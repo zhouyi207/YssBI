@@ -12,6 +12,7 @@ import {
 import '@glideapps/glide-data-grid/dist/index.css';
 import { VscDatabase } from 'react-icons/vsc';
 import type { ColumnMeta } from '@/features/application/databaseEditor';
+import type { DatabaseRow } from '@/shared/types/dto/database';
 import { emptyGridSelection, isEmptyGridSelection } from '@/features/application/databaseEditor';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { buildDataGridThemeOverlay, buildRowMarkerThemeOverlay } from './dataGridTheme';
@@ -30,7 +31,7 @@ interface ContextMenuTarget {
 
 interface DataTableProps {
   columns: ColumnMeta[];
-  loadedRows: any[][];
+  loadedRows: DatabaseRow[];
   pageStartIndex: number;
   loading: boolean;
 

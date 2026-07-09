@@ -171,6 +171,58 @@ export interface RuntimeSourcesInvalidatedPayload {
     pinIds: string[];
 }
 
+// ==================== Backend event typing ====================
+
+export type BackendEventType =
+    | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectSaved'
+    | 'EventCreated' | 'EventUpdated' | 'EventDeleted' | 'EventCreatedFailed'
+    | 'FunctionCreated' | 'FunctionUpdated' | 'FunctionDeleted' | 'FunctionCreatedFailed'
+    | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
+    | 'DataFrameCreated' | 'DataFrameDeleted' | 'DataFrameSchemaUpdated'
+    | 'ResourceChanged' | 'ResourceDeleted' | 'GraphResourceMoved' | 'ProjectIndexInvalidated'
+    | 'NodeCreated' | 'NodesBatchCreated' | 'NodeUpdated' | 'NodeDeleted' | 'NodesBatchDeleted'
+    | 'NodePositionsUpdated' | 'NodePinsUpdated' | 'PinTypesInferred' | 'RuntimeSourcesInvalidated'
+    | 'ConnectionCreated' | 'ConnectionDeleted' | 'ConnectionsBatchDeleted' | 'ConnectionsBatchCreated';
+
+export interface BackendEventPayloadMap {
+    ProjectLoaded: ProjectLoadedPayload;
+    ProjectCleared: void;
+    ProjectSaved: ProjectSavedPayload;
+    EventCreated: GraphCreatedPayload;
+    EventUpdated: GraphUpdatedPayload;
+    EventDeleted: GraphDeletedPayload;
+    EventCreatedFailed: GraphCreatedFailedPayload;
+    FunctionCreated: GraphCreatedPayload;
+    FunctionUpdated: GraphUpdatedPayload;
+    FunctionDeleted: GraphDeletedPayload;
+    FunctionCreatedFailed: GraphCreatedFailedPayload;
+    VariableCreated: VariableCreatedPayload;
+    VariableUpdated: VariableUpdatedPayload;
+    VariableDeleted: VariableDeletedPayload;
+    DataFrameCreated: DataFrameCreatedPayload;
+    DataFrameDeleted: DataFrameDeletedPayload;
+    DataFrameSchemaUpdated: DataFrameSchemaUpdatedPayload;
+    ResourceChanged: ResourceChangedPayload;
+    ResourceDeleted: ResourceDeletedPayload;
+    GraphResourceMoved: GraphResourceMovedPayload;
+    ProjectIndexInvalidated: ProjectIndexInvalidatedPayload;
+    NodeCreated: NodeCreatedPayload;
+    NodesBatchCreated: NodesBatchCreatedPayload;
+    NodeUpdated: unknown;
+    NodeDeleted: NodeDeletedPayload;
+    NodesBatchDeleted: NodesBatchDeletedPayload;
+    NodePositionsUpdated: NodePositionsUpdatedPayload;
+    NodePinsUpdated: NodePinsUpdatedPayload;
+    PinTypesInferred: PinTypesInferredPayload;
+    RuntimeSourcesInvalidated: RuntimeSourcesInvalidatedPayload;
+    ConnectionCreated: ConnectionCreatedPayload;
+    ConnectionDeleted: ConnectionDeletedPayload;
+    ConnectionsBatchDeleted: ConnectionsBatchDeletedPayload;
+    ConnectionsBatchCreated: ConnectionsBatchCreatedPayload;
+}
+
+export type RawBackendEvent = BaseEvent | NestedEvent;
+
 // ==================== Connection 事件 Payload ====================
 
 export interface ConnectionCreatedPayload {

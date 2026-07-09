@@ -1,6 +1,6 @@
 // src/features/core/sync/registry/EventRegistry.ts
 
-import { EventHandler, EventCallbacks } from '../types';
+import { EventHandler, EventCallbacks, RawBackendEvent } from '../types';
 import { parseEvent, isValidEventType } from '../utils/eventParser';
 import { logger } from '@/utils/appLogger';
 
@@ -37,7 +37,7 @@ export class EventRegistry {
     /**
      * 分发事件到对应的处理器
      */
-    dispatch(event: any): void {
+    dispatch(event: RawBackendEvent): void {
         const parsed = parseEvent(event);
         
         if (!isValidEventType(parsed.type)) {

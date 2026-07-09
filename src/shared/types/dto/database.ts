@@ -8,6 +8,10 @@ export interface ColumnInfo {
   type: string;
 }
 
+/** Scalar cell from paginated database row queries (IPC boundary). */
+export type DatabaseCellValue = string | number | boolean | null;
+export type DatabaseRow = DatabaseCellValue[];
+
 export type DatabaseEngineSqlDTO =
   | { sqlite: { autoCreate?: boolean } }
   | { postgres: { ssl?: boolean } }

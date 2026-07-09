@@ -6,7 +6,7 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
-import { pinThemeTypeKey } from '@/shared/types/domain/pinSemantics';
+import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
@@ -21,7 +21,8 @@ export interface EdgeData {
   toPinId: string;
   sourceNodeId: string;
   targetNodeId?: string;
-  pinType: string;
+  colorKey: string;
+  edgeKind: 'exec' | 'data';
   pinColor?: string;
 }
 
@@ -36,13 +37,15 @@ export function buildEdgeData(
     const fromPin = getPin(conn.from);
     if (!fromPin || !nodeIdSet.has(fromPin.nodeId)) continue;
     const toPin = getPin(conn.to);
+    const visual = resolvePinVisualSpec(fromPin);
     result.push({
       id: conn.id,
       fromPinId: conn.from,
       toPinId: conn.to,
       sourceNodeId: fromPin.nodeId,
       targetNodeId: toPin?.nodeId,
-      pinType: pinThemeTypeKey(fromPin),
+      colorKey: visual.colorKey,
+      edgeKind: visual.edgeKind,
       pinColor: fromPin.ui?.color,
     });
   }
@@ -112,10 +115,10 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWo
         const hasPull = completedConnections?.has(connKey) ?? false;
         const hasFlow = flowingConnections?.has(connKey) ?? false;
         // data：先取数、后流动；ConnectionFlow 仅在 pin 已有值时由后端发出
-        const isPullActive = edge.pinType !== "exec" && hasPull && !hasFlow && !isError;
-        const isFlowActive = edge.pinType === "exec" ? hasPull : hasFlow;
-        const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
-        const edgeKind = edge.pinType === "exec" ? "exec" : "data";
+        const isPullActive = edge.edgeKind === 'data' && hasPull && !hasFlow && !isError;
+        const isFlowActive = edge.edgeKind === 'exec' ? hasPull : hasFlow;
+        const color = edge.pinColor ?? getPinTypeColor(edge.colorKey, theme);
+        const edgeKind = edge.edgeKind;
 
         return (
           <Edge

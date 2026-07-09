@@ -155,28 +155,28 @@ export const SettingsView: React.FC = () => {
                                     description={t("settings.descriptions.showGrid")}
                                     type="checkbox"
                                     checked={editor.showGrid}
-                                    onChange={(val) => updateEditor({ showGrid: val === "true" || val === true })}
+                                    onChange={(val) => updateEditor({ showGrid: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.autoSave")}
                                     description={t("settings.descriptions.autoSave")}
                                     type="checkbox"
                                     checked={editor.autoSave}
-                                    onChange={(val) => updateEditor({ autoSave: val === "true" || val === true })}
+                                    onChange={(val) => updateEditor({ autoSave: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.snapToGrid")}
                                     description={t("settings.descriptions.snapToGrid")}
                                     type="checkbox"
                                     checked={editor.snapToGrid}
-                                    onChange={(val) => updateEditor({ snapToGrid: val === "true" || val === true })}
+                                    onChange={(val) => updateEditor({ snapToGrid: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.fontSize")}
                                     description={t("settings.descriptions.fontSize")}
                                     type="number"
                                     value={String(editor.fontSize)}
-                                    onChange={(val) => updateEditor({ fontSize: parseInt(val as string) || 12 })}
+                                    onChange={(val) => updateEditor({ fontSize: parseInt(val, 10) || 12 })}
                                 />
                             </div>
                         </div>
@@ -193,7 +193,7 @@ export const SettingsView: React.FC = () => {
                                     description={t("settings.descriptions.projectName")}
                                     type="text"
                                     value={project.projectName}
-                                    onChange={(val) => updateProject({ projectName: val as string })}
+                                    onChange={(val) => updateProject({ projectName: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.projectVersion")}
@@ -207,7 +207,7 @@ export const SettingsView: React.FC = () => {
                                     description={t("settings.descriptions.exportPath")}
                                     type="text"
                                     value={project.exportPath}
-                                    onChange={(val) => updateProject({ exportPath: val as string })}
+                                    onChange={(val) => updateProject({ exportPath: val })}
                                     placeholder="/path/to/export"
                                 />
                             </div>
@@ -237,7 +237,7 @@ export const SettingsView: React.FC = () => {
                                     type="select"
                                     options={themeOptions}
                                     value={appearance.colorTheme}
-                                    onChange={(val) => updateAppearance({ colorTheme: val as string })}
+                                    onChange={(val) => updateAppearance({ colorTheme: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.language")}
@@ -258,14 +258,14 @@ export const SettingsView: React.FC = () => {
                                     type="select"
                                     options={activityBarOptions}
                                     value={appearance.activityBarPosition}
-                                    onChange={(val) => updateAppearance({ activityBarPosition: val as string })}
+                                    onChange={(val) => updateAppearance({ activityBarPosition: val })}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.smoothScroll")}
                                     description={t("settings.descriptions.smoothScroll")}
                                     type="checkbox"
                                     checked={appearance.smoothScroll}
-                                    onChange={(val) => updateAppearance({ smoothScroll: val === "true" || val === true })}
+                                    onChange={(val) => updateAppearance({ smoothScroll: val })}
                                 />
                             </div>
                         </div>
@@ -542,32 +542,45 @@ export const SettingsView: React.FC = () => {
     );
 };
 
-interface SettingItemProps {
+interface SettingItemBase {
     label: string;
     description: string;
-    type: "checkbox" | "text" | "number" | "select" | "color";
-    defaultValue?: string;
-    value?: string;
-    checked?: boolean;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onChange?: (val: any) => void;
     placeholder?: string;
     disabled?: boolean;
-    options?: Array<{ label: string; value: string }>;
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
-    label,
-    description,
-    type,
-    defaultValue,
-    value,
-    checked,
-    onChange,
-    placeholder,
-    disabled,
-    options
-}) => {
+type SettingItemProps =
+    | (SettingItemBase & {
+        type: "checkbox";
+        checked?: boolean;
+        onChange?: (val: boolean) => void;
+    })
+    | (SettingItemBase & {
+        type: "text";
+        value?: string;
+        defaultValue?: string;
+        onChange?: (val: string) => void;
+    })
+    | (SettingItemBase & {
+        type: "number";
+        value?: string;
+        defaultValue?: string;
+        onChange?: (val: string) => void;
+    })
+    | (SettingItemBase & {
+        type: "select";
+        value?: string;
+        options?: Array<{ label: string; value: string }>;
+        onChange?: (val: string) => void;
+    })
+    | (SettingItemBase & {
+        type: "color";
+        value?: string;
+        onChange?: (val: string) => void;
+    });
+
+const SettingItem: React.FC<SettingItemProps> = (props) => {
+    const { label, description, type, placeholder, disabled } = props;
     const controlId = React.useId();
 
     return (
@@ -579,16 +592,16 @@ const SettingItem: React.FC<SettingItemProps> = ({
                 {type === "checkbox" && (
                     <Checkbox
                         id={controlId}
-                        checked={checked ?? false}
-                        onCheckedChange={(value) => onChange?.(value === true)}
+                        checked={props.checked ?? false}
+                        onCheckedChange={(value) => props.onChange?.(value === true)}
                     />
                 )}
                 {type === "text" && (
                     <Input
                         id={controlId}
                         type="text"
-                        value={value ?? defaultValue ?? ""}
-                        onChange={(e) => onChange?.(e.target.value)}
+                        value={props.value ?? props.defaultValue ?? ""}
+                        onChange={(e) => props.onChange?.(e.target.value)}
                         placeholder={placeholder}
                         disabled={disabled}
                         className="max-w-md"
@@ -598,8 +611,8 @@ const SettingItem: React.FC<SettingItemProps> = ({
                     <Input
                         id={controlId}
                         type="number"
-                        value={value ?? defaultValue ?? ""}
-                        onChange={(e) => onChange?.(e.target.value)}
+                        value={props.value ?? props.defaultValue ?? ""}
+                        onChange={(e) => props.onChange?.(e.target.value)}
                         className="w-24"
                     />
                 )}
@@ -607,9 +620,9 @@ const SettingItem: React.FC<SettingItemProps> = ({
                     <div className="w-full max-w-md">
                         <Select
                             id={controlId}
-                            options={options || []}
-                            value={value || (options?.[0]?.value || "")}
-                            onChange={(val) => onChange?.(val)}
+                            options={props.options || []}
+                            value={props.value || (props.options?.[0]?.value || "")}
+                            onChange={(val) => props.onChange?.(val)}
                         />
                     </div>
                 )}
@@ -619,16 +632,16 @@ const SettingItem: React.FC<SettingItemProps> = ({
                             <Input
                                 id={controlId}
                                 type="color"
-                                value={value}
-                                onChange={(e) => onChange?.(e.target.value)}
+                                value={props.value}
+                                onChange={(e) => props.onChange?.(e.target.value)}
                                 className="absolute -inset-1 h-8 w-12 cursor-pointer border-none bg-transparent p-0"
                             />
                         </div>
                         <Input
                             aria-label={label}
                             type="text"
-                            value={value}
-                            onChange={(e) => onChange?.(e.target.value)}
+                            value={props.value}
+                            onChange={(e) => props.onChange?.(e.target.value)}
                             className="h-7 w-24 font-mono text-[11px]"
                         />
                     </div>

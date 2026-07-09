@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { getCommandHandler } from './commands';
+import type { CommandHandler } from './types';
 import { notifyStructuralChange } from './structuralChange';
 import type {
   CommandType,
@@ -108,7 +109,7 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     const entry = hist.undoStack[hist.undoStack.length - 1];
 
     try {
-      const handler = getCommandHandler(entry.commandType);
+      const handler = getCommandHandler(entry.commandType) as CommandHandler;
       await handler.undo(graphPath, entry.context);
       notifyStructuralChange(entry.commandType, graphPath);
       set((state) => {
@@ -139,7 +140,7 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     const entry = hist.redoStack[0];
 
     try {
-      const handler = getCommandHandler(entry.commandType);
+      const handler = getCommandHandler(entry.commandType) as CommandHandler;
       await handler.redo(graphPath, entry.context);
       notifyStructuralChange(entry.commandType, graphPath);
       set((state) => {

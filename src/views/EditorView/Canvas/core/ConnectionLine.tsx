@@ -6,6 +6,7 @@ import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
 
 import { Pin } from "@/shared/types/domain";
+import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { getConnectGesture } from "@/shared/types/ui";
 
 export const ConnectionLine = ({
@@ -87,11 +88,12 @@ export const ConnectionLine = ({
 
             const start = getPinWorldPosRef.current(activeStart.id);
             if (start) {
+                const colorKey = resolvePinVisualSpec(activeStart).colorKey;
                 drawEdge(
                     ctx,
                     start.x, start.y,
                     endWorld.x, endWorld.y,
-                    activeStart.ui?.color ?? getPinTypeColor(activeStart.type ?? "any", currentTheme),
+                    activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
                     2 / viewport.scale,
                     activeStart.direction === "input"
                 );

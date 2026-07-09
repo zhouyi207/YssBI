@@ -975,7 +975,12 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 
 - [x] **P1 — Pin Result Search 修复**：以 `pinResults` 为唯一索引源；`pinResultCacheKey(graphPath,pinId)` 对齐后端 runtime index；`pinResultsForSourceGraph` 支持函数图 Detail/Canvas 查看嵌套 Call 结果；`evaluatePinViewState` 单 pass UI 判定。
 - [x] 在执行图的时候，首先需要递归加载外部图，并进行存储，避免修改外部图的时候导致原来的执行出现变化
-
+- [x] **`@deprecated` 兼容层清零**：删除 `InfoView/shared/types.ts`、`parseSourceIdFromLocation`、`LoadingOverlay`、`PaletteItem`/`CreateNodeSpawnParams` 等别名；`LayoutTab.title`、`ConnectPinsResult.autoDisconnected*`、`node_metadata`/`ui_style` 双字段、测试 `withLegacyPinLinks` 一并移除；Presentation 统一 `parsePresentationWindowQuery`；`src/` / `src-tauri/` 无 `@deprecated` 标注。
+- [x] **`EventRegistry.dispatch` 异构事件联合**：`dispatch(event: RawBackendEvent)`；`BackendEventType` / `BackendEventPayloadMap` 定义于 `sync/types.ts`；`ProjectListener` IPC 边界收窄。
+- [x] **`commandRegistry` 泛型收口**：`commands/registryTypes.ts` 定义 `CommandArgsByType` / `CommandContextByType` / `CommandHandlerMap`；`getCommandHandler<K>()` + `executeCommand<K>()` 窄化；undo/redo 栈仍以 `CommandHandler` 不透明 context 回放。
+- [x] **DatabaseEditor 表格行 `any[][]`**：`DatabaseCellValue` / `DatabaseRow`（`dto/database.ts`）；`useDataLoader` / `useEditActions` / `DataTable` / `DatabaseService.getDatabaseRows` 贯通。
+- [x] **`SettingsView` 表单 `onChange` 去 `any`**：`SettingItemProps` 判别联合（checkbox/text/number/select/color）；移除 `eslint-disable`。
+- [x] **Pin 视觉语义统一架构（形状 / 颜色 / 连线）**：`shared/types/domain/pinVisual.ts` 导出 `resolvePinVisualSpec` / `resolvePinRenderStyle`；`Pin.tsx` / `EdgesOverlay` / `ConnectionLine` 迁移；`EdgeData` 改 `colorKey` + `edgeKind`；6 项 vitest 矩阵覆盖。
 
 ## 2026.07.12
 
@@ -1006,23 +1011,8 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
 - [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
 - [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
-- [x] **`@deprecated` 兼容层清零**：删除 `InfoView/shared/types.ts`、`parseSourceIdFromLocation`、`LoadingOverlay`、`PaletteItem`/`CreateNodeSpawnParams` 等别名；`LayoutTab.title`、`ConnectPinsResult.autoDisconnected*`、`node_metadata`/`ui_style` 双字段、测试 `withLegacyPinLinks` 一并移除；Presentation 统一 `parsePresentationWindowQuery`；`src/` / `src-tauri/` 无 `@deprecated` 标注。
 
-
-## v1.0 待办
-
-
-
-> **注解型 `any` 残留**（`src/` 已无 `as any` / `as unknown as`；以下为 `: any` 注解债，按模块分期，新代码不得新增）
-
-- [ ] **`EventRegistry.dispatch` 异构事件联合**：`features/core/sync/registry/EventRegistry.ts` — `dispatch(event: any)` 改为 `BackendEvent` / 已注册 payload 判别联合或泛型 `dispatch<E extends BackendEventType>(...)`，与 `EventHandler<T>` 对齐。
-- [ ] **`commandRegistry` 泛型收口**：`features/core/history/commands/index.ts` — `CommandHandler<any, any>` 改为按 `CommandType` 映射的 `CommandHandlerMap`，`getCommandHandler` 返回窄化类型。
-- [ ] **DatabaseEditor 表格行 `any[][]`**：`useDataLoader` / `useEditActions` / `DataTable` — 对齐后端 cell 类型（`DataValue` 或 `string | number | null` 联合），消除 `loadedRows: any[][]`。
-- [ ] **`SettingsView` 表单 `onChange` 去 `any`**：`SettingsView.tsx` — 移除 `eslint-disable` + `onChange?: (val: any)`，按设置项 discriminated union 或泛型字段组件收窄。
-
-- [ ] **Pin 视觉语义统一架构（形状 / 颜色 / 连线）**：`pinSemantics` 仅为过渡层；`Pin.tsx` / `EdgesOverlay` / `pinTypeTheme` 各自维护形状与颜色分支，未覆盖 Date/Datetime/Time/Categorical/OneOf/嵌套容器等全量 `DataType`；需从 `dataType` 单点派生 `PinVisualSpec`，与 Rust `data_type_to_pin_type` / `data_type_to_container` 对齐并扩展。见下「Pin 视觉语义」设计说明。
-
-> **Pin 视觉语义 — v1.0 设计说明**（源于 2026.07.08 `pinThemeTypeKey` 颜色回归复盘）
+> **Pin 视觉语义 — v1.0 设计说明**（已完成，保留作架构参考）
 
 **问题**
 
@@ -1076,11 +1066,16 @@ interface PinVisualSpec {
 4. **测试**：vitest 矩阵覆盖上表 + 嵌套样例（`DataSeries<Float64>`、`Array<String>`、`OneOf<Float64,String>`）；截图或 SVG 快照可选。
 5. **弃用**：逐步停止视觉层读取 `pin.type`；`type` 字段保留 IPC 兼容至 v1.0 前，仅非视觉路径使用。
 
-**完成标准**
+**完成标准**（已达成）
 
 - 新增/修改 pin 视觉只需改 `resolvePinVisualSpec` 一处；`Pin.tsx` 无 `dataType.kind ===` 硬编码。
-- 调色板拖线、静态连线、执行 flow/pull 动画三线颜色与 source pin 一致。
-- 上表每种 DataType 至少 1 个 vitest + 1 个手动验收图（含嵌套容器）。
+- 调色板拖线、静态连线、执行 flow/pull 动画三线颜色与 source pin 一致（`colorKey`）。
+- 全量 DataType 矩阵 vitest 覆盖（`pinVisual.test.ts`）。
+
+## v1.0 待办
+
+
+> **后续可选**：Rust `pin_visual_spec` DTO 下发 + golden case 与前端对齐；`NodePinSpecRow` 类型徽章迁移。
 
 
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：

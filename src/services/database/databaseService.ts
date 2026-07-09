@@ -5,7 +5,7 @@ import type {
     DatasetOverview,
     EditState,
 } from "@/shared/types/domain/dataframe";
-import type { ColumnInfo, LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
+import type { ColumnInfo, DatabaseRow, LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 
 export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 
@@ -20,7 +20,7 @@ export interface LoadDatabaseResult {
 
 /** 分页行数据（含稳定 rowIds） */
 export interface DatabaseRowsResult {
-    rows: unknown[][];
+    rows: DatabaseRow[];
     rowIds: number[];
 }
 
@@ -84,7 +84,7 @@ export class DatabaseService {
      * 获取数据库行数据（分页，含稳定 rowIds）
      */
     static async getDatabaseRows(id: string, offset: number, limit: number): Promise<DatabaseRowsResult> {
-        const payload = await invoke<{ rows?: unknown[][]; rowIds?: number[] } | unknown[][]>(
+        const payload = await invoke<{ rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]>(
             "get_database_rows",
             { id, offset, limit },
         );

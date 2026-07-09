@@ -2,11 +2,12 @@ import { useState, useRef, useCallback } from 'react';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { DATABASE_EDITOR_CHUNK_SIZE } from '@/app/appConfig/default';
+import type { DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 
 export function useDataLoader(selectedDfId: string | null) {
   const selectedRowCount = useDatabaseStore(s => selectedDfId ? (s.databases[selectedDfId]?.rowCount ?? 0) : 0);
-  const [loadedRows, setLoadedRows] = useState<any[][]>([]);
+  const [loadedRows, setLoadedRows] = useState<DatabaseRow[]>([]);
   const [loadedRowIds, setLoadedRowIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);

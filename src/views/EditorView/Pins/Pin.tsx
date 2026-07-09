@@ -4,7 +4,8 @@ import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
-import { pinThemeTypeKey, isExecPin, pinTypeLabel, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
+import { isExecPin, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
+import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
@@ -50,30 +51,6 @@ export interface PinProps extends PinModel {
   forceShowInput?: boolean;
 }
 
-const getPinTheme = (
-  pin: { type: string; dataType?: PinModel['dataType'] },
-  isConnected: boolean,
-  baseColor: string,
-  containerType?: string,
-) => {
-  const isExec = isExecPin(pin);
-  const isDataFrame = pin.dataType?.kind === 'DataFrame';
-  const isStruct = pin.dataType?.kind === 'Struct';
-  return {
-    isExec,
-    isDataFrame,
-    isStruct,
-    containerType,
-    fill: isConnected
-      ? baseColor
-      : isExec
-        ? "rgba(0,0,0,0.1)"
-        : "rgba(0,0,0,0.05)",
-    stroke: isExec && !isConnected ? "#666" : baseColor,
-    strokeWidth: isExec ? 1.5 : 2,
-  };
-};
-
 export const Pin: React.FC<PinProps> = (props) => {
   const {
     id,
@@ -105,14 +82,15 @@ export const Pin: React.FC<PinProps> = (props) => {
   const { theme: appTheme } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(
-    () => ({ type: type ?? 'object', typeDisplay, dataType }),
-    [type, typeDisplay, dataType],
+    () => ({ type: type ?? 'object', typeDisplay, dataType, containerType }),
+    [type, typeDisplay, dataType, containerType],
   );
-  const baseColor = ui?.color ?? getPinTypeColor(pinThemeTypeKey(pinSemantics), appTheme);
+  const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
+  const baseColor = ui?.color ?? getPinTypeColor(visualSpec.colorKey, appTheme);
 
-  const theme = useMemo(
-    () => getPinTheme(pinSemantics, isConnected, baseColor, containerType),
-    [pinSemantics, isConnected, baseColor, containerType],
+  const renderStyle = useMemo(
+    () => resolvePinRenderStyle(visualSpec, isConnected, baseColor),
+    [visualSpec, isConnected, baseColor],
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -215,7 +193,92 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const pinTooltip = `${name} (${pinTypeLabel(pinSemantics)})`;
+  const pinTooltip = `${name} (${visualSpec.label})`;
+
+  const pulseStrokeProps = shouldPulse
+    ? {
+        fill: 'none' as const,
+        stroke: baseColor,
+        strokeWidth: 2.5,
+        strokeDasharray: visualSpec.shape === 'exec' ? '6 24' : visualSpec.shape === 'gridRect' ? '8 28' : '7 21',
+        className: 'pin-flow-stroke',
+        filter: 'url(#pinGlow)',
+      }
+    : null;
+
+  const renderPinShape = () => {
+    const { fill, stroke, strokeWidth } = renderStyle;
+    const dashed = visualSpec.dashedStroke && !shouldPulse ? { strokeDasharray: '2 2' } : {};
+
+    switch (visualSpec.shape) {
+      case 'exec':
+        return (
+          <>
+            <path
+              d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="miter"
+              {...dashed}
+            />
+            {pulseStrokeProps && <path d="M2 2 L7 2 L11 6 L7 10 L2 10 Z" strokeLinejoin="miter" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'gridRect':
+        return (
+          <>
+            <g>
+              <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+              <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={stroke} strokeWidth="0.8" />
+              <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={stroke} strokeWidth="0.8" />
+            </g>
+            {pulseStrokeProps && <rect x="1.5" y="1.5" width="9" height="9" rx="1" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'roundedRect':
+        return (
+          <>
+            <rect x="2" y="2" width="8" height="8" rx="1.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+            {pulseStrokeProps && <rect x="2" y="2" width="8" height="8" rx="1.5" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'diamond':
+        return (
+          <>
+            <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="miter" {...dashed} />
+            {pulseStrokeProps && <polygon points="6,1 11,6 6,11 1,6" strokeLinejoin="miter" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'hexagon':
+        return (
+          <>
+            <polygon
+              points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="round"
+              {...dashed}
+            />
+            {pulseStrokeProps && (
+              <polygon
+                points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+                strokeLinejoin="round"
+                {...pulseStrokeProps}
+              />
+            )}
+          </>
+        );
+      default:
+        return (
+          <>
+            <circle cx="6" cy="6" r="4.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+            {pulseStrokeProps && <circle cx="6" cy="6" r="4.5" {...pulseStrokeProps} />}
+          </>
+        );
+    }
+  };
 
   return (
     <Tooltip>
@@ -258,132 +321,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           className="overflow-visible"
           style={{ display: "block" }}
         >
-          {theme.isExec ? (
-            <>
-              <path
-                d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="miter"
-              />
-              {shouldPulse && (
-                <path
-                  d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="miter"
-                  strokeDasharray="6 24"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.isDataFrame ? (
-            <>
-              <g>
-                <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={theme.fill} stroke={theme.stroke} strokeWidth={theme.strokeWidth} />
-                <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={theme.stroke} strokeWidth="0.8" />
-                <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={theme.stroke} strokeWidth="0.8" />
-              </g>
-              {shouldPulse && (
-                <rect
-                  x="1.5" y="1.5" width="9" height="9" rx="1"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="8 28"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.containerType === "array" ? (
-            <>
-              <rect
-                x="2" y="2" width="8" height="8" rx="1.5"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-              />
-              {shouldPulse && (
-                <rect
-                  x="2" y="2" width="8" height="8" rx="1.5"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="7 25"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.containerType === "dataseries" ? (
-            <>
-              <polygon
-                points="6,1 11,6 6,11 1,6"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="miter"
-              />
-              {shouldPulse && (
-                <polygon
-                  points="6,1 11,6 6,11 1,6"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="miter"
-                  strokeDasharray="7 21"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.isStruct ? (
-            <>
-              <polygon
-                points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="round"
-              />
-              {shouldPulse && (
-                <polygon
-                  points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="round"
-                  strokeDasharray="8 25"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <circle
-                cx="6" cy="6" r="4.5"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-              />
-              {shouldPulse && (
-                <circle
-                  cx="6" cy="6" r="4.5"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="7 21"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          )}
+          {renderPinShape()}
           {shouldPulse && (
             <defs>
               <filter id="pinGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -391,7 +329,7 @@ export const Pin: React.FC<PinProps> = (props) => {
               </filter>
             </defs>
           )}
-          {isConnected && !theme.isExec && (
+          {isConnected && visualSpec.edgeKind === 'data' && (
             <circle
               cx="6"
               cy="6"

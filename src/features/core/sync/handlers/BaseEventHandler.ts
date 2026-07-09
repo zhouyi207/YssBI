@@ -3,7 +3,7 @@
 import { EventHandler, EventCallbacks } from '../types';
 import { logger } from '@/utils/appLogger';
 
-export abstract class BaseEventHandler<T = any> implements EventHandler<T> {
+export abstract class BaseEventHandler<T = unknown> implements EventHandler<T> {
     abstract eventType: string;
     
     constructor(protected callbacks?: EventCallbacks) {}

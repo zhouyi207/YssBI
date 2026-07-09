@@ -7,23 +7,19 @@
 
 import { useHistoryStore } from './historyStore';
 import { getCommandHandler } from './commands';
+import type { CommandArgsByType, CommandContextByType } from './commands/registryTypes';
 import { notifyStructuralChange } from './structuralChange';
 import type { CommandType, ExecuteOptions } from './types';
 
 /**
  * Execute an editor command and push it onto the undo stack.
- *
- * @param graphPath - Target graph
- * @param type    - Registered command type
- * @param args    - Command-specific arguments
- * @param options - mergeKey for operation coalescing
  */
-export async function executeCommand<TArgs = unknown>(
+export async function executeCommand<K extends CommandType>(
   graphPath: string,
-  type: CommandType,
-  args: TArgs,
+  type: K,
+  args: CommandArgsByType[K],
   options?: ExecuteOptions,
-): Promise<unknown> {
+): Promise<CommandContextByType[K]> {
   const handler = getCommandHandler(type);
   const context = await handler.execute(graphPath, args);
   useHistoryStore.getState().push(graphPath, type, context, options);
