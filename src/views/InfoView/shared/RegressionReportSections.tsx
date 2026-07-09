@@ -16,7 +16,7 @@ import { VifTable, meanFiniteVif } from './VifTable';
 import { ReportLazyBoundary, ReportSection, ReportSubheading } from './ReportLayout';
 import { LazyKDE, LazyResidualPlot, LazyScatter } from './reportLazyModules';
 import { HypothesisTestBlock } from './HypothesisTestBlock';
-import type { DiagnosticInfo, RegressionResultData } from './types';
+import type { DiagnosticInfo, RegressionResultData } from '@/shared/types/report';
 
 export function OmittedVariablesAlert({ diag }: { diag: DiagnosticInfo }) {
   if (!diag.omit_info?.omitted.length) return null;

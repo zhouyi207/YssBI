@@ -19,7 +19,7 @@ export function resolveNodeViewMeta(n: {
   const useDefName = !rawTitle || rawTitle === nodeType;
   const title = def && useDefName ? def.name : (rawTitle || nodeType);
   const meta = def ? getNodeDefinitionMeta(def) : undefined;
-  const uiStyle = n.uiStyle ?? meta?.uiStyle ?? meta?.ui_style ?? 'default';
+  const uiStyle = n.uiStyle ?? meta?.uiStyle ?? 'default';
   const category = n.category ?? def?.category ?? [];
   const description = n.description ?? meta?.description;
   return { nodeType, title, category, uiStyle, description };

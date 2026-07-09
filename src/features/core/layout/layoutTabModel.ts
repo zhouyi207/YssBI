@@ -16,20 +16,22 @@ export function layoutTabResourceRef(tab: LayoutTab): ResourceRef | null {
   return resourceRefFromLayoutTab(tab);
 }
 
-/** hydrate 入站：历史 Tab 可能缺 type / component */
+/** hydrate 入站：历史 Tab 可能缺 type / component，或携带已废弃的 title 快照 */
 export type LayoutTabInput = Omit<LayoutTab, 'type' | 'component'> & {
+  title?: string;
   type?: LayoutTabType;
   component?: LayoutTabComponent | string;
 };
 
-/** 从持久化/旧数据规范化 Tab（补全缺失的 type / component） */
+/** 从持久化/旧数据规范化 Tab（补全缺失的 type / component，剥离 title） */
 export function normalizeLayoutTab(tab: LayoutTabInput): LayoutTab {
+  const { title: _title, ...rest } = tab;
   const type: LayoutTabType =
     tab.type ??
     (tab.component === 'WorksheetEditor' ? 'worksheet' : 'event');
   const component: LayoutTabComponent =
     type === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor';
-  return { ...tab, type, component };
+  return { ...rest, type, component };
 }
 
 export function normalizeLayoutTabs(tabs: readonly LayoutTabInput[]): LayoutTab[] {

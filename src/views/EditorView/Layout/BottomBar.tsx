@@ -16,6 +16,8 @@ import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
+import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport } from "@/features/core/viewport";
 import { LoadStatus } from "@/shared/types/ui";
@@ -112,7 +114,9 @@ export function BottomBar() {
       return {
         groupId,
         activeTabId,
-        activeTitle: activeTab?.title ?? t("bottomBar.noActiveGraph"),
+        activeTitle: activeTab
+          ? resolveTabDisplayName(layoutTabResourceRef(activeTab), activeTab.id)
+          : t("bottomBar.noActiveGraph"),
         activeType: activeTab?.type ?? null,
         selectedCount: Array.isArray(selectedNodeIds) ? selectedNodeIds.length : 0,
       };

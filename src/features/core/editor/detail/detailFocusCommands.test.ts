@@ -19,7 +19,7 @@ describe('detailFocusCommands', () => {
           parentId: 'root',
           data: {
             component: 'GraphEditor',
-            tabs: [{ id: 'g1', title: 'Event', component: 'GraphEditor', type: 'event' }],
+            tabs: [{ id: 'g1', component: 'GraphEditor', type: 'event' }],
             activeTabId: 'g1',
           },
         },

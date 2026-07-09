@@ -1,6 +1,6 @@
 /** 共享工具函数 */
 
-import type { Coefficient } from './types';
+import type { Coefficient } from '@/shared/types/report';
 
 export {
   coerceFiniteNumber,

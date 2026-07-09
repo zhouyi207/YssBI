@@ -26,7 +26,7 @@ impl ArrayLike2D for Array2<f64> {
     }
 }
 
-// 给 vec 实现 ArrayLike1D 和 ArrayLike2D  trait
+// 给 vec 实现 ArrayLike1D 和 ArrayLike2D trait
 
 impl ArrayLike1D for Vec<f64> {
     fn as_view(&self) -> ArrayView1<'_, f64> {
@@ -34,7 +34,6 @@ impl ArrayLike1D for Vec<f64> {
     }
 }
 
-// @deprecated: use Array2<f64> instead
 impl ArrayLike2D for Vec<Vec<f64>> {
     fn as_view(&self) -> ArrayView2<'_, f64> {
         let rows = self.len();

@@ -14,9 +14,6 @@ export interface NodeSpawnParams {
   dataframeId?: string;
 }
 
-/** @deprecated 使用 `NodeSpawnParams` */
-export type CreateNodeSpawnParams = NodeSpawnParams;
-
 export type NodeInstanceParamsDTO =
   | { paramsKind: 'none' }
   | {

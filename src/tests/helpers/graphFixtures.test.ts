@@ -11,7 +11,7 @@ describe('makeTestGraph', () => {
     ]);
   });
 
-  it('supports legacy pin links and custom pin ids', () => {
+  it('supports custom pin ids', () => {
     const graph = makeTestGraph({
       path: 'g1',
       name: 'Test',
@@ -19,10 +19,10 @@ describe('makeTestGraph', () => {
       nodeId: 'node-a',
       inputPinId: 'pin-in',
       outputPinId: 'pin-out',
-      withLegacyPinLinks: true,
     });
     expect(graph.nodes[0].id).toBe('node-a');
-    expect(graph.pins[0]).toMatchObject({ id: 'pin-in', links: ['should-be-ignored'] });
+    expect(graph.pins[0].id).toBe('pin-in');
+    expect(graph.pins[1].id).toBe('pin-out');
   });
 
   it('builds overlapping graph pairs for scope tests', () => {

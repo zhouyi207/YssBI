@@ -18,7 +18,7 @@ import type {
   DFADFRegRowData,
   DFADFSummaryListResultData,
   DFADFSummaryResultData,
-} from './shared/types';
+} from '@/shared/types/report';
 
 function itemLabel(item: DFADFSummaryResultData): string {
   return `${item.regression} · lags=${item.lags}`;

@@ -33,6 +33,3 @@ export {
   formatPValueDisplay,
   correlogramLjungBoxTooltipHtml,
 } from './correlogram';
-
-/** @deprecated Use `PlotCorrelogramBarDTO` */
-export type CorrelogramDatum = import('./correlogram').PlotCorrelogramBarDTO;

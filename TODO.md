@@ -761,7 +761,7 @@ src/app/appConfig/appLinks.ts
 - [x] **Store `NodeData` → UI `Node` 单点桥接**：`toUiNode` + `UINode` 渲染层；3 项 vitest。
 - [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`layoutTabModel` + `EditorGroupSnapshot`；`useEditorGroups` 去 `any`；4 项 vitest。
 - [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts`；连接/值写入以 `dataType` 为准；`pinViewTarget` 改 `isExec`；5 项 vitest。
-- [x] **InfoView 报告类型分层**：`shared/types/report/` 按模型拆分 + `guards` 去重；`types.ts` 薄 re-export；IV 契约测试 7 项 vitest。
+- [x] **InfoView 报告类型分层**：`shared/types/report/` 按模型拆分 + `guards` 去重；曾用 `InfoView/shared/types.ts` 薄 re-export（后续已删除，直接 `@/shared/types/report`）；IV 契约测试 7 项 vitest。
 - [x] **Info 报告 IPC 边界窄化**：`parseReportPayload` 单点分发 + `parseRegression`/`parsePanel`/`parseVar` 等；`ReportView` 渲染前校验；`parseCommon` 去重系数解析；11 项 vitest。
 
 ## 2026.07.10
@@ -997,7 +997,7 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **Store `NodeData` → UI `Node` 单点桥接**：`nodeView.ts` 的 `toUiNode`；`useNodeView` 复用；渲染层改 `UINode`；去除 `CanvasNode` `as unknown as NodeModel`。
 - [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`LayoutTabType` / `EditorGroupSnapshot` / `layoutTabModel` 工厂与规范化；`useEditorGroups` 去 `any`；`openEditorTab` / TabBar split 共用。
 - [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts` 统一 exec 判别 / 展示标签 / 主题键；连接与 palette 以 `buildPinDataType` + `TypeSystemSnapshot` 为准；`setPinValue` 改读 store `dataType`；去除 `resolveNodePinSpecs` 裸 `type` fallback；5 项 vitest。
-- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；`InfoView/shared/types.ts` 薄 re-export；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
+- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；曾用 `InfoView/shared/types.ts` 薄 re-export（后续已删除）；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
 - [x] **Info 报告 IPC 边界 `normalize*` 补齐**：`parseReportPayload(report, raw)` 覆盖全部 `ReportKind`；回归五类共用 `parseRegressionResultData`；`ReportView` 无效 payload 展示错误文案；`serialTests`/`correlogram`/`iv` 共用 `parseCommon`；11 项 vitest。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)
 - [x] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。→ 见 [DESIGN_RULE.md §2.9](./docs/DESIGN_RULE.md#29-infoview-统计数值展示)
 - [x] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。→ 见 [DESIGN_RULE.md §3.8](./docs/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)、[DTO_TYPE_MAPPING.md §十二–十四](./docs/DTO_TYPE_MAPPING.md#十二nodeinstanceparams节点实例参数)
@@ -1006,6 +1006,7 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
 - [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
 - [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
+- [x] **`@deprecated` 兼容层清零**：删除 `InfoView/shared/types.ts`、`parseSourceIdFromLocation`、`LoadingOverlay`、`PaletteItem`/`CreateNodeSpawnParams` 等别名；`LayoutTab.title`、`ConnectPinsResult.autoDisconnected*`、`node_metadata`/`ui_style` 双字段、测试 `withLegacyPinLinks` 一并移除；Presentation 统一 `parsePresentationWindowQuery`；`src/` / `src-tauri/` 无 `@deprecated` 标注。
 
 
 ## v1.0 待办
@@ -1292,6 +1293,28 @@ PinInstance 新增字段:
 - **问题**：仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
 - **修复**：删除该函数，测试改为 `buildPinResultSearchEntry`，并从 `execution/index.ts` 移除导出。
 
+### 12. 代码漂移：InfoView 类型导入路径
+- **问题**：`InfoView/shared/types.ts` 标注 `@deprecated`，多处仍从该路径导入，实际仅 re-export `@/shared/types/report`。
+- **修复**：删除 `InfoView/shared/types.ts`；全部 InfoView 组件改 `@/shared/types/report`；`InfoView/shared/index.ts` 移除 types re-export。
+
+### 13. `@deprecated` 兼容层清零
+- **问题**：前后端仍保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
+- **修复**：
+
+| 废弃项 | 处理 |
+|--------|------|
+| `parseSourceIdFromLocation` | 删除；统一 `parsePresentationWindowQuery().sourceId` |
+| `SCAN_CANCELLED` / `cancelProjectScan` | 从 `projectService` 删除 |
+| `pickNodeDocumentation` / `resolveNodeDescription` | 删除 |
+| `LoadingOverlay` | 删除 |
+| `CreateNodeSpawnParams` / `PaletteItem` | 删除；改用 `NodeSpawnParams` / `NodeCatalogItem` |
+| `CorrelogramDatum`（TS 导出） | 删除 |
+| `ConnectPinsResult.autoDisconnectedFrom/To` | 从 TS + Rust DTO 删除 |
+| `NodeMetaData.node_metadata` / `ui_style` | 删除双字段；统一 `nodeMetadata` / `uiStyle` |
+| `LayoutTab.title` | 从类型与测试 fixtures 删除 |
+| `withLegacyPinLinks` | 从 `graphFixtures.ts` 删除 |
+| `yss-sci/typing.rs` `@deprecated` 注释 | 删除 |
+
 ---
 
 ## 仍待收敛（未改，风险较低）
@@ -1300,7 +1323,6 @@ PinInstance 新增字段:
 |------|------|
 | Plot 其余组件 | `ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart` 仍有内联 `ResizeObserver`，可逐步改用 `usePlotContainerSize` |
 | Plot 网格线绘制 | 各 XY 图内联 d3 grid 逻辑相似，但 `axisScale.ts` 注释明确单图可内联，暂不强制抽取 |
-| InfoView 类型导入 | 多处仍从 deprecated `views/InfoView/shared/types` 导入，实际 re-export 到 `@/shared/types/report`，可批量改 import 路径 |
 | `normalizeVariables` | `projectIOStore` 本地 helper 与 `variableService` 模式略重复，但边界清晰，暂保留 |
 
 ---
@@ -1308,9 +1330,11 @@ PinInstance 新增字段:
 ## 验证
 
 - `npx tsc --noEmit` — 通过
-- vitest：plotTime、pinResultSearch、dnd、graphModel、layoutTabModel — 22 项全部通过
+- `cargo check` — 通过
+- vitest：plotTime、pinResultSearch、execution、graphModel、layoutTabModel — 通过
+- 全项目 `@deprecated` 标注 — 已清零（`src/` / `src-tauri/`）
 
-如需继续，建议下一批处理 **InfoView 类型 import 路径统一** 或 **剩余 Plot 组件迁移 `usePlotContainerSize`**。要我先做哪一块？
+如需继续，建议下一批处理 **剩余 Plot 组件迁移 `usePlotContainerSize`**。
 
 
 

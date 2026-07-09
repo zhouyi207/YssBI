@@ -1,6 +1,6 @@
 import VARStableChart from './VARStableChart';
 import { VarEigenvalueTable } from './VarModelTable';
-import type { VARStableRow } from './types';
+import type { VARStableRow } from '@/shared/types/report';
 
 export function VarEigenvalueStabilityPanel({
   rows,

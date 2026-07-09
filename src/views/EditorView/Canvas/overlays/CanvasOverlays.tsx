@@ -6,7 +6,8 @@ import { useEditorGroup } from "@/features/application/editor";
 
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { ContextMenu } from "@/shared/ui/contextMenu";
-import { NodePalette, type PaletteItem } from "../../Layout/NodePalette";
+import { NodePalette } from "../../Layout/NodePalette";
+import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
@@ -56,7 +57,7 @@ export default function CanvasOverlays({
     });
 
     const tabId = activeTabId ?? "";
-    const onPaletteSelect = (item: PaletteItem) =>
+    const onPaletteSelect = (item: NodeCatalogItem) =>
         contextMenu && handleNodePaletteSelect(item, contextMenu);
 
     const activeTabType = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type;

@@ -21,8 +21,6 @@ fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
 pub struct ConnectPinsResult {
     pub from_pin: String,
     pub to_pin: String,
-    pub auto_disconnected_from: Option<String>,
-    pub auto_disconnected_to: Option<String>,
     pub auto_disconnected: Vec<AutoDisconnected>,
 }
 
@@ -112,10 +110,6 @@ pub fn connect_pins(
         &[],
     );
 
-    let (ad_from, ad_to) = auto_disconnected_list
-        .first()
-        .map(|(f, t)| (Some(f.to_string()), Some(t.to_string())))
-        .unwrap_or((None, None));
     let auto_disconnected = auto_disconnected_list
         .iter()
         .map(|(f, t)| AutoDisconnected {
@@ -126,8 +120,6 @@ pub fn connect_pins(
     Ok(ConnectPinsResult {
         from_pin: from_pin.to_string(),
         to_pin: to_pin.to_string(),
-        auto_disconnected_from: ad_from,
-        auto_disconnected_to: ad_to,
         auto_disconnected,
     })
 }

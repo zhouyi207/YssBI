@@ -1,7 +1,7 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatNum, SignificanceStars } from './RegressionShared';
-import type { Coefficient } from './types';
+import type { Coefficient } from '@/shared/types/report';
 import {
   InfoStatsTable,
   infoStatsCellClass,

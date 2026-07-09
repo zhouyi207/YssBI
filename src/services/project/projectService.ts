@@ -51,20 +51,12 @@ export type ProjectCleanupProgressEvent =
 export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
 export const EXECUTION_CANCELLED = "EXECUTION_CANCELLED";
 
-/** @deprecated 使用 PICKER_TASK_CANCELLED */
-export const SCAN_CANCELLED = PICKER_TASK_CANCELLED;
-
 export function isPickerTaskCancelledError(error: unknown): boolean {
     return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
 }
 
 export function isExecutionCancelledError(error: unknown): boolean {
     return formatErrorMessage(error, "") === EXECUTION_CANCELLED;
-}
-
-/** @deprecated 使用 isPickerTaskCancelledError */
-export function isScanCancelledError(error: unknown): boolean {
-    return isPickerTaskCancelledError(error);
 }
 
 export interface ProjectGraphIndexRow {
@@ -251,11 +243,6 @@ export class ProjectService {
 
     static async cancelProjectPickerTask(): Promise<void> {
         await invoke("cancel_project_picker_task");
-    }
-
-    /** @deprecated 使用 cancelProjectPickerTask */
-    static async cancelProjectScan(): Promise<void> {
-        return ProjectService.cancelProjectPickerTask();
     }
 
     static async cleanupInvalidRegisteredProjects(

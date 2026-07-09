@@ -5,7 +5,7 @@ import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { FormulaMappingTable } from './shared/FormulaMappingTable';
 import { formatNum } from './shared/utils';
-import type { Coefficient } from './shared/types';
+import type { Coefficient } from '@/shared/types/report';
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);

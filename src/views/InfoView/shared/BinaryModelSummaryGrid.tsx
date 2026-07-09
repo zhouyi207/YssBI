@@ -1,5 +1,5 @@
 import { formatNum, InfoRow } from './RegressionShared';
-import type { ModelBasicInfo } from './types';
+import type { ModelBasicInfo } from '@/shared/types/report';
 
 /** Model summary for binary choice models (Logit, Probit) */
 export function BinaryModelSummaryGrid({

@@ -9,9 +9,9 @@ import {
   RegressionModelCoreSections,
   OlsStyleDiagnosticsSection,
 } from './shared';
-import type { OLSResultData } from './shared/types';
+import type { OLSResultData } from '@/shared/types/report';
 
-export type { Coefficient, OLSResultData } from './shared/types';
+export type { Coefficient, OLSResultData } from '@/shared/types/report';
 
 export const OLSComponent: FC<{ data: OLSResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical, leverageKdeData } = useRegressionReport(data);

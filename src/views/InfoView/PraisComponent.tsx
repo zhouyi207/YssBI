@@ -14,7 +14,7 @@ import {
   MulticollinearityBlock,
   ResidualDiagnosticsSection,
 } from './shared';
-import type { RegressionResultData } from './shared/types';
+import type { RegressionResultData } from '@/shared/types/report';
 
 export interface PraisResultData extends RegressionResultData {
   diagnostic_info: RegressionResultData['diagnostic_info'] & {

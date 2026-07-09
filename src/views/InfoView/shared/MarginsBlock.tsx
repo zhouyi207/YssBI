@@ -11,7 +11,7 @@ import {
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildParamNames } from './utils';
 import { parseAtValues } from '@/features/application/stats/statsActions';
-import type { OLSResultData } from './types';
+import type { OLSResultData } from '@/shared/types/report';
 
 /** Standard normal PDF φ(x) */
 function phi(x: number): number {

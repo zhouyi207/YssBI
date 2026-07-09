@@ -10,7 +10,7 @@ import {
   VarModelCell,
 } from './shared';
 import { VarEigenvalueStabilityPanel } from './shared/VarEigenvalueStabilityPanel';
-import type { Coefficient, VECSummaryResultData } from './shared/types';
+import type { Coefficient, VECSummaryResultData } from '@/shared/types/report';
 
 function vecCoeffsToOLSFormat(coefficients: VECSummaryResultData['coefficients']): Coefficient[] {
   const eqOrder = [...new Set(coefficients.map((x) => x.eq_name))];

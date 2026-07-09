@@ -1,5 +1,5 @@
 import { formatNum } from './RegressionShared';
-import type { ModelBasicInfo } from './types';
+import type { ModelBasicInfo } from '@/shared/types/report';
 
 /** MLE iteration log — separate module at bottom (Stata-style) */
 export function PanelMLEIterationBlock({ info }: { info: ModelBasicInfo }) {

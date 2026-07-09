@@ -1,7 +1,7 @@
 import { ReportSection } from '../shared/ReportLayout';
 import { formatNum } from '../shared/RegressionShared';
 import { VarModelCell, VarModelRow, VarModelTable } from '../shared/VarModelTable';
-import type { VARLmarDisplay } from '../shared/types';
+import type { VARLmarDisplay } from '@/shared/types/report';
 
 export function VarLmarSection({ rows }: { rows: VARLmarDisplay[] }) {
   if (rows.length === 0) return null;

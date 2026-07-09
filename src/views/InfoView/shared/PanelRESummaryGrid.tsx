@@ -1,6 +1,6 @@
 import { formatNum, InfoRow } from './RegressionShared';
-import type { PanelFEInfo } from './types';
-import type { ModelBasicInfo } from './types';
+import type { PanelFEInfo } from '@/shared/types/report';
+import type { ModelBasicInfo } from '@/shared/types/report';
 
 /** Stata xtreg, re style summary grid — Random-effects GLS or ML regression */
 export function PanelRESummaryGrid({

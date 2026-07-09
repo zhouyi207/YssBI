@@ -6,9 +6,6 @@ import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { Card } from '@/components/ui/card';
 import { NodeCatalogTreeView } from './nodeCatalog/NodeCatalogTreeView';
 
-/** @deprecated Use NodeCatalogItem */
-export type PaletteItem = NodeCatalogItem;
-
 export function NodePalette({
   x,
   y,
@@ -21,7 +18,7 @@ export function NodePalette({
 }: {
   x: number;
   y: number;
-  onSelect: (item: PaletteItem) => void;
+  onSelect: (item: NodeCatalogItem) => void;
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
   functions?: Record<string, FunctionCatalogEntry>;

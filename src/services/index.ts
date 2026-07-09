@@ -9,7 +9,6 @@ export { NodeService } from "./graph/node/nodeService";
 export type {
   BatchCreateNodeRequest,
   NodeSpawnParams,
-  CreateNodeSpawnParams,
   BatchCreateWithConnectionsEntry,
 } from "./graph/node/nodeService";
 export { ConnectionService } from "./graph/connection/connectionService";

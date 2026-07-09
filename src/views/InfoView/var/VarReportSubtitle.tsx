@@ -1,4 +1,4 @@
-import type { VARSummaryResultData } from '../shared/types';
+import type { VARSummaryResultData } from '@/shared/types/report';
 
 export function VarReportSubtitle({
   var_names,

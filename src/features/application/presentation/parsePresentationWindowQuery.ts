@@ -26,11 +26,6 @@ export function parsePresentationWindowQuery(): PresentationWindowQuery {
   return parsePresentationWindowQueryFromParts(window.location.hash, window.location.search);
 }
 
-/** @deprecated Use parsePresentationWindowQuery().sourceId */
-export function parseSourceIdFromLocation(): string | null {
-  return parsePresentationWindowQuery().sourceId;
-}
-
 export function parsePlotChartFromLocation(): string | null {
   return parsePresentationWindowQuery().plotType;
 }

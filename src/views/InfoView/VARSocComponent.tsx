@@ -3,9 +3,9 @@ import { useMemo } from 'react';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ReportLayout, ReportSection, formatNum } from './shared';
 import { InfoStatsTable, infoStatsRowEvenClass, infoStatsRowOddClass } from './shared/InfoStatsTable';
-import type { VARSocResultData } from './shared/types';
+import type { VARSocResultData } from '@/shared/types/report';
 
-export type { VARSocResultData } from './shared/types';
+export type { VARSocResultData } from '@/shared/types/report';
 
 function fmtCell(v: number | null | undefined, decimals = 4): string {
   if (v == null || Number.isNaN(v)) return '—';

@@ -9,8 +9,6 @@ export interface AutoDisconnected {
 export interface ConnectPinsResult {
     fromPin: string;
     toPin: string;
-    autoDisconnectedFrom: string | null;
-    autoDisconnectedTo: string | null;
     autoDisconnected: AutoDisconnected[];
 }
 

@@ -3,6 +3,7 @@ import type { NodeMetaData } from '@/shared/types/domain/node';
 import { resolveNodeDocumentationContent } from './nodeDocumentation';
 
 const meta: NodeMetaData = {
+  uiStyle: 'default',
   supports_dynamic_pins: false,
   graph_scope: 'any',
   shell_role: null,
@@ -24,6 +25,7 @@ describe('resolveNodeDocumentationContent', () => {
 
   it('falls back to the other language when primary is missing', () => {
     const partial: NodeMetaData = {
+      uiStyle: 'default',
       supports_dynamic_pins: false,
       graph_scope: 'any',
       shell_role: null,

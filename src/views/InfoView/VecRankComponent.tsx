@@ -2,9 +2,9 @@ import type { FC } from 'react';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ReportLayout, ReportSection, formatNum } from './shared';
 import { InfoStatsTable } from './shared/InfoStatsTable';
-import type { VecRankResultData } from './shared/types';
+import type { VecRankResultData } from '@/shared/types/report';
 
-export type { VecRankResultData } from './shared/types';
+export type { VecRankResultData } from '@/shared/types/report';
 
 function fmt(v: number | null | undefined, d = 4): string {
   if (v == null || Number.isNaN(v)) return '—';

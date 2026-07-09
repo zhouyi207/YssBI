@@ -31,8 +31,6 @@ export type LayoutTabComponent = 'GraphEditor' | 'WorksheetEditor';
 export interface LayoutTab {
   /** Graph tab: project-relative graph path; worksheet tab: worksheet resource id */
   id: string;
-  /** @deprecated Hydrate-only snapshot; display via ResourceStore / resolveTabDisplayName. */
-  title?: string;
   component: LayoutTabComponent;
   type: LayoutTabType;
   /**

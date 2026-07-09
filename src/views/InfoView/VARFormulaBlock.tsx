@@ -5,7 +5,7 @@ import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNum } from './shared/utils';
-import type { VARCoefDisplay } from './shared/types';
+import type { VARCoefDisplay } from '@/shared/types/report';
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);

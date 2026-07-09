@@ -166,10 +166,7 @@ export function buildNodeDraft(
     title: definition.name ?? nodeType,
     inputs,
     outputs,
-    uiStyle:
-      definition.nodeMetadata?.uiStyle ??
-      definition.nodeMetadata?.ui_style ??
-      'default',
+    uiStyle: definition.nodeMetadata?.uiStyle ?? 'default',
     position: { x, y },
     paramsKind,
     variableId: params?.variableId,

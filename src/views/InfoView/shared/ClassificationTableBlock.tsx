@@ -1,6 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNum, formatPercent } from './RegressionShared';
-import type { ClassificationTable } from './types';
+import type { ClassificationTable } from '@/shared/types/report';
 
 /** Stata estat classification — classification table and statistics */
 export function ClassificationTableBlock({ data }: { data: ClassificationTable }) {

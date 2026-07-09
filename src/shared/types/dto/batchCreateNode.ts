@@ -12,7 +12,6 @@ export type {
   ParamsKind,
   NodeSpawnParams,
   NodeInstanceParamsDTO,
-  CreateNodeSpawnParams,
 } from './nodeInstanceParams';
 
 export { spawnParamsToInstanceParams, NODE_INSTANCE_PARAMS_NONE } from './nodeInstanceParams';

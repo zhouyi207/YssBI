@@ -3,7 +3,7 @@ import { CoefficientTable } from './CoefficientTable';
 import { IvFirstStageSummaryTables } from './IvFirstStageSummaryTables';
 import { ReportLazyBoundary, ReportSection } from './ReportLayout';
 import { LazyFormulaBlock, LazyFormulaBlock2SLS } from './reportLazyModules';
-import type { Coefficient, DiagnosticInfo } from './types';
+import type { Coefficient, DiagnosticInfo } from '@/shared/types/report';
 
 type IvVariant = '2sls' | 'liml';
 

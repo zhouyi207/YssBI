@@ -16,8 +16,6 @@ export interface MakeTestGraphOptions {
   outputPinId?: string;
   outputPinColor?: string;
   pinType?: string;
-  /** Attach deprecated `links` on pins (hydrate must strip). */
-  withLegacyPinLinks?: boolean;
   /** Default true: `outputPin` → `inputPin` */
   connected?: boolean;
 }
@@ -29,9 +27,8 @@ function makeTestPinData(params: {
   name?: string;
   type?: string;
   ui?: PinData['ui'];
-  withLegacyPinLinks?: boolean;
 }): PinData {
-  const pin: PinData & { links?: string[] } = {
+  return {
     id: params.id,
     nodeId: params.nodeId,
     name: params.name ?? (params.direction === 'input' ? 'In' : 'Out'),
@@ -39,10 +36,6 @@ function makeTestPinData(params: {
     direction: params.direction,
     ui: params.ui,
   };
-  if (params.withLegacyPinLinks) {
-    pin.links = ['should-be-ignored'];
-  }
-  return pin;
 }
 
 /** Hydrate-safe `GraphDataLike` factory for store / canvas / sync tests. */
@@ -87,7 +80,6 @@ export function makeTestGraph(
         nodeId,
         direction: 'input',
         type: options.pinType,
-        withLegacyPinLinks: options.withLegacyPinLinks,
       }),
       makeTestPinData({
         id: outputPinId,
@@ -95,7 +87,6 @@ export function makeTestGraph(
         direction: 'output',
         type: options.pinType,
         ui: options.outputPinColor ? { color: options.outputPinColor } : undefined,
-        withLegacyPinLinks: options.withLegacyPinLinks,
       }),
     ],
     connections: connected

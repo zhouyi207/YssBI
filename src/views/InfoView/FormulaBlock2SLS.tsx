@@ -4,8 +4,8 @@ import 'katex/dist/katex.min.css';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { formatNum } from './shared/utils';
-import type { Coefficient } from './shared/types';
-import type { Iv2slsFirstStageResult } from './shared/types';
+import type { Coefficient } from '@/shared/types/report';
+import type { Iv2slsFirstStageResult } from '@/shared/types/report';
 
 function escapeLatex(s: string): string {
   return s.replace(/[_{}\\^~&%$#]/g, (ch) => `\\${ch}`);

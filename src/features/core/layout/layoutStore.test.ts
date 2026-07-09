@@ -19,8 +19,8 @@ describe('layoutStore tab selection lifecycle', () => {
           data: {
             component: 'GraphEditor',
             tabs: [
-              { id: 'g1', title: 'Graph 1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', title: 'Graph 2', component: 'GraphEditor', type: 'event' },
+              { id: 'g1', component: 'GraphEditor', type: 'event' },
+              { id: 'g2', component: 'GraphEditor', type: 'event' },
             ],
             activeTabId: 'g1',
             params: { selectedNodeIds: ['node-from-g1'] },
@@ -43,7 +43,6 @@ describe('layoutStore tab selection lifecycle', () => {
   it('clears stale selected node ids when activating an existing tab', () => {
     useLayoutStore.getState().addTab('editor', {
       id: 'g2',
-      title: 'Graph 2',
       component: 'GraphEditor',
       type: 'event',
     });
@@ -56,7 +55,6 @@ describe('layoutStore tab selection lifecycle', () => {
   it('keeps selected node ids when activating the already active tab', () => {
     useLayoutStore.getState().addTab('editor', {
       id: 'g1',
-      title: 'Graph 1',
       component: 'GraphEditor',
       type: 'event',
     });

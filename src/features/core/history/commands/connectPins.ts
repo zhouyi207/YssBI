@@ -21,9 +21,6 @@ export interface ConnectPinsContext {
   pinB: string;
   fromPin: string;
   toPin: string;
-  /** @deprecated use autoDisconnectedList */
-  autoDisconnectedFrom: string | null;
-  autoDisconnectedTo: string | null;
   autoDisconnectedList: AutoDisconnectedEntry[];
 }
 
@@ -44,8 +41,6 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
         pinB: args.pinB,
         fromPin: result.fromPin,
         toPin: result.toPin,
-        autoDisconnectedFrom: result.autoDisconnectedFrom,
-        autoDisconnectedTo: result.autoDisconnectedTo,
         autoDisconnectedList: result.autoDisconnected,
       };
     } catch (error) {
@@ -58,8 +53,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
     const connectionId = `${context.fromPin}->${context.toPin}`;
     await ConnectionService.deleteConnection(graphPath, connectionId);
 
-    const toRestore = context.autoDisconnectedList ?? [];
-    for (const entry of toRestore) {
+    for (const entry of context.autoDisconnectedList) {
       await ConnectionService.connectPins(graphPath, entry.fromPin, entry.toPin);
     }
   },

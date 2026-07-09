@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatNum, formatNullableNum, coerceFiniteNumber } from './utils';
-import type { BreuschPaganTests } from './types';
+import type { BreuschPaganTests } from '@/shared/types/report';
 
 export { formatNum, formatNullableNum, formatPercent, coerceFiniteNumber } from './utils';
 

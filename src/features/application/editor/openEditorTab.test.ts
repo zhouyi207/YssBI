@@ -13,7 +13,7 @@ describe('openEditorTab', () => {
           data: {
             component: 'Sidebar',
             isFixed: true,
-            tabs: [{ id: 'ws1', title: 'Sheet 1', component: 'WorksheetEditor', type: 'worksheet' }],
+            tabs: [{ id: 'ws1', component: 'WorksheetEditor', type: 'worksheet' }],
             activeTabId: 'ws1',
           },
         },
@@ -34,7 +34,6 @@ describe('openEditorTab', () => {
 
     openEditorTab({
       id: 'ws1',
-      title: 'Sheet 1',
       component: 'WorksheetEditor',
       type: 'worksheet',
     });

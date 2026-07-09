@@ -1,7 +1,7 @@
 import { ReportSection } from '../shared/ReportLayout';
 import { formatNum } from '../shared/RegressionShared';
 import { VarModelCell, VarModelRow, VarModelTable } from '../shared/VarModelTable';
-import type { VAREquationDisplay } from '../shared/types';
+import type { VAREquationDisplay } from '@/shared/types/report';
 
 export function VarEquationSummarySection({ equations }: { equations: VAREquationDisplay[] }) {
   if (equations.length === 0) return null;

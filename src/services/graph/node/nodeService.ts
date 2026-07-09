@@ -12,7 +12,6 @@ export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from '@/sh
 export type {
   BatchCreateNodeRequest,
   NodeSpawnParams,
-  CreateNodeSpawnParams,
   BatchCreateNodeIpcItem,
   NodeInstanceParamsDTO,
 } from '@/shared/types/dto/batchCreateNode';

@@ -17,8 +17,8 @@ const mockNodes: LayoutTree = {
     data: {
       component: 'GraphEditor',
       tabs: [
-        { id: 'g1', title: 'Graph 1', component: 'GraphEditor', type: 'event' },
-        { id: 'g2', title: 'Graph 2', component: 'GraphEditor', type: 'function' },
+        { id: 'g1', component: 'GraphEditor', type: 'event' },
+        { id: 'g2', component: 'GraphEditor', type: 'function' },
       ],
       activeTabId: 'g1',
     },
@@ -29,7 +29,7 @@ const mockNodes: LayoutTree = {
     parentId: 'root',
     data: {
       component: 'GraphEditor',
-      tabs: [{ id: 'g3', title: 'Graph 3', component: 'GraphEditor', type: 'event' }],
+      tabs: [{ id: 'g3', component: 'GraphEditor', type: 'event' }],
       activeTabId: 'g3',
     },
   },

@@ -4,7 +4,7 @@ import { InfoAccentButton } from './InfoViewControls';
 import { ReportSection } from './ReportLayout';
 import { formatNum } from './RegressionShared';
 import { linearFormToLatex, renderHypothesisLatex } from './utils';
-import type { RegressionResultData } from './types';
+import type { RegressionResultData } from '@/shared/types/report';
 
 function HypothesisFormulas({
   form,

@@ -9,7 +9,7 @@ import {
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
 } from './InfoStatsTable';
-import type { Iv2slsFirstStageResult, Iv2slsFirstStageSummary } from './types';
+import type { Iv2slsFirstStageResult, Iv2slsFirstStageSummary } from '@/shared/types/report';
 
 export function IvFirstStageSummaryTables({
   summary,

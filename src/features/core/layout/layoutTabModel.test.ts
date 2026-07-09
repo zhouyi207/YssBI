@@ -16,7 +16,6 @@ describe('layoutTabModel', () => {
     const legacy: LayoutTabInput = { id: 'g1', title: 'G', component: 'GraphEditor' };
     expect(normalizeLayoutTab(legacy)).toEqual({
       id: 'g1',
-      title: 'G',
       component: 'GraphEditor',
       type: 'event',
     });

@@ -1,4 +1,4 @@
-import type { Coefficient, VARSummaryResultData, VARStableRow } from '../shared/types';
+import type { Coefficient, VARSummaryResultData, VARStableRow } from '@/shared/types/report';
 
 export function varCoeffsToOLSFormat(coefficients: VARSummaryResultData['coefficients']): Coefficient[] {
   const eqOrder = [...new Set(coefficients.map((x) => x.eq_name))];

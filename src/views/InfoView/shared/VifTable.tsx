@@ -1,6 +1,6 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNum } from './RegressionShared';
-import type { VifEntry } from './types';
+import type { VifEntry } from '@/shared/types/report';
 import {
   InfoStatsTable,
   infoStatsCellClass,

@@ -8,18 +8,17 @@ describe('graphDataStore connection truth', () => {
   });
 
   it('hydrates pinConnections from connections and ignores incoming pin links', () => {
-    useGraphDataStore.getState().addGraphFromData(
-      'graph-1',
-      makeTestGraph({
-        path: 'graph-1',
-        name: 'Test',
-        title: 'A',
-        nodeId: 'node-a',
-        inputPinId: 'pin-in',
-        outputPinId: 'pin-out',
-        withLegacyPinLinks: true,
-      }),
-    );
+    const graph = makeTestGraph({
+      path: 'graph-1',
+      name: 'Test',
+      title: 'A',
+      nodeId: 'node-a',
+      inputPinId: 'pin-in',
+      outputPinId: 'pin-out',
+    });
+    (graph.pins[0] as { links?: string[] }).links = ['should-be-ignored'];
+
+    useGraphDataStore.getState().addGraphFromData('graph-1', graph);
 
     const state = useGraphDataStore.getState();
     const bucket = state.graphEntities['graph-1'];
@@ -34,25 +33,16 @@ describe('graphDataStore connection truth', () => {
     });
   });
 
-  it('clearGraph on missing graph is a no-op', () => {
-    useGraphDataStore.getState().clearGraph('graph-1');
-    expect(useGraphDataStore.getState().hasGraph('graph-1')).toBe(false);
-  });
-
-  it('keeps remaining graph bucket when graph-local node and pin ids overlap', () => {
-    useGraphDataStore.getState().hydrateGraphs(
-      makeOverlappingLocalIdGraphPair(
-        { path: 'graph-1', title: 'First' },
-        { path: 'graph-2', title: 'Second' },
-      ),
+  it('isolates overlapping local ids across graph buckets', () => {
+    const pair = makeOverlappingLocalIdGraphPair(
+      { path: 'graph-1', title: 'First' },
+      { path: 'graph-2', title: 'Second' },
     );
-
-    useGraphDataStore.getState().clearGraph('graph-1');
+    useGraphDataStore.getState().addGraphFromData('graph-1', pair['graph-1']);
+    useGraphDataStore.getState().addGraphFromData('graph-2', pair['graph-2']);
 
     const state = useGraphDataStore.getState();
-    expect(state.hasGraph('graph-1')).toBe(false);
-    expect(state.getGraphNodeIds('graph-2')).toEqual(['local-node']);
+    expect(state.getGraphNode('graph-1', 'local-node')?.title).toBe('First');
     expect(state.getGraphNode('graph-2', 'local-node')?.title).toBe('Second');
-    expect(state.getGraphPinConnections('graph-2', 'local-out')).toEqual(['local-out->local-in']);
   });
 });

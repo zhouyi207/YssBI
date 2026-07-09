@@ -9,7 +9,6 @@ export * from './InfoStatsTable';
 export * from './FormulaMappingTable';
 export * from './IvFirstStageSummaryTables';
 export * from './VarModelTable';
-export * from './types';
 export * from './utils';
 export * from './RegressionShared';
 export * from './CoeffBarChart';

@@ -9,4 +9,4 @@ export {
   type XySeriesPlotDTO,
 } from '@/shared/types/dto/plotPayload';
 
-export type { CorrelogramBarDTO, PlotCorrelogramBarDTO, CorrelogramDatum } from '@/shared/types/report';
+export type { CorrelogramBarDTO, PlotCorrelogramBarDTO } from '@/shared/types/report';

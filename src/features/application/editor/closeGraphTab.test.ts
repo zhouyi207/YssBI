@@ -25,8 +25,8 @@ describe('closeGraphTab', () => {
           data: {
             component: 'GraphEditor',
             tabs: [
-              { id: 'g1', title: 'Graph 1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', title: 'Graph 2', component: 'GraphEditor', type: 'event' },
+              { id: 'g1', component: 'GraphEditor', type: 'event' },
+              { id: 'g2', component: 'GraphEditor', type: 'event' },
             ],
             activeTabId: 'g1',
             params: { selectedNodeIds: ['node-from-g1'] },

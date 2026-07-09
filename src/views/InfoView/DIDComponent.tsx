@@ -16,9 +16,9 @@ import {
   formatNum,
   formatNullableNum,
 } from './shared';
-import type { PanelDidResultData, OLSResultData } from './shared/types';
+import type { PanelDidResultData, OLSResultData } from '@/shared/types/report';
 
-export type { PanelDidResultData } from './shared/types';
+export type { PanelDidResultData } from '@/shared/types/report';
 
 export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
   const {

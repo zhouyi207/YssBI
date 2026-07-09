@@ -16,7 +16,7 @@ import {
   HypothesisTestBlock,
   OmittedVariablesAlert,
 } from './shared';
-import type { PanelSummaryResult, OLSResultData } from './shared/types';
+import type { PanelSummaryResult, OLSResultData } from '@/shared/types/report';
 import type { PanelEffectType as EffectType, PanelMethod as TabKey, PanelModelType as ModelType } from './PanelFormulaBlock';
 
 const MODEL_TYPE_TABS: { key: ModelType; label: string }[] = [

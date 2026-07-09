@@ -14,7 +14,7 @@ import {
   tooltipRichBlock,
 } from '@/shared/plot/d3Tooltip';
 import { formatNum } from './utils';
-import type { VARStableRow } from './types';
+import type { VARStableRow } from '@/shared/types/report';
 
 export interface VARStableChartProps {
   data: VARStableRow[];

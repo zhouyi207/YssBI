@@ -13,7 +13,7 @@ import {
   MarginsBlock,
   formatNum,
 } from './shared';
-import type { OLSResultData } from './shared/types';
+import type { OLSResultData } from '@/shared/types/report';
 
 export type { OLSResultData };
 

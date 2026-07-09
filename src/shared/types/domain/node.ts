@@ -24,9 +24,7 @@ export type NodeGraphScope = 'any' | 'event' | 'function';
 export type ShellRole = 'event_begin' | 'function_entry' | 'function_return';
 
 export interface NodeMetaData {
-    uiStyle?: string;
-    /** @deprecated 后端 DTO 格式，优先使用 uiStyle */
-    ui_style?: string;
+    uiStyle: string;
     description?: string;
     documentation?: NodeDocumentation;
     supports_dynamic_pins: boolean;
@@ -99,15 +97,12 @@ export interface NodeDefinitionDTO {
     category: string[];
     nodeType: string;
     nodeMetadata: NodeMetaData;
-    /** @deprecated 旧字段名，优先使用 nodeMetadata */
-    node_metadata?: NodeMetaData;
     pinSlots: PinSlot[];
     typeCapabilities: PinTypeCapability[];
 }
 
 export function getNodeDefinitionMeta(def: NodeDefinition | undefined): NodeMetaData | undefined {
-    if (!def) return undefined;
-    return def.nodeMetadata ?? def.node_metadata;
+    return def?.nodeMetadata;
 }
 
 /** 系统托管壳节点（Event Begin / Function Entry/Return）：不可删除、不从 palette 添加。 */

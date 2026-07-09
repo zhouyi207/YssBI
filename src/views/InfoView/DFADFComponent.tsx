@@ -7,7 +7,7 @@ import {
   InfoRow,
   CoefficientTable,
 } from './shared';
-import type { Coefficient, DFADFSummaryResultData } from './shared/types';
+import type { Coefficient, DFADFSummaryResultData } from '@/shared/types/report';
 
 export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) => {
   const {
