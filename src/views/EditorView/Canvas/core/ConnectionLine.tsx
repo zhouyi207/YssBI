@@ -4,6 +4,7 @@ import { subscribeToViewport, getViewport } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
+import { bindSashAwareResizeObserver } from '@/shared/utils/sashResizeGuard';
 
 import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
@@ -122,7 +123,7 @@ export const ConnectionLine = ({
         const parent = canvasEl.parentElement;
         if (!parent) return;
 
-        const resizeObserver = new ResizeObserver(() => {
+        const resizeObserverCleanup = bindSashAwareResizeObserver(parent, () => {
             const rect = parent.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
             canvasEl.width = rect.width * dpr;
@@ -133,9 +134,8 @@ export const ConnectionLine = ({
             if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             renderRef.current();
         });
-        resizeObserver.observe(parent);
 
-        return () => resizeObserver.disconnect();
+        return resizeObserverCleanup;
     }, []);
 
     return <canvas ref={lineCanvasRef} className="absolute inset-0 pointer-events-none z-50" />;

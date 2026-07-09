@@ -127,6 +127,7 @@ export function Menubar() {
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,
+    handleResetLayout,
     openNewWindow,
   } = useMenubar();
 
@@ -196,10 +197,11 @@ export function Menubar() {
     { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
     { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },
+    { label: isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail"), shortcut: "Ctrl+Alt+B", onClick: toggleDetail },
     { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
     { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
     { label: "-" },
-    { label: t("menubar.resetLayout") },
+    { label: t("menubar.resetLayout"), onClick: handleResetLayout },
     { label: t("menubar.zoomIn"), shortcut: "Ctrl++" },
     { label: t("menubar.zoomOut"), shortcut: "Ctrl+-" },
   ];

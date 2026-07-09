@@ -1,4 +1,5 @@
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { useTranslation } from "react-i18next";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { BottomBar } from "./Layout/BottomBar";
@@ -13,7 +14,10 @@ import {
   useEditorKeyboard,
 } from "@/features/application/editor";
 import { useMenubar } from "@/features/application/menubar";
-import { usePersistedWindow } from "@/features/application/window";
+import { toggleSidebarVisibility } from "@/features/core/layout/workbenchLayoutService";
+import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
+import { useAppearanceSettings } from "@/features/application/settings/useAppearanceSettings";
+import { usePersistedWindow, usePersistedSecondaryWindow } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 
@@ -21,11 +25,14 @@ function EditorWindowReady() {
   const rootId = useLayoutStore((s) => s.rootId);
   const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
+  const activityBarPosition = useSettingsStore((s) => s.appearance.activityBarPosition);
 
+  useWorkbenchLayout();
+  useAppearanceSettings();
   useProjectSyncWithEditor();
 
   const editor = useEditorGroup();
-  const { toggleLogPanel } = useMenubar();
+  const { toggleLogPanel, toggleDetail } = useMenubar();
   useEditorKeyboard({
     deleteSelected: editor.deleteSelected,
     undo: editor.undo,
@@ -42,14 +49,20 @@ function EditorWindowReady() {
     setActiveTabId: editor.setActiveTabId,
     splitEditorRight: editor.splitEditorRight,
     toggleLogPanel,
+    toggleSidebar: toggleSidebarVisibility,
+    toggleDetail,
   });
+
+  const showActivityBar = activityBarPosition !== "Hidden";
+  const activityBarOnRight = activityBarPosition === "Right";
 
   return (
     <div className="flex flex-col w-full h-screen">
       <Menubar />
       <div className="flex flex-1 overflow-hidden isolate">
-        <ActivityBar />
+        {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}
         <Workspace nodeId={rootId} />
+        {showActivityBar && activityBarOnRight ? <ActivityBar side="right" /> : null}
       </div>
       <BottomBar />
       <Dialog open={isSettingsOpen} onOpenChange={setSettingsOpen}>
@@ -66,6 +79,7 @@ export const EditorWindow = () => {
   const { status, error } = useAppInitialization();
 
   usePersistedWindow("main");
+  usePersistedSecondaryWindow();
 
   if (status !== LoadStatus.Ready) {
     return (

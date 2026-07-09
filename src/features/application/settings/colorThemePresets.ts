@@ -1,0 +1,46 @@
+import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from '@/app/appConfig/default';
+import type { ThemeSettings } from '@/shared/types/settings';
+
+const THEME_BASE_KEYS = [
+  'mode',
+  'workbenchBackground',
+  'sidebarBackground',
+  'gridLines',
+  'nodeBase',
+  'connectionLines',
+  'selectionRegion',
+  'execColor',
+  'objectColor',
+  'anyColor',
+] satisfies Array<keyof ThemeSettings>;
+
+function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
+  return Object.fromEntries(THEME_BASE_KEYS.map((key) => [key, theme[key]])) as Partial<ThemeSettings>;
+}
+
+export const COLOR_THEME_PRESET_IDS = [
+  'Dark Modern (Default)',
+  'OLED Black',
+  'Light Modern',
+] as const;
+
+export type ColorThemePresetId = (typeof COLOR_THEME_PRESET_IDS)[number];
+
+export const COLOR_THEME_PRESETS: Record<ColorThemePresetId, Partial<ThemeSettings>> = {
+  'Dark Modern (Default)': pickThemeBase(DEFAULT_DARK_THEME),
+  'OLED Black': {
+    ...pickThemeBase(DEFAULT_DARK_THEME),
+    workbenchBackground: '#000000',
+    sidebarBackground: '#000000',
+    gridLines: '#141414',
+    nodeBase: '#0a0a0a',
+  },
+  'Light Modern': pickThemeBase(DEFAULT_LIGHT_THEME),
+};
+
+export function resolveColorThemePreset(colorTheme: string): Partial<ThemeSettings> {
+  if (colorTheme in COLOR_THEME_PRESETS) {
+    return COLOR_THEME_PRESETS[colorTheme as ColorThemePresetId];
+  }
+  return COLOR_THEME_PRESETS['Dark Modern (Default)'];
+}

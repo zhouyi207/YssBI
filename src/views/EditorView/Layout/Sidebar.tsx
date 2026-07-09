@@ -63,9 +63,12 @@ import {
   sidebarItemIndent,
   sidebarItemLabelClass,
   sidebarItemRowClass,
+  sidebarTrailingMetaClass,
+  sidebarVariableTypeBadgeClass,
 } from "./sidebarUi";
 import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
 import { SidebarNodesPanel } from "./SidebarNodesPanel";
+import { SidebarVirtualList } from "./SidebarVirtualList";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
@@ -325,10 +328,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             )}
             {type === "variable" && !readOnly && (
               <span
-                className={cn(
-                  "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
-                  isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
-                )}
+                className={sidebarVariableTypeBadgeClass(isSelected)}
                 style={{ color: safeDataTypeColor(extra?.dataType) }}
               >
                 {safeDataTypeDisplay(extra?.dataType)}
@@ -342,10 +342,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             )}
             {type === "variable" && readOnly && (
               <span
-                className={cn(
-                  "flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
-                  isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
-                )}
+                className={sidebarVariableTypeBadgeClass(isSelected)}
                 style={{ color: safeDataTypeColor(extra?.dataType) }}
               >
                 {safeDataTypeDisplay(extra?.dataType)}
@@ -443,13 +440,34 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     );
   };
 
+  const eventEntries = useMemo(
+    () => Object.entries(events as Record<string, { name: string }>),
+    [events],
+  );
+  const functionEntries = useMemo(
+    () => Object.entries(functions as Record<string, { name: string }>),
+    [functions],
+  );
+  const localVariableEntries = useMemo(
+    () => Object.entries(localVariables),
+    [localVariables],
+  );
+  const globalVariableEntries = useMemo(
+    () => Object.entries(variablesGlobal),
+    [variablesGlobal],
+  );
+  const dataframeEntries = useMemo(
+    () => Object.entries(dataframes ?? {}),
+    [dataframes],
+  );
+
   return (
     <div
       ref={ref}
-      className="sidebar-container flex h-full w-full overflow-hidden select-none bg-[var(--sidebar-bg)] relative z-30"
+      className="sidebar-container relative z-30 flex h-full w-full min-w-0 overflow-hidden select-none bg-[var(--sidebar-bg)]"
       style={{ pointerEvents: "auto" }}
     >
-      <div className="flex flex-col flex-1 min-h-0 bg-[var(--sidebar-bg)]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--sidebar-bg)]">
         <div className={workbenchPanelHeaderClass}>
           <span className={workbenchPanelHeaderTitleClass}>
             {currentTab === "graphs"
@@ -468,9 +486,9 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           </span>
         </div>
 
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden p-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
           {currentTab === "graphs" && (
-            <div ref={listRef} className="flex flex-col flex-1 min-h-0">
+            <div ref={listRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SidebarCollapsibleSection
                 label={t("sidebar.sections.event")}
                 expanded={isSectionExpanded("graphsEvent")}
@@ -479,14 +497,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "event" })}
               >
-                {Object.entries(events as Record<string, { name: string }>).map(([id, data]) =>
-                  renderItem(id, data.name, "event", undefined, false, (e) =>
-                    openContextMenu(e, { type: "graph", id, name: data.name, graphType: "event" })
-                  )
-                )}
-                {Object.keys(events).length === 0 && (
-                  <SidebarEmptyPlaceholder>{t("sidebar.noEvents")}</SidebarEmptyPlaceholder>
-                )}
+                <SidebarVirtualList
+                  items={eventEntries}
+                  renderItem={([id, data]) =>
+                    renderItem(id, data.name, "event", undefined, false, (e) =>
+                      openContextMenu(e, { type: "graph", id, name: data.name, graphType: "event" })
+                    )
+                  }
+                  empty={<SidebarEmptyPlaceholder>{t("sidebar.noEvents")}</SidebarEmptyPlaceholder>}
+                />
               </SidebarCollapsibleSection>
 
               <SidebarCollapsibleSection
@@ -497,14 +516,15 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "section", graphType: "function" })}
               >
-                {Object.entries(functions as Record<string, { name: string }>).map(([id, data]) =>
-                  renderItem(id, data.name, "function", undefined, false, (e) =>
-                    openContextMenu(e, { type: "graph", id, name: data.name, graphType: "function" })
-                  )
-                )}
-                {Object.keys(functions).length === 0 && (
-                  <SidebarEmptyPlaceholder>{t("sidebar.noFunctions")}</SidebarEmptyPlaceholder>
-                )}
+                <SidebarVirtualList
+                  items={functionEntries}
+                  renderItem={([id, data]) =>
+                    renderItem(id, data.name, "function", undefined, false, (e) =>
+                      openContextMenu(e, { type: "graph", id, name: data.name, graphType: "function" })
+                    )
+                  }
+                  empty={<SidebarEmptyPlaceholder>{t("sidebar.noFunctions")}</SidebarEmptyPlaceholder>}
+                />
               </SidebarCollapsibleSection>
             </div>
           )}
@@ -516,7 +536,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
           )}
 
           {currentTab === "variables" && (
-            <div ref={listRef} className="flex flex-col flex-1 min-h-0">
+            <div ref={listRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SidebarCollapsibleSection
                 label={t("sidebar.sections.local")}
                 expanded={isSectionExpanded("variablesLocal")}
@@ -525,16 +545,18 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: false })}
               >
-                {Object.entries(localVariables).map(([id, data]) =>
-                  renderItem(id, data.name, "variable", { dataType: data.dataType, isGlobal: false }, false, (e) =>
-                    openVariableContextMenu(e, id, data.name)
-                  )
-                )}
-                {!variablesScopeGraphType && (
+                {!variablesScopeGraphType ? (
                   <SidebarEmptyPlaceholder>{t("sidebar.noActiveGraph")}</SidebarEmptyPlaceholder>
-                )}
-                {variablesScopeGraphType && Object.keys(localVariables).length === 0 && (
-                  <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
+                ) : (
+                  <SidebarVirtualList
+                    items={localVariableEntries}
+                    renderItem={([id, data]) =>
+                      renderItem(id, data.name, "variable", { dataType: data.dataType, isGlobal: false }, false, (e) =>
+                        openVariableContextMenu(e, id, data.name)
+                      )
+                    }
+                    empty={<SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>}
+                  />
                 )}
               </SidebarCollapsibleSection>
 
@@ -546,20 +568,21 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "variableSection", isGlobal: true })}
               >
-                  {Object.entries(variablesGlobal).map(([id, data]) =>
+                <SidebarVirtualList
+                  items={globalVariableEntries}
+                  renderItem={([id, data]) =>
                     renderItem(id, data.name, "variable", { dataType: data.dataType, isGlobal: true }, false, (e) =>
                       openVariableContextMenu(e, id, data.name)
                     )
-                  )}
-                {Object.keys(variablesGlobal).length === 0 && (
-                  <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
-                )}
+                  }
+                  empty={<SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>}
+                />
               </SidebarCollapsibleSection>
             </div>
           )}
 
           {currentTab === "data" && (
-            <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SidebarCollapsibleSection
                 label={t("sidebar.sections.data")}
                 expanded={isSectionExpanded("dataData")}
@@ -568,12 +591,11 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
                 onHeaderContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
                 onContentContextMenu={(e) => openContextMenu(e, { type: "dataSection" })}
               >
-                  {Object.entries(dataframes || {}).map(([id, data]) =>
-                    renderDataItem(id, data.name, data),
-                  )}
-                  {Object.keys(dataframes || {}).length === 0 && (
-                    <SidebarEmptyPlaceholder>{t("sidebar.noData")}</SidebarEmptyPlaceholder>
-                  )}
+                <SidebarVirtualList
+                  items={dataframeEntries}
+                  renderItem={([id, data]) => renderDataItem(id, data.name, data)}
+                  empty={<SidebarEmptyPlaceholder>{t("sidebar.noData")}</SidebarEmptyPlaceholder>}
+                />
               </SidebarCollapsibleSection>
             </div>
           )}
@@ -581,7 +603,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
             <CommandsPanel activeTabId={activeTabId} />
           )}
           {currentTab === "charts" && (
-            <div ref={listRef} className="flex flex-col flex-1 min-h-0">
+            <div ref={listRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SidebarCollapsibleSection
                 label={t("chartsSidebar.worksheets")}
                 expanded={isSectionExpanded("chartsWorksheets")}
@@ -673,7 +695,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
 
   if (!activeTabId) {
     return (
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <SidebarEmptyPlaceholder className="py-3">{t("sidebar.noActiveGraph")}</SidebarEmptyPlaceholder>
       </div>
     );
@@ -682,7 +704,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
   const reversedUndo = [...undoStack].reverse();
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SidebarCollapsibleSection
         collapsible={false}
         label={`${t("common.undo")} (${undoStack.length})`}
@@ -699,7 +721,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
             <span className={sidebarItemLabelClass()}>
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(entry.timestamp)}</span>
+            <span className={sidebarTrailingMetaClass()}>{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
           <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>
@@ -722,7 +744,7 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
             <span className={sidebarItemLabelClass()}>
               {t(`sidebar.commands.${entry.commandType}`, { defaultValue: COMMAND_LABELS[entry.commandType] ?? entry.commandType })}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">{formatTime(entry.timestamp)}</span>
+            <span className={sidebarTrailingMetaClass()}>{formatTime(entry.timestamp)}</span>
           </div>
         )) : (
           <SidebarEmptyPlaceholder>—</SidebarEmptyPlaceholder>

@@ -1,4 +1,5 @@
 use super::ProjectState;
+use super::project_state_graph_mut::GraphMutContext;
 use super::unique_name;
 use crate::graph::{
     FunctionSignaturePin, GraphInstance, GraphKind, GraphRecompileScope, NodeInstanceParams,
@@ -510,18 +511,91 @@ impl ProjectState {
     ) -> Result<(GraphInstance, PinChangeSet), String> {
         let signature = self.get_function_signature(target_function_path)?;
 
-        let result = self.with_graph_mut(caller_graph_path, |ctx| {
-            let change_set = ctx.graph_ref().sync_call_function_pins_from_signature(
-                call_node_id,
-                &signature.inputs,
-                &signature.outputs,
-                None,
-            );
-            ctx.recompile(GraphRecompileScope::InferOnly);
-            Ok((ctx.graph_ref().clone(), change_set))
+        let result = self.with_graph_mut(caller_graph_path, |mut ctx| {
+            let (graph, change_set, _inferred) =
+                Self::project_call_function_pins(&mut ctx, call_node_id, &signature)?;
+            Ok((graph, change_set))
         })?;
         self.register_call_site(caller_graph_path, call_node_id, target_function_path);
         Ok(result)
+    }
+
+    /// 将 Call Function 节点重绑定到新目标函数：更新 subGraphPath、重投影 pin、维护 call-site 索引。
+    pub fn update_call_function_target(
+        &self,
+        caller_graph_path: &GraphResourcePath,
+        call_node_id: crate::graph::NodeId,
+        new_function_path: &GraphResourcePath,
+    ) -> Result<(GraphInstance, PinChangeSet, Vec<(crate::graph::PinId, crate::graph::DataType)>), String>
+    {
+        if self.get_graph(caller_graph_path).is_none() {
+            self.load_graph_from_current_project(caller_graph_path)?;
+        }
+
+        let node = self
+            .get_graph(caller_graph_path)
+            .and_then(|g| g.get_node_instance(call_node_id))
+            .ok_or_else(|| format!("Node '{}' not found in graph '{}'", call_node_id, caller_graph_path))?;
+
+        if node.definition.node_type != CALL_FUNCTION_NODE_TYPE {
+            return Err(format!(
+                "Node '{}' is not a Call Function node (type: {})",
+                call_node_id, node.definition.node_type
+            ));
+        }
+
+        let current_target =
+            Self::call_function_target_path(CALL_FUNCTION_NODE_TYPE, Some(&node.instance_params));
+        if current_target.as_ref() == Some(new_function_path) {
+            let graph = self
+                .get_graph(caller_graph_path)
+                .expect("caller graph loaded after no-op check");
+            return Ok((graph.clone(), PinChangeSet::default(), Vec::new()));
+        }
+
+        let signature = self.get_function_signature(new_function_path)?;
+
+        self.unregister_call_site_for_node(
+            caller_graph_path,
+            call_node_id,
+            CALL_FUNCTION_NODE_TYPE,
+        );
+
+        let new_params = crate::graph::NodeInstanceParams::SubGraph {
+            sub_graph_path: new_function_path.as_str().to_string(),
+        };
+
+        let result = self.with_graph_mut(caller_graph_path, |mut ctx| {
+            ctx.graph()
+                .set_node_instance_params(call_node_id, new_params)?;
+            Self::project_call_function_pins(&mut ctx, call_node_id, &signature)
+        })?;
+
+        self.register_call_site(caller_graph_path, call_node_id, new_function_path);
+        let _ = self.persist_loaded_graph(caller_graph_path);
+        Ok(result)
+    }
+
+    fn project_call_function_pins(
+        ctx: &mut GraphMutContext<'_>,
+        call_node_id: crate::graph::NodeId,
+        signature: &FunctionSignatureEntry,
+    ) -> Result<
+        (
+            GraphInstance,
+            PinChangeSet,
+            Vec<(crate::graph::PinId, crate::graph::DataType)>,
+        ),
+        String,
+    > {
+        let change_set = ctx.graph_ref().sync_call_function_pins_from_signature(
+            call_node_id,
+            &signature.inputs,
+            &signature.outputs,
+            None,
+        );
+        let inferred = ctx.recompile(GraphRecompileScope::InferOnly).inferred;
+        Ok((ctx.graph_ref().clone(), change_set, inferred))
     }
 
     /// 收集项目中所有引用 `function_path` 的 Call Function 节点（读内存索引）。

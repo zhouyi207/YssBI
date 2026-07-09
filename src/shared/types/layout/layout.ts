@@ -79,6 +79,20 @@ export interface LayoutNode {
     tabs?: LayoutTab[];
     activeTabId?: string;
     currentTab?: string | null;
+    /** User explicitly hid detail panel; auto-show should not override. */
+    userHidden?: boolean;
+    /** Panel maximized via sash double-click. */
+    maximized?: boolean;
+    restoredPixelSize?: number;
+    /** Editor group hidden while another group is maximized in editor_area. */
+    groupMaximizedHidden?: boolean;
+    /** editor_area: currently maximized editor group id. */
+    maximizedGroupId?: string;
+    /** editor_area: pixel sizes snapshot before group maximize. */
+    restoredGridSizes?: Record<string, number>;
+    /** Bottom panel tab views (Logs / Output / …). */
+    panelViews?: { id: string; component: string }[];
+    activePanelView?: string;
   };
 }
 

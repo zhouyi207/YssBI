@@ -11,6 +11,7 @@ use yssbi_lib::graph::core::{
 use yssbi_lib::graph::node::NodeInstanceParams;
 use yssbi_lib::graph::pin::{DataRole, ExecRole, PinRole};
 use yssbi_lib::graph::value::DataValue;
+use yssbi_lib::graph::value::DataType;
 use yssbi_lib::graph::{NodeId, PinId};
 use yssbi_lib::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use yssbi_lib::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
@@ -605,6 +606,69 @@ fn resolve_graph_dynamic_pins_reconciles_function_shell_pins() {
 
     let after = entry_data_pin_count(&state, &func_path);
     assert_eq!(after, before + 1, "tab open should project new signature input to Entry shell");
+}
+
+#[test]
+fn update_call_function_target_rebinds_pins_and_call_site_index() {
+    let state = ProjectState::new();
+    let func_int = build_identity_function(&state, "int", false);
+    let func_float = build_identity_function(&state, "float", false);
+    let event = state.add_event("Main");
+
+    let call = event
+        .create_node_with_position(
+            CALL_FUNCTION_NODE_TYPE,
+            0.0,
+            0.0,
+            Some(NodeInstanceParams::SubGraph {
+                sub_graph_path: func_int.to_string(),
+            }),
+        )
+        .expect("create call");
+
+    state
+        .sync_call_node(&event.resource_path, call, &func_int)
+        .expect("sync call pins");
+
+    assert_eq!(state.get_function_call_sites(&func_int).len(), 1);
+    assert!(state.get_function_call_sites(&func_float).is_empty());
+
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
+    let a_pin = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("a".into())),
+    );
+    assert_eq!(
+        event_graph.get_pin_data_type_by_pin_id(a_pin),
+        Some(DataType::Int64)
+    );
+
+    state
+        .update_call_function_target(&event.resource_path, call, &func_float)
+        .expect("rebind call target");
+
+    assert!(state.get_function_call_sites(&func_int).is_empty());
+    let float_sites = state.get_function_call_sites(&func_float);
+    assert_eq!(float_sites.len(), 1);
+    assert_eq!(float_sites[0].0, event.resource_path);
+    assert_eq!(float_sites[0].1, vec![call]);
+
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
+    let call_node = event_graph.get_node_instance(call).expect("call node");
+    assert_eq!(
+        call_node.instance_params.sub_graph_path(),
+        Some(func_float.as_str())
+    );
+    let a_pin = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("a".into())),
+    );
+    assert_eq!(
+        event_graph.get_pin_data_type_by_pin_id(a_pin),
+        Some(DataType::Float64)
+    );
 }
 
 fn entry_data_pin_count(state: &ProjectState, func_path: &GraphResourcePath) -> usize {

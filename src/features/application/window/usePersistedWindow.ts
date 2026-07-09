@@ -47,6 +47,7 @@ export function usePersistedWindow(kind: WindowKind): void {
         };
 
         const setup = async () => {
+            if (win.label !== "main") return;
             try {
                 unlistenClose = await win.onCloseRequested(async () => {
                     const next = await captureCurrentState();

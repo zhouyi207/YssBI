@@ -32,7 +32,6 @@ describe('graphSessionStore', () => {
           data: { component: 'GraphEditor', tabs: [], activeTabId: undefined },
         },
       },
-      activeGroupId: 'editor-a',
       activeEditorGroupId: 'editor-a',
     });
 

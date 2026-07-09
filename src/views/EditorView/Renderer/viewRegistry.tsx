@@ -1,10 +1,11 @@
 import React from 'react';
 import { GraphEditor } from "../Canvas/core/GraphEditor";
 import { WorksheetEditor } from "../Worksheet/WorksheetEditor";
-import { SettingsView } from "../Layout/SettingsView";
 import Sidebar from "../Layout/Sidebar";
 import { Detail } from "../Layout/Detail/Detail";
+import { PanelPart } from "../Layout/PanelPart";
 import { LogPanel } from "@/views/LogView/LogPanel";
+import { OutputPanel } from "@/views/LogView/OutputPanel";
 
 /**
  * 视图注册表类
@@ -42,14 +43,13 @@ export const viewRegistry = ViewRegistry.getInstance();
 viewRegistry.register('GraphEditor', GraphEditor);
 viewRegistry.register('WorksheetEditor', WorksheetEditor);
 
-// 2. 设置编辑器
-viewRegistry.register('SettingsEditor', SettingsView);
-
-// 3. 侧边栏 (Explorer)
+// 2. 侧边栏 (Explorer)
 viewRegistry.register('Sidebar', Sidebar);
 
 // 4. 属性详情栏 (Properties)
 viewRegistry.register('Detail', Detail);
 
-// 5. 日志面板 (Logs - VSCode-style panel at bottom)
+// 5. Bottom panel (VS Code-style: tab strip + views)
+viewRegistry.register('PanelPart', PanelPart);
 viewRegistry.register('LogPanel', LogPanel);
+viewRegistry.register('OutputPanel', OutputPanel);

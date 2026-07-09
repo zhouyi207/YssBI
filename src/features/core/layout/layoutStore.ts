@@ -7,10 +7,39 @@ import {
     resolveEditorSplitPlacement,
     type EditorSplitEdge,
 } from './editorSplitLayout';
-import { logger } from '@/utils/appLogger';
+import { clampWorkbenchPartSize } from './workbenchPanelSizing';
+import {
+    createInitialWorkbenchNodes,
+    DEFAULT_EDITOR_GROUP_ID,
+    EDITOR_AREA_ID,
+    WORKBENCH_ROOT_ID,
+    WORKBENCH_PART_IDS,
+} from './workbenchLayoutDefaults';
+import {
+    applyEditorGridPixelSizes,
+    clearEditorGroupMaximizedHidden,
+    listEditorGroupIds,
+    readEditorAreaMaximizedGroupId,
+    readEditorAreaRestoredGridSizes,
+    setEditorGroupMaximizedHidden,
+    snapshotEditorGridPixelSizes,
+    writeEditorAreaMaximizeState,
+} from './editorGridLayout';
 
-// Helper to generate IDs
-const generateId = () => Math.random().toString(36).slice(2, 11);
+export type SidebarTabId = 'graphs' | 'nodes' | 'variables' | 'data' | 'commands' | 'charts';
+
+export const SIDEBAR_NODE_ID = 'sidebar';
+
+export function isSidebarTabId(value: string | null | undefined): value is SidebarTabId {
+    return (
+        value === 'graphs'
+        || value === 'nodes'
+        || value === 'variables'
+        || value === 'data'
+        || value === 'commands'
+        || value === 'charts'
+    );
+}
 
 function clearSelectedNodeIds(data: LayoutNode['data']): LayoutNode['data'] {
     return {
@@ -48,14 +77,29 @@ export interface LayoutState {
     ) => string | null;
     resizeNode: (nodeId: string, size: number) => void;
 
+    /** Show sidebar and switch activity tab. pixelSize is preserved while hidden. */
+    showSidebarTab: (tab: SidebarTabId) => void;
+    /** Toggle sidebar visibility; same tab click hides, different tab switches. */
+    toggleSidebarTab: (tab: SidebarTabId) => void;
+
+    /** Collapse split editor groups back to a single default group. */
+    collapseEditorGroups: () => void;
+    /** Reset workbench chrome + editor grid to initial layout. */
+    resetWorkbenchLayout: () => void;
+
     // DND Actions
-    moveNode: (sourceId: string, targetId: string, position: 'center' | 'top' | 'bottom' | 'left' | 'right') => void;
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab) => void;
     setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
     /** Patch only activeTabId (+ clear selection on change). Avoids full node spread on tab switch. */
     setEditorGroupActiveTab: (nodeId: string, tabId: string | null) => void;
+    /** Pixelize both flex siblings after first sash drag between editor groups. */
+    commitFlexSplitResize: (beforeId: string, afterId: string, beforeSize: number, afterSize: number) => void;
+    /** VS Code maximize editor group — hide sibling groups until toggled off. */
+    toggleMaximizeEditorGroup: (groupId: string) => void;
+    /** Reset a flex/pixel split between two editor-grid siblings to equal sizes. */
+    resetEditorGridSplitEqual: (beforeId: string, afterId: string, beforeSize: number, afterSize: number) => void;
     /**
      * Drop every graph (event/function) tab from every editor group, regardless
      * of dirty state. Use during destructive project transitions (load / clear /
@@ -66,7 +110,6 @@ export interface LayoutState {
     // UI State
     isDragging: boolean;
     setDragging: (isDragging: boolean) => void;
-    activeGroupId: string | null;
     activeEditorGroupId: string | null;
     isSettingsOpen: boolean;
     setActiveGroup: (id: string | null) => void;
@@ -77,19 +120,16 @@ export interface LayoutState {
     setAltPressed: (pressed: boolean) => void;
 }
 
-// Initial Layout Structure (VSCode-style: sidebar | center(editor+panel) | detail)
-const INITIAL_ROOT_ID = 'root';
-const FIXED_CHROME_NODE_IDS = ['sidebar', 'detail', 'panel'] as const;
 function snapshotFixedChromeSizes(nodes: LayoutTree): Record<string, number | undefined> {
     const sizes: Record<string, number | undefined> = {};
-    for (const id of FIXED_CHROME_NODE_IDS) {
+    for (const id of WORKBENCH_PART_IDS) {
         sizes[id] = nodes[id]?.pixelSize;
     }
     return sizes;
 }
 
 function restoreFixedChromeSizes(state: { nodes: LayoutTree }, saved: Record<string, number | undefined>): void {
-    for (const id of FIXED_CHROME_NODE_IDS) {
+    for (const id of WORKBENCH_PART_IDS) {
         const savedSize = saved[id];
         if (savedSize === undefined) continue;
         const node = state.nodes[id];
@@ -99,69 +139,28 @@ function restoreFixedChromeSizes(state: { nodes: LayoutTree }, saved: Record<str
     }
 }
 
-const INITIAL_NODES: LayoutTree = {
-    [INITIAL_ROOT_ID]: {
-        id: INITIAL_ROOT_ID,
-        type: 'row',
-        parentId: null,
-        children: ['sidebar', 'center', 'detail'],
-    },
-    'sidebar': {
-        id: 'sidebar',
-        type: 'component',
-        parentId: INITIAL_ROOT_ID,
-        pixelSize: 260,
-        minSize: 240,
-        data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'graphs' },
-    },
-    'center': {
-        id: 'center',
-        type: 'col',
-        parentId: INITIAL_ROOT_ID,
-        children: ['editor_area', 'panel'],
-        size: 1,
-    },
-    'editor_area': {
-        id: 'editor_area',
-        type: 'row',
-        parentId: 'center',
-        children: ['default_editor'],
-        size: 1,
-    },
-    'default_editor': {
-        id: 'default_editor',
-        type: 'component',
-        parentId: 'editor_area',
-        data: {
-            component: 'GraphEditor',
-            tabs: []
-        },
-    },
-    'panel': {
-        id: 'panel',
-        type: 'component',
-        parentId: 'center',
-        pixelSize: 200,
-        minSize: 80,
-        data: { component: 'LogPanel', visible: true, title: 'Logs', isFixed: true },
-    },
-    'detail': {
-        id: 'detail',
-        type: 'component',
-        parentId: INITIAL_ROOT_ID,
-        pixelSize: 300,
-        minSize: 240,
-        data: { component: 'Detail', visible: true, title: 'Properties', isFixed: true },
-    }
-};
+function collectDescendantIds(nodes: LayoutTree, rootId: string, skipId?: string): string[] {
+    const collected: string[] = [];
+    const visit = (id: string) => {
+        if (id === skipId) return;
+        const node = nodes[id];
+        if (!node) return;
+        collected.push(id);
+        node.children?.forEach(visit);
+    };
+    const root = nodes[rootId];
+    root?.children?.forEach(visit);
+    return collected;
+}
+
+const INITIAL_NODES = createInitialWorkbenchNodes();
 
 export const useLayoutStore = create<LayoutState>()(
     immer((set, get) => ({
-        rootId: INITIAL_ROOT_ID,
+        rootId: WORKBENCH_ROOT_ID,
         nodes: INITIAL_NODES,
         isDragging: false,
-        activeGroupId: 'default_editor', // Default focus
-        activeEditorGroupId: 'default_editor',
+        activeEditorGroupId: DEFAULT_EDITOR_GROUP_ID,
 
         getNode: (id) => get().nodes[id],
 
@@ -226,9 +225,6 @@ export const useLayoutStore = create<LayoutState>()(
 
             // 自动重设焦点到剩余的编辑器组
             const remainingEditors = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
-            if (state.activeGroupId === id) {
-                state.activeGroupId = remainingEditors[0]?.id || null;
-            }
             if (state.activeEditorGroupId === id) {
                 state.activeEditorGroupId = remainingEditors[0]?.id || null;
             }
@@ -237,7 +233,6 @@ export const useLayoutStore = create<LayoutState>()(
             const activeNode = state.nodes[state.activeEditorGroupId || ''];
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
                 if (remainingEditors.length > 0) {
-                    state.activeGroupId = remainingEditors[0].id;
                     state.activeEditorGroupId = remainingEditors[0].id;
                 }
             }
@@ -314,7 +309,6 @@ export const useLayoutStore = create<LayoutState>()(
                     state.nodes[branchId] = branch;
                 }
 
-                state.activeGroupId = newNodeId;
                 state.activeEditorGroupId = newNodeId;
                 createdGroupId = newNodeId;
             });
@@ -324,106 +318,105 @@ export const useLayoutStore = create<LayoutState>()(
         resizeNode: (nodeId, size) => set((state) => {
             const node = state.nodes[nodeId];
             if (node) {
-                node.pixelSize = size;
+                node.pixelSize = clampWorkbenchPartSize(node, size);
             }
         }),
 
-        moveNode: (sourceId, targetId, position) => set((state) => {
-            logger.sys.trace('Moving node ' + sourceId + ' to ' + targetId + ' ' + position, 'LayoutStore');
-            const sourceNode = state.nodes[sourceId];
-            const targetNode = state.nodes[targetId];
-            if (!sourceNode || !targetNode || sourceId === targetId) return;
+        showSidebarTab: (tab) => set((state) => {
+            const sidebar = state.nodes[SIDEBAR_NODE_ID];
+            if (!sidebar) return;
+            sidebar.data = { ...sidebar.data, visible: true, currentTab: tab };
+        }),
 
-            // 如果是中心区域停靠，执行合并逻辑
-            if (position === 'center') {
-                if (sourceNode.type === 'component' && targetNode.type === 'component') {
-                    const sourceTabs = sourceNode.data?.tabs || [];
-                    const targetTabs = targetNode.data?.tabs || [];
+        toggleSidebarTab: (tab) => set((state) => {
+            const sidebar = state.nodes[SIDEBAR_NODE_ID];
+            if (!sidebar) return;
 
-                    // 合并 tabs
-                    targetNode.data = {
-                        ...targetNode.data,
-                        tabs: [...targetTabs, ...sourceTabs],
-                        activeTabId: sourceNode.data?.activeTabId || targetNode.data?.activeTabId
-                    };
+            const isVisible = sidebar.data?.visible !== false;
+            const activeTab = isSidebarTabId(sidebar.data?.currentTab) ? sidebar.data!.currentTab! : null;
 
-                    // 从父节点移除源节点
-                    const sourceParent = state.nodes[sourceNode.parentId!];
-                    if (sourceParent && sourceParent.children) {
-                        sourceParent.children = sourceParent.children.filter(id => id !== sourceId);
-                        if (sourceParent.children.length === 1 && sourceParent.parentId) {
-                            const grandParent = state.nodes[sourceParent.parentId];
-                            if (grandParent?.children) {
-                                const singleChildId = sourceParent.children[0];
-                                const singleChild = state.nodes[singleChildId];
-                                if (singleChild) {
-                                    const parentIndex = grandParent.children.indexOf(sourceParent.id);
-                                    grandParent.children[parentIndex] = singleChildId;
-                                    singleChild.parentId = grandParent.id;
-                                    singleChild.size = sourceParent.size ?? 1;
-                                    singleChild.pixelSize = undefined;
-                                    delete state.nodes[sourceParent.id];
-                                }
-                            }
-                        } else if (sourceParent.children.length === 0 && sourceParent.parentId) {
-                            const grandParent = state.nodes[sourceParent.parentId];
-                            if (grandParent?.children) {
-                                grandParent.children = grandParent.children.filter(cid => cid !== sourceParent.id);
-                                delete state.nodes[sourceParent.id];
-                            }
-                        }
-                    }
-                    delete state.nodes[sourceId];
-                    return;
-                }
+            if (isVisible && activeTab === tab) {
+                sidebar.data = { ...sidebar.data, visible: false };
                 return;
             }
 
-            const sourceParentId = sourceNode.parentId;
-            const targetParentId = targetNode.parentId;
-            if (!sourceParentId || !targetParentId) return;
+            sidebar.data = { ...sidebar.data, visible: true, currentTab: tab };
+        }),
 
-            // 从原父节点移除
-            const sourceParent = state.nodes[sourceParentId];
-            if (sourceParent.children) {
-                sourceParent.children = sourceParent.children.filter(id => id !== sourceId);
+        collapseEditorGroups: () => set((state) => {
+            const editorArea = state.nodes[EDITOR_AREA_ID];
+            if (!editorArea?.children) return;
+
+            const defaultEditor = state.nodes[DEFAULT_EDITOR_GROUP_ID];
+            const tabs = defaultEditor?.data?.tabs ?? [];
+            const activeTabId = defaultEditor?.data?.activeTabId;
+
+            for (const id of collectDescendantIds(state.nodes, EDITOR_AREA_ID, DEFAULT_EDITOR_GROUP_ID)) {
+                delete state.nodes[id];
             }
 
-            // 计算新节点的布局方向
-            const direction: 'row' | 'col' = (position === 'left' || position === 'right') ? 'row' : 'col';
-            const isAfter = position === 'right' || position === 'bottom';
+            editorArea.children = [DEFAULT_EDITOR_GROUP_ID];
 
-            const targetParent = state.nodes[targetParentId];
-            if (targetParent.type === direction) {
-                // 如果父节点方向一致，直接插入
-                const targetIndex = targetParent.children?.indexOf(targetId) || 0;
-                targetParent.children?.splice(isAfter ? targetIndex + 1 : targetIndex, 0, sourceId);
-                sourceNode.parentId = targetParentId;
-            } else {
-                // 否则需要创建新的分支节点
-                const branchId = generateId();
-                const branch: LayoutNode = {
-                    id: branchId,
-                    type: direction,
-                    parentId: targetParentId,
-                    children: isAfter ? [targetId, sourceId] : [sourceId, targetId],
-                    size: targetNode.size,
-                    pixelSize: targetNode.pixelSize
+            writeEditorAreaMaximizeState(state.nodes, null, null);
+            clearEditorGroupMaximizedHidden(state.nodes);
+
+            if (defaultEditor) {
+                defaultEditor.parentId = EDITOR_AREA_ID;
+                defaultEditor.size = 1;
+                defaultEditor.pixelSize = undefined;
+                defaultEditor.data = {
+                    ...defaultEditor.data,
+                    component: 'GraphEditor',
+                    tabs,
+                    activeTabId,
                 };
-
-                const targetIndex = targetParent.children?.indexOf(targetId) || 0;
-                targetParent.children![targetIndex] = branchId;
-
-                targetNode.parentId = branchId;
-                targetNode.size = 1;
-                targetNode.pixelSize = undefined;
-
-                sourceNode.parentId = branchId;
-                sourceNode.size = 1;
-                sourceNode.pixelSize = undefined;
-
-                state.nodes[branchId] = branch;
+            } else {
+                state.nodes[DEFAULT_EDITOR_GROUP_ID] = {
+                    id: DEFAULT_EDITOR_GROUP_ID,
+                    type: 'component',
+                    parentId: EDITOR_AREA_ID,
+                    data: { component: 'GraphEditor', tabs: [] },
+                };
             }
+
+            state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
+        }),
+
+        toggleMaximizeEditorGroup: (groupId) => set((state) => {
+            const editorArea = state.nodes[EDITOR_AREA_ID];
+            if (!editorArea || !state.nodes[groupId]) return;
+
+            const current = readEditorAreaMaximizedGroupId(state.nodes);
+            if (current === groupId) {
+                const restored = readEditorAreaRestoredGridSizes(state.nodes);
+                clearEditorGroupMaximizedHidden(state.nodes);
+                if (restored) applyEditorGridPixelSizes(state.nodes, restored);
+                writeEditorAreaMaximizeState(state.nodes, null, null);
+                return;
+            }
+
+            const restoredGridSizes = snapshotEditorGridPixelSizes(state.nodes);
+            writeEditorAreaMaximizeState(state.nodes, groupId, restoredGridSizes);
+
+            for (const id of listEditorGroupIds(state.nodes)) {
+                setEditorGroupMaximizedHidden(state.nodes, id, id !== groupId);
+            }
+            state.activeEditorGroupId = groupId;
+        }),
+
+        resetEditorGridSplitEqual: (beforeId, afterId, beforeSize, afterSize) => set((state) => {
+            const total = beforeSize + afterSize;
+            const half = Math.floor(total / 2);
+            const before = state.nodes[beforeId];
+            const after = state.nodes[afterId];
+            if (before) before.pixelSize = half;
+            if (after) after.pixelSize = total - half;
+        }),
+
+        resetWorkbenchLayout: () => set((state) => {
+            state.rootId = WORKBENCH_ROOT_ID;
+            state.nodes = createInitialWorkbenchNodes();
+            state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
         }),
 
         moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => set((state) => {
@@ -482,10 +475,6 @@ export const useLayoutStore = create<LayoutState>()(
                         delete state.nodes[sourceNodeId];
 
                         // 如果删除的是当前激活的编辑器，切换到目标编辑器
-                        if (state.activeGroupId === sourceNodeId) {
-                            state.activeGroupId = targetNodeId;
-                            state.activeEditorGroupId = targetNodeId;
-                        }
                         if (state.activeEditorGroupId === sourceNodeId) {
                             state.activeEditorGroupId = targetNodeId;
                         }
@@ -495,7 +484,6 @@ export const useLayoutStore = create<LayoutState>()(
                 // 只激活目标节点中已存在的标签页
                 targetNode.data!.activeTabId = tabId;
                 // 确保目标编辑器被激活
-                state.activeGroupId = targetNodeId;
                 state.activeEditorGroupId = targetNodeId;
                 return;
             }
@@ -561,8 +549,8 @@ export const useLayoutStore = create<LayoutState>()(
                     delete state.nodes[sourceNodeId];
 
                     // 如果删除的是当前激活的编辑器，切换到目标编辑器
-                    if (state.activeGroupId === sourceNodeId) {
-                        state.activeGroupId = targetNodeId;
+                    if (state.activeEditorGroupId === sourceNodeId) {
+                        state.activeEditorGroupId = targetNodeId;
                         state.activeEditorGroupId = targetNodeId;
                     }
                     if (state.activeEditorGroupId === sourceNodeId) {
@@ -584,7 +572,6 @@ export const useLayoutStore = create<LayoutState>()(
             };
 
             // 确保目标编辑器被激活
-            state.activeGroupId = targetNodeId;
             state.activeEditorGroupId = targetNodeId;
 
             // 最后验证：确保激活的编辑器存在且有效
@@ -592,7 +579,6 @@ export const useLayoutStore = create<LayoutState>()(
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
                 const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length > 0) {
-                    state.activeGroupId = editorGroups[0].id;
                     state.activeEditorGroupId = editorGroups[0].id;
                 }
             }
@@ -645,7 +631,6 @@ export const useLayoutStore = create<LayoutState>()(
 
                     // 重设焦点
                     const remainingEditors = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
-                    state.activeGroupId = remainingEditors[0]?.id || null;
                     state.activeEditorGroupId = remainingEditors[0]?.id || null;
                 } else {
                     // 最后一个组，保留但清空
@@ -672,7 +657,6 @@ export const useLayoutStore = create<LayoutState>()(
             if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
                 const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
                 if (editorGroups.length > 0) {
-                    state.activeGroupId = editorGroups[0].id;
                     state.activeEditorGroupId = editorGroups[0].id;
                 }
             }
@@ -754,13 +738,17 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         setActiveGroup: (id) => set((state) => {
-            state.activeGroupId = id;
-
-            // 逻辑补充：如果该节点是非固定组件（编辑器组），则更新 activeEditorGroupId
             const node = id ? state.nodes[id] : null;
             if (node?.type === 'component' && !node.data?.isFixed) {
                 state.activeEditorGroupId = id;
             }
+        }),
+
+        commitFlexSplitResize: (beforeId, afterId, beforeSize, afterSize) => set((state) => {
+            const before = state.nodes[beforeId];
+            const after = state.nodes[afterId];
+            if (before) before.pixelSize = beforeSize;
+            if (after) after.pixelSize = afterSize;
         }),
 
         isAltPressed: false,

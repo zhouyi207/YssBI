@@ -27,6 +27,12 @@ export const enUS = {
   },
   editor: {
     initializationFailed: "Initialization failed: {{error}}",
+    inactiveGroupPlaceholder: "Editor group inactive — click to focus",
+  },
+  panel: {
+    logs: "Logs",
+    output: "Output",
+    outputPlaceholder: "Output channel — coming soon",
   },
   /** Editor context menus and input dialogs triggered from them */
   contextMenu: {
@@ -250,6 +256,7 @@ export const enUS = {
       colorTheme: "Color Theme",
       language: "Language",
       activityBarPosition: "Activity Bar Position",
+      panelPosition: "Panel Position",
       smoothScroll: "Smooth Scroll",
       workbenchBackground: "Workbench Background",
       sidebarBackground: "Sidebar Background",
@@ -287,6 +294,7 @@ export const enUS = {
       colorTheme: "Controls the overall color theme of the editor.",
       language: "Controls the application interface language.",
       activityBarPosition: "Controls the visibility and position of the activity bar.",
+      panelPosition: "Controls whether the panel is docked to the bottom, left, or right of the editor area.",
       smoothScroll: "Enable smooth scrolling in the canvas and menus.",
       workbenchBackground: "The primary background color of the editor environment.",
       sidebarBackground: "Background color for sidebars and headers.",
@@ -324,6 +332,7 @@ export const enUS = {
       lightModern: "Light Modern",
       left: "Left",
       right: "Right",
+      bottom: "Bottom",
       hidden: "Hidden",
     },
   },
@@ -366,6 +375,10 @@ export const enUS = {
   },
   editorDropPreview: {
     openResource: "Open {{name}}",
+    splitLeft: "Split Left",
+    splitRight: "Split Right",
+    splitTop: "Split Up",
+    splitBottom: "Split Down",
   },
   tabBar: {
     splitDownAlt: "Split Editor Down (Alt)",
@@ -625,6 +638,8 @@ export const enUS = {
     callFunction: {
       openTarget: "Open target function",
       missingTarget: "Missing function: {{path}}",
+      target: "Target function",
+      changeTarget: "Change target",
     },
     counts: {
       columns: "{{count}} columns",

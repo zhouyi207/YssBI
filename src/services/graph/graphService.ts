@@ -120,6 +120,26 @@ export class GraphService {
         return invoke<FunctionCallSiteDTO[]>("get_function_call_sites", { functionPath });
     }
 
+    static async updateCallFunctionTarget(
+        graphPath: string,
+        nodeId: string,
+        functionPath: string,
+    ): Promise<void> {
+        try {
+            await invoke("update_call_function_target", { graphPath, nodeId, functionPath });
+            logger.graph.info(
+                `Call node '${nodeId}' rebound to function '${functionPath}'`,
+                'GraphService',
+            );
+        } catch (error) {
+            logger.graph.error(
+                `Error rebinding Call Function target: ${error instanceof Error ? error.message : String(error)}`,
+                'GraphService',
+            );
+            throw error;
+        }
+    }
+
     static async purgeFunctionCallSites(functionPath: string): Promise<Graph[]> {
         const graphs = await invoke<GraphInstanceDTO[]>("purge_function_call_sites", { functionPath });
         return graphs.map(toFrontendGraph);

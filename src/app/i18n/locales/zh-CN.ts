@@ -27,6 +27,12 @@ export const zhCN = {
   },
   editor: {
     initializationFailed: "初始化失败: {{error}}",
+    inactiveGroupPlaceholder: "编辑器组未激活 — 点击以聚焦",
+  },
+  panel: {
+    logs: "日志",
+    output: "输出",
+    outputPlaceholder: "输出通道 — 即将推出",
   },
   /** 编辑器内右键上下文菜单及由菜单触发的输入框 */
   contextMenu: {
@@ -250,6 +256,7 @@ export const zhCN = {
       colorTheme: "颜色主题",
       language: "语言",
       activityBarPosition: "活动栏位置",
+      panelPosition: "面板位置",
       smoothScroll: "平滑滚动",
       workbenchBackground: "工作区背景",
       sidebarBackground: "侧栏背景",
@@ -287,6 +294,7 @@ export const zhCN = {
       colorTheme: "控制编辑器整体颜色主题。",
       language: "控制应用界面语言。",
       activityBarPosition: "控制活动栏的位置和可见性。",
+      panelPosition: "控制面板停靠在编辑器区域的底部、左侧或右侧。",
       smoothScroll: "启用画布和菜单的平滑滚动。",
       workbenchBackground: "编辑器工作区的主背景色。",
       sidebarBackground: "侧栏和头部区域的背景色。",
@@ -324,6 +332,7 @@ export const zhCN = {
       lightModern: "浅色现代",
       left: "左侧",
       right: "右侧",
+      bottom: "底部",
       hidden: "隐藏",
     },
   },
@@ -366,6 +375,10 @@ export const zhCN = {
   },
   editorDropPreview: {
     openResource: "打开 {{name}}",
+    splitLeft: "向左拆分",
+    splitRight: "向右拆分",
+    splitTop: "向上拆分",
+    splitBottom: "向下拆分",
   },
   tabBar: {
     splitDownAlt: "向下拆分编辑器（Alt）",
@@ -625,6 +638,8 @@ export const zhCN = {
     callFunction: {
       openTarget: "打开目标函数",
       missingTarget: "目标函数缺失：{{path}}",
+      target: "目标函数",
+      changeTarget: "更换目标",
     },
     counts: {
       columns: "{{count}} 列",

@@ -66,6 +66,12 @@ export const SettingsView: React.FC = () => {
         { label: t("settings.options.hidden"), value: "Hidden" },
     ];
 
+    const panelPositionOptions = [
+        { label: t("settings.options.bottom"), value: "Bottom" },
+        { label: t("settings.options.left"), value: "Left" },
+        { label: t("settings.options.right"), value: "Right" },
+    ];
+
     const handleResetAll = async () => {
         const confirmed = await uiStore.confirm({
             title: t("settings.confirmResetAllTitle"),
@@ -259,6 +265,17 @@ export const SettingsView: React.FC = () => {
                                     options={activityBarOptions}
                                     value={appearance.activityBarPosition}
                                     onChange={(val) => updateAppearance({ activityBarPosition: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.panelPosition")}
+                                    description={t("settings.descriptions.panelPosition")}
+                                    type="select"
+                                    options={panelPositionOptions}
+                                    value={appearance.panelPosition}
+                                    onChange={(val) => {
+                                        updateAppearance({ panelPosition: val });
+                                        saveDebounced();
+                                    }}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.smoothScroll")}

@@ -4,6 +4,8 @@ import type { Graph } from '@/shared/types/domain';
 
 import { GraphService } from '@/services/graph/graphService';
 
+import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
+
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 import {
@@ -77,3 +79,17 @@ export async function applyCallerGraphUpdates(
 }
 
 export { shouldSuppressIncrementalPinUpdate };
+
+export async function updateCallFunctionTarget(
+  graphPath: string,
+  nodeId: string,
+  functionPath: string,
+): Promise<void> {
+  await GraphService.updateCallFunctionTarget(graphPath, nodeId, functionPath);
+  useGraphDataStore.getState().updateNode(
+    nodeId,
+    { paramsKind: 'subGraph', subGraphPath: functionPath },
+    graphPath,
+  );
+  markGraphTabDirty(graphPath);
+}

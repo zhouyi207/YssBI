@@ -1,4 +1,8 @@
 export { usePersistedWindow } from "./usePersistedWindow";
+export {
+  usePersistedSecondaryWindow,
+  readSecondaryWindowFallbackPosition,
+} from "./usePersistedSecondaryWindow";
 export { useWindowMaximized } from "./useWindowMaximized";
 export { createPersistedWindow } from "./createPersistedWindow";
 export type { PersistedWindowOptions } from "./createPersistedWindow";

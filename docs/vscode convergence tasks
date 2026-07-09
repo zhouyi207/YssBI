@@ -1,0 +1,344 @@
+## Unchecked items inventory (§1124–1472)
+
+| # | Item | Priority | Status in TODO |
+|---|------|----------|--------------|
+| 1 | 多组同屏 Canvas 上限策略 | P0 | `[ ]` |
+| 2 | 最大化 Editor Group | P1 | `[ ]` |
+| 3 | 拖组间 sash 双击（均分还原） | P1 | `[ ]` |
+| 4 | 评估引入 `GridWidget` 等价模块 | P2 | `[ ]` |
+| 5 | 两层 sash 测试矩阵（§7.6 + 收敛 P2，重复项） | P2 | `[ ]` ×2 |
+| 6 | 统一 `LeafNodeRenderer` 订阅 | P2 | `[ ]` **但正文已标 `[x]` — 陈旧 checkbox** |
+| 7 | 抽 `SplitView` 模块 | P2 | `[ ]` |
+| 8 | Panel / Terminal / Webview resize 节流 | P2 | `[ ]` |
+| 9 | Side Bar 列表虚拟化复核 | P2 | `[ ]` |
+| 10 | 隐藏 Part keep-alive 策略 | P2 | `[ ]` |
+| 11 | Panel 多 Tab 模型 | P2 (§8.4) | `[ ]` |
+| 12 | Settings：Dialog vs Editor Tab | P2 (§8.4) | `[ ]` |
+| 13 | 卫星窗口策略文档 | P2 (§8.4) | `[ ]` |
+| 14–18 | Panel 位置 / Zen / 标题栏 / Status Bar / BottomBar 命令 | P3 | `[ ]` |
+
+---
+
+## Per-item codebase analysis
+
+### P0 — 多组同屏 Canvas 上限策略
+
+**Partially exists**
+- Non-active groups: `pointer-events-none` + `aria-hidden` in `d:\Desktop\YssBI\src\views\EditorView\Canvas\core\GraphEditor.tsx`
+- Tab switch unload: `activateGraphTab` → `deactivateInactiveGraphPath` (`d:\Desktop\YssBI\src\features\application\editor\`)
+- Open-tab guard: `isGraphOpenInAnyTab` in `d:\Desktop\YssBI\src\features\core\layout\graphTabQueries.ts`
+- Per-group active path: `graphSessionStore.ts` (no cap)
+- Cache check: `graphLoadPolicy.ts` (binary cached/not, no LRU)
+
+**Still missing**
+- No document-level LRU on `graphEntities` (`graphDataStore.ts`)
+- Inactive groups **still mount full `Canvas`** (nodes, edges, ResizeObserver, execution binder) — only input blocked
+- Split-screen with 2+ graphs = N simultaneous Canvas instances + N hydrated graphs
+
+**Files to change**
+- New: `d:\Desktop\YssBI\src\features\application\editor\graphDocumentCachePolicy.ts` (LRU + eviction)
+- `d:\Desktop\YssBI\src\features\application\editor\deactivateInactiveGraphPath.ts` — call LRU eviction
+- `d:\Desktop\YssBI\src\views\EditorView\Canvas\core\GraphEditor.tsx` — inactive group: placeholder / frozen snapshot vs full Canvas
+- `d:\Desktop\YssBI\src\views\EditorView\Canvas\core\Canvas.tsx` — optional suspend hooks when parent inactive
+- Tests: extend `graphLoadPolicy.test.ts`, `graphSessionStore.test.ts`
+
+**Depends on:** nothing blocking; complements keep-alive (opposite memory tradeoff).
+
+---
+
+### P1 — 最大化 Editor Group
+
+**Partially exists**
+- Panel maximize pattern: `togglePanelMaximized()` in `workbenchLayoutService.ts` (`maximized` + `restoredPixelSize` on `panel.data`)
+- Tab double-click today **pins preview**, not maximize (`TabBar.tsx` ~321)
+
+**Still missing**
+- No `maximizeEditorGroup` / `groupMaximized` field anywhere
+- No menubar/keyboard command
+
+**Files to change**
+- `d:\Desktop\YssBI\src\features\core\layout\editorGroupsService.ts` — `toggleMaximizeGroup(groupId)`
+- `d:\Desktop\YssBI\src\features\core\layout\layoutStore.ts` — snapshot/restore editor_area subtree sizes (mirror panel pattern)
+- `d:\Desktop\YssBI\src\features\core\layout\editorGridMemento.ts` + `workbenchLayoutMemento.ts` — persist maximize state
+- `d:\Desktop\YssBI\src\views\EditorView\Layout\TabBar.tsx` — double-click → maximize (keep pin on preview tabs via modifier or context menu)
+- `d:\Desktop\YssBI\src\features\application\menubar\useMenubar.ts` + `useEditorKeyboard.ts` — command + shortcut
+- `d:\Desktop\YssBI\src\views\EditorView\Renderer\layoutNodeFlexStyle` path in `sashResizeLogic.ts` — hide sibling groups (size→0, keep memento)
+
+**Depends on:** `editorGridMemento` (already done); independent of SplitView extraction.
+
+---
+
+### P1 — 拖组间 sash 双击（均分还原）
+
+**Partially exists**
+- Sash dblclick only for **editor↔panel** in `sashResizeLogic.ts` (~347–352) → `togglePanelMaximized()`
+- Flex split math in `splitViewSizing.ts` (`computeFlexSplitSizes`)
+
+**Still missing**
+- No branch for editor-area group sashes
+- No `resetSplitToEqual` API
+
+**Files to change**
+- `d:\Desktop\YssBI\src\views\EditorView\Renderer\sashResizeLogic.ts` — detect editor_grid sash, call reset
+- `d:\Desktop\YssBI\src\features\core\layout\editorGroupsService.ts` or `layoutStore.ts` — `resetFlexSplit(beforeId, afterId)`
+- `splitViewSizing.ts` — equal-split helper
+- Test: `sashResizeLogic.test.ts`
+
+**Depends on:** none; pairs well with maximize group (both editor_grid layout mutations).
+
+---
+
+### P2 — 抽 `SplitView` 模块
+
+**Partially exists**
+- Imperative drag: `attachSashDrag` in `sashResizeLogic.ts`
+- Flex math: `splitViewSizing.ts`
+- DOM flex styles: `layoutNodeFlexStyle` in `sashResizeLogic.ts`
+- Rendering: `LayoutNodeRenderer.tsx` + `Sash.tsx`
+
+**Still missing**
+- No standalone `SplitView` class/module with `resizeView(index, size)` API
+- Workbench + editor grid share ad-hoc logic
+
+**Files to change**
+- **New:** `d:\Desktop\YssBI\src\features\core\layout\splitView.ts` (orientation, views[], resizeView, equalize)
+- Refactor: `sashResizeLogic.ts`, `LayoutNodeRenderer.tsx` to delegate
+- Move/extend tests from `splitViewSizing.test.ts`, `sashDrag.test.ts`
+
+**Depends on:** optional precursor to test matrix; not required for P0/P1 features.
+
+---
+
+### P2 — 两层 sash 测试矩阵 (duplicate TODO)
+
+**Partially exists**
+- `sashResizeLogic.test.ts`, `sashDrag.test.ts`, `splitViewSizing.test.ts`, `workbenchPanelSizing.test.ts`
+- `layoutStore.test.ts`, `editorSplitLayout.test.ts`
+
+**Still missing**
+- Combined matrix: (a) sidebar↔editor, (b) editor↔panel, (c) editor group↔group
+- Manual checklist doc
+
+**Files to change**
+- **New:** `d:\Desktop\YssBI\src\views\EditorView\Renderer\workbenchSashMatrix.test.ts` (or under `features/core/layout/`)
+- Optional: `docs/WORKBENCH_SASH_CHECKLIST.md` (TODO asks for doc — product decision)
+
+**Depends on:** maximize group + grid sash dblclick for full coverage; can start with existing 3 scenarios now.
+
+---
+
+### P2 — 统一 `LeafNodeRenderer` 订阅
+
+**Already done** — stale checkbox. `LayoutNodeRenderer.tsx` uses `useShallow` on single leaf fields (~135–147). **Action: mark `[x]` in TODO only.**
+
+---
+
+### P2 — Panel / Terminal / Webview resize 节流
+
+**Partially exists**
+- Sash drag guards: `sashResizeGuard.ts`, `OverlayScrollbar.tsx`, `useCanvasViewport.ts`, `ConnectionLine.tsx`
+- `LogPanel` = static embed, no resize IPC
+
+**Still missing**
+- No debounced Part resize callback for child windows / future PTY
+- No Terminal/Webview yet
+
+**Files to change**
+- **New:** `d:\Desktop\YssBI\src\features\application\layout\usePartResizeNotifier.ts` (debounce 100ms, skip during `layout-sash-dragging`)
+- `workbenchLayoutService.ts` or `useWorkbenchLayout.ts` — emit on sash end + toggle
+- Future: Terminal/Webview consumers; today wire `LogPanel` as no-op stub
+
+**Depends on:** Panel multi-tab (if resize targets specific tab content).
+
+---
+
+### P2 — Side Bar 列表虚拟化复核
+
+**Partially exists**
+- Virtualized: `NodeCatalogTreeView.tsx` (`@tanstack/react-virtual`), `LogPanelContent.tsx`
+- **Not virtualized:** `Sidebar.tsx` — events/functions/variables/dataframes/worksheets/history all `.map()` (~470–726)
+
+**Files to change**
+- `d:\Desktop\YssBI\src\views\EditorView\Layout\Sidebar.tsx` — extract `SidebarResourceList` with virtualizer per section (or one virtual list per tab)
+- Reuse patterns from `NodeCatalogTreeView.tsx`
+- `sidebarUi/SidebarListItem.tsx` — ensure fixed row height for virtualizer
+
+**Depends on:** none; independent performance win during narrow sidebar + sash drag.
+
+---
+
+### P2 — 隐藏 Part keep-alive
+
+**Partially exists**
+- `pixelSize` retained when `visible: false` (`workbenchLayoutService.ts`, memento)
+- `restoreAdjacentPanelVisibility` in `sashResizeLogic.ts`
+
+**Current behavior (unmount)**
+```122:122:d:\Desktop\YssBI\src\views\EditorView\Renderer\LayoutNodeRenderer.tsx
+{node.data?.visible !== false && <LayoutNodeRenderer nodeId={nodeId} />}
+```
+
+**Files to change**
+- `LayoutNodeRenderer.tsx` `ChildWrapper` — render children with `visibility:hidden` + `pointer-events:none` + `aria-hidden` instead of conditional unmount
+- `sashResizeLogic.ts` `layoutNodeFlexStyle` — already uses flex 0 for hidden; verify no layout thrash
+- `Detail.tsx`, `Sidebar.tsx`, `LogPanel.tsx` — audit mount cost; optional lazy inner content
+- `workbenchLayoutMemento.ts` — no schema change needed
+
+**Depends on:** conflicts with aggressive memory goals of Canvas LRU — decide policy: keep-alive chrome parts only, still evict graph documents.
+
+---
+
+### P2 (§8.4) — Panel 多 Tab 模型
+
+**Partially exists**
+- Single `LogPanel` registered in `viewRegistry.tsx`
+- Panel node: `component: 'LogPanel'` in `workbenchLayoutDefaults.ts`
+- Editor groups have full TabBar pattern (`TabBar.tsx`, `layoutTabModel.ts`)
+
+**Files to change**
+- **New:** `d:\Desktop\YssBI\src\views\EditorView\Layout\PanelTabBar.tsx` + panel tab store or `panel.data.tabs` on layout node
+- `LogPanel.tsx` → shell with tab strip; `Output`/`Terminal` placeholders
+- `layoutStore.ts`, `workbenchLayoutMemento.ts` — panel active tab
+- `useMenubar.ts` — View menu entries
+
+**Depends on:** resize debounce (P2), Terminal integration later.
+
+---
+
+### P2 (§8.4) — Settings Dialog vs Editor Tab
+
+**Current:** Dialog only — `EditorWindow.tsx` wraps `SettingsView` in shadcn `Dialog`; `layoutStore.openSettings()`; `SettingsEditor` removed from registry.
+
+**Files (if Dialog wins):** delete dead tab-settings paths, document decision in TODO.  
+**Files (if Editor Tab wins):** re-register in `viewRegistry.tsx`, `openSettings` → `openEditorTab`, remove Dialog from `EditorWindow.tsx`.
+
+**Depends on:** product decision only.
+
+---
+
+### P2 (§8.4) — 卫星窗口策略文档
+
+**Partially exists**
+- `PresentationWindowShell.tsx` used by `PlotWindow.tsx`, `InfoWindow.tsx`, `SourceInspectorWindow.tsx`
+- Log detach: `LogPanelContent.tsx` HTML5 DnD
+- Main workbench: `EditorWindow.tsx` + `usePersistedWindow.ts` / `usePersistedSecondaryWindow.ts`
+
+**Action:** documentation only (no code unless detaching more Parts). Reference implementation = Log panel tear-off.
+
+---
+
+### P3 (skip unless trivial)
+
+| Item | Exists | Effort |
+|------|--------|--------|
+| Panel bottom/left/right | Fixed `col` in `workbenchLayoutDefaults.ts` | Large — re-root layout tree |
+| Detail `Ctrl+Alt+B` | `Ctrl+I` in `useEditorKeyboard.ts` | Trivial add |
+| Zen Mode | None | Large |
+| Title bar toggle | Tauri `decorations: false` + `WindowTitleBar` | Medium |
+| Status Bar commands | `BottomBar.tsx` read-only `StatusItem` | Medium |
+
+---
+
+## Dependency graph
+
+```mermaid
+flowchart TD
+  P0_LR[Canvas LRU / inactive suspend]
+  P1_MAX[Maximize Editor Group]
+  P1_DBL[Grid sash dblclick reset]
+  P2_SV[SplitView module]
+  P2_TM[Test matrix]
+  P2_KA[Part keep-alive]
+  P2_VIRT[Sidebar virtualization]
+  P2_PT[Panel multi-tab]
+  P2_RD[Part resize debounce]
+
+  P1_MAX --> P2_TM
+  P1_DBL --> P2_TM
+  P2_SV --> P2_TM
+  P0_LR -.->|memory tradeoff| P2_KA
+  P2_PT --> P2_RD
+```
+
+---
+
+## Prioritized implementation plan
+
+### Phase 1 — P0 correctness/perf (do first)
+
+**1. Multi-group Canvas cap (highest ROI)**
+
+1. Add `graphDocumentCachePolicy.ts`: max N hydrated graphs (e.g. 4), LRU by last activation; evict via existing `deactivateInactiveGraphPath`.
+2. In `GraphEditor.tsx`: if group inactive, render lightweight placeholder (tab title watermark) instead of `Canvas` — keeps split layout visual without N canvases.
+3. On group activate, `activateCurrentEditorTab` reloads if evicted.
+4. Tests for LRU + split 2-group scenario.
+
+**Effort:** ~2–3 days. **Unblocks:** safe multi-split usage.
+
+---
+
+### Phase 2 — P1 interaction parity
+
+**2. Maximize Editor Group**
+
+1. Copy panel maximize pattern to `editor_area` / target group in `editorGroupsService.ts`.
+2. Wire TabBar double-click (non-preview) + menubar command.
+3. Persist in `editorGridMemento`.
+
+**3. Grid sash double-click equal split**
+
+1. Extend `onDoubleClick` in `sashResizeLogic.ts` for non-panel sashes inside `editor_area`.
+2. `resetFlexSplit` in `layoutStore` + debounced persist.
+
+**Effort:** ~1–2 days each; can parallelize.
+
+---
+
+### Phase 3 — P2 hardening (actionable now)
+
+**4. Sidebar virtualization** (`Sidebar.tsx`) — independent, improves sash-drag sidebar resize.
+
+**5. Part keep-alive (chrome only)** — change `ChildWrapper` to hide-not-unmount for `sidebar`/`panel`/`detail`; **do not** keep-alive `GraphEditor` (use Phase 1 instead).
+
+**6. Two-layer sash test matrix** — vitest harness + short manual checklist; merge duplicate TODO items.
+
+**7. Mark stale TODO:** `LeafNodeRenderer` subscription → `[x]`.
+
+---
+
+### Phase 4 — P2 architecture (schedule after Phase 1–3)
+
+**8. `SplitView` module extraction** — refactor, no user-visible change; enables cleaner tests.
+
+**9. Panel multi-tab shell** — tab strip + Logs tab first; stubs for Output/Terminal.
+
+**10. Part resize debounce hook** — scaffold for future Terminal.
+
+**11. `GridWidget` evaluation** — spike only: JSON mapper `editorGridMemento` ↔ hypothetical `SerializableGrid`; defer replacement unless row/col bugs accumulate.
+
+---
+
+### Phase 5 — product/docs (no rush)
+
+**12. Settings Dialog vs Tab** — decision meeting, then one-path cleanup.  
+**13. Satellite window doc** — `PresentationWindowShell` vs workbench detach boundaries.  
+**14. P3** — defer Panel reposition, Zen, title bar, interactive status bar.
+
+---
+
+## Quick wins vs avoid now
+
+| Do now | Defer |
+|--------|-------|
+| Canvas LRU + inactive group placeholder | `GridWidget` full replacement |
+| Maximize editor group | Panel left/right reposition |
+| Grid sash dblclick reset | Zen mode |
+| Sidebar virtualization | Interactive BottomBar |
+| Sash test matrix | Native title bar toggle |
+| Fix stale TODO checkbox | |
+
+---
+
+## Summary
+
+Outer Workbench sash convergence is largely complete (DOM preview, debounced memento, sash guards, panel maximize, narrow subscriptions). **The main gap is Editor Grid runtime cost**: multiple groups still run full Canvas instances with no LRU. **P1 maximize-group and grid sash reset** are clear next features with an existing panel-maximize template. **P2** splits into quick wins (sidebar virtualization, keep-alive for chrome, tests) vs larger work (SplitView module, Panel tabs, product decisions on Settings/satellite docs). Item **#6 (LeafNodeRenderer subscription)** is already implemented — only the TODO checkbox needs updating.

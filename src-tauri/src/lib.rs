@@ -158,6 +158,7 @@ pub fn run() {
             apply_graph_patch,
             update_node_positions,
             batch_create_with_connections,
+            update_call_function_target,
             // ==================== Connection ====================
             connect_pins,
             disconnect_pin,

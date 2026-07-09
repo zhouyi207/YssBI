@@ -3,6 +3,10 @@ import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQuer
 import { useProjectIOStore } from '@/features/core/dataStore';
 import { deactivateInactiveGraphPath } from './deactivateInactiveGraphPath';
 import { activateCachedGraph, isGraphCachedInMemory } from './graphLoadPolicy';
+import {
+  enforceGraphDocumentCacheLimit,
+  touchGraphDocument,
+} from './graphDocumentCachePolicy';
 
 /** Session bookkeeping + backend load for a graph path in a group. */
 export async function activateGraphTab(
@@ -17,12 +21,19 @@ export async function activateGraphTab(
     await deactivateInactiveGraphPath(previous);
   }
 
+  touchGraphDocument(graphPath);
+
   if (isGraphCachedInMemory(graphPath)) {
+    await enforceGraphDocumentCacheLimit();
     return activateCachedGraph(graphPath);
   }
 
   const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
-  if (loaded) return true;
+  if (loaded) {
+    touchGraphDocument(graphPath);
+    await enforceGraphDocumentCacheLimit();
+    return true;
+  }
 
   if (previous) {
     useGraphSessionStore.getState().setGroupActivePath(groupId, previous);

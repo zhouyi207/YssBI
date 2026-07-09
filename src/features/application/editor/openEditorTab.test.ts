@@ -24,7 +24,6 @@ describe('openEditorTab', () => {
           data: { component: 'GraphEditor', tabs: [], activeTabId: undefined },
         },
       },
-      activeGroupId: 'sidebar',
       activeEditorGroupId: null,
     } as Partial<ReturnType<typeof useLayoutStore.getState>>);
   });

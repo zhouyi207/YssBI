@@ -5,7 +5,7 @@ export function resolveExecutionGraphPath(targetGraphPath?: string): string | un
   if (targetGraphPath) return targetGraphPath;
 
   const layoutStore = useLayoutStore.getState();
-  const editorGroupId = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+  const editorGroupId = layoutStore.activeEditorGroupId;
   const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
   return editorNode?.data?.activeTabId as string | undefined;
 }

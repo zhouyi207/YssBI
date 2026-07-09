@@ -153,7 +153,21 @@ impl GraphInstance {
             .unwrap_or(false)
     }
 
-    /// 更新节点的 instance_params 并触发动态 pin 重建
+    /// 更新节点 instance_params（如 Call Function 的 subGraphPath）。
+    pub fn set_node_instance_params(
+        &self,
+        node_id: NodeId,
+        params: NodeInstanceParams,
+    ) -> Result<(), String> {
+        let mut data_state = self.data_state.write().unwrap();
+        let node = data_state
+            .nodes
+            .get_mut(&node_id)
+            .ok_or_else(|| format!("Node '{}' not found", node_id))?;
+        node.instance_params = params;
+        Ok(())
+    }
+
     /// 批量更新节点位置（拖拽结束时调用，CQRS 模式）
     pub fn set_node_positions(&self, updates: &[(NodeId, f32, f32)]) -> Result<(), String> {
         let mut data_state = self.data_state.write().unwrap();

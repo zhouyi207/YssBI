@@ -17,6 +17,7 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 /** 清空 tab / viewport / history / 数据视图缓存等；变量与 graph 正文由调用方立即覆写。 */
 export function resetClientProjectState(): void {
   useLayoutStore.getState().closeAllGraphTabs();
+  useLayoutStore.getState().collapseEditorGroups();
   useViewportStore.getState().clear();
   useHistoryStore.getState().clear();
   useEditStateStore.getState().clear();

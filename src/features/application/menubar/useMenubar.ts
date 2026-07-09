@@ -1,12 +1,23 @@
 import { useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
-import { splitComponentForTab } from "@/features/core/layout/layoutTabModel";
+import {
+  resetWorkbenchLayout,
+  toggleDetailVisibility,
+  togglePanelVisibility,
+} from "@/features/core/layout/workbenchLayoutService";
+import { normalizePanelPosition } from "@/features/core/layout/panelPartLayout";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { EditorGroupsService } from "@/features/core/layout/editorGroupsService";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
-import { createPersistedWindow, openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
+import {
+  createPersistedWindow,
+  openDatabaseEditorWindow,
+  openLogsWindow,
+  readSecondaryWindowFallbackPosition,
+} from "@/features/application/window";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { i18n } from "@/app/i18n";
 import { logger } from '@/utils/appLogger';
@@ -22,10 +33,8 @@ import { logger } from '@/utils/appLogger';
 export function useMenubar() {
   const openSettings = useLayoutStore((s) => s.openSettings);
   const activeEditorGroupId = useLayoutStore((s) => s.activeEditorGroupId);
-  const splitNode = useLayoutStore((s) => s.splitNode);
   const detailNode = useLayoutStore((s) => s.nodes["detail"]);
   const panelNode = useLayoutStore((s) => s.nodes["panel"]);
-  const updateNode = useLayoutStore((s) => s.updateNode);
 
   const isDetailVisible = detailNode?.data?.visible !== false;
   const isLogPanelVisible = panelNode?.data?.visible !== false;
@@ -96,19 +105,15 @@ export function useMenubar() {
 
   const handleSplitRight = useCallback(() => {
     if (activeEditorGroupId) {
-      const nodes = useLayoutStore.getState().nodes;
-      const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
-      splitNode(activeEditorGroupId, "row", splitComponentForTab(activeTab));
+      EditorGroupsService.splitActiveTabRight(activeEditorGroupId);
     }
-  }, [activeEditorGroupId, splitNode]);
+  }, [activeEditorGroupId]);
 
   const handleSplitDown = useCallback(() => {
     if (activeEditorGroupId) {
-      const nodes = useLayoutStore.getState().nodes;
-      const activeTab = getActiveLayoutTab(activeEditorGroupId, nodes)?.tab;
-      splitNode(activeEditorGroupId, "col", splitComponentForTab(activeTab));
+      EditorGroupsService.splitActiveTabDown(activeEditorGroupId);
     }
-  }, [activeEditorGroupId, splitNode]);
+  }, [activeEditorGroupId]);
 
   const handleDatabaseEditor = useCallback(() => {
     void openDatabaseEditorWindow();
@@ -119,26 +124,32 @@ export function useMenubar() {
   }, []);
 
   const toggleDetail = useCallback(() => {
-    updateNode("detail", {
-      data: { ...detailNode?.data, visible: !isDetailVisible },
-    });
-  }, [detailNode, isDetailVisible, updateNode]);
+    toggleDetailVisibility();
+  }, []);
 
   const toggleLogPanel = useCallback(() => {
-    updateNode("panel", {
-      data: { ...panelNode?.data, visible: !isLogPanelVisible },
-    });
-  }, [panelNode, isLogPanelVisible, updateNode]);
+    togglePanelVisibility();
+  }, []);
+
+  const handleResetLayout = useCallback(() => {
+    const panelPosition = normalizePanelPosition(
+      useSettingsStore.getState().appearance.panelPosition,
+    );
+    resetWorkbenchLayout(panelPosition);
+  }, []);
 
   const openNewWindow = useCallback(async () => {
     try {
       const label = `window-${Math.random().toString(36).substring(7)}`;
+      const { x, y } = readSecondaryWindowFallbackPosition(label);
       await createPersistedWindow({
         kind: "main",
         label,
         url: "index.html",
         title: "YssBI Node Editor",
         visible: true,
+        fallbackX: x,
+        fallbackY: y,
       });
     } catch (error) {
       logger.app.error(`Failed to open new window: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
@@ -156,6 +167,7 @@ export function useMenubar() {
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,
+    handleResetLayout,
     openNewWindow,
   };
 }

@@ -105,7 +105,7 @@ export function BottomBar() {
   const { t } = useTranslation();
   const editor = useLayoutStore(
     useShallow((state) => {
-      const groupId = state.activeEditorGroupId ?? state.activeGroupId ?? "default_editor";
+      const groupId = state.activeEditorGroupId ?? "default_editor";
       const active = getActiveLayoutTab(groupId, state.nodes);
       const activeTabId = active?.activeTabId ?? null;
       const activeTab = active?.tab ?? null;

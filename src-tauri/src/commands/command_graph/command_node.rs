@@ -9,8 +9,8 @@ use crate::graph::core::GraphInstance;
 use crate::project::FunctionSignatureEntry;
 use crate::log::log_app;
 use crate::project::{
-    GraphResourcePath, ProjectState, emit_inferred_types, emit_pin_change_events,
-    emit_runtime_source_invalidation,
+    GraphResourcePath, ProjectState, emit_graph_pin_mutation_sync, emit_inferred_types,
+    emit_pin_change_events, emit_runtime_source_invalidation,
 };
 use crate::schema::{GraphUndoPatch, NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
@@ -799,4 +799,46 @@ pub fn batch_create_with_connections(
         pin_mapping,
         undo_patch,
     })
+}
+
+/// 将 Call Function 节点重绑定到另一目标函数（更新 subGraphPath + 重投影 pin + call-site 索引）。
+#[tauri::command]
+pub fn update_call_function_target(
+    app: AppHandle,
+    state: State<ProjectState>,
+    source_store: State<ResultSourceStore>,
+    graph_path: String,
+    node_id: NodeId,
+    function_path: String,
+) -> Result<(), String> {
+    let graph_path = GraphResourcePath::new(&graph_path).map_err(|e| e.to_string())?;
+    let function_path = GraphResourcePath::new(&function_path).map_err(|e| e.to_string())?;
+
+    log_app::info!(
+        "update_call_function_target: graph={}, node={}, target={}",
+        graph_path,
+        node_id,
+        function_path
+    );
+
+    let (graph, change_set, inferred) =
+        state.update_call_function_target(&graph_path, node_id, &function_path)?;
+
+    let has_pin_changes = !change_set.removed_pin_ids.is_empty()
+        || !change_set.added_pins.is_empty()
+        || !change_set.updated_pins.is_empty()
+        || !change_set.removed_connections.is_empty();
+    if has_pin_changes || !inferred.is_empty() {
+        emit_graph_pin_mutation_sync(
+            &app,
+            &source_store,
+            &graph_path,
+            &graph,
+            &[change_set],
+            inferred,
+            &[],
+        );
+    }
+
+    Ok(())
 }

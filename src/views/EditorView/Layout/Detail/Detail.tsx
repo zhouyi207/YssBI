@@ -25,7 +25,7 @@ import { useFunctionCallSites } from '@/features/application/graphDocument/useFu
 import { useEditorSessionResources } from '@/features/application/editor';
 import { useDetailPanelModel } from './useDetailPanelModel';
 
-export const Detail = forwardRef<HTMLDivElement, { width?: number }>((_, ref) => {
+export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
   const { updateVariable, updateDataFrame } = useEditorSessionDetailActions();
   const { variables } = useEditorSessionResources();

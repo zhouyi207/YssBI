@@ -21,6 +21,8 @@ interface UseEditorKeyboardProps {
   setActiveTabId: (id: string | null, targetGroupId?: string) => void;
   splitEditorRight: (groupId: string) => void;
   toggleLogPanel?: () => void;
+  toggleSidebar?: () => void;
+  toggleDetail?: () => void;
 }
 
 /**
@@ -43,12 +45,14 @@ export function useEditorKeyboard({
   setActiveTabId,
   splitEditorRight,
   toggleLogPanel,
+  toggleSidebar,
+  toggleDetail,
 }: UseEditorKeyboardProps) {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
   const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const layoutStore = useLayoutStore.getState();
-    const gid = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
+    const gid = layoutStore.activeEditorGroupId || 'default_editor';
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
@@ -128,7 +132,7 @@ export function useEditorKeyboard({
       } else if (isControlKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
         const layoutStore = useLayoutStore.getState();
-        const gid = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+        const gid = layoutStore.activeEditorGroupId;
         if (gid) {
           const node = layoutStore.nodes[gid];
           const activeTabId = node?.data?.activeTabId;
@@ -136,7 +140,7 @@ export function useEditorKeyboard({
         }
       } else if (isControlKey && e.key === "Tab") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        const gid = useLayoutStore.getState().activeEditorGroupId;
         if (gid) {
           const node = useLayoutStore.getState().nodes[gid];
           const tabs = node?.data?.tabs || [];
@@ -151,8 +155,17 @@ export function useEditorKeyboard({
         }
       } else if (isControlKey && e.key === "\\") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        const gid = useLayoutStore.getState().activeEditorGroupId;
         if (gid) splitEditorRight(gid);
+      } else if (isControlKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar?.();
+      } else if (isControlKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        toggleDetail?.();
+      } else if (isControlKey && e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleDetail?.();
       } else if (isControlKey && e.key === "`") {
         e.preventDefault();
         toggleLogPanel?.();
@@ -198,5 +211,7 @@ export function useEditorKeyboard({
     setActiveTabId,
     splitEditorRight,
     toggleLogPanel,
+    toggleSidebar,
+    toggleDetail,
   ]);
 }

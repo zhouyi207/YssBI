@@ -1,5 +1,37 @@
-export { useLayoutStore } from './layoutStore';
-export type { LayoutState } from './layoutStore';
+export { EditorGroupsService } from './editorGroupsService';
+export {
+  hydrateWorkbenchLayout,
+  getPartSize,
+  resizePart,
+  togglePart,
+  persistWorkbenchLayoutDebounced,
+  persistWorkbenchLayoutNow,
+  applyPanelPosition,
+  applyPanelPositionFromSetting,
+  resetWorkbenchLayout,
+  setWorkbenchPartVisible,
+  showSidebarTab,
+  subscribeWorkbenchLayoutPersistence,
+  toggleDetailVisibility,
+  togglePanelVisibility,
+  toggleSidebarTab,
+  toggleSidebarVisibility,
+  setPanelActiveView,
+} from './workbenchLayoutService';
+export {
+  clampWorkbenchPartSize,
+  PANEL_MAX_VIEWPORT_RATIO,
+  resolveWorkbenchPartMaxSize,
+  resolveWorkbenchViewport,
+} from './workbenchPanelSizing';
+export {
+  createInitialWorkbenchNodes,
+  DEFAULT_EDITOR_GROUP_ID,
+  WORKBENCH_PART_IDS,
+} from './workbenchLayoutDefaults';
+export type { WorkbenchPartId } from './workbenchLayoutDefaults';
+export { useLayoutStore, SIDEBAR_NODE_ID, isSidebarTabId } from './layoutStore';
+export type { LayoutState, SidebarTabId } from './layoutStore';
 export { collectDirtyGraphTabs } from './tabDirty';
 export {
   getLayoutTabById,
@@ -11,6 +43,21 @@ export {
   isEditorGroupNode,
   updateEditorGroupSelectedNodeIds,
 } from './layoutTabQueries';
+export {
+  isEditorGridSash,
+  listEditorGroupIds,
+} from './editorGridLayout';
+export { panelFlexBasis } from './splitView';
+export type { PanelViewId } from './panelPartModel';
+export { DEFAULT_PANEL_VIEWS } from './panelPartModel';
+export {
+  centerLayoutForPanelPosition,
+  inferPanelPosition,
+  isEditorPanelSash,
+  normalizePanelPosition,
+  panelPositionToSetting,
+} from './panelPartLayout';
+export type { PanelPosition, PanelPositionSetting } from './panelPartLayout';
 export {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,

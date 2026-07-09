@@ -33,7 +33,6 @@ describe('closeGraphTab', () => {
           },
         },
       },
-      activeGroupId: 'editor',
       activeEditorGroupId: 'editor',
     });
     useGraphDataStore.getState().hydrateGraphs({});

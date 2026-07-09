@@ -15,7 +15,7 @@ import { activateCurrentEditorTab } from './switchEditorTab';
 
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
   const layoutStore = useLayoutStore.getState();
-  const candidateGroupIds = [preferredNodeId, layoutStore.activeEditorGroupId, layoutStore.activeGroupId]
+  const candidateGroupIds = [preferredNodeId, layoutStore.activeEditorGroupId]
     .filter((id): id is string => Boolean(id));
   for (const groupId of candidateGroupIds) {
     const activated = await activateCurrentEditorTab(groupId);

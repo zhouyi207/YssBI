@@ -28,6 +28,7 @@ import {
   splitEditorGroupFromPointer,
   switchTab,
 } from "@/features/application/editor/tabCommands";
+import { EditorGroupsService } from "@/features/core/layout/editorGroupsService";
 import { createUntitledEventInGroup } from "@/features/application/editor/editorGroupCommands";
 import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/application/editor/tabBarReorderStore";
 import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
@@ -320,7 +321,11 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
         data-tab-title={title}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          if (isPreview) pinTab(layoutNodeId, tab.id);
+          if (isPreview) {
+            pinTab(layoutNodeId, tab.id);
+            return;
+          }
+          EditorGroupsService.toggleMaximizeGroup(layoutNodeId);
         }}
         onContextMenu={(e) => {
           e.preventDefault();

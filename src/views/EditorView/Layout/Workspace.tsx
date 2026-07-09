@@ -18,7 +18,6 @@ import {
   isLayoutRegionDrop,
   isTabbarDrop,
   isGraphResourceDragPayload,
-  isLeafDragData,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
   isSidebarSpawnDrag,
@@ -33,7 +32,6 @@ import { WorkspaceDragOverlay } from "./WorkspaceDragOverlay";
 import "../Renderer/viewRegistry"; // 确保业务组件已注册
 
 export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeId }, ref) => {
-  const moveNode = useLayoutStore(s => s.moveNode);
   const setDragging = useLayoutStore(s => s.setDragging);
   const setActiveDrag = useSidebarDragStore(s => s.setActiveDrag);
   const updatePosition = useSidebarDragStore(s => s.updatePosition);
@@ -142,9 +140,6 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
             dropPosition,
           );
         }
-      } else if (isLeafDragData(activeData)) {
-        // 处理节点拖拽
-        moveNode(active.id as string, targetNodeId as string, dropPosition);
       }
     }
   };

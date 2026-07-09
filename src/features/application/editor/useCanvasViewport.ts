@@ -11,6 +11,8 @@ import { useGraphDataStore } from '@/features/core/dataStore';
 import { getDragPreview } from '@/features/core/canvas/dragPreview';
 import { NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from '@/app/appConfig/default';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
+import { createSashAwareResizeHandler } from '@/shared/utils/sashResizeGuard';
+import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
 function segmentIntersectsRect(
@@ -168,10 +170,15 @@ export function useCanvasViewport(
     const root = canvasElementRef.current;
     if (!root) return;
 
+    const bumpResizeVersion = () => {
+      setNodeResizeVersion((v) => v + 1);
+    };
+    const { handler, flushAfterSashDrag } = createSashAwareResizeHandler(bumpResizeVersion);
+
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(resizeRafRef.current);
       resizeRafRef.current = requestAnimationFrame(() => {
-        setNodeResizeVersion((v) => v + 1);
+        handler();
       });
     });
 
@@ -180,9 +187,12 @@ export function useCanvasViewport(
       if (el) observer.observe(el);
     });
 
+    window.addEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
+
     return () => {
       cancelAnimationFrame(resizeRafRef.current);
       observer.disconnect();
+      window.removeEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
     };
   }, [canvasElementRef, visibleNodeIds]);
 

@@ -1,7 +1,7 @@
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { splitComponentForTab } from '@/features/core/layout/layoutTabModel';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
+import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { createUntitledGraphResource } from '@/features/application/resource/resourceActions';
 import { openGraphInEditor } from '@/features/application/editor/openGraphInEditor';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -15,8 +15,7 @@ export function moveTabBetweenGroups(
   targetGroupId: string,
   targetTabIndex?: number,
 ): void {
-  useLayoutStore.getState().moveTab(sourceGroupId, tabId, targetGroupId, targetTabIndex);
-  useLayoutStore.getState().setActiveGroup(targetGroupId);
+  EditorGroupsService.moveTab(sourceGroupId, tabId, targetGroupId, targetTabIndex);
 }
 
 /**
@@ -31,7 +30,7 @@ export function splitEditorWithTab(
   const tab = useLayoutStore.getState().nodes[sourceGroupId]?.data?.tabs?.find((t) => t.id === tabId);
   if (!tab) return null;
 
-  return useLayoutStore.getState().splitEditorGroupAtEdge(targetGroupId, edge, {
+  return EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
     component: tab.component || 'GraphEditor',
     tabs: [{ ...tab }],
     activeTabId: tabId,
@@ -40,23 +39,17 @@ export function splitEditorWithTab(
 
 /** Button / command split — copies active tab to right or bottom. */
 export function splitEditorAtEdge(groupId: string, edge: 'right' | 'bottom'): void {
-  const nodes = useLayoutStore.getState().nodes;
-  const activeTab = nodes[groupId]?.data?.tabs?.find(
-    (tab) => tab.id === nodes[groupId]?.data?.activeTabId,
-  ) ?? nodes[groupId]?.data?.tabs?.[0];
-
-  useLayoutStore.getState().splitEditorGroupAtEdge(groupId, edge, {
-    component: splitComponentForTab(activeTab),
-    tabs: activeTab ? [{ ...activeTab, pinned: true as const }] : [],
-    activeTabId: activeTab?.id,
-    pinSourceActiveTab: true,
-  });
+  if (edge === 'right') {
+    EditorGroupsService.splitActiveTabRight(groupId);
+    return;
+  }
+  EditorGroupsService.splitActiveTabDown(groupId);
 }
 
 /** Double-click TabBar empty area — create Untitled-N event in the target editor group. */
 export async function createUntitledEventInGroup(groupId: string): Promise<void> {
   try {
-    useLayoutStore.getState().setActiveGroup(groupId);
+    EditorGroupsService.setActiveGroup(groupId);
     const graphPath = await createUntitledGraphResource('event');
     const parsed = parseUntitledGraphPath(graphPath);
     const name = parsed?.label ?? graphPath;

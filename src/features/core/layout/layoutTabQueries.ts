@@ -5,7 +5,6 @@ export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
 
 export interface LayoutGroupContext {
   activeEditorGroupId: string | null;
-  activeGroupId: string | null;
 }
 
 const DEFAULT_EDITOR_GROUP_ID = 'default_editor';
@@ -34,7 +33,6 @@ export function resolveEditorTargetGroupId(
   const candidates = [
     explicitGroupId,
     ctx.activeEditorGroupId,
-    ctx.activeGroupId,
   ].filter((id): id is string => Boolean(id));
 
   for (const id of candidates) {
@@ -42,7 +40,9 @@ export function resolveEditorTargetGroupId(
   }
 
   const fallback = Object.values(tree).find(isEditorGroupNode);
-  return fallback?.id ?? DEFAULT_EDITOR_GROUP_ID;
+  if (fallback) return fallback.id;
+
+  return DEFAULT_EDITOR_GROUP_ID;
 }
 
 export function getLayoutTabById(tabId: string, nodes?: LayoutTree): LocatedLayoutTab | null {
@@ -97,7 +97,7 @@ export function resolveEditorGroupId(
   context?: LayoutGroupContext,
 ): string | null {
   const ctx = context ?? useLayoutStore.getState();
-  return groupId ?? ctx.activeEditorGroupId ?? ctx.activeGroupId ?? null;
+  return groupId ?? ctx.activeEditorGroupId ?? null;
 }
 
 function areStringArraysEqual(a: string[], b: string[]): boolean {

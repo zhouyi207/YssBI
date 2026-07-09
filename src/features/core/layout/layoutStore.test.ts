@@ -27,7 +27,6 @@ describe('layoutStore tab selection lifecycle', () => {
           },
         },
       },
-      activeGroupId: 'editor',
       activeEditorGroupId: 'editor',
     });
   });

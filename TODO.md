@@ -981,6 +981,11 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **DatabaseEditor 表格行 `any[][]`**：`DatabaseCellValue` / `DatabaseRow`（`dto/database.ts`）；`useDataLoader` / `useEditActions` / `DataTable` / `DatabaseService.getDatabaseRows` 贯通。
 - [x] **`SettingsView` 表单 `onChange` 去 `any`**：`SettingItemProps` 判别联合（checkbox/text/number/select/color）；移除 `eslint-disable`。
 - [x] **Pin 视觉语义统一架构（形状 / 颜色 / 连线）**：`shared/types/domain/pinVisual.ts` 导出 `resolvePinVisualSpec` / `resolvePinRenderStyle`；`Pin.tsx` / `EdgesOverlay` / `ConnectionLine` 迁移；`EdgeData` 改 `colorKey` + `edgeKind`；6 项 vitest 矩阵覆盖。
+- [x] **删除函数前引用检查**：`deleteFunctionWithConfirm` + `uiStore.confirm3`（取消 / 仍删除 / 删除并清理 Call）；`purge_function_call_sites` IPC。
+- [x] **删除函数后 `by_function` 索引清理**：`remove_graph` + `remove_function`；可选 `purge_function_call_sites` 批量移除 Call 节点并刷新 caller 图 store。
+- [x] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 调用 `useGraphMetaStore.deleteGraph`。
+- [x] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 对 Function 图先 `sync_function_shell_pins_in_graph`；`function_call_test::resolve_graph_dynamic_pins_reconciles_function_shell_pins` 回归。
+
 
 ## 2026.07.12
 
@@ -1116,6 +1121,356 @@ interface PinVisualSpec {
 
 ## v1.0 待办
 
+### Workbench / Sash 向 VS Code 收敛
+
+> **参考**：VS Code 布局内核为 Monaco **`SplitView` + `Sash`**（`src/vs/base/browser/ui/splitview/`、`sash/`），由 **`IWorkbenchLayoutService`** 统一编排各 **Part** 的尺寸与显隐；YssBI 当前为 `layoutStore` 树 + CSS Flex + `sashResizeLogic.ts`（2026.07.09 已部分对齐）。
+
+#### VS Code 布局架构（目标参照）
+
+**1. 区域划分（Workbench Grid）**
+
+```
+┌ Titlebar（可选）────────────────────────────────────────┐
+├ Act ├ Primary ├──────── Editor Groups ────────├ Aux ───┤
+│ Bar │ Side Bar│         （独立 GridWidget）    │ Bar   │
+│     │         ├──────── Panel ────────────────┤       │
+├─────┴─────────┴───────────────────────────────┴───────┤
+└ Status Bar ────────────────────────────────────────────┘
+```
+
+| Part | 职责 | 尺寸模型 |
+|------|------|----------|
+| Activity Bar | 切换 Primary Side Bar 视图 | 固定 ~48px，不参与 sash |
+| Primary Side Bar | Explorer / Search 等 | **像素宽**，min/max，可隐藏 |
+| Editor Part | 多 Editor Group 网格 | 占剩余空间；组间另有 sash |
+| Panel | Terminal / Output / Problems | **像素高**（或左/右时为宽），可最大化 |
+| Auxiliary Bar / Secondary Side Bar | 右侧属性类面板 | 同 Side Bar 模型 |
+| Status Bar | 状态信息 | 固定高度 |
+
+**2. SplitView 尺寸语义（核心）**
+
+- 每个子 View 在**父容器主轴**上只有一个 `size`（像素或比例）；**不在 cross-axis 设 width/height**（避免 Panel 误设 `width: 200px` 类 bug）。
+- 通常一个 View 为 **flex 填充剩余**（`size: 0` + 权重），其余为固定像素 View。
+- 隐藏 View：**存储里保留上次 size**，渲染为 0；再次显示或拖相邻 sash 时恢复，而非丢失尺寸。
+
+**3. Sash 交互（Monaco `Sash`）**
+
+| 行为 | VS Code 做法 |
+|------|----------------|
+| 热区 | 4px（`--vscode-sash-size`） |
+| 分隔线 | 居中 1px，hover/active 用 `--vscode-sash-hoverBorder` |
+| 光标 | 垂直 sash → `ew-resize`；水平 sash → `ns-resize` |
+| **拖拽中** | **仅 SplitView 内部 imperative 改尺寸**，不广播 workbench 全局状态、不触发 Part 重挂载 |
+| **松手** | `IWorkbenchLayoutService` 写入 Part size，**debounce 持久化**到 `IStorageService` |
+| 起始尺寸 | 以 **存储的 size** 为基准，不用 content min-width 测量的 DOM |
+| 双击 sash | Panel **最大化 / 还原**（toggle） |
+| 拖向折叠邻居 | 可 **展开** 已隐藏的相邻 Part |
+| 全局 | 拖拽时 `pointer-events: none` 作用于 iframe/canvas；`user-select: none` |
+
+**4. 与 Editor Group 的边界**
+
+- **Workbench sash**：Side Bar ↔ Editor ↔ Panel ↔ Auxiliary（外层）。
+- **Editor Grid sash**：Tab 组分屏（内层，`GridWidget`），与外层 Part 尺寸**独立存储**。
+- YssBI 对应：外层 `root` 树（sidebar / center / detail）+ 内层 `splitEditorGroupAtEdge`（编辑器组）——应对齐「两层 sash、两套持久化键」心智。
+- 内层 Grid 的完整逻辑、性能与待办见下文 **§7**；Tab/分屏命令收敛见前文「编辑器拆分 / EditorGroup 架构收敛」。
+
+**5. 持久化**
+
+- 键示例：`workbench.sidebar.size`、`workbench.panel.size`、`workbench.auxiliaryBar.size`（workspace / global scope）。
+- 启动 hydrate → 运行期 Part API 读写 → 关闭 / debounce 写回。
+
+**6. 性能策略（Layout / Sash — VS Code 如何做）**
+
+> VS Code Workbench **不是 React 树**，布局层用原生 DOM + `SplitView` imperative API，性能目标：**拖 sash 时 60fps、零 workbench 级状态广播、零 Storage 写入**。
+
+| 策略 | VS Code 做法 | 目的 |
+|------|----------------|------|
+| **拖拽期零状态广播** | `SplitView.resizeView()` 只改**当前 split 内**子 View 的 DOM 尺寸；**不**触发 `IWorkbenchLayoutService` 全局事件、**不**写 `IStorageService` | 避免整窗 Part 与 Editor 重算布局 |
+| **松手才 commit** | `onDidEndSash` 一次写入 LayoutService；Storage **debounce**（通常 100–300ms 量级） | 磁盘 / JSON 序列化不进热路径 |
+| **rAF 合并 pointer move** | Sash `mousemove` 合并到 animation frame，一帧最多 layout 一次 | 避免一帧多次 reflow |
+| **增量 layout** | 仅被拖 sash **相邻**的两个 View 参与 `layout()`；兄弟 Part（如 Activity Bar、Status Bar）不重算 | O(1) 级 resize 范围 |
+| **起始尺寸读存储** | `startSize` 来自 memento，**不**读 `getBoundingClientRect`（防 content min-width 触发额外 measure） | 减少 forced layout |
+| **拖拽全局隔离** | body：`user-select: none`；**iframe / webview / canvas / terminal**：`pointer-events: none` | 避免嵌入层 hit-test、选区、Monaco 抢事件 |
+| **CSS containment** | 部分 Part 在 resize 期间 `contain: layout style paint`（或等价合成层策略） | 限制 reflow 传播范围 |
+| **隐藏 Part 不重挂载** | Side Bar / Panel 隐藏时 **保留 DOM 或保留 size 快照**；显示时恢复，而非销毁后重建整棵 Part | 切换/拖 sash 展开无冷启动 |
+| **Part 内虚拟化** | Explorer / Outline 等 **List 虚拟滚动**（与 sash 正交，但 Side Bar 变窄时不渲染屏外千行） | 窄 width 下仍流畅 |
+| **Editor 与 Chrome 解耦** | Editor Part（Monaco）resize 走 **独立 observer / debounce**；Workbench sash 不触发 tab 切换、不 reload 文档 | 拖 sash 不卡编辑器 |
+| **Webview 尺寸通知节流** | Terminal / Webview Panel 收到 resize 事件 **debounce**，不在每个 pointermove 重算 PTY 列宽 | 底部 Panel 拉高不卡终端 |
+| **Grid 内层 sash** | Editor Group 的 `GridWidget` 与外层 Workbench sash **独立** resize 通道；拖外层不遍历所有 open editors | 双层 sash 互不拖累 |
+
+**YssBI 已有 / 部分对齐（2026.07.09）**
+
+- [x] 拖 sash：**DOM 预览 + 松手一次 `resizeNode`**（对齐「零 store 热路径」；历史曾因每帧 `resizeNode` 卡顿）。
+- [x] `ChildWrapper` **`useShallow` 单节点订阅**（对齐「增量更新」— 仅被 resize 的 Part 对应 wrapper 应更新）。
+- [x] **`layout-sash-dragging` 期间 canvas/iframe `pointer-events: none`**（`App.css`）。
+- [x] **`OverlayScrollbar`**：sash 拖动时跳过 `ResizeObserver` 触发的 thumb `setState`，松手 `layout-sash-drag-end` 补一次（见历史 TODO「Detail sash 拖拽卡顿优化」）。
+- [x] **`startSize` 优先 `pixelSize`**，避免 DOM inflated measure。
+
+**YssBI 仍缺 / 风险点**
+
+| 风险 | 说明 |
+|------|------|
+| ~~`LayoutNodeRenderer` 根仍订阅整节点~~ | [x] 根 / `LeafNodeRenderer` 已 `useShallow` 窄订阅；`GraphEditor` `memo` |
+| 拖 Side Bar 时 Detail / Panel 内 **OverlayScrollbar / 重内容** | 若 ResizeObserver 未统一 respect `layout-sash-dragging`，仍会 setState |
+| ~~无 **`contain`**~~ | [x] 拖 sash 时 `.layout-split-contain`（`contain: layout style paint`） |
+| Panel / Webview 未来接入 | 需 **debounce resize** 通知，勿每 pixel 调 backend |
+| ~~持久化~~ | [x] sash 松手 **debounce 250ms** 写 `workbenchLayoutMemento` |
+| `visible: false` 卸载子树 | `ChildWrapper` 已不渲染子节点 — 对齐 VS Code「隐藏不重算内容」；但再次显示有 remount 成本，可评估 keep-alive |
+
+**7. Editor Group Grid（VS Code 内层 — `GridWidget` + `IEditorGroupsService`）**
+
+> **参考**：`src/vs/base/browser/ui/grid/grid.ts`（**GridWidget**）、`src/vs/workbench/browser/parts/editor/editorPart.ts`、`IEditorGroupsService` / `IEditorService`。Editor Part **不是** Workbench 外层 SplitView 的一部分；它是 **独立 2D 网格**，有自己的 sash、序列化与生命周期。
+
+**7.1 网格模型（VS Code）**
+
+```
+Editor Part（占 Workbench 中央 flex 区）
+└── GridWidget（可嵌套 row/col 的二叉树或序列化 Grid）
+    ├── EditorGroup A（Tab 条 + 单槽 Editor 控件）
+    ├── Sash
+    ├── EditorGroup B
+    └── …
+```
+
+| 概念 | VS Code | 说明 |
+|------|---------|------|
+| **GridWidget** | 2D 网格容器 | 每个 **leaf** 是一个 `EditorGroup`；内部 fork 产生 row/col 分支 |
+| **EditorGroup** | Tab 条 + **一个** Editor 控件槽 | 组内 **仅 active tab** 挂载 Monaco/TextEditor；inactive tab 只占 Tab 条 |
+| **组间 sash** | 与 Workbench 相同 Monaco `Sash` | 拖组间 sash **不**触发 Side Bar / Panel resize |
+| **尺寸** | 序列化 **比例 + 像素** | `SerializableGrid` 存拓扑与各 split 的 size；resize 后 **debounce** 写 `workbench.editor.layout` |
+| **分屏** | 拖 Tab 到四边 / 命令 `splitEditor` | 新 Group + **复制或移动** Tab（拖 TabBar=移动，拖画布边=复制） |
+| **关组** | 组内最后一个 Tab 关闭 → **合并 Grid** | 相邻组吸收空间，不留下空壳 flex 节点 |
+| **最大化组** | 双击 Tab / `workbench.action.maximizeEditor` | 当前组占满 Editor Part，其它组 size→0（可还原） |
+| **Active Group** | 全局 `activeGroup` + 组内 `activeEditor` | 键盘焦点、命令目标、Status Bar 上下文 |
+
+**7.2 交互与数据流（VS Code）**
+
+```
+用户拖 Tab 到画布右缘
+  → IEditorGroupsService.splitEditor(OPEN_EDITOR, RIGHT)
+  → GridWidget.addView(newGroup, direction, referenceGroup)
+  → 复制 EditorInput 到新组（或 move，取决于 drop 目标）
+  → SerializableGrid.toJSON() debounce → IStorageService
+
+用户拖组间 sash
+  → GridWidget.resizeView（imperative，同 §6）
+  → onDidEndSash → 更新 SerializableGrid → Storage debounce
+
+用户切换 Tab（组内）
+  → 仅 swap Editor 控件绑定的 EditorInput
+  → **不**重建 Grid、**不**动 Workbench Part
+```
+
+**7.3 性能策略（Editor Grid 专项 — VS Code）**
+
+| 策略 | VS Code 做法 | 目的 |
+|------|----------------|------|
+| **组内单 Editor 槽** | 每个 EditorGroup 只 **1 个** Monaco 实例；切 Tab **换 model**，不 mount N 个编辑器 | 内存与 GPU 与 Tab 数解耦 |
+| **Inactive 组仍显示** | 非激活组 **保留** 其 active editor 的 DOM（缩略预览），但 **失去焦点、降低优先级** | 分屏对照时两图同屏；非激活组不跑 layout 重任务 |
+| **Preview Tab** | `workbench.editor.enablePreview`：单击资源 **不 pin** 则替换 preview tab | 减少 Tab / Document 实例 |
+| **Grid resize 与文档解耦** | 拖组间 sash **不** `loadModel`、**不**触发扩展 activate | 纯 layout reflow |
+| **SerializableGrid debounce** | 拓扑变更 / sash 松手后 **debounce** 写 storage | 分屏拖拽不进磁盘热路径 |
+| **IEditorGroupsService 事件粒度** | `onDidActiveGroupChange` / `onDidAddGroup` 等 **细粒度**；Sidebar 不订阅整 Grid | 减少无关 Part 刷新 |
+| **Editor Part resize** | 外层 Workbench 改 Editor Part 大小时，Grid **按比例**分配各 leaf | 拖 Side Bar 时各组同比缩放，无需用户重调 |
+| **关闭空组 O(1) 合并** | `GridWidget.removeView` 合并 sibling，**不**遍历所有 open editors | 关 Tab 不卡 |
+
+**7.4 YssBI 现状 vs VS Code（Editor Grid）**
+
+| 维度 | VS Code | YssBI 现状（2026.07.09） |
+|------|---------|---------------------------|
+| 布局 primitive | `GridWidget` + `SerializableGrid` | `layoutStore` 嵌套 `row`/`col` + `editor_area` |
+| 组尺寸 | 持久化比例/像素 | [x] `editorGridMemento` + flex 组 `commitFlexSplitResize` 首次 pixel 化 |
+| 组间 sash | Grid 内 Monaco Sash，imperative | 共用 `LayoutNodeRenderer` Sash；flex 组 **首次拖 sash 才 `pixelSize` 化** |
+| 分屏入口 | 四向 + 命令 | [x] `splitEditorGroupAtEdge` + `editorGroupCommands`（见前文 checklist） |
+| Tab 移动/复制语义 | 拖 TabBar=move，拖边=copy | [x] 已对齐 |
+| 关组合并 | `removeView` 自动合并 | [x] `removeNode` 单子提升；需与 **空 Tab 组** 场景回归 |
+| 组内 Editor 槽 | **1 Monaco / 组，切 Tab 换 model** | 每组 `GraphEditor`；[x] Tab 切换 **graphEntities 缓存**、窄订阅（见画布架构重构） |
+| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | **多个 Group 同屏 = 多个 Canvas 实例**（非激活组仍 mount GraphEditor） |
+| Active group | `IEditorGroupsService.activeGroup` | [x] `activeEditorGroupId` + `GroupContext` |
+| TabBar 订阅 | 轻量 model | [x] `useEditorGroupTabStrip` 窄订阅 |
+| Grid 与 Workbench 持久化解耦 | 独立 `workbench.editor.layout` | [x] `workbenchLayoutMemento.editorGrid` 与 chrome parts 分开 hydrate/debounce |
+| 最大化 Editor Group | 支持 | [x] 双击 pinned Tab toggle |
+| Preview Tab | `pinned: false` 可替换 | [x] `LayoutTab.pinned` + preview 语义 |
+
+**7.5 YssBI 已有 / 部分对齐（Editor Grid）**
+
+- [x] **分屏单点**：`splitEditorGroupAtEdge` + `editorSplitLayout.resolveEditorSplitPlacement`。
+- [x] **编排门面**：`editorGroupCommands`（拖边复制 Tab、TabBar 移动 Tab）。
+- [x] **Tab 切换轻量 patch**：`setEditorGroupActiveTab` 不全量 spread `data`。
+- [x] **TabBar 窄订阅**：`useEditorGroupTabStrip`。
+- [x] **画布逐节点订阅 / 去全图反序列化**（见 ## 2026.07.03 画布渲染架构重构）——对齐「切 Tab 不重算整图」方向。
+- [x] **Viewport 按 graphPath 存**（非 groupId）——对齐「layout 变而 view state 跟资源走」。
+
+**7.6 Editor Grid 收敛任务列表**
+
+**P0 — 正确性 + 与 Workbench sash 分离**
+
+- [x] **`IEditorGroupsService` 薄封装**：`editorGroupsService.ts`；`editorGroupCommands` / `useMenubar` 已迁移。
+- [x] **Editor Grid 独立持久化**：`editorGridMemento` 并入统一 workbench memento；与 chrome 分开 hydrate/debounce。
+- [x] **组间 sash 首次 resize 行为**：flex 组双端 `commitFlexSplitResize` + `splitViewSizing`。
+- [x] **空 Editor Group 自动合并**：`removeTab` / `moveTab` 已有合并逻辑（回归通过）。
+
+**P0 — 性能（Editor Grid 热路径）**
+
+- [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`。
+- [x] **组内 Tab 切换不 remount GraphEditor 壳**：同组切 Tab 仅换 `activeTabId` / Canvas `graphPath`；`GraphEditor` `memo` + 组件类型不变不 unmount。
+- [x] **Grid resize 不触发 loadGraph**：layout 层无 `loadGraph` 调用；sash 仅改 flex / `pixelSize` + viewport scale。
+- [x] **多组同屏 Canvas 上限策略**：`graphDocumentCachePolicy` LRU（max 4）+ 非激活组 `InactiveEditorGroupPlaceholder`（不 mount Canvas）。
+
+**P1 — 交互 parity**
+
+- [x] **最大化 Editor Group**：双击 pinned Tab → `EditorGroupsService.toggleMaximizeGroup`；`editor_area` snapshot 还原。
+- [x] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；重启恢复分屏比例/方向。
+- [x] **拖组间 sash 双击**：editor grid sash 双击均分 → `resetEditorGridSplitEqual`。
+
+**P2 — 架构**
+
+- [ ] **评估引入 `GridWidget` 等价模块**：`editorGridLayout` + `editorGridMemento` 已覆盖当前需求；完整 GridWidget 替换待评估。
+- [x] **Editor Grid 与 Workbench 两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts` + 既有 sash 单测。
+- [x] **统一 `LeafNodeRenderer` 订阅**：`nodeId` + `useShallow` 单叶字段，与 `ChildWrapper` 一致。
+
+#### YssBI 现状 vs VS Code 差距
+
+| 维度 | VS Code | YssBI 现状（2026.07.09） |
+|------|---------|---------------------------|
+| 布局 primitive | SplitView（主轴 size） | `layoutStore` + Flex `flex: 0 0 Npx` |
+| Activity Bar | Grid 内固定 Part | `EditorWindow` 中与 `Workspace` **并列**，不在 layout 树 |
+| 隐藏 Part | size 与 visible 分离存储 | `visible: false` → flex 0，**pixelSize 仍保留**（类似） |
+| Sash 拖拽 | imperative，松手 commit | **已改**：DOM 预览 + 松手 `resizeNode` 一次 |
+| cross-axis 尺寸 | 不设 | **已改**：去掉 width/maxWidth 误伤 Panel |
+| 尺寸持久化 | settings / storage | [x] `workbenchLayoutMemento` localStorage；启动 hydrate + sash 松手 debounce |
+| 双击 sash | Panel maximize | [x] editor↔panel sash 双击 `togglePanelMaximized` |
+| activityBarPosition | 左/右/隐藏生效 | [x] Settings → `EditorWindow` 重排 Activity Bar |
+| Panel 位置 | 下/左/右 | [x] Settings `panelPosition` → `applyPanelPosition` |
+| maxSize | Panel ≤ ~80% 视口 | [x] `workbenchPanelSizing` |
+| 收敛 API | `IWorkbenchLayoutService` | [x] `workbenchLayoutService` + `editorGroupsService` |
+| **Sash 热路径** | SplitView imperative，零全局事件 | DOM 预览 + 松手 commit（**已对齐**） |
+| **ResizeObserver 节流** | Part 内 list/editor 各自 debounce / 虚拟化 | [x] OverlayScrollbar / canvas / ConnectionLine sash guard |
+| **拖拽 containment** | `contain: layout` 等 | [x] `.layout-split-contain` |
+| **Storage 写入** | debounce 松手后 | [x] 250ms debounce localStorage |
+| **隐藏 Part 内容** | 保留 DOM 或轻量占位 | [x] chrome Part keep-alive（`invisible`）；GraphEditor 按需 mount |
+| **Editor Grid** | `GridWidget` + 独立 storage | [x] `layoutStore` row/col + `editorGridMemento`（见 **§7.4**） |
+| **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] flex 首次 pixel 化 + debounce 持久化 |
+| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 非 active 组 placeholder + `graphDocumentCachePolicy` LRU |
+
+#### 收敛任务列表
+
+**P0 — 行为正确 + 不卡顿（Workbench 外层 sash）**
+
+- [x] **主轴仅用 flex-basis**：固定 Part 只设 `flex: 0 0 Npx` + `min-w/h-0`，禁止 cross-axis `width/maxWidth`（修复日志 Panel 宽度异常）。
+- [x] **Sash 拖拽 imperative + 松手 commit**：拖动中只改目标 DOM `flex`，mouseup 一次 `resizeNode`；避免每帧写 store 卡顿。
+- [x] **`startSize` 以 store `pixelSize` 为准**：不用 content 撑开后的 DOM 宽度作拖拽基准。
+- [x] **Sash 样式 VS Code 化**：4px 热区、1px 分隔线、hover/active accent、`ew-resize`/`ns-resize`（`App.css` `.workbench-sash-*`）。
+- [x] **拖 sash 展开相邻隐藏 Part**：`restoreAdjacentPanelVisibility`（隐藏 Side Bar / Panel 时拖相邻 sash 自动 `visible: true`）。
+- [x] **`ChildWrapper` 窄订阅**：`useShallow` 单节点，避免拖 Side Bar 时重渲染 Detail/Panel。
+- [x] **单测**：`sashResizeLogic.test.ts`（target 解析、minSize 钳制、flex 不含 width）。
+- [x] **`IWorkbenchLayoutService` 薄封装**：`workbenchLayoutService` 暴露 `resizePart` / `togglePart` / `getPartSize` / `setWorkbenchPartVisible`；UI 经 service 访问 chrome。
+- [x] **Workbench 尺寸持久化**：统一 `workbenchLayoutMemento`（localStorage），启动 hydrate；sash 松手 debounce 250ms 保存。
+- [x] **Panel `maxSize`**：`workbenchPanelSizing` 默认 `min(floor(0.8 * viewport), …)`。
+
+**P0 — 性能（对齐 VS Code 热路径）**
+
+- [x] **Sash 拖动全仓 ResizeObserver 审计**：`OverlayScrollbar` / `useCanvasViewport` / `ConnectionLine` 已 respect `layout-sash-dragging`。
+- [x] **Sash 拖动 `.layout-split-view` containment**：`.layout-split-contain` 拖时加 `contain: layout style paint`，松手移除。
+- [x] **Workbench 尺寸持久化 debounce**：250ms debounce 写 localStorage。
+- [x] **`LeafNodeRenderer` / Editor 区 sash 隔离**：`GraphEditor` `memo` + 窄订阅；非激活组 `pointer-events-none`。
+- [x] **Sash rAF 合并断言 / 性能回归**：`sashDrag.test.ts` — mousemove 期间 store 不变，mouseup 一次 `resizeNode`。
+
+**P1 — 交互 parity**
+
+- [x] **双击水平 sash → Panel 最大化/还原**：editor↔panel sash 双击 toggle；`panel.data.maximized` + `restoredPixelSize`。
+- [x] **接入 `activityBarPosition`**：Settings 左/右/隐藏 → `EditorWindow` 重排 Activity Bar。
+- [x] **Side Bar toggle 与 size 分离收口**：toggle 仅改 `visible`/`currentTab`，`pixelSize` 保留。
+- [x] **Sash 拖至 minSize 视觉反馈**：`.workbench-sash.at-limit` 态。
+
+**P2 — 架构与 Editor 内层对齐**
+
+- [x] **抽 `SplitView` 模块**：`splitView.ts` 统一 flex 数学（`panelFlexBasis` / `splitViewSizing`）；imperative drag 仍在 `sashResizeLogic`。
+- [x] **两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts`（外层 chrome + 内层 grid）。
+- [ ] ~~**Editor Group Grid 与 Workbench 解耦持久化**~~ → 已并入 **§7.6 P0「Editor Grid 独立持久化」**。
+
+**P2 — 性能（Part 内容与未来 Webview）**
+
+- [x] **Panel / Terminal / Webview resize 节流**：`partResizeNotifier` debounce 100ms + `usePartResizeCommit`；sash 预览期不 emit。
+- [x] **Side Bar 列表虚拟化复核**：Graphs Events/Functions、Variables 本地/全局、Data 列表已用 `SidebarVirtualList`；Nodes 仍走 `NodeCatalogTreeView` virtualizer。
+- [x] **隐藏 Part keep-alive 策略**：chrome Part（sidebar/panel/detail）已 `invisible` 保 DOM；GraphEditor 仍按需 mount。
+
+**P3 — 可选产品 parity（v1.0 后可排）**
+
+- [x] **Panel 位置** bottom / left / right（VS Code `workbench.panel.defaultLocation`）；Settings → `panelPartLayout` + `applyPanelPosition`。
+- [x] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+Alt+B` / `Ctrl+I` toggle Detail；Menubar Window 菜单已标注。
+- [ ] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原。
+- [ ] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；当前 Tauri `decorations: false` + 自绘 `WindowTitleBar` 写死。
+- [ ] **Status Bar 可交互项**（VS Code 左/右 status item + command）；当前 `BottomBar` 只读展示。
+
+**8. Shell / 设置 / 多窗口 — 尚未写入 §1–§7 的收敛项**
+
+> 2026.07.09 全仓扫 layout/chrome 壳层：下列为 **TODO §1–§7 未单独列出**、但与 VS Code Workbench 体验相关的缺口。
+
+**8.1 VS Code 有、YssBI 缺或半实现**
+
+| 领域 | VS Code | YssBI 现状 |
+|------|---------|------------|
+| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [x] `resetWorkbenchLayout` 已接 Menubar |
+| **Sidebar 快捷键** | `Ctrl+B` toggle | [x] `Ctrl+B` / `Ctrl+I` / `Ctrl+\`` |
+| **Settings 呈现** | 可开 Settings **编辑器 Tab** | **Dialog 模态**（产品决策：不恢复 SettingsEditor Tab） |
+| **Appearance 预设** | 选 theme 即生效 | [x] `colorTheme` / `activityBarPosition` / `smoothScroll` 已接 shell |
+| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [x] `PanelPart` Tab 条（Logs + Output 占位）；Terminal 待接 |
+| **Tab 拖边分屏预览** | 半屏高亮 | [x] `EditorDropPreviewOverlay` 四向 split 预览 |
+| **项目切换布局** | 可保留 workspace layout 或 reset | [x] `collapseEditorGroups` on project reset |
+| **Detail 自动展开** | 用户隐藏后尊重选择 | [x] `detail.userHidden` memento |
+| **多 Editor 窗口** | 独立 window 状态 | [x] 副窗口 localStorage + cascade；主窗 `label=main` |
+| **Satellite 窗口** | 部分复用 workbench Part | [x] 见 `docs/WORKBENCH_SATELLITE_WINDOWS.md` |
+
+**8.2 半实现 / 死代码（应收敛或删除）**
+
+- [x] **`LayoutNodeRenderer` 叶子组 drag**：已删除无效 `useDraggable` / `moveNode` 路径。
+- [x] **`SettingsEditor` viewRegistry 注册**：已删除（Settings 仅 Dialog）。
+- [x] **`activeGroupId` vs `activeEditorGroupId`**：合并为单一 `activeEditorGroupId`。
+- [x] **`clampPanelSize` 重复**：统一到 `workbenchPanelSizing`。
+- [x] **`Detail` 未使用的 `width` prop**：已删除。
+
+**8.3 性能补漏（具体文件，补充 §6 P0 审计）**
+
+- [x] **`useCanvasViewport.ts` ResizeObserver**：sash guard 已接入。
+- [x] **`ConnectionLine.tsx` ResizeObserver**：`bindSashAwareResizeObserver` 已接入。
+
+**8.4 收敛任务（Shell / 设置 / 多窗口）**
+
+**P0**
+
+- [x] **实现或移除 `resetLayout`**：`resetWorkbenchLayout` 已接 Menubar。
+- [x] **渲染 Tab 分屏 drop preview**（`kind:'split'` 半屏 overlay）。
+- [x] **`ensureDetailVisible` 尊重用户隐藏**：`detail.userHidden` memento。
+- [x] **项目切换 Editor Grid 策略**：`collapseEditorGroups` on project reset（已修 `collectDescendantIds` 误删 `editor_area`）。
+- [x] **多主窗口 geometry**：副窗口 localStorage + cascade fallback；主窗口 `usePersistedWindow` 仅 label=`main`。
+
+**P1**
+
+- [x] **快捷键**：`Ctrl+B` Side Bar；`Ctrl+I` Detail；`Ctrl+\`` Panel。
+- [x] **Appearance → 运行时**：`activityBarPosition` / `colorTheme` / `smoothScroll` 已接 shell。
+- [x] **Canvas/连线 sash 节流**：§8.3 两文件已加 guard。
+
+**P2**
+
+- [x] **统一 workbench memento schema**：`workbenchLayoutMemento` 含 parts + editorGrid。
+- [x] **Panel 多 Tab 模型**：`PanelPart` + `panelPartModel`；Logs / Output 占位。
+- [x] **Settings：Dialog vs Editor Tab** → 保持 Dialog，不恢复 Tab 编辑器。
+- [x] **卫星窗口策略文档**：`docs/WORKBENCH_SATELLITE_WINDOWS.md`。
+
+**P3**
+
+- [ ] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）。
+
+**8.5 已对齐 VS Code、无需重复排期**
+
+- Log Panel **拖出独立窗口**（`LogPanelContent` HTML5 DnD）。
+- Log 列表 **虚拟化** + OverlayScrollbar。
+- 跨窗 **主题 settings 同步**（`CLIENT_SETTINGS_UPDATED_EVENT`）。
+- Tab 分屏/移动 **命令单点**（`editorGroupCommands` + `splitEditorGroupAtEdge`，见前文 EditorGroup checklist）。
+
+---
+
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
 
 - [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
@@ -1138,18 +1493,12 @@ interface PinVisualSpec {
 
 > **源于 2026.07.08 函数图层复盘**（Phase 1–4 + 签名索引已落地；缺口主要在**引用生命周期**、**打开图 reconcile**、**UE5 导航 UX**、**三处投影漂移**）：
 
-**P0 — 正确性 / 引用生命周期**
-
-- [x] **删除函数前引用检查**：`deleteFunctionWithConfirm` + `uiStore.confirm3`（取消 / 仍删除 / 删除并清理 Call）；`purge_function_call_sites` IPC。
-- [x] **删除函数后 `by_function` 索引清理**：`remove_graph` + `remove_function`；可选 `purge_function_call_sites` 批量移除 Call 节点并刷新 caller 图 store。
-- [x] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 调用 `useGraphMetaStore.deleteGraph`。
-- [x] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 对 Function 图先 `sync_function_shell_pins_in_graph`；`function_call_test::resolve_graph_dynamic_pins_reconciles_function_shell_pins` 回归。
 
 **P1 — 亟需补齐的 UE5 式功能**
 
 - [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
 - [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
-- [ ] **Call Function 目标重绑定**：`subGraphId` 仅在 palette/sidebar 拖放时写入，创建后无法改目标；新增 `update_call_function_target`（改 `subGraphId` + 重投影 pin + 维护 call-site 索引）+ Node Detail 或右键入口。
+- [x] **Call Function 目标重绑定**：`update_call_function_target`（改 `subGraphPath` + 重投影 pin + 维护 call-site 索引）+ Node Detail `Select` 入口；`function_call_test` 覆盖重绑定与索引迁移。
 - [ ] **PinEditor 保护默认 exec 引脚**：新建函数默认含 `exec-in`/`exec-out`，但 Detail 可删至「纯数据函数」且无确认；删除最后一个 exec 入/出前应确认，并与 `sideEffectWarning` 文案一致。
 - [ ] **签名变更断连用户反馈**：`reconcile_shell_pins` / Call 投影删除 pin 时会断连接（设计如此），但无「N 条连接已断开」toast 或 Validation 面板；避免用户以为 bug。
 - [ ] **断裂引用图级诊断**：无效 / 缺失 `subGraphId` 的 Call 节点无 compile 期标记（仅 runtime 失败）；打开图或保存前扫描 dangling Call，在侧栏/节点上显示警告徽章。

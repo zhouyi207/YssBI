@@ -12,7 +12,7 @@ import { useLogActions } from '@/features/application/log';
 import { LogMessage, LogLevel, LogType } from '@/shared/types/ui';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { togglePanelVisibility } from '@/features/core/layout/workbenchLayoutService';
 import { useEditorStore } from '@/features/core/editor';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { logger } from '@/utils/appLogger';
@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+import { usePartResizeCommit } from '@/features/application/layout/usePartResizeCommit';
 import {
   getLogLevelBackground,
   getLogLevelColor,
@@ -254,11 +255,7 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
 
   const handleClose = useCallback(() => {
     if (variant === 'embedded') {
-      const { nodes, updateNode } = useLayoutStore.getState();
-      const panelNode = nodes['panel'];
-      updateNode('panel', {
-        data: { ...panelNode?.data, visible: false },
-      });
+      togglePanelVisibility();
     } else {
       getCurrentWindow().close();
     }
@@ -287,6 +284,16 @@ export const LogPanelContent = ({ variant = 'embedded', className = '' }: LogPan
     estimateSize: () => LOG_ITEM_HEIGHT + LOG_ITEM_GAP,
     overscan: 8,
   });
+
+  const virtualizerRef = useRef(virtualizer);
+  virtualizerRef.current = virtualizer;
+
+  const handlePanelResizeCommit = useCallback(() => {
+    if (variant !== 'embedded') return;
+    virtualizerRef.current.measure();
+  }, [variant]);
+
+  usePartResizeCommit('panel', handlePanelResizeCommit);
 
   const getLevelColor = getLogLevelColor;
   const getLevelBgColor = getLogLevelBackground;

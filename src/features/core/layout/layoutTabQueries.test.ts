@@ -38,7 +38,7 @@ const mockNodes: LayoutTree = {
     type: 'component',
     parentId: 'root',
     data: {
-      component: 'LogPanel',
+      component: 'PanelPart',
       tabs: [],
       activeTabId: undefined,
     },
@@ -97,11 +97,11 @@ describe('layoutTabQueries', () => {
   });
 
   it('resolves editor group id with fallbacks', () => {
-    expect(resolveEditorGroupId(undefined, { activeEditorGroupId: 'editorA', activeGroupId: 'editorB' })).toBe(
+    expect(resolveEditorGroupId(undefined, { activeEditorGroupId: 'editorA' })).toBe(
       'editorA',
     );
-    expect(resolveEditorGroupId(null, { activeEditorGroupId: null, activeGroupId: 'editorB' })).toBe('editorB');
-    expect(resolveEditorGroupId('explicit', { activeEditorGroupId: 'editorA', activeGroupId: 'editorB' })).toBe(
+    expect(resolveEditorGroupId(null, { activeEditorGroupId: null })).toBe(null);
+    expect(resolveEditorGroupId('explicit', { activeEditorGroupId: 'editorA' })).toBe(
       'explicit',
     );
   });
@@ -119,7 +119,6 @@ describe('layoutTabQueries', () => {
     expect(
       resolveEditorTargetGroupId(undefined, tree, {
         activeEditorGroupId: null,
-        activeGroupId: 'sidebar',
       }),
     ).toBe('editorA');
   });

@@ -5,6 +5,10 @@ import type { PinData, PinView } from '@/shared/types/store/graph';
 import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { CALL_FUNCTION_NODE_TYPE, resolveEffectiveDefinition } from '@/features/domain/nodeDefinition';
 import { openGraphResource, resolveGraphResourceMeta } from '@/features/application/editor/openGraphResource';
+import { updateCallFunctionTarget } from '@/features/application/graphDocument/graphDocumentActions';
+import { useFunctionCatalog } from '@/features/core/editor/hooks/useFunctionCatalog';
+import { uiStore } from '@/features/core/ui/UIStore';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
@@ -18,8 +22,12 @@ import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
 import { resolveNodeDocumentationContent } from '../nodeDocumentation';
 import { resolveNodePinSpecs } from '../resolveNodePinSpecs';
+import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
+import { VscGoToFile } from 'react-icons/vsc';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
+import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailText } from '../shared/DetailText';
+import { Select } from '@/shared/ui';
 import type { PinResultState } from '@/shared/types/ui';
 
 const EMPTY_PINS: PinData[] = [];
@@ -59,6 +67,14 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     }),
   );
   const nodeType = node?.nodeType;
+  const functionCatalog = useFunctionCatalog();
+  const functionOptions = useMemo(
+    () =>
+      Object.values(functionCatalog)
+        .map((entry) => ({ label: entry.name, value: entry.id }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [functionCatalog],
+  );
   const definition = useNodeRegistryStore((s) =>
     nodeType ? s.definitions.get(nodeType) : undefined,
   );
@@ -117,6 +133,13 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     void openGraphResource(node.subGraphPath, 'function');
   };
 
+  const handleCallTargetChange = (functionPath: string) => {
+    if (!functionPath || functionPath === node.subGraphPath) return;
+    void updateCallFunctionTarget(graphPath, nodeId, functionPath).catch((error) => {
+      uiStore.showToast(formatErrorMessage(error), 'error');
+    });
+  };
+
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: node.title || node.nodeType })}>
       <DetailForm>
@@ -128,18 +151,34 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
             {node.category.join(' / ')}
           </DetailReadonlyField>
         )}
-        {nodeType === CALL_FUNCTION_NODE_TYPE && node.subGraphPath && (
-          <DetailReadonlyField label={t('detail.fields.graph')}>
-            <button
-              type="button"
-              className="text-left text-[var(--accent-color)] hover:underline"
-              onClick={handleOpenCallTarget}
-            >
-              {callTargetMissing
-                ? t('detail.callFunction.missingTarget', { path: node.subGraphPath })
-                : t('detail.callFunction.openTarget')}
-            </button>
-          </DetailReadonlyField>
+        {nodeType === CALL_FUNCTION_NODE_TYPE && (
+          <DetailFieldRow label={t('detail.callFunction.target')}>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <Select
+                  className="w-full"
+                  value={node.subGraphPath ?? ''}
+                  options={functionOptions}
+                  onChange={handleCallTargetChange}
+                />
+              </div>
+              <ToolbarIconButton
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="shrink-0"
+                disabled={!node.subGraphPath || callTargetMissing}
+                tooltip={
+                  callTargetMissing && node.subGraphPath
+                    ? t('detail.callFunction.missingTarget', { path: node.subGraphPath })
+                    : t('detail.callFunction.openTarget')
+                }
+                onClick={handleOpenCallTarget}
+              >
+                <VscGoToFile size={14} />
+              </ToolbarIconButton>
+            </div>
+          </DetailFieldRow>
         )}
       </DetailForm>
       <NodePinInterfacePanel

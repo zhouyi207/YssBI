@@ -18,7 +18,7 @@ function buildEditorState(
   uiState: ReturnType<typeof useEditorUIState>,
 ) {
   return {
-    activeGroupId: active.activeGroupId,
+    activeGroupId: active.activeEditorGroupId,
     activeEditorGroupId: active.activeEditorGroupId,
     activeTabId: active.activeTabId,
     groupId: active.groupId,

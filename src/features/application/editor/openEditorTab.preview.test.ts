@@ -18,7 +18,6 @@ describe('openEditorTab preview', () => {
           },
         },
       },
-      activeGroupId: 'default_editor',
       activeEditorGroupId: 'default_editor',
     } as Partial<ReturnType<typeof useLayoutStore.getState>>);
   });
