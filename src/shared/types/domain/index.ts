@@ -21,6 +21,8 @@ export * from './pin';
 export * from './pinSemantics';
 export * from './pinVisual';
 export * from './connection';
+export * from './functionSignaturePin';
+export * from './nodeViewMeta';
 export * from './graph';
 export * from './graphResourcePath';
 export * from './dataType';

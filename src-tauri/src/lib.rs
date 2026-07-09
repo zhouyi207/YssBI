@@ -6,7 +6,6 @@ pub mod application;
 pub mod ast;
 pub mod commands;
 pub mod database;
-pub mod editor;
 pub mod event;
 pub mod execution;
 pub mod frontend;
@@ -129,9 +128,6 @@ pub fn run() {
             get_result_source_page,
             get_pin_result_descriptor,
             release_result_source,
-            // ==================== 设置 ====================
-            load_settings,
-            save_settings,
             // ==================== 窗口几何状态 ====================
             get_window_states,
             get_window_state,

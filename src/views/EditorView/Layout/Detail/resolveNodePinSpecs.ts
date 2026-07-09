@@ -7,8 +7,7 @@ export interface ResolvedPinSpec {
   name: string;
   direction: 'input' | 'output';
   kind: 'Data' | 'Exec';
-  type: string;
-  typeDisplay?: string;
+  typeLabel: string;
   optional: boolean;
   slotKind?: 'fixed' | 'repeatable' | 'derivedFromInput';
   slotNote?: { kind: 'repeatableRange'; min: number; max: number | null } | { kind: 'derivedFromInput' };
@@ -95,8 +94,7 @@ function resolvePin(
     name: pin.name,
     direction: pin.direction,
     kind: pinFlowKind(pin),
-    type: label,
-    typeDisplay: pin.typeDisplay ?? label,
+    typeLabel: label,
     optional: meta.optional,
     slotKind: meta.slotKind,
     slotNote: meta.slotNote,
@@ -134,7 +132,7 @@ export function listDefinitionOnlyPins(
         name: def.name,
         direction: def.direction,
         kind: def.kind,
-        type: formatDefinitionType(def),
+        typeLabel: formatDefinitionType(def),
         optional: def.optional ?? false,
         slotKind: 'fixed',
         connected: false,
@@ -148,7 +146,7 @@ export function listDefinitionOnlyPins(
         name: `${slot.namePrefix}*`,
         direction: def.direction,
         kind: def.kind,
-        type: formatDefinitionType(def),
+        typeLabel: formatDefinitionType(def),
         optional: def.optional ?? false,
         slotKind: 'repeatable',
         slotNote: slotNote(slot),

@@ -4,7 +4,7 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, RuntimeSourcesInvalidatedPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
-import { resolveNodeViewMeta } from '@/features/core/dataStore/serialization';
+import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
@@ -15,13 +15,13 @@ import type { NodeInstanceDTO } from '@/shared/types/dto';
 import { flattenInstanceParams } from '@/shared/types/dto/nodeInstanceParams';
 import { runtimePinRefsToIds } from '@/shared/types/dto/graphModel';
 import { dataTypeFromBackend } from '@/shared/types/dto/dataType';
+import { normalizePinDto, pinInferredPatch } from '@/shared/types/dto/pinHydrate';
 
 function dtoToNodeData(graphPath: string, nodeId: string, d: NodeInstanceDTO): NodeData {
     const meta = resolveNodeViewMeta({
         nodeType: d.nodeType,
         title: d.title,
         category: d.category,
-        uiStyle: d.uiStyle,
         description: d.description,
     });
     const params = flattenInstanceParams(d);
@@ -33,7 +33,6 @@ function dtoToNodeData(graphPath: string, nodeId: string, d: NodeInstanceDTO): N
         title: meta.title,
         inputs: runtimePinRefsToIds(d.inputs),
         outputs: runtimePinRefsToIds(d.outputs),
-        uiStyle: meta.uiStyle,
         description: meta.description,
         position: d.position ?? { x: 0, y: 0 },
         paramsKind: params.paramsKind,
@@ -58,7 +57,7 @@ export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
         store.reconcileNode(
             payload.graphPath,
             dtoToNodeData(payload.graphPath, payload.nodeId, payload.data),
-            payload.pins as PinData[],
+            payload.pins.map((pin) => normalizePinDto(pin as PinData)),
         );
         markGraphTabDirty(payload.graphPath);
         callbacks?.onNodeCreated?.(payload.graphPath, payload.nodeId, payload.data);
@@ -75,7 +74,7 @@ export class NodesBatchCreatedHandler extends BaseEventHandler<NodesBatchCreated
 
         const items = payload.nodes.map(([nodeId, data, pins]) => ({
             node: dtoToNodeData(payload.graphPath, nodeId, data),
-            pins: pins as PinData[],
+            pins: pins.map((pin) => normalizePinDto(pin as PinData)),
         }));
 
         store.batchAddNodesAndPins(payload.graphPath, items);
@@ -170,24 +169,21 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
         store.batchUpdatePins({
             disconnectIds: payload.removedConnections.map(([from, to]) => `${from}->${to}`),
             removePinIds: payload.removedPinIds,
-            updatePins: (payload.updatedPins ?? []).map((pin) => ({
-                pinId: pin.id,
-                // 签名/投影 pin 就地更新时，类型、容器、方向都可能变（如 input int → float），
-                // 不能只改 name，否则画布上的 pin 与函数签名「对不上」。
-                // 与 addPins 一致：直接采用 DTO 字段（dataType 保持后端形状），
-                // 避免只改 name 导致类型/方向与签名不符。
-                patch: {
-                    name: pin.name,
-                    type: pin.type,
-                    direction: pin.direction,
-                    containerType: pin.containerType ?? undefined,
-                    typeDisplay: pin.typeDisplay ?? undefined,
-                    dataType: pin.dataType,
-                },
-            })),
+            updatePins: (payload.updatedPins ?? []).map((pin) => {
+                const normalized = normalizePinDto(pin);
+                return {
+                    pinId: pin.id,
+                    patch: {
+                        name: normalized.name,
+                        type: normalized.type,
+                        direction: normalized.direction,
+                        dataType: normalized.dataType,
+                    },
+                };
+            }),
             addPins: payload.addedPins.map((pin) => ({
                 nodeId: payload.nodeId,
-                pin: pin as PinData,
+                pin: normalizePinDto(pin),
             })),
             graphPath: payload.graphPath,
         });
@@ -206,14 +202,9 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
         this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphPath);
 
         useGraphDataStore.getState().batchUpdatePinFields(
-            payload.pinTypes.map(({ pinId, pinType, containerType, typeDisplay, dataType }) => ({
+            payload.pinTypes.map(({ pinId, dataType }) => ({
                 pinId,
-                patch: {
-                    type: pinType,
-                    containerType: containerType ?? undefined,
-                    typeDisplay: typeDisplay ?? undefined,
-                    dataType: dataType ? dataTypeFromBackend(dataType) : undefined,
-                },
+                patch: pinInferredPatch(dataTypeFromBackend(dataType)),
             })),
             payload.graphPath,
         );

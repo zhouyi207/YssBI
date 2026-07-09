@@ -53,20 +53,35 @@ pub struct PinChangeSet {
     pub removed_connections: Vec<(PinId, PinId)>,
 }
 
+/// 函数签名 pin：`data_type == None` 表示 exec；data pin 直接携带结构化 `DataType`。
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionSignaturePin {
     pub id: String,
     pub name: String,
-    #[serde(rename = "type")]
-    pub pin_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub container_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_type: Option<DataType>,
 }
 
 impl FunctionSignaturePin {
     pub fn is_exec(&self) -> bool {
-        self.pin_type.eq_ignore_ascii_case("exec")
+        self.data_type.is_none()
+    }
+
+    pub fn data(sig_id: impl Into<String>, name: impl Into<String>, data_type: DataType) -> Self {
+        Self {
+            id: sig_id.into(),
+            name: name.into(),
+            data_type: Some(data_type),
+        }
+    }
+
+    pub fn exec(sig_id: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            id: sig_id.into(),
+            name: name.into(),
+            data_type: None,
+        }
     }
 }
 
@@ -76,21 +91,11 @@ pub const DEFAULT_FUNCTION_EXEC_IN_ID: &str = "exec-in";
 pub const DEFAULT_FUNCTION_EXEC_OUT_ID: &str = "exec-out";
 
 pub fn default_function_exec_input() -> FunctionSignaturePin {
-    FunctionSignaturePin {
-        id: DEFAULT_FUNCTION_EXEC_IN_ID.to_string(),
-        name: "In".to_string(),
-        pin_type: "exec".to_string(),
-        container_type: None,
-    }
+    FunctionSignaturePin::exec(DEFAULT_FUNCTION_EXEC_IN_ID, "In")
 }
 
 pub fn default_function_exec_output() -> FunctionSignaturePin {
-    FunctionSignaturePin {
-        id: DEFAULT_FUNCTION_EXEC_OUT_ID.to_string(),
-        name: "Out".to_string(),
-        pin_type: "exec".to_string(),
-        container_type: None,
-    }
+    FunctionSignaturePin::exec(DEFAULT_FUNCTION_EXEC_OUT_ID, "Out")
 }
 
 pub fn default_function_exec_inputs() -> Vec<FunctionSignaturePin> {
@@ -99,4 +104,30 @@ pub fn default_function_exec_inputs() -> Vec<FunctionSignaturePin> {
 
 pub fn default_function_exec_outputs() -> Vec<FunctionSignaturePin> {
     vec![default_function_exec_output()]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signature_pin_serializes_structured_data_type() {
+        let pin = FunctionSignaturePin::data(
+            "a",
+            "Value",
+            DataType::DataSeries(Box::new(DataType::Float64)),
+        );
+        let json = serde_json::to_value(&pin).unwrap();
+        assert_eq!(json["dataType"]["kind"], "DataSeries");
+        assert_eq!(json["dataType"]["inner"]["kind"], "Float64");
+        assert!(json.get("type").is_none());
+        assert!(json.get("containerType").is_none());
+    }
+
+    #[test]
+    fn exec_signature_omits_data_type() {
+        let pin = default_function_exec_input();
+        let json = serde_json::to_value(&pin).unwrap();
+        assert!(json.get("dataType").is_none());
+    }
 }

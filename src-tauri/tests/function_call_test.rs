@@ -1,5 +1,8 @@
 //! 函数调用集成测试：Call Function 执行、签名 exec 投影、pin 同步。
 
+mod common;
+
+use common::function_signature_pin as sig;
 use std::sync::{Arc, Mutex};
 use yssbi_lib::execution::{Executor, NoopEmitter, ResultSourceStore};
 use yssbi_lib::graph::core::{
@@ -8,20 +11,11 @@ use yssbi_lib::graph::core::{
 use yssbi_lib::graph::node::NodeInstanceParams;
 use yssbi_lib::graph::pin::{DataRole, ExecRole, PinRole};
 use yssbi_lib::graph::value::DataValue;
-use yssbi_lib::graph::{FunctionSignaturePin, NodeId, PinId};
+use yssbi_lib::graph::{NodeId, PinId};
 use yssbi_lib::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use yssbi_lib::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use yssbi_lib::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use yssbi_lib::project::{GraphResourcePath, ProjectState};
-
-fn sig(id: &str, name: &str, pin_type: &str) -> FunctionSignaturePin {
-    FunctionSignaturePin {
-        id: id.to_string(),
-        name: name.to_string(),
-        pin_type: pin_type.to_string(),
-        container_type: None,
-    }
-}
 
 fn exec_in_role() -> PinRole {
     PinRole::Exec(ExecRole::Custom(DEFAULT_FUNCTION_EXEC_IN_ID.to_string()))

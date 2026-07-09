@@ -1,4 +1,5 @@
 import { Connection } from "./connection";
+import type { DataType } from "./dataType";
 import { Node } from "./node";
 import { Pin } from "./pin";
 
@@ -43,8 +44,8 @@ export interface Graph {
 export interface FunctionSignaturePin {
     id: string;
     name: string;
-    type: string;
-    containerType?: string;
+    /** 结构化类型；缺省表示 exec pin */
+    dataType?: DataType;
 }
 
 export type FunctionPinSpec = FunctionSignaturePin;

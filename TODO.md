@@ -1012,71 +1012,109 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
 - [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
 
-> **Pin 视觉语义 — v1.0 设计说明**（已完成，保留作架构参考）
+> **Pin 视觉语义 — 架构说明**（前后端已收敛；Phase A–D 完成）
 
-**问题**
+**原则**
 
-- **逻辑分散**：形状判断在 `Pin.tsx`（`getPinTheme` + 大段 SVG 分支），颜色在 `pinTypeTheme.ts` + `pinSemantics.dataTypeToThemePinType`，连线在 `EdgesOverlay` / `ConnectionLine` / `Edge.tsx`（exec/data 流动态硬编码色，与 pin 类型色脱节）。
-- **类型覆盖不全**：`ThemeSettings` 已有 `dateColor` / `categoricalColor` / `oneofColor` 等，但 pin 渲染未系统映射；`Struct<OLSModel>` 与 `Struct<OLSResult>` 同色同形，无法区分 model/result 族。
-- **字段语义混用**：`type`（历史展示串）、`containerType`（形状）、`typeDisplay`（标签）、`dataType`（连接）四套字段，视觉层无统一「规范 → 渲染」函数，改一处易漏另一处（如此次容器类型颜色回归）。
+- **Pin 画布视觉（形状 / 主题色键 / 连线语义）100% 前端**：权威实现 `src/shared/types/domain/pinVisual.ts` → `resolvePinVisualSpec` + `pinTypeTheme.ts`。
+- **后端只下发领域类型**：结构化 `dataType`（+ exec 判别）；**不做** `pin_visual_spec` DTO，**不**再派生 `pinType` / `containerType` / `typeDisplay`。
+- **主题 hex 只在前端**：`settingsStore` + `ThemeSettings`（localStorage）；已删除 Rust `ThemeSettings` / `load_settings` / `save_settings`。
 
-**目标架构**
+**已完成（前端）**
 
-从 **`dataType`（+ `isExec`）单点派生** `PinVisualSpec`，消费方只读 spec，不再散落 `pin.type` 字符串判断：
+- [x] `pinVisual.ts` + `pinVisual.test.ts`；`Pin.tsx` / `EdgesOverlay` / `ConnectionLine` 统一消费 `resolvePinVisualSpec`。
+- [x] `EdgeData` 改 `colorKey` + `edgeKind`；视觉层不再读 `pin.type` 做颜色/形状。
+
+**目标数据结构（前端本地推导）**
 
 ```ts
 interface PinVisualSpec {
-  label: string;              // tooltip / Detail：typeDisplay ?? dataTypeDisplay
-  shape: PinShape;            // 形式区分：exec | circle | diamond | roundedRect | gridRect | hexagon | …
-  colorKey: ThemeColorKey;    // 连线 & pin 描边/填充：叶子标量或 struct 族
-  container?: 'array' | 'dataseries'; // 仅影响形状叠加，不改变 colorKey 递归规则
-  edgeKind: 'exec' | 'data';  // 连线动画语义（flow / pull）
+  label: string;       // tooltip：typeDisplay ?? dataTypeDisplay
+  shape: PinShape;     // exec | circle | diamond | roundedRect | gridRect | hexagon
+  colorKey: string;    // 查 ThemeSettings，容器递归到内层标量
+  container?: 'array' | 'dataseries';
+  edgeKind: 'exec' | 'data';
 }
 ```
 
-**视觉维度分工（形式 vs 语义）**
+| 维度 | 规则 |
+|------|------|
+| 形状 | Exec→箭头；DataFrame→网格；Array→圆角方框；DataSeries→菱形；Struct→六边形；标量→圆 |
+| 颜色 | 由 `dataType` 递归到标量再映射 `colorKey`（与旧 Rust `data_type_to_pin_type` 语义对齐，但**实现仅在前端**） |
+| 连线 | 颜色跟 source pin `colorKey`；动画跟 `edgeKind` |
 
-| 维度 | 表达什么 | 规则 |
-|------|----------|------|
-| **形状 `shape`** | 容器 / 控制流 / 复合类型 | Exec→箭头；DataFrame→网格方框；Array→圆角方框；DataSeries→菱形；Struct→六边形；标量→圆 |
-| **颜色 `colorKey`** | 数据「含义」 | 镜像 Rust `data_type_to_pin_type`：**容器递归到内层标量**；DataFrame→dataframe；Struct→struct（或按 `TypeSystemSnapshot.category` 分 model/result 色） |
-| **连线颜色** | 与 source pin 一致 | `EdgesOverlay` / 拖拽预览统一 `resolvePinVisualSpec(fromPin).colorKey`，禁止另写 `fromPin.type` |
-| **连线动画** | exec vs data 行为 | 保留 `EdgeKind`；颜色跟 pin，动画跟 kind |
-| **标签 `label`** | 人类可读完整类型 | 仅展示，不参与颜色/形状/连接 |
+---
 
-**全量 `DataType` 覆盖矩阵（验收基线）**
+### 后端视觉相关配置盘点（迁移清单）
 
-| DataType | 形状 | 颜色键 | 备注 |
-|----------|------|--------|------|
-| Exec | 箭头 | exec | 无 dataType |
-| Boolean / Int64 / Float64 / String | 圆 | bool / Int64 / Float64 / string | 可编辑标量 |
-| Date / Datetime / Time / Categorical | 圆 | date / datetime / time / categorical | 补齐当前缺失映射 |
-| Object / Any | 圆 | object / any | |
-| DataFrame | 网格方框 | dataframe | 无内层泛型 |
-| Array\<T\> | 圆角方框 | colorKey(T) | 形状看外层，颜色看内层 |
-| DataSeries\<T\> | 菱形 | colorKey(T) | 同上 |
-| Struct\<K\> | 六边形 | struct 或 category 色 | 可选：model/result 分色 |
-| OneOf\<…\> | 圆 + 虚线描边？ | oneof | 产品确认差异化方案 |
+> 审计日期：2026.07.11。性质：**纯视觉** / **半视觉** / **展示文案** / **非视觉（易混淆）**。优先级：**P0** 应迁前端 / **P1** 可收敛 / **P2** 另议。
 
-**实现路径**
+#### 一、Pin 视觉派生（P0 — 核心）
 
-1. **前端**：`shared/types/domain/pinVisual.ts`（或 `features/core/pin/pinVisual.ts`）导出 `resolvePinVisualSpec(pin)`；`pinSemantics` 收敛为 re-export 或删除重复函数。
-2. **后端**：Rust `schema/pin.rs` 增加 `pin_visual_spec(dt) -> PinVisualSpecDTO`（或与现有 DTO 合并下发），保证 IPC 与前端单测同一套 golden case。
-3. **消费方迁移**：`Pin.tsx`（删 `getPinTheme` 内联分支）、`EdgesOverlay`、`ConnectionLine` 拖拽线、`NodePinSpecRow` 类型徽章、主题设置预览页。
-4. **测试**：vitest 矩阵覆盖上表 + 嵌套样例（`DataSeries<Float64>`、`Array<String>`、`OneOf<Float64,String>`）；截图或 SVG 快照可选。
-5. **弃用**：逐步停止视觉层读取 `pin.type`；`type` 字段保留 IPC 兼容至 v1.0 前，仅非视觉路径使用。
+| ID | 后端配置 | 位置 | IPC / 事件字段 | 前端消费 | 迁移建议 |
+|----|----------|------|----------------|----------|----------|
+| P1 | `data_type_to_pin_type()` | `schema/pin.rs` | `PinInstanceDTO.type`、`InferredPinType.pinType` | 历史 `Pin.type`；视觉已改 `pinVisual` | 删除函数；DTO 停止填 `type`（exec 除外） |
+| P2 | `data_type_to_container()` | `schema/pin.rs` | `containerType` | store + `pinVisual`（已从 `dataType` 推导） | 停止下发；前端单源 |
+| P3 | `PinInstanceDTO::from_pin_with_context` | `schema/pin.rs` | 图加载 / `NodeCreated` / `NodePinsUpdated` 每 pin | `NodeEventHandler`、`graphModel` hydrate | 仅保留 `dataType`；`typeDisplay` 可前端 `dataTypeDisplay()` |
+| P4 | `InferredPinType` | `event/event_node.rs` | `PinTypesInferred.pinTypes[]` | `PinTypesInferredHandler` 写 store | payload 缩为 `{ pinId, dataType }` |
+| P5 | `emit_inferred_types` | `project/graph_events.rs` | 同上 | 同上 | 删对 P1/P2 的调用 |
+| P6 | 变量类型变更联动 | `project/project_state_variable.rs` | 变量更新时 `InferredPinType` 列表 | 变量 IPC → store | 与 P4/P5 同步 |
+| P7 | 图序列化 pin 列表 | `schema/graph.rs` | `get_project_data` pins[] | 项目加载 → `graphDataStore` | 加载路径只依赖 `dataType` |
 
-**完成标准**（已达成）
+#### 二、Pin UI 覆盖（P1）
 
-- 新增/修改 pin 视觉只需改 `resolvePinVisualSpec` 一处；`Pin.tsx` 无 `dataType.kind ===` 硬编码。
-- 调色板拖线、静态连线、执行 flow/pull 动画三线颜色与 source pin 一致（`colorKey`）。
-- 全量 DataType 矩阵 vitest 覆盖（`pinVisual.test.ts`）。
+| ID | 配置 | 位置 | 字段 | 说明 |
+|----|------|------|------|------|
+| P8 | `PinUIDTO` | `schema/pin.rs` | `ui.{x,y,color}` | Rust 恒 `ui: None`；若做 per-pin 着色应前端本地，不走 IPC 默认 |
+| P9 | `type` fallback `"object"` | `from_pin_with_context` | 无 `dataType` 时 | 收敛后 data pin 必有 `dataType`，去掉兜底 |
+
+#### 三、节点壳层视觉（P2 — 与 Pin 迁移分开）
+
+| ID | 配置 | 位置 | 字段 | 前端消费 | 建议 |
+|----|------|------|------|----------|------|
+| N1 | `NodeMetaData.ui_style` | `graph/node/node_definition.rs` | `NodeDefinitionDTO` / `NodeInstanceDTO.uiStyle` | `Node.tsx` 布局（math vs default） | 可保留 catalog 声明，或前端 `nodeType → uiStyle` 表 |
+| N2 | `with_ui_style(...)` | `graph/register/catalog/**` | 注册表 | 同上 | 工作量大，非 Pin P0 阻塞项 |
+
+#### 四、客户端主题副本（P1）
+
+| ID | 配置 | 位置 | 说明 |
+|----|------|------|------|
+| T1 | `ThemeSettings`（含 Pin/画布色 hex） | `editor/settings/theme.rs` | 前端实际用 `settingsStore` + localStorage；Rust 副本冗余 |
+| T2 | `AppearanceSettings` | `editor/settings/appearance.rs` | 同上 |
+| T3 | `load_settings` / `save_settings` | `commands/command_settings.rs`、`lib.rs` | 前端无 invoke；可删 command |
+| T4 | `EditorSettings` / `ProjectSettings` | `editor/settings/*.rs` | 非 Pin 视觉；随 T3 一并清理 |
+
+#### 五、易混淆 — 勿当视觉删
+
+| ID | 名称 | 位置 | 实际用途 |
+|----|------|------|----------|
+| X1 | `GraphDataState.pin_types` | `graph_data_state.rs` | `HashMap<PinId, DataType>`，推断/校验 |
+| X2 | `TypeInferenceContext.pin_types` | `type_inference_context.rs` | 推断会话内部 |
+| X3 | `FunctionSignaturePin.data_type` | `graph_instance/types.rs` | 签名结构化 `DataType`（exec 缺省），非画布渲染 |
+| X4 | `get_pin_type_by_role` | `node_execution_context*.rs` | 执行期取 `DataType` |
+| X5 | `type_display` | `pin.rs`、`event_node.rs` | Tooltip 文案；可迁前端，优先级低于 P1–P7 |
+
+#### 六、前端已本地化（无需后端参与）
+
+| 能力 | 权威位置 |
+|------|----------|
+| Pin 形状 / 色键 / 连线语义 | `pinVisual.ts` |
+| 主题色 hex | `pinTypeTheme.ts` + `ThemeSettings` |
+| 客户端设置持久化 | `settingsStore` + localStorage |
+
+---
+
+### 迁移阶段（v1.0 待办）
+
+- [x] **Phase A — Pin IPC 瘦身（P0）**：`PinTypesInferred` / 图 DTO / `NodePinsUpdated` 只传 `dataType`；删 `data_type_to_pin_type` / `data_type_to_container`；`NodeEventHandler` + `pinHydrate.ts` 本地推导展示字段；`pinVisual` + 图加载 vitest 回归。
+- [x] **Phase B — 后端主题副本清理（P1）**：删 Rust `editor/settings` 与 `load_settings`/`save_settings` command；前端无 invoke 引用。
+- [x] **Phase C — 节点 uiStyle（P2）**：`resolveNodeViewMeta` / hydrate 仅从节点注册表推导 `uiStyle`；`NodeInstanceDTO` 停止下发 `uiStyle`。
+- [x] **FunctionSignaturePin 结构化 `DataType`**：`type`+`containerType` 字符串 DSL 已删除；签名直接存 `dataType`（exec 缺省）；Rust `function_shell` / TS `resolveEffectiveDefinition` / `functionSignaturePin.ts` 单源；删 `dataTypeFromPinType` / `dataTypeFromFunctionSignaturePin`。
+- [x] **Phase D — 扫尾**：运行时 `Pin` / `PinData` / `PinInstanceDTO` 删除 `containerType`；data pin `type` 恒为 `object`（exec 除外）；`FunctionSignaturePin` 同步改为结构化 `dataType`（exec 缺省），与 Pin IPC 契约一致。
+
+---
 
 ## v1.0 待办
-
-
-> **后续可选**：Rust `pin_visual_spec` DTO 下发 + golden case 与前端对齐；`NodePinSpecRow` 类型徽章迁移。
-
 
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
 
@@ -1118,7 +1156,7 @@ interface PinVisualSpec {
 
 **P2 — 重复 / 失效逻辑清理**
 
-- [ ] **签名投影三处手写 → 契约测试**：Rust `function_shell.rs`（`signature_data_type` / `pins_from_signature`）↔ TS `resolveEffectiveDefinition.ts` ↔ `dataTypeFromFunctionSignaturePin` 须手动同步；增加 exec/data/Array/DataSeries 样例 roundtrip 测试（Rust unit + vitest），防 palette 自动连接与后端 pin 漂移。
+- [x] **签名投影三处手写 → 契约测试**：`FunctionSignaturePin` 已统一为结构化 `dataType`；Rust `types.rs` + TS `functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts` roundtrip；删 `signature_data_type` 与 `dataTypeFromFunctionSignaturePin`。
 - [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
 - [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
 - [ ] **签名更新刷新路径收敛**：单用户改签名仍走 invoke 全量 `addGraphFromData` + `applyCallerGraphUpdates` + 后端 `FunctionUpdated`/`NodePinsUpdated` 三路（`incrementalPinUpdateGuard` 仅抑制重复）；长期应让 invoke 回包为唯一权威，事件只做增量补洞或删除冗余 handler。
@@ -1145,6 +1183,8 @@ interface PinVisualSpec {
 - [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
 - [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
+- [x] 函数的 `FunctionSignaturePin` 结构化 `DataType`（与项目变量同构；见 Phase D + `functionSignaturePin.ts`）
+- [ ] uistyle 可能需要根据节点类型来进行重构
 
 
 
@@ -1337,3 +1377,35 @@ PinInstance 新增字段:
 2. 路径变更时 persist_loaded_graph 可能二次保存——保证 local variables scope 正确
 
 这两点可以优化吗？
+
+
+
+# functionsignature（已完成 2026.07.09）
+
+`FunctionSignaturePin` 已从 `type` + `containerType` 字符串 DSL 迁移为结构化 `DataType`（exec pin 缺省 `dataType`）。
+
+**契约**
+
+```ts
+interface FunctionSignaturePin {
+  id: string;
+  name: string;
+  dataType?: DataType; // 缺省 = exec
+}
+```
+
+**实现单源**
+
+| 层 | 权威位置 |
+|----|----------|
+| Rust 签名类型 | `graph_instance/types.rs`（`exec()` / `data()` 构造器） |
+| 壳节点 / Call 投影 | `function_shell.rs`、`sync_call_function_pins_from_signature` |
+| Call 索引 | `register_call_site`（`sync_call_node` 成功后幂等登记） |
+| 前端编辑 | `functionSignaturePin.ts` + `PinEditor.tsx` |
+| Call 有效定义 | `resolveEffectiveDefinition.ts` |
+
+**已删除**：`signature_data_type`、`dataTypeFromPinType`、`dataTypeFromFunctionSignaturePin`。
+
+**测试**：`types.rs` serde 单测；`functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts`；`function_call_test` / `shell_node_test`（共享 `tests/common::function_signature_pin`）。
+
+**后续（非阻塞）**：`PinEditor` 可逐步接入变量面板级类型选择器（`DataFrame` / `Struct` / `OneOf` 等），无需再改字符串映射表。

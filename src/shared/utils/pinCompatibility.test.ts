@@ -32,23 +32,22 @@ function pin(partial: Partial<Pin> & { direction: PinDirection }): Pin {
 }
 
 describe('buildPinDataType', () => {
-  it('prefers the structured dataType over typeDisplay', () => {
+  it('requires structured dataType for data pins', () => {
     const p = pin({
       direction: 'output',
-      type: 'number',
-      typeDisplay: 'String', // intentionally conflicting display string
+      type: 'object',
       dataType: SERIES_FLOAT64,
     });
     expect(buildPinDataType(p)).toEqual(SERIES_FLOAT64);
   });
 
   it('throws for data pins without structured dataType', () => {
-    const p = pin({ direction: 'output', type: 'object', typeDisplay: 'Float64' });
+    const p = pin({ direction: 'output', type: 'object' });
     expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 
-  it('does not infer data pin types from type + containerType', () => {
-    const p = pin({ direction: 'output', type: 'number', containerType: 'dataseries' });
+  it('does not infer data pin types from legacy type strings alone', () => {
+    const p = pin({ direction: 'output', type: 'object' });
     expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 

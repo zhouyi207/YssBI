@@ -50,7 +50,6 @@ function makeEventGraphData(path: string, name: string): GraphData {
         position: { x: 0, y: 0 },
         inputs: [],
         outputs: ['pin-exec'],
-        uiStyle: 'default',
       },
     ],
     pins: [

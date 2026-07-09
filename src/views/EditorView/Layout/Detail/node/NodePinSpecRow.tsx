@@ -61,7 +61,7 @@ export function NodePinSpecRow({
       : pin.slotNote?.kind === 'derivedFromInput'
         ? t('detail.nodeDoc.derivedFromInput')
         : undefined;
-  const typeLabel = pin.typeDisplay ?? pin.type;
+  const typeLabel = pin.typeLabel;
   const badges: Array<{ label: string; tooltip?: string }> = [];
   if (pin.optional) badges.push({ label: t('detail.nodeDoc.optional') });
   if (pin.slotKind === 'repeatable') {

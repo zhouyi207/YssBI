@@ -11,7 +11,6 @@ function makeAccess(overrides: Partial<Parameters<typeof buildGraphSnapshot>[0]>
     title: 'Const',
     inputs: ['pin-in'],
     outputs: ['pin-out'],
-    uiStyle: 'default',
     position: { x: 0, y: 0 },
   };
   const pins: GraphData['pins'] = [
@@ -19,15 +18,17 @@ function makeAccess(overrides: Partial<Parameters<typeof buildGraphSnapshot>[0]>
       id: 'pin-in',
       nodeId: 'node-1',
       name: 'In',
-      type: 'Float64',
+      type: 'object',
       direction: 'input',
+      dataType: { kind: 'Float64' },
     },
     {
       id: 'pin-out',
       nodeId: 'node-1',
       name: 'Out',
-      type: 'Float64',
+      type: 'object',
       direction: 'output',
+      dataType: { kind: 'Float64' },
     },
   ];
 

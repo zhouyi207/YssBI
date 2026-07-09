@@ -23,12 +23,10 @@
  * - `category` / `title` / `position` 等可选；缺失时 normalize 填默认值
  * - 连接关系**不**写在 pin 的废弃 `links` 字段；以图级 `connections` + `pinConnections` 为唯一真源
  *
- * ### 规范化规则（`normalizeGraphDataLike` — 见 `dto/graphModel.ts`）
+ * ### 规范化规则
  *
- * 1. **节点**：`graphPath` 强制为入参 `graphPath`；`inputs/outputs` → `runtimePinRefsToIds`
- * 2. **Pin**：原样写入实体表；`toStoredPin` 剥离废弃 `links`
- * 3. **连接**：`normalizeGraphConnections` 兼容 `{ connections }` / `ConnectionData[]` / 历史 map
- * 4. **画布**：`canvas` 优先，其次 DTO `position`，默认 `{ x:0, y:0, scale:1 }`
+ * 1. **结构**（`normalizeGraphDataLike` — `dto/graphModel.ts`）：节点 pin 引用、pin DTO、connections、canvas
+ * 2. **展示 enrich**（`graphDataStore.buildGraphBucket`）：title / category 从节点注册表推导；`uiStyle` 仅在 `toUiNode` 视图层推导
  *
  * ### 出站（导出 / IPC 前）
  *
@@ -46,7 +44,7 @@
 import type { NodeId, PinId, GraphPath, ConnectionId } from '../domain/ids';
 export type { NodeId, PinId, GraphPath, ConnectionId };
 import type { GraphPosition, Graph } from '../domain/graph';
-import type { PinDirection, PinType, PinUI } from '../domain/pin';
+import type { PinDirection, PinUI, RuntimePinKind } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
 import type { GraphInstanceDTO } from '../dto/graph';
 
@@ -62,7 +60,6 @@ export interface NodeData {
   title: string;
   inputs: string[];   // Pin IDs
   outputs: string[]; // Pin IDs
-  uiStyle: string;
   description?: string;
   position: { x: number; y: number };
   /** 以下为 UI 扩展字段 */
@@ -82,12 +79,10 @@ export interface PinData {
   id: string;
   nodeId: string;
   name: string;
-  type: PinType;
+  type: RuntimePinKind;
   direction: PinDirection;
   defaultValue?: unknown;
   userValue?: unknown;
-  containerType?: string;
-  typeDisplay?: string;
   dataType?: DataType;
   optional?: boolean;
   ui?: PinUI;
@@ -136,7 +131,6 @@ export interface RuntimeNodeInput {
   position?: { x: number; y: number };
   inputs?: (string | PinData | PinView)[];
   outputs?: (string | PinData | PinView)[];
-  uiStyle?: string;
   description?: string;
   isInternal?: boolean;
   paramsKind?: ParamsKind;
@@ -154,6 +148,6 @@ export interface GraphDataInput extends Omit<GraphData, 'nodes'> {
 
 /**
  * `addGraphFromData` / `hydrateGraphs` 入站联合类型。
- * 一律经 `normalizeGraphDataLike(graphPath, graph)` 写入 store。
+ * 一律经 `normalizeGraphDataLike` + `graphDataStore` 注册表 enrich 写入 store。
  */
 export type GraphDataLike = GraphData | GraphDataInput | Graph | GraphInstanceDTO;

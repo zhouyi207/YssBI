@@ -1,6 +1,6 @@
 import type { ThemeSettings } from "@/shared/types/settings";
 
-/** Pin 类型到 ThemeSettings 键的显式映射（与后端 data_type_to_pin_type 一致） */
+/** Pin 类型到 ThemeSettings 键的显式映射 */
 const PIN_TYPE_TO_THEME_KEY: Record<string, keyof ThemeSettings> = {
   exec: "execColor",
   Int32: "int32Color",

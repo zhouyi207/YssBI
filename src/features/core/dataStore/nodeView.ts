@@ -5,7 +5,7 @@
 import type { NodeData, PinData, PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { derivePinConnectionView } from './pinLinks';
-import { resolveNodeViewMeta } from './serialization';
+import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 
 export interface UiNodePinSlice {
   pin: PinData;

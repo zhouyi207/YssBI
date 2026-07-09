@@ -16,7 +16,6 @@ export interface Node {
     title: string;
     inputs: Pin[];
     outputs: Pin[];
-    uiStyle: string;
     description?: string;
 }
 

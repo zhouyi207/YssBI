@@ -46,14 +46,15 @@ describe('resolveEffectiveDefinition', () => {
     expect(effective.typeCapabilities).toHaveLength(2);
   });
 
-  it('signatureToPinSlots maps data pin with concrete type', () => {
+  it('projects DataSeries signature through pinSlots', () => {
     const slots = signatureToPinSlots(
-      [{ id: 'a', name: 'Value', type: 'float' }],
+      [{ id: 'a', name: 'Series', dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } } }],
       [],
     );
-    expect(slots).toHaveLength(1);
     if (slots[0].slotKind === 'fixed') {
-      expect(slots[0].pin.dataType).toEqual({ Concrete: { kind: 'Float64' } });
+      expect(slots[0].pin.dataType).toEqual({
+        Concrete: { kind: 'DataSeries', inner: { kind: 'Float64' } },
+      });
     }
   });
 });

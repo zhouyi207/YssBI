@@ -5,12 +5,13 @@
 
 import type { Connection, ConnectionItem } from '../domain/connection';
 import type { Graph } from '../domain/graph';
-import type { Pin, PinType } from '../domain/pin';
-import type { GraphInstanceDTO } from './graph';
+import type { Pin } from '../domain/pin';
 import {
   connectionDataToItems,
   connectionItemToConnectionData,
 } from './graphConverters';
+import { normalizePinDto } from './pinHydrate';
+import type { GraphInstanceDTO } from './graph';
 import type {
   ConnectionData,
   GraphData,
@@ -19,17 +20,6 @@ import type {
   PinData,
   RuntimeNodeInput,
 } from '../store/graph';
-
-type DomainGraphNode = Graph['nodes'][number] & {
-  position?: { x: number; y: number };
-  paramsKind?: NodeData['paramsKind'];
-  variableId?: string;
-  variableName?: string;
-  variableType?: string;
-  subGraphPath?: string;
-  dataframeId?: string;
-  isInternal?: boolean;
-};
 
 /** 兼容 hydrate 入站（DTO / domain / 历史快照）的多种 connections 形态 → store `ConnectionData[]` */
 export function normalizeGraphConnections(connections: unknown): ConnectionData[] {
@@ -77,12 +67,10 @@ export function pinDataToDomainPin(pin: PinData): Pin {
     id: pin.id,
     nodeId: pin.nodeId,
     name: pin.name,
-    type: pin.type as PinType,
+    type: pin.type,
     direction: pin.direction,
     defaultValue: pin.defaultValue,
     userValue: pin.userValue,
-    containerType: pin.containerType,
-    typeDisplay: pin.typeDisplay,
     dataType: pin.dataType,
     optional: pin.optional,
     ui: pin.ui,
@@ -90,7 +78,7 @@ export function pinDataToDomainPin(pin: PinData): Pin {
 }
 
 export function domainPinToPinData(pin: Pin): PinData {
-  return {
+  return normalizePinDto({
     id: pin.id,
     nodeId: pin.nodeId,
     name: pin.name,
@@ -98,12 +86,10 @@ export function domainPinToPinData(pin: Pin): PinData {
     direction: pin.direction,
     defaultValue: pin.defaultValue,
     userValue: pin.userValue,
-    containerType: pin.containerType,
-    typeDisplay: pin.typeDisplay,
     dataType: pin.dataType,
     optional: pin.optional,
     ui: pin.ui,
-  };
+  });
 }
 
 function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph['nodes'] {
@@ -118,7 +104,6 @@ function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph[
     outputs: node.outputs
       .map((pinId) => pinMap.get(pinId))
       .filter((pin): pin is Pin => pin != null),
-    uiStyle: node.uiStyle,
     description: node.description,
     position: node.position,
     paramsKind: node.paramsKind,
@@ -149,42 +134,9 @@ export function graphDataToDomainGraph(data: GraphData): Graph {
   };
 }
 
-function domainNodeToNodeData(graphPath: string, node: DomainGraphNode): NodeData {
-  return {
-    id: node.id,
-    graphPath,
-    nodeType: node.nodeType,
-    category: node.category,
-    title: node.title,
-    inputs: node.inputs.map((pin) => pin.id),
-    outputs: node.outputs.map((pin) => pin.id),
-    uiStyle: node.uiStyle,
-    description: node.description,
-    position: node.position ?? { x: 0, y: 0 },
-    paramsKind: node.paramsKind,
-    variableId: node.variableId,
-    variableName: node.variableName,
-    variableType: node.variableType,
-    subGraphPath: node.subGraphPath,
-    dataframeId: node.dataframeId,
-    isInternal: node.isInternal,
-  };
-}
-
-/** domain Graph → Store 图（hydrate 入口规范化） */
+/** domain Graph → Store 图（结构转换；注册表 enrich 在 `graphDataStore` hydrate 边界） */
 export function domainGraphToGraphData(graph: Graph): GraphData {
-  const pins = graph.pins.map(domainPinToPinData);
-  return {
-    path: graph.path,
-    name: graph.name,
-    type: graph.type,
-    functionInputs: graph.functionInputs,
-    functionOutputs: graph.functionOutputs,
-    nodes: graph.nodes.map((node) => domainNodeToNodeData(graph.path, node as DomainGraphNode)),
-    pins,
-    connections: normalizeGraphConnections(graph.connections),
-    canvas: graph.canvas,
-  };
+  return normalizeGraphDataLike(graph.path, graph);
 }
 
 export function graphDataRecordToDomainGraphs(
@@ -226,7 +178,7 @@ function resolveGraphNodes(graph: GraphDataLike): RuntimeNodeInput[] {
 }
 
 function resolveGraphPins(graph: GraphDataLike): PinData[] {
-  return (graph.pins ?? []) as PinData[];
+  return (graph.pins ?? []).map((pin) => normalizePinDto(pin as PinData));
 }
 
 /** 单个运行时 pin 引用 → PinId */
@@ -242,13 +194,13 @@ export function runtimePinRefsToIds(arr: unknown): string[] {
 
 function runtimeNodeInputToNodeData(graphPath: string, node: RuntimeNodeInput): NodeData {
   const stored = node as NodeData;
+  const nodeType = stored.nodeType ?? node.nodeType ?? '';
   return {
     ...(node as NodeData),
     graphPath,
-    nodeType: stored.nodeType ?? node.nodeType ?? '',
-    category: stored.category ?? [],
-    title: stored.title ?? '',
-    uiStyle: stored.uiStyle ?? 'default',
+    nodeType,
+    category: stored.category ?? node.category ?? [],
+    title: stored.title ?? node.title ?? nodeType,
     position: stored.position ?? { x: 0, y: 0 },
     inputs: runtimePinRefsToIds(node.inputs),
     outputs: runtimePinRefsToIds(node.outputs),

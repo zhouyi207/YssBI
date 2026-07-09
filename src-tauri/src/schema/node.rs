@@ -14,7 +14,6 @@ pub struct NodeInstanceDTO {
     pub title: String,
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
-    pub ui_style: String,
     pub description: Option<String>,
     pub position: NodePosition,
     #[serde(flatten)]
@@ -30,7 +29,6 @@ impl From<&NodeInstance> for NodeInstanceDTO {
             title: value.definition.name.clone(),
             inputs: Vec::new(),
             outputs: Vec::new(),
-            ui_style: value.definition.metadata.ui_style.clone(),
             description: value.definition.metadata.description.clone(),
             position: value.position.clone(),
             instance_params: value.instance_params.clone(),

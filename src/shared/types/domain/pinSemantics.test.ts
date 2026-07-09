@@ -11,20 +11,12 @@ import {
 describe('pinSemantics', () => {
   it('detects exec pins by flow type only', () => {
     expect(isExecPin({ type: 'exec' })).toBe(true);
-    expect(isExecPin({ type: 'float' })).toBe(false);
+    expect(isExecPin({ type: 'object' })).toBe(false);
     expect(pinFlowKind({ type: 'exec' })).toBe('Exec');
     expect(pinFlowKind({ type: 'object' })).toBe('Data');
   });
 
-  it('prefers typeDisplay then dataType for labels', () => {
-    expect(
-      pinTypeLabel({
-        type: 'number',
-        typeDisplay: 'DataSeries<Float64>',
-        dataType: { kind: 'Float64' },
-      }),
-    ).toBe('DataSeries<Float64>');
-
+  it('derives labels from structured dataType', () => {
     expect(
       pinTypeLabel({
         type: 'object',
@@ -33,8 +25,8 @@ describe('pinSemantics', () => {
     ).toBe('DataSeries<Float64>');
   });
 
-  it('does not fall back to bare type string for data pin labels', () => {
-    expect(pinTypeLabel({ type: 'float' })).toBe('unknown');
+  it('does not use legacy bare type strings for data pin labels', () => {
+    expect(pinTypeLabel({ type: 'object' })).toBe('unknown');
     expect(pinTypeLabel({ type: 'exec' })).toBe('exec');
   });
 

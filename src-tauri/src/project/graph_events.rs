@@ -6,7 +6,6 @@ use crate::execution::{
 use crate::graph::{DataType, GraphInstance, PinChangeSet, PinId};
 use crate::project::GraphResourcePath;
 use crate::schema::PinInstanceDTO;
-use crate::schema::pin::{data_type_to_container, data_type_to_pin_type};
 use tauri::AppHandle;
 
 pub fn emit_pin_change_events(
@@ -65,13 +64,7 @@ pub fn emit_inferred_types(
     }
     let pin_types: Vec<InferredPinType> = inferred
         .into_iter()
-        .map(|(pin_id, dt)| InferredPinType {
-            pin_id,
-            pin_type: data_type_to_pin_type(&dt).to_string(),
-            container_type: data_type_to_container(&dt).map(|s| s.to_string()),
-            type_display: Some(dt.to_string()),
-            data_type: Some(dt.clone()),
-        })
+        .map(|(pin_id, dt)| InferredPinType { pin_id, data_type: dt })
         .collect();
     emit_project_event(
         app,

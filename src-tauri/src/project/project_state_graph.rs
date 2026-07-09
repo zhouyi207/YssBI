@@ -379,6 +379,23 @@ impl ProjectState {
             .remove_caller(caller_graph_path.as_str());
     }
 
+    /// 登记 Call 节点 → 目标函数的调用点（幂等）。
+    pub fn register_call_site(
+        &self,
+        caller_graph_path: &GraphResourcePath,
+        call_node_id: crate::graph::NodeId,
+        target_function_path: &GraphResourcePath,
+    ) {
+        self.function_call_sites()
+            .write()
+            .unwrap()
+            .register(
+                caller_graph_path.as_str().to_string(),
+                call_node_id,
+                target_function_path.as_str().to_string(),
+            );
+    }
+
     /// 节点创建后登记 Call 调用点（非 Call 节点为 no-op）。
     pub fn register_call_site_for_node(
         &self,
@@ -390,14 +407,7 @@ impl ProjectState {
         let Some(function_path) = Self::call_function_target_path(node_type, params) else {
             return;
         };
-        self.function_call_sites()
-            .write()
-            .unwrap()
-            .register(
-                caller_graph_path.as_str().to_string(),
-                call_node_id,
-                function_path.as_str().to_string(),
-            );
+        self.register_call_site(caller_graph_path, call_node_id, &function_path);
     }
 
     /// 节点删除前移除 Call 调用点（非 Call 节点为 no-op）。
@@ -500,7 +510,7 @@ impl ProjectState {
     ) -> Result<(GraphInstance, PinChangeSet), String> {
         let signature = self.get_function_signature(target_function_path)?;
 
-        self.with_graph_mut(caller_graph_path, |ctx| {
+        let result = self.with_graph_mut(caller_graph_path, |ctx| {
             let change_set = ctx.graph_ref().sync_call_function_pins_from_signature(
                 call_node_id,
                 &signature.inputs,
@@ -509,7 +519,9 @@ impl ProjectState {
             );
             ctx.recompile(GraphRecompileScope::InferOnly);
             Ok((ctx.graph_ref().clone(), change_set))
-        })
+        })?;
+        self.register_call_site(caller_graph_path, call_node_id, target_function_path);
+        Ok(result)
     }
 
     /// 收集项目中所有引用 `function_path` 的 Call Function 节点（读内存索引）。
@@ -942,14 +954,10 @@ impl ProjectState {
 mod tests {
     use super::*;
     use crate::graph::core::{default_function_exec_inputs, default_function_exec_outputs};
+    use crate::graph::value::DataType;
 
     fn signature_pin(id: &str) -> FunctionSignaturePin {
-        FunctionSignaturePin {
-            id: id.to_string(),
-            name: id.to_string(),
-            pin_type: "int".to_string(),
-            container_type: None,
-        }
+        FunctionSignaturePin::data(id, id, DataType::Int64)
     }
 
     #[test]

@@ -33,7 +33,6 @@ describe('cascadeGraphPathReferences', () => {
               graphPath: 'events/Caller.yssbi-event',
               nodeType: CALL_FUNCTION_NODE_TYPE,
               category: ['value'],
-              uiStyle: 'default',
               subGraphPath: from,
               title: 'Call',
               position: { x: 0, y: 0 },

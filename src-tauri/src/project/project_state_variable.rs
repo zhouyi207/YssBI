@@ -4,7 +4,6 @@ use crate::event::InferredPinType;
 use crate::graph::pin::PinKind;
 use crate::graph::value::{DataType, DataValue};
 use crate::project::GraphResourcePath;
-use crate::schema::{data_type_to_container, data_type_to_pin_type};
 use crate::tabular::{normalize_variable_tabular, remove_variable_cache, sync_variable_cache};
 use crate::variable::VariableId;
 use crate::variable::{VariableInstance, VariableScope};
@@ -170,11 +169,7 @@ impl ProjectState {
                             if pin.definition.kind == PinKind::Data {
                                 inferred_pins.push(InferredPinType {
                                     pin_id,
-                                    pin_type: data_type_to_pin_type(new_data_type).to_string(),
-                                    container_type: data_type_to_container(new_data_type)
-                                        .map(|s| s.to_string()),
-                                    type_display: Some(new_data_type.to_string()),
-                                    data_type: Some(new_data_type.clone()),
+                                    data_type: new_data_type.clone(),
                                 });
                             }
                         }

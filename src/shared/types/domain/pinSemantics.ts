@@ -9,9 +9,10 @@ import { dataTypeDisplay } from './dataType';
 
 export type PinFlowKind = 'Exec' | 'Data';
 
+export type PinContainerOverlay = 'array' | 'dataseries';
+
 export interface PinSemanticsFields {
   type: string;
-  typeDisplay?: string;
   dataType?: DataType;
 }
 
@@ -25,13 +26,22 @@ export function pinFlowKind(pin: Pick<PinSemanticsFields, 'type'>): PinFlowKind 
 
 /** UI label only — not used for compatibility or coercion. */
 export function pinTypeLabel(pin: PinSemanticsFields): string {
-  if (pin.typeDisplay) return pin.typeDisplay;
-  if (pin.dataType) return dataTypeDisplay(pin.dataType);
   if (isExecPin(pin)) return 'exec';
+  if (pin.dataType) return dataTypeDisplay(pin.dataType);
   return 'unknown';
 }
 
-/** Mirror of Rust `data_type_to_pin_type`: container types recurse to inner scalar for color. */
+/** Array / DataSeries 容器叠加层（签名编辑与 pin 视觉共用）。 */
+export function dataTypeContainerOverlay(
+  dataType: DataType | undefined,
+): PinContainerOverlay | undefined {
+  if (!dataType) return undefined;
+  if (dataType.kind === 'Array') return 'array';
+  if (dataType.kind === 'DataSeries') return 'dataseries';
+  return undefined;
+}
+
+/** 容器类型递归到内层标量，映射 ThemeSettings 色键。 */
 export function dataTypeToThemePinType(dt: DataType): string {
   switch (dt.kind) {
     case 'Boolean':

@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { NodeData, PinData } from '@/shared/types/store/graph';
+import type { NodeDefinition } from '@/shared/types/domain/node';
+import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { toUiNode, uiNodeHasNoHeader } from './nodeView';
 
 const baseNode: NodeData = {
@@ -10,7 +12,6 @@ const baseNode: NodeData = {
   title: 'Add',
   inputs: ['pin-in'],
   outputs: ['pin-out'],
-  uiStyle: 'math',
   position: { x: 10, y: 20 },
 };
 
@@ -18,19 +19,40 @@ const inputPin: PinData = {
   id: 'pin-in',
   nodeId: 'node-1',
   name: 'A',
-  type: 'Float64',
+  type: 'object',
   direction: 'input',
+  dataType: { kind: 'Float64' },
 };
 
 const outputPin: PinData = {
   id: 'pin-out',
   nodeId: 'node-1',
   name: 'Result',
-  type: 'Float64',
+  type: 'object',
   direction: 'output',
+  dataType: { kind: 'Float64' },
 };
 
 describe('toUiNode', () => {
+  beforeEach(() => {
+    const def: NodeDefinition = {
+      name: 'Add',
+      category: ['Math'],
+      nodeType: 'Math:Add',
+      nodeMetadata: {
+        uiStyle: 'math',
+        supports_dynamic_pins: false,
+        graph_scope: 'any',
+        shell_role: null,
+      },
+      pinSlots: [],
+      typeCapabilities: [],
+    };
+    useNodeRegistryStore.getState().setDefinitionsFromSchema(
+      new Map([['Math:Add', def]]),
+    );
+  });
+
   it('maps NodeData and pin slices to UINode with connection views', () => {
     const view = toUiNode(baseNode, {
       pins: [

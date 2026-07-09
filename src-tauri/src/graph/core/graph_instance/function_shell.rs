@@ -73,29 +73,6 @@ impl DesiredShellPin {
     }
 }
 
-/// 把签名 pin 的 `pin_type` + `container_type` 解析为运行时 `DataType`（仅 data 项）。
-fn signature_data_type(pin: &FunctionSignaturePin) -> Option<DataType> {
-    if pin.is_exec() {
-        return None;
-    }
-
-    let base = match pin.pin_type.as_str() {
-        "int" => DataType::Int64,
-        "float" => DataType::Float64,
-        "bool" => DataType::Boolean,
-        "string" => DataType::String,
-        "object" => DataType::Object,
-        other => other.parse::<DataType>().unwrap_or(DataType::Any),
-    };
-
-    let dt = match pin.container_type.as_deref() {
-        Some("array") => DataType::Array(Box::new(base)),
-        Some("dataseries") => DataType::DataSeries(Box::new(base)),
-        _ => base,
-    };
-    Some(dt)
-}
-
 fn desired_pin_from_signature(
     sig: &FunctionSignaturePin,
     direction: PinDirection,
@@ -107,7 +84,8 @@ fn desired_pin_from_signature(
             direction,
         ))
     } else {
-        signature_data_type(sig)
+        sig.data_type
+            .clone()
             .map(|dt| DesiredShellPin::data(&sig.id, &sig.name, direction, dt))
     }
 }

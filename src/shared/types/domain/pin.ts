@@ -13,20 +13,22 @@ import type { DataType } from './dataType';
 export type PinDirection = "input" | "output";
 
 /**
- * Pin 类型标识符
- * 实际的类型定义（颜色、转换规则）从后端 schema 获取
+ * 运行时 pin 种类（与 Rust `PinInstanceDTO.type` 对齐：仅 exec / object）。
+ * 数据语义一律看 `dataType`。
  */
+export type RuntimePinKind = 'exec' | 'object';
+
+/** @deprecated 使用 `RuntimePinKind`；宽 union 仅作历史文档参考。 */
 export type PinType =
-    | "exec"      // 执行针脚（控制流）
-    | "int"       // 整数
-    | "float"     // 浮点数
-    | "string"    // 字符串
-    | "bool"      // 布尔
-    | "object"    // 对象
-    | "array"     // 数组
-    | "struct"    // 结构体
-    | "delegate"  // 委托/事件
-    | string;     // 允许自定义类型
+    | RuntimePinKind
+    | "int"
+    | "float"
+    | "string"
+    | "bool"
+    | "array"
+    | "struct"
+    | "delegate"
+    | string;
 
 /**
  * Pin UI 配置
@@ -43,16 +45,14 @@ export interface PinUI {
  * 代表节点上的一个输入或输出接口
  */
 export interface Pin {
-    id: string;                 // 唯一标识
-    nodeId: string;             // 所属节点 ID
-    name: string;               // 显示名称
-    type: PinType;              // 数据类型
-    direction: PinDirection;    // 方向（输入/输出）
-    defaultValue?: unknown;     // 默认值（数据针脚）
-    userValue?: unknown;        // 用户设置的值（覆盖默认值）
-    containerType?: string;     // 容器类型: "array" | "dataseries"，决定 pin 形状
-    typeDisplay?: string;       // 完整类型描述（如 DataSeries<Float64 | String>），仅用于 tooltip 展示
-    dataType?: DataType;        // 结构化类型（后端下发），兼容判断的单一来源
-    optional?: boolean;         // 是否可选（true = 无需连接也可运行）
-    ui?: PinUI;                 // UI 配置
+    id: string;
+    nodeId: string;
+    name: string;
+    type: RuntimePinKind;
+    direction: PinDirection;
+    defaultValue?: unknown;
+    userValue?: unknown;
+    dataType?: DataType;
+    optional?: boolean;
+    ui?: PinUI;
 }

@@ -6,6 +6,24 @@ use yssbi_lib::execution::{
     EventEmitter, ExecutionEvent, Executor, NoopEmitter, ResultSourceStore,
 };
 use yssbi_lib::graph::core::GraphRuntime;
+use yssbi_lib::graph::value::DataType;
+use yssbi_lib::graph::FunctionSignaturePin;
+
+/// 测试夹具：从简短类型名构建结构化 `FunctionSignaturePin`（`exec` / `int` / `float` 等）。
+pub fn function_signature_pin(id: &str, name: &str, pin_type: &str) -> FunctionSignaturePin {
+    if pin_type.eq_ignore_ascii_case("exec") {
+        return FunctionSignaturePin::exec(id, name);
+    }
+    let dt = match pin_type {
+        "int" => DataType::Int64,
+        "float" => DataType::Float64,
+        "bool" => DataType::Boolean,
+        "string" => DataType::String,
+        "object" => DataType::Object,
+        other => other.parse().unwrap_or(DataType::Any),
+    };
+    FunctionSignaturePin::data(id, name, dt)
+}
 
 /// 创建用于测试的执行器（无需 Tauri Channel）
 pub fn executor_for_test(graph: Arc<Mutex<GraphRuntime>>) -> Executor<NoopEmitter> {

@@ -1,8 +1,11 @@
 //! 壳节点协议（graph_scope + shell_role）测试
 
+mod common;
+
+use common::function_signature_pin as sig;
 use std::sync::Arc;
 use yssbi_lib::graph::{
-    FunctionSignaturePin, GraphKind, core::GraphInstance, pin::PinRole, register::NodeRegistry,
+    GraphKind, core::GraphInstance, pin::PinRole, register::NodeRegistry,
 };
 
 const EVENT_BEGIN: &str = "Event:Event Begin";
@@ -13,15 +16,6 @@ fn test_registry() -> Arc<NodeRegistry> {
     let registry = Arc::new(NodeRegistry::new());
     yssbi_lib::graph::register::catalog::register_builtin_nodes(&registry);
     registry
-}
-
-fn sig(id: &str, name: &str, pin_type: &str) -> FunctionSignaturePin {
-    FunctionSignaturePin {
-        id: id.to_string(),
-        name: name.to_string(),
-        pin_type: pin_type.to_string(),
-        container_type: None,
-    }
 }
 
 #[test]

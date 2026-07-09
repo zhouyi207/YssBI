@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import { useGraphMetaStore } from '@/features/core/dataStore';
 import { buildGraphResourceMeta, useResourceStore } from '@/features/core/resource';
 import { FunctionCreatedHandler, FunctionUpdatedHandler } from './GraphEventHandler';
@@ -16,8 +17,8 @@ describe('Graph event handlers', () => {
         path: 'functions/Compute.yssbi-function',
         name: 'Compute',
         type: 'function',
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
         nodes: [],
         pins: [],
         connections: { connections: [] },
@@ -27,8 +28,8 @@ describe('Graph event handlers', () => {
 
     expect(useGraphMetaStore.getState().graphs['functions/Compute.yssbi-function']).toEqual(
       expect.objectContaining({
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       }),
     );
   });
@@ -44,15 +45,15 @@ describe('Graph event handlers', () => {
         path: 'functions/Compute.yssbi-function',
         name: 'Compute',
         type: 'function',
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       },
     });
 
     expect(useGraphMetaStore.getState().graphs['functions/Compute.yssbi-function']).toEqual(
       expect.objectContaining({
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       }),
     );
   });
@@ -61,7 +62,7 @@ describe('Graph event handlers', () => {
     new FunctionUpdatedHandler().handle({
       path: 'functions/Compute.yssbi-function',
       data: {
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
       },
     });
 

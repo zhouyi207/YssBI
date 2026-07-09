@@ -11,6 +11,7 @@ import {
 } from '@/shared/types';
 import { normalizeGraphDataLike } from '@/shared/types/dto/graphModel';
 import { isExecPin } from '@/shared/types/domain/pinSemantics';
+import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 import { logger } from '@/utils/appLogger';
 import {
   type GraphEntityBucket,
@@ -113,14 +114,26 @@ function toStoredPin(pin: PinDataInput): PinData {
   return stored;
 }
 
+/** 注册表 enrich：title / category 以 catalog 为权威（uiStyle 在视图层推导）。 */
+function enrichNodeData(node: NodeData): NodeData {
+  const meta = resolveNodeViewMeta(node);
+  return {
+    ...node,
+    category: meta.category,
+    title: meta.title,
+    description: meta.description ?? node.description,
+  };
+}
+
 function buildGraphBucket(graphPath: GraphPath, graph: GraphDataLike): GraphEntityBucket {
   const normalized = normalizeGraphDataLike(graphPath, graph);
   const bucket = emptyGraphBucket();
 
   normalized.nodes.forEach((node) => {
-    bucket.nodes[node.id] = node;
-    bucket.graphNodes.push(node.id);
-    const pinIds = [...node.inputs, ...node.outputs];
+    const enriched = enrichNodeData(node);
+    bucket.nodes[enriched.id] = enriched;
+    bucket.graphNodes.push(enriched.id);
+    const pinIds = [...enriched.inputs, ...enriched.outputs];
     bucket.nodePins[node.id] = pinIds;
     pinIds.forEach((pinId) => {
       bucket.pinConnections[pinId] = bucket.pinConnections[pinId] ?? [];

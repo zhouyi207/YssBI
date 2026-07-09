@@ -1,6 +1,9 @@
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
-import { dataTypeFromFunctionSignaturePin } from '@/shared/types/domain/dataType';
+import {
+  isExecSignaturePin,
+  signaturePinDataType,
+} from '@/shared/types/domain/functionSignaturePin';
 import type {
   NodeDefinition,
   PinDefinitionDTO,
@@ -21,13 +24,11 @@ const DYNAMIC_PIN_META = {
 export const DEFAULT_FUNCTION_EXEC_INPUT: FunctionSignaturePin = {
   id: 'exec-in',
   name: 'In',
-  type: 'exec',
 };
 
 export const DEFAULT_FUNCTION_EXEC_OUTPUT: FunctionSignaturePin = {
   id: 'exec-out',
   name: 'Out',
-  type: 'exec',
 };
 
 export function defaultFunctionSignature(): {
@@ -50,7 +51,7 @@ function signaturePinToDefinition(
   sig: FunctionSignaturePin,
   direction: PinDirection,
 ): PinDefinitionDTO {
-  if (sig.type === 'exec') {
+  if (isExecSignaturePin(sig)) {
     return {
       name: sig.name,
       direction,
@@ -62,7 +63,7 @@ function signaturePinToDefinition(
     };
   }
 
-  const dataType = dataTypeFromFunctionSignaturePin(sig);
+  const dataType = signaturePinDataType(sig)!;
   return {
     name: sig.name,
     direction,

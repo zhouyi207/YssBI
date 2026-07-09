@@ -7,7 +7,7 @@ import {
   normalizeGraphConnections,
   normalizeGraphDataLike,
 } from './graphModel';
-import type { GraphData, GraphDataInput } from '../store/graph';
+import type { GraphData, PinData } from '../store/graph';
 
 function makeGraphData(): GraphData {
   return normalizeGraphDataLike(
@@ -70,15 +70,15 @@ describe('graphModel converters', () => {
       outputPinId: 'out-1',
       connected: false,
     });
-    const pinIn = base.pins[0];
-    const pinOut = base.pins[1];
+    const pinIn = base.pins![0] as PinData;
+    const pinOut = base.pins![1] as PinData;
 
     const normalized = normalizeGraphDataLike('g1', {
       path: 'g1',
       name: 'g1',
       type: 'event',
       canvas: base.canvas,
-      pins: base.pins,
+      pins: [...(base.pins ?? [])] as PinData[],
       connections: base.connections as GraphData['connections'],
       nodes: [
         {
@@ -88,7 +88,7 @@ describe('graphModel converters', () => {
           outputs: [pinOut],
         },
       ],
-    } satisfies GraphDataInput);
+    });
 
     expect(normalized.nodes[0].inputs).toEqual(['in-1']);
     expect(normalized.nodes[0].outputs).toEqual(['out-1']);
@@ -108,7 +108,6 @@ describe('graphModel converters', () => {
             title: 'Begin',
             inputs: [],
             outputs: ['pin-exec'],
-            uiStyle: 'default',
             position: { x: 0, y: 0 },
             paramsKind: 'none',
           },

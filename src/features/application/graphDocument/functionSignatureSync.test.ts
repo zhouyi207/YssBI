@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import {
   syncFunctionSignatureFromGraph,
@@ -15,14 +16,14 @@ describe('functionSignatureSync', () => {
       path: 'function-1',
       name: 'Compute',
       type: 'function',
-      functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-      functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+      functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+      functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
     });
 
     expect(useGraphMetaStore.getState().graphs['function-1']).toEqual(
       expect.objectContaining({
-        functionInputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        functionOutputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        functionInputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       }),
     );
   });
@@ -33,16 +34,16 @@ describe('functionSignatureSync', () => {
         path: 'functions/Add.yssbi-function',
         name: 'Add',
         type: 'function',
-        functionInputs: [{ id: 'a', name: 'A', type: 'int' }],
-        functionOutputs: [{ id: 'r', name: 'R', type: 'int' }],
+        functionInputs: [createDataSignaturePin('a', 'A', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('r', 'R', { kind: 'Int64' })],
       },
       { path: 'events/Main.yssbi-event', name: 'Main', type: 'event' },
     ]);
 
     expect(useGraphMetaStore.getState().graphs['functions/Add.yssbi-function']).toEqual(
       expect.objectContaining({
-        functionInputs: [{ id: 'a', name: 'A', type: 'int' }],
-        functionOutputs: [{ id: 'r', name: 'R', type: 'int' }],
+        functionInputs: [createDataSignaturePin('a', 'A', { kind: 'Int64' })],
+        functionOutputs: [createDataSignaturePin('r', 'R', { kind: 'Int64' })],
       }),
     );
     expect(useGraphMetaStore.getState().graphs['events/Main.yssbi-event']).toBeUndefined();

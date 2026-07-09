@@ -14,13 +14,13 @@
 
 import type { NodeData, PinData } from '@/shared/types';
 import type { DataType } from '@/shared/types/domain/dataType';
-import { dataTypeDisplay } from '@/shared/types/domain/dataType';
 import type {
   NodeDefinition,
   PinDataTypeDefinition,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
 import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
+import { normalizePinDto } from '@/shared/types/dto/pinHydrate';
 import {
   resolveEffectiveDefinition,
   type ResolveEffectiveOptions,
@@ -32,49 +32,6 @@ export interface NodeDraft {
   node: NodeData;
   pins: PinData[];
   effectiveDefinition: NodeDefinition;
-}
-
-/** 对齐后端 `data_type_to_pin_type`：容器类型递归到内部类型。 */
-function dataTypeToPinType(dt: DataType): string {
-  switch (dt.kind) {
-    case 'Boolean':
-      return 'bool';
-    case 'Int64':
-      return 'Int64';
-    case 'Float64':
-      return 'Float64';
-    case 'String':
-      return 'string';
-    case 'Date':
-      return 'date';
-    case 'Datetime':
-      return 'datetime';
-    case 'Time':
-      return 'time';
-    case 'Categorical':
-      return 'categorical';
-    case 'Object':
-      return 'object';
-    case 'Any':
-      return 'any';
-    case 'DataFrame':
-      return 'dataframe';
-    case 'Array':
-      return dataTypeToPinType(dt.inner);
-    case 'DataSeries':
-      return dataTypeToPinType(dt.inner);
-    case 'Struct':
-      return 'struct';
-    case 'OneOf':
-      return 'oneof';
-  }
-}
-
-/** 对齐后端 `data_type_to_container`。 */
-function dataTypeToContainer(dt: DataType): string | undefined {
-  if (dt.kind === 'Array') return 'array';
-  if (dt.kind === 'DataSeries') return 'dataseries';
-  return undefined;
 }
 
 function concreteDataType(def: PinDataTypeDefinition | null): DataType | undefined {
@@ -99,19 +56,15 @@ function pinFromDefinition(
   const isExec = def.kind === 'Exec';
   const dt = isExec ? undefined : concreteDataType(def.dataType);
 
-  const type = isExec ? 'exec' : dt ? dataTypeToPinType(dt) : 'object';
-
-  return {
+  return normalizePinDto({
     id: crypto.randomUUID(),
     nodeId,
     name: nameOverride ?? def.name,
-    type,
+    type: isExec ? 'exec' : 'object',
     direction: def.direction,
-    containerType: dt ? dataTypeToContainer(dt) : undefined,
-    typeDisplay: dt ? dataTypeDisplay(dt) : undefined,
     dataType: dt,
     optional: def.optional ?? false,
-  };
+  });
 }
 
 /** 依据定义生成初始 pin 列表（对齐后端 `generate_initial_pins`）。 */
@@ -166,7 +119,6 @@ export function buildNodeDraft(
     title: definition.name ?? nodeType,
     inputs,
     outputs,
-    uiStyle: definition.nodeMetadata?.uiStyle ?? 'default',
     position: { x, y },
     paramsKind,
     variableId: params?.variableId,

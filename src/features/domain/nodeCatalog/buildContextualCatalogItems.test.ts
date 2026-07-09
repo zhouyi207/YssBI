@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import type { Pin } from '@/shared/types/domain/pin';
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 import { buildContextualCatalogItems } from './buildContextualCatalogItems';
@@ -27,10 +28,10 @@ const callRegistryDef = {
 };
 
 describe('buildContextualCatalogItems', () => {
-  it('does not throw when filtering by data pin and a function has signature pins without structured dataType', () => {
+  it('excludes Call Function when signature dataType is incompatible', () => {
     const filterPin = draggedPin({
       direction: 'input',
-      type: 'float',
+      type: 'object',
       dataType: { kind: 'Float64' },
     });
 
@@ -41,9 +42,7 @@ describe('buildContextualCatalogItems', () => {
         'fn-1': {
           id: 'fn-1',
           name: 'New Function',
-          functionInputs: [
-            { id: 'pin-c3f93066', name: '新 Pin', type: 'int' },
-          ],
+          functionInputs: [createDataSignaturePin('pin-c3f93066', '新 Pin', { kind: 'Int64' })],
           functionOutputs: [],
         },
       },
@@ -56,7 +55,7 @@ describe('buildContextualCatalogItems', () => {
   it('includes Call Function when signature pin type is compatible', () => {
     const filterPin = draggedPin({
       direction: 'output',
-      type: 'float',
+      type: 'object',
       dataType: { kind: 'Float64' },
     });
 
@@ -67,9 +66,7 @@ describe('buildContextualCatalogItems', () => {
         'fn-1': {
           id: 'fn-1',
           name: 'My Func',
-          functionInputs: [
-            { id: 'sig-1', name: 'Value', type: 'float' },
-          ],
+          functionInputs: [createDataSignaturePin('sig-1', 'Value', { kind: 'Float64' })],
           functionOutputs: [],
         },
       },

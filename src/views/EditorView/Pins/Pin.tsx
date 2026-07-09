@@ -67,8 +67,6 @@ export const Pin: React.FC<PinProps> = (props) => {
     onPinPointerDown,
     isActive,
     pinDragState = "normal",
-    containerType,
-    typeDisplay,
     dataType,
     optional,
     defaultValue,
@@ -82,8 +80,8 @@ export const Pin: React.FC<PinProps> = (props) => {
   const { theme: appTheme } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(
-    () => ({ type: type ?? 'object', typeDisplay, dataType, containerType }),
-    [type, typeDisplay, dataType, containerType],
+    () => ({ type: type ?? 'object', dataType }),
+    [type, dataType],
   );
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = ui?.color ?? getPinTypeColor(visualSpec.colorKey, appTheme);
@@ -160,7 +158,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     direction === "input" &&
     scalarInputKey != null &&
     PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
-    !containerType &&
+    !visualSpec.container &&
     userValue != null &&
     userValue !== undefined;
 
@@ -180,7 +178,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     (!isConnected || forceShowInput === true) &&
     scalarInputKey != null &&
     (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) || (scalarInputKey === "string" && isDropdownPin)) &&
-    !containerType &&
+    !visualSpec.container &&
     (direction === "input" || forceShowInput === true) &&
     graphPath &&
     nodeId;

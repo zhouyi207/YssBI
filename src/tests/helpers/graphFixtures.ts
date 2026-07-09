@@ -1,4 +1,5 @@
 import type { PinDirection } from '@/shared/types/domain/pin';
+import type { DataType } from '@/shared/types/domain/dataType';
 import type { GraphPosition } from '@/shared/types/domain/graph';
 import type { GraphDataLike, PinData } from '@/shared/types/store/graph';
 
@@ -20,20 +21,32 @@ export interface MakeTestGraphOptions {
   connected?: boolean;
 }
 
+function defaultDataType(type?: string): DataType | undefined {
+  if (!type || type === 'exec') return undefined;
+  if (type === 'Float64') return { kind: 'Float64' };
+  if (type === 'Int64') return { kind: 'Int64' };
+  return { kind: 'Any' };
+}
+
 function makeTestPinData(params: {
   id: string;
   nodeId: string;
   direction: PinDirection;
   name?: string;
   type?: string;
+  dataType?: DataType;
   ui?: PinData['ui'];
 }): PinData {
+  const pinType = params.type ?? 'Float64';
+  const isExec = pinType === 'exec';
+  const dataType = params.dataType ?? defaultDataType(pinType);
   return {
     id: params.id,
     nodeId: params.nodeId,
     name: params.name ?? (params.direction === 'input' ? 'In' : 'Out'),
-    type: params.type ?? 'Float64',
+    type: isExec ? 'exec' : 'object',
     direction: params.direction,
+    dataType,
     ui: params.ui,
   };
 }

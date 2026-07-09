@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import type { LogMessage } from '@/shared/types/ui';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
 
@@ -61,8 +62,8 @@ describe('resolveDetailPanelModel', () => {
       selectedLog: null,
       worksheetDocument: null,
       functionSignature: {
-        functionInputs: [{ id: 'in-1', name: 'A', type: 'Float64' }],
-        functionOutputs: [{ id: 'out-1', name: 'R', type: 'Float64' }],
+        functionInputs: [createDataSignaturePin('in-1', 'A', { kind: 'Float64' })],
+        functionOutputs: [createDataSignaturePin('out-1', 'R', { kind: 'Float64' })],
       },
       ...catalog,
     });
@@ -73,8 +74,8 @@ describe('resolveDetailPanelModel', () => {
       fn: {
         path: 'fn-1',
         name: 'Add',
-        inputs: [{ id: 'in-1', name: 'A', type: 'Float64' }],
-        outputs: [{ id: 'out-1', name: 'R', type: 'Float64' }],
+        inputs: [createDataSignaturePin('in-1', 'A', { kind: 'Float64' })],
+        outputs: [createDataSignaturePin('out-1', 'R', { kind: 'Float64' })],
       },
     });
   });
