@@ -8,7 +8,11 @@ import { openGraphResource, resolveGraphResourceMeta } from '@/features/applicat
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
-import { useExecutionStore } from '@/features/core/execution';
+import {
+  pinResultsForSourceGraph,
+  executionStatusForSourceGraph,
+  useExecutionStore,
+} from '@/features/core/execution';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
@@ -78,11 +82,15 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     [nodeId, pins, effectiveDefinition],
   );
 
-  const executionGraph = useExecutionStore((s) => (graphPath ? s.graphs[graphPath] : undefined));
+  const executionGraphs = useExecutionStore((s) => s.graphs);
   const pinResults = useMemo(() => {
-    if (!executionGraph) return new Map<string, PinResultState>();
-    return new Map(executionGraph.pinResults);
-  }, [executionGraph]);
+    if (!graphPath) return new Map<string, PinResultState>();
+    return pinResultsForSourceGraph(executionGraphs, graphPath);
+  }, [executionGraphs, graphPath]);
+  const executionStatus = useMemo(
+    () => (graphPath ? executionStatusForSourceGraph(executionGraphs, graphPath) : undefined),
+    [executionGraphs, graphPath],
+  );
 
   const documentation = useMemo(() => {
     const meta = getNodeDefinitionMeta(effectiveDefinition);
@@ -139,7 +147,7 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
         inputs={pinSpecs.inputs}
         outputs={pinSpecs.outputs}
         pinResults={pinResults}
-        executionStatus={executionGraph?.status}
+        executionStatus={executionStatus}
       />
       {documentation && <NodeDocumentationPanel markdown={documentation} />}
     </DetailPanelShell>

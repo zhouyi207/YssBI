@@ -15,13 +15,13 @@ import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import {
   buildPinViewParams,
+  evaluatePinViewState,
   pinViewDisabledTitle,
-  resolvePinViewDisabledReason,
-  resolvePinViewTargetFromCache,
-  shouldShowPinViewMenuItem,
+  pinResultsForSourceGraph,
+  executionStatusForSourceGraph,
   useExecutionStore,
 } from "@/features/core/execution";
-import { openPinView } from "@/features/application/execution/pinViewActions";
+import { openPinInspectableView } from "@/features/application/execution/openInspectableSource";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -124,11 +124,15 @@ export const Pin: React.FC<PinProps> = (props) => {
   const connectionIds = useGraphDataStore((s) =>
     graphPath ? s.getGraphPinConnections(graphPath, id) : [],
   );
-  const pinResults = useExecutionStore((s) =>
-    graphPath ? s.graphs[graphPath]?.pinResults : undefined,
-  );
-  const executionStatus = useExecutionStore((s) =>
-    graphPath ? s.graphs[graphPath]?.status : undefined,
+  const executionGraphs = useExecutionStore((s) => s.graphs);
+  const pinResults = useMemo(() => {
+    if (!graphPath) return undefined;
+    const merged = pinResultsForSourceGraph(executionGraphs, graphPath);
+    return merged.size > 0 ? merged : undefined;
+  }, [executionGraphs, graphPath]);
+  const executionStatus = useMemo(
+    () => (graphPath ? executionStatusForSourceGraph(executionGraphs, graphPath) : undefined),
+    [executionGraphs, graphPath],
   );
 
   const viewParams = useMemo(
@@ -147,14 +151,17 @@ export const Pin: React.FC<PinProps> = (props) => {
     [graphPath, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
   );
 
-  const showViewMenu = viewParams ? shouldShowPinViewMenuItem(viewParams) : false;
-  const viewTarget = viewParams ? resolvePinViewTargetFromCache(viewParams) : null;
-  const viewDisabledReason = viewParams ? resolvePinViewDisabledReason(viewParams) : null;
-  const viewEnabled =
-    showViewMenu &&
-    (Boolean(viewTarget) ||
-      (executionStatus === 'completed' &&
-        (direction === 'output' || (direction === 'input' && (connectionIds?.length ?? 0) > 0))));
+  const viewState = useMemo(
+    () =>
+      viewParams
+        ? evaluatePinViewState(viewParams)
+        : null,
+    [viewParams],
+  );
+
+  const showViewMenu = viewState?.showMenu ?? false;
+  const viewEnabled = viewState?.enabled ?? false;
+  const viewDisabledReason = viewState?.disabledReason ?? null;
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -166,7 +173,7 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const handleView = useCallback(() => {
     if (!viewParams) return;
-    void openPinView(viewParams, t);
+    void openPinInspectableView(viewParams, t);
   }, [viewParams, t]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;

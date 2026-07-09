@@ -7,12 +7,13 @@ use crate::graph::{
 use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use crate::project::{
     FunctionSignatureEntry, FunctionSignatureTable, GraphDocumentKind, GraphResourcePath,
-    call_site_pairs_from_graph, read_function_signature_header_from_project,
-    read_graph_call_sites_from_project, read_project_index,
+    ExecutionGraphBundle, ProjectData, call_site_pairs_from_graph,
+    read_function_signature_header_from_project, read_graph_call_sites_from_project,
+    read_project_index,
 };
 use crate::variable::VariableScope;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 impl ProjectState {
     fn graph_resource_dir(kind: &GraphKind) -> &'static str {
@@ -729,30 +730,18 @@ impl ProjectState {
         Ok(existing)
     }
 
-    /// 执行前预加载本次可能触达的函数图（含嵌套 Call），避免 Call Function 运行时
-    /// `project_data.graphs` 中缺少目标函数。
-    pub fn preload_execution_dependencies(
+
+    /// BFS over Call Function targets starting from event entry graph(s).
+    fn collect_execution_dependency_paths(
         &self,
         target_graph_path: Option<GraphResourcePath>,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<GraphResourcePath>, String> {
         use std::collections::{HashSet, VecDeque};
 
-        let entry_paths: Vec<GraphResourcePath> = {
-            let data = self.project_data.read().unwrap();
-            data.graphs
-                .iter()
-                .filter(|(graph_path, graph)| {
-                    graph.kind == GraphKind::Event
-                        && target_graph_path
-                            .as_ref()
-                            .is_none_or(|target| *graph_path == target)
-                })
-                .map(|(graph_path, _)| graph_path.clone())
-                .collect()
-        };
-
+        let entry_paths = self.event_entry_paths_for_execution(target_graph_path)?;
         let mut seen = HashSet::new();
         let mut queue: VecDeque<GraphResourcePath> = entry_paths.into_iter().collect();
+        let mut ordered = Vec::new();
 
         while let Some(graph_path) = queue.pop_front() {
             if !seen.insert(graph_path.clone()) {
@@ -765,6 +754,8 @@ impl ProjectState {
                 continue;
             };
 
+            ordered.push(graph_path.clone());
+
             for (_, target_path) in call_site_pairs_from_graph(&graph) {
                 if let Ok(path) = GraphResourcePath::new(target_path) {
                     queue.push_back(path);
@@ -772,7 +763,61 @@ impl ProjectState {
             }
         }
 
-        Ok(())
+        Ok(ordered)
+    }
+
+    /// Load + deep-snapshot all execution dependencies into an isolated bundle.
+    pub fn prepare_execution_bundle(
+        &self,
+        target_graph_path: Option<GraphResourcePath>,
+    ) -> Result<ExecutionGraphBundle, String> {
+        let dependency_paths = self.collect_execution_dependency_paths(target_graph_path)?;
+
+        let live = self
+            .project_data
+            .read()
+            .map_err(|e| e.to_string())?;
+
+        let mut snapshot_graphs = HashMap::new();
+        for path in &dependency_paths {
+            let graph = live.graphs.get(path).ok_or_else(|| {
+                format!("graph '{}' not loaded for execution snapshot", path)
+            })?;
+            snapshot_graphs.insert(path.clone(), graph.snapshot_for_execution());
+        }
+
+        let execution_pd = ProjectData {
+            variables: live.variables.clone(),
+            databases: live.databases.clone(),
+            metadata: live.metadata.clone(),
+            graphs: snapshot_graphs,
+        };
+
+        Ok(ExecutionGraphBundle {
+            project_data: Arc::new(RwLock::new(execution_pd)),
+            project_store: Arc::clone(&self.project_store),
+        })
+    }
+
+    fn event_entry_paths_for_execution(
+        &self,
+        target_graph_path: Option<GraphResourcePath>,
+    ) -> Result<Vec<GraphResourcePath>, String> {
+        let data = self
+            .project_data
+            .read()
+            .map_err(|e| e.to_string())?;
+        Ok(data
+            .graphs
+            .iter()
+            .filter(|(graph_path, graph)| {
+                graph.kind == GraphKind::Event
+                    && target_graph_path
+                        .as_ref()
+                        .is_none_or(|target| *graph_path == target)
+            })
+            .map(|(graph_path, _)| graph_path.clone())
+            .collect())
     }
 
     fn ensure_graph_loaded_for_execution(&self, graph_path: &GraphResourcePath) -> Result<(), String> {
@@ -1078,5 +1123,65 @@ mod tests {
         assert_eq!(index.graphs[0].name, "Saved");
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn snapshot_for_execution_isolates_data_state() {
+        use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
+
+        let state = ProjectState::new();
+        let event = state.add_event("Runner");
+        let node = event
+            .create_node_with_position(EVENT_BEGIN_NODE_TYPE, 0.0, 0.0, None)
+            .expect("node");
+
+        let before = event.data_state.read().unwrap().nodes.len();
+        assert!(before >= 1);
+
+        let snapshot = event.snapshot_for_execution();
+        event.data_state.write().unwrap().nodes.clear();
+
+        assert!(event.data_state.read().unwrap().nodes.is_empty());
+        assert_eq!(snapshot.data_state.read().unwrap().nodes.len(), before);
+        assert!(!std::sync::Arc::ptr_eq(&event.data_state, &snapshot.data_state));
+        let _ = node;
+    }
+
+    #[test]
+    fn prepare_execution_bundle_snapshots_call_targets() {
+        use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
+        use crate::graph::NodeInstanceParams;
+
+        let state = ProjectState::new();
+        let function = state.add_function("Helper");
+        let func_path = function.resource_path.clone();
+
+        let event = state.add_event("Caller");
+        let call = event
+            .create_node_with_position(
+                CALL_FUNCTION_NODE_TYPE,
+                0.0,
+                0.0,
+                Some(NodeInstanceParams::SubGraph {
+                    sub_graph_path: func_path.as_str().to_string(),
+                }),
+            )
+            .expect("call");
+
+        let bundle = state
+            .prepare_execution_bundle(Some(event.resource_path.clone()))
+            .expect("bundle");
+
+        let frozen = bundle.project_data.read().unwrap();
+        assert!(frozen.graphs.contains_key(&event.resource_path));
+        assert!(frozen.graphs.contains_key(&func_path));
+        assert!(!std::sync::Arc::ptr_eq(
+            &state
+                .get_graph(&func_path)
+                .expect("live fn")
+                .data_state,
+            &frozen.graphs.get(&func_path).expect("frozen fn").data_state,
+        ));
+        let _ = call;
     }
 }

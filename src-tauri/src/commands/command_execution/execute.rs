@@ -14,8 +14,6 @@ pub async fn execute_project(
     graph_path: Option<String>,
 ) -> Result<Value, String> {
     let source_store = source_store.inner().clone();
-    let project_data_state = state.project_data.clone();
-    let project_store = state.project_store.clone();
     let cancel = cancel_registry.begin();
 
     let target_graph_path: Option<GraphResourcePath> = graph_path
@@ -23,7 +21,9 @@ pub async fn execute_project(
         .map(|s| GraphResourcePath::new(s).map_err(|e| format!("Invalid graph_path '{}': {}", s, e)))
         .transpose()?;
 
-    state.preload_execution_dependencies(target_graph_path.clone())?;
+    let bundle = state.prepare_execution_bundle(target_graph_path.clone())?;
+    let project_data_state = bundle.project_data;
+    let project_store = bundle.project_store;
 
     let cancel_for_task = cancel.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {

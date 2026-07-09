@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { VscSearch } from 'react-icons/vsc';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { openPinResultView } from '@/features/application/execution/pinViewActions';
+import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
 import {
   usePinResultSearch,
   type PinResultSearchEntry,
@@ -104,7 +104,7 @@ export function PinResultSearch({ graphPath }: PinResultSearchProps) {
   };
 
   const handleSelect = (entry: PinResultSearchEntry) => {
-    void openPinResultView(entry.pinResult, t).then((opened) => {
+    void openInspectableSource(entry.ref, t).then((opened) => {
       if (opened) {
         setShellMotion('collapse');
         setOpen(false);

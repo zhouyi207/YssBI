@@ -25,24 +25,27 @@ export {
 } from './executionRecording';
 export {
   buildPinViewParams,
+  evaluatePinViewState,
+  inspectableRefsFromPinView,
   pinViewDisabledTitle,
-  resolvePinViewDisabledReason,
-  resolvePinViewTargetFromCache,
-  shouldShowPinViewMenuItem,
   type PinViewDisabledReason,
+  type PinViewUiState,
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
 export {
-  graphBucketHasPinResults,
+  executionStatusForSourceGraph,
+  lookupPinResult,
+  pinResultCacheKey,
+  pinResultsForSourceGraph,
+} from './pinResultIndex';
+export {
   normalizePinResultState,
+  type PinResultWirePayload,
 } from './normalizePinResult';
 export {
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
-  collectPinResultSearchEntriesFromCache,
   filterPinResultSearchEntries,
-  type PinResultSearchDirection,
   type PinResultSearchEntry,
   type PinResultSearchLabels,
-  type PinResultSearchPinRef,
 } from './pinResultSearch';

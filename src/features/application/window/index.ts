@@ -2,7 +2,12 @@ export { usePersistedWindow } from "./usePersistedWindow";
 export { useWindowMaximized } from "./useWindowMaximized";
 export { createPersistedWindow } from "./createPersistedWindow";
 export type { PersistedWindowOptions } from "./createPersistedWindow";
-export { openPresentationWindow, openPresentationWindowSafe } from "./openPresentationWindow";
+export {
+  openPresentationWindow,
+  openPresentationWindowSafe,
+  presentationWindowPayload,
+  presentationWindowPayloadFromDescriptor,
+} from "./openPresentationWindow";
 export type { PresentationWindowPayload } from "./openPresentationWindow";
 export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openLogsWindow } from "./openLogsWindow";

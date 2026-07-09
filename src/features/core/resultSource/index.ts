@@ -16,6 +16,12 @@ export {
   presentationRoute,
   presentationRouteForDescriptor,
 } from './presentation';
+export {
+  resolveInspectableSource,
+  runtimePinRef,
+  windowSourceRef,
+  type InspectableSourceRef,
+} from './inspectableSource';
 export { resolveSourceRenderer } from './resolveRenderer';
 export { useSourceValue } from './useSourceValue';
 export { usePagedSourceRows } from './usePagedSourceRows';

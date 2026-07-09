@@ -15,6 +15,7 @@ import {
 } from './executionVisualSession';
 import { clearedRunArtifactsPatch } from './graphRunArtifacts';
 import { normalizePinResultState, type PinResultWirePayload } from './normalizePinResult';
+import { pinResultCacheKey } from './pinResultIndex';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -158,7 +159,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     const g = state.graphs[graphPath] ?? emptyGraphState();
     const normalized = normalizePinResultState(graphPath, result);
     const next = new Map(g.pinResults);
-    next.set(normalized.pinId, normalized);
+    next.set(pinResultCacheKey(normalized.graphPath, normalized.pinId), normalized);
     return updateGraph(state, graphPath, { pinResults: next });
   }),
 
@@ -185,15 +186,28 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     };
   }),
 
-  clearPinResults: (graphPath, pinIds) => set((state) => {
+  clearPinResults: (resultGraphPath, pinIds) => set((state) => {
     if (pinIds.length === 0) return state;
-    const g = state.graphs[graphPath];
-    if (!g || g.pinResults.size === 0) return state;
-    const next = new Map(g.pinResults);
-    for (const pinId of pinIds) {
-      next.delete(pinId);
+
+    let changed = false;
+    const graphs = { ...state.graphs };
+
+    for (const [bucketPath, bucket] of Object.entries(graphs)) {
+      if (bucket.pinResults.size === 0) continue;
+
+      const next = new Map(bucket.pinResults);
+      for (const pinId of pinIds) {
+        if (next.delete(pinResultCacheKey(resultGraphPath, pinId))) {
+          changed = true;
+        }
+      }
+
+      if (next.size !== bucket.pinResults.size) {
+        graphs[bucketPath] = { ...bucket, pinResults: next };
+      }
     }
-    return updateGraph(state, graphPath, { pinResults: next });
+
+    return changed ? { ...state, graphs } : state;
   }),
 
   releaseGraphExecutionState: (graphPath) => set((state) => {

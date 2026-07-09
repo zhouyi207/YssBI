@@ -16,8 +16,7 @@ import {
   graphHasClearableArtifacts,
   enqueueLiveExecutionEvent,
 } from '@/features/core/execution';
-import { openPresentationWindowSafe } from '@/features/application/window';
-import { plotTypeFromPresentation, presentationRoute } from '@/features/core/resultSource';
+import { openWindowInspectableSource } from '@/features/application/execution/openInspectableSource';
 import type { Presentation } from '@/features/core/resultSource';
 import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
 import {
@@ -138,15 +137,7 @@ export function useProjectOperations() {
     sourceId: string,
     event: { presentation: Presentation; windowTitle: string },
   ) => {
-    await openPresentationWindowSafe(
-      sourceId,
-      {
-        route: presentationRoute(event.presentation),
-        windowTitle: event.windowTitle,
-        plotType: plotTypeFromPresentation(event.presentation),
-      },
-      'ProjectOperations',
-    );
+    await openWindowInspectableSource(sourceId, event);
   }, []);
 
   const finalizeExecutionRun = useCallback((

@@ -600,7 +600,7 @@ src/app/appConfig/appLinks.ts
 - [x] **执行可视化 cleanup**：移除 store 死字段（`currentNodeId` / `errorConnections` / `nodeDurations`）、`isExecuting` 死 UI 路径；`clearedVisualPatch()` 合并 reset 逻辑；`resolveTabId` 提取至 `canvasInteractionUtils.ts`；移除 `data-edge-from/to` 等遗留属性。
 - [x] **C 节技术债清理完成**：删除 `useEditorInit`、`connections.ts`、`SettingsService`、`update_subgraph_io` stub、`syncFromBackend`（node registry）、`default_type_system_snapshot`；`useShemaStore`→`useSchemaStore`；`PinRuntimeState::from_instance` 保留 pin id；`window_data_store`→`result_source_store`；`ColumnInfo` 合并为 `ColumnInfoDTO`；移除 `executedNodes` 双写；`GroupContext`/`services` barrel 收口；`useGraphManagement` 统一 `uiStore.showToast`。
 - [x] **B 节 Layout tab / 窗口 helper 收口**：`layoutTabQueries.ts`（`getLayoutTabById` / `locateLayoutTab` / `getActiveLayoutTab` / `getActiveLayoutTabAmongGroups` / `resolveEditorGroupId`）+ barrel `features/core/layout/index.ts`；close-tab / detail / menubar split / BottomBar / TabBar / layoutStore 迁移；`openDatabaseEditorWindow` / `openLogsWindow` + `windowLabels.ts`；Sidebar / menubar / LogPanel 去重。
-- [x] **IPC 分层 + Toast 单通道**：`SourceService`→`services/resultSource`；`GraphService.renameGraphResource`；`pinViewTarget.ts`（core 纯逻辑）+ `pinViewActions.ts`（开窗/toast）；`openGraphInEditor` / `sidebarResourceActions` / `statsActions`；views 去直连 services 与 sonner。
+- [x] **IPC 分层 + Toast 单通道**：`SourceService`→`services/resultSource`；`GraphService.renameGraphResource`；`pinViewTarget.ts`（core 纯逻辑）+ `openInspectableSource.ts`（开窗/toast）；`openGraphInEditor` / `sidebarResourceActions` / `statsActions`；views 去直连 services 与 sonner。
 
 ## 2026.07.05
 
@@ -653,9 +653,9 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.07.07
 
-- [x] **View：Pin 结果搜索 + Inspector 窗口**：移除 Canvas Runtime Results embedded 浮层；Canvas 左上 Pin 搜索入口，筛选 node/pin 后打开 `SourceInspectorWindow`；统一 `openPinResultView` 出口；删除 `SourceViewLayout=embedded` 死代码；Detail 侧栏保留 pin 行「View」按钮，不做 inline 预览。
+- [x] **View：Pin 结果搜索 + Inspector 窗口**：移除 Canvas Runtime Results embedded 浮层；Canvas 左上 Pin 搜索入口，筛选 node/pin 后打开 `SourceInspectorWindow`；统一 `openInspectableSource` 出口；删除 `SourceViewLayout=embedded` 死代码；Detail 侧栏保留 pin 行「View」按钮，不做 inline 预览。
 - [x] **View：Pin 搜索 UX 内联展开**：点击搜索图标 spring 展开为 input（同容器宽度动画）；再次点击图标 / Esc / 点击外部收起；input 与下拉列表合并为同一 bordered shell，避免错位；列表单行展示 `节点 · Pin`。
-- [x] **View：Pin 搜索纳入 input pins**：`collectPinResultSearchEntries` 除 output runtime 结果外，枚举图中已连接且可解析上游结果的 input pin；列表 output 优先、input 其后；点击仍走 `openPinResultView` 打开上游 Inspector 数据。
+- [x] **View：Pin 搜索纳入 input pins（已 supersede）**：历史版本曾枚举图中已连接 input pin；现以 `pinResults` 为唯一索引，仅展示执行后实际产出的 runtime 结果。
 - [x] **View：Pin 搜索列表滚轮修复**：Pin search 根节点加 `menu-container`，避免 Canvas 全局 wheel 拦截 `OverlayScrollbar` 原生滚动（后随 Canvas wheel 移除一并解决根因）。
 - [x] **Canvas：移除全局滚轮平移/缩放**：删除 `viewportWheel.ts` / `attachViewportWheel`（`window` capture + `preventDefault`）；Canvas 不再响应滚轮 pan/zoom，保留中键/右键/Alt+拖拽平移。
 - [x] **滚轮事件收口**：审计全项目无 `window`/`document` 级 wheel 监听；移除 Menubar / Sidebar / Detail 上仅为挡 Canvas wheel 而设的 `onWheel stopPropagation`；TabBar 拖拽时仅在容器 ref 上绑定非 passive wheel listener。
@@ -720,7 +720,7 @@ src/app/appConfig/appLinks.ts
 - [x] **执行连线动画根治（live 绿高亮 + 取数/流动双态 + 架构去重）**：
   - **根因**：`invoke("execute_project")` 在 Channel 排空前返回 → `finalize` 用不完整 recording 提交视觉；`nodeError` 立即把全局 `status` 置 `error` → `isRunning=false` 提前关掉连线动画；旧执行器在 `NodeStart` 批量 `emit_data_input_connections` + `execute_upstream_data_nodes` 导致 fan-out、纯 data 链 pull/flow 顺序错乱、exec 驱动上游无 flow。
   - **后端执行器拆分**：删除单体 `executor.rs`（~697 行）→ `executor/mod.rs` + `wire_events.rs`（`ConnectionActive`/`ConnectionFlow` **唯一发射点**）+ `data_inputs.rs`（`satisfy_data_inputs` → 按边 `emit_data_pull` → 递归求值 → `emit_data_flow`）；`absorb_pin_side_effects` 共用 pin 副作用收集；`halted` 标志 + 清空 ready 队列，节点失败后 Sequence 不再继续 Then 3。
-  - **Call Function 预加载**：`ProjectState::preload_execution_dependencies`（BFS 扫描 Call 目标函数图）于 `execute.rs` spawn 前调用，修复「目标函数图未加载」。
+  - **Call Function 执行隔离**：`prepare_execution_bundle`（BFS 收集依赖 + `snapshot_for_execution` 深拷贝）于 `execute.rs` spawn 前构建隔离 bundle，修复「目标函数图未加载」与执行中外部图被编辑污染。
   - **Channel 排空**：`executionChannelDrain.ts`（`createExecutionStreamDrain` / `bindExecutionEventChannel`）在 invoke 返回后 `waitForStreamEnd` 直至 `executionComplete` 处理完毕。
   - **前端视觉单会话**：`executionVisualSession.ts` 承载 live/replay 快照（`completedConnections`=取数 pull、`flowingConnections`=流动 flow）；`executionLiveFeed.ts` 按帧批处理，`connectionFlow` 延后一帧以区分双态；`commitExecutionVisual` 单次 flush + 写入 store。
   - **live 结束 / replay**：`finalizeExecutionRun` 统一 `commit` → `setRecording` → `ensureGraphExecutionTerminal`（仅 status 仍为 `running` 时兜底）；replay 不再调 `startExecution`（避免清空 recording 导致只能播一次）；`play()` 对 recording 做 spread 快照。
@@ -887,6 +887,23 @@ graphDataStore[graphPath]               // 正文单实例（与 Tab 解耦）
 - [ ] **P2 — Tab 拖拽去 dnd-kit 逐 Tab 注册**：改 strip 级 pointer 监听或虚拟化 Tab 列表。
 - [ ] **P3 — 多 Canvas 保活**（大图频繁切换可选）：隐藏保活 vs 单 Canvas 换 model 权衡。
 
+#### Pin Result Search（执行后查结果）
+
+> **结论（已修复）**：执行后 Pin 结果写入 `ExecutionStore.pinResults`；搜索以 `pinResults` 为唯一索引，`openInspectableSource(entry.ref)` 单管道打开。
+
+##### 架构
+
+```
+PinResultSearch (View)
+  → usePinResultSearch(graphPath, query)
+      → collectPinResultSearchEntries(pinResults)   // 唯一数据源
+      → resolveLabels from graphDataStore（仅展示）
+      → filterPinResultSearchEntries
+  → openInspectableSource(entry.ref)
+```
+
+- [x] **P1 — 以 pinResults 为索引**：删除图 pin 遍历、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`。
+
 #### TabBar 收敛原则（写入规则 / PR checklist）
 
 1. **Tab 不拥有正文与脏状态**：仅引用 `ResourceRef`；正文在 `graphEntities` / worksheet store；脏在 `DocumentStateStore`。
@@ -953,8 +970,14 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [ ] **P2 — 空组自动折叠**（最后一 tab 拖走后折叠组，已有 `moveTab` 部分逻辑，需与四向分屏联调）。
 - [ ] **P3 — Tab 溢出菜单**（`…` 列出不可见 tabs，对标 VS Code tab actions）。
 
-## v1.0 待办
 
+## 2026.07.11
+
+- [x] **P1 — Pin Result Search 修复**：以 `pinResults` 为唯一索引源；`pinResultCacheKey(graphPath,pinId)` 对齐后端 runtime index；`pinResultsForSourceGraph` 支持函数图 Detail/Canvas 查看嵌套 Call 结果；`evaluatePinViewState` 单 pass UI 判定。
+- [x] 在执行图的时候，首先需要递归加载外部图，并进行存储，避免修改外部图的时候导致原来的执行出现变化
+
+
+## 2026.07.12
 
 > **源于 2026.07.08 `tsc` 清零复盘**：以下多为根因治理与类型债清扫，避免修复回潮；优先级按「阻断开发 → 架构单点 → 体验验证」排列。
 
@@ -974,6 +997,20 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [x] **Store `NodeData` → UI `Node` 单点桥接**：`nodeView.ts` 的 `toUiNode`；`useNodeView` 复用；渲染层改 `UINode`；去除 `CanvasNode` `as unknown as NodeModel`。
 - [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`LayoutTabType` / `EditorGroupSnapshot` / `layoutTabModel` 工厂与规范化；`useEditorGroups` 去 `any`；`openEditorTab` / TabBar split 共用。
 - [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts` 统一 exec 判别 / 展示标签 / 主题键；连接与 palette 以 `buildPinDataType` + `TypeSystemSnapshot` 为准；`setPinValue` 改读 store `dataType`；去除 `resolveNodePinSpecs` 裸 `type` fallback；5 项 vitest。
+- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；`InfoView/shared/types.ts` 薄 re-export；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
+- [x] **Info 报告 IPC 边界 `normalize*` 补齐**：`parseReportPayload(report, raw)` 覆盖全部 `ReportKind`；回归五类共用 `parseRegressionResultData`；`ReportView` 无效 payload 展示错误文案；`serialTests`/`correlogram`/`iv` 共用 `parseCommon`；11 项 vitest。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)
+- [x] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。→ 见 [DESIGN_RULE.md §2.9](./docs/DESIGN_RULE.md#29-infoview-统计数值展示)
+- [x] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。→ 见 [DESIGN_RULE.md §3.8](./docs/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)、[DTO_TYPE_MAPPING.md §十二–十四](./docs/DTO_TYPE_MAPPING.md#十二nodeinstanceparams节点实例参数)
+- [x] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。→ 见 [DESIGN_RULE.md §2.10](./docs/DESIGN_RULE.md#210-plotview-d3-工具层)
+- [x] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。→ 见 [DESIGN_RULE.md §2.11](./docs/DESIGN_RULE.md#211-tauri--webview-平台类型)
+- [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
+- [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
+- [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
+
+
+## v1.0 待办
+
+
 
 > **注解型 `any` 残留**（`src/` 已无 `as any` / `as unknown as`；以下为 `: any` 注解债，按模块分期，新代码不得新增）
 
@@ -1044,16 +1081,6 @@ interface PinVisualSpec {
 - 调色板拖线、静态连线、执行 flow/pull 动画三线颜色与 source pin 一致。
 - 上表每种 DataType 至少 1 个 vitest + 1 个手动验收图（含嵌套容器）。
 
-- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；`InfoView/shared/types.ts` 薄 re-export；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
-- [x] **Info 报告 IPC 边界 `normalize*` 补齐**：`parseReportPayload(report, raw)` 覆盖全部 `ReportKind`；回归五类共用 `parseRegressionResultData`；`ReportView` 无效 payload 展示错误文案；`serialTests`/`correlogram`/`iv` 共用 `parseCommon`；11 项 vitest。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)
-- [x] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。→ 见 [DESIGN_RULE.md §2.9](./docs/DESIGN_RULE.md#29-infoview-统计数值展示)
-- [x] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。→ 见 [DESIGN_RULE.md §3.8](./docs/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)、[DTO_TYPE_MAPPING.md §十二–十四](./docs/DTO_TYPE_MAPPING.md#十二nodeinstanceparams节点实例参数)
-- [x] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。→ 见 [DESIGN_RULE.md §2.10](./docs/DESIGN_RULE.md#210-plotview-d3-工具层)
-- [x] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。→ 见 [DESIGN_RULE.md §2.11](./docs/DESIGN_RULE.md#211-tauri--webview-平台类型)
-- [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
-- [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
-- [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
-
 
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
 
@@ -1122,8 +1149,7 @@ interface PinVisualSpec {
 - [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
 - [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
-- [ ] 目前 search pin 查看数据都是无法找到，有 bug
-- [ ] 在执行图的时候，首先需要递归加载外部图，并进行存储，避免修改外部图的时候导致原来的执行出现变化
+
 
 
 # TODOLIST

@@ -8,12 +8,10 @@ import { DetailBadge, DetailText } from '../shared/DetailText';
 import type { PinResultState } from '@/shared/types/ui';
 import {
   buildPinViewParams,
+  evaluatePinViewState,
   pinViewDisabledTitle,
-  resolvePinViewDisabledReason,
-  resolvePinViewTargetFromCache,
-  shouldShowPinViewMenuItem,
 } from '@/features/core/execution';
-import { openPinView } from '@/features/application/execution/pinViewActions';
+import { openPinInspectableView } from '@/features/application/execution/openInspectableSource';
 import type { ExecutionStatus } from '@/shared/types/ui';
 
 interface NodePinSpecRowProps {
@@ -45,15 +43,14 @@ export function NodePinSpecRow({
     [graphPath, pin, pinResults, executionStatus],
   );
 
-  const showView = shouldShowPinViewMenuItem(viewParams);
-  const viewTarget = resolvePinViewTargetFromCache(viewParams);
-  const viewDisabledReason = resolvePinViewDisabledReason(viewParams);
-  const viewEnabled =
-    showView &&
-    (Boolean(viewTarget) ||
-      (executionStatus === 'completed' &&
-        (pin.direction === 'output' || (pin.direction === 'input' && pin.connectionIds.length > 0))));
-  const viewDisabledLabel = pinViewDisabledTitle(viewDisabledReason, t);
+  const viewState = useMemo(
+    () => evaluatePinViewState(viewParams),
+    [viewParams],
+  );
+
+  const showView = viewState.showMenu;
+  const viewEnabled = viewState.enabled;
+  const viewDisabledLabel = pinViewDisabledTitle(viewState.disabledReason, t);
 
   const slotNoteText =
     pin.slotNote?.kind === 'repeatableRange'
@@ -103,7 +100,7 @@ export function NodePinSpecRow({
             variant="ghost"
             className="h-5 px-1.5 text-[10px]"
             disabled={!viewEnabled}
-            onClick={() => void openPinView(viewParams, t)}
+            onClick={() => void openPinInspectableView(viewParams, t)}
           >
             {t('detail.nodeDoc.view')}
           </Button>

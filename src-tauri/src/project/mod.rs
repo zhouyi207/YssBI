@@ -1,6 +1,7 @@
 //! 项目管理模块
 
 pub mod execution_cancel;
+pub mod execution_graph_bundle;
 pub mod graph_events;
 pub mod function_call_site_index;
 pub mod function_signature_table;
@@ -28,6 +29,7 @@ pub mod unique_name;
 pub mod worksheet_io;
 
 pub use execution_cancel::*;
+pub use execution_graph_bundle::*;
 pub use graph_events::*;
 pub use function_call_site_index::*;
 pub use function_signature_table::*;

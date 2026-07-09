@@ -107,6 +107,23 @@ impl GraphInstance {
         self.schema_provider = Some(provider);
     }
 
+    /// Deep-clone `data_state` so an execution run is isolated from live editor mutations.
+    pub fn snapshot_for_execution(&self) -> Self {
+        let data_state = Arc::new(RwLock::new(self.data_state.read().unwrap().clone()));
+        Self {
+            resource_path: self.resource_path.clone(),
+            name: self.name.clone(),
+            kind: self.kind.clone(),
+            position: self.position.clone(),
+            function_inputs: self.function_inputs.clone(),
+            function_outputs: self.function_outputs.clone(),
+            runtime_prepared_epoch: self.runtime_prepared_epoch,
+            data_state,
+            registry: Arc::clone(&self.registry),
+            schema_provider: self.schema_provider.clone(),
+        }
+    }
+
     /// Unified post-mutation compile entry.
     pub fn recompile(&self, scope: GraphRecompileScope) -> GraphRecompileResult {
         match scope {

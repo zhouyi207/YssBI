@@ -338,7 +338,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         let function_path = crate::project::GraphResourcePath::new(sub_graph_path.clone())
             .map_err(|e| format!("Call Function: 无效 subGraphPath '{}': {}", sub_graph_path, e))?;
 
-        // 取项目引用 + 目标函数图（clone 共享 data_state Arc，执行期只读，安全）
+        // 取项目引用 + 目标函数图（来自执行快照 bundle，与编辑器 live 图隔离）
         let (project_data, project_store, function_graph) = {
             let rt = self.graph.lock().unwrap();
             let pd = rt.project_data();
@@ -382,11 +382,9 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         // 构建嵌套 runtime，预置 Entry 输出（入参）值。
         //
         // 每次调用新建独立 runtime 是刻意为之，且开销很低：
-        // - `GraphInstance` 是浅克隆（`data_state` 为 `Arc<RwLock<_>>`），不复制节点 / pin 数据。
-        // - `GraphRuntime::new` 只分配空 HashMap，执行期状态（`pins_runtime_state` / `loop_counters`）
-        //   独立于共享的 `data_state`。
-        // 因此不缓存复用：缓存反而会在递归 / 多 Call 指向同一函数时共享可变执行状态而互相污染，
-        // 得不偿失。
+        // - `GraphInstance` 浅克隆仅共享同一快照内的 `data_state` Arc。
+        // - `GraphRuntime::new` 只分配空 HashMap，执行期状态独立于 `data_state`。
+        // 不缓存复用：递归 / 多 Call 指向同一函数时会共享可变执行状态而互相污染。
         let mut runtime = GraphRuntime::new(Arc::new(function_graph), project_data, project_store);
         runtime.reset_execution_state();
         if let Some(entry) = entry_id {

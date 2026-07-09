@@ -1,11 +1,37 @@
 import { createPersistedWindow } from './createPersistedWindow';
 import { windowKindForRoute } from './windowRoute';
 import { logger } from '@/utils/appLogger';
+import {
+  plotTypeFromPresentation,
+  presentationRoute,
+  type Presentation,
+} from '@/features/core/resultSource';
 
 export interface PresentationWindowPayload {
   route: string;
   windowTitle: string;
   plotType?: string;
+}
+
+export function presentationWindowPayload(
+  presentation: Presentation,
+  windowTitle: string,
+): PresentationWindowPayload {
+  return {
+    route: presentationRoute(presentation),
+    windowTitle,
+    plotType: plotTypeFromPresentation(presentation),
+  };
+}
+
+export function presentationWindowPayloadFromDescriptor(
+  descriptor: { presentation: Presentation; title: string },
+  titleFallback: string,
+): PresentationWindowPayload {
+  return presentationWindowPayload(
+    descriptor.presentation,
+    descriptor.title || titleFallback,
+  );
 }
 
 export async function openPresentationWindow(

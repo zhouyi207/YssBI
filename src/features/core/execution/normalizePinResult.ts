@@ -22,10 +22,3 @@ export function normalizePinResultState(
     descriptor: payload.descriptor,
   };
 }
-
-/** Pin results are bucketed per graphPath in ExecutionStore; size is authoritative. */
-export function graphBucketHasPinResults(
-  pinResults: ReadonlyMap<string, PinResultState>,
-): boolean {
-  return pinResults.size > 0;
-}

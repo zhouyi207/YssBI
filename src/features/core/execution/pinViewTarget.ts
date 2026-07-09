@@ -1,17 +1,15 @@
 import type { TFunction } from 'i18next';
 import { otherEndpointFromConnectionId } from '@/features/core/dataStore/pinLinks';
+import type { InspectableSourceRef } from '@/features/core/resultSource/inspectableSource';
+import { runtimePinRef } from '@/features/core/resultSource/inspectableSource';
 import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
+import { lookupPinResult } from './pinResultIndex';
 
 export type PinViewDisabledReason =
   | 'exec_pin'
   | 'not_applicable'
   | 'no_run'
   | 'no_upstream';
-
-export interface PinViewTarget {
-  sourcePinId: string;
-  pinResult: PinResultState;
-}
 
 export interface ResolvePinViewTargetParams {
   graphPath: string;
@@ -23,7 +21,14 @@ export interface ResolvePinViewTargetParams {
   executionStatus?: ExecutionStatus;
 }
 
-export function isInspectableDataPin(isExec: boolean): boolean {
+export interface PinViewUiState {
+  showMenu: boolean;
+  enabled: boolean;
+  disabledReason: PinViewDisabledReason | null;
+  refs: InspectableSourceRef[];
+}
+
+function isInspectableDataPin(isExec: boolean): boolean {
   return !isExec;
 }
 
@@ -36,49 +41,81 @@ export function resolveUpstreamPinIds(
   );
 }
 
-export function resolvePinViewTargetFromCache(
+/** Shared traversal: output pin or upstream data pins for input direction. */
+export function candidatePinIdsFromPinView(
   params: ResolvePinViewTargetParams,
-): PinViewTarget | null {
-  const { pinId, direction, isExec, connectionIds, pinResults } = params;
-  if (!isInspectableDataPin(isExec) || !pinResults) return null;
-
-  if (direction === 'output') {
-    const pinResult = pinResults.get(pinId);
-    if (pinResult) {
-      return { sourcePinId: pinId, pinResult };
-    }
-    return null;
-  }
-
-  for (const upstreamPinId of resolveUpstreamPinIds(pinId, connectionIds)) {
-    const pinResult = pinResults.get(upstreamPinId);
-    if (pinResult) {
-      return { sourcePinId: upstreamPinId, pinResult };
-    }
-  }
-  return null;
+): string[] {
+  const { pinId, direction, isExec, connectionIds } = params;
+  if (!isInspectableDataPin(isExec)) return [];
+  return direction === 'output' ? [pinId] : resolveUpstreamPinIds(pinId, connectionIds);
 }
 
-export function resolvePinViewDisabledReason(
+function buildInspectableRefs(
   params: ResolvePinViewTargetParams,
-): PinViewDisabledReason | null {
-  const { isExec, direction, connectionIds } = params;
-  if (!isInspectableDataPin(isExec)) return 'exec_pin';
-  if (resolvePinViewTargetFromCache(params)) return null;
-
-  if (direction === 'input') {
-    if (resolveUpstreamPinIds(params.pinId, connectionIds).length === 0) {
-      return 'not_applicable';
-    }
-    return 'no_upstream';
-  }
-
-  return 'no_run';
+  candidates: string[],
+): InspectableSourceRef[] {
+  const { graphPath, pinResults } = params;
+  return candidates.map((candidatePinId) => {
+    const cached = lookupPinResult(pinResults, graphPath, candidatePinId);
+    return runtimePinRef(cached?.graphPath ?? graphPath, cached?.pinId ?? candidatePinId);
+  });
 }
 
-export function shouldShowPinViewMenuItem(params: ResolvePinViewTargetParams): boolean {
-  const reason = resolvePinViewDisabledReason(params);
-  return reason !== 'exec_pin' && reason !== 'not_applicable';
+/** Single-pass UI + open resolution for pin view menus. */
+export function evaluatePinViewState(params: ResolvePinViewTargetParams): PinViewUiState {
+  const { isExec, executionStatus, direction } = params;
+
+  if (!isInspectableDataPin(isExec)) {
+    return {
+      showMenu: false,
+      enabled: false,
+      disabledReason: 'exec_pin',
+      refs: [],
+    };
+  }
+
+  const candidates = candidatePinIdsFromPinView(params);
+  const refs = buildInspectableRefs(params, candidates);
+  const cacheHit = candidates.some((candidatePinId) =>
+    lookupPinResult(params.pinResults, params.graphPath, candidatePinId),
+  );
+
+  if (cacheHit) {
+    return {
+      showMenu: true,
+      enabled: true,
+      disabledReason: null,
+      refs,
+    };
+  }
+
+  if (direction === 'input' && candidates.length === 0) {
+    return {
+      showMenu: false,
+      enabled: false,
+      disabledReason: 'not_applicable',
+      refs,
+    };
+  }
+
+  const enabled = executionStatus === 'completed' && refs.length > 0;
+  return {
+    showMenu: true,
+    enabled,
+    disabledReason: enabled
+      ? null
+      : direction === 'input'
+        ? 'no_upstream'
+        : 'no_run',
+    refs,
+  };
+}
+
+/** Build backend lookup refs for opening a pin view (no IPC). */
+export function inspectableRefsFromPinView(
+  params: ResolvePinViewTargetParams,
+): InspectableSourceRef[] {
+  return evaluatePinViewState(params).refs;
 }
 
 export function pinViewDisabledTitle(

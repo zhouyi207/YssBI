@@ -1,12 +1,11 @@
+import type { InspectableSourceRef } from '@/features/core/resultSource/inspectableSource';
+import { runtimePinRef } from '@/features/core/resultSource/inspectableSource';
 import type { PinResultState } from '@/shared/types/ui';
-import { isInspectableDataPin, resolvePinViewTargetFromCache } from './pinViewTarget';
-
-export type PinResultSearchDirection = 'input' | 'output';
+import { pinResultCacheKey } from './pinResultIndex';
 
 export interface PinResultSearchEntry {
   id: string;
-  direction: PinResultSearchDirection;
-  pinResult: PinResultState;
+  ref: InspectableSourceRef;
   nodeTitle: string;
   pinName: string;
   sourceTitle: string;
@@ -18,29 +17,20 @@ export interface PinResultSearchLabels {
   pinName: string;
 }
 
-export interface PinResultSearchPinRef {
-  pinId: string;
-  nodeId: string;
-  direction: PinResultSearchDirection;
-  isExec: boolean;
-  connectionIds: readonly string[];
-}
-
 export function buildPinResultSearchEntry(
-  id: string,
-  direction: PinResultSearchDirection,
   pinResult: PinResultState,
   labels: PinResultSearchLabels,
 ): PinResultSearchEntry {
   const sourceTitle = pinResult.descriptor.title.trim();
-  const nodeTitle = labels.nodeTitle.trim();
-  const pinName = labels.pinName.trim();
-  const searchText = [nodeTitle, pinName, sourceTitle, direction].join(' ').toLowerCase();
+  const nodeTitle = labels.nodeTitle.trim() || pinResult.nodeId || pinResult.pinId;
+  const pinName = labels.pinName.trim() || pinResult.pinId;
+  const searchText = [nodeTitle, pinName, sourceTitle, pinResult.graphPath]
+    .join(' ')
+    .toLowerCase();
 
   return {
-    id,
-    direction,
-    pinResult,
+    id: pinResultCacheKey(pinResult.graphPath, pinResult.pinId),
+    ref: runtimePinRef(pinResult.graphPath, pinResult.pinId),
     nodeTitle,
     pinName,
     sourceTitle,
@@ -48,60 +38,27 @@ export function buildPinResultSearchEntry(
   };
 }
 
+/** Build searchable entries from execution pinResults — the post-run source of truth. */
 export function collectPinResultSearchEntries(
-  graphPath: string,
   pinResults: ReadonlyMap<string, PinResultState>,
-  pins: readonly PinResultSearchPinRef[],
-  resolveLabels: (nodeId: string, pinId: string) => PinResultSearchLabels,
+  resolveLabels: (
+    labelGraphPath: string,
+    nodeId: string,
+    pinId: string,
+  ) => PinResultSearchLabels,
 ): PinResultSearchEntry[] {
   const entries: PinResultSearchEntry[] = [];
 
-  for (const pin of pins) {
-    if (!isInspectableDataPin(pin.isExec)) continue;
-
-    if (pin.direction === 'output') {
-      const pinResult = pinResults.get(pin.pinId);
-      if (!pinResult) continue;
-
-      entries.push(
-        buildPinResultSearchEntry(
-          `output:${pin.pinId}`,
-          'output',
-          pinResult,
-          resolveLabels(pin.nodeId, pin.pinId),
-        ),
-      );
-      continue;
-    }
-
-    if (pin.connectionIds.length === 0) continue;
-
-    const target = resolvePinViewTargetFromCache({
-      graphPath,
-      pinId: pin.pinId,
-      direction: 'input',
-      isExec: pin.isExec,
-      connectionIds: pin.connectionIds,
-      pinResults,
-    });
-    if (!target) continue;
-
+  for (const pinResult of pinResults.values()) {
     entries.push(
       buildPinResultSearchEntry(
-        `input:${pin.pinId}`,
-        'input',
-        target.pinResult,
-        resolveLabels(pin.nodeId, pin.pinId),
+        pinResult,
+        resolveLabels(pinResult.graphPath, pinResult.nodeId, pinResult.pinId),
       ),
     );
   }
 
-  return entries.sort((left, right) => {
-    if (left.direction !== right.direction) {
-      return left.direction === 'output' ? -1 : 1;
-    }
-    return left.searchText.localeCompare(right.searchText);
-  });
+  return entries.sort((left, right) => left.searchText.localeCompare(right.searchText));
 }
 
 export function filterPinResultSearchEntries(
@@ -111,30 +68,4 @@ export function filterPinResultSearchEntries(
   const normalized = query.trim().toLowerCase();
   if (!normalized) return entries;
   return entries.filter((entry) => entry.searchText.includes(normalized));
-}
-
-/** Fallback when graph body is unloaded: list cached output pin results only. */
-export function collectPinResultSearchEntriesFromCache(
-  _graphPath: string,
-  pinResults: ReadonlyMap<string, PinResultState>,
-  resolveLabels?: (nodeId: string, pinId: string) => PinResultSearchLabels,
-): PinResultSearchEntry[] {
-  const entries: PinResultSearchEntry[] = [];
-
-  for (const pinResult of pinResults.values()) {
-    const labels = resolveLabels?.(pinResult.nodeId, pinResult.pinId) ?? {
-      nodeTitle: pinResult.nodeId,
-      pinName: pinResult.pinId,
-    };
-    entries.push(
-      buildPinResultSearchEntry(
-        `output:${pinResult.pinId}`,
-        'output',
-        pinResult,
-        labels,
-      ),
-    );
-  }
-
-  return entries.sort((left, right) => left.searchText.localeCompare(right.searchText));
 }
