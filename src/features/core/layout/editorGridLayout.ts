@@ -1,6 +1,23 @@
-import type { LayoutNode, LayoutTree } from '@/shared/types/ui';
+import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types/ui';
 import { EDITOR_AREA_ID, PANEL_PART_ID } from './workbenchLayoutDefaults';
 import { isEditorGroupNode } from './layoutTabQueries';
+import {
+  createEditorGroupId,
+  resolveEditorSplitPlacement,
+  type EditorSplitEdge,
+} from './editorSplitLayout';
+
+/**
+ * Editor Grid domain — VS Code `GridWidget` + `SerializableGrid` equivalent.
+ *
+ * YssBI models the editor part as a nested row/col tree under `editor_area` (not imperative DOM).
+ * - Tree mutations: this module
+ * - Persistence: `editorGridMemento`
+ * - Facade API: `EditorGroupsService`
+ * - Render + sash: `LayoutNodeRenderer` + `sashResizeLogic`
+ *
+ * A separate imperative GridWidget class is intentionally not introduced.
+ */
 
 export function isDescendantOf(nodes: LayoutTree, nodeId: string, ancestorId: string): boolean {
   let current: string | null = nodeId;
@@ -96,6 +113,146 @@ export function equalSplitPairSizes(beforeSize: number, afterSize: number): { be
   const total = beforeSize + afterSize;
   const half = Math.floor(total / 2);
   return { beforeSize: half, afterSize: total - half };
+}
+
+/** Apply equal split sizes to two grid siblings (sash double-click). */
+export function applyEqualGridSplit(
+  nodes: LayoutTree,
+  beforeId: string,
+  afterId: string,
+  beforeSize: number,
+  afterSize: number,
+): void {
+  const { beforeSize: nextBefore, afterSize: nextAfter } = equalSplitPairSizes(beforeSize, afterSize);
+  const before = nodes[beforeId];
+  const after = nodes[afterId];
+  if (before) before.pixelSize = nextBefore;
+  if (after) after.pixelSize = nextAfter;
+}
+
+export function firstEditorGroupId(nodes: LayoutTree): string | null {
+  return listEditorGroupIds(nodes)[0] ?? null;
+}
+
+export function isActiveEditorGroupValid(nodes: LayoutTree, groupId: string | null | undefined): boolean {
+  return groupId != null && isEditorGroupNode(nodes[groupId]);
+}
+
+/**
+ * GridWidget.removeView equivalent — drop an empty editor group and collapse redundant branches.
+ * Returns whether the group was removed and the next group to focus.
+ */
+export function removeEditorGroupFromTree(
+  nodes: LayoutTree,
+  groupId: string,
+): { removed: boolean; nextActiveGroupId: string | null } {
+  const group = nodes[groupId];
+  if (!isEditorGroupNode(group)) {
+    return { removed: false, nextActiveGroupId: groupId };
+  }
+  if ((group.data?.tabs?.length ?? 0) > 0) {
+    return { removed: false, nextActiveGroupId: groupId };
+  }
+  if (listEditorGroupIds(nodes).length <= 1) {
+    return { removed: false, nextActiveGroupId: groupId };
+  }
+
+  const parent = group.parentId ? nodes[group.parentId] : undefined;
+  if (!parent?.children) {
+    return { removed: false, nextActiveGroupId: groupId };
+  }
+
+  parent.children = parent.children.filter((id) => id !== groupId);
+
+  if (parent.children.length === 1 && parent.parentId) {
+    const grandParent = nodes[parent.parentId];
+    if (grandParent?.children) {
+      const singleChildId = parent.children[0];
+      const singleChild = nodes[singleChildId];
+      if (singleChild) {
+        const parentIndex = grandParent.children.indexOf(parent.id);
+        grandParent.children[parentIndex] = singleChildId;
+        singleChild.parentId = grandParent.id;
+        singleChild.size = parent.size ?? 1;
+        singleChild.pixelSize = undefined;
+        delete nodes[parent.id];
+      }
+    }
+  } else if (parent.children.length === 0 && parent.parentId) {
+    const grandParent = nodes[parent.parentId];
+    if (grandParent?.children) {
+      grandParent.children = grandParent.children.filter((cid) => cid !== parent.id);
+      delete nodes[parent.id];
+    }
+  }
+
+  delete nodes[groupId];
+  return { removed: true, nextActiveGroupId: firstEditorGroupId(nodes) };
+}
+
+export interface SplitEditorGroupPayload {
+  component: string;
+  tabs: LayoutTab[];
+  activeTabId?: string;
+}
+
+/** GridWidget.addView equivalent — fork a new editor group at a dock edge. */
+export function splitEditorGroupInTree(
+  nodes: LayoutTree,
+  targetGroupId: string,
+  edge: EditorSplitEdge,
+  payload: SplitEditorGroupPayload,
+): string | null {
+  const { direction, isAfter } = resolveEditorSplitPlacement(edge);
+  const targetNode = nodes[targetGroupId];
+  if (!targetNode?.parentId) return null;
+
+  const parentNode = nodes[targetNode.parentId];
+  if (!parentNode) return null;
+
+  const newNodeId = createEditorGroupId();
+  const newNode: LayoutNode = {
+    id: newNodeId,
+    type: 'component',
+    parentId: parentNode.id,
+    children: [],
+    size: 1,
+    data: {
+      component: payload.component,
+      tabs: payload.tabs,
+      activeTabId: payload.activeTabId,
+    },
+  };
+
+  if (parentNode.type === direction) {
+    const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;
+    const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
+    parentNode.children?.splice(insertIndex, 0, newNodeId);
+    nodes[newNodeId] = newNode;
+    return newNodeId;
+  }
+
+  const branchId = createEditorGroupId();
+  const branch: LayoutNode = {
+    id: branchId,
+    type: direction,
+    parentId: parentNode.id,
+    children: isAfter ? [targetGroupId, newNodeId] : [newNodeId, targetGroupId],
+    size: targetNode.size,
+    pixelSize: targetNode.pixelSize,
+  };
+
+  const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;
+  parentNode.children![targetIndex] = branchId;
+
+  targetNode.parentId = branchId;
+  targetNode.size = 1;
+  targetNode.pixelSize = undefined;
+
+  newNode.parentId = branchId;
+  nodes[newNodeId] = newNode;
+  nodes[branchId] = branch;
+  return newNodeId;
 }
 
 export function panelStartSizeFromNode(node: LayoutNode | undefined, domSize: number): number {

@@ -1,6 +1,7 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { WindowStateService } from "@/services/window/windowStateService";
 import type { WindowKind } from "@/shared/types/settings";
+import { readWindowDecorationsFromSettings } from "@/features/application/window/windowDecorationPolicy";
 import { logger } from "@/utils/appLogger";
 
 export interface PersistedWindowOptions {
@@ -9,7 +10,7 @@ export interface PersistedWindowOptions {
     label: string;
     url: string;
     title: string;
-    /** 是否显示原生装饰（默认 false 与项目其他窗口一致） */
+    /** 是否显示原生装饰；默认读取 appearance.titleBarStyle */
     decorations?: boolean;
     /** 是否在创建时立即可见，默认 false 由窗口自身在准备好后调用 show() */
     visible?: boolean;
@@ -50,7 +51,7 @@ export async function createPersistedWindow(opts: PersistedWindowOptions): Promi
         title: opts.title,
         width: saved.width,
         height: saved.height,
-        decorations: opts.decorations ?? false,
+        decorations: opts.decorations ?? readWindowDecorationsFromSettings(),
         visible: opts.visible ?? false,
     };
     if (typeof x === "number" && typeof y === "number") {

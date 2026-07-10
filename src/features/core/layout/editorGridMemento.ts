@@ -10,6 +10,7 @@ import {
   listEditorGroupIds,
   setEditorGroupMaximizedHidden,
 } from './editorGridLayout';
+import { isEditorGroupNode } from './layoutTabQueries';
 
 export interface EditorGridNodeMemento {
   id: string;
@@ -28,7 +29,11 @@ export interface EditorGridMemento {
 }
 
 function isEditorGroupSnapshot(node: EditorGridNodeMemento): boolean {
-  return node.type === 'component' && node.id !== 'sidebar' && node.id !== 'panel' && node.id !== 'detail';
+  return node.type === 'component' && isEditorGroupNode({
+    id: node.id,
+    type: node.type,
+    parentId: node.parentId,
+  });
 }
 
 function collectEditorAreaNodeIds(nodes: LayoutTree): Set<string> {

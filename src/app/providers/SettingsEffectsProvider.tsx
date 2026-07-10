@@ -2,10 +2,14 @@ import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
 import { subscribeClientSettingsCrossWindow, useSettingsStore } from "@/features/core/settings/settingsStore";
 
+import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
+
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const theme = useSettingsStore((s) => s.theme);
     const language = useSettingsStore((s) => s.appearance.language);
     const load = useSettingsStore((s) => s.load);
+
+    useWindowDecorationEffect();
 
     useEffect(() => {
         load();

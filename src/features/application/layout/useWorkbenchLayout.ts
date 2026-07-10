@@ -1,13 +1,9 @@
 import { useEffect } from 'react';
-import {
-  hydrateWorkbenchLayout,
-  subscribeWorkbenchLayoutPersistence,
-} from '@/features/core/layout/workbenchLayoutService';
+import { hydrateWorkbenchLayout } from '@/features/core/layout/workbenchLayoutService';
 
-/** Hydrate persisted workbench chrome sizes and subscribe to sash-end persistence. */
+/** Hydrate persisted workbench chrome + editor grid from localStorage on mount. */
 export function useWorkbenchLayout(): void {
   useEffect(() => {
     hydrateWorkbenchLayout();
-    return subscribeWorkbenchLayoutPersistence();
   }, []);
 }

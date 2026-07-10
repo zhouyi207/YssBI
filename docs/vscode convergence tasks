@@ -5,7 +5,7 @@
 | 1 | 多组同屏 Canvas 上限策略 | P0 | `[ ]` |
 | 2 | 最大化 Editor Group | P1 | `[ ]` |
 | 3 | 拖组间 sash 双击（均分还原） | P1 | `[ ]` |
-| 4 | 评估引入 `GridWidget` 等价模块 | P2 | `[ ]` |
+| 4 | 评估引入 `GridWidget` 等价模块 | P2 | `[x]` — 见 `docs/EDITOR_GRID_ARCHITECTURE.md` |
 | 5 | 两层 sash 测试矩阵（§7.6 + 收敛 P2，重复项） | P2 | `[ ]` ×2 |
 | 6 | 统一 `LeafNodeRenderer` 订阅 | P2 | `[ ]` **但正文已标 `[x]` — 陈旧 checkbox** |
 | 7 | 抽 `SplitView` 模块 | P2 | `[ ]` |
@@ -314,7 +314,7 @@ flowchart TD
 
 **10. Part resize debounce hook** — scaffold for future Terminal.
 
-**11. `GridWidget` evaluation** — spike only: JSON mapper `editorGridMemento` ↔ hypothetical `SerializableGrid`; defer replacement unless row/col bugs accumulate.
+**11. `GridWidget` evaluation** — **Done**: no imperative replacement; `editorGridLayout` + memento + React render is equivalent. See `docs/EDITOR_GRID_ARCHITECTURE.md`.
 
 ---
 

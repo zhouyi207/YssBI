@@ -7,6 +7,13 @@ export { useWindowMaximized } from "./useWindowMaximized";
 export { createPersistedWindow } from "./createPersistedWindow";
 export type { PersistedWindowOptions } from "./createPersistedWindow";
 export {
+  resolveWindowDecorations,
+  usesCustomTitleBar,
+  readTitleBarStyleFromSettings,
+  readWindowDecorationsFromSettings,
+} from "./windowDecorationPolicy";
+export { useWindowDecorationEffect, useCustomTitleBar } from "./useWindowDecorations";
+export {
   openPresentationWindow,
   openPresentationWindowSafe,
   presentationWindowPayload,

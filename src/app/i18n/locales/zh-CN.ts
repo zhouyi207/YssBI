@@ -191,6 +191,8 @@ export const zhCN = {
     splitEditorDown: "向下拆分编辑器",
     hideLogs: "隐藏日志",
     showLogs: "显示日志",
+    enterZenMode: "进入 Zen 模式",
+    exitZenMode: "退出 Zen 模式",
     openLogsInNewWindow: "在新窗口打开日志",
     resetLayout: "重置布局",
     zoomIn: "放大",
@@ -227,6 +229,13 @@ export const zhCN = {
     executionStatus: "执行状态",
     canvasViewport: "画布视图",
     themeMode: "主题模式",
+    openLogsPanel: "显示日志面板",
+    cycleTheme: "切换颜色主题",
+    resetViewport: "重置画布视口",
+    ariaLabel: "状态栏",
+  },
+  workbench: {
+    exitZenModeHint: "退出 Zen 模式",
   },
   settings: {
     sections: {
@@ -258,6 +267,7 @@ export const zhCN = {
       activityBarPosition: "活动栏位置",
       panelPosition: "面板位置",
       smoothScroll: "平滑滚动",
+      titleBarStyle: "标题栏样式",
       workbenchBackground: "工作区背景",
       sidebarBackground: "侧栏背景",
       accentColor: "强调色",
@@ -296,6 +306,7 @@ export const zhCN = {
       activityBarPosition: "控制活动栏的位置和可见性。",
       panelPosition: "控制面板停靠在编辑器区域的底部、左侧或右侧。",
       smoothScroll: "启用画布和菜单的平滑滚动。",
+      titleBarStyle: "使用应用内自绘标题栏或操作系统原生窗口边框。",
       workbenchBackground: "编辑器工作区的主背景色。",
       sidebarBackground: "侧栏和头部区域的背景色。",
       accentColor: "用于选中态和活动高亮的主色。",
@@ -334,6 +345,8 @@ export const zhCN = {
       right: "右侧",
       bottom: "底部",
       hidden: "隐藏",
+      titleBarCustom: "自定义",
+      titleBarNative: "原生",
     },
   },
   canvas: {

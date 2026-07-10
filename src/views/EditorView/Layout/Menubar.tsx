@@ -6,6 +6,7 @@ import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from
 import { useMenubar } from "@/features/application/menubar";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
 import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
-import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
+import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import { AboutModal } from "./AboutModal";
 
@@ -132,6 +133,7 @@ export function Menubar() {
   } = useMenubar();
 
   const currentPath = useProjectIOStore((s) => s.currentPath);
+  const zenMode = useLayoutStore((s) => s.zenMode);
   const saveableEditorTabId = useLayoutStore((s) => {
     const editorGroupId = s.activeEditorGroupId || "default_editor";
     const active = getActiveLayoutTab(editorGroupId, s.nodes);
@@ -199,6 +201,7 @@ export function Menubar() {
     { label: "-" },
     { label: isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail"), shortcut: "Ctrl+Alt+B", onClick: toggleDetail },
     { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
+    { label: zenMode ? t("menubar.exitZenMode") : t("menubar.enterZenMode"), shortcut: "Ctrl+K Z", onClick: toggleZenMode },
     { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
     { label: "-" },
     { label: t("menubar.resetLayout"), onClick: handleResetLayout },
@@ -225,35 +228,9 @@ export function Menubar() {
 
   return (
     <>
-    <WindowTitleBar
-      elevated
-      className="menubar-container"
-    >
-      {/* Left: Icon & Brand */}
-      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
-        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
-          <span className="text-white font-black text-xs">Y</span>
-        </div>
-        <div className="text-foreground font-bold text-sm tracking-tight">
-          Yss<span className="text-[var(--accent-color)]">BI</span>
-        </div>
-      </div>
-
-      {/* Center Left: Menus */}
-      <div className="flex items-center gap-1 self-center">
-        <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
-        <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
-        <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
-        <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
-        <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
-        <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
-      </div>
-
-      <div className="flex-1 min-w-[20px]" data-tauri-drag-region />
-
-      {/* Right side: Window Buttons */}
-      <WindowTitleBarActions>
-        {/* Theme Toggle Button */}
+    <WindowMenuBar
+      toolbar={
+        <>
         <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
@@ -285,7 +262,6 @@ export function Menubar() {
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
         </ToolbarIconButton>
-
         <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
@@ -295,9 +271,30 @@ export function Menubar() {
         >
           <VscSettingsGear size={14} />
         </ToolbarIconButton>
-        <WindowChromeControls isMaximized={isMaximized} />
-      </WindowTitleBarActions>
-    </WindowTitleBar>
+        </>
+      }
+      windowActions={<WindowChromeControls isMaximized={isMaximized} />}
+    >
+      {/* Left: Icon & Brand */}
+      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
+        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
+          <span className="text-white font-black text-xs">Y</span>
+        </div>
+        <div className="text-foreground font-bold text-sm tracking-tight">
+          Yss<span className="text-[var(--accent-color)]">BI</span>
+        </div>
+      </div>
+
+      {/* Center Left: Menus */}
+      <div className="flex items-center gap-1 self-center">
+        <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
+        <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
+        <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
+        <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
+        <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
+        <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
+      </div>
+    </WindowMenuBar>
     <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   );

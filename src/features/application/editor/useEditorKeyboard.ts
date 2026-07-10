@@ -3,6 +3,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getViewport } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 interface UseEditorKeyboardProps {
@@ -23,6 +24,7 @@ interface UseEditorKeyboardProps {
   toggleLogPanel?: () => void;
   toggleSidebar?: () => void;
   toggleDetail?: () => void;
+  toggleZenMode?: () => void;
 }
 
 /**
@@ -47,8 +49,11 @@ export function useEditorKeyboard({
   toggleLogPanel,
   toggleSidebar,
   toggleDetail,
+  toggleZenMode,
 }: UseEditorKeyboardProps) {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const pendingCtrlKRef = useRef(false);
+  const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const layoutStore = useLayoutStore.getState();
@@ -76,6 +81,12 @@ export function useEditorKeyboard({
       setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
 
       if (isAppModalOpen()) {
+        return;
+      }
+
+      if (e.key === 'Escape' && isZenModeActive()) {
+        e.preventDefault();
+        exitZenMode();
         return;
       }
 
@@ -169,6 +180,22 @@ export function useEditorKeyboard({
       } else if (isControlKey && e.key === "`") {
         e.preventDefault();
         toggleLogPanel?.();
+      } else if (isControlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        pendingCtrlKRef.current = true;
+        if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
+        pendingCtrlKTimerRef.current = setTimeout(() => {
+          pendingCtrlKRef.current = false;
+          pendingCtrlKTimerRef.current = null;
+        }, 2000);
+      } else if (pendingCtrlKRef.current && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        pendingCtrlKRef.current = false;
+        if (pendingCtrlKTimerRef.current) {
+          clearTimeout(pendingCtrlKTimerRef.current);
+          pendingCtrlKTimerRef.current = null;
+        }
+        toggleZenMode?.();
       }
     };
 
@@ -194,6 +221,7 @@ export function useEditorKeyboard({
       cleanupKeyUp();
       cleanupPointerMove();
       cleanupBlur();
+      if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
     };
   }, [
     deleteSelected,
@@ -213,5 +241,6 @@ export function useEditorKeyboard({
     toggleLogPanel,
     toggleSidebar,
     toggleDetail,
+    toggleZenMode,
   ]);
 }

@@ -72,6 +72,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
     activityBarPosition: "Left",
     panelPosition: "Bottom",
     smoothScroll: true,
+    titleBarStyle: "custom",
 };
 
 export const DEFAULT_PROJECT: ProjectSettings = {

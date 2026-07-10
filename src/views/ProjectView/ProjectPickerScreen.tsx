@@ -52,7 +52,7 @@ import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { ProjectService } from "@/services/project/projectService";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
-import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
+import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import type { ThemeSettings } from "@/shared/types/settings";
 import { NewProjectModal } from "./NewProjectModal";
@@ -167,7 +167,66 @@ function TitleBar({
   };
 
   return (
-    <WindowTitleBar>
+    <WindowMenuBar
+      toolbar={
+        <>
+        {currentPath ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onGoEditor}
+            className="mr-1 h-7 self-center px-3 text-muted-foreground hover:text-foreground"
+          >
+            {t("projectPicker.backToEditor")}
+          </Button>
+        ) : null}
+        <ToolbarIconButton
+          type="button"
+          variant="ghost"
+          size="icon-lg"
+          onClick={() => void openExternalUrl(APP_LINKS.repository)}
+          className="self-center text-muted-foreground"
+          tooltip={t("menubar.githubRepository")}
+          aria-label={t("menubar.githubRepository")}
+        >
+          <VscGithub size={16} />
+        </ToolbarIconButton>
+        <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-lg"
+        onClick={toggleThemeMode}
+        className="self-center text-muted-foreground"
+        tooltip={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
+        aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
+      >
+        {isLightTheme ? (
+          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.8A8.5 8.5 0 1111.2 3a7 7 0 009.8 9.8z" />
+          </svg>
+        ) : (
+          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64" />
+            <circle cx="12" cy="12" r="4" strokeWidth={2} />
+          </svg>
+        )}
+      </ToolbarIconButton>
+      <ToolbarIconButton
+        type="button"
+        variant="ghost"
+        size="icon-lg"
+        onClick={onOpenSettings}
+        className="self-center text-muted-foreground"
+        tooltip={t("menubar.settings")}
+        aria-label={t("menubar.settings")}
+      >
+        <VscSettingsGear size={14} />
+      </ToolbarIconButton>
+        </>
+      }
+      windowActions={<WindowChromeControls isMaximized={isMaximized} />}
+    >
       <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
         <div className="flex h-5 w-5 items-center justify-center rounded bg-[var(--accent-color)]">
           <span className="text-xs font-black text-white">Y</span>
@@ -227,64 +286,7 @@ function TitleBar({
           </Select>
         </div>
       </div>
-      <div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
-      <WindowTitleBarActions>
-        {currentPath ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onGoEditor}
-            className="mr-1 h-7 self-center px-3 text-muted-foreground hover:text-foreground"
-          >
-            {t("projectPicker.backToEditor")}
-          </Button>
-        ) : null}
-        <ToolbarIconButton
-          type="button"
-          variant="ghost"
-          size="icon-lg"
-          onClick={() => void openExternalUrl(APP_LINKS.repository)}
-          className="self-center text-muted-foreground"
-          tooltip={t("menubar.githubRepository")}
-          aria-label={t("menubar.githubRepository")}
-        >
-          <VscGithub size={16} />
-        </ToolbarIconButton>
-        <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        onClick={toggleThemeMode}
-        className="self-center text-muted-foreground"
-        tooltip={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
-        aria-label={isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight")}
-      >
-        {isLightTheme ? (
-          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12.8A8.5 8.5 0 1111.2 3a7 7 0 009.8 9.8z" />
-          </svg>
-        ) : (
-          <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0-1.42-1.42M7.06 7.06 5.64 5.64" />
-            <circle cx="12" cy="12" r="4" strokeWidth={2} />
-          </svg>
-        )}
-      </ToolbarIconButton>
-      <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        onClick={onOpenSettings}
-        className="self-center text-muted-foreground"
-        tooltip={t("menubar.settings")}
-        aria-label={t("menubar.settings")}
-      >
-        <VscSettingsGear size={14} />
-      </ToolbarIconButton>
-      <WindowChromeControls isMaximized={isMaximized} />
-      </WindowTitleBarActions>
-    </WindowTitleBar>
+    </WindowMenuBar>
   );
 }
 

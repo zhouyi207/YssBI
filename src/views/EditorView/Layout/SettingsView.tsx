@@ -72,6 +72,11 @@ export const SettingsView: React.FC = () => {
         { label: t("settings.options.right"), value: "Right" },
     ];
 
+    const titleBarStyleOptions = [
+        { label: t("settings.options.titleBarCustom"), value: "custom" },
+        { label: t("settings.options.titleBarNative"), value: "native" },
+    ];
+
     const handleResetAll = async () => {
         const confirmed = await uiStore.confirm({
             title: t("settings.confirmResetAllTitle"),
@@ -274,6 +279,17 @@ export const SettingsView: React.FC = () => {
                                     value={appearance.panelPosition}
                                     onChange={(val) => {
                                         updateAppearance({ panelPosition: val });
+                                        saveDebounced();
+                                    }}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.titleBarStyle")}
+                                    description={t("settings.descriptions.titleBarStyle")}
+                                    type="select"
+                                    options={titleBarStyleOptions}
+                                    value={appearance.titleBarStyle}
+                                    onChange={(val) => {
+                                        updateAppearance({ titleBarStyle: val as "custom" | "native" });
                                         saveDebounced();
                                     }}
                                 />

@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useWindowMaximized } from '@/features/application/window';
+import { useCustomTitleBar } from '@/features/application/window/useWindowDecorations';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
 import { TAURI_NO_DRAG_STYLE, stopTauriDragPropagation } from '@/shared/platform/tauriWebview';
@@ -38,6 +39,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const { t } = useTranslation();
   const editStateByDatabase = useEditStateStore((s) => s.editStateByDatabase);
   const isMaximized = useWindowMaximized('DatabaseEditorTitleBar');
+  const showCustomChrome = useCustomTitleBar();
 
   const labelWithDirtyMark = (id: string, label: string) =>
     editStateByDatabase[id]?.isModified ? `${label} *` : label;
@@ -46,9 +48,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     ? selectedDataframeId
     : undefined;
 
-  return (
-    <WindowTitleBar className="z-50">
-      <div className="flex min-w-0 flex-1 items-center gap-2 px-3" data-tauri-drag-region>
+  const toolbarBody = (
+    <>
+      <div
+        className="flex min-w-0 flex-1 items-center gap-2 px-3"
+        {...(showCustomChrome ? { 'data-tauri-drag-region': true } : {})}
+      >
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
           <VscDatabase size={14} />
         </span>
@@ -96,6 +101,20 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           {selectedCellText ? <TooltipContent side="bottom">{selectedCellText}</TooltipContent> : null}
         </Tooltip>
       </div>
+    </>
+  );
+
+  if (!showCustomChrome) {
+    return (
+      <div className="z-50 flex h-10 shrink-0 items-stretch border-b border-border bg-[var(--workbench-bg)] shadow-xl">
+        {toolbarBody}
+      </div>
+    );
+  }
+
+  return (
+    <WindowTitleBar className="z-50">
+      {toolbarBody}
       <WindowTitleBarActions>
         <WindowChromeControls isMaximized={isMaximized} />
       </WindowTitleBarActions>

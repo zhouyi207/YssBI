@@ -3,7 +3,7 @@ import type { LayoutTab } from '@/shared/types/ui';
 import { splitComponentForTab } from './layoutTabModel';
 import { useLayoutStore } from './layoutStore';
 import { getActiveLayoutTab } from './layoutTabQueries';
-import { persistEditorGridDebounced } from './workbenchLayoutService';
+import { persistEditorGridDebounced, collapseEditorGroupsForProjectSwitch } from './workbenchLayoutService';
 
 /** VS Code IEditorGroupsService — thin facade over layoutStore editor grid actions. */
 export const EditorGroupsService = {
@@ -69,8 +69,7 @@ export const EditorGroupsService = {
   },
 
   collapseToSingleGroup(): void {
-    useLayoutStore.getState().collapseEditorGroups();
-    persistEditorGridDebounced();
+    collapseEditorGroupsForProjectSwitch();
   },
 
   toggleMaximizeGroup(groupId: string): void {

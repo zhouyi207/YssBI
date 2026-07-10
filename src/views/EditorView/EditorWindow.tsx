@@ -15,15 +15,18 @@ import {
 } from "@/features/application/editor";
 import { useMenubar } from "@/features/application/menubar";
 import { toggleSidebarVisibility } from "@/features/core/layout/workbenchLayoutService";
+import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { useAppearanceSettings } from "@/features/application/settings/useAppearanceSettings";
 import { usePersistedWindow, usePersistedSecondaryWindow } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
+import { ZenModeHintOverlay } from "./Layout/ZenModeHintOverlay";
 
 function EditorWindowReady() {
   const rootId = useLayoutStore((s) => s.rootId);
   const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
+  const zenMode = useLayoutStore((s) => s.zenMode);
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
   const activityBarPosition = useSettingsStore((s) => s.appearance.activityBarPosition);
 
@@ -51,20 +54,22 @@ function EditorWindowReady() {
     toggleLogPanel,
     toggleSidebar: toggleSidebarVisibility,
     toggleDetail,
+    toggleZenMode,
   });
 
-  const showActivityBar = activityBarPosition !== "Hidden";
+  const showActivityBar = !zenMode && activityBarPosition !== "Hidden";
   const activityBarOnRight = activityBarPosition === "Right";
 
   return (
     <div className="flex flex-col w-full h-screen">
-      <Menubar />
+      {!zenMode ? <Menubar /> : null}
       <div className="flex flex-1 overflow-hidden isolate">
         {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}
         <Workspace nodeId={rootId} />
         {showActivityBar && activityBarOnRight ? <ActivityBar side="right" /> : null}
       </div>
-      <BottomBar />
+      {!zenMode ? <BottomBar /> : null}
+      <ZenModeHintOverlay />
       <Dialog open={isSettingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0">
           <SettingsView />

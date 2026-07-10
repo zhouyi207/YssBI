@@ -1,0 +1,44 @@
+import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { StatusBarItemViewModel } from "@/features/core/statusBar";
+
+export function StatusBarItem({
+  item,
+}: {
+  item: StatusBarItemViewModel;
+}) {
+  const interactive = Boolean(item.onClick);
+  const cell = (
+    <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={item.onClick}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                item.onClick?.();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors hover:bg-[var(--hover-bg)] hover:text-foreground",
+        interactive && "cursor-pointer",
+        item.className,
+      )}
+    >
+      {item.content}
+    </div>
+  );
+
+  if (!item.tooltip) return cell;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{cell}</TooltipTrigger>
+      <TooltipContent side="top">{item.tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}

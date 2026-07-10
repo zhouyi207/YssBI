@@ -1325,7 +1325,7 @@ Editor Part（占 Workbench 中央 flex 区）
 
 **P2 — 架构**
 
-- [ ] **评估引入 `GridWidget` 等价模块**：`editorGridLayout` + `editorGridMemento` 已覆盖当前需求；完整 GridWidget 替换待评估。
+- [x] **评估引入 `GridWidget` 等价模块**：结论见 `docs/EDITOR_GRID_ARCHITECTURE.md` — 无需 imperative GridWidget；`editorGridLayout` + `editorGridMemento` 即为等价层，已 Consolidate 树 mutation（`splitEditorGroupInTree` / `removeEditorGroupFromTree`）。
 - [x] **Editor Grid 与 Workbench 两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts` + 既有 sash 单测。
 - [x] **统一 `LeafNodeRenderer` 订阅**：`nodeId` + `useShallow` 单叶字段，与 `ChildWrapper` 一致。
 
@@ -1387,7 +1387,7 @@ Editor Part（占 Workbench 中央 flex 区）
 
 - [x] **抽 `SplitView` 模块**：`splitView.ts` 统一 flex 数学（`panelFlexBasis` / `splitViewSizing`）；imperative drag 仍在 `sashResizeLogic`。
 - [x] **两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts`（外层 chrome + 内层 grid）。
-- [ ] ~~**Editor Group Grid 与 Workbench 解耦持久化**~~ → 已并入 **§7.6 P0「Editor Grid 独立持久化」**。
+- [x] ~~**Editor Group Grid 与 Workbench 解耦持久化**~~ → 见 §7.6 P0；`workbenchLayoutPersistence` 分 slice merge + `collapseEditorGroupsForProjectSwitch`。
 
 **P2 — 性能（Part 内容与未来 Webview）**
 
@@ -1399,9 +1399,9 @@ Editor Part（占 Workbench 中央 flex 区）
 
 - [x] **Panel 位置** bottom / left / right（VS Code `workbench.panel.defaultLocation`）；Settings → `panelPartLayout` + `applyPanelPosition`。
 - [x] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+Alt+B` / `Ctrl+I` toggle Detail；Menubar Window 菜单已标注。
-- [ ] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原。
-- [ ] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；当前 Tauri `decorations: false` + 自绘 `WindowTitleBar` 写死。
-- [ ] **Status Bar 可交互项**（VS Code 左/右 status item + command）；当前 `BottomBar` 只读展示。
+- [x] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原；`workbenchZenMode.ts` + `Ctrl+K Z` / `Esc` / Window 菜单 + `ZenModeHintOverlay`；不持久化。
+- [x] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；`appearance.titleBarStyle` + `windowDecorationPolicy` + `WindowChrome` / `WindowMenuBar` + `createPersistedWindow`。
+- [x] **Status Bar 可交互项**（VS Code 左/右 status item + command）；`statusBarRegistry` + `useStatusBarItems` + `BottomBar`。
 
 **8. Shell / 设置 / 多窗口 — 尚未写入 §1–§7 的收敛项**
 
@@ -1460,7 +1460,7 @@ Editor Part（占 Workbench 中央 flex 区）
 
 **P3**
 
-- [ ] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）。
+- [x] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）。
 
 **8.5 已对齐 VS Code、无需重复排期**
 

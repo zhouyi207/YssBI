@@ -2,6 +2,7 @@
  * 项目切换时清空前端的 per-project 缓存。
  * 所有被 reset 的 store 须在本文件显式 import（dataStore.audit 校验）。
  */
+import { collapseEditorGroupsForProjectSwitch } from '@/features/core/layout/workbenchLayoutService';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useHistoryStore } from '@/features/core/history';
@@ -17,7 +18,7 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 /** 清空 tab / viewport / history / 数据视图缓存等；变量与 graph 正文由调用方立即覆写。 */
 export function resetClientProjectState(): void {
   useLayoutStore.getState().closeAllGraphTabs();
-  useLayoutStore.getState().collapseEditorGroups();
+  collapseEditorGroupsForProjectSwitch();
   useViewportStore.getState().clear();
   useHistoryStore.getState().clear();
   useEditStateStore.getState().clear();

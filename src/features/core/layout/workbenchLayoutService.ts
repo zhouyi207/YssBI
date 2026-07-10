@@ -1,7 +1,6 @@
 import { useLayoutStore, SIDEBAR_NODE_ID, isSidebarTabId, type SidebarTabId } from './layoutStore';
 import {
   loadWorkbenchLayoutMemento,
-  saveWorkbenchLayoutMemento,
   type WorkbenchLayoutMemento,
   type WorkbenchPartMemento,
 } from './workbenchLayoutMemento';
@@ -23,11 +22,15 @@ import {
   clampWorkbenchPartSize,
   resolveWorkbenchViewport,
 } from './workbenchPanelSizing';
-import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
+import {
+  flushWorkbenchLayoutPersist,
+  mergeWorkbenchLayoutMemento,
+  saveFullWorkbenchLayoutMemento,
+  scheduleWorkbenchLayoutPersist,
+  WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS,
+} from './workbenchLayoutPersistence';
 
-const PERSIST_DEBOUNCE_MS = 250;
-
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const PERSIST_DEBOUNCE_MS = WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS;
 
 function readPartMemento(partId: WorkbenchPartId): WorkbenchPartMemento {
   const node = useLayoutStore.getState().nodes[partId];
@@ -59,44 +62,104 @@ function readPartMemento(partId: WorkbenchPartId): WorkbenchPartMemento {
   return memento;
 }
 
-export function snapshotWorkbenchLayoutMemento(): WorkbenchLayoutMemento {
-  const state = useLayoutStore.getState();
+function snapshotWorkbenchChromeParts(): WorkbenchLayoutMemento['parts'] {
   const parts: WorkbenchLayoutMemento['parts'] = {};
   for (const partId of WORKBENCH_PART_IDS) {
     parts[partId] = readPartMemento(partId);
   }
+  return parts;
+}
+
+export function snapshotWorkbenchLayoutMemento(): WorkbenchLayoutMemento {
+  const state = useLayoutStore.getState();
   return {
-    parts,
+    parts: snapshotWorkbenchChromeParts(),
     editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
   };
 }
 
-function schedulePersist(): void {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    saveWorkbenchLayoutMemento(snapshotWorkbenchLayoutMemento());
-  }, PERSIST_DEBOUNCE_MS);
-}
-
 export function persistWorkbenchLayoutDebounced(delayMs = PERSIST_DEBOUNCE_MS): void {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    saveWorkbenchLayoutMemento(snapshotWorkbenchLayoutMemento());
-  }, delayMs);
+  scheduleWorkbenchLayoutPersist(
+    () => mergeWorkbenchLayoutMemento({ parts: snapshotWorkbenchChromeParts() }),
+    delayMs,
+  );
 }
 
+/** Persist only the editor grid slice (VS Code `workbench.editor.layout` decoupling). */
 export function persistEditorGridDebounced(): void {
-  schedulePersist();
+  scheduleWorkbenchLayoutPersist(() => {
+    const state = useLayoutStore.getState();
+    mergeWorkbenchLayoutMemento({
+      editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+    });
+  });
+}
+
+export function persistEditorGridNow(): void {
+  flushWorkbenchLayoutPersist(() => {
+    const state = useLayoutStore.getState();
+    mergeWorkbenchLayoutMemento({
+      editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+    });
+  });
 }
 
 export function persistWorkbenchLayoutNow(): void {
-  if (persistTimer) {
-    clearTimeout(persistTimer);
-    persistTimer = null;
+  saveFullWorkbenchLayoutMemento(snapshotWorkbenchLayoutMemento());
+}
+
+/** Collapse split groups on project switch and persist collapsed grid memento. */
+export function collapseEditorGroupsForProjectSwitch(): void {
+  useLayoutStore.getState().collapseEditorGroups();
+  persistEditorGridNow();
+}
+
+export function hydrateWorkbenchChrome(): void {
+  const memento = loadWorkbenchLayoutMemento();
+  if (!memento?.parts) return;
+
+  const { nodes, updateNode, resizeNode } = useLayoutStore.getState();
+
+  for (const partId of WORKBENCH_PART_IDS) {
+    const saved = memento.parts[partId];
+    if (!saved) continue;
+
+    const node = nodes[partId];
+    if (!node) continue;
+
+    if (saved.pixelSize != null) {
+      resizeNode(partId, saved.pixelSize);
+    }
+
+    const nextData = { ...node.data };
+    if (saved.visible != null) nextData.visible = saved.visible;
+    if (partId === SIDEBAR_NODE_ID && saved.currentTab) nextData.currentTab = saved.currentTab;
+    if (partId === 'detail' && saved.userHidden != null) nextData.userHidden = saved.userHidden;
+    if (partId === PANEL_PART_ID) {
+      if (saved.maximized != null) nextData.maximized = saved.maximized;
+      if (saved.restoredPixelSize != null) nextData.restoredPixelSize = saved.restoredPixelSize;
+      if (saved.activePanelView) nextData.activePanelView = saved.activePanelView;
+    }
+
+    updateNode(partId, { data: nextData });
   }
-  saveWorkbenchLayoutMemento(snapshotWorkbenchLayoutMemento());
+}
+
+export function hydrateEditorGrid(): void {
+  const memento = loadWorkbenchLayoutMemento();
+  if (!memento?.editorGrid?.nodes?.length) return;
+
+  const { setActiveGroup } = useLayoutStore.getState();
+  useLayoutStore.setState((state) => {
+    state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
+    state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
+  });
+  setActiveGroup(memento.editorGrid!.activeEditorGroupId);
+}
+
+export function hydrateWorkbenchLayout(): void {
+  hydrateWorkbenchChrome();
+  hydrateEditorGrid();
 }
 
 export function applyPanelPosition(position: PanelPosition): void {
@@ -137,45 +200,6 @@ export function applyPanelPositionFromSetting(setting: string | undefined): void
   applyPanelPosition(normalizePanelPosition(setting));
 }
 
-export function hydrateWorkbenchLayout(): void {
-  const memento = loadWorkbenchLayoutMemento();
-  if (!memento?.parts) return;
-
-  const { nodes, updateNode, resizeNode, setActiveGroup } = useLayoutStore.getState();
-
-  for (const partId of WORKBENCH_PART_IDS) {
-    const saved = memento.parts[partId];
-    if (!saved) continue;
-
-    const node = nodes[partId];
-    if (!node) continue;
-
-    if (saved.pixelSize != null) {
-      resizeNode(partId, saved.pixelSize);
-    }
-
-    const nextData = { ...node.data };
-    if (saved.visible != null) nextData.visible = saved.visible;
-    if (partId === SIDEBAR_NODE_ID && saved.currentTab) nextData.currentTab = saved.currentTab;
-    if (partId === 'detail' && saved.userHidden != null) nextData.userHidden = saved.userHidden;
-    if (partId === PANEL_PART_ID) {
-      if (saved.maximized != null) nextData.maximized = saved.maximized;
-      if (saved.restoredPixelSize != null) nextData.restoredPixelSize = saved.restoredPixelSize;
-      if (saved.activePanelView) nextData.activePanelView = saved.activePanelView;
-    }
-
-    updateNode(partId, { data: nextData });
-  }
-
-  if (memento.editorGrid?.nodes?.length) {
-    useLayoutStore.setState((state) => {
-      state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
-      state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
-    });
-    setActiveGroup(memento.editorGrid.activeEditorGroupId);
-  }
-}
-
 /** IWorkbenchLayoutService — chrome Part API (views should use this, not layoutStore.updateNode). */
 export function getPartSize(partId: WorkbenchPartId): number | undefined {
   return useLayoutStore.getState().nodes[partId]?.pixelSize;
@@ -199,7 +223,7 @@ export function setPanelActiveView(viewId: PanelViewId): void {
 export function setWorkbenchPartVisible(
   partId: WorkbenchPartId,
   visible: boolean,
-  options?: { userHidden?: boolean },
+  options?: { userHidden?: boolean; persist?: boolean },
 ): void {
   const node = useLayoutStore.getState().nodes[partId];
   if (!node) return;
@@ -210,7 +234,9 @@ export function setWorkbenchPartVisible(
   }
 
   useLayoutStore.getState().updateNode(partId, { data: nextData });
-  persistWorkbenchLayoutDebounced();
+  if (options?.persist !== false) {
+    persistWorkbenchLayoutDebounced();
+  }
 }
 
 export function togglePart(partId: WorkbenchPartId): void {
@@ -276,10 +302,4 @@ export function resetWorkbenchLayout(panelPosition?: PanelPosition): void {
     applyPanelPosition(panelPosition);
   }
   persistWorkbenchLayoutNow();
-}
-
-export function subscribeWorkbenchLayoutPersistence(): () => void {
-  const onSashEnd = () => persistWorkbenchLayoutDebounced();
-  window.addEventListener(SASH_DRAG_END_EVENT, onSashEnd);
-  return () => window.removeEventListener(SASH_DRAG_END_EVENT, onSashEnd);
 }

@@ -191,6 +191,8 @@ export const enUS = {
     splitEditorDown: "Split Editor Down",
     hideLogs: "Hide Logs",
     showLogs: "Show Logs",
+    enterZenMode: "Enter Zen Mode",
+    exitZenMode: "Exit Zen Mode",
     openLogsInNewWindow: "Open Logs in New Window",
     resetLayout: "Reset Layout",
     zoomIn: "Zoom In",
@@ -227,6 +229,13 @@ export const enUS = {
     executionStatus: "Execution status",
     canvasViewport: "Canvas viewport",
     themeMode: "Theme mode",
+    openLogsPanel: "Show logs panel",
+    cycleTheme: "Cycle color theme",
+    resetViewport: "Reset canvas viewport",
+    ariaLabel: "Status bar",
+  },
+  workbench: {
+    exitZenModeHint: "Exit Zen Mode",
   },
   settings: {
     sections: {
@@ -258,6 +267,7 @@ export const enUS = {
       activityBarPosition: "Activity Bar Position",
       panelPosition: "Panel Position",
       smoothScroll: "Smooth Scroll",
+      titleBarStyle: "Title Bar Style",
       workbenchBackground: "Workbench Background",
       sidebarBackground: "Sidebar Background",
       accentColor: "Accent Color",
@@ -296,6 +306,7 @@ export const enUS = {
       activityBarPosition: "Controls the visibility and position of the activity bar.",
       panelPosition: "Controls whether the panel is docked to the bottom, left, or right of the editor area.",
       smoothScroll: "Enable smooth scrolling in the canvas and menus.",
+      titleBarStyle: "Use custom in-app title bar or the native OS window frame.",
       workbenchBackground: "The primary background color of the editor environment.",
       sidebarBackground: "Background color for sidebars and headers.",
       accentColor: "The primary color used for selections and active highlights.",
@@ -334,6 +345,8 @@ export const enUS = {
       right: "Right",
       bottom: "Bottom",
       hidden: "Hidden",
+      titleBarCustom: "Custom",
+      titleBarNative: "Native",
     },
   },
   canvas: {

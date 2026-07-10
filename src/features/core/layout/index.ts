@@ -1,23 +1,33 @@
 export { EditorGroupsService } from './editorGroupsService';
 export {
   hydrateWorkbenchLayout,
+  hydrateWorkbenchChrome,
+  hydrateEditorGrid,
   getPartSize,
   resizePart,
   togglePart,
   persistWorkbenchLayoutDebounced,
+  persistEditorGridDebounced,
+  persistEditorGridNow,
   persistWorkbenchLayoutNow,
+  collapseEditorGroupsForProjectSwitch,
   applyPanelPosition,
   applyPanelPositionFromSetting,
   resetWorkbenchLayout,
   setWorkbenchPartVisible,
   showSidebarTab,
-  subscribeWorkbenchLayoutPersistence,
   toggleDetailVisibility,
   togglePanelVisibility,
   toggleSidebarTab,
   toggleSidebarVisibility,
   setPanelActiveView,
 } from './workbenchLayoutService';
+export {
+  enterZenMode,
+  exitZenMode,
+  isZenModeActive,
+  toggleZenMode,
+} from './workbenchZenMode';
 export {
   clampWorkbenchPartSize,
   PANEL_MAX_VIEWPORT_RATIO,
@@ -46,6 +56,9 @@ export {
 export {
   isEditorGridSash,
   listEditorGroupIds,
+  applyEqualGridSplit,
+  splitEditorGroupInTree,
+  removeEditorGroupFromTree,
 } from './editorGridLayout';
 export { panelFlexBasis } from './splitView';
 export type { PanelViewId } from './panelPartModel';
