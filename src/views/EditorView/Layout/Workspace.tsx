@@ -10,6 +10,7 @@ import { EditorDragPreviewMonitorHost } from "@/features/application/editor/useE
 import { uiStore } from "@/features/core/ui/UIStore";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
+import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
@@ -100,7 +101,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       const groupId = isCanvasDrop(overData) ? overData.groupId : null;
       if (groupId && dragState && isNodeTemplateDragState(dragState)) {
         // 将目标 canvas 设为 active group（确保 variable drop menu 等 UI 正确显示）
-        useLayoutStore.getState().setActiveGroup(groupId);
+        void activateEditorGroup(groupId);
 
         const handler = canvasDropHandlerStore.getHandler(groupId);
         if (handler) {

@@ -1,5 +1,6 @@
 import { useCallback, useContext, useMemo } from 'react';
 import { useCanvasInteraction } from '@/features/core/canvas';
+import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditorSession } from './EditorSessionContext';
@@ -30,7 +31,6 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
   const withCanvasInteraction = options?.withCanvasInteraction ?? false;
 
   const { groupId, tabs, activeTabId, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
-  const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
 
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: session.activeGroupIdRef as React.RefObject<string>,
@@ -42,9 +42,9 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
 
   const ensureActiveGroup = useCallback(() => {
     if (useLayoutStore.getState().activeEditorGroupId !== groupId) {
-      setActiveGroup(groupId);
+      void activateEditorGroup(groupId);
     }
-  }, [groupId, setActiveGroup]);
+  }, [groupId]);
 
   const wrappedOnCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {

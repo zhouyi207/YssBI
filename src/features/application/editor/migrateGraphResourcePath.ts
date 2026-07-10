@@ -53,7 +53,7 @@ export function migrateGraphResourcePath(
   remapGraphEntityPath(from, to);
   cascadeGraphPathReferences(from, to);
   migrateDocumentStatePath(from, to, kind);
-  useGraphSessionStore.getState().remapActivePaths(from, to);
+  useGraphSessionStore.getState().remapFocusedGraphPath(from, to);
 
   const layoutStore = useLayoutStore.getState();
   for (const [nodeId, node] of Object.entries(layoutStore.nodes)) {

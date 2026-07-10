@@ -8,12 +8,21 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 import { activateGraphTab } from './activateGraphTab';
 import { applyEditorTabSelection } from './editorTabSelection';
 import { ensureDetailVisible } from './ensureDetailVisible';
+import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
+
+async function focusEditorGroup(groupId: string): Promise<void> {
+  const prevGroupId = useLayoutStore.getState().activeEditorGroupId;
+  if (prevGroupId && prevGroupId !== groupId) {
+    await suspendEditorGroupGraphSession(prevGroupId);
+  }
+  useLayoutStore.getState().setActiveGroup(groupId);
+}
 
 /**
  * Unified editor tab activation: graph reload, worksheet detail, layout selection, session.
  */
 export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
-  useLayoutStore.getState().setActiveGroup(groupId);
+  await focusEditorGroup(groupId);
   applyEditorTabSelection(groupId, tab.id);
 
   if (tab.type === 'event' || tab.type === 'function') {
@@ -29,6 +38,10 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
   if (tab.type === 'worksheet') {
     useEditorStore.getState().setDetailFocus({ kind: 'worksheet', id: tab.id });
     ensureDetailVisible();
+    const sessionStore = useGraphSessionStore.getState();
+    if (sessionStore.getFocusedGroupId() === groupId) {
+      sessionStore.clearFocusedSession(groupId);
+    }
     return true;
   }
 
@@ -40,12 +53,12 @@ export async function activateCurrentEditorTab(groupId: string): Promise<boolean
   const node = useLayoutStore.getState().nodes[groupId];
   const activeTabId = node?.data?.activeTabId;
   if (!activeTabId) {
-    useGraphSessionStore.getState().clearGroupActivePath(groupId);
+    useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;
   }
   const activeTab = node?.data?.tabs?.find((tab) => tab.id === activeTabId);
   if (!activeTab) {
-    useGraphSessionStore.getState().clearGroupActivePath(groupId);
+    useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;
   }
 
@@ -61,12 +74,12 @@ export async function activateCurrentEditorTab(groupId: string): Promise<boolean
     return true;
   }
 
-  useGraphSessionStore.getState().clearGroupActivePath(groupId);
+  useGraphSessionStore.getState().clearFocusedSession(groupId);
   return false;
 }
 
 /** Activate an editor group and hydrate its current graph-backed session as one application action. */
 export async function activateEditorGroup(groupId: string): Promise<boolean> {
-  useLayoutStore.getState().setActiveGroup(groupId);
+  await focusEditorGroup(groupId);
   return activateCurrentEditorTab(groupId);
 }

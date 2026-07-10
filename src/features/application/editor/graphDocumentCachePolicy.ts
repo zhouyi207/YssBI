@@ -1,7 +1,7 @@
 import { useGraphDataStore } from '@/features/core/dataStore';
-import { isGraphOpenInAnyTab } from '@/features/core/layout/graphTabQueries';
+import { isGraphTabDirty } from '@/features/core/layout/graphTabQueries';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { deactivateInactiveGraphPath } from './deactivateInactiveGraphPath';
+import { unloadGraphDocument } from './graphSessionLifecycle';
 
 /** Max in-memory graph documents (VS Code-style cap for split-screen). */
 export const MAX_HYDRATED_GRAPH_DOCUMENTS = 4;
@@ -13,14 +13,11 @@ export function touchGraphDocument(graphPath: string): void {
 }
 
 function protectedGraphPaths(): Set<string> {
-  const protectedPaths = new Set<string>();
-  for (const path of Object.values(useGraphSessionStore.getState().activePathByGroup)) {
-    if (path) protectedPaths.add(path);
-  }
-  return protectedPaths;
+  const focused = useGraphSessionStore.getState().getFocusedGraphPath();
+  return focused ? new Set([focused]) : new Set();
 }
 
-/** Evict LRU hydrated graphs until within cap; skips active tabs and dirty paths. */
+/** Evict LRU hydrated graphs until within cap; skips focused session and dirty paths. */
 export async function enforceGraphDocumentCacheLimit(): Promise<void> {
   const protectedPaths = protectedGraphPaths();
   let hydrated = Object.keys(useGraphDataStore.getState().graphEntities);
@@ -35,8 +32,9 @@ export async function enforceGraphDocumentCacheLimit(): Promise<void> {
     if (Object.keys(useGraphDataStore.getState().graphEntities).length <= MAX_HYDRATED_GRAPH_DOCUMENTS) {
       break;
     }
-    if (isGraphOpenInAnyTab(path)) continue;
-    await deactivateInactiveGraphPath(path);
+    if (protectedPaths.has(path)) continue;
+    if (isGraphTabDirty(path)) continue;
+    await unloadGraphDocument(path);
     lastAccessAt.delete(path);
   }
 }

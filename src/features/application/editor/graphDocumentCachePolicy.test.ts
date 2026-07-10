@@ -5,6 +5,7 @@ vi.mock('@/services/graph/graphService', () => ({
     unloadProjectGraph: vi.fn().mockResolvedValue(undefined),
   },
 }));
+
 import {
   enforceGraphDocumentCacheLimit,
   MAX_HYDRATED_GRAPH_DOCUMENTS,
@@ -15,12 +16,14 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 
 describe('graphDocumentCachePolicy', () => {
   beforeEach(() => {
-    useGraphSessionStore.setState({ activePathByGroup: {} });
+    useGraphSessionStore.setState({ focusedSession: null });
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
   it('evicts LRU graphs beyond the hydrated cap', async () => {
-    useGraphSessionStore.setState({ activePathByGroup: { g1: 'active-graph' } });
+    useGraphSessionStore.setState({
+      focusedSession: { groupId: 'g1', graphPath: 'active-graph' },
+    });
     touchGraphDocument('ancient-graph');
     touchGraphDocument('oldest-graph');
     touchGraphDocument('older-graph');

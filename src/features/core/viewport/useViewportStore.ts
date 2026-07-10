@@ -69,6 +69,17 @@ export function ensureGraphViewport(graphPath: string, canvas?: GraphPosition | 
   applyGraphViewport(graphPath, canvas);
 }
 
+/** Drop committed + live viewport when a graph document is unloaded from memory. */
+export function releaseGraphViewport(graphPath: string): void {
+  resetLiveViewports(graphPath);
+  useViewportStore.setState((state) => {
+    if (!(graphPath in state.viewports)) return state;
+    const viewports = { ...state.viewports };
+    delete viewports[graphPath];
+    return { viewports };
+  });
+}
+
 export function syncGraphViewportsFromRecords(
   graphs: Record<string, { canvas?: GraphPosition | null }>,
 ): void {

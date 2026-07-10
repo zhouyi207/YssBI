@@ -10,6 +10,7 @@ import {
   listEditorGroupIds,
   setEditorGroupMaximizedHidden,
 } from './editorGridLayout';
+import { computeEditorGridMementoSizes } from './editorGridSizing';
 import { isEditorGroupNode } from './layoutTabQueries';
 
 export interface EditorGridNodeMemento {
@@ -17,8 +18,8 @@ export interface EditorGridNodeMemento {
   type: LayoutNode['type'];
   parentId: string | null;
   children?: string[];
+  /** Normalized flex weight within the parent split (0–1). */
   size?: number;
-  pixelSize?: number;
 }
 
 export interface EditorGridMemento {
@@ -58,6 +59,7 @@ export function snapshotEditorGridMemento(
   if (!editorArea) return null;
 
   const ids = collectEditorAreaNodeIds(nodes);
+  const normalizedSizes = computeEditorGridMementoSizes(nodes);
   const gridNodes: EditorGridNodeMemento[] = [];
   for (const id of ids) {
     const node = nodes[id];
@@ -67,8 +69,7 @@ export function snapshotEditorGridMemento(
       type: node.type,
       parentId: node.parentId,
       children: node.children ? [...node.children] : undefined,
-      size: node.size,
-      pixelSize: node.pixelSize,
+      size: normalizedSizes[id] ?? node.size,
     });
   }
 
@@ -98,7 +99,7 @@ export function applyEditorGridMemento(
         type: 'component',
         parentId: snapshot.parentId,
         size: snapshot.size,
-        pixelSize: snapshot.pixelSize,
+        pixelSize: undefined,
         data: existing?.data ?? { component: 'GraphEditor', tabs: [] },
       };
       continue;
@@ -110,7 +111,7 @@ export function applyEditorGridMemento(
       parentId: snapshot.parentId,
       children: snapshot.children ? [...snapshot.children] : undefined,
       size: snapshot.size,
-      pixelSize: snapshot.pixelSize,
+      pixelSize: undefined,
       data: existing?.data,
     };
   }

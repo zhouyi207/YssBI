@@ -26,6 +26,7 @@ import {
     splitEditorGroupInTree,
     writeEditorAreaMaximizeState,
 } from './editorGridLayout';
+import { commitSplitPairSizes } from './editorGridSizing';
 
 export type SidebarTabId = 'graphs' | 'nodes' | 'variables' | 'data' | 'commands' | 'charts';
 
@@ -525,10 +526,7 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         commitFlexSplitResize: (beforeId, afterId, beforeSize, afterSize) => set((state) => {
-            const before = state.nodes[beforeId];
-            const after = state.nodes[afterId];
-            if (before) before.pixelSize = beforeSize;
-            if (after) after.pixelSize = afterSize;
+            commitSplitPairSizes(state.nodes, beforeId, afterId, beforeSize, afterSize);
         }),
 
         isAltPressed: false,

@@ -1,7 +1,7 @@
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useProjectIOStore } from '@/features/core/dataStore';
-import { deactivateInactiveGraphPath } from './deactivateInactiveGraphPath';
+import { unloadGraphDocument } from './graphSessionLifecycle';
 import { activateCachedGraph, isGraphCachedInMemory } from './graphLoadPolicy';
 import {
   enforceGraphDocumentCacheLimit,
@@ -15,10 +15,10 @@ export async function activateGraphTab(
 ): Promise<boolean> {
   const groupId = resolveEditorTargetGroupId(targetGroupId);
   const sessionStore = useGraphSessionStore.getState();
-  const previous = sessionStore.setGroupActivePath(groupId, graphPath);
+  const previous = sessionStore.setFocusedSession(groupId, graphPath);
 
   if (previous && previous !== graphPath) {
-    await deactivateInactiveGraphPath(previous);
+    await unloadGraphDocument(previous);
   }
 
   touchGraphDocument(graphPath);
@@ -36,13 +36,13 @@ export async function activateGraphTab(
   }
 
   if (previous) {
-    useGraphSessionStore.getState().setGroupActivePath(groupId, previous);
+    sessionStore.setFocusedSession(groupId, previous);
   } else {
-    useGraphSessionStore.getState().clearGroupActivePath(groupId);
+    sessionStore.clearFocusedSession(groupId);
   }
   return false;
 }
 
 export function deactivateGraphTab(groupId: string): void {
-  useGraphSessionStore.getState().clearGroupActivePath(groupId);
+  useGraphSessionStore.getState().clearFocusedSession(groupId);
 }

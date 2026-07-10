@@ -1,56 +1,50 @@
 import { create } from 'zustand';
 
+export type FocusedGraphSession = {
+  groupId: string;
+  graphPath: string;
+};
+
 interface GraphSessionState {
-  activePathByGroup: Record<string, string>;
-  setGroupActivePath: (groupId: string , graphPath: string) => string | null;
-  clearGroupActivePath: (groupId: string) => void;
-  getGroupActivePath: (groupId: string) => string | null;
-  isPathActiveInAnyGroup: (graphPath: string) => boolean;
-  remapActivePaths: (from: string, to: string) => void;
+  /** Hydrated graph document bound to the focused editor group (at most one). */
+  focusedSession: FocusedGraphSession | null;
+  setFocusedSession: (groupId: string, graphPath: string) => string | null;
+  clearFocusedSession: (groupId: string) => void;
+  getFocusedGraphPath: () => string | null;
+  getFocusedGroupId: () => string | null;
+  isFocusedGraphPath: (graphPath: string) => boolean;
+  remapFocusedGraphPath: (from: string, to: string) => void;
   reset: () => void;
 }
 
 export const useGraphSessionStore = create<GraphSessionState>((set, get) => ({
-  activePathByGroup: {},
+  focusedSession: null,
 
-  setGroupActivePath: (groupId, graphPath) => {
-    const previous = get().activePathByGroup[groupId] ?? null;
-    set((state) => ({
-      activePathByGroup: {
-        ...state.activePathByGroup,
-        [groupId]: graphPath,
-      },
-    }));
+  setFocusedSession: (groupId, graphPath) => {
+    const previous = get().focusedSession?.graphPath ?? null;
+    set({ focusedSession: { groupId, graphPath } });
     return previous;
   },
 
-  clearGroupActivePath: (groupId) =>
+  clearFocusedSession: (groupId) =>
     set((state) => {
-      if (!(groupId in state.activePathByGroup)) return state;
-      const next = { ...state.activePathByGroup };
-      delete next[groupId];
-      return { activePathByGroup: next };
+      if (state.focusedSession?.groupId !== groupId) return state;
+      return { focusedSession: null };
     }),
 
-  getGroupActivePath: (groupId) => get().activePathByGroup[groupId] ?? null,
+  getFocusedGraphPath: () => get().focusedSession?.graphPath ?? null,
 
-  isPathActiveInAnyGroup: (graphPath) =>
-    Object.values(get().activePathByGroup).some((activePath) => activePath === graphPath),
+  getFocusedGroupId: () => get().focusedSession?.groupId ?? null,
 
-  remapActivePaths: (from, to) =>
+  isFocusedGraphPath: (graphPath) => get().focusedSession?.graphPath === graphPath,
+
+  remapFocusedGraphPath: (from, to) =>
     set((state) => {
-      const next: Record<string, string> = {};
-      let changed = false;
-      for (const [groupId, activePath] of Object.entries(state.activePathByGroup)) {
-        if (activePath === from) {
-          next[groupId] = to;
-          changed = true;
-        } else {
-          next[groupId] = activePath;
-        }
-      }
-      return changed ? { activePathByGroup: next } : state;
+      if (state.focusedSession?.graphPath !== from) return state;
+      return {
+        focusedSession: { ...state.focusedSession, graphPath: to },
+      };
     }),
 
-  reset: () => set({ activePathByGroup: {} }),
+  reset: () => set({ focusedSession: null }),
 }));

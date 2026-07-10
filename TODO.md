@@ -1285,7 +1285,7 @@ Editor Part（占 Workbench 中央 flex 区）
 | Tab 移动/复制语义 | 拖 TabBar=move，拖边=copy | [x] 已对齐 |
 | 关组合并 | `removeView` 自动合并 | [x] `removeNode` 单子提升；需与 **空 Tab 组** 场景回归 |
 | 组内 Editor 槽 | **1 Monaco / 组，切 Tab 换 model** | 每组 `GraphEditor`；[x] Tab 切换 **graphEntities 缓存**、窄订阅（见画布架构重构） |
-| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | **多个 Group 同屏 = 多个 Canvas 实例**（非激活组仍 mount GraphEditor） |
+| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | 仅 **active 组** mount `Canvas`；非 active 组 `InactiveEditorGroupPlaceholder` |
 | Active group | `IEditorGroupsService.activeGroup` | [x] `activeEditorGroupId` + `GroupContext` |
 | TabBar 订阅 | 轻量 model | [x] `useEditorGroupTabStrip` 窄订阅 |
 | Grid 与 Workbench 持久化解耦 | 独立 `workbench.editor.layout` | [x] `workbenchLayoutMemento.editorGrid` 与 chrome parts 分开 hydrate/debounce |
@@ -1315,12 +1315,12 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`。
 - [x] **组内 Tab 切换不 remount GraphEditor 壳**：同组切 Tab 仅换 `activeTabId` / Canvas `graphPath`；`GraphEditor` `memo` + 组件类型不变不 unmount。
 - [x] **Grid resize 不触发 loadGraph**：layout 层无 `loadGraph` 调用；sash 仅改 flex / `pixelSize` + viewport scale。
-- [~] **多组同屏 Canvas 上限策略**：`graphDocumentCachePolicy` LRU（max 4）已驱逐 hydrated graph documents；非激活组使用 `InactiveEditorGroupPlaceholder`（不 mount Canvas）。**剩余：** 多组同屏仍可能同时保留多个 graph session/viewport；LRU 不限制 Canvas 实例本身，仅限制 `graphEntities` 内存。
+- [x] **多组同屏 Canvas 上限策略**：单焦点 `focusedSession` + `suspendEditorGroupGraphSession`；非 active 组 `InactiveEditorGroupPlaceholder`（不 mount Canvas）；LRU（max 4）仅保护 focused graph + dirty；切换组/Tab 时 lazy unload 并 `releaseGraphViewport`。
 
 **P1 — 交互 parity**
 
 - [x] **最大化 Editor Group**：双击 pinned Tab → `EditorGroupsService.toggleMaximizeGroup`；`editor_area` snapshot 还原。
-- [~] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；flex 组首次拖 sash 后 `pixelSize` 化并持久化。**剩余：** 未 pixelize 的 flex 比例在极端嵌套 split 下仍需回归；重启后比例恢复依赖已 pixelize 的节点。
+- [x] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；sash 提交同步 `size` 权重 + 运行时 `pixelSize`；快照仅持久化归一化 `size`（viewport 无关），hydrate 走 flex 比例恢复。
 - [x] **拖组间 sash 双击**：editor grid sash 双击均分 → `resetEditorGridSplitEqual`。
 
 **P2 — 架构**
@@ -1350,8 +1350,8 @@ Editor Part（占 Workbench 中央 flex 区）
 | **Storage 写入** | debounce 松手后 | [x] 250ms debounce localStorage |
 | **隐藏 Part 内容** | 保留 DOM 或轻量占位 | [x] chrome Part keep-alive（`invisible`）；GraphEditor 按需 mount |
 | **Editor Grid** | `GridWidget` + 独立 storage | [x] `layoutStore` row/col + `editorGridMemento`（见 **§7.4**） |
-| **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] flex 首次 pixel 化 + debounce 持久化 |
-| **多组同屏 Canvas** | 非 active 组降优先级 | [~] 非 active 组 placeholder + `graphDocumentCachePolicy` LRU（文档级，max 4）；Canvas 仅 active 组 mount |
+| **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] sash 提交同步 flex 权重；memento 仅存归一化 `size` |
+| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 单焦点 session + placeholder + LRU（文档级，max 4）；Canvas 仅 active 组 mount |
 
 #### 收敛任务列表
 

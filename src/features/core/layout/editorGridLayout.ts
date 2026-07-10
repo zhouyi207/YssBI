@@ -1,4 +1,5 @@
 import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types/ui';
+import { commitSplitPairSizes } from './editorGridSizing';
 import { EDITOR_AREA_ID, PANEL_PART_ID } from './workbenchLayoutDefaults';
 import { isEditorGroupNode } from './layoutTabQueries';
 import {
@@ -134,10 +135,7 @@ export function applyEqualGridSplit(
   afterSize: number,
 ): void {
   const { beforeSize: nextBefore, afterSize: nextAfter } = equalSplitPairSizes(beforeSize, afterSize);
-  const before = nodes[beforeId];
-  const after = nodes[afterId];
-  if (before) before.pixelSize = nextBefore;
-  if (after) after.pixelSize = nextAfter;
+  commitSplitPairSizes(nodes, beforeId, afterId, nextBefore, nextAfter);
 }
 
 export function firstEditorGroupId(nodes: LayoutTree): string | null {
@@ -263,14 +261,12 @@ export function splitEditorGroupInTree(
   }
 
   const branchId = createEditorGroupId();
-  const inheritedPixelSize = targetNode.pixelSize;
   const branch: LayoutNode = {
     id: branchId,
     type: direction,
     parentId: parentNode.id,
     children: isAfter ? [targetGroupId, newNodeId] : [newNodeId, targetGroupId],
-    size: targetNode.size,
-    pixelSize: inheritedPixelSize,
+    size: targetNode.size ?? 1,
   };
 
   const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;

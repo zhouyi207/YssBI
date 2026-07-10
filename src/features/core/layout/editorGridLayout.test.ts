@@ -77,7 +77,8 @@ describe('editorGridLayout tree ops', () => {
     expect(created).toBeTruthy();
     const branchId = nodes[DEFAULT_EDITOR_GROUP_ID]?.parentId;
     expect(branchId).toBeTruthy();
-    expect(nodes[branchId!]?.pixelSize).toBe(640);
+    expect(nodes[branchId!]?.pixelSize).toBeUndefined();
+    expect(nodes[branchId!]?.size).toBe(1);
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
     expect(nodes[created!]?.pixelSize).toBeUndefined();
   });

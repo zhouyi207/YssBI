@@ -66,7 +66,7 @@ Workbench chrome sashes and editor-grid sashes share `splitViewSizing.ts` / `sas
 - **Chrome sash:** `resizePart` + `persistWorkbenchLayoutDebounced()`.
 - **Grid sash:** adjacent editor-group pair resize (including after both leaves are pixelized) + `persistEditorGridDebounced()`.
 
-Flex-only grid splits are pixelized on first drag via `commitFlexSplitResize`; persisted `pixelSize` values restore split ratios on hydrate.
+Flex-only grid splits are pixelized on first drag via `commitFlexSplitResize` (runtime `pixelSize` + normalized `size`). **`editorGridMemento` persists ratio weights only** — `computeEditorGridMementoSizes` derives weights from the live tree without mutating session pixels; hydrate restores viewport-independent flex ratios.
 
 ## Deferred (not grid replacement)
 
