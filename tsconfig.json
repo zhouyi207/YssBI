@@ -21,7 +21,6 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path Mapping, shadcn ui */
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
     }
