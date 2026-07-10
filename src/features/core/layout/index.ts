@@ -47,7 +47,6 @@ export {
   getLayoutTabById,
   locateLayoutTab,
   getActiveLayoutTab,
-  getActiveLayoutTabAmongGroups,
   resolveEditorGroupId,
   resolveEditorTargetGroupId,
   isEditorGroupNode,

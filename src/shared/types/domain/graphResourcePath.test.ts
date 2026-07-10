@@ -5,8 +5,6 @@ import {
   graphPathFromResourceUri,
   graphResourceUriFromPath,
   parseGraphResourceUri,
-  parseUntitledGraphPath,
-  buildUntitledGraphPath,
   inferGraphResourceKind,
   isValidGraphResourceTabId,
   toGraphResourceUri,
@@ -36,16 +34,10 @@ describe('graphResourcePath', () => {
     expect(graphPathFromResourceUri('yssbi://graph/worksheet/x')).toBeNull();
   });
 
-  it('parses untitled graph handles', () => {
-    expect(parseUntitledGraphPath('untitled:event:Untitled-1')).toEqual({
-      kind: 'event',
-      label: 'Untitled-1',
-    });
-    expect(buildUntitledGraphPath('function', 'Untitled-2')).toBe(
-      'untitled:function:Untitled-2',
-    );
-    expect(inferGraphResourceKind('untitled:event:Untitled-1')).toBe('event');
-    expect(isValidGraphResourceTabId('untitled:event:Untitled-1', 'event')).toBe(true);
-    expect(isValidGraphResourceTabId('untitled:event:Untitled-1', 'function')).toBe(false);
+  it('infers graph kind from persisted paths', () => {
+    expect(inferGraphResourceKind('events/Main.yssbi-event')).toBe('event');
+    expect(inferGraphResourceKind('functions/Helper.yssbi-function')).toBe('function');
+    expect(isValidGraphResourceTabId('events/Main.yssbi-event', 'event')).toBe(true);
+    expect(isValidGraphResourceTabId('events/Main.yssbi-event', 'function')).toBe(false);
   });
 });

@@ -26,6 +26,15 @@ describe('parseCanvasDragPayload', () => {
     expect(isSidebarSpawnDrag(payload)).toBe(true);
   });
 
+  it('accepts function graph-resource payload (same as event — open tab, not spawn node)', () => {
+    const payload = buildSidebarDragData('functions/A.yssbi-function', 'MyFunc', 'function');
+    expect(isGraphResourceDragPayload(payload)).toBe(true);
+    expect(isNodeTemplateDragData(payload)).toBe(false);
+    if (isGraphResourceDragPayload(payload)) {
+      expect(payload.sidebarResource.type).toBe('function');
+    }
+  });
+
   it('accepts palette node template data', () => {
     const payload = buildNodeTemplateDragData({
       title: 'Add',
@@ -59,14 +68,21 @@ describe('buildSidebarDragState', () => {
     }
   });
 
-  it('builds graph-resource drag state without template placeholder', () => {
-    const payload = buildSidebarDragData('e1', 'Main', 'event');
-    expect(payload).not.toBeNull();
-    const state = buildSidebarDragState(payload!, 1, 2);
-    expect(state.type).toBe(DRAG_TYPES.GRAPH_RESOURCE);
-    expect('template' in state).toBe(false);
-    if (state.type === DRAG_TYPES.GRAPH_RESOURCE) {
-      expect(state.sidebarResource.name).toBe('Main');
+  it('builds graph-resource drag state for event and function', () => {
+    for (const kind of ['event', 'function'] as const) {
+      const payload = buildSidebarDragData(
+        kind === 'event' ? 'events/Main.yssbi-event' : 'functions/A.yssbi-function',
+        'Main',
+        kind,
+      );
+      expect(payload).not.toBeNull();
+      const state = buildSidebarDragState(payload!, 1, 2);
+      expect(state.type).toBe(DRAG_TYPES.GRAPH_RESOURCE);
+      expect('template' in state).toBe(false);
+      if (state.type === DRAG_TYPES.GRAPH_RESOURCE) {
+        expect(state.sidebarResource.type).toBe(kind);
+        expect(state.sidebarResource.name).toBe('Main');
+      }
     }
   });
 });

@@ -87,34 +87,6 @@ impl ProjectState {
         unreachable!("allocate_new_graph_path loop should return")
     }
 
-    fn allocate_untitled_graph_path(
-        &self,
-        graph_kind: &GraphKind,
-    ) -> Result<GraphResourcePath, String> {
-        let kind_str = match graph_kind {
-            GraphKind::Event => "event",
-            GraphKind::Function => "function",
-        };
-        let prefix = format!("untitled:{kind_str}:");
-        let used_labels: Vec<String> = self
-            .project_data
-            .read()
-            .unwrap()
-            .graphs
-            .keys()
-            .filter_map(|path| {
-                let s = path.as_str();
-                if s.starts_with(&prefix) {
-                    Some(s[prefix.len()..].to_string())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let label = unique_name::unique_untitled_label(used_labels);
-        GraphResourcePath::new(format!("{prefix}{label}")).map_err(|e| e.to_string())
-    }
-
     pub fn add_graph_with_existing_names(
         &self,
         graph_name: &str,
@@ -149,46 +121,6 @@ impl ProjectState {
         // Funnel through the single `insert_graph` entry point so registry +
         // schema provider + schema propagation are bound consistently with the
         // load / duplicate / import paths.
-        self.insert_graph(graph_data)
-    }
-
-    /// Create an in-memory draft graph (`untitled:{kind}:{label}`) without writing to disk.
-    pub fn add_draft_graph_with_existing_names(
-        &self,
-        graph_name: &str,
-        graph_kind: GraphKind,
-        existing_names: Vec<String>,
-    ) -> GraphInstance {
-        let graph_register = {
-            let store = self.project_store.read().unwrap();
-            Arc::clone(&store.node_register)
-        };
-        let resource_path = self
-            .allocate_untitled_graph_path(&graph_kind)
-            .expect("failed to allocate untitled graph resource path");
-        let base_name = if graph_name.trim().is_empty() {
-            resource_path.display_name().to_string()
-        } else {
-            graph_name.to_string()
-        };
-        let unique_graph_name = {
-            let project_data = self.project_data.read().unwrap();
-            let mut existing: Vec<String> = project_data
-                .graphs
-                .values()
-                .filter(|g| g.kind == graph_kind)
-                .map(|g| g.name.clone())
-                .collect();
-            existing.extend(existing_names);
-            unique_name::unique_name(&base_name, existing)
-        };
-
-        let graph_data = GraphInstance::new_with_path(
-            &unique_graph_name,
-            graph_kind,
-            graph_register,
-            resource_path,
-        );
         self.insert_graph(graph_data)
     }
 
@@ -1130,58 +1062,57 @@ mod tests {
     }
 
     #[test]
-    fn draft_graph_first_save_migrates_to_disk_path() {
+    fn new_graph_first_save_writes_to_allocated_path() {
         use crate::project::EVENTS_DIR;
 
         let root = std::env::temp_dir().join(format!(
-            "yssbi-draft-save-{}",
+            "yssbi-first-save-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
         let state = ProjectState::new();
         state.set_path(Some(root.to_string_lossy().to_string()));
 
-        let draft = state.add_draft_graph_with_existing_names("New Event", GraphKind::Event, vec![]);
-        let draft_path = draft.resource_path.clone();
-        assert!(draft_path.as_str().starts_with("untitled:event:"));
+        let graph = state.add_event("New Event");
+        let graph_path = graph.resource_path.clone();
+        assert!(graph_path.as_str().starts_with(&format!("{EVENTS_DIR}/")));
 
         let moved_to = state
-            .persist_loaded_graph(&draft_path)
-            .expect("first save should persist draft")
-            .expect("draft save should migrate path");
-        assert!(!moved_to.as_str().starts_with("untitled:"));
-        assert!(moved_to.as_str().starts_with(&format!("{EVENTS_DIR}/")));
+            .persist_loaded_graph(&graph_path)
+            .expect("first save should persist graph");
+        assert!(moved_to.is_none());
 
-        assert!(state.get_graph(&draft_path).is_none());
-        assert!(state.get_graph(&moved_to).is_some());
+        assert!(state.get_graph(&graph_path).is_some());
 
-        let disk_file = root.join(moved_to.as_str());
+        let disk_file = root.join(graph_path.as_str());
         assert!(disk_file.is_file());
 
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert!(index.graphs.iter().any(|g| g.path == moved_to.as_str()));
+        assert!(index.graphs.iter().any(|g| g.path == graph_path.as_str()));
 
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn save_project_to_directory_skips_untitled_drafts() {
+    fn save_project_to_directory_writes_all_loaded_graphs() {
         use crate::project::save_project_to_file;
 
         let root = std::env::temp_dir().join(format!(
-            "yssbi-skip-untitled-{}",
+            "yssbi-save-all-graphs-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
         let state = ProjectState::new();
-        let _draft = state.add_draft_graph_with_existing_names("Draft", GraphKind::Event, vec![]);
+        let draft = state.add_event("Draft");
         let _persisted = state.add_event("Saved");
 
         save_project_to_file(&state.get_data(), root.to_string_lossy().as_ref()).unwrap();
 
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
-        assert_eq!(index.graphs.len(), 1);
-        assert_eq!(index.graphs[0].name, "Saved");
+        assert_eq!(index.graphs.len(), 2);
+        assert!(index.graphs.iter().any(|g| g.name == "Draft"));
+        assert!(index.graphs.iter().any(|g| g.name == "Saved"));
+        assert!(root.join(draft.resource_path.as_str()).is_file());
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -1,36 +1,10 @@
-import { parseGraphResourceUri, parseUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
-import type { ProjectResourceMeta, ResourceKey, ResourceRef } from './resourceTypes';
+import type { ProjectResourceMeta, ResourceKey } from './resourceTypes';
 import { resourceKey } from './resourceTypes';
 
 export interface ResourceSnapshot {
   resources: ProjectResourceMeta[];
   graphOrder: string[];
-}
-
-const WORKSHEET_URI_PREFIX = 'yssbi://worksheet/';
-const DATABASE_URI_PREFIX = 'yssbi://database/';
-const VARIABLE_URI_PREFIX = 'yssbi://variable/';
-
-export function resourceRefFromKey(key: ResourceKey): ResourceRef | null {
-  const graph = parseGraphResourceUri(key);
-  if (graph) {
-    return { kind: graph.kind, id: graph.path };
-  }
-  const untitled = parseUntitledGraphPath(key);
-  if (untitled) {
-    return { kind: untitled.kind, id: key };
-  }
-  if (key.startsWith(WORKSHEET_URI_PREFIX)) {
-    return { kind: 'worksheet', id: key.slice(WORKSHEET_URI_PREFIX.length) };
-  }
-  if (key.startsWith(DATABASE_URI_PREFIX)) {
-    return { kind: 'database', id: key.slice(DATABASE_URI_PREFIX.length) };
-  }
-  if (key.startsWith(VARIABLE_URI_PREFIX)) {
-    return { kind: 'variable', id: key.slice(VARIABLE_URI_PREFIX.length) };
-  }
-  return null;
 }
 
 function snapshotMetaFingerprint(resource: ProjectResourceMeta): string {
@@ -45,7 +19,6 @@ export interface SnapshotReconcileResult {
 /**
  * Reconcile a backend index snapshot with open document state.
  * Loaded persisted resources absent from the snapshot are retained as missing entries.
- * In-memory untitled drafts are retained without marking missing.
  */
 export function reconcileResourceSnapshot(
   incoming: ProjectResourceMeta[],
@@ -95,19 +68,6 @@ export function reconcileResourceSnapshot(
     if (incomingByKey.has(key)) continue;
     const doc = documents[key];
     if (!doc?.loaded && !previous.loaded) continue;
-
-    // In-memory drafts are absent from the disk index by design — retain without marking missing.
-    if (parseUntitledGraphPath(key)) {
-      resources.push({
-        ...previous,
-        exists: false,
-        loaded: true,
-        hasDirtyDocument: doc?.dirty ?? previous.hasDirtyDocument,
-        hasStaleDocument: false,
-        hasConflictDocument: doc?.dirty ?? previous.hasConflictDocument,
-      });
-      continue;
-    }
 
     documentPatches.push({
       key,

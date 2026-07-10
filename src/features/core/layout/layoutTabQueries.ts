@@ -78,19 +78,6 @@ export function getActiveLayoutTab(
   return { activeTabId, tab };
 }
 
-export function getActiveLayoutTabAmongGroups(
-  groupIds: string[],
-  nodes?: LayoutTree,
-): LayoutTab | null {
-  const tree = readNodes(nodes);
-  const uniqueGroupIds = Array.from(new Set(groupIds.filter(Boolean)));
-  for (const groupId of uniqueGroupIds) {
-    const active = getActiveLayoutTab(groupId, tree);
-    if (active) return active.tab;
-  }
-  return null;
-}
-
 export function resolveEditorGroupId(
   groupId?: string | null,
   context?: LayoutGroupContext,

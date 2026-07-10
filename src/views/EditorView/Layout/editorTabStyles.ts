@@ -4,7 +4,7 @@ import { cva } from "class-variance-authority";
 export const editorTabBarShellClass =
   "box-border flex h-[var(--titlebar-height)] min-h-[var(--titlebar-height)] max-h-[var(--titlebar-height)] w-full shrink-0 select-none items-stretch overflow-hidden border-b border-border bg-muted/25";
 
-/** Tab strip — grows to fill bar; double-click empty area creates Untitled event. */
+/** Tab strip — grows to fill bar. */
 export const editorTabBarStripClass =
   "relative flex h-full min-h-full min-w-full flex-1 cursor-default items-stretch overflow-visible";
 

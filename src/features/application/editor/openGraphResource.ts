@@ -1,8 +1,7 @@
+import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { lookupGraphResource } from '@/features/core/resource/resourceSelectors';
 import { useResourceStore } from '@/features/core/resource';
 import { openGraphInEditor } from './openGraphInEditor';
-
-export type GraphResourceKind = 'event' | 'function';
 
 export function resolveGraphResourceMeta(
   path: string,

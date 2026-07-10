@@ -29,14 +29,12 @@ import {
   switchTab,
   toggleMaximizeEditorGroup,
 } from "@/features/application/editor/tabCommands";
-import { createUntitledEventInGroup } from "@/features/application/editor/editorGroupCommands";
 import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/application/editor/tabBarReorderStore";
 import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { isPreviewLayoutTab } from "@/features/core/layout/layoutTabModel";
 import { useSidebarTab } from "@/features/application/editor/useSidebarTab";
 import { resourceKey, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
-import { isUntitledGraphPath } from "@/shared/types/domain/graphResourcePath";
 
 interface TabBarProps {
   layoutNodeId: string;
@@ -127,12 +125,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     return () => container.removeEventListener('wheel', preventScroll);
   }, [isDragging]);
 
-  const handleEmptyStripDoubleClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-tab-id]')) return;
-    e.stopPropagation();
-    void createUntitledEventInGroup(layoutNodeId);
-  };
-
   const handleTabClose = useCallback((tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     void closeTab(layoutNodeId, tabId);
@@ -155,8 +147,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             className={editorTabBarStripClass}
             onClick={handleTabStripClick}
             onAuxClick={handleTabStripAuxClick}
-            onDoubleClick={handleEmptyStripDoubleClick}
-            aria-label={t('tabBar.newUntitledHint')}
           >
             {tabs.map((tab, index) => (
               <TabItem
@@ -266,9 +256,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
   });
 
   const baseTitle = resolveTabDisplayName(resourceRef, tab.id);
-  const title = isUntitledGraphPath(tab.id)
-    ? `${t('tabBar.unsavedPrefix')}: ${baseTitle}`
-    : (resourceTitle ?? baseTitle);
+  const title = resourceTitle ?? baseTitle;
 
   const isPreview = isPreviewLayoutTab(tab);
 

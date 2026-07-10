@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { LayoutTree } from '@/shared/types';
 import {
   getActiveLayoutTab,
-  getActiveLayoutTabAmongGroups,
   getLayoutTabById,
   locateLayoutTab,
   resolveEditorGroupId,
@@ -88,12 +87,6 @@ describe('layoutTabQueries', () => {
       },
     };
     expect(getActiveLayoutTab('editor', broken)).toBeNull();
-  });
-
-  it('picks the first valid active tab among groups in order', () => {
-    const tab = getActiveLayoutTabAmongGroups(['panel', 'editorB', 'editorA'], mockNodes);
-    expect(tab?.id).toBe('g3');
-    expect(getActiveLayoutTabAmongGroups(['editorA', 'editorB'], mockNodes)?.id).toBe('g1');
   });
 
   it('resolves editor group id with fallbacks', () => {

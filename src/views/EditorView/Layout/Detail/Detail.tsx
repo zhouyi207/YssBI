@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useEditorSessionDetailActions } from '@/features/application/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { renameGraph } from '@/features/application/dataManagement/graphActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
 import { DetailEmptyState } from './DetailEmptyState';
@@ -62,7 +61,7 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
             event={model.event}
             onUpdate={(patch) => {
               if (typeof patch.name === 'string') {
-                void renameGraph(model.path, patch.name, 'event');
+                void renameResource({ id: model.path, kind: 'event' }, patch.name);
               }
             }}
           />
@@ -74,7 +73,7 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
             callSites={functionCallSites}
             callSitesLoading={functionCallSitesLoading}
             onRename={(name) => {
-              void renameGraph(model.path, name, 'function');
+              void renameResource({ id: model.path, kind: 'function' }, name);
             }}
             onSignatureChange={(patch) => {
               void updateFunctionSignature(model.path, patch);

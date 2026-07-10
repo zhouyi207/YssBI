@@ -287,9 +287,6 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     flatten_graph_layout(root)?;
 
     for graph_path in project_data.graphs.keys() {
-        if super::is_untitled_graph_path(graph_path.as_str()) {
-            continue;
-        }
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
 

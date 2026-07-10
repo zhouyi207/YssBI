@@ -29,16 +29,19 @@ describe('document state queries', () => {
     expect(useResourceStore.getState().resources[resourceKey(meta)]?.hasDirtyDocument).toBe(true);
   });
 
-  it('removes untitled draft resource meta on clear', () => {
-    const draft = buildGraphResourceMeta('event', 'untitled:event:Untitled-1', 'Draft');
-    useResourceStore.getState().upsertResource(draft);
-    markResourceLoaded({ id: draft.id, kind: 'event' });
+  it('clears document state while retaining resource meta', () => {
+    const meta = buildGraphResourceMeta('event', 'events/A.yssbi-event', 'A');
+    useResourceStore.getState().upsertResource(meta);
+    markResourceLoaded({ id: meta.id, kind: 'event' });
 
-    clearResourceDocumentState({ id: draft.id, kind: 'event' });
+    clearResourceDocumentState({ id: meta.id, kind: 'event' });
 
-    expect(useResourceStore.getState().resources[resourceKey(draft)]).toBeUndefined();
+    expect(useResourceStore.getState().resources[resourceKey(meta)]).toMatchObject({
+      loaded: false,
+      exists: true,
+    });
     expect(
-      useDocumentStateStore.getState().documents[resourceKey({ id: draft.id, kind: 'event' })],
+      useDocumentStateStore.getState().documents[resourceKey({ id: meta.id, kind: 'event' })],
     ).toBeUndefined();
   });
 

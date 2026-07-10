@@ -27,10 +27,8 @@ describe('layoutTabModel', () => {
       type: 'event',
       component: 'GraphEditor',
     });
-    expect(
-      buildGraphLayoutTab('untitled:function:Untitled-1', 'function'),
-    ).toMatchObject({
-      id: 'untitled:function:Untitled-1',
+    expect(buildGraphLayoutTab('functions/Helper.yssbi-function', 'function')).toMatchObject({
+      id: 'functions/Helper.yssbi-function',
       type: 'function',
     });
     expect(buildWorksheetLayoutTab('w1')).toMatchObject({

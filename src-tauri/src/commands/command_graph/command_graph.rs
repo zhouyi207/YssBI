@@ -58,7 +58,7 @@ pub fn create_event(
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
-    let graph = state.add_draft_graph_with_existing_names(
+    let graph = state.add_graph_with_existing_names(
         graph_name,
         GraphKind::Event,
         existing_graph_names(&state, GraphKind::Event, None)?,
@@ -82,7 +82,7 @@ pub fn create_function(
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
-    let graph = state.add_draft_graph_with_existing_names(
+    let graph = state.add_graph_with_existing_names(
         graph_name,
         GraphKind::Function,
         existing_graph_names(&state, GraphKind::Function, None)?,

@@ -56,7 +56,7 @@ export async function closeEditorTab(
   if (tabType === 'worksheet') {
     return closeWorksheetTab(tabId, nodeId, skipDirtyPrompt);
   }
-  if (tabType === 'event' || tabType === 'function' || !tabType) {
+  if (tabType === 'event' || tabType === 'function') {
     return closeGraphTab(tabId, nodeId, skipDirtyPrompt);
   }
 

@@ -406,7 +406,6 @@ export const zhCN = {
     splitDownAlt: "向下拆分编辑器（Alt）",
     splitRight: "向右拆分编辑器",
     closeGroup: "关闭分组",
-    unsavedPrefix: "未保存",
     status: {
       missing: "磁盘上找不到此资源",
       stale: "磁盘上的文件已更新",
@@ -421,7 +420,6 @@ export const zhCN = {
       keepOpen: "保持打开",
     },
     previewHint: "预览标签页 — 双击或编辑以固定",
-    newUntitledHint: "双击空白处新建未命名 Event",
   },
   activityBar: {
     graphs: "图",

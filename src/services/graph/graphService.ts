@@ -11,13 +11,13 @@ import { logger } from '@/utils/appLogger';
 /**
  * Graph Service - 管理 Event、Function 的创建、删除、更新和查询
  *
- * 创建返回 untitled 草稿句柄；正文由 EventCreated/FunctionCreated 事件注入并保持 loaded。
+ * 创建时即分配 `events/…` / `functions/…` 路径；正文由 EventCreated/FunctionCreated 事件注入并保持 loaded。
  */
 export class GraphService {
     /**
      * 创建 Event
      * @param graphName - Event 的名称
-     * @returns 草稿 graph path（`untitled:event:…`）
+     * @returns graph path（`events/…`）
      */
     static async createEvent(graphName: string): Promise<string> {
         try {
@@ -33,7 +33,7 @@ export class GraphService {
     /**
      * 创建 Function
      * @param graphName - Function 的名称
-     * @returns 草稿 graph path（`untitled:function:…`）
+     * @returns graph path（`functions/…`）
      */
     static async createFunction(graphName: string): Promise<string> {
         try {

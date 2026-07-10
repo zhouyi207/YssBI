@@ -41,9 +41,6 @@ fn graph_kind_to_resource_kind(kind: &crate::graph::GraphKind) -> &'static str {
 }
 
 fn graph_uri(kind: &crate::graph::GraphKind, graph_path: &crate::project::GraphResourcePath) -> String {
-    if crate::project::is_untitled_graph_path(graph_path.as_str()) {
-        return graph_path.as_str().to_string();
-    }
     crate::project::to_graph_resource_uri(
         crate::project::GraphDocumentKind::from(kind),
         graph_path,
@@ -56,13 +53,12 @@ fn graph_resource_meta(
     name: String,
     kind: crate::graph::GraphKind,
 ) -> Result<ProjectResourceMetaDTO, String> {
-    let is_draft = crate::project::is_untitled_graph_path(graph_path.as_str());
     Ok(ProjectResourceMetaDTO {
         id: graph_path.as_str().to_string(),
         kind: graph_kind_to_resource_kind(&kind).to_string(),
         name,
         uri: graph_uri(&kind, graph_path),
-        exists: !is_draft,
+        exists: true,
         loaded: state.get_graph(graph_path).is_some(),
         has_dirty_document: false,
         has_stale_document: false,

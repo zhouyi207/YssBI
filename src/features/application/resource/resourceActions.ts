@@ -9,9 +9,10 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
 import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
 
-export type GraphResourceKind = 'event' | 'function';
+export type { GraphResourceKind };
 
 async function refreshResourceIndex(): Promise<void> {
   await useProjectIOStore.getState().refreshResourceIndex();
@@ -57,13 +58,6 @@ export async function createGraphResource(kind: GraphResourceKind, name?: string
   return kind === 'event'
     ? GraphService.createEvent(graphName)
     : GraphService.createFunction(graphName);
-}
-
-/** VS Code-style untitled draft — backend assigns `untitled:{kind}:Untitled-N` and matching display name. */
-export async function createUntitledGraphResource(kind: GraphResourceKind): Promise<string> {
-  return kind === 'event'
-    ? GraphService.createEvent('')
-    : GraphService.createFunction('');
 }
 
 export async function duplicateGraphResource(graphPath: string): Promise<void> {

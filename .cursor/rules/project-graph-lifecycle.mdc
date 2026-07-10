@@ -42,9 +42,9 @@ backend and the React frontend in sync. New features must follow it.
    Frontend handlers in `src/features/core/sync/handlers/` apply the event to
    the projection store.
 5. **Graph close**: `closeGraphTab` prompts to save dirty graphs, calls
-   `save_project_graph` if the user agrees, removes the tab, and runs
-   `releaseGraphCacheIfClosed` which clears the frontend cache and calls
-   `unload_project_graph` to free backend memory.
+   `save_project_graph` if the user agrees, removes the tab, and fire-and-forget
+   `unloadGraphDocument` to clear the frontend cache and call
+   `unload_project_graph` on the backend.
 6. **App close**: the `useMenubar` close handler (Editor window) intercepts
    the request, collects every dirty graph tab, and shows a tri-state app-
    internal confirm dialog (Save All / Don't Save / Cancel) before allowing
@@ -88,12 +88,13 @@ backend and the React frontend in sync. New features must follow it.
 
 ## Graph Resource Identity
 
-- Event/Function **项目资源**身份：`events/...` / `functions/...` 磁盘相对路径，或内存草稿
-  `untitled:{event|function}:{label}`（保存前不落盘；禁止 UUID 图键）。
+- Event/Function **项目资源**身份：磁盘相对路径 `events/...` / `functions/...`（禁止 UUID 图键）。
+- `create_event` / `create_function` 创建时即通过 `add_graph_with_existing_names` 分配上述路径；内存与 Tab 始终使用该 path。
 - `metadata.yssbi` 只保存项目元数据；图列表由扫描 `events/` / `functions/` 派生。
-- **Tab.id** = 图资源 path 或 untitled 句柄；禁止 tab 级 UUID。用 `buildGraphLayoutTab` 创建 graph tab。
+- **Tab.id** = 图资源 path；禁止 tab 级 UUID。用 `buildGraphLayoutTab` 创建 graph tab。
 - IPC / Store / Call Function 引用一律使用 `graphPath`（DTO 字段 `path`）。
-- ResourceStore 逻辑键：已落盘用 `yssbi://graph/...` URI；untitled 草稿用 `untitled:...` 句柄本身。
+- ResourceStore 逻辑键：`yssbi://graph/{kind}/{encodedPath}` URI（`resourceKey` / `buildGraphResourceMeta`）。
+- 重命名或保存导致 path 变更时，后端 emit `GraphResourceMoved`；前端 `migrateGraphResourcePath` 级联 Tab / store 引用。
 - Node/Pin/Connection 仍使用 UUID；不要把 `GraphId` 用于 Event/Function 资源身份。
 
 ## Active Graph Session (per Editor Group)

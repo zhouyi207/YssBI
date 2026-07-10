@@ -1,7 +1,7 @@
 import { uiStore } from '@/features/core/ui/UIStore';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { GraphService } from '@/services/graph/graphService';
-import { deleteGraph } from './graphActions';
+import { deleteResource } from '@/features/application/resource/resourceActions';
 import { applyCallerGraphUpdates } from '@/features/application/graphDocument/graphDocumentActions';
 
 function graphDisplayName(path: string, kind: 'event' | 'function'): string {
@@ -12,7 +12,7 @@ function countCallSites(sites: { nodeIds: string[] }[]): number {
   return sites.reduce((sum, site) => sum + site.nodeIds.length, 0);
 }
 
-export async function deleteFunctionWithConfirm(functionPath: string): Promise<boolean> {
+async function deleteFunctionWithCallSiteConfirm(functionPath: string): Promise<boolean> {
   const name = graphDisplayName(functionPath, 'function');
   const callSites = await GraphService.getFunctionCallSites(functionPath);
   const callCount = countCallSites(callSites);
@@ -26,7 +26,7 @@ export async function deleteFunctionWithConfirm(functionPath: string): Promise<b
       type: 'danger',
     });
     if (!confirmed) return false;
-    await deleteGraph(functionPath, 'function');
+    await deleteResource({ id: functionPath, kind: 'function' });
     return true;
   }
 
@@ -46,6 +46,28 @@ export async function deleteFunctionWithConfirm(functionPath: string): Promise<b
     await applyCallerGraphUpdates(functionPath, callerGraphs);
   }
 
-  await deleteGraph(functionPath, 'function');
+  await deleteResource({ id: functionPath, kind: 'function' });
+  return true;
+}
+
+/** Unified graph delete with confirm — function adds call-site options; event uses simple confirm. */
+export async function deleteGraphWithConfirm(
+  graphPath: string,
+  kind: 'event' | 'function',
+): Promise<boolean> {
+  if (kind === 'function') {
+    return deleteFunctionWithCallSiteConfirm(graphPath);
+  }
+
+  const name = graphDisplayName(graphPath, 'event');
+  const confirmed = await uiStore.confirm({
+    title: '删除 Event 图',
+    message: `确定要删除 Event 图「${name}」吗？`,
+    confirmText: '删除',
+    cancelText: '取消',
+    type: 'danger',
+  });
+  if (!confirmed) return false;
+  await deleteResource({ id: graphPath, kind: 'event' });
   return true;
 }

@@ -1,4 +1,3 @@
-import { isUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
 import { useResourceStore } from './resourceStore';
 import type { ResourceKind, ResourceRef } from './resourceTypes';
@@ -54,34 +53,9 @@ export function markResourceDirty(ref: ResourceRef, dirty: boolean): void {
   }));
 }
 
-export function markResourceExternalChanged(ref: ResourceRef): void {
-  updateDocumentState(ref, (previous) => ({
-    ...previous,
-    loaded: previous.loaded,
-    stale: previous.loaded && !previous.dirty,
-    conflict: previous.loaded && previous.dirty,
-    missing: false,
-    diskVersion: (previous.diskVersion ?? previous.version) + 1,
-  }));
-}
-
-export function markResourceMissing(ref: ResourceRef): void {
-  updateDocumentState(ref, (previous) => ({
-    ...previous,
-    missing: true,
-    stale: false,
-    conflict: previous.loaded && previous.dirty,
-    diskVersion: (previous.diskVersion ?? previous.version) + 1,
-  }));
-}
-
 export function clearResourceDocumentState(ref: ResourceRef): void {
   const key = resourceKey(ref);
   useDocumentStateStore.getState().removeDocument(key);
-  if (isUntitledGraphPath(ref.id)) {
-    useResourceStore.getState().removeResource(ref);
-    return;
-  }
   useResourceStore.getState().patchResource(ref, {
     loaded: false,
     exists: true,

@@ -406,7 +406,6 @@ export const enUS = {
     splitDownAlt: "Split Editor Down (Alt)",
     splitRight: "Split Editor Right",
     closeGroup: "Close Group",
-    unsavedPrefix: "Untitled",
     status: {
       missing: "Resource missing on disk",
       stale: "File changed on disk",
@@ -421,7 +420,6 @@ export const enUS = {
       keepOpen: "Keep Open",
     },
     previewHint: "Preview tab — double-click or edit to pin",
-    newUntitledHint: "Double-click to create a new untitled event",
   },
   activityBar: {
     graphs: "Graphs",

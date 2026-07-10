@@ -38,14 +38,6 @@ impl GraphResourcePath {
     }
 
     pub fn display_name(&self) -> &str {
-        if is_untitled_graph_path(self.as_str()) {
-            let mut parts = self.as_str().splitn(3, ':');
-            let _prefix = parts.next();
-            let _kind = parts.next();
-            if let Some(label) = parts.next() {
-                return label;
-            }
-        }
         self.as_str()
             .rsplit('/')
             .next()
@@ -99,55 +91,17 @@ pub fn normalize_graph_resource_path(path: &str) -> String {
         .join("/")
 }
 
-pub fn is_untitled_graph_path(path: &str) -> bool {
-    path.starts_with("untitled:")
-}
-
-pub fn parse_untitled_graph_path(path: &str) -> Result<(GraphDocumentKind, String), ProjectError> {
-    if !is_untitled_graph_path(path) {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "not an untitled graph path '{path}'"
-        )));
-    }
-    let rest = &path["untitled:".len()..];
-    let (kind_str, label) = rest
-        .split_once(':')
-        .ok_or_else(|| ProjectError::InvalidProjectFormat(format!("invalid untitled path '{path}'")))?;
-    if label.is_empty() {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "untitled graph label cannot be empty in '{path}'"
-        )));
-    }
-    let kind = match kind_str {
-        "event" => GraphDocumentKind::Event,
-        "function" => GraphDocumentKind::Function,
-        _ => {
-            return Err(ProjectError::InvalidProjectFormat(format!(
-                "invalid untitled graph kind in '{path}'"
-            )));
-        }
-    };
-    Ok((kind, label.to_string()))
-}
-
 pub fn validate_graph_resource_path(path: &str) -> Result<(), ProjectError> {
     if path.is_empty() {
         return Err(ProjectError::InvalidProjectFormat(
             "graph resource path cannot be empty".into(),
         ));
     }
-    if is_untitled_graph_path(path) {
-        parse_untitled_graph_path(path)?;
-        return Ok(());
-    }
     graph_kind_from_path(path)?;
     Ok(())
 }
 
 pub fn graph_kind_from_path(path: &str) -> Result<GraphDocumentKind, ProjectError> {
-    if is_untitled_graph_path(path) {
-        return parse_untitled_graph_path(path).map(|(kind, _)| kind);
-    }
     let normalized = normalize_graph_resource_path(path);
     if normalized.starts_with(&format!("{EVENTS_DIR}/"))
         && normalized.ends_with(&format!(".{EVENT_EXTENSION}"))
@@ -203,10 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_untitled_graph_path() {
-        let path = GraphResourcePath::new("untitled:function:Untitled-1").unwrap();
-        assert_eq!(path.as_str(), "untitled:function:Untitled-1");
-        assert_eq!(path.display_name(), "Untitled-1");
-        assert_eq!(path.kind().unwrap(), GraphDocumentKind::Function);
+    fn rejects_untitled_graph_path() {
+        assert!(GraphResourcePath::new("untitled:function:Untitled-1").is_err());
     }
 }

@@ -786,7 +786,7 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 | **局部状态** | 函数内变量不在文件 URI 层 | `VariableScope::{Event,Function}` + Sidebar Local（`variablesGraphScopePath`） | [x] scope path 字段；[x] Sidebar Local 为唯一入口（已删 Detail 重复区块） |
 | **Pin 画布上下文** | N/A | React props `graphPath` | [x] `Pin`/`Node`/`CanvasNode`/`usePinInput` props `subgraphId` → `graphPath`，与 store 一致 |
 | **Detail 选中** | Resource 选中 | `DetailFocus` event/function 用 `path` | [x] `DetailFocus` 图资源分支 `id` → `path`；`ResourceRef.id` 保留（值=path，见原则 4） |
-| **临时资源** | `untitled:Untitled-1` | 未实现 | [x] 新建未保存图草稿 + 保存落盘换 path（`add_draft_graph` / `save_project_graph` → `GraphResourceMoved`）；[x] `untitled:{kind}:{label}` 句柄与 TS/Rust 校验、`resourceKey` / `inferGraphResourceKind` 基础层 |
+| **临时资源** | `untitled:Untitled-1` | 不使用 untitled 句柄 | [x] 已移除 `untitled:…` 草稿模型；创建即分配 `events/…` / `functions/…`；`GraphResourceMoved` 仅用于重命名/保存 path 变更 |
 | **执行上下文** | 无直接对标 | `playbackGraphPath`、`targetGraphPath` | [x] 已改名；保持与活跃 tab path 一致 |
 
 **收敛原则（写进后续 PR / 规则）**
@@ -816,7 +816,7 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 
 #### 已对齐（可视为收敛基线）
 
-- [x] **Tab.id = 资源 path**：graph `events/…` / `untitled:…`；worksheet id；禁止 tab 级 UUID（见身份收敛表）。
+- [x] **Tab.id = 资源 path**：graph `events/…` / `functions/…`；worksheet id；禁止 tab 级 UUID（见身份收敛表）。
 - [x] **Tab 标题优先 ResourceStore**：`resolveTabDisplayName` + `ResourceStore`。
 - [x] **脏状态单源**：`DocumentStateStore`；`collectDirtyGraphTabs` / TabBar 圆点不读 `LayoutTab.isDirty`。
 - [x] **打开/激活单入口（graph）**：`openGraphInEditor` → `openEditorTab` + `switchEditorGraphTab`。
@@ -833,7 +833,7 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 - [x] **P1 — Tab 资源引用显式化**：`layoutTabResourceRef(tab)`；TabBar / close / dirty 统一走 `resourceKey`。
 - [x] **P1 — 关闭/保存文案单源**：`resolveTabDisplayName` 供 `closeGraphTab` / `closeEditorTab` / `collectDirtyGraphTabs` 使用。
 - [x] **P2 — 组关闭去重**：`closeEditorGroup` 单点关闭 + `removeNode`；移除多余 `releaseGraphCacheIfClosed` 批量调用。
-- [x] **P2 — Tab 状态 UI 规范**：`missing` / `stale` / `conflict` icon + tooltip（i18n）；untitled 显示「未保存」前缀。
+- [x] **P2 — Tab 状态 UI 规范**：`missing` / `stale` / `conflict` icon + tooltip（i18n）。
 - [x] **P2 — Tab 上下文菜单**：右键 Close / Close Others / Close All / Close Saved；Reveal in Sidebar。
 - [x] **P3 — Preview / Pin tab**：侧栏单击 preview、双击/显式打开 pin；每组至多一个 preview；脏状态自动 pin；Tab 斜体 + 右键「保持打开」。
 - [x] **P3 — 布局恢复与资源索引对齐**：`reconcileOpenLayoutTabsWithResources` 在 load / refresh index 后剥离 `LayoutTab.title` 快照。
@@ -923,7 +923,7 @@ PinResultSearch (View)
 | **拖 Tab → 编辑器四边** | 新 EditorGroup + 复制 Tab | `Workspace.tsx` 内联 ~80 行 `setState` | [x] `splitEditorWithTab` → `splitEditorGroupAtEdge` |
 | **拖 Tab → 另一组 TabBar** | `moveEditor` 移动 Tab | `layoutStore.moveTab` | [x] 保持；经 `editorGroupCommands` 导出 |
 | **按钮分屏（右/下）** | `splitEditor` | `splitEditorGroup` → `splitNode`（仅右/下） | [x] 统一走 `splitEditorGroupAtEdge` |
-| **双击 TabBar 空白** | 新建 `Untitled-1` | 未实现 | [x] `createUntitledEventInGroup` |
+| **双击 TabBar 空白** | 新建 `Untitled-1` | 有意不实现（Event/Function 需显式选择） | [x] 空白双击：preview → pin；否则 toggle maximize group |
 | **中键关闭 Tab** | `closeEditor` | 未实现 | [x] TabItem `auxclick` |
 | **Tab 视觉** | 底边高亮、inactive 底色差、hover 显关闭 | 顶边 `before:bg-primary` | [x] `editorTabStyles` 底边 accent |
 
@@ -933,7 +933,7 @@ PinResultSearch (View)
 TabBar / Workspace (View)
     → editorGroupCommands（application 编排）
         → layoutStore.splitEditorGroupAtEdge / moveTab（布局树单点）
-        → openGraphInEditor / createUntitledGraphResource（资源打开）
+        → openGraphInEditor / createGraphResource（resourceActions）
 editorSplitLayout.ts（纯函数：edge → direction/isAfter）
 ```
 
@@ -942,14 +942,14 @@ editorSplitLayout.ts（纯函数：edge → direction/isAfter）
 1. **禁止在 View 内联布局树 mutation**：`Workspace` 不得再 `useLayoutStore.setState` 手写分屏。
 2. **四向分屏与按钮分屏共用同一 store action**：`splitEditorGroupAtEdge(targetId, edge, payload)`。
 3. **拖边分屏 = 复制 Tab**；**拖 TabBar = 移动 Tab**（VS Code 语义，源组保留）。
-4. **新建 Untitled 走资源层**：`createEvent('')` → 后端 `untitled:event:Untitled-N` + 名称对齐 label；`openGraphInEditor(..., targetGroupId)`。
+4. **新建图走资源层 + 显式 kind**：Sidebar / 菜单 `createGraphResource('event'|'function', name?)` → 后端 `add_graph_with_existing_names` 分配 path → `openGraphInEditor`。
 5. **样式与交互分离**：`editorTabStyles.ts` 管视觉；`TabBar.tsx` 仅绑事件到 commands。
 
 ##### 待办 checklist
 
 - [x] **P0 — 布局树分屏单点**：`editorSplitLayout.ts` + `layoutStore.splitEditorGroupAtEdge`；删除 `Workspace` 内联分屏。
-- [x] **P0 — 编排门面**：`editorGroupCommands.ts`（`splitEditorWithTab` / `splitEditorAtEdge` / `createUntitledEventInGroup`）。
-- [x] **P1 — TabBar 空白双击**：新建 `Untitled-N` event 并激活于当前组。
+- [x] **P0 — 编排门面**：`editorGroupCommands.ts`（`splitEditorWithTab` / `splitEditorAtEdge` / `moveTabBetweenGroups`）。
+- [x] **P1 — Tab 双击语义**：preview tab 双击 pin；非 preview 双击 maximize editor group（不新建空白图）。
 - [x] **P1 — Tab 样式 VS Code 化**：底边 active accent、inactive 底色、hover 关闭按钮。
 
 ##### 统一拖放预览（`EditorDropPreview`）
@@ -1645,6 +1645,14 @@ Editor Part（占 Workbench 中央 flex 区）
 - [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
 - [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 
+
+函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
+
+useGraphManagement 里 addEvent / addFunction、deleteEvent / deleteFunction 几乎镜像，底层已是 createGraphResource(kind) / deleteGraphWithConfirm(kind)
+GraphResourceKind vs GraphResourceType 两处 type alias（sidebar / editor）
+快捷键 Ctrl+N 仅新建 Event（产品选择，非 bug）
+Menubar / Watermark 仍分「新建 Event / 新建 Function」两项（入口文案差异，合理）
+若要进一步收敛，可以把 Session 对外 API 收成 addGraph(kind) / deleteGraph(kind)，Sidebar/Menubar 只传 kind，不再暴露四套函数名。
 
 # TODOLIST
 

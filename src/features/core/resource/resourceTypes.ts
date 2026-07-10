@@ -1,6 +1,5 @@
 import type { LayoutTab } from '@/shared/types/ui';
 import {
-  isUntitledGraphPath,
   toGraphResourceUri,
   type GraphResourceKind,
 } from '@/shared/types/domain/graphResourcePath';
@@ -54,7 +53,6 @@ function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
   switch (ref.kind) {
     case 'event':
     case 'function':
-      if (isUntitledGraphPath(ref.id)) return ref.id;
       return toGraphResourceUri(ref.kind, ref.id);
     case 'worksheet':
       return `yssbi://worksheet/${ref.id}`;
@@ -71,13 +69,12 @@ export function buildGraphResourceMeta(
   name: string,
   overrides?: Partial<Omit<ProjectResourceMeta, 'id' | 'kind' | 'name' | 'uri'>>,
 ): ProjectResourceMeta {
-  const isDraft = isUntitledGraphPath(path);
   return {
     id: path,
     kind,
     name,
-    uri: isDraft ? path : toGraphResourceUri(kind, path),
-    exists: !isDraft,
+    uri: toGraphResourceUri(kind, path),
+    exists: true,
     loaded: false,
     hasDirtyDocument: false,
     hasStaleDocument: false,

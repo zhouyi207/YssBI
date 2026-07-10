@@ -43,27 +43,6 @@ pub fn unique_name(base_name: &str, existing: impl IntoIterator<Item = impl AsRe
     format!("{} {}", base_name, i)
 }
 
-/// Untitled draft handle labels: `Untitled-1`, `Untitled-2`, …
-pub fn unique_untitled_label(existing: impl IntoIterator<Item = impl AsRef<str>>) -> String {
-    let re = Regex::new(r"^Untitled-(\d+)$").expect("regex valid");
-    let mut used = HashSet::new();
-
-    for label in existing {
-        let label = label.as_ref().as_ref();
-        if let Some(caps) = re.captures(label) {
-            if let Ok(n) = caps.get(1).unwrap().as_str().parse::<u32>() {
-                used.insert(n);
-            }
-        }
-    }
-
-    let mut i = 1u32;
-    while used.contains(&i) {
-        i += 1;
-    }
-    format!("Untitled-{i}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,15 +68,5 @@ mod tests {
     #[test]
     fn test_unique_name_different_base() {
         assert_eq!(unique_name("New Event", ["New Function"]), "New Event");
-    }
-
-    #[test]
-    fn test_unique_untitled_label() {
-        assert_eq!(unique_untitled_label([] as [&str; 0]), "Untitled-1");
-        assert_eq!(unique_untitled_label(["Untitled-1"]), "Untitled-2");
-        assert_eq!(
-            unique_untitled_label(["Untitled-1", "Untitled-2"]),
-            "Untitled-3"
-        );
     }
 }

@@ -46,7 +46,7 @@ export function cascadeSubGraphPathInLoadedGraphs(from: string, to: string): voi
   });
 }
 
-export function remapGraphMetaPath(from: string, to: string): void {
+function remapGraphMetaPath(from: string, to: string): void {
   if (pathsEqual(from, to)) return;
 
   useGraphMetaStore.setState((state) => {
@@ -63,7 +63,7 @@ export function remapGraphMetaPath(from: string, to: string): void {
   });
 }
 
-export function remapVariableScopePaths(from: string, to: string): void {
+function remapVariableScopePaths(from: string, to: string): void {
   const fromNorm = normalizeGraphResourcePath(from);
   const toNorm = normalizeGraphResourcePath(to);
   if (fromNorm === toNorm) return;
@@ -90,7 +90,7 @@ export function remapVariableScopePaths(from: string, to: string): void {
   });
 }
 
-export function remapEditorGraphPaths(from: string, to: string): void {
+function remapEditorGraphPaths(from: string, to: string): void {
   if (pathsEqual(from, to)) return;
 
   const store = useEditorStore.getState();

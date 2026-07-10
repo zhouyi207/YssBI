@@ -1,12 +1,7 @@
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
 import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { createUntitledGraphResource } from '@/features/application/resource/resourceActions';
-import { openGraphInEditor } from '@/features/application/editor/openGraphInEditor';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { parseUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
-import { activateEditorGroup, switchEditorTab } from './switchEditorTab';
+import { switchEditorTab } from './switchEditorTab';
 
 async function activateCreatedEditorGroup(groupId: string | null): Promise<string | null> {
   if (!groupId) return null;
@@ -60,18 +55,4 @@ export async function splitEditorAtEdge(
     ? EditorGroupsService.splitActiveTabRight(groupId)
     : EditorGroupsService.splitActiveTabDown(groupId);
   return activateCreatedEditorGroup(created);
-}
-
-/** Double-click TabBar empty area — create Untitled-N event in the target editor group. */
-export async function createUntitledEventInGroup(groupId: string): Promise<void> {
-  try {
-    await activateEditorGroup(groupId);
-    const graphPath = await createUntitledGraphResource('event');
-    const parsed = parseUntitledGraphPath(graphPath);
-    const name = parsed?.label ?? graphPath;
-    await openGraphInEditor(graphPath, name, 'event', groupId);
-  } catch (error) {
-    uiStore.showToast(formatErrorMessage(error), 'error');
-    throw error;
-  }
 }
