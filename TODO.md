@@ -971,6 +971,61 @@ useEditorDragPreviewMonitor（DndContext 子组件）
 - [ ] **P3 — Tab 溢出菜单**（`…` 列出不可见 tabs，对标 VS Code tab actions）。
 
 
+### 重复逻辑：双重 `loadGraph`（已收口）
+- **原问题**：创建图后打开时，可能在 UI 层与 `activateGraphTab` 各触发一次 `loadGraph`；`activateGraphTab` 与 `projectIOStore.loadGraph` 还重复做缓存判断 / viewport 激活。
+- **现状**：`openCreatedGraph` 仅调 `openGraph` → `openGraphInEditor` → `switchEditorTab` → `activateGraphTab`；**唯一** IO 入口为 `projectIOStore.loadGraph`（含 in-flight 去重）。
+- **架构**：
+  - `graphDocumentLoadPolicy.isGraphCachedInMemory`（core）：是否需打后端
+  - `loadGraph`（IO）：缓存命中只返回 `true`；未命中才 fetch + hydrate
+  - `activateGraphTab`（editor）：session + 单次 `loadGraph` + `activateCachedGraph`（viewport / loaded flag）
+- **删除**：`loadGraph` 内 `activateCachedGraph` / `ensureGraphViewport`；`activateGraphTab` 内重复的 `isGraphCachedInMemory` 分支。
+
+### 多事实源：`activeGroupId` vs `activeEditorGroupId`（已收口）
+- **原问题**：`useActiveEditorGroup` 在 override 时把 `activeEditorGroupId` 误设为 `groupId`；`useEditorState` 同时暴露 `activeGroupId` / `activeEditorGroupId` 别名；Tab 激活用 nullable `resolveEditorGroupId` 可能静默失败。
+- **架构**：
+  - **唯一事实源**：`layoutStore.activeEditorGroupId`（全局焦点 editor group）
+  - **`useActiveEditorGroup`**：`groupId`（上下文组）与 `focusedEditorGroupId`（store 焦点）分离
+  - **Tab 路由**：需保证有效 editor group 时用 `resolveEditorTargetGroupId`（`useTabManagement`）
+  - **焦点判定**：`useIsActiveEditorGroup` / `ensureActiveGroup` 直接比较 `activeEditorGroupId`
+- **删除**：`useEditorState.activeGroupId` 别名；`useEditorGroupWorkspace.activeGroupId`；`CanvasOverlays` 冗余 `activeGroupId === groupId` 守卫（已由 `Canvas interactive` 门控）。
+
+### 重复逻辑：Plot 时间轴与容器尺寸（已收口）
+- **原问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
+- **架构**：
+  - `shared/plot/plotTime.ts` — `numToPlotDate`、`plotAxisTickFormatter`（date/datetime 轴）
+  - `shared/plot/usePlotContainerSize.ts` — 容器 `ResizeObserver` 单点
+  - `plotShellStyles.ts` — `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN` / `CORRELOGRAM_MARGIN` / `PARALLEL_COORDINATES_MARGIN`
+- **已迁移全部 PlotView 组件**：`Scatter`、`Line`、`Histogram`、`BarChart`、`ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart`、`ParallelCoordinates`
+
+### 无效逻辑：deprecated `buildPinResultSearchEntries`（已收口）
+- **原问题**：`buildPinResultSearchEntries`（复数）仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
+- **架构**（当前）：
+  - `buildPinResultSearchEntry` — 单条 entry 构建（模块内 primitive，测试直引 `pinResultSearch.ts`）
+  - `collectPinResultSearchEntries` — 从 `ExecutionStore.pinResults` 批量收集（`usePinResultSearch` 唯一生产路径）
+  - `filterPinResultSearchEntries` — 查询过滤
+- **已删除**：`buildPinResultSearchEntries`、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`
+- **已收敛**：`buildPinResultSearchEntry` 不再从 `execution/index.ts` 公开导出
+
+### 代码漂移：InfoView 类型导入路径（已收口）
+- **原问题**：`InfoView/shared/types.ts` 薄 re-export `@/shared/types/report`，与领域类型双源漂移。
+- **架构**（当前）：
+  - **类型真源**：`shared/types/report/`（`index.ts` 聚合导出）
+  - **解析边界**：`parseReportPayload.ts`（IPC 单点窄化）
+  - **视图层**：InfoView 组件直引 `@/shared/types/report`；`InfoView/shared/index.ts` 仅导出 UI 块，不含 types
+- **已删除**：`InfoView/shared/types.ts`；各 `*Component.tsx` 上无引用的 `export type { … } from '@/shared/types/report'` 再导出
+
+### `@deprecated` 兼容层清零（已收口）
+- **原问题**：前后端保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
+- **架构**（当前）：
+  - Presentation：`parsePresentationWindowQuery().sourceId`（无 `parseSourceIdFromLocation`）
+  - 节点创建：`NodeSpawnParams` / `NodeCatalogItem`（无 `CreateNodeSpawnParams` / `PaletteItem`）
+  - 连线结果：`ConnectPinsResult.autoDisconnected[]`（无 `autoDisconnectedFrom/To`）
+  - 布局 Tab：`LayoutTab` 无 `title`；`LayoutTabInput.title` 仅 hydrate 入站，`normalizeLayoutTab` + `reconcileOpenLayoutTabsWithResources` 剥离
+  - 节点 DTO：前端 `nodeMetadata` / `uiStyle`（camelCase）；Rust DTO `#[serde(rename_all = "camelCase")]` 单字段序列化
+  - Correlogram：TS 用 `CorrelogramBarDTO` / `PlotCorrelogramBarDTO`；Rust plot 节点内部 `CorrelogramDatum` 不导出到前端
+- **已删除**：`LoadingOverlay`、`pickNodeDocumentation` / `resolveNodeDescription`、`cancelProjectScan` / `SCAN_CANCELLED`、`withLegacyPinLinks`、InfoView types shim 等
+- **验证**：`src/` / `src-tauri/` 无 `@deprecated` / `#[deprecated]` 业务标注（`Cargo.lock` 第三方 crate 除外）
+
 ## 2026.07.11
 
 - [x] **P1 — Pin Result Search 修复**：以 `pinResults` 为唯一索引源；`pinResultCacheKey(graphPath,pinId)` 对齐后端 runtime index；`pinResultsForSourceGraph` 支持函数图 Detail/Canvas 查看嵌套 Call 结果；`evaluatePinViewState` 单 pass UI 判定。
@@ -1503,6 +1558,19 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **首屏 resolve 单点**：`resolveInitialGraphViewport`（memento → default）← `ensureGraphViewport`；path 重命名 cascade 同步 memento（`remapEditorViewStateGraphPath`）。
 
 
+> **源于 2026.07.08 函数图层复盘**（Phase 1–4 + 签名索引已落地；缺口主要在**引用生命周期**、**打开图 reconcile**、**UE5 导航 UX**、**三处投影漂移**）：
+
+- [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
+- [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
+- [x] **Call Function 目标重绑定**：`update_call_function_target`（改 `subGraphPath` + 重投影 pin + 维护 call-site 索引）+ Node Detail `Select` 入口；`function_call_test` 覆盖重绑定与索引迁移。
+- [x] **断裂引用图级诊断**：`graphDiagnostics/callFunctionDiagnostics` 扫描缺失/无效 `subGraphPath` 的 Call 节点；画布节点 amber 徽章、侧栏图项徽章、保存前 warning toast；`resolveGraphResourceMeta` 统一校验 `exists`。
+- [x] **签名投影三处手写 → 契约测试**：`FunctionSignaturePin` 已统一为结构化 `dataType`；Rust `types.rs` + TS `functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts` roundtrip；删 `signature_data_type` 与 `dataTypeFromFunctionSignaturePin`。
+- [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
+- [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
+- [x] **签名更新刷新路径收敛**：`update_function_signature` invoke 回包为发起方唯一灌图权威；后端不再 emit `NodePinsUpdated`（对齐 `resolve_graph_dynamic_pins`）；`FunctionUpdated` 保留供非发起方/后续多窗口，发起方经 `graphRefreshEchoGuard` 整段跳过；删除 `incrementalPinUpdateGuard`。
+- [x] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`；`functionResourceView` + `useFunctionCatalog` 单点合并；Detail 经 `session.functions` 不再双订阅；`buildGraphSnapshotFromStores` 导出组装签名；删 `graphMetaStore.graphOrder`；见 `docs/adr/function-metadata-projection.md`。
+- [x] **Function Detail 局部变量区块（不实现）**：局部变量统一由 Sidebar Local 管理；已删除 `GraphLocalVariablesSection` 与 Detail 重复 wiring；`focusDetail` 对 event/function 同步 `variablesGraphScope`。
+
 ## v1.0 待办
 
 ### 窗口跨窗同步
@@ -1554,29 +1622,7 @@ Editor Part（占 Workbench 中央 flex 区）
 - [ ] **Executor 模块路径确认**：执行器已拆为 `execution/engine/executor/mod.rs` + `wire_events`/`data_inputs`；确认无残留 `executor.rs` 双份实现或 dead re-export，防止合并回潮。
 - [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
 
-> **源于 2026.07.08 函数图层复盘**（Phase 1–4 + 签名索引已落地；缺口主要在**引用生命周期**、**打开图 reconcile**、**UE5 导航 UX**、**三处投影漂移**）：
-
-
-**P1 — 亟需补齐的 UE5 式功能**
-
-- [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
-- [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
-- [x] **Call Function 目标重绑定**：`update_call_function_target`（改 `subGraphPath` + 重投影 pin + 维护 call-site 索引）+ Node Detail `Select` 入口；`function_call_test` 覆盖重绑定与索引迁移。
-- [ ] **签名变更断连用户反馈**：`reconcile_shell_pins` / Call 投影删除 pin 时会断连接（设计如此），但无「N 条连接已断开」toast 或 Validation 面板；避免用户以为 bug。
-- [ ] **断裂引用图级诊断**：无效 / 缺失 `subGraphId` 的 Call 节点无 compile 期标记（仅 runtime 失败）；打开图或保存前扫描 dangling Call，在侧栏/节点上显示警告徽章。
-
-**P2 — 重复 / 失效逻辑清理**
-
-- [x] **签名投影三处手写 → 契约测试**：`FunctionSignaturePin` 已统一为结构化 `dataType`；Rust `types.rs` + TS `functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts` roundtrip；删 `signature_data_type` 与 `dataTypeFromFunctionSignaturePin`。
-- [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
-- [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
-- [x] **签名更新刷新路径收敛**：`update_function_signature` invoke 回包为发起方唯一灌图权威；后端不再 emit `NodePinsUpdated`（对齐 `resolve_graph_dynamic_pins`）；`FunctionUpdated` 保留供非发起方/后续多窗口，发起方经 `graphRefreshEchoGuard` 整段跳过；删除 `incrementalPinUpdateGuard`。
-- [x] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`；`functionResourceView` + `useFunctionCatalog` 单点合并；Detail 经 `session.functions` 不再双订阅；`buildGraphSnapshotFromStores` 导出组装签名；删 `graphMetaStore.graphOrder`；见 `docs/adr/function-metadata-projection.md`。
-
-**P3 — 体验增强（可 v1.0 后）**
-
-- [x] **Function Detail 局部变量区块（不实现）**：局部变量统一由 Sidebar Local 管理；已删除 `GraphLocalVariablesSection` 与 Detail 重复 wiring；`focusDetail` 对 event/function 同步 `variablesGraphScope`。
-- [ ] **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
+### 口语化表达
 
 - [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
@@ -1597,6 +1643,7 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] 函数的 `FunctionSignaturePin` 结构化 `DataType`（与项目变量同构；见 Phase D + `functionSignaturePin.ts`）
 - [ ] uistyle 可能需要根据节点类型来进行重构
 - [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
+- [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 
 
 # TODOLIST
@@ -1713,66 +1760,6 @@ PinInstance 新增字段:
 
 结构估计
 
-
-
-本轮继续深挖，又发现并修复了以下问题：
-
-## 新发现与修复
-
-### 8. 重复逻辑：双重 `loadGraph`（已收口）
-- **原问题**：创建图后打开时，可能在 UI 层与 `activateGraphTab` 各触发一次 `loadGraph`；`activateGraphTab` 与 `projectIOStore.loadGraph` 还重复做缓存判断 / viewport 激活。
-- **现状**：`openCreatedGraph` 仅调 `openGraph` → `openGraphInEditor` → `switchEditorTab` → `activateGraphTab`；**唯一** IO 入口为 `projectIOStore.loadGraph`（含 in-flight 去重）。
-- **架构**：
-  - `graphDocumentLoadPolicy.isGraphCachedInMemory`（core）：是否需打后端
-  - `loadGraph`（IO）：缓存命中只返回 `true`；未命中才 fetch + hydrate
-  - `activateGraphTab`（editor）：session + 单次 `loadGraph` + `activateCachedGraph`（viewport / loaded flag）
-- **删除**：`loadGraph` 内 `activateCachedGraph` / `ensureGraphViewport`；`activateGraphTab` 内重复的 `isGraphCachedInMemory` 分支。
-
-### 9. 多事实源：`activeGroupId` vs `activeEditorGroupId`（已收口）
-- **原问题**：`useActiveEditorGroup` 在 override 时把 `activeEditorGroupId` 误设为 `groupId`；`useEditorState` 同时暴露 `activeGroupId` / `activeEditorGroupId` 别名；Tab 激活用 nullable `resolveEditorGroupId` 可能静默失败。
-- **架构**：
-  - **唯一事实源**：`layoutStore.activeEditorGroupId`（全局焦点 editor group）
-  - **`useActiveEditorGroup`**：`groupId`（上下文组）与 `focusedEditorGroupId`（store 焦点）分离
-  - **Tab 路由**：需保证有效 editor group 时用 `resolveEditorTargetGroupId`（`useTabManagement`）
-  - **焦点判定**：`useIsActiveEditorGroup` / `ensureActiveGroup` 直接比较 `activeEditorGroupId`
-- **删除**：`useEditorState.activeGroupId` 别名；`useEditorGroupWorkspace.activeGroupId`；`CanvasOverlays` 冗余 `activeGroupId === groupId` 守卫（已由 `Canvas interactive` 门控）。
-
-### 10. 重复逻辑：Plot 时间轴与容器尺寸（已收口）
-- **原问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
-- **架构**：
-  - `shared/plot/plotTime.ts` — `numToPlotDate`、`plotAxisTickFormatter`（date/datetime 轴）
-  - `shared/plot/usePlotContainerSize.ts` — 容器 `ResizeObserver` 单点
-  - `plotShellStyles.ts` — `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN` / `CORRELOGRAM_MARGIN` / `PARALLEL_COORDINATES_MARGIN`
-- **已迁移全部 PlotView 组件**：`Scatter`、`Line`、`Histogram`、`BarChart`、`ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart`、`ParallelCoordinates`
-
-### 11. 无效逻辑：deprecated `buildPinResultSearchEntries`（已收口）
-- **原问题**：`buildPinResultSearchEntries`（复数）仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
-- **架构**（当前）：
-  - `buildPinResultSearchEntry` — 单条 entry 构建（模块内 primitive，测试直引 `pinResultSearch.ts`）
-  - `collectPinResultSearchEntries` — 从 `ExecutionStore.pinResults` 批量收集（`usePinResultSearch` 唯一生产路径）
-  - `filterPinResultSearchEntries` — 查询过滤
-- **已删除**：`buildPinResultSearchEntries`、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`
-- **已收敛**：`buildPinResultSearchEntry` 不再从 `execution/index.ts` 公开导出
-
-### 12. 代码漂移：InfoView 类型导入路径（已收口）
-- **原问题**：`InfoView/shared/types.ts` 薄 re-export `@/shared/types/report`，与领域类型双源漂移。
-- **架构**（当前）：
-  - **类型真源**：`shared/types/report/`（`index.ts` 聚合导出）
-  - **解析边界**：`parseReportPayload.ts`（IPC 单点窄化）
-  - **视图层**：InfoView 组件直引 `@/shared/types/report`；`InfoView/shared/index.ts` 仅导出 UI 块，不含 types
-- **已删除**：`InfoView/shared/types.ts`；各 `*Component.tsx` 上无引用的 `export type { … } from '@/shared/types/report'` 再导出
-
-### 13. `@deprecated` 兼容层清零（已收口）
-- **原问题**：前后端保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
-- **架构**（当前）：
-  - Presentation：`parsePresentationWindowQuery().sourceId`（无 `parseSourceIdFromLocation`）
-  - 节点创建：`NodeSpawnParams` / `NodeCatalogItem`（无 `CreateNodeSpawnParams` / `PaletteItem`）
-  - 连线结果：`ConnectPinsResult.autoDisconnected[]`（无 `autoDisconnectedFrom/To`）
-  - 布局 Tab：`LayoutTab` 无 `title`；`LayoutTabInput.title` 仅 hydrate 入站，`normalizeLayoutTab` + `reconcileOpenLayoutTabsWithResources` 剥离
-  - 节点 DTO：前端 `nodeMetadata` / `uiStyle`（camelCase）；Rust DTO `#[serde(rename_all = "camelCase")]` 单字段序列化
-  - Correlogram：TS 用 `CorrelogramBarDTO` / `PlotCorrelogramBarDTO`；Rust plot 节点内部 `CorrelogramDatum` 不导出到前端
-- **已删除**：`LoadingOverlay`、`pickNodeDocumentation` / `resolveNodeDescription`、`cancelProjectScan` / `SCAN_CANCELLED`、`withLegacyPinLinks`、InfoView types shim 等
-- **验证**：`src/` / `src-tauri/` 无 `@deprecated` / `#[deprecated]` 业务标注（`Cargo.lock` 第三方 crate 除外）
 
 ---
 

@@ -5,6 +5,7 @@ import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { markResourceDirty } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
+import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 
 /**
  * Persist every dirty graph tab to disk and clear its dirty flag.
@@ -19,6 +20,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
     const layout = useLayoutStore.getState();
     for (const tab of dirty) {
         try {
+            warnCallFunctionIssuesBeforeSave(tab.graphPath);
             const layoutTab = Object.values(layout.nodes)
                 .flatMap((node) => node.data?.tabs ?? [])
                 .find((item) => item.id === tab.graphPath);

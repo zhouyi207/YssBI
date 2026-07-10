@@ -351,6 +351,13 @@ export const enUS = {
       titleBarNative: "Native",
     },
   },
+  graphDiagnostics: {
+    callFunctionNodeBadge: "Broken Call Function reference",
+    callFunctionEmptyTarget: "Call Function has no target function selected",
+    callFunctionMissingTarget: "Target function missing: {{path}}",
+    callFunctionSaveWarning: "This graph has {{count}} broken Call Function reference(s); saving anyway",
+    callFunctionSidebarTooltip: "{{count}} broken Call reference(s) in this graph",
+  },
   canvas: {
     pinResultSearch: {
       open: "Search pin results",

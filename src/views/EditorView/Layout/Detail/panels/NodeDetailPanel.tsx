@@ -4,7 +4,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { PinData, PinView } from '@/shared/types/store/graph';
 import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
 import { CALL_FUNCTION_NODE_TYPE, resolveEffectiveDefinition } from '@/features/domain/nodeDefinition';
-import { openGraphResource, resolveGraphResourceMeta } from '@/features/application/editor/openGraphResource';
+import { openGraphResource } from '@/features/application/editor/openGraphResource';
+import { useCallFunctionIssue } from '@/features/application/graphDiagnostics/useCallFunctionDiagnostics';
 import { updateCallFunctionTarget } from '@/features/application/graphDocument/graphDocumentActions';
 import { useFunctionCatalog } from '@/features/core/editor/hooks/useFunctionCatalog';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -113,6 +114,8 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     return resolveNodeDocumentationContent(meta, i18n.language, node?.description);
   }, [effectiveDefinition, node?.description, i18n.language]);
 
+  const callTargetIssue = useCallFunctionIssue(graphPath, nodeId);
+
   if (!node || !graphPath) {
     return (
       <DetailPanelShell title={t('detail.titleNode')}>
@@ -122,11 +125,6 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
       </DetailPanelShell>
     );
   }
-
-  const callTargetMissing =
-    nodeType === CALL_FUNCTION_NODE_TYPE &&
-    !!node.subGraphPath &&
-    !resolveGraphResourceMeta(node.subGraphPath);
 
   const handleOpenCallTarget = () => {
     if (!node.subGraphPath) return;
@@ -167,11 +165,13 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
                 size="icon-sm"
                 variant="outline"
                 className="shrink-0"
-                disabled={!node.subGraphPath || callTargetMissing}
+                disabled={!node.subGraphPath || callTargetIssue != null}
                 tooltip={
-                  callTargetMissing && node.subGraphPath
-                    ? t('detail.callFunction.missingTarget', { path: node.subGraphPath })
-                    : t('detail.callFunction.openTarget')
+                  callTargetIssue?.kind === 'missing_target' && callTargetIssue.subGraphPath
+                    ? t('detail.callFunction.missingTarget', { path: callTargetIssue.subGraphPath })
+                    : callTargetIssue?.kind === 'empty_target'
+                      ? t('graphDiagnostics.callFunctionEmptyTarget')
+                      : t('detail.callFunction.openTarget')
                 }
                 onClick={handleOpenCallTarget}
               >

@@ -351,6 +351,13 @@ export const zhCN = {
       titleBarNative: "原生",
     },
   },
+  graphDiagnostics: {
+    callFunctionNodeBadge: "Call Function 引用断裂",
+    callFunctionEmptyTarget: "Call Function 未选择目标函数",
+    callFunctionMissingTarget: "目标函数缺失：{{path}}",
+    callFunctionSaveWarning: "当前图有 {{count}} 处 Call Function 引用断裂，仍将保存",
+    callFunctionSidebarTooltip: "该图有 {{count}} 处 Call Function 引用断裂",
+  },
   canvas: {
     pinResultSearch: {
       open: "搜索 Pin 结果",

@@ -10,10 +10,10 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
-import { resourceKey, useResourceStore } from '@/features/core/resource';
-import { toUiNode } from './nodeView';
-
+import { useResourceStore } from '@/features/core/resource';
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { getFunctionResourceName } from '@/features/domain/graphDiagnostics';
+import { toUiNode } from './nodeView';
 
 export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
   const nodeData = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
@@ -22,8 +22,7 @@ export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
   // 名称以 ResourceStore 为准（重命名的单一事实来源）。
   const callFunctionName = useResourceStore((s) => {
     if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphPath) return undefined;
-    const meta = s.resources[resourceKey({ id: nodeData.subGraphPath, kind: 'function' })];
-    return meta?.exists ? meta.name : undefined;
+    return getFunctionResourceName(s.resources, nodeData.subGraphPath);
   });
 
   const callTitleOverride =

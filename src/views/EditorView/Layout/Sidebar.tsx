@@ -69,6 +69,7 @@ import {
 import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from "./workbenchPanelHeaderStyles";
 import { SidebarNodesPanel } from "./SidebarNodesPanel";
 import { SidebarVirtualList } from "./SidebarVirtualList";
+import { useCallFunctionIssueCountsByGraph } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
 
 const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
@@ -95,6 +96,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     renameGraph,
     duplicateGraph,
   } = useEditorGroup();
+
+  const callFunctionIssueCounts = useCallFunctionIssueCountsByGraph();
 
   const detailTarget = useDetailTarget();
 
@@ -316,6 +319,16 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         onContextMenu={onContextMenu}
         trailing={
           <>
+            {(type === "event" || type === "function") && (callFunctionIssueCounts[id] ?? 0) > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {t("graphDiagnostics.callFunctionSidebarTooltip", { count: callFunctionIssueCounts[id] })}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {(type === "event" || type === "function") && (
               <SidebarRowActionButton
                 isSelected={isSelected}

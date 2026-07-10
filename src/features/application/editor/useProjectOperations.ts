@@ -8,6 +8,7 @@ import { markResourceDirty } from '@/features/core/resource';
 import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
+import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import { uiStore } from '@/features/core/ui/UIStore';
 import {
   useExecutionStore,
@@ -86,6 +87,8 @@ export function useProjectOperations() {
         uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
         return;
       }
+
+      warnCallFunctionIssuesBeforeSave(activeTabId);
 
       const savedPath = await GraphService.saveProjectGraph(activeTabId);
       markResourceDirty({ id: savedPath, kind: activeTab.type }, false);
