@@ -9,75 +9,30 @@ import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData, GraphData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
 import { useGraphDataStore } from './graphDataStore';
-import { useGraphMetaStore } from './graphMetaStore';
-import { resourceKey, useResourceStore } from '@/features/core/resource';
+import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { getViewport } from '@/features/core/viewport';
+import { resourceKey, useResourceStore } from '@/features/core/resource';
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-function getGraphMetaFromResourceStore(graphPath: string): { path: string; name: string; type: 'event' | 'function' } | null {
-  const resources = useResourceStore.getState().resources;
-  const eventMeta = resources[resourceKey({ id: graphPath, kind: 'event' })];
-  if (eventMeta?.exists) {
-    return { path: graphPath, name: eventMeta.name, type: 'event' };
-  }
-  const functionMeta = resources[resourceKey({ id: graphPath, kind: 'function' })];
-  if (functionMeta?.exists) {
-    return { path: graphPath, name: functionMeta.name, type: 'function' };
-  }
-  return null;
-}
-
 /**
- * 从 ResourceStore + GraphDataStore 获取指定 graph 的完整数据（用于 openGraph 等）
+ * 从三 store 组装指定 graph 的完整数据（ResourceStore + graphMetaStore + GraphDataStore）。
  */
 export function getGraphByPath(graphPath: string): GraphData | null {
-  const meta = getGraphMetaFromResourceStore(graphPath);
-  if (!meta) return null;
-
-  const dataState = useGraphDataStore.getState();
-  const graphMeta = useGraphMetaStore.getState().graphs[graphPath];
-  const nodeIds = dataState.getGraphNodeIds(graphPath);
-  const nodes = nodeIds.map((nid) => dataState.getGraphNode(graphPath, nid)).filter(isPresent);
-  const pins = nodeIds.flatMap((nid) =>
-    dataState.getGraphNodePins(graphPath, nid).map((pid) => dataState.getGraphPin(graphPath, pid)).filter(isPresent),
-  );
-  const connIds = new Set<string>();
-  pins.forEach((p) => {
-    (p ? dataState.getGraphPinConnections(graphPath, p.id) : []).forEach((cid) => connIds.add(cid));
-  });
-  const connections = Array.from(connIds)
-    .map((cid) => dataState.getGraphConnection(graphPath, cid))
-    .filter(isPresent);
-
-  return {
-    ...meta,
-    functionInputs: graphMeta?.functionInputs ?? [],
-    functionOutputs: graphMeta?.functionOutputs ?? [],
-    nodes,
-    pins,
-    connections,
-    canvas: getViewport(graphPath),
-  };
+  return buildGraphSnapshotFromStores()[graphPath] ?? null;
 }
 
 /**
  * 获取所有 graphs（按 ResourceStore graphOrder 顺序）
  */
 export function getGraphs(): Record<string, GraphData> {
-  const graphOrder = useResourceStore.getState().graphOrder;
-  const result: Record<string, GraphData> = {};
-  for (const gid of graphOrder) {
-    const g = getGraphByPath(gid);
-    if (g) result[gid] = g;
-  }
-  return result;
+  return buildGraphSnapshotFromStores();
 }
 
 /**
- * React Hook: 订阅指定 graph 的数据（用于需要响应式更新的组件）
+ * React Hook: 订阅指定 graph 的图体数据（名称来自 ResourceStore；不含签名，签名见 graphMetaStore / useFunctionCatalog）。
  * 注意：selector 必须返回稳定引用，避免 "getSnapshot should be cached" 无限循环
  */
 export function useGraphData(activeTabId: string | null) {

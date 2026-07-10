@@ -57,7 +57,6 @@ export function remapGraphMetaPath(from: string, to: string): void {
 
     return {
       graphs,
-      graphOrder: state.graphOrder.map((path) => (path === from ? to : path)),
     };
   });
 }

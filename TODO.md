@@ -692,7 +692,7 @@ src/app/appConfig/appLinks.ts
 - [x] **函数图 Phase 3–4 复审的四项修复/增强**：
   - **未加载图的 Call pin 陈旧根治**：`ProjectState::sync_all_call_nodes_in_graph` + `resolve_graph_dynamic_pins`（tab 打开）按目标函数当前签名重投影 Call pin——持久化仅作缓存。
   - **嵌套调用 runtime 文档化（不加缓存）**：`call_subgraph` 每次新建嵌套 runtime，避免递归/多 Call 共享可变执行态。
-  - **签名无 exec 但含副作用节点警告**：`function_has_side_effect_nodes`；`update_function_signature` 返回 `sideEffectWarning`，前端 `detail.signature.sideEffectWarning` toast（已移除纯度 Switch 与 `set_function_purity`）。
+  - ~~**签名无 exec 但含副作用节点警告**~~（**已删除**）：曾用 `sideEffectWarning` toast；data-only 函数为合法形态，改由用户自行理解 exec/data 求值差异。
   - ~~**纯函数 Call 节点视觉区分**~~（**已取消**）：不再为无 exec 的 Call 节点做绿色标题 / `pure` 徽章。
 - [x] **函数签名统一为 exec/data 单一事实来源（移除 is_pure）**：删除 `GraphInstance.is_pure`、持久化、DTO、`set_function_purity` command 及前端 `Graph.isPure` / `FunctionDetailPanel` 纯度 Switch / `setFunctionPurity` 全链；新建函数默认签名含 `exec-in`/`exec-out`；Entry/Call `flow_processor` 经 `get_exec_output_roles()` 触发签名 exec 输出；`NodePinsUpdated` `updatePins` 采用完整 pin 字段（修复签名就地修改后画布 pin 对不上）；`applyCallerGraphUpdates` 合并 invoke 回包与打开图 fallback 刷新。
 - [x] **函数图签名就地修改后画布 pin「对不上」修复**：后端投影方向经 `function_call_test` 新增 `call_node_input_output_directions_match_signature` 验证无误；根因在前端 `NodePinsUpdatedHandler` 的 `updatePins` 只 patch `name`，丢弃了就地更新 pin 的 type/direction/container/typeDisplay/dataType——改为采用 DTO 完整可见字段（与 `addPins` 一致），惠及函数壳节点、repeatable pin 重排、动态 pin reconcile 所有走 `updated_pins` 的路径。
@@ -783,7 +783,7 @@ Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`�
 | **工作区索引** | `workspace.fs` 扫描 + 文件监听 | `scan_graph_resource_index` + `ResourceStore` | [x] 扫描索引；[x] Rust `project_watcher` + `ProjectIndexInvalidated` → `refreshResourceIndex` |
 | **图内实体** | 符号/AST 局部 id（非文件路径） | `NodeId` / `PinId` UUID | [x] 正确分层，保持 |
 | **跨文件引用** | Import path、Find References | `subGraphPath` on Call、`FunctionCallSiteIndex` | [x] `get_function_call_sites` IPC + Function Detail 调用方列表（基础 Find References）；[x] 跳转定义（`openGraphResource` + Node Detail）；[x] 重命名 path 级联（Rust `move_graph_resource_path` + 前端 `cascadeGraphPathReferences` / `migrateGraphResourcePath`） |
-| **局部状态** | 函数内变量不在文件 URI 层 | `VariableScope::{Event,Function}` + `variablesGraphScopePath` | [x] scope path 字段；[x] Function Detail 局部变量区块（`variableScopeSelectors` + `GraphLocalVariablesSection`） |
+| **局部状态** | 函数内变量不在文件 URI 层 | `VariableScope::{Event,Function}` + Sidebar Local（`variablesGraphScopePath`） | [x] scope path 字段；[x] Sidebar Local 为唯一入口（已删 Detail 重复区块） |
 | **Pin 画布上下文** | N/A | React props `graphPath` | [x] `Pin`/`Node`/`CanvasNode`/`usePinInput` props `subgraphId` → `graphPath`，与 store 一致 |
 | **Detail 选中** | Resource 选中 | `DetailFocus` event/function 用 `path` | [x] `DetailFocus` 图资源分支 `id` → `path`；`ResourceRef.id` 保留（值=path，见原则 4） |
 | **临时资源** | `untitled:Untitled-1` | 未实现 | [x] 新建未保存图草稿 + 保存落盘换 path（`add_draft_graph` / `save_project_graph` → `GraphResourceMoved`）；[x] `untitled:{kind}:{label}` 句柄与 TS/Rust 校验、`resourceKey` / `inferGraphResourceKind` 基础层 |
@@ -1471,7 +1471,7 @@ Editor Part（占 Workbench 中央 flex 区）
 
 ## v1.0 待办
 
-
+### 窗口跨窗同步
 
 > **8.6 多 Editor 窗口跨窗同步（v1.0 设计 / 待办）**：**基线（已实现）**：副窗口 `#/editor`、per-label `workbenchLayoutMemento`（`setWorkbenchLayoutWindowScope`）、`useEditorWindowGeometryPersistence`（main → backend / secondary → localStorage）、各窗独立 `layoutStore` + editor grid。主题/设置跨窗；项目/图事件经 Tauri + `ProjectListener` 共享。**layout / open-tabs 跨窗不同步**为当前有意 defer。详见 [`docs/WORKBENCH_SATELLITE_WINDOWS.md`](./docs/WORKBENCH_SATELLITE_WINDOWS.md) § Secondary Editor Windows / Multi-window sync。
 
@@ -1499,6 +1499,8 @@ Editor Part（占 Workbench 中央 flex 区）
 
 ---
 
+### Rust 后端复盘
+
 > **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
 
 - [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
@@ -1511,7 +1513,6 @@ Editor Part（占 Workbench 中央 flex 区）
 - [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
 - [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs` 或 CI 校验「样例 JSON ↔ TypeScript」契约（与前端 `DatabaseRecord` 强类型化项联动）。
-- [ ] **`function_has_side_effect_nodes` 语义补强**：当前仅扫非壳节点的 exec pin，不含 Sleep/View/纯 data 副作用；与 `sideEffectWarning` 产品文案对齐，补 `function_call_test` / `shell_node_test` 用例，避免签名无 exec 时漏警告或误报。
 - [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
 - [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
 - [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。
@@ -1527,7 +1528,6 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
 - [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
 - [x] **Call Function 目标重绑定**：`update_call_function_target`（改 `subGraphPath` + 重投影 pin + 维护 call-site 索引）+ Node Detail `Select` 入口；`function_call_test` 覆盖重绑定与索引迁移。
-- [ ] **PinEditor 保护默认 exec 引脚**：新建函数默认含 `exec-in`/`exec-out`，但 Detail 可删至「纯数据函数」且无确认；删除最后一个 exec 入/出前应确认，并与 `sideEffectWarning` 文案一致。
 - [ ] **签名变更断连用户反馈**：`reconcile_shell_pins` / Call 投影删除 pin 时会断连接（设计如此），但无「N 条连接已断开」toast 或 Validation 面板；避免用户以为 bug。
 - [ ] **断裂引用图级诊断**：无效 / 缺失 `subGraphId` 的 Call 节点无 compile 期标记（仅 runtime 失败）；打开图或保存前扫描 dangling Call，在侧栏/节点上显示警告徽章。
 
@@ -1536,12 +1536,12 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **签名投影三处手写 → 契约测试**：`FunctionSignaturePin` 已统一为结构化 `dataType`；Rust `types.rs` + TS `functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts` roundtrip；删 `signature_data_type` 与 `dataTypeFromFunctionSignaturePin`。
 - [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
 - [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
-- [ ] **签名更新刷新路径收敛**：单用户改签名仍走 invoke 全量 `addGraphFromData` + `applyCallerGraphUpdates` + 后端 `FunctionUpdated`/`NodePinsUpdated` 三路（`incrementalPinUpdateGuard` 仅抑制重复）；长期应让 invoke 回包为唯一权威，事件只做增量补洞或删除冗余 handler。
-- [ ] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`（加载时 `functionInputs/Outputs`）；`Detail.tsx` 手合并 `selectedFunction` + `selectedFunctionSignature`。与「Detail 单入口」待办联动，禁止第四份签名拷贝。
+- [x] **签名更新刷新路径收敛**：`update_function_signature` invoke 回包为发起方唯一灌图权威；后端不再 emit `NodePinsUpdated`（对齐 `resolve_graph_dynamic_pins`）；`FunctionUpdated` 保留供非发起方/后续多窗口，发起方经 `graphRefreshEchoGuard` 整段跳过；删除 `incrementalPinUpdateGuard`。
+- [x] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`；`functionResourceView` + `useFunctionCatalog` 单点合并；Detail 经 `session.functions` 不再双订阅；`buildGraphSnapshotFromStores` 导出组装签名；删 `graphMetaStore.graphOrder`；见 `docs/adr/function-metadata-projection.md`。
 
 **P3 — 体验增强（可 v1.0 后）**
 
-- [ ] **Function Detail 局部变量区块**：后端 `VariableScope::Function` + palette Local 已有，但 `FunctionDetailPanel` 仅名称+签名；可增加当前函数 scope 变量列表与快捷新建（复用 Sidebar Local hook），贴近 UE5「接口+局部状态」一体。
+- [x] **Function Detail 局部变量区块（不实现）**：局部变量统一由 Sidebar Local 管理；已删除 `GraphLocalVariablesSection` 与 Detail 重复 wiring；`focusDetail` 对 event/function 同步 `variablesGraphScope`。
 - [ ] **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 
 - [ ] 点击更新会自动更新

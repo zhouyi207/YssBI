@@ -3,7 +3,7 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
 import { syncFunctionSignatureFromGraph } from '@/features/application/graphDocument/functionSignatureSync';
-import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
+import { shouldSuppressGraphRefreshEcho } from '@/features/application/graphDocument/graphRefreshEchoGuard';
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import {
@@ -63,6 +63,11 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
     eventType = 'EventUpdated';
     
     handle(payload: GraphUpdatedPayload): void {
+        if (shouldSuppressGraphRefreshEcho(payload.path)) {
+            this.log('Event updated (suppressed — invoke refresh authoritative):', payload.path);
+            return;
+        }
+
         this.log('Event updated:', payload.path);
         
         const meta = getGraphResourceMeta(payload.path, 'event');
@@ -126,6 +131,11 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
     eventType = 'FunctionUpdated';
     
     handle(payload: GraphUpdatedPayload): void {
+        if (shouldSuppressGraphRefreshEcho(payload.path)) {
+            this.log('Function updated (suppressed — invoke refresh authoritative):', payload.path);
+            return;
+        }
+
         this.log('Function updated:', payload.path);
         
         const meta = getGraphResourceMeta(payload.path, 'function');
@@ -140,7 +150,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
             functionOutputs: payload.data.functionOutputs,
           });
         }
-        if (payload.data.nodes && meta && !shouldSuppressIncrementalPinUpdate(payload.path)) {
+        if (payload.data.nodes && meta) {
           useGraphDataStore.getState().addGraphFromData(
             payload.path,
             buildGraphUpdateData(payload, meta, 'function'),

@@ -18,7 +18,7 @@ const catalog = {
     },
   },
   events: { 'evt-1': { id: 'evt-1', name: 'Main' } },
-  functions: { 'fn-1': { id: 'fn-1', name: 'Add' } },
+  functions: { 'fn-1': { id: 'fn-1', name: 'Add', functionInputs: [], functionOutputs: [] } },
   dataframes: {
     'df-1': { id: 'df-1', name: 'Sales', rowCount: 10 },
   },
@@ -61,11 +61,15 @@ describe('resolveDetailPanelModel', () => {
       target: { kind: 'function', path: 'fn-1' },
       selectedLog: null,
       worksheetDocument: null,
-      functionSignature: {
-        functionInputs: [createDataSignaturePin('in-1', 'A', { kind: 'Float64' })],
-        functionOutputs: [createDataSignaturePin('out-1', 'R', { kind: 'Float64' })],
-      },
       ...catalog,
+      functions: {
+        'fn-1': {
+          id: 'fn-1',
+          name: 'Add',
+          functionInputs: [createDataSignaturePin('in-1', 'A', { kind: 'Float64' })],
+          functionOutputs: [createDataSignaturePin('out-1', 'R', { kind: 'Float64' })],
+        },
+      },
     });
 
     expect(model).toEqual({

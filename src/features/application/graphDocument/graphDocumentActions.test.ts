@@ -7,7 +7,7 @@ import { updateFunctionSignature } from './graphDocumentActions';
 describe('graphDocumentActions', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
+    useGraphMetaStore.setState({ graphs: {} });
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
@@ -32,7 +32,6 @@ describe('graphDocumentActions', () => {
         canvas: { x: 0, y: 0, scale: 1 },
       },
       callerGraphs: [],
-      sideEffectWarning: false,
     });
 
     await updateFunctionSignature('function-1', { inputs });

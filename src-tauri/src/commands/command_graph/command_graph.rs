@@ -4,9 +4,7 @@ use crate::event::Event;
 use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use crate::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use crate::graph::{FunctionSignaturePin, GraphKind};
-use crate::project::{
-    GraphDocumentKind, GraphResourcePath, emit_pin_change_events, read_project_index,
-};
+use crate::project::{GraphDocumentKind, GraphResourcePath, read_project_index};
 use crate::schema::GraphInstanceDTO;
 use crate::project::ProjectState;
 use tauri::{AppHandle, State};
@@ -137,14 +135,12 @@ pub fn remove_graph(
     Ok(())
 }
 
-/// `update_function_signature` 的返回：函数图 DTO + 已同步 Call pin 的调用方图 DTO + 副作用警告。
+/// `update_function_signature` 的返回：函数图 DTO + 已同步 Call pin 的调用方图 DTO。
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateFunctionSignatureResult {
     pub graph: GraphInstanceDTO,
     pub caller_graphs: Vec<GraphInstanceDTO>,
-    /// 签名无 exec 入参但函数体含副作用节点时前端据此提示。
-    pub side_effect_warning: bool,
 }
 
 #[tauri::command]
@@ -156,8 +152,9 @@ pub fn update_function_signature(
     outputs: Option<Vec<FunctionSignaturePin>>,
 ) -> Result<UpdateFunctionSignatureResult, String> {
     let function_path = parse_graph_path(&function_path)?;
-    let (graph, change_sets) = state.update_function_signature(&function_path, inputs, outputs)?;
+    let (graph, _change_sets) = state.update_function_signature(&function_path, inputs, outputs)?;
     let dto: GraphInstanceDTO = (&graph).into();
+    // FunctionUpdated：供未发起 invoke 的监听方刷新；发起方以 invoke 回包为准（前端 echo guard 忽略）。
     emit_project_event(
         &app,
         Event::Function(EventFunction::FunctionUpdated {
@@ -165,22 +162,17 @@ pub fn update_function_signature(
             data: dto.clone(),
         }),
     );
-    // 签名变更后同步 Entry / Return 壳节点 pin（新增 / 移除 / 更新）到前端画布。
-    emit_pin_change_events(&app, &function_path, &graph, &change_sets);
-    // 同步所有引用该函数的 Call 节点 pin，并随 invoke 回包带回调用方图供前端即时刷新。
+    // invoke 回包已含完整 Graph DTO（含 Entry/Return 与 Call pin），不在此 emit NodePinsUpdated
+    //（对齐 resolve_graph_dynamic_pins：避免与 addGraphFromData 竞态）。
     let mut caller_graphs = Vec::new();
-    for (caller_path, caller_graph, caller_sets) in
+    for (_caller_path, caller_graph, _caller_sets) in
         state.sync_call_nodes_for_function(&function_path)
     {
-        emit_pin_change_events(&app, &caller_path, &caller_graph, &caller_sets);
         caller_graphs.push((&caller_graph).into());
     }
-    let side_effect_warning = !graph.signature_has_exec_input()
-        && state.function_has_side_effect_nodes(&function_path);
     Ok(UpdateFunctionSignatureResult {
         graph: dto,
         caller_graphs,
-        side_effect_warning,
     })
 }
 

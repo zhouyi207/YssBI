@@ -692,27 +692,6 @@ impl ProjectState {
         out
     }
 
-    /// 函数体是否含「副作用 / 控制流」节点：即非壳节点且带 exec pin。
-    ///
-    /// 签名无 exec 入参时函数按数据拉取求值，这类节点不会被执行。用于签名保存时提示用户。
-    pub fn function_has_side_effect_nodes(&self, function_path: &GraphResourcePath) -> bool {
-        let Some(graph) = self.get_graph(function_path) else {
-            return false;
-        };
-        let ds = graph.data_state.read().unwrap();
-        ds.nodes.iter().any(|(_, node)| {
-            if node.definition.metadata.shell_role.is_some() {
-                return false;
-            }
-            node.pin_ids.iter().any(|pid| {
-                ds.pins
-                    .get(pid)
-                    .map(|p| p.is_exec())
-                    .unwrap_or(false)
-            })
-        })
-    }
-
     /// 打开 Function 图 Tab 时：将签名表投影到 Entry / Return 壳节点 pin。
     pub fn sync_function_shell_pins_in_graph(
         &self,

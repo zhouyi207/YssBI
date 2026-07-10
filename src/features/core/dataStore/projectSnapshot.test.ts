@@ -84,4 +84,19 @@ describe('buildGraphSnapshot', () => {
     expect(Object.keys(snapshot)).toEqual(['graph-a']);
     expect(snapshot['graph-a'].type).toBe('function');
   });
+
+  it('includes function signatures when getFunctionSignature is provided', () => {
+    const snapshot = buildGraphSnapshot(
+      makeAccess({
+        getResourceMeta: () => ({ name: 'Compute', kind: 'function', exists: true }),
+        getFunctionSignature: () => ({
+          functionInputs: [{ id: 'in-1', name: 'A' }],
+          functionOutputs: [{ id: 'out-1', name: 'R' }],
+        }),
+      }),
+    );
+
+    expect(snapshot['graph-1'].functionInputs).toEqual([{ id: 'in-1', name: 'A' }]);
+    expect(snapshot['graph-1'].functionOutputs).toEqual([{ id: 'out-1', name: 'R' }]);
+  });
 });

@@ -636,20 +636,11 @@ export const zhCN = {
     typeLabels: {
       function: "函数",
     },
-    signature: {
-      sideEffectWarning:
-        "函数签名未包含 exec 入参，但函数体含有副作用节点（如 View、Set Variable），按数据求值时这些节点不会执行。",
-    },
     callSites: {
       title: "被引用 ({{count}})",
       loading: "正在加载调用点…",
       empty: "暂无 Call Function 节点引用此函数",
       openCaller: "打开 Call 节点 {{nodeId}}",
-    },
-    localVariables: {
-      title: "局部变量 ({{count}})",
-      empty: "此函数暂无局部变量",
-      add: "添加",
     },
     callFunction: {
       openTarget: "打开目标函数",

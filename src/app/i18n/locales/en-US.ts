@@ -636,20 +636,11 @@ export const enUS = {
     typeLabels: {
       function: "Function",
     },
-    signature: {
-      sideEffectWarning:
-        "This function has no exec input in its signature, but the body contains side-effect nodes (e.g. View, Set Variable) that will not run when evaluated as data.",
-    },
     callSites: {
       title: "Referenced by ({{count}})",
       loading: "Loading call sites…",
       empty: "Not referenced by any Call Function nodes",
       openCaller: "Open Call node {{nodeId}}",
-    },
-    localVariables: {
-      title: "Local variables ({{count}})",
-      empty: "No local variables in this function",
-      add: "Add",
     },
     callFunction: {
       openTarget: "Open target function",

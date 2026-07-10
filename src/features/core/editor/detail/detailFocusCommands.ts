@@ -4,10 +4,14 @@ import {
   resolveEditorGroupId,
 } from '@/features/core/layout/layoutTabQueries';
 import { useEditorStore } from '../stores/useEditorStore';
+import { setVariablesGraphScopeFromResource } from './variablesGraphScope';
 import type { DetailFocus } from './types';
 
 export function focusDetail(focus: DetailFocus): void {
   useEditorStore.getState().setDetailFocus(focus);
+  if (focus.kind === 'event' || focus.kind === 'function') {
+    setVariablesGraphScopeFromResource(focus.path);
+  }
 }
 
 export function focusDetailOnActiveGraph(groupId?: string | null): void {

@@ -3,7 +3,6 @@ import { createDataSignaturePin } from '@/shared/types/domain/functionSignatureP
 import { describe, expect, it, vi } from 'vitest';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailNameField } from '../shared/DetailForm';
-import { GraphLocalVariablesSection } from '../shared/GraphLocalVariablesSection';
 import { FunctionDetailPanel } from './FunctionDetailPanel';
 
 vi.mock('react-i18next', () => ({
@@ -58,25 +57,5 @@ describe('FunctionDetailPanel', () => {
     expect(onSignatureChange).toHaveBeenNthCalledWith(2, {
       outputs: [createDataSignaturePin('output-2', 'Done', { kind: 'Boolean' })],
     });
-  });
-
-  it('renders local variables section with selection callback', () => {
-    const onSelectLocalVariable = vi.fn();
-    const element = FunctionDetailPanel({
-      fn: {
-        path: 'functions/A.yssbi-function',
-        name: 'Compute',
-        inputs: [],
-        outputs: [],
-      },
-      localVariables: [{ id: 'var-1', name: 'Counter', typeLabel: 'Int64', dataType: { kind: 'Int64' } }],
-      onSelectLocalVariable,
-      onRename: vi.fn(),
-      onSignatureChange: vi.fn(),
-    }) as ReactElement;
-
-    const section = findAllByType(element, GraphLocalVariablesSection)[0];
-    (section.props as { onSelectVariable: (id: string) => void }).onSelectVariable('var-1');
-    expect(onSelectLocalVariable).toHaveBeenCalledWith('var-1');
   });
 });

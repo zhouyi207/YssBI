@@ -9,37 +9,40 @@ import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 import {
-  guardFullGraphPinRefresh,
-  shouldSuppressIncrementalPinUpdate,
-} from './incrementalPinUpdateGuard';
+  markGraphRefreshEcho,
+  resolveGraphRefreshEcho,
+} from './graphRefreshEchoGuard';
 
 import { syncFunctionSignatureFromGraph } from './functionSignatureSync';
 
 export async function updateFunctionSignature(
   functionPath: string,
   patch: import('@/shared/types').FunctionSignaturePatch,
-): Promise<{ sideEffectWarning: boolean }> {
-  if (!patch.inputs && !patch.outputs) return { sideEffectWarning: false };
+): Promise<void> {
+  if (!patch.inputs && !patch.outputs) return;
 
-  const { graph, callerGraphs, sideEffectWarning } = await GraphService.updateFunctionSignature(
-    functionPath,
-    patch,
-  );
-
-  const releaseGuard = guardFullGraphPinRefresh([
-    functionPath,
-    ...callerGraphs.map((g) => g.path),
-  ]);
+  // 在 invoke 前标记函数图，避免 FunctionUpdated 与回包 apply 竞态重复灌图。
+  markGraphRefreshEcho([functionPath]);
 
   try {
-    syncFunctionSignatureFromGraph(graph);
-    useGraphDataStore.getState().addGraphFromData(functionPath, graph);
-    await applyCallerGraphUpdates(functionPath, callerGraphs);
-  } finally {
-    releaseGuard();
-  }
+    const { graph, callerGraphs } = await GraphService.updateFunctionSignature(
+      functionPath,
+      patch,
+    );
 
-  return { sideEffectWarning };
+    const callerPaths = callerGraphs.map((g) => g.path);
+    markGraphRefreshEcho(callerPaths);
+
+    try {
+      syncFunctionSignatureFromGraph(graph);
+      useGraphDataStore.getState().addGraphFromData(functionPath, graph);
+      await applyCallerGraphUpdates(functionPath, callerGraphs);
+    } finally {
+      resolveGraphRefreshEcho(callerPaths);
+    }
+  } finally {
+    resolveGraphRefreshEcho([functionPath]);
+  }
 }
 
 function graphHasCallToFunction(callerGraphPath: string, functionPath: string): boolean {
@@ -77,8 +80,6 @@ export async function applyCallerGraphUpdates(
     }),
   );
 }
-
-export { shouldSuppressIncrementalPinUpdate };
 
 export async function updateCallFunctionTarget(
   graphPath: string,

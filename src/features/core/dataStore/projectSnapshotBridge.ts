@@ -6,11 +6,13 @@ import { getViewport } from '@/features/core/viewport';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import type { GraphData } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
+import { useGraphMetaStore } from './graphMetaStore';
 import { buildGraphSnapshot } from './projectSnapshot';
 
 export function buildGraphSnapshotFromStores(): Record<string, GraphData> {
   const resourceStore = useResourceStore.getState();
   const dataStore = useGraphDataStore.getState();
+  const metaStore = useGraphMetaStore.getState();
 
   return buildGraphSnapshot({
     graphOrder: resourceStore.graphOrder,
@@ -19,6 +21,14 @@ export function buildGraphSnapshotFromStores(): Record<string, GraphData> {
       const functionMeta = resourceStore.resources[resourceKey({ id: graphPath, kind: 'function' })];
       const meta = eventMeta ?? functionMeta;
       return meta ? { name: meta.name, kind: meta.kind, exists: meta.exists } : null;
+    },
+    getFunctionSignature: (graphPath) => {
+      const meta = metaStore.graphs[graphPath];
+      if (!meta || meta.type !== 'function') return null;
+      return {
+        functionInputs: meta.functionInputs ?? [],
+        functionOutputs: meta.functionOutputs ?? [],
+      };
     },
     getGraphNodeIds: (graphPath) => dataStore.getGraphNodeIds(graphPath),
     getGraphNode: (graphPath, nodeId) => dataStore.getGraphNode(graphPath, nodeId) ?? null,

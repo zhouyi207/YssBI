@@ -1,4 +1,5 @@
 import type { DetailTarget } from '@/features/core/editor/detail/types';
+import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
 import type { GraphResourceRecord } from '@/features/core/resource/resourceSelectors';
 import type { FunctionPinSpec } from '@/shared/types/domain/graph';
 import type { Variable } from '@/shared/types/domain/variable';
@@ -9,7 +10,8 @@ import type { LogMessage } from '@/shared/types/ui';
 export interface DetailCatalogSnapshot {
   variables: Record<string, Variable>;
   events: GraphResourceRecord;
-  functions: GraphResourceRecord;
+  /** 已合并名称 + 签名（`useFunctionCatalog` / `FunctionResourceView`） */
+  functions: Record<string, FunctionResourceView>;
   dataframes: Record<string, DatabaseRecord>;
 }
 
@@ -17,10 +19,6 @@ export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
   target: DetailTarget | null;
   selectedLog: LogMessage | null;
   worksheetDocument: WorksheetDocument | null;
-  functionSignature?: {
-    functionInputs?: FunctionPinSpec[];
-    functionOutputs?: FunctionPinSpec[];
-  };
 }
 
 export type FunctionDetailModel = {
@@ -51,7 +49,6 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     functions,
     dataframes,
     worksheetDocument,
-    functionSignature,
   } = input;
 
   if (!target) return { kind: 'empty' };
@@ -82,8 +79,8 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
         fn: {
           path: fnRecord.id,
           name: fnRecord.name,
-          inputs: functionSignature?.functionInputs ?? [],
-          outputs: functionSignature?.functionOutputs ?? [],
+          inputs: fnRecord.functionInputs,
+          outputs: fnRecord.functionOutputs,
         },
       };
     }

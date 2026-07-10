@@ -1,11 +1,18 @@
 import type { GraphPosition } from '@/shared/types/domain/graph';
+import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
 import type { GraphData } from '@/shared/types/store/graph';
 import type { ProjectResourceMeta } from '@/features/core/resource/resourceTypes';
+
+export type FunctionSignatureSnapshot = {
+  functionInputs: FunctionSignaturePin[];
+  functionOutputs: FunctionSignaturePin[];
+};
 
 /** 图快照读取端口（纯函数测试与 projectIOStore 共用） */
 export interface GraphSnapshotAccess {
   graphOrder: string[];
   getResourceMeta(graphPath: string): Pick<ProjectResourceMeta, 'name' | 'kind' | 'exists'> | null;
+  getFunctionSignature?(graphPath: string): FunctionSignatureSnapshot | null;
   getGraphNodeIds(graphPath: string): string[];
   getGraphNode(graphPath: string, nodeId: string): GraphData['nodes'][number] | null;
   getGraphNodePins(graphPath: string, nodeId: string): string[];
@@ -60,6 +67,15 @@ export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, 
           connections,
           canvas: access.getViewport(graphPath),
         };
+
+        if (graph.type === 'function' && access.getFunctionSignature) {
+          const signature = access.getFunctionSignature(graphPath);
+          if (signature) {
+            graph.functionInputs = signature.functionInputs;
+            graph.functionOutputs = signature.functionOutputs;
+          }
+        }
+
         return [graphPath, graph] as const;
       })
       .filter((entry): entry is [string, GraphData] => entry !== null),

@@ -7,7 +7,7 @@ import { useGraphDataStore } from '@/features/core/dataStore';
 import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
-import { shouldSuppressIncrementalPinUpdate } from '@/features/application/graphDocument/graphDocumentActions';
+import { shouldSuppressGraphRefreshEcho } from '@/features/application/graphDocument/graphRefreshEchoGuard';
 import { isPending } from '../utils/echoSuppressor';
 import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
@@ -149,8 +149,8 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
     eventType = 'NodePinsUpdated';
 
     handle(payload: NodePinsUpdatedPayload, _callbacks?: EventCallbacks): void {
-        if (shouldSuppressIncrementalPinUpdate(payload.graphPath)) {
-            this.log('Node pins updated (suppressed — full graph refresh in progress):', payload.graphPath);
+        if (shouldSuppressGraphRefreshEcho(payload.graphPath)) {
+            this.log('Node pins updated (suppressed — invoke refresh authoritative):', payload.graphPath);
             return;
         }
 

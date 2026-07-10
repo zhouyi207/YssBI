@@ -12,7 +12,7 @@ import {
 describe('cascadeGraphPathReferences', () => {
   beforeEach(() => {
     useGraphDataStore.setState({ graphEntities: {} });
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
+    useGraphMetaStore.setState({ graphs: {} });
     useVariableStore.setState({ variables: {} });
     useEditorStore.setState({
       detailFocus: null,
@@ -64,7 +64,6 @@ describe('cascadeGraphPathReferences', () => {
       graphs: {
         [from]: { path: from, name: 'Old', type: 'function' },
       },
-      graphOrder: [from],
     });
     useVariableStore.setState({
       variables: {

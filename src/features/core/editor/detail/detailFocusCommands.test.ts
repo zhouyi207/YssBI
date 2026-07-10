@@ -3,6 +3,7 @@ import { useEditorStore } from '@/features/core/editor';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import {
   applyCanvasDetailFocus,
+  focusDetail,
   focusDetailOnActiveGraph,
   focusDetailOnNode,
 } from './detailFocusCommands';
@@ -68,5 +69,13 @@ describe('detailFocusCommands', () => {
 
     focusDetailOnNode('n9', 'editor');
     expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'node', id: 'n9' , graphPath: 'g1' });
+  });
+
+  it('focusDetail syncs variables graph scope for event and function resources', () => {
+    focusDetail({ kind: 'function', path: 'functions/A.yssbi-function' });
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('functions/A.yssbi-function');
+
+    focusDetail({ kind: 'variable', id: 'var-1' });
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('functions/A.yssbi-function');
   });
 });

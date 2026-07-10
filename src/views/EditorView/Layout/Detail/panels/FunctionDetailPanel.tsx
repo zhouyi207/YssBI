@@ -1,13 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
 import type { FunctionCallSiteDTO } from '@/shared/types/dto';
-import type { VariableListEntry } from '@/features/core/variable/variableScopeSelectors';
 import { openGraphResource, resolveGraphResourceMeta } from '@/features/application/editor/openGraphResource';
 import { focusDetailOnNode } from '@/features/core/editor/detail/detailFocusCommands';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
-import { GraphLocalVariablesSection } from '../shared/GraphLocalVariablesSection';
 import { detailMetaTextClass, detailSectionTitleClass, detailSubsectionTitleClass } from '../shared/detailStyles';
 
 interface FunctionDetailPanelProps {
@@ -19,9 +17,6 @@ interface FunctionDetailPanelProps {
   };
   callSites?: FunctionCallSiteDTO[];
   callSitesLoading?: boolean;
-  localVariables?: VariableListEntry[];
-  onSelectLocalVariable?: (id: string) => void;
-  onAddLocalVariable?: () => void;
   onRename: (name: string) => void;
   onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
@@ -30,9 +25,6 @@ export function FunctionDetailPanel({
   fn,
   callSites = [],
   callSitesLoading = false,
-  localVariables = [],
-  onSelectLocalVariable,
-  onAddLocalVariable,
   onRename,
   onSignatureChange,
 }: FunctionDetailPanelProps) {
@@ -59,11 +51,6 @@ export function FunctionDetailPanel({
           {t('detail.typeLabels.function')}
         </DetailReadonlyField>
       </DetailForm>
-      <GraphLocalVariablesSection
-        variables={localVariables}
-        onSelectVariable={(id) => onSelectLocalVariable?.(id)}
-        onAddVariable={onAddLocalVariable}
-      />
       <section className="mt-4 space-y-2">
         <h3 className={detailSectionTitleClass}>
           {t('detail.callSites.title', { count: totalCalls })}

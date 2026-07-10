@@ -8,7 +8,7 @@ import {
 
 describe('functionSignatureSync', () => {
   beforeEach(() => {
-    useGraphMetaStore.setState({ graphs: {}, graphOrder: [] });
+    useGraphMetaStore.setState({ graphs: {} });
   });
 
   it('writes function signature fields into graph meta store', () => {

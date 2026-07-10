@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useEditorSessionResources } from '@/features/application/editor';
 import { useDetailTarget } from '@/features/core/editor';
-import { useGraphMetaStore } from '@/features/core/dataStore';
 import { useLogStore } from '@/features/core/log/logStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
@@ -23,10 +22,6 @@ export function useDetailPanelModel(): {
     worksheetTargetId ? s.documents[worksheetTargetId] ?? null : null,
   );
 
-  const functionSignature = useGraphMetaStore((s) =>
-    target?.kind === 'function' ? s.graphs[target.path] : undefined,
-  );
-
   const model = useMemo(
     () =>
       resolveDetailPanelModel({
@@ -37,18 +32,8 @@ export function useDetailPanelModel(): {
         functions,
         dataframes,
         worksheetDocument,
-        functionSignature,
       }),
-    [
-      target,
-      selectedLog,
-      variables,
-      events,
-      functions,
-      dataframes,
-      worksheetDocument,
-      functionSignature,
-    ],
+    [target, selectedLog, variables, events, functions, dataframes, worksheetDocument],
   );
 
   return { model, worksheetTargetId, worksheetDocument };
