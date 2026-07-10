@@ -1,6 +1,6 @@
 /** Product metadata and external links (single source for Help / About). */
 export const APP_DISPLAY_NAME = "YssBI";
-export const APP_VERSION = "0.2.5";
+export const APP_VERSION = "0.2.6";
 
 const GITHUB_REPO = "https://github.com/zhouyi207/YssBI";
 
