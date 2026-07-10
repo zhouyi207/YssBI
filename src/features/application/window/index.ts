@@ -1,9 +1,9 @@
 export { usePersistedWindow } from "./usePersistedWindow";
+export { useEditorWindowGeometryPersistence } from "./useEditorWindowGeometryPersistence";
 export {
-  usePersistedSecondaryWindow,
   readSecondaryWindowFallbackPosition,
   readSecondaryWindowState,
-} from "./usePersistedSecondaryWindow";
+} from "./secondaryWindowGeometryStore";
 export { useWindowMaximized } from "./useWindowMaximized";
 export { createPersistedWindow } from "./createPersistedWindow";
 export type {

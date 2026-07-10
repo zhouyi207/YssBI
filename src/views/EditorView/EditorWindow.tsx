@@ -1,5 +1,4 @@
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { useTranslation } from "react-i18next";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { BottomBar } from "./Layout/BottomBar";
@@ -17,8 +16,9 @@ import { useMenubar } from "@/features/application/menubar";
 import { toggleSidebarVisibility } from "@/features/core/layout/workbenchLayoutService";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
-import { useAppearanceSettings } from "@/features/application/settings/useAppearanceSettings";
-import { usePersistedWindow, usePersistedSecondaryWindow } from "@/features/application/window";
+import { useEditorWorkbenchAppearance } from "@/features/application/settings/useAppearanceSettings";
+import { useActivityBarLayout } from "@/features/application/settings/useActivityBarLayout";
+import { useEditorWindowGeometryPersistence } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 import { ZenModeHintOverlay } from "./Layout/ZenModeHintOverlay";
@@ -28,10 +28,10 @@ function EditorWindowReady() {
   const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
   const zenMode = useLayoutStore((s) => s.zenMode);
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
-  const activityBarPosition = useSettingsStore((s) => s.appearance.activityBarPosition);
+  const activityBar = useActivityBarLayout(zenMode);
 
   useWorkbenchLayout();
-  useAppearanceSettings();
+  useEditorWorkbenchAppearance();
   useProjectSyncWithEditor();
 
   const editor = useEditorGroup();
@@ -57,8 +57,8 @@ function EditorWindowReady() {
     toggleZenMode,
   });
 
-  const showActivityBar = !zenMode && activityBarPosition !== "Hidden";
-  const activityBarOnRight = activityBarPosition === "Right";
+  const showActivityBar = activityBar.visible;
+  const activityBarOnRight = activityBar.side === "right";
 
   return (
     <div className="flex flex-col w-full h-screen">
@@ -83,8 +83,7 @@ export const EditorWindow = () => {
   const { t } = useTranslation();
   const { status, error } = useAppInitialization();
 
-  usePersistedWindow("main");
-  usePersistedSecondaryWindow();
+  useEditorWindowGeometryPersistence();
 
   if (status !== LoadStatus.Ready) {
     return (

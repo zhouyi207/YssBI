@@ -26,7 +26,7 @@ import { logger } from '@/utils/appLogger';
  * Menubar logic: window lifecycle, import, split, open windows, etc.
  * Extracted from Menubar.tsx - view should only consume this hook.
  *
- * 窗口几何状态（位置/大小/最大化）由 `usePersistedWindow("main")` 在
+ * 窗口几何状态（位置/大小/最大化）由 `useEditorWindowGeometryPersistence` 在
  * EditorWindow / ProjectPickerScreen 等主窗口入口处统一接入；这里仅负责
  * 拦截关闭以处理脏标签，不再自行写入 settings。
  */

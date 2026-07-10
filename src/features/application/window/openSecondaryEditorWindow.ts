@@ -3,7 +3,7 @@ import {
   type PersistedWindowOptions,
 } from './createPersistedWindow';
 import { createEphemeralWindowLabel } from './windowLabels';
-import { readSecondaryWindowState } from './usePersistedSecondaryWindow';
+import { readSecondaryWindowState } from './secondaryWindowGeometryStore';
 
 export function buildSecondaryEditorWindowRequest(label: string): PersistedWindowOptions {
   return {

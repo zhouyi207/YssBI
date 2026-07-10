@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WindowStateService } from "@/services/window/windowStateService";
-import type { WindowKind, WindowState } from "@/shared/types/settings";
+import type { WindowKind } from "@/shared/types/settings";
 import { logger } from "@/utils/appLogger";
+import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCapture";
 
 /**
  * 在窗口关闭时把当前几何状态写回后端 `window_state.json`。
@@ -20,37 +21,14 @@ export function usePersistedWindow(kind: WindowKind): void {
         const win = getCurrentWindow();
         let unlistenClose: (() => void) | null = null;
 
-        const captureCurrentState = async (): Promise<WindowState | null> => {
-            try {
-                const isMaximized = await win.isMaximized();
-                if (isMaximized) {
-                    // 最大化时只标记 isMaximized；窗口还原后的尺寸应保留前一次记录
-                    const prev = await WindowStateService.get(kind);
-                    return { ...prev, isMaximized: true };
-                }
-                const size = await win.innerSize();
-                const position = await win.outerPosition();
-                return {
-                    width: size.width,
-                    height: size.height,
-                    x: position.x,
-                    y: position.y,
-                    isMaximized: false,
-                };
-            } catch (e) {
-                logger.app.warn(
-                    `Failed to read current window geometry: ${e instanceof Error ? e.message : String(e)}`,
-                    "Window",
-                );
-                return null;
-            }
-        };
-
         const setup = async () => {
             if (win.label !== "main") return;
             try {
                 unlistenClose = await win.onCloseRequested(async () => {
-                    const next = await captureCurrentState();
+                    const next = await captureWindowGeometryPreservingMaximized(
+                        win,
+                        () => WindowStateService.get(kind),
+                    );
                     if (!next) return;
                     try {
                         await WindowStateService.save(kind, next);

@@ -3,18 +3,18 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { usePersistedSecondaryWindow } from './usePersistedSecondaryWindow';
+import { useEditorWindowGeometryPersistence } from './useEditorWindowGeometryPersistence';
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: vi.fn(),
 }));
 
 function Harness(): null {
-  usePersistedSecondaryWindow();
+  useEditorWindowGeometryPersistence();
   return null;
 }
 
-describe('usePersistedSecondaryWindow', () => {
+describe('useEditorWindowGeometryPersistence', () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -30,7 +30,7 @@ describe('usePersistedSecondaryWindow', () => {
     host.remove();
   });
 
-  it('persists restorable geometry when first closed maximized', async () => {
+  it('persists restorable geometry when a secondary window closes maximized', async () => {
     let closeListener: (() => Promise<void>) | undefined;
     const unlisten = vi.fn();
     vi.mocked(getCurrentWindow).mockReturnValue({

@@ -32,7 +32,9 @@ export const enUS = {
   panel: {
     logs: "Logs",
     output: "Output",
+    terminal: "Terminal",
     outputPlaceholder: "Output channel — coming soon",
+    terminalPlaceholder: "Integrated terminal — requires PTY backend",
   },
   /** Editor context menus and input dialogs triggered from them */
   contextMenu: {
@@ -170,6 +172,7 @@ export const enUS = {
     edit: "Edit",
     data: "Data",
     window: "Window",
+    view: "View",
     tools: "Tools",
     help: "Help",
     newEventGraph: "New Event Graph",
@@ -189,8 +192,6 @@ export const enUS = {
     newWindow: "New Window",
     splitEditorRight: "Split Editor Right",
     splitEditorDown: "Split Editor Down",
-    hideLogs: "Hide Logs",
-    showLogs: "Show Logs",
     enterZenMode: "Enter Zen Mode",
     exitZenMode: "Exit Zen Mode",
     openLogsInNewWindow: "Open Logs in New Window",
@@ -205,10 +206,12 @@ export const enUS = {
     about: "About",
     switchToDark: "Switch to dark theme",
     switchToLight: "Switch to light theme",
-    hideSidebar: "Hide Sidebar",
-    showSidebar: "Show Sidebar",
-    hideDetail: "Hide Detail",
-    showDetail: "Show Detail",
+    hidePrimarySideBar: "Hide Primary Side Bar",
+    showPrimarySideBar: "Show Primary Side Bar",
+    hideSecondarySideBar: "Hide Secondary Side Bar",
+    showSecondarySideBar: "Show Secondary Side Bar",
+    hidePanel: "Hide Panel",
+    showPanel: "Show Panel",
   },
   aboutModal: {
     title: "About {{appName}}",

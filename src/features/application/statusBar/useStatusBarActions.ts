@@ -6,7 +6,7 @@ import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layout/workbenchLayoutService';
 import { setViewportLive } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
-import { resolveColorThemePreset } from '@/features/application/settings/colorThemePresets';
+import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
 
 /** Bottom bar command handlers — keeps BottomBar presentational. */
 export function useStatusBarActions() {
@@ -36,7 +36,7 @@ export function useStatusBarActions() {
     const idx = order.indexOf(colorTheme as (typeof order)[number]);
     const next = order[(idx + 1) % order.length];
     useSettingsStore.getState().updateAppearance({ colorTheme: next });
-    updateTheme(resolveColorThemePreset(next));
+    syncColorThemePreset(next, updateTheme);
     saveDebounced();
   }, [colorTheme, updateTheme, saveDebounced]);
 

@@ -32,7 +32,9 @@ export const zhCN = {
   panel: {
     logs: "日志",
     output: "输出",
+    terminal: "终端",
     outputPlaceholder: "输出通道 — 即将推出",
+    terminalPlaceholder: "集成终端 — 需 PTY 后端",
   },
   /** 编辑器内右键上下文菜单及由菜单触发的输入框 */
   contextMenu: {
@@ -170,6 +172,7 @@ export const zhCN = {
     edit: "编辑",
     data: "数据",
     window: "窗口",
+    view: "视图",
     tools: "工具",
     help: "帮助",
     newEventGraph: "新建 Event",
@@ -189,8 +192,6 @@ export const zhCN = {
     newWindow: "新窗口",
     splitEditorRight: "向右拆分编辑器",
     splitEditorDown: "向下拆分编辑器",
-    hideLogs: "隐藏日志",
-    showLogs: "显示日志",
     enterZenMode: "进入 Zen 模式",
     exitZenMode: "退出 Zen 模式",
     openLogsInNewWindow: "在新窗口打开日志",
@@ -205,10 +206,12 @@ export const zhCN = {
     about: "关于",
     switchToDark: "切换为深色主题",
     switchToLight: "切换为浅色主题",
-    hideSidebar: "隐藏侧栏",
-    showSidebar: "显示侧栏",
-    hideDetail: "隐藏详情",
-    showDetail: "显示详情",
+    hidePrimarySideBar: "隐藏主侧栏",
+    showPrimarySideBar: "显示主侧栏",
+    hideSecondarySideBar: "隐藏辅助侧栏",
+    showSecondarySideBar: "显示辅助侧栏",
+    hidePanel: "隐藏面板",
+    showPanel: "显示面板",
   },
   aboutModal: {
     title: "关于 {{appName}}",

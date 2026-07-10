@@ -1109,7 +1109,7 @@ interface PinVisualSpec {
 
 ---
 
-### 迁移阶段（v1.0 待办）
+### 迁移阶段
 
 - [x] **Phase A — Pin IPC 瘦身（P0）**：`PinTypesInferred` / 图 DTO / `NodePinsUpdated` 只传 `dataType`；删 `data_type_to_pin_type` / `data_type_to_container`；`NodeEventHandler` + `pinHydrate.ts` 本地推导展示字段；`pinVisual` + 图加载 vitest 回归。
 - [x] **Phase B — 后端主题副本清理（P1）**：删 Rust `editor/settings` 与 `load_settings`/`save_settings` command；前端无 invoke 引用。
@@ -1118,8 +1118,6 @@ interface PinVisualSpec {
 - [x] **Phase D — 扫尾**：运行时 `Pin` / `PinData` / `PinInstanceDTO` 删除 `containerType`；data pin `type` 恒为 `object`（exec 除外）；`FunctionSignaturePin` 同步改为结构化 `dataType`（exec 缺省），与 Pin IPC 契约一致。
 
 ---
-
-## v1.0 待办
 
 ### Workbench / Sash 向 VS Code 收敛
 
@@ -1398,7 +1396,7 @@ Editor Part（占 Workbench 中央 flex 区）
 **P3 — 可选产品 parity（v1.0 后可排）**
 
 - [x] **Panel 位置** bottom / left / right（VS Code `workbench.panel.defaultLocation`）；Settings → `panelPartLayout` + `applyPanelPosition`。
-- [~] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+I` toggle Detail；Menubar Window 菜单已标注。**剩余：** 无独立 View 菜单项（VS Code View → Appearance → Secondary Side Bar）。
+- [x] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+I` toggle；`detail.userHidden` 尊重用户隐藏；**View** 菜单提供 Primary / Secondary Side Bar / Panel / Zen（对齐 VS Code View → Appearance）；Window 菜单仅保留窗口与布局操作。
 - [x] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原；`workbenchZenMode.ts` + `Ctrl+K Z` / `Esc` / Window 菜单 + `ZenModeHintOverlay`；不持久化。
 - [x] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；`appearance.titleBarStyle` + `windowDecorationPolicy` + `WindowChrome` / `WindowMenuBar` + `createPersistedWindow`。
 - [x] **Status Bar 可交互项**（VS Code 左/右 status item + command）；`statusBarRegistry` + `useStatusBarItems` + `BottomBar`。
@@ -1411,15 +1409,15 @@ Editor Part（占 Workbench 中央 flex 区）
 
 | 领域 | VS Code | YssBI 现状 |
 |------|---------|------------|
-| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [~] `resetWorkbenchLayout` 已接 **Window** 菜单（chrome-only，保留 editor grid）；无独立 View 菜单 |
+| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [x] View → Reset Layout → `resetWorkbenchLayout`（chrome-only，保留 editor grid） |
 | **Sidebar 快捷键** | `Ctrl+B` toggle | [x] `Ctrl+B` / `Ctrl+I` / `Ctrl+\`` |
 | **Settings 呈现** | 可开 Settings **编辑器 Tab** | **Dialog 模态**（产品决策：不恢复 SettingsEditor Tab） |
-| **Appearance 预设** | 选 theme 即生效 | [x] `colorTheme` / `activityBarPosition` / `panelPosition` 已接 shell |
-| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [~] `PanelPart` Tab 条（Logs + Output 占位）；**Terminal 未接** |
+| **Appearance 预设** | 选 theme 即生效 | [x] `SettingsEffectsProvider` + `appearanceRuntime`（全窗口）；editor shell 另接 `panelPosition` / Activity Bar |
+| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [x] `PanelPart` Tab 条（Logs + Output 占位）；Terminal **deferred**（需 PTY + xterm，见 `WORKBENCH_SATELLITE_WINDOWS.md`） |
 | **Tab 拖边分屏预览** | 半屏高亮 | [x] `EditorDropPreviewOverlay` 四向 split 预览 |
 | **项目切换布局** | 可保留 workspace layout 或 reset | [x] `collapseEditorGroups` on project reset |
 | **Detail 自动展开** | 用户隐藏后尊重选择 | [x] `detail.userHidden` memento |
-| **多 Editor 窗口** | 独立 window 状态 | [~] 副窗口 `#/editor` + per-label memento + secondary geometry；**无跨窗 layout/tab 同步** |
+| **多 Editor 窗口** | 独立 window 状态 | [x] 副窗口 `#/editor` + per-label memento + secondary geometry；跨窗 layout/tab **deferred**（各窗独立 workbench，见 `WORKBENCH_SATELLITE_WINDOWS.md`） |
 | **Satellite 窗口** | 部分复用 workbench Part | [x] 见 `docs/WORKBENCH_SATELLITE_WINDOWS.md` |
 
 **8.2 半实现 / 死代码（应收敛或删除）**
@@ -1439,22 +1437,22 @@ Editor Part（占 Workbench 中央 flex 区）
 
 **P0**
 
-- [x] **实现或移除 `resetLayout`**：`resetWorkbenchLayout` 已接 Menubar。
+- [x] **实现或移除 `resetLayout`**：`resetWorkbenchLayout` 已接 View 菜单（chrome-only）。
 - [x] **渲染 Tab 分屏 drop preview**（`kind:'split'` 半屏 overlay）。
 - [x] **`ensureDetailVisible` 尊重用户隐藏**：`detail.userHidden` memento。
 - [x] **项目切换 Editor Grid 策略**：`collapseEditorGroups` on project reset（已修 `collectDescendantIds` 误删 `editor_area`）。
-- [x] **多主窗口 geometry**：副窗口 localStorage + cascade fallback；主窗口 `usePersistedWindow` 仅 label=`main`。
+- [x] **多主窗口 geometry**：`useEditorWindowGeometryPersistence`（main → backend；secondary → per-label localStorage + cascade fallback）。
 
 **P1**
 
 - [x] **快捷键**：`Ctrl+B` Side Bar；`Ctrl+I` Detail；`Ctrl+\`` Panel。
-- [~] **Appearance → 运行时**：`colorTheme` / `activityBarPosition` / `panelPosition` 已接 shell；`smoothScroll` 仅作用于 `html[data-smooth-scroll]` → OverlayScrollbar 纵向滚动（非 canvas / menubar）。
+- [x] **Appearance → 运行时**：`SettingsEffectsProvider` 统一应用 `colorTheme` / `smoothScroll`（全路由）；`useEditorWorkbenchAppearance` 仅接 `panelPosition`；`useActivityBarLayout` 接 Activity Bar；`smoothScroll`  intentionally 仅 OverlayScrollbar 纵向滚动（canvas 为 transform pan，menubar 无滚动容器）。
 - [x] **Canvas/连线 sash 节流**：§8.3 两文件已加 guard。
 
 **P2**
 
 - [x] **统一 workbench memento schema**：`workbenchLayoutMemento` 含 parts + editorGrid。
-- [x] **Panel 多 Tab 模型**：`PanelPart` + `panelPartModel`；Logs / Output 占位。
+- [x] **Panel 多 Tab 模型**：`PanelPart` + `panelPartModel`（`PANEL_VIEW_SPECS` 注册表；Logs / Output 占位；Terminal `implemented: false` 待 PTY）。
 - [x] **Settings：Dialog vs Editor Tab** → 保持 Dialog，不恢复 Tab 编辑器。
 - [x] **卫星窗口策略文档**：`docs/WORKBENCH_SATELLITE_WINDOWS.md`。
 
@@ -1468,6 +1466,36 @@ Editor Part（占 Workbench 中央 flex 区）
 - Log 列表 **虚拟化** + OverlayScrollbar。
 - 跨窗 **主题 settings 同步**（`CLIENT_SETTINGS_UPDATED_EVENT`）。
 - Tab 分屏/移动 **命令单点**（`editorGroupCommands` + `splitEditorGroupAtEdge`，见前文 EditorGroup checklist）。
+
+## 2026.07.13
+
+## v1.0 待办
+
+
+
+> **8.6 多 Editor 窗口跨窗同步（v1.0 设计 / 待办）**：**基线（已实现）**：副窗口 `#/editor`、per-label `workbenchLayoutMemento`（`setWorkbenchLayoutWindowScope`）、`useEditorWindowGeometryPersistence`（main → backend / secondary → localStorage）、各窗独立 `layoutStore` + editor grid。主题/设置跨窗；项目/图事件经 Tauri + `ProjectListener` 共享。**layout / open-tabs 跨窗不同步**为当前有意 defer。详见 [`docs/WORKBENCH_SATELLITE_WINDOWS.md`](./docs/WORKBENCH_SATELLITE_WINDOWS.md) § Secondary Editor Windows / Multi-window sync。
+
+**Phase 0 — 设计与产品定稿（Implement 前必做）**
+
+- [ ] **跨窗能力范围定稿**：明确 v1.0 需要哪些能力（勾选后写进设计 doc）：① `Window → New Window` 空白副 workbench（**已有**）；② **Tab 移到新窗**（源窗 remove + 副窗 add，VS Code「Move into New Window」）；③ 多窗 **镜像** 同一 tab 集（VS Code **不做**，默认排除）；④ 仅共享项目数据（**已有**，非 layout）；⑤ chrome 可见性克隆（sidebar/panel/detail 开关，不含 tabs/grid 拓扑）。
+- [ ] **权威源与冲突模型**：文档化 write authority——每窗 `workbenchLayoutMemento:${label}` 为 layout 真源；同一 `graphPath` 多窗同时打开时的 dirty / save / `graphSessionLifecycle`（focused hydrate）冲突策略；副窗关闭时 tab 回收到主窗还是丢弃。
+- [ ] **IPC / 事件边界草案**：与 `CLIENT_SETTINGS_UPDATED_EVENT`、`ProjectListener` 分工；跨窗 workbench 变更的 Tauri event 命名与 payload（例：`editor-tab-moved`、`workbench-chrome-changed`）、窗口 `label` scope、debounce / fan-out；禁止 layout sash 热路径跨窗广播（对齐 §6「拖拽期零状态广播」）。
+
+**Phase 1 — 首选 MVP（定稿后实现）**
+
+- [ ] **Tab 跨窗移动**：命令 + Tab 上下文菜单「Move to New Window」——`openSecondaryEditorWindow` 创建副窗 → IPC/handoff 传递 tab descriptor → 源窗 `closeTab`、副窗 `openTab` + `setPanelActiveView('logs')` 可选；vitest + 手工双窗回归。
+- [ ] **同一 graph 多窗打开提示（非阻断）**：检测多 label 下相同 `activeTabId` / open tabs 含同一 path 时，Tab 标题或 Status Bar 弱提示「已在其他窗口打开」；与 save 冲突 toast 文案联动。
+
+**Phase 2 — 可选增强（v1.0 后 / 有明确需求再排）**
+
+- [ ] **跨窗 layout 镜像或跟随**：仅当产品明确要求（VS Code 默认 **per-window layout**）；若做，需 global layout revision + merge 规则，勿破坏现有 per-label memento。
+- [ ] **副窗 ↔ 主窗 tab 回收**：副窗关闭前 prompt「将未保存 tab 移回主窗？」（应用内 Modal，非原生 dialog）；与 dirty-tab 关闭拦截（`useMenubar`）统一。
+- [ ] **跨窗执行 / 日志焦点**：Run graph 时自动 `openLogsPanel` 是否仅焦点窗生效；多窗同时 playback 的 `graphSessionStore.focusedSession` 策略。
+
+**Phase 3 — 测试与文档**
+
+- [ ] **双窗 E2E 清单**：新建副窗、per-label memento 隔离、geometry 持久化、Tab 移动、同 path 双开、主题同步、项目事件双窗一致；写入 `WORKBENCH_SATELLITE_WINDOWS.md` 或独立 `docs/MULTI_WINDOW_SYNC.md`。
+- [ ] **Rust 侧 window registry（若 IPC 需要）**：可选 `command/list_editor_windows` 返回 label + 前台状态，供冲突检测与 handoff；保持 command 层薄包装。
 
 ---
 

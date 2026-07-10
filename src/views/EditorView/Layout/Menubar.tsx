@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
+import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
@@ -195,19 +196,19 @@ export function Menubar() {
     { label: t("menubar.schemaViewer") },
   ];
 
+  const viewItems: MenuItem[] = buildViewMenuItems(
+    t,
+    { isSidebarVisible, isDetailVisible, isLogPanelVisible, zenMode },
+    { toggleSidebar, toggleDetail, toggleLogPanel, toggleZenMode, resetLayout: handleResetLayout },
+  );
+
   const windowItems: MenuItem[] = [
     { label: t("menubar.newWindow"), onClick: openNewWindow },
     { label: "-" },
     { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
     { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },
-    { label: isSidebarVisible ? t("menubar.hideSidebar") : t("menubar.showSidebar"), shortcut: "Ctrl+B", onClick: toggleSidebar },
-    { label: isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail"), shortcut: "Ctrl+I", onClick: toggleDetail },
-    { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
-    { label: zenMode ? t("menubar.exitZenMode") : t("menubar.enterZenMode"), shortcut: "Ctrl+K Z", onClick: toggleZenMode },
     { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
-    { label: "-" },
-    { label: t("menubar.resetLayout"), onClick: handleResetLayout },
   ];
 
   const toolItems: MenuItem[] = [
@@ -259,8 +260,8 @@ export function Menubar() {
             'self-center',
             isDetailVisible ? 'text-foreground' : 'text-muted-foreground',
           )}
-          tooltip={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
-          aria-label={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
+          tooltip={isDetailVisible ? t("menubar.hideSecondarySideBar") : t("menubar.showSecondarySideBar")}
+          aria-label={isDetailVisible ? t("menubar.hideSecondarySideBar") : t("menubar.showSecondarySideBar")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
         </ToolbarIconButton>
@@ -292,6 +293,7 @@ export function Menubar() {
         <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
         <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
         <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
+        <MenuButton id="view" label={t("menubar.view")} items={viewItems} />
         <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
         <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
         <MenuButton id="help" label={t("menubar.help")} items={helpItems} />

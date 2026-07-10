@@ -127,6 +127,7 @@
   display: none;
 }
 
+/* OverlayScrollbar vertical viewports — toggled by appearance.smoothScroll via SettingsEffectsProvider */
 html[data-smooth-scroll='true'] .overlay-scrollbar-viewport {
   scroll-behavior: smooth;
 }
