@@ -1,4 +1,11 @@
-﻿export * from './useViewportStore';
+export type { EditorViewport } from './editorViewport';
+export {
+  useViewportStore,
+  remapGraphViewport,
+  normalizeEditorViewport,
+  ensureGraphViewport,
+  releaseGraphViewport,
+} from './useViewportStore';
 export {
   getViewport,
   setViewportLive,
@@ -7,6 +14,12 @@ export {
   resetLiveViewports,
 } from './viewportSession';
 export { persistGraphViewport } from './persistGraphViewport';
+export {
+  loadEditorViewStateMemento,
+  patchEditorViewStateViewport,
+  remapEditorViewStateGraphPath,
+} from './editorViewStateMemento';
+export { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
 export {
   applyViewportTransform,
   applyViewportGrid,

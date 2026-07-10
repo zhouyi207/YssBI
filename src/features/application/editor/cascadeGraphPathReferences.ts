@@ -1,6 +1,8 @@
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
+import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { remapEditorViewStateGraphPath } from '@/features/core/viewport/editorViewStateMemento';
 import { remapGraphViewport } from '@/features/core/viewport/useViewportStore';
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 import { normalizeGraphResourcePath } from '@/shared/types/domain/graphResourcePath';
@@ -115,4 +117,8 @@ export function cascadeGraphPathReferences(from: string, to: string): void {
   remapVariableScopePaths(from, to);
   remapEditorGraphPaths(from, to);
   remapGraphViewport(from, to);
+  const projectPath = useProjectIOStore.getState().currentPath;
+  if (projectPath) {
+    remapEditorViewStateGraphPath(projectPath, from, to);
+  }
 }

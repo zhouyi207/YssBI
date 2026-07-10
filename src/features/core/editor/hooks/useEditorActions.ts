@@ -1,7 +1,7 @@
 /**
  * 编辑器操作（组合 hook）
  * 组合 useEditorCanvasActions、useEditorUIActions、useEditorLayoutActions
- * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 GraphPosition 快照）
+ * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
 import { useRef, useEffect } from 'react';
 import { getViewport, subscribeToViewport } from '@/features/core/viewport';

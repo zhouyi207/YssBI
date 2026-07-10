@@ -6,7 +6,7 @@
 import type { RefObject } from 'react';
 import type { buildEditorState } from '@/features/core/editor/hooks/useEditorState';
 import type { useEditorActions } from '@/features/core/editor/hooks/useEditorActions';
-import type { GraphPosition } from '@/shared/types/domain';
+import type { EditorViewport } from '@/features/core/viewport';
 import type { LayoutTab } from '@/shared/types/layout/layout';
 import type { Pin } from '@/shared/types/domain/pin';
 import type { useEditorOperations } from './useEditorOperations';
@@ -34,7 +34,7 @@ export interface EditorSessionLayoutBindings {
   setPendingConnection: EditorActions['setPendingConnection'];
   activeGroupIdRef: RefObject<string | null>;
   activeTabIdRef: RefObject<string | null>;
-  viewportRef: RefObject<GraphPosition>;
+  viewportRef: RefObject<EditorViewport>;
 }
 
 // ─── Command slices（与各 application hook 1:1）────────────────────────────
@@ -116,7 +116,7 @@ export interface EditorGroupInteractionSlice {
   onPinPointerDown: (pin: Pin, e: React.PointerEvent) => void;
   connectPins: ConnectPinsHandler;
   setCanvas: (
-    updater: GraphPosition | ((prev: GraphPosition) => GraphPosition),
+    updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
     targetGraphPath?: string,
   ) => void;
 }

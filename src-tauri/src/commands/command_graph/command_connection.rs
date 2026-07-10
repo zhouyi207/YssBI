@@ -5,7 +5,6 @@ use crate::log::log_app;
 use crate::project::{GraphResourcePath, ProjectState, emit_graph_pin_mutation_sync};
 use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
@@ -403,31 +402,4 @@ pub fn delete_connections_for_node(
     );
 
     Ok(removed_ids)
-}
-
-// ==================== 子图管理命令 ====================
-
-/// 更新画布视图状态（位置、缩放等）
-#[tauri::command]
-pub fn update_canvas(
-    state: State<ProjectState>,
-    graph_path: String,
-    canvas: Value,
-) -> Result<(), String> {
-    let graph_path = parse_graph_path(&graph_path)?;
-
-    log_app::debug!("[command.update_canvas] graph={}", graph_path);
-
-    state.with_graph_mut(&graph_path, |mut ctx| {
-        if let Some(x) = canvas.get("x").and_then(|v| v.as_f64()) {
-            ctx.graph().position.x = x;
-        }
-        if let Some(y) = canvas.get("y").and_then(|v| v.as_f64()) {
-            ctx.graph().position.y = y;
-        }
-        if let Some(scale) = canvas.get("scale").and_then(|v| v.as_f64()) {
-            ctx.graph().position.scale = scale;
-        }
-        Ok(())
-    })
 }

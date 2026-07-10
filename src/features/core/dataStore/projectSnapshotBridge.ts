@@ -2,7 +2,6 @@
  * 从多个 store 组装图导出快照（exportSnapshot 专用）。
  * 跨 store 读取集中于此，避免 projectIOStore 隐式依赖未 import 的 hook。
  */
-import { getViewport } from '@/features/core/viewport';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import type { GraphData } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
@@ -37,6 +36,5 @@ export function buildGraphSnapshotFromStores(): Record<string, GraphData> {
     getGraphPinConnections: (graphPath, pinId) => dataStore.getGraphPinConnections(graphPath, pinId),
     getGraphConnection: (graphPath, connectionId) =>
       dataStore.getGraphConnection(graphPath, connectionId) ?? null,
-    getViewport,
   });
 }

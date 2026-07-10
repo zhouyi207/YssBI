@@ -3,7 +3,8 @@ import { useGestureStore } from '@/features/core/gesture';
 import { commitViewport, setViewportLive } from '@/features/core/viewport';
 import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
-import type { GraphPosition, Pin } from '@/shared/types/domain';
+import type { Pin } from '@/shared/types/domain';
+import type { EditorViewport } from '@/features/core/viewport';
 import type { EditorGesture } from '@/shared/types/ui';
 import { logger } from '@/utils/appLogger';
 import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
@@ -30,7 +31,7 @@ import {
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
   activeTabIdRef: RefObject<string | null>;
-  viewportRef: RefObject<GraphPosition>;
+  viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
   persistViewport: (graphPath?: string | null) => void;

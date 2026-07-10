@@ -72,7 +72,6 @@ impl std::fmt::Debug for GraphInstance {
             .field("resource_path", &self.resource_path)
             .field("name", &self.name)
             .field("kind", &self.kind)
-            .field("position", &self.position)
             .field("function_inputs", &self.function_inputs)
             .field("function_outputs", &self.function_outputs)
             .field("data_state", &self.data_state)

@@ -26,7 +26,6 @@ describe('Graph event handlers', () => {
         nodes: [],
         pins: [],
         connections: { connections: [] },
-        canvas: { x: 0, y: 0, scale: 1 },
       },
     });
 

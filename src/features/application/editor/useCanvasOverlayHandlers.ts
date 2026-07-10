@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { findInternalNodeInGraph } from "@/features/core/dataStore";
-import { getViewport } from "@/features/core/viewport";
+import { getViewport, type EditorViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
@@ -29,7 +29,7 @@ export function useCanvasOverlayHandlers({
   setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
   setCanvas: (
-    updater: import('@/shared/types/domain/graph').GraphPosition | ((prev: import('@/shared/types/domain/graph').GraphPosition) => import('@/shared/types/domain/graph').GraphPosition),
+    updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
     targetGraphPath?: string,
   ) => void;
 }) {

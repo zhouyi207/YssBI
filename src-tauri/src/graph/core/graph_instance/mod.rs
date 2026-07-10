@@ -6,7 +6,7 @@
 //! ✅ 持有状态
 //! ✅ 提供受控 mutation API
 
-use super::{GraphDataState, GraphKind, GraphPosition};
+use super::{GraphDataState, GraphKind};
 use crate::graph::connection::Connection;
 use crate::graph::node::OutputSchemaContext;
 pub use crate::graph::node::SchemaProvider;
@@ -42,9 +42,6 @@ pub struct GraphInstance {
 
     // 类型
     pub kind: GraphKind,
-
-    // 位置
-    pub position: GraphPosition,
 
     // Function graph 对外签名。Event 始终为空。
     pub function_inputs: Vec<FunctionSignaturePin>,

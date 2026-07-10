@@ -1,30 +1,30 @@
-import type { GraphPosition } from '@/shared/types/domain';
+import type { EditorViewport } from './editorViewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { useViewportStore } from './useViewportStore';
 
-function viewportEqual(a: GraphPosition, b: GraphPosition): boolean {
+function viewportEqual(a: EditorViewport, b: EditorViewport): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
 }
 
-function storeViewport(graphPath: string): GraphPosition {
+function storeViewport(graphPath: string): EditorViewport {
   return useViewportStore.getState().viewports[graphPath] ?? DEFAULT_VIEWPORT;
 }
 
-const liveByGraph = new Map<string, GraphPosition>();
-const listenersByGraph = new Map<string, Set<(viewport: GraphPosition) => void>>();
+const liveByGraph = new Map<string, EditorViewport>();
+const listenersByGraph = new Map<string, Set<(viewport: EditorViewport) => void>>();
 
-function notify(graphPath: string, viewport: GraphPosition): void {
+function notify(graphPath: string, viewport: EditorViewport): void {
   listenersByGraph.get(graphPath)?.forEach((listener) => listener(viewport));
 }
 
 /** Authoritative in-memory viewport (live preview ⊃ committed store). */
-export function getViewport(graphPath: string): GraphPosition {
+export function getViewport(graphPath: string): EditorViewport {
   return liveByGraph.get(graphPath) ?? storeViewport(graphPath);
 }
 
 export function setViewportLive(
   graphPath: string,
-  updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition),
+  updater: Partial<EditorViewport> | ((prev: EditorViewport) => EditorViewport),
 ): void {
   const prev = getViewport(graphPath);
   const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
@@ -47,7 +47,7 @@ export function resetLiveViewports(graphPath?: string): void {
 
 export function subscribeToViewport(
   graphPath: string,
-  listener: (viewport: GraphPosition) => void,
+  listener: (viewport: EditorViewport) => void,
 ): () => void {
   const set = listenersByGraph.get(graphPath) ?? new Set();
   set.add(listener);

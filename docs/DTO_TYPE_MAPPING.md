@@ -14,6 +14,8 @@ NodeInstance            →    NodeInstanceDTO      →    Node (domain) / NodeD
 PinInstance             →    PinInstanceDTO       →    Pin (domain) / PinData (store)
 Connection              →    ConnectionItemDTO    →    ConnectionItem / ConnectionData
 ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
+
+EditorViewport          →    （无 IPC / 无 DTO）   →    EditorViewport（前端 runtime + localStorage memento）
 ```
 
 **序列化约定**：所有 DTO 使用 `#[serde(rename_all = "camelCase")]`，JSON 键为 camelCase。`GraphTypeDTO` 使用 `rename_all = "lowercase"`，序列化为 `"event"` / `"function"`。
@@ -32,13 +34,18 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 | nodes | HashMap<NodeId, NodeInstance> | NodeInstanceDTO[] | Node[] | NodeData[] | 节点列表，DTO 展平为数组 |
 | pins | (在 data_state 中) | PinInstanceDTO[] | Pin[] | PinData[] | 所有 Pin，DTO 展平为数组 |
 | connections | ConnectionManager | connections: ConnectionDTO | Connection | ConnectionData[] 或 { connections } | 连接关系 |
-| canvas | GraphPosition (position) | canvas | GraphPosition | GraphPosition | 画布视口 (x, y, scale) |
+| functionInputs | Vec<FunctionSignaturePin> | functionInputs? | FunctionSignaturePin[]? | FunctionSignaturePin[]? | Function 图对外输入签名 |
+| functionOutputs | Vec<FunctionSignaturePin> | functionOutputs? | FunctionSignaturePin[]? | FunctionSignaturePin[]? | Function 图对外输出签名 |
+
+**不在 IPC / 图文件中的字段**：编辑器视口（pan / zoom / scale）为纯前端 `EditorViewport`，见 §6.2。
 
 ### 2.2 字段说明
 
 - **type**：后端 `graph_type` 字段通过 `#[serde(rename = "type")]` 序列化为 `type`，与前端保持一致。
 - **nodes / pins**：后端以 HashMap 存储，DTO 转为数组便于 JSON 序列化；前端 Domain 的 Node 含完整 Pin 对象，Store 的 NodeData 仅存 Pin ID 数组。
 - **connections**：后端 ConnectionManager 内部为 HashMap 结构，DTO 转为 `{ connections: ConnectionItemDTO[] }`；Store 的 GraphData 支持 `ConnectionData[]` 或 `{ connections: Array<{ fromPin, toPin }> }` 两种格式。
+- **磁盘格式**：`.yssbi-event` / `.yssbi-function` 仅含 `name`、`kind`、`nodes`、`connections`（及 function 签名）；**不含**图级 viewport 字段。旧文件若仍带顶层 `position`，反序列化时忽略。
+- **hydrate 入站**：`graphInstanceDtoToGraphData` → `normalizeGraphDataLike` 单点规范化；**不**读取 legacy `canvas` / `position` 视口字段。
 
 ---
 
@@ -111,20 +118,37 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 
 ## 六、Position（位置）
 
-### 6.1 NodePosition（节点位置）
+### 6.1 NodePosition（节点位置 — 图文档，前后端一致）
 
-| 字段 | 后端 (NodePosition) | DTO | 前端 | 说明 |
-|------|---------------------|-----|------|------|
-| x | f32 | x | number | 节点左上角 X |
+| 字段 | 后端 (NodePosition) | DTO (NodeInstanceDTO.position) | 前端 (NodeData.position) | 说明 |
+|------|---------------------|--------------------------------|--------------------------|------|
+| x | f32 | x | number | 节点左上角 X（世界坐标，非视口偏移） |
 | y | f32 | y | number | 节点左上角 Y |
 
-### 6.2 GraphPosition（画布视口）
+- 持久化在图文件的 `nodes[].position`；`update_node_positions` / undo patch 会读写此字段。
+- **与视口无关**：节点坐标不随画布 pan/zoom 写入后端 viewport 字段（后端已无此类字段）。
 
-| 字段 | 后端 (GraphPosition) | DTO | 前端 | 说明 |
-|------|----------------------|-----|------|------|
-| x | f64 | x | number | 画布平移 X |
-| y | f64 | y | number | 画布平移 Y |
-| scale | f64 | scale | number | 缩放比例 |
+### 6.2 EditorViewport（编辑器视口 — 仅前端）
+
+| 字段 | 后端 | DTO / IPC | 前端类型 | 说明 |
+|------|------|-----------|----------|------|
+| x | — | — | `EditorViewport.x` | 画布平移 X（屏幕空间 offset） |
+| y | — | — | `EditorViewport.y` | 画布平移 Y |
+| scale | — | — | `EditorViewport.scale` | 缩放比例（如 0.1–5） |
+
+**类型真源**：`src/features/core/viewport/editorViewport.ts` — `EditorViewport`。
+
+**三层存储（均在前端）**：
+
+| 层 | 模块 | 键 | 说明 |
+|----|------|-----|------|
+| 手势预览 | `viewportSession` | `graphPath` | 拖拽/缩放过程中的 live 值 |
+| 会话提交 | `useViewportStore` | `graphPath` | 当前窗口 session 内 committed viewport |
+| 跨会话 | `editorViewStateMemento` | `projectPath` + `graphPath` | `localStorage`，`persistGraphViewport` 写入 |
+
+**首屏解析**：`resolveInitialGraphViewport(graphPath)` → memento 命中则恢复，否则 `DEFAULT_VIEWPORT`。
+
+**禁止路径**：不要向 Rust invoke 发送 viewport；不要在 `Graph` / `GraphData` / `GraphInstanceDTO` 上挂载 `canvas` 字段。
 
 ---
 
@@ -193,10 +217,13 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 
 | 场景 | 转换函数/位置 | 说明 |
 |------|---------------|------|
-| DTO → Store | `addGraphFromData` (graphDataStore) | GraphInstanceDTO 直接 hydrate 到规范化 Store；`toStoredPin()` 剥离旧运行时 links |
+| DTO → Store | `graphInstanceDtoToGraphData` → `normalizeGraphDataLike` → `addGraphFromData` | GraphInstanceDTO hydrate 到 Store；无视口字段 |
 | DTO → Store (连接) | `connectionItemToConnectionData` (graphConverters) | ConnectionItemDTO → ConnectionData |
+| Store → Domain | `graphDataToDomainGraph` (graphModel) | 导出快照 / 内存 ProjectData；不含 viewport |
 | Store → DTO | `connectionDataToItem` (graphConverters) | ConnectionData → ConnectionItemDTO |
 | 项目加载 | `loadProject` / `refreshResourceIndex` | 后端 ProjectIndex + graph 文档直接写入 Store |
+| 视口持久化 | `persistGraphViewport` → `patchEditorViewStateViewport` | 仅 localStorage；**不**调用 `save_project_graph` |
+| 视口首屏 | `ensureGraphViewport` → `resolveInitialGraphViewport` | tab 激活 / 图加载成功后单点 seed |
 | Pin 连接状态派生 | `derivePinConnectionView` (pinLinks) | 从 `pinConnections[pinId]` 派生 `connected` / `linkCount` / `connectionIds` |
 | Spawn → IPC params | `spawnParamsToInstanceParams` (nodeInstanceParams.ts) | 创建节点打 tag |
 | NodeCreated → Store | `flattenInstanceParams` (NodeEventHandler) | flatten DTO 写入 NodeData |
@@ -211,6 +238,7 @@ ProjectData             →    ProjectDataDTO       →    ProjectData (domain)
 3. **Pin direction**：后端序列化为 `"input"`/`"output"`，与前端 PinDirection 一致。
 4. **Node 命名**：Domain/Store 使用 snake_case（node_type, ui_style），DTO 使用 camelCase（nodeType, uiStyle）；转换时需注意字段映射。
 5. **节点 params 与 Layout params**：`NodeInstanceParams`（tagged union）与 `EditorGroupNodeParams`（布局选中态）是两套类型，详见 [DESIGN_RULE.md §3.8](./DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)。
+6. **NodePosition ≠ EditorViewport**：前者是图文档（IPC + 磁盘）；后者是编辑器 UI 状态（仅前端）。勿在 DTO 映射表为 Graph 增加 `canvas` 行。
 
 ---
 
@@ -357,12 +385,14 @@ delete / disconnect / paste redo
 
 | 层级 | 模块 | 说明 |
 | --- | --- | --- |
-| 类型契约 | `shared/types/store/graph.ts` | `GraphData` / `GraphDataLike` / `RuntimeNodeInput` |
-| normalize 单点 | `normalizeGraphDataLike` | 所有入站图数据规范化 |
+| 类型契约 | `shared/types/store/graph.ts` | `GraphData` / `GraphDataLike` / `RuntimeNodeInput`（**无** viewport / canvas） |
+| normalize 单点 | `normalizeGraphDataLike` (`dto/graphModel.ts`) | 所有入站图数据规范化 |
+| DTO 入站 | `graphInstanceDtoToGraphData` | IPC `get_graph` 等 → Store |
 | Pin 引用窄化 | `runtimePinRefToId` / `runtimePinRefsToIds` | `RuntimeNodeInput.inputs/outputs` |
-| 连接兼容 | `normalizeGraphConnections` | DTO / domain / 历史快照多形态 |
+| 连接兼容 | `normalizeGraphConnections` | DTO / domain 多形态 connections |
 | Store 写入 | `graphDataStore.buildGraphBucket` | 实体桶索引 |
 | 同步入站 | `graphUpdatedPayloadToGraphDataLike` | `GraphEventHandler` |
+| 视口（独立） | `features/core/viewport/*` | `EditorViewport`；与 hydrate 边界无交叉 |
 | 测试夹具 | `makeTestGraph()` | hydrate-safe `GraphDataLike` |
 
 约定详见 [DESIGN_RULE.md §2.14](./DESIGN_RULE.md#214-graph-store-hydrate)、[adr/graph-store-hydrate.md](./adr/graph-store-hydrate.md)。

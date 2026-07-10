@@ -2,7 +2,6 @@
  * 序列化相关类型（历史遗留；连接事实在 connections / pinConnections）
  */
 
-import type { GraphPosition } from '../domain/graph';
 import type { Variable } from '../domain/variable';
 
 /** 序列化后的 Pin（不含连接状态） */
@@ -35,7 +34,6 @@ export interface SerializedGraphData {
   id: string;
   name: string;
   type: 'event' | 'function';
-  canvas: GraphPosition;
   variables: Record<string, Variable>;
   connections: { connections: Array<{ fromPin: string; toPin: string }> };
   nodes: SerializedNode[];

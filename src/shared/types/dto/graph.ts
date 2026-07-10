@@ -4,7 +4,7 @@
  * 序列化时后端使用 snake_case，前端接收后保持 JSON 原始格式
  */
 
-import type { GraphPosition, FunctionSignaturePin } from '../domain/graph';
+import type { FunctionSignaturePin } from '../domain/graph';
 import type { PinDirection } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
 import type { NodeInstanceParamsDTO } from './nodeInstanceParams';
@@ -81,7 +81,6 @@ export interface GraphInstanceDTO {
   nodes: NodeInstanceDTO[];
   pins: PinInstanceDTO[];
   connections: ConnectionDTO;
-  canvas: GraphPosition;
 }
 
 export interface FunctionCallSiteDTO {

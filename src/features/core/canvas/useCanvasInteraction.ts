@@ -5,7 +5,8 @@ import { useGestureStore } from "@/features/core/gesture";
 import { persistGraphViewport } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { executeCommand } from "@/features/core/history";
-import { GraphPosition, Pin } from "@/shared/types/domain";
+import { Pin } from "@/shared/types/domain";
+import type { EditorViewport } from "@/features/core/viewport";
 import { logger } from '@/utils/appLogger';
 import { canConnectPins } from "@/shared/utils/pinCompatibility";
 
@@ -19,7 +20,7 @@ import {
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
     activeTabIdRef: React.RefObject<string | null>;
-    viewportRef: React.RefObject<GraphPosition>;
+    viewportRef: React.RefObject<EditorViewport>;
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
     enabled?: boolean;

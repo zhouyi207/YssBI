@@ -13,10 +13,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 
-import type { Graph } from '@/shared/types/domain';
-
 type OpenGraphOptions = {
-  initialData?: Graph;
   pinned?: boolean;
   targetGroupId?: string;
 };

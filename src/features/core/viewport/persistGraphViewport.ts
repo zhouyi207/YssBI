@@ -1,7 +1,11 @@
-import { ProjectService } from '@/services/project/projectService';
+import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { patchEditorViewStateViewport } from './editorViewStateMemento';
 import { getViewport } from './viewportSession';
 
+/** Persist committed viewport to project-scoped editor view state (not graph files). */
 export function persistGraphViewport(graphPath: string | null | undefined): void {
   if (!graphPath) return;
-  ProjectService.updateCanvas(graphPath, getViewport(graphPath)).catch(() => {});
+  const projectPath = useProjectIOStore.getState().currentPath;
+  if (!projectPath) return;
+  patchEditorViewStateViewport(projectPath, graphPath, getViewport(graphPath));
 }

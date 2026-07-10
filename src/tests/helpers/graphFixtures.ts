@@ -1,13 +1,11 @@
 import type { PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
-import type { GraphPosition } from '@/shared/types/domain/graph';
 import type { GraphDataLike, PinData } from '@/shared/types/store/graph';
 
 export interface MakeTestGraphOptions {
   path: string;
   name?: string;
   type?: 'event' | 'function';
-  canvas?: GraphPosition;
   /** Node `title`; defaults to `name` or `path` */
   title?: string;
   nodeId?: string;
@@ -75,7 +73,6 @@ export function makeTestGraph(
     path,
     name,
     type: options.type ?? 'event',
-    canvas: options.canvas ?? { x: 0, y: 0, scale: 1 },
     nodes: [
       {
         id: nodeId,

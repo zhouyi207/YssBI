@@ -39,7 +39,6 @@ impl GraphInstance {
         Self {
             resource_path,
             name: name.into(),
-            position: GraphPosition::default(),
             kind,
             function_inputs,
             function_outputs,
@@ -114,7 +113,6 @@ impl GraphInstance {
             resource_path: self.resource_path.clone(),
             name: self.name.clone(),
             kind: self.kind.clone(),
-            position: self.position.clone(),
             function_inputs: self.function_inputs.clone(),
             function_outputs: self.function_outputs.clone(),
             runtime_prepared_epoch: self.runtime_prepared_epoch,

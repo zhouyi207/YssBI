@@ -1297,7 +1297,7 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **Tab 切换轻量 patch**：`setEditorGroupActiveTab` 不全量 spread `data`。
 - [x] **TabBar 窄订阅**：`useEditorGroupTabStrip`。
 - [x] **画布逐节点订阅 / 去全图反序列化**（见 ## 2026.07.03 画布渲染架构重构）——对齐「切 Tab 不重算整图」方向。
-- [x] **Viewport 按 graphPath 存**（非 groupId）——对齐「layout 变而 view state 跟资源走」。
+- [x] **Viewport 按 graphPath 存 + 与图文件解耦**：运行时 zustand + project `editorViewStateMemento`；图文件不再读写 viewport（Rust 磁盘格式已移除 `position`，IPC DTO 已移除 `canvas`）。
 
 **7.6 Editor Grid 收敛任务列表**
 
@@ -1495,6 +1495,13 @@ Editor Part（占 Workbench 中央 flex 区）
 
 - [x] **非激活组仍显示 Canvas（对齐 VS Code）**：删除 `InactiveEditorGroupPlaceholder`；`GraphEditor` 始终 mount `Canvas`，经 `useIsActiveEditorGroup` 切换 `interactive` preview / 编辑模式；`CanvasDropZone` 非激活组禁用 DnD 命中。
 - [x] **Preview 模式降载**：`Canvas interactive={false}` 跳过 drag preview、selection box、execution binder、wheel zoom、drop handler；保留 viewport culling 与节点/连线只读渲染；外层 `pointer-events-none` 点击穿透至 `LayoutNodeRenderer` → `activateEditorGroup`。
+
+**P1 — Editor viewport 与图文件解耦**
+
+- [x] **Viewport 三层模型**：运行时 `viewportSession` + `useViewportStore`（按 `graphPath`）；跨会话 `editorViewStateMemento`（按 `projectPath` + `graphPath`，localStorage）；图文件不含 viewport 字段。
+- [x] **删除图文件 viewport 热路径写入**：移除 `ProjectService.updateCanvas` / Rust `update_canvas`；`persistGraphViewport` 改写 project memento；`buildGraphSnapshot` 导出恒为 default stub。
+- [x] **首屏 resolve 单点**：`resolveInitialGraphViewport`（memento → default）← `ensureGraphViewport`；path 重命名 cascade 同步 memento（`remapEditorViewStateGraphPath`）。
+
 
 ## v1.0 待办
 

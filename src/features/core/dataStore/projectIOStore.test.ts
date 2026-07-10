@@ -39,7 +39,6 @@ function makeEventGraphData(path: string, name: string): GraphData {
     path,
     name,
     type: 'event',
-    canvas: { x: 5, y: 6, scale: 1 },
     nodes: [
       {
         id: 'node-a',
@@ -127,7 +126,6 @@ describe('useProjectIOStore snapshot paths', () => {
       path: 'evt-1',
       name: 'Main Event',
       type: 'event',
-      canvas: { x: 5, y: 6, scale: 1 },
     });
     expect(snapshot.graphs['evt-1'].nodes[0].outputs[0]).toMatchObject({ id: 'pin-exec', type: 'exec' });
     expect(snapshot.graphs['evt-1'].connections).toEqual({ connections: [] });
@@ -203,7 +201,6 @@ describe('useProjectIOStore snapshot paths', () => {
         nodes: [],
         pins: [],
         connections: { connections: [] },
-        canvas: { x: 0, y: 0, scale: 1 },
       },
       variables: {},
     });

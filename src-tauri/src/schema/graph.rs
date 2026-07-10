@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     graph::{
-        FunctionSignaturePin, GraphDataState, GraphInstance, GraphKind, GraphPosition, NodeId,
+        FunctionSignaturePin, GraphDataState, GraphInstance, GraphKind, NodeId,
         PinId,
     },
     schema::{ConnectionDTO, NodeInstanceDTO, PinInstanceDTO},
@@ -37,7 +37,6 @@ pub struct GraphInstanceDTO {
     pub nodes: Vec<NodeInstanceDTO>,
     pub pins: Vec<PinInstanceDTO>,
     pub connections: ConnectionDTO,
-    pub canvas: GraphPosition,
     #[serde(default)]
     pub function_inputs: Vec<FunctionSignaturePin>,
     #[serde(default)]
@@ -94,7 +93,6 @@ impl From<&GraphInstance> for GraphInstanceDTO {
             nodes,
             pins,
             connections: ConnectionDTO::from(&data_state.connections),
-            canvas: value.position.clone(),
             function_inputs: value.function_inputs.clone(),
             function_outputs: value.function_outputs.clone(),
         }

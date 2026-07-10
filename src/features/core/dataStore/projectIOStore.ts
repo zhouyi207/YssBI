@@ -14,7 +14,7 @@ import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { ensureGraphViewport, syncGraphViewportsFromRecords } from '@/features/core/viewport';
+import { ensureGraphViewport } from '@/features/core/viewport';
 import { buildGraphResourceMeta, markResourceLoaded, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
   applySnapshotDocumentPatches,
@@ -275,7 +275,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
       }),
       graphOrder: Object.values(project.graphs).map((graph) => graph.path),
     });
-    syncGraphViewportsFromRecords(project.graphs);
     reconcileOpenLayoutTabsWithResources();
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
@@ -314,7 +313,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
           ...frontendGraph,
         });
         useGraphDataStore.getState().addGraphFromData(graphPath, frontendGraph);
-        ensureGraphViewport(graphPath, frontendGraph.canvas);
+        ensureGraphViewport(graphPath);
         return true;
       } catch (err) {
         const errorMessage = formatErrorMessage(err, 'Failed to load graph');

@@ -25,7 +25,7 @@
  *
  * ### 规范化规则
  *
- * 1. **结构**（`normalizeGraphDataLike` — `dto/graphModel.ts`）：节点 pin 引用、pin DTO、connections、canvas
+ * 1. **结构**（`normalizeGraphDataLike` — `dto/graphModel.ts`）：节点 pin 引用、pin DTO、connections
  * 2. **展示 enrich**（`graphDataStore.buildGraphBucket`）：title / category 从节点注册表推导；`uiStyle` 仅在 `toUiNode` 视图层推导
  *
  * ### 出站（导出 / IPC 前）
@@ -43,7 +43,7 @@
 
 import type { NodeId, PinId, GraphPath, ConnectionId } from '../domain/ids';
 export type { NodeId, PinId, GraphPath, ConnectionId };
-import type { GraphPosition, Graph } from '../domain/graph';
+import type { Graph } from '../domain/graph';
 import type { PinDirection, PinUI, RuntimePinKind } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
 import type { GraphInstanceDTO } from '../dto/graph';
@@ -115,7 +115,6 @@ export interface GraphData {
   nodes: NodeData[];
   pins: PinData[];
   connections: ConnectionData[];
-  canvas: GraphPosition;
 }
 
 /**

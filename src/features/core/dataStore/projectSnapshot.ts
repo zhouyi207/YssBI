@@ -1,4 +1,3 @@
-import type { GraphPosition } from '@/shared/types/domain/graph';
 import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
 import type { GraphData } from '@/shared/types/store/graph';
 import type { ProjectResourceMeta } from '@/features/core/resource/resourceTypes';
@@ -22,7 +21,6 @@ export interface GraphSnapshotAccess {
     graphPath: string,
     connectionId: string,
   ): { from: string; to: string } | null;
-  getViewport(graphPath: string): GraphPosition;
 }
 
 /** 从 store 状态导出图快照（store 内 `ConnectionData[]`；持久化经 `graphDataToDomainGraph` 包装） */
@@ -65,7 +63,6 @@ export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, 
           nodes,
           pins,
           connections,
-          canvas: access.getViewport(graphPath),
         };
 
         if (graph.type === 'function' && access.getFunctionSignature) {

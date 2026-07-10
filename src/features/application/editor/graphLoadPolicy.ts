@@ -25,6 +25,6 @@ export function activateCachedGraph(graphPath: string): boolean {
     markResourceLoaded({ id: graphPath, kind }, true);
   }
 
-  ensureGraphViewport(graphPath, getGraphByPath(graphPath)?.canvas);
+  ensureGraphViewport(graphPath);
   return true;
 }

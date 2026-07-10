@@ -2,7 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
-import { Graph, ProjectData, GraphPosition } from "@/shared/types/domain";
+import { Graph, ProjectData } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
 import {
   graphDataToDomainGraph,
@@ -12,8 +12,6 @@ import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 import { bindExecutionEventChannel } from "./executionChannelDrain";
-
-type CanvasState = GraphPosition;
 
 export interface ProjectRecordRow {
     id: string;
@@ -365,11 +363,6 @@ export class ProjectService {
             throw e;
         }
     }
-
-    static async updateCanvas(graphPath: string, canvas: CanvasState): Promise<void> {
-        await invoke("update_canvas", { graphPath, canvas });
-    }
-
     /**
      * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
      * @param graphPath 要执行的 graph 路径，传 undefined 则执行所有 Event 图

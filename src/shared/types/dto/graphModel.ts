@@ -130,7 +130,6 @@ export function graphDataToDomainGraph(data: GraphData): Graph {
     nodes: resolveDomainNodes(data.nodes, pinMap),
     pins: domainPins,
     connections: { connections: connectionDataToItems(data.connections) },
-    canvas: data.canvas,
   };
 }
 
@@ -157,12 +156,7 @@ export function domainGraphRecordToGraphData(
 
 /** GraphInstanceDTO → GraphData（IPC 入站；委托 `normalizeGraphDataLike` 单点） */
 export function graphInstanceDtoToGraphData(dto: GraphInstanceDTO): GraphData {
-  return normalizeGraphDataLike(dto.path, {
-    ...dto,
-    canvas:
-      dto.canvas ??
-      (dto as GraphInstanceDTO & { position?: GraphData['canvas'] }).position,
-  });
+  return normalizeGraphDataLike(dto.path, dto);
 }
 
 function resolveGraphType(graph: GraphDataLike): GraphData['type'] {
@@ -225,7 +219,6 @@ export function graphUpdatedPayloadToGraphDataLike(
     nodes: data.nodes ?? [],
     pins: data.pins ?? [],
     connections: data.connections ?? { connections: [] },
-    canvas: data.canvas ?? { x: 0, y: 0, scale: 1 },
   };
 }
 
@@ -243,10 +236,5 @@ export function normalizeGraphDataLike(graphPath: string, graph: GraphDataLike):
     nodes: resolveGraphNodes(graph).map((node) => runtimeNodeInputToNodeData(graphPath, node)),
     pins: resolveGraphPins(graph),
     connections: normalizeGraphConnections((graph as GraphDataLike & { connections?: unknown }).connections),
-    canvas:
-      (graph as GraphData).canvas ??
-      (graph as Graph).canvas ??
-      (graph as GraphInstanceDTO & { position?: GraphData['canvas'] }).position ??
-      { x: 0, y: 0, scale: 1 },
   };
 }

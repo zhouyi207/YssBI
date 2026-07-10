@@ -7,16 +7,14 @@ use super::*;
 // 重新挂载；动态/可重复 pin 自带完整定义覆盖。运行期缓存
 // （`pin_types` / `type_var_bindings` / `resolved_schema`）不落盘。
 //
-// 该自定义 serde 是 `GraphInstance` 唯一的磁盘序列化路径；前端始终通过
-// `GraphInstanceDTO`（`From<&GraphInstance>`）获取数据，不经过此处。
-// ============================================================================
+// Editor viewport (pan/zoom) is not document data; per-project view state lives in
+// frontend editor view state memento.
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphDocSer<'a> {
     name: &'a str,
     kind: GraphKind,
-    position: GraphPosition,
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
     function_inputs: &'a [FunctionSignaturePin],
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
@@ -42,8 +40,6 @@ struct GraphNodeSer<'a> {
 struct GraphDocDe {
     name: String,
     kind: GraphKind,
-    #[serde(default)]
-    position: GraphPosition,
     #[serde(default)]
     function_inputs: Vec<FunctionSignaturePin>,
     #[serde(default)]
@@ -111,7 +107,6 @@ impl Serialize for GraphInstance {
         GraphDocSer {
             name: &self.name,
             kind: self.kind.clone(),
-            position: self.position.clone(),
             function_inputs: &self.function_inputs,
             function_outputs: &self.function_outputs,
             nodes: node_ser,
@@ -131,7 +126,6 @@ impl<'de> Deserialize<'de> for GraphInstance {
             GraphResourcePath::from_normalized_unchecked(String::new()),
             doc.name,
             doc.kind,
-            doc.position,
             doc.function_inputs,
             doc.function_outputs,
             doc.nodes,
@@ -147,7 +141,6 @@ impl GraphInstance {
         resource_path: GraphResourcePath,
         name: String,
         kind: GraphKind,
-        position: GraphPosition,
         function_inputs: Vec<FunctionSignaturePin>,
         function_outputs: Vec<FunctionSignaturePin>,
         nodes: Vec<GraphNodeDe>,
@@ -185,7 +178,6 @@ impl GraphInstance {
             resource_path,
             name,
             kind,
-            position,
             function_inputs,
             function_outputs,
             data_state: Arc::new(RwLock::new(data_state)),

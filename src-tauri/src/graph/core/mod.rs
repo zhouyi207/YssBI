@@ -6,12 +6,10 @@
 pub mod graph_data_state;
 pub mod graph_instance;
 pub mod graph_kind;
-pub mod graph_position;
 pub mod graph_runtime;
 pub mod graph_subgraph;
 
 pub use graph_data_state::*;
 pub use graph_instance::*;
 pub use graph_kind::*;
-pub use graph_position::*;
 pub use graph_runtime::*;

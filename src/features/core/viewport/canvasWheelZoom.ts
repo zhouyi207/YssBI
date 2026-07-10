@@ -1,4 +1,4 @@
-import type { GraphPosition } from '@/shared/types/domain';
+import type { EditorViewport } from './editorViewport';
 import { clamp } from '@/shared/utils';
 import {
   getViewport,
@@ -15,10 +15,10 @@ export function isCanvasWheelZoomGesture(e: Pick<WheelEvent, 'ctrlKey' | 'metaKe
 }
 
 export function applyWheelZoomToViewport(
-  current: GraphPosition,
+  current: EditorViewport,
   e: WheelEvent,
   canvasRect: DOMRect,
-): GraphPosition {
+): EditorViewport {
   if (!isCanvasWheelZoomGesture(e)) return current;
 
   const mouseX = e.clientX - canvasRect.left;

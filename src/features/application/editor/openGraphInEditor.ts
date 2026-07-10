@@ -1,7 +1,5 @@
-import { Graph } from '@/shared/types/domain';
 import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { ensureGraphViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 import { openEditorTab } from './openEditorTab';
 import { switchEditorTab } from './switchEditorTab';
@@ -16,7 +14,6 @@ export async function openGraphInEditor(
   name: string,
   type: 'event' | 'function',
   targetGroupId?: string,
-  initialData?: Graph,
   options?: OpenGraphInEditorOptions,
 ): Promise<void> {
   logger.graph.trace(`openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`, 'TabManagement');
@@ -27,8 +24,4 @@ export async function openGraphInEditor(
   const groupId = resolveEditorTargetGroupId(targetGroupId);
   const activated = await switchEditorTab(groupId, tab);
   if (!activated) return;
-
-  if (initialData?.canvas) {
-    ensureGraphViewport(graphPath, initialData.canvas);
-  }
 }

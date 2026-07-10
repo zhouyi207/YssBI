@@ -5,7 +5,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { useEditorSession } from './EditorSessionContext';
 import type { Pin } from '@/shared/types/domain';
-import type { GraphPosition } from '@/shared/types/domain';
+import type { EditorViewport } from '@/features/core/viewport';
 import {
   composeEditorGroupSession,
   type EditorGroupInteractionSlice,
@@ -71,7 +71,7 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
   );
 
   const wrappedSetCanvas = useCallback(
-    (updater: GraphPosition | ((prev: GraphPosition) => GraphPosition)) => {
+    (updater: EditorViewport | ((prev: EditorViewport) => EditorViewport)) => {
       ensureActiveGroup();
       session.setCanvas(updater);
     },

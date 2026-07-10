@@ -46,7 +46,6 @@ function makeAccess(overrides: Partial<Parameters<typeof buildGraphSnapshot>[0]>
     getGraphPinConnections: (_graphPath: string, pinId: string) =>
       pinId === 'pin-out' ? ['pin-out->pin-in'] : ['pin-out->pin-in'],
     getGraphConnection: () => ({ from: 'pin-out', to: 'pin-in' }),
-    getViewport: () => ({ x: 12, y: 34, scale: 1.5 }),
     ...overrides,
   };
 }
@@ -60,7 +59,6 @@ describe('buildGraphSnapshot', () => {
       path: 'graph-1',
       name: 'Main Event',
       type: 'event',
-      canvas: { x: 12, y: 34, scale: 1.5 },
     });
     expect(snapshot['graph-1'].nodes).toHaveLength(1);
     expect(snapshot['graph-1'].pins).toHaveLength(2);

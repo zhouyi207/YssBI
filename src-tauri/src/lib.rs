@@ -174,8 +174,6 @@ pub fn run() {
             resolve_graph_dynamic_pins,
             // ==================== History ====================
             sync_graph_state,
-            // ==================== 子图管理 ====================
-            update_canvas,
             // ==================== Database ====================
             load_database,
             list_sqlite_tables,

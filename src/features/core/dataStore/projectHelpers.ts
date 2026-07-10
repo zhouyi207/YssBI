@@ -3,19 +3,11 @@
  * 替代原 @/features/core/project 中的 helpers
  */
 
-import { useMemo, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { LoadStatus } from '@/shared/types/ui/common';
-import { ProjectData, GraphData } from '@/shared/types';
+import { ProjectData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
-import { useGraphDataStore } from './graphDataStore';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
-import { getViewport } from '@/features/core/viewport';
-import { resourceKey, useResourceStore } from '@/features/core/resource';
-
-function isPresent<T>(value: T | null | undefined): value is T {
-  return value != null;
-}
+import type { GraphData } from '@/shared/types/store/graph';
 
 /**
  * 从三 store 组装指定 graph 的完整数据（ResourceStore + graphMetaStore + GraphDataStore）。
@@ -29,83 +21,6 @@ export function getGraphByPath(graphPath: string): GraphData | null {
  */
 export function getGraphs(): Record<string, GraphData> {
   return buildGraphSnapshotFromStores();
-}
-
-/**
- * React Hook: 订阅指定 graph 的图体数据（名称来自 ResourceStore；不含签名，签名见 graphMetaStore / useFunctionCatalog）。
- * 注意：selector 必须返回稳定引用，避免 "getSnapshot should be cached" 无限循环
- */
-export function useGraphData(activeTabId: string | null) {
-  const meta = useResourceStore((s) => {
-    if (!activeTabId) return null;
-    const eventMeta = s.resources[resourceKey({ id: activeTabId, kind: 'event' })];
-    if (eventMeta?.exists) {
-      return { path: activeTabId, name: eventMeta.name, type: 'event' as const };
-    }
-    const functionMeta = s.resources[resourceKey({ id: activeTabId, kind: 'function' })];
-    if (functionMeta?.exists) {
-      return { path: activeTabId, name: functionMeta.name, type: 'function' as const };
-    }
-    return null;
-  });
-
-  // 只提取当前图的 node 数组，useShallow 对比每个 node 引用，
-  // 其他图变化时 node 引用不变 → 不触发 re-render
-  const graphNodes = useGraphDataStore(
-    useShallow((s) => {
-      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
-      const ids = s.getGraphNodeIds(activeTabId);
-      return ids.map((nid) => s.getGraphNode(activeTabId, nid)).filter(isPresent);
-    })
-  );
-
-  const graphPins = useGraphDataStore(
-    useShallow((s) => {
-      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
-      const nodeIds = s.getGraphNodeIds(activeTabId);
-      return nodeIds.flatMap((nid) =>
-        s.getGraphNodePins(activeTabId, nid).map((pid) => s.getGraphPin(activeTabId, pid)).filter(isPresent)
-      );
-    })
-  );
-
-  const graphConnections = useGraphDataStore(
-    useShallow((s) => {
-      if (!activeTabId || !s.hasGraph(activeTabId)) return null;
-      const nodeIds = s.getGraphNodeIds(activeTabId);
-      const connIds = new Set<string>();
-      for (const nid of nodeIds) {
-        for (const pid of s.getGraphNodePins(activeTabId, nid)) {
-          for (const cid of s.getGraphPinConnections(activeTabId, pid)) {
-            connIds.add(cid);
-          }
-        }
-      }
-      return Array.from(connIds)
-        .map((cid) => s.getGraphConnection(activeTabId, cid))
-        .filter(isPresent);
-    })
-  );
-
-  // 用 ref 缓存上一次结果，只在内容真正变化时返回新引用
-  const prevRef = useRef<GraphData | null>(null);
-
-  return useMemo(() => {
-    if (!activeTabId || !meta || !graphNodes) {
-      prevRef.current = null;
-      return null;
-    }
-
-    const result: GraphData = {
-      ...meta,
-      nodes: graphNodes,
-      pins: graphPins ?? [],
-      connections: graphConnections ?? [],
-      canvas: getViewport(activeTabId),
-    };
-    prevRef.current = result;
-    return result;
-  }, [activeTabId, meta, graphNodes, graphPins, graphConnections]);
 }
 
 /**

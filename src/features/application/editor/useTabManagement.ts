@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { Graph } from '@/shared/types/domain';
 import { openGraphInEditor } from './openGraphInEditor';
 import { getActiveLayoutTab, locateLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
@@ -19,7 +18,6 @@ export function useTabManagement() {
   const handleSetActiveTabId = useCallback((
     newId: string | null,
     _forceType?: 'event' | 'function' | 'setting',
-    _initialData?: Graph,
     targetGroupId?: string,
   ) => {
     logger.graph.trace(`handleSetActiveTabId called: newId=${newId}, targetGroupId=${targetGroupId}`, 'TabManagement');
@@ -32,21 +30,20 @@ export function useTabManagement() {
   }, []);
 
   const activateTab = useCallback((id: string | null, targetGroupId?: string) => {
-    handleSetActiveTabId(id, undefined, undefined, targetGroupId);
+    handleSetActiveTabId(id, undefined, targetGroupId);
   }, [handleSetActiveTabId]);
 
   const openGraph = useCallback(async (
     id: string,
     name: string,
     type: "event" | "function",
-    options?: { initialData?: Graph; pinned?: boolean; targetGroupId?: string },
+    options?: { pinned?: boolean; targetGroupId?: string },
   ) => {
     await openGraphInEditor(
       id,
       name,
       type,
       options?.targetGroupId,
-      options?.initialData,
       { pinned: options?.pinned },
     );
   }, []);
@@ -55,7 +52,7 @@ export function useTabManagement() {
     const layoutStore = useLayoutStore.getState();
     const targetGroupId = layoutStore.activeEditorGroupId || 'default_editor';
     layoutStore.openSettings();
-    handleSetActiveTabId("settings", "setting", undefined, targetGroupId);
+    handleSetActiveTabId("settings", "setting", targetGroupId);
   }, [handleSetActiveTabId]);
 
   /** Close by tab id (keyboard / global); resolves owning editor group. */

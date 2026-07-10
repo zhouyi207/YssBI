@@ -77,7 +77,6 @@ describe('graphModel converters', () => {
       path: 'g1',
       name: 'g1',
       type: 'event',
-      canvas: base.canvas,
       pins: [...(base.pins ?? [])] as PinData[],
       connections: base.connections as GraphData['connections'],
       nodes: [
@@ -122,7 +121,6 @@ describe('graphModel converters', () => {
           },
         ],
         connections: { connections: [] },
-        canvas: { x: 0, y: 0, scale: 1 },
       }),
     );
 
