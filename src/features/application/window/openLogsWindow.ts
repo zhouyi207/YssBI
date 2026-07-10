@@ -13,12 +13,15 @@ export async function openLogsWindow(options?: OpenLogsWindowOptions): Promise<v
   try {
     const label = createEphemeralWindowLabel('logs');
     await createPersistedWindow({
-      kind: 'logs',
+      geometry: {
+        source: 'backend',
+        kind: 'logs',
+        fallbackX: typeof options?.fallbackX === 'number' ? options.fallbackX : undefined,
+        fallbackY: typeof options?.fallbackY === 'number' ? options.fallbackY : undefined,
+      },
       label,
       url: 'index.html#/logs',
       title: i18n.t('log.title'),
-      fallbackX: typeof options?.fallbackX === 'number' ? options.fallbackX : undefined,
-      fallbackY: typeof options?.fallbackY === 'number' ? options.fallbackY : undefined,
     });
   } catch (error) {
     logger.app.error(

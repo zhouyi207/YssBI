@@ -7,6 +7,15 @@ import { openGraphInEditor } from '@/features/application/editor/openGraphInEdit
 import { uiStore } from '@/features/core/ui/UIStore';
 import { parseUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
 import type { LayoutTab } from '@/shared/types/ui';
+import { activateEditorGroup, switchEditorTab } from './switchEditorTab';
+
+async function activateCreatedEditorGroup(groupId: string | null): Promise<string | null> {
+  if (!groupId) return null;
+  const node = useLayoutStore.getState().nodes[groupId];
+  const activeTab = node?.data?.tabs?.find((tab) => tab.id === node.data?.activeTabId);
+  if (activeTab) await switchEditorTab(groupId, activeTab);
+  return groupId;
+}
 
 /** Move a tab onto another editor group's TabBar (removes from source). */
 export function moveTabBetweenGroups(
@@ -15,41 +24,49 @@ export function moveTabBetweenGroups(
   targetGroupId: string,
   targetTabIndex?: number,
 ): void {
+  const wasInactive = useLayoutStore.getState().activeEditorGroupId !== targetGroupId;
   EditorGroupsService.moveTab(sourceGroupId, tabId, targetGroupId, targetTabIndex);
+  if (!wasInactive && sourceGroupId === targetGroupId) return;
+  const targetNode = useLayoutStore.getState().nodes[targetGroupId];
+  const activeTab = targetNode?.data?.tabs?.find((tab) => tab.id === targetNode.data?.activeTabId);
+  if (activeTab) void switchEditorTab(targetGroupId, activeTab);
 }
 
 /**
  * Drag tab to editor canvas edge — VS Code split: copy tab into a new group, keep source.
  */
-export function splitEditorWithTab(
+export async function splitEditorWithTab(
   sourceGroupId: string,
   tabId: string,
   targetGroupId: string,
   edge: EditorSplitEdge,
-): string | null {
+): Promise<string | null> {
   const tab = useLayoutStore.getState().nodes[sourceGroupId]?.data?.tabs?.find((t) => t.id === tabId);
   if (!tab) return null;
 
-  return EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
+  const created = EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
     component: tab.component || 'GraphEditor',
     tabs: [{ ...tab }],
     activeTabId: tabId,
   });
+  return activateCreatedEditorGroup(created);
 }
 
 /** Button / command split — copies active tab to right or bottom. */
-export function splitEditorAtEdge(groupId: string, edge: 'right' | 'bottom'): void {
-  if (edge === 'right') {
-    EditorGroupsService.splitActiveTabRight(groupId);
-    return;
-  }
-  EditorGroupsService.splitActiveTabDown(groupId);
+export async function splitEditorAtEdge(
+  groupId: string,
+  edge: 'right' | 'bottom',
+): Promise<string | null> {
+  const created = edge === 'right'
+    ? EditorGroupsService.splitActiveTabRight(groupId)
+    : EditorGroupsService.splitActiveTabDown(groupId);
+  return activateCreatedEditorGroup(created);
 }
 
 /** Double-click TabBar empty area — create Untitled-N event in the target editor group. */
 export async function createUntitledEventInGroup(groupId: string): Promise<void> {
   try {
-    EditorGroupsService.setActiveGroup(groupId);
+    await activateEditorGroup(groupId);
     const graphPath = await createUntitledGraphResource('event');
     const parsed = parseUntitledGraphPath(graphPath);
     const name = parsed?.label ?? graphPath;

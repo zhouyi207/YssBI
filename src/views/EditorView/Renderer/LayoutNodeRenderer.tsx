@@ -11,6 +11,7 @@ import { GroupContext } from '@/features/core/editor';
 import { useEditorGroupTabStrip } from '@/features/core/editor/hooks/useEditorGroupTabStrip';
 import { TabBar } from '../Layout/TabBar';
 import { DROP_TYPES } from '@/features/core/dnd';
+import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 
 /**
  * 布局引擎核心渲染器
@@ -120,6 +121,7 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
 
     const hidden = node.data?.visible === false;
     const keepAlive = node.data?.isFixed === true;
+    const maximizedHidden = node.data?.groupMaximizedHidden === true;
 
     return (
         <div
@@ -127,7 +129,13 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
             className="layout-split-view relative min-h-0 min-w-0"
             style={style}
         >
-            {(!hidden || keepAlive) && (
+            {maximizedHidden ? (
+                <div
+                    className="h-full w-full"
+                    data-editor-group-maximized-placeholder={nodeId}
+                    aria-hidden="true"
+                />
+            ) : (!hidden || keepAlive) && (
                 <div
                     className={`h-full w-full ${hidden && keepAlive ? 'invisible pointer-events-none' : ''}`}
                     aria-hidden={hidden || undefined}
@@ -145,18 +153,17 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
  */
 const LeafNodeRenderer = ({ nodeId }: { nodeId: string }) => {
     const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
-    const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
 
     const leaf = useLayoutStore(useShallow((s) => {
         const node = s.nodes[nodeId];
         if (!node) return null;
         const tabs = node.data?.tabs;
+        const activeTabId = node.data?.activeTabId;
+        const activeTab = tabs?.find((tab) => tab.id === activeTabId);
         const hasTabs = (tabs?.length ?? 0) > 0;
         return {
             hasTabs,
-            activeTabId: node.data?.activeTabId,
-            component: node.data?.component ?? '',
-            tabs,
+            activeComponentName: activeTab?.component ?? node.data?.component ?? '',
             isFixed: !!node.data?.isFixed,
         };
     }));
@@ -165,24 +172,15 @@ const LeafNodeRenderer = ({ nodeId }: { nodeId: string }) => {
 
     const ActiveComponent = useMemo(() => {
         if (!leaf) return null;
-        let componentName = leaf.component;
-
-        if (leaf.hasTabs && leaf.activeTabId) {
-            const activeTab = leaf.tabs?.find((t) => t?.id === leaf.activeTabId);
-            if (activeTab) {
-                componentName = activeTab.component;
-            }
-        }
-
-        return componentName ? viewRegistry.get(componentName) : null;
-    }, [leaf]);
+        return leaf.activeComponentName ? viewRegistry.get(leaf.activeComponentName) : null;
+    }, [leaf?.activeComponentName]);
 
     if (!leaf) return null;
 
     return (
         <GroupContext.Provider value={nodeId}>
             <div
-                onClick={() => setActiveGroup(nodeId)}
+                onClick={() => void activateEditorGroup(nodeId)}
                 className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${leaf.isFixed ? 'z-20' : ''} ${isActive && (leaf.hasTabs || !leaf.isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
                 id={`layout-node-${nodeId}`}
             >

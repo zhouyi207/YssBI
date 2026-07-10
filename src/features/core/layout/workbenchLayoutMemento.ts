@@ -5,6 +5,19 @@ import type { PanelViewId } from './panelPartModel';
 import { logger } from '@/utils/appLogger';
 
 const WORKBENCH_LAYOUT_STORAGE_KEY = 'yssbi-workbench-layout';
+let workbenchLayoutWindowScope = 'main';
+
+/** Resolve the workbench memento key for a Tauri window label. */
+export function workbenchLayoutStorageKey(windowLabel = 'main'): string {
+  return windowLabel === 'main'
+    ? WORKBENCH_LAYOUT_STORAGE_KEY
+    : `${WORKBENCH_LAYOUT_STORAGE_KEY}:${encodeURIComponent(windowLabel)}`;
+}
+
+/** Select the window scope consumed by the persistence and hydration pipeline. */
+export function setWorkbenchLayoutWindowScope(windowLabel: string): void {
+  workbenchLayoutWindowScope = windowLabel;
+}
 
 export interface WorkbenchPartMemento {
   pixelSize?: number;
@@ -26,7 +39,7 @@ export function loadWorkbenchLayoutMemento(): WorkbenchLayoutMemento | null {
   if (typeof localStorage === 'undefined') return null;
 
   try {
-    const raw = localStorage.getItem(WORKBENCH_LAYOUT_STORAGE_KEY);
+    const raw = localStorage.getItem(workbenchLayoutStorageKey(workbenchLayoutWindowScope));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WorkbenchLayoutMemento;
     if (!parsed || typeof parsed !== 'object' || !parsed.parts) return null;
@@ -40,11 +53,16 @@ export function loadWorkbenchLayoutMemento(): WorkbenchLayoutMemento | null {
   }
 }
 
-export function saveWorkbenchLayoutMemento(memento: WorkbenchLayoutMemento): void {
+export function saveWorkbenchLayoutMemento(
+  memento: WorkbenchLayoutMemento,
+): void {
   if (typeof localStorage === 'undefined') return;
 
   try {
-    localStorage.setItem(WORKBENCH_LAYOUT_STORAGE_KEY, JSON.stringify(memento));
+    localStorage.setItem(
+      workbenchLayoutStorageKey(workbenchLayoutWindowScope),
+      JSON.stringify(memento),
+    );
   } catch (error) {
     logger.app.error(
       `Failed to save workbench layout: ${error instanceof Error ? error.message : String(error)}`,

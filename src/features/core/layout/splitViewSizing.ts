@@ -21,6 +21,11 @@ export function computeFlexSplitSizes(
   minAfter = 0,
 ): { beforeSize: number; afterSize: number } {
   const total = pair.beforeStart + pair.afterStart;
+  const minimumTotal = minBefore + minAfter;
+  if (minimumTotal > total && minimumTotal > 0) {
+    const beforeSize = total * (minBefore / minimumTotal);
+    return { beforeSize, afterSize: total - beforeSize };
+  }
   const beforeSize = Math.min(
     total - minAfter,
     Math.max(minBefore, pair.beforeStart + pointerDelta),

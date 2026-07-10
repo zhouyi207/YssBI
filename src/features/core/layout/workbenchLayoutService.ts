@@ -29,6 +29,7 @@ import {
   scheduleWorkbenchLayoutPersist,
   WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS,
 } from './workbenchLayoutPersistence';
+import { clearZenModeSession, isZenModeActive } from './workbenchZenMode';
 
 const PERSIST_DEBOUNCE_MS = WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS;
 
@@ -79,15 +80,19 @@ export function snapshotWorkbenchLayoutMemento(): WorkbenchLayoutMemento {
 }
 
 export function persistWorkbenchLayoutDebounced(delayMs = PERSIST_DEBOUNCE_MS): void {
+  if (isZenModeActive()) return;
+
+  const parts = snapshotWorkbenchChromeParts();
   scheduleWorkbenchLayoutPersist(
-    () => mergeWorkbenchLayoutMemento({ parts: snapshotWorkbenchChromeParts() }),
+    'parts',
+    () => mergeWorkbenchLayoutMemento({ parts }),
     delayMs,
   );
 }
 
 /** Persist only the editor grid slice (VS Code `workbench.editor.layout` decoupling). */
 export function persistEditorGridDebounced(): void {
-  scheduleWorkbenchLayoutPersist(() => {
+  scheduleWorkbenchLayoutPersist('editorGrid', () => {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
@@ -96,7 +101,7 @@ export function persistEditorGridDebounced(): void {
 }
 
 export function persistEditorGridNow(): void {
-  flushWorkbenchLayoutPersist(() => {
+  flushWorkbenchLayoutPersist('editorGrid', () => {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
@@ -119,6 +124,7 @@ export function hydrateWorkbenchChrome(): void {
   if (!memento?.parts) return;
 
   const { nodes, updateNode, resizeNode } = useLayoutStore.getState();
+  const panelPosition = inferPanelPosition(nodes);
 
   for (const partId of WORKBENCH_PART_IDS) {
     const saved = memento.parts[partId];
@@ -128,7 +134,7 @@ export function hydrateWorkbenchChrome(): void {
     if (!node) continue;
 
     if (saved.pixelSize != null) {
-      resizeNode(partId, saved.pixelSize);
+      resizeNode(partId, saved.pixelSize, panelPosition);
     }
 
     const nextData = { ...node.data };
@@ -190,7 +196,7 @@ export function applyPanelPosition(position: PanelPosition): void {
     position,
   );
   if (clamped !== panel.pixelSize) {
-    resizeNode(PANEL_PART_ID, clamped);
+    resizeNode(PANEL_PART_ID, clamped, position);
   }
   schedulePartResizeCommit(PANEL_PART_ID, clamped);
   persistWorkbenchLayoutDebounced();
@@ -206,9 +212,52 @@ export function getPartSize(partId: WorkbenchPartId): number | undefined {
 }
 
 export function resizePart(partId: WorkbenchPartId, size: number): void {
-  useLayoutStore.getState().resizeNode(partId, size);
-  schedulePartResizeCommit(partId, size);
+  const state = useLayoutStore.getState();
+  const panelPosition = inferPanelPosition(state.nodes);
+  state.resizeNode(partId, size, panelPosition);
+  const committedSize = useLayoutStore.getState().nodes[partId]?.pixelSize ?? size;
+  schedulePartResizeCommit(partId, committedSize);
   persistWorkbenchLayoutDebounced();
+}
+
+export function reclampWorkbenchPanelSize(): void {
+  const state = useLayoutStore.getState();
+  const panel = state.nodes[PANEL_PART_ID];
+  if (!panel?.pixelSize) return;
+
+  const panelPosition = inferPanelPosition(state.nodes);
+  const clamped = clampWorkbenchPartSize(
+    panel,
+    panel.pixelSize,
+    resolveWorkbenchViewport(),
+    panelPosition,
+  );
+  if (clamped === panel.pixelSize) return;
+
+  state.resizeNode(PANEL_PART_ID, clamped, panelPosition);
+  schedulePartResizeCommit(PANEL_PART_ID, clamped);
+  if (!isZenModeActive()) {
+    persistWorkbenchLayoutDebounced();
+  }
+}
+
+/** Register the one window-level resize boundary; caller owns the returned lifecycle cleanup. */
+export function subscribeWorkbenchViewportResize(delayMs = 100): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const onResize = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      reclampWorkbenchPanelSize();
+    }, delayMs);
+  };
+
+  window.addEventListener('resize', onResize);
+  return () => {
+    window.removeEventListener('resize', onResize);
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
 }
 
 export function setPanelActiveView(viewId: PanelViewId): void {
@@ -225,6 +274,8 @@ export function setWorkbenchPartVisible(
   visible: boolean,
   options?: { userHidden?: boolean; persist?: boolean },
 ): void {
+  if (isZenModeActive()) return;
+
   const node = useLayoutStore.getState().nodes[partId];
   if (!node) return;
 
@@ -263,17 +314,22 @@ export function togglePanelVisibility(): void {
 }
 
 export function togglePanelMaximized(): void {
-  const { nodes, updateNode } = useLayoutStore.getState();
+  if (isZenModeActive()) return;
+
+  const { nodes, updateNode, resizeNode } = useLayoutStore.getState();
   const panel = nodes[PANEL_PART_ID];
   if (!panel) return;
 
   const isMaximized = panel.data?.maximized === true;
   if (isMaximized) {
     const restored = panel.data?.restoredPixelSize ?? panel.pixelSize ?? 200;
+    const panelPosition = inferPanelPosition(nodes);
+    resizeNode(PANEL_PART_ID, restored, panelPosition);
     updateNode(PANEL_PART_ID, {
-      pixelSize: restored,
       data: { ...panel.data, maximized: false, restoredPixelSize: undefined },
     });
+    const committedSize = useLayoutStore.getState().nodes[PANEL_PART_ID]?.pixelSize ?? restored;
+    schedulePartResizeCommit(PANEL_PART_ID, committedSize);
   } else {
     updateNode(PANEL_PART_ID, {
       data: {
@@ -287,16 +343,19 @@ export function togglePanelMaximized(): void {
 }
 
 export function showSidebarTab(tab: SidebarTabId): void {
+  if (isZenModeActive()) return;
   useLayoutStore.getState().showSidebarTab(tab);
   persistWorkbenchLayoutDebounced();
 }
 
 export function toggleSidebarTab(tab: SidebarTabId): void {
+  if (isZenModeActive()) return;
   useLayoutStore.getState().toggleSidebarTab(tab);
   persistWorkbenchLayoutDebounced();
 }
 
 export function resetWorkbenchLayout(panelPosition?: PanelPosition): void {
+  clearZenModeSession();
   useLayoutStore.getState().resetWorkbenchLayout();
   if (panelPosition) {
     applyPanelPosition(panelPosition);

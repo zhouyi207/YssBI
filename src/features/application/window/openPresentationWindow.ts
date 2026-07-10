@@ -46,7 +46,7 @@ export async function openPresentationWindow(
   const url = `index.html#${route}?${params.toString()}`;
 
   await createPersistedWindow({
-    kind: windowKindForRoute(route),
+    geometry: { source: 'backend', kind: windowKindForRoute(route) },
     label,
     url,
     title: presentation.windowTitle.trim() || 'Source Inspector',

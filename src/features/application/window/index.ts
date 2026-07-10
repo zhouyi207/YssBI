@@ -2,10 +2,14 @@ export { usePersistedWindow } from "./usePersistedWindow";
 export {
   usePersistedSecondaryWindow,
   readSecondaryWindowFallbackPosition,
+  readSecondaryWindowState,
 } from "./usePersistedSecondaryWindow";
 export { useWindowMaximized } from "./useWindowMaximized";
 export { createPersistedWindow } from "./createPersistedWindow";
-export type { PersistedWindowOptions } from "./createPersistedWindow";
+export type {
+  PersistedWindowOptions,
+  WindowGeometryPolicy,
+} from "./createPersistedWindow";
 export {
   resolveWindowDecorations,
   usesCustomTitleBar,
@@ -23,6 +27,10 @@ export type { PresentationWindowPayload } from "./openPresentationWindow";
 export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openLogsWindow } from "./openLogsWindow";
 export type { OpenLogsWindowOptions } from "./openLogsWindow";
+export {
+  buildSecondaryEditorWindowRequest,
+  openSecondaryEditorWindow,
+} from "./openSecondaryEditorWindow";
 export { createEphemeralWindowLabel } from "./windowLabels";
 export { usePresentationWindowLifecycle } from "./usePresentationWindowLifecycle";
 export { PresentationWindowShell } from "./PresentationWindowShell";

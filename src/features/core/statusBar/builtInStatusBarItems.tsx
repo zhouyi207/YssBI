@@ -131,6 +131,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       id: "execution-status",
       alignment: "right",
       priority: 40,
+      ariaLabel: (ctx) => actions.executionTooltip || ctx.t('bottomBar.openLogsPanel'),
       tooltip: () => actions.executionTooltip,
       onClick: () => actions.openLogsPanel(),
       render: (ctx) => (
@@ -144,6 +145,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       id: "viewport-status",
       alignment: "right",
       priority: 50,
+      ariaLabel: () => actions.viewportTooltip,
       tooltip: () => actions.viewportTooltip,
       onClick: () => actions.resetCanvasViewport(),
       render: (ctx) => (
@@ -158,6 +160,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       alignment: "right",
       priority: 60,
       className: "capitalize text-foreground",
+      ariaLabel: () => actions.themeTooltip,
       tooltip: () => actions.themeTooltip,
       onClick: () => actions.cycleColorTheme(),
       render: (ctx) => ctx.themeMode,

@@ -81,7 +81,7 @@ export function isWorksheetLayoutTab(
   return tab?.type === 'worksheet';
 }
 
-/** splitNode 复用：按当前 Tab 选择编辑器组件 */
+/** Editor group split: choose the component for the current tab. */
 export function splitComponentForTab(tab: LayoutTab | null | undefined): LayoutTabComponent {
   return tab?.component ?? 'GraphEditor';
 }

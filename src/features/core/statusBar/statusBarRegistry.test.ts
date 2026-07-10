@@ -71,4 +71,16 @@ describe("statusBarRegistry", () => {
 
     clearStatusBarRegistryForTests();
   });
+
+  it("provides accessible names for interactive built-in items", () => {
+    clearStatusBarRegistryForTests();
+    const snapshot = buildStatusBarItems(ctx, createBuiltInStatusBarItems(noopActions));
+
+    for (const item of [...snapshot.left, ...snapshot.right]) {
+      if (!item.onClick) continue;
+      expect(item.ariaLabel, item.id).toBeTruthy();
+    }
+
+    clearStatusBarRegistryForTests();
+  });
 });

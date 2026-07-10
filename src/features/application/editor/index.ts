@@ -16,6 +16,7 @@ export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';
 export {
   switchEditorTab,
+  activateEditorGroup,
   activateCurrentEditorTab,
 } from './switchEditorTab';
 export {

@@ -64,3 +64,9 @@ export async function activateCurrentEditorTab(groupId: string): Promise<boolean
   useGraphSessionStore.getState().clearGroupActivePath(groupId);
   return false;
 }
+
+/** Activate an editor group and hydrate its current graph-backed session as one application action. */
+export async function activateEditorGroup(groupId: string): Promise<boolean> {
+  useLayoutStore.getState().setActiveGroup(groupId);
+  return activateCurrentEditorTab(groupId);
+}

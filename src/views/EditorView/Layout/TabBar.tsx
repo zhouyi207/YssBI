@@ -27,8 +27,8 @@ import {
   pinTab,
   splitEditorGroupFromPointer,
   switchTab,
+  toggleMaximizeEditorGroup,
 } from "@/features/application/editor/tabCommands";
-import { EditorGroupsService } from "@/features/core/layout/editorGroupsService";
 import { createUntitledEventInGroup } from "@/features/application/editor/editorGroupCommands";
 import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/application/editor/tabBarReorderStore";
 import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
@@ -84,7 +84,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 
   const handleSplit = (e: Pick<PointerEvent, 'altKey' | 'stopPropagation'>) => {
     e.stopPropagation();
-    splitEditorGroupFromPointer(layoutNodeId, e.altKey || isAltPressed);
+    void splitEditorGroupFromPointer(layoutNodeId, e.altKey || isAltPressed);
   };
 
   const handleCloseGroup = async (e: React.MouseEvent) => {
@@ -322,10 +322,10 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
         onDoubleClick={(e) => {
           e.stopPropagation();
           if (isPreview) {
-            pinTab(layoutNodeId, tab.id);
+            void pinTab(layoutNodeId, tab.id);
             return;
           }
-          EditorGroupsService.toggleMaximizeGroup(layoutNodeId);
+          void toggleMaximizeEditorGroup(layoutNodeId);
         }}
         onContextMenu={(e) => {
           e.preventDefault();

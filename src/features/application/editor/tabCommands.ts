@@ -1,10 +1,16 @@
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 import { isGraphResourceDirty } from '@/features/core/resource';
 import type { LayoutTab } from '@/shared/types/ui';
 import { closeEditorTab } from './closeEditorTab';
-import { switchEditorTab } from './switchEditorTab';
+import { activateEditorGroup, switchEditorTab } from './switchEditorTab';
+
+async function activateTabBarGroup(groupId: string): Promise<void> {
+  if (useLayoutStore.getState().activeEditorGroupId === groupId) return;
+  await activateEditorGroup(groupId);
+}
 
 export async function switchTab(
   groupId: string,
@@ -24,10 +30,12 @@ export async function closeTab(
   tabId: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
+  await activateTabBarGroup(groupId);
   return closeEditorTab(tabId, groupId, skipDirtyPrompt);
 }
 
 export async function closeOtherTabs(groupId: string, keepTabId: string): Promise<boolean> {
+  await activateTabBarGroup(groupId);
   const tabIds =
     useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
   for (const tabId of tabIds) {
@@ -39,6 +47,7 @@ export async function closeOtherTabs(groupId: string, keepTabId: string): Promis
 }
 
 export async function closeAllTabsInGroup(groupId: string): Promise<boolean> {
+  await activateTabBarGroup(groupId);
   const tabIds =
     useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
   for (const tabId of [...tabIds]) {
@@ -49,6 +58,7 @@ export async function closeAllTabsInGroup(groupId: string): Promise<boolean> {
 }
 
 export async function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
+  await activateTabBarGroup(groupId);
   const tabs = useLayoutStore.getState().nodes[groupId]?.data?.tabs ?? [];
   for (const tab of [...tabs]) {
     if (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet') continue;
@@ -60,22 +70,27 @@ export async function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
 }
 
 export async function closeEditorGroup(groupId: string): Promise<boolean> {
+  await activateTabBarGroup(groupId);
   const tabIds =
     useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+  if (tabIds.length === 0) {
+    useLayoutStore.getState().removeEditorGroup(groupId);
+    return true;
+  }
   for (const tabId of [...tabIds]) {
     const closed = await closeEditorTab(tabId, groupId);
     if (!closed) return false;
   }
-  useLayoutStore.getState().removeNode(groupId);
   return true;
 }
 
-export function splitEditorGroup(groupId: string, direction: 'row' | 'col' = 'row'): void {
-  splitEditorAtEdge(groupId, direction === 'row' ? 'right' : 'bottom');
+export async function splitEditorGroup(groupId: string, direction: 'row' | 'col' = 'row'): Promise<void> {
+  await activateTabBarGroup(groupId);
+  await splitEditorAtEdge(groupId, direction === 'row' ? 'right' : 'bottom');
 }
 
-export function splitEditorGroupFromPointer(groupId: string, altPressed: boolean): void {
-  splitEditorGroup(groupId, altPressed ? 'col' : 'row');
+export async function splitEditorGroupFromPointer(groupId: string, altPressed: boolean): Promise<void> {
+  await splitEditorGroup(groupId, altPressed ? 'col' : 'row');
 }
 
 export function findTabInGroup(groupId: string, tabId: string): LayoutTab | undefined {
@@ -83,8 +98,14 @@ export function findTabInGroup(groupId: string, tabId: string): LayoutTab | unde
 }
 
 /** Pin a preview tab so it is no longer replaced by sidebar preview opens. */
-export function pinTab(groupId: string, tabId: string): void {
+export async function pinTab(groupId: string, tabId: string): Promise<void> {
+  await activateTabBarGroup(groupId);
   useLayoutStore.getState().setTabPinned(groupId, tabId, true);
+}
+
+export async function toggleMaximizeEditorGroup(groupId: string): Promise<void> {
+  await activateTabBarGroup(groupId);
+  EditorGroupsService.toggleMaximizeGroup(groupId);
 }
 
 export function locateTab(tabId: string, groupId?: string) {

@@ -1315,12 +1315,12 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`。
 - [x] **组内 Tab 切换不 remount GraphEditor 壳**：同组切 Tab 仅换 `activeTabId` / Canvas `graphPath`；`GraphEditor` `memo` + 组件类型不变不 unmount。
 - [x] **Grid resize 不触发 loadGraph**：layout 层无 `loadGraph` 调用；sash 仅改 flex / `pixelSize` + viewport scale。
-- [x] **多组同屏 Canvas 上限策略**：`graphDocumentCachePolicy` LRU（max 4）+ 非激活组 `InactiveEditorGroupPlaceholder`（不 mount Canvas）。
+- [~] **多组同屏 Canvas 上限策略**：`graphDocumentCachePolicy` LRU（max 4）已驱逐 hydrated graph documents；非激活组使用 `InactiveEditorGroupPlaceholder`（不 mount Canvas）。**剩余：** 多组同屏仍可能同时保留多个 graph session/viewport；LRU 不限制 Canvas 实例本身，仅限制 `graphEntities` 内存。
 
 **P1 — 交互 parity**
 
 - [x] **最大化 Editor Group**：双击 pinned Tab → `EditorGroupsService.toggleMaximizeGroup`；`editor_area` snapshot 还原。
-- [x] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；重启恢复分屏比例/方向。
+- [~] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；flex 组首次拖 sash 后 `pixelSize` 化并持久化。**剩余：** 未 pixelize 的 flex 比例在极端嵌套 split 下仍需回归；重启后比例恢复依赖已 pixelize 的节点。
 - [x] **拖组间 sash 双击**：editor grid sash 双击均分 → `resetEditorGridSplitEqual`。
 
 **P2 — 架构**
@@ -1351,7 +1351,7 @@ Editor Part（占 Workbench 中央 flex 区）
 | **隐藏 Part 内容** | 保留 DOM 或轻量占位 | [x] chrome Part keep-alive（`invisible`）；GraphEditor 按需 mount |
 | **Editor Grid** | `GridWidget` + 独立 storage | [x] `layoutStore` row/col + `editorGridMemento`（见 **§7.4**） |
 | **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] flex 首次 pixel 化 + debounce 持久化 |
-| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 非 active 组 placeholder + `graphDocumentCachePolicy` LRU |
+| **多组同屏 Canvas** | 非 active 组降优先级 | [~] 非 active 组 placeholder + `graphDocumentCachePolicy` LRU（文档级，max 4）；Canvas 仅 active 组 mount |
 
 #### 收敛任务列表
 
@@ -1398,7 +1398,7 @@ Editor Part（占 Workbench 中央 flex 区）
 **P3 — 可选产品 parity（v1.0 后可排）**
 
 - [x] **Panel 位置** bottom / left / right（VS Code `workbench.panel.defaultLocation`）；Settings → `panelPartLayout` + `applyPanelPosition`。
-- [x] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+Alt+B` / `Ctrl+I` toggle Detail；Menubar Window 菜单已标注。
+- [~] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+I` toggle Detail；Menubar Window 菜单已标注。**剩余：** 无独立 View 菜单项（VS Code View → Appearance → Secondary Side Bar）。
 - [x] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原；`workbenchZenMode.ts` + `Ctrl+K Z` / `Esc` / Window 菜单 + `ZenModeHintOverlay`；不持久化。
 - [x] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；`appearance.titleBarStyle` + `windowDecorationPolicy` + `WindowChrome` / `WindowMenuBar` + `createPersistedWindow`。
 - [x] **Status Bar 可交互项**（VS Code 左/右 status item + command）；`statusBarRegistry` + `useStatusBarItems` + `BottomBar`。
@@ -1411,22 +1411,22 @@ Editor Part（占 Workbench 中央 flex 区）
 
 | 领域 | VS Code | YssBI 现状 |
 |------|---------|------------|
-| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [x] `resetWorkbenchLayout` 已接 Menubar |
+| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [~] `resetWorkbenchLayout` 已接 **Window** 菜单（chrome-only，保留 editor grid）；无独立 View 菜单 |
 | **Sidebar 快捷键** | `Ctrl+B` toggle | [x] `Ctrl+B` / `Ctrl+I` / `Ctrl+\`` |
 | **Settings 呈现** | 可开 Settings **编辑器 Tab** | **Dialog 模态**（产品决策：不恢复 SettingsEditor Tab） |
-| **Appearance 预设** | 选 theme 即生效 | [x] `colorTheme` / `activityBarPosition` / `smoothScroll` 已接 shell |
-| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [x] `PanelPart` Tab 条（Logs + Output 占位）；Terminal 待接 |
+| **Appearance 预设** | 选 theme 即生效 | [x] `colorTheme` / `activityBarPosition` / `panelPosition` 已接 shell |
+| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [~] `PanelPart` Tab 条（Logs + Output 占位）；**Terminal 未接** |
 | **Tab 拖边分屏预览** | 半屏高亮 | [x] `EditorDropPreviewOverlay` 四向 split 预览 |
 | **项目切换布局** | 可保留 workspace layout 或 reset | [x] `collapseEditorGroups` on project reset |
 | **Detail 自动展开** | 用户隐藏后尊重选择 | [x] `detail.userHidden` memento |
-| **多 Editor 窗口** | 独立 window 状态 | [x] 副窗口 localStorage + cascade；主窗 `label=main` |
+| **多 Editor 窗口** | 独立 window 状态 | [~] 副窗口 `#/editor` + per-label memento + secondary geometry；**无跨窗 layout/tab 同步** |
 | **Satellite 窗口** | 部分复用 workbench Part | [x] 见 `docs/WORKBENCH_SATELLITE_WINDOWS.md` |
 
 **8.2 半实现 / 死代码（应收敛或删除）**
 
 - [x] **`LayoutNodeRenderer` 叶子组 drag**：已删除无效 `useDraggable` / `moveNode` 路径。
 - [x] **`SettingsEditor` viewRegistry 注册**：已删除（Settings 仅 Dialog）。
-- [x] **`activeGroupId` vs `activeEditorGroupId`**：合并为单一 `activeEditorGroupId`。
+- [x] **`activeGroupId` vs `activeEditorGroupId`**：合并为单一 `activeEditorGroupId`（UI 层 alias 仍可能存在，非 store 字段）。
 - [x] **`clampPanelSize` 重复**：统一到 `workbenchPanelSizing`。
 - [x] **`Detail` 未使用的 `width` prop**：已删除。
 
@@ -1448,7 +1448,7 @@ Editor Part（占 Workbench 中央 flex 区）
 **P1**
 
 - [x] **快捷键**：`Ctrl+B` Side Bar；`Ctrl+I` Detail；`Ctrl+\`` Panel。
-- [x] **Appearance → 运行时**：`activityBarPosition` / `colorTheme` / `smoothScroll` 已接 shell。
+- [~] **Appearance → 运行时**：`colorTheme` / `activityBarPosition` / `panelPosition` 已接 shell；`smoothScroll` 仅作用于 `html[data-smooth-scroll]` → OverlayScrollbar 纵向滚动（非 canvas / menubar）。
 - [x] **Canvas/连线 sash 节流**：§8.3 两文件已加 guard。
 
 **P2**
@@ -1460,7 +1460,7 @@ Editor Part（占 Workbench 中央 flex 区）
 
 **P3**
 
-- [x] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）。
+- [x] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）；Status Bar 交互项支持 `aria-label` + Enter/Space 激活。
 
 **8.5 已对齐 VS Code、无需重复排期**
 

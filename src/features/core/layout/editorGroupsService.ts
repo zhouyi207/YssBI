@@ -30,10 +30,10 @@ export const EditorGroupsService = {
     return created;
   },
 
-  splitActiveTabRight(groupId: string): void {
+  splitActiveTabRight(groupId: string): string | null {
     const nodes = useLayoutStore.getState().nodes;
     const activeTab = getActiveLayoutTab(groupId, nodes)?.tab;
-    EditorGroupsService.splitGroupAtEdge(groupId, 'right', {
+    return EditorGroupsService.splitGroupAtEdge(groupId, 'right', {
       component: splitComponentForTab(activeTab),
       tabs: activeTab ? [{ ...activeTab, pinned: true as const }] : [],
       activeTabId: activeTab?.id,
@@ -41,10 +41,10 @@ export const EditorGroupsService = {
     });
   },
 
-  splitActiveTabDown(groupId: string): void {
+  splitActiveTabDown(groupId: string): string | null {
     const nodes = useLayoutStore.getState().nodes;
     const activeTab = getActiveLayoutTab(groupId, nodes)?.tab;
-    EditorGroupsService.splitGroupAtEdge(groupId, 'bottom', {
+    return EditorGroupsService.splitGroupAtEdge(groupId, 'bottom', {
       component: splitComponentForTab(activeTab),
       tabs: activeTab ? [{ ...activeTab, pinned: true as const }] : [],
       activeTabId: activeTab?.id,

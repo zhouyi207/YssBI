@@ -7,6 +7,16 @@ import {
   type EditorSplitEdge,
 } from './editorSplitLayout';
 
+export const EDITOR_GROUP_MIN_WIDTH = 200;
+export const EDITOR_GROUP_MIN_HEIGHT = 120;
+
+export function resolveEditorGroupMinSize(
+  node: LayoutNode | undefined,
+  orientation: 'row' | 'col',
+): number {
+  return node?.minSize ?? (orientation === 'row' ? EDITOR_GROUP_MIN_WIDTH : EDITOR_GROUP_MIN_HEIGHT);
+}
+
 /**
  * Editor Grid domain — VS Code `GridWidget` + `SerializableGrid` equivalent.
  *
@@ -162,9 +172,20 @@ export function removeEditorGroupFromTree(
     return { removed: false, nextActiveGroupId: groupId };
   }
 
-  parent.children = parent.children.filter((id) => id !== groupId);
+  const removedIndex = parent.children.indexOf(groupId);
+  const siblingId = parent.children[removedIndex - 1] ?? parent.children[removedIndex + 1] ?? null;
+  const sibling = siblingId ? nodes[siblingId] : undefined;
+  parent.children.splice(removedIndex, 1);
 
-  if (parent.children.length === 1 && parent.parentId) {
+  if (parent.id === EDITOR_AREA_ID) {
+    if (sibling) {
+      if (sibling.pixelSize != null && group.pixelSize != null) {
+        sibling.pixelSize += group.pixelSize;
+      } else {
+        sibling.pixelSize = undefined;
+      }
+    }
+  } else if (parent.children.length === 1 && parent.parentId) {
     const grandParent = nodes[parent.parentId];
     if (grandParent?.children) {
       const singleChildId = parent.children[0];
@@ -174,9 +195,15 @@ export function removeEditorGroupFromTree(
         grandParent.children[parentIndex] = singleChildId;
         singleChild.parentId = grandParent.id;
         singleChild.size = parent.size ?? 1;
-        singleChild.pixelSize = undefined;
+        singleChild.pixelSize = parent.pixelSize;
         delete nodes[parent.id];
       }
+    }
+  } else if (sibling) {
+    if (sibling.pixelSize != null && group.pixelSize != null) {
+      sibling.pixelSize += group.pixelSize;
+    } else {
+      sibling.pixelSize = undefined;
     }
   } else if (parent.children.length === 0 && parent.parentId) {
     const grandParent = nodes[parent.parentId];
@@ -187,7 +214,10 @@ export function removeEditorGroupFromTree(
   }
 
   delete nodes[groupId];
-  return { removed: true, nextActiveGroupId: firstEditorGroupId(nodes) };
+  return {
+    removed: true,
+    nextActiveGroupId: sibling && isEditorGroupNode(sibling) ? sibling.id : firstEditorGroupId(nodes),
+  };
 }
 
 export interface SplitEditorGroupPayload {
@@ -233,13 +263,14 @@ export function splitEditorGroupInTree(
   }
 
   const branchId = createEditorGroupId();
+  const inheritedPixelSize = targetNode.pixelSize;
   const branch: LayoutNode = {
     id: branchId,
     type: direction,
     parentId: parentNode.id,
     children: isAfter ? [targetGroupId, newNodeId] : [newNodeId, targetGroupId],
     size: targetNode.size,
-    pixelSize: targetNode.pixelSize,
+    pixelSize: inheritedPixelSize,
   };
 
   const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;

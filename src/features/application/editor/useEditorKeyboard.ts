@@ -91,7 +91,6 @@ export function useEditorKeyboard({
       }
 
       if (e.key === 'Alt') {
-        e.preventDefault();
         if (e.repeat) return;
         useLayoutStore.getState().setAltPressed(true);
       }
@@ -172,9 +171,6 @@ export function useEditorKeyboard({
         e.preventDefault();
         toggleSidebar?.();
       } else if (isControlKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        toggleDetail?.();
-      } else if (isControlKey && e.altKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         toggleDetail?.();
       } else if (isControlKey && e.key === "`") {

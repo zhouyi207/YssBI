@@ -1,15 +1,15 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { LayoutNode, LayoutTree, LayoutDirection, LayoutTab } from '@/shared/types/ui';
+import { LayoutNode, LayoutTree, LayoutTab } from '@/shared/types/ui';
 import { getActiveLayoutTab } from './layoutTabQueries';
 import type { EditorSplitEdge } from './editorSplitLayout';
 import { clampWorkbenchPartSize } from './workbenchPanelSizing';
+import { inferPanelPosition, type PanelPosition } from './panelPartLayout';
 import {
     createInitialWorkbenchNodes,
     DEFAULT_EDITOR_GROUP_ID,
     EDITOR_AREA_ID,
     WORKBENCH_ROOT_ID,
-    WORKBENCH_PART_IDS,
 } from './workbenchLayoutDefaults';
 import {
     applyEditorGridPixelSizes,
@@ -62,10 +62,8 @@ export interface LayoutState {
     // Basic tree manipulation
     addNode: (node: LayoutNode) => void;
     updateNode: (id: string, patches: Partial<LayoutNode>) => void;
-    removeNode: (id: string) => void;
 
     // High level actions
-    splitNode: (targetId: string, direction: LayoutDirection, newComponentType: string) => void;
     splitEditorGroupAtEdge: (
         targetGroupId: string,
         edge: EditorSplitEdge,
@@ -76,7 +74,7 @@ export interface LayoutState {
             pinSourceActiveTab?: boolean;
         },
     ) => string | null;
-    resizeNode: (nodeId: string, size: number) => void;
+    resizeNode: (nodeId: string, size: number, panelPosition?: PanelPosition) => void;
 
     /** Show sidebar and switch activity tab. pixelSize is preserved while hidden. */
     showSidebarTab: (tab: SidebarTabId) => void;
@@ -85,7 +83,9 @@ export interface LayoutState {
 
     /** Collapse split editor groups back to a single default group. */
     collapseEditorGroups: () => void;
-    /** Reset workbench chrome + editor grid to initial layout. */
+    /** Remove an empty editor group through the editor-grid domain boundary. */
+    removeEditorGroup: (groupId: string) => boolean;
+    /** Reset workbench chrome while preserving the complete editor grid session. */
     resetWorkbenchLayout: () => void;
 
     // DND Actions
@@ -121,25 +121,6 @@ export interface LayoutState {
     setAltPressed: (pressed: boolean) => void;
     /** Session-only zen mode — hides shell chrome + workbench parts without persisting visibility. */
     zenMode: boolean;
-}
-
-function snapshotFixedChromeSizes(nodes: LayoutTree): Record<string, number | undefined> {
-    const sizes: Record<string, number | undefined> = {};
-    for (const id of WORKBENCH_PART_IDS) {
-        sizes[id] = nodes[id]?.pixelSize;
-    }
-    return sizes;
-}
-
-function restoreFixedChromeSizes(state: { nodes: LayoutTree }, saved: Record<string, number | undefined>): void {
-    for (const id of WORKBENCH_PART_IDS) {
-        const savedSize = saved[id];
-        if (savedSize === undefined) continue;
-        const node = state.nodes[id];
-        if (node) {
-            node.pixelSize = savedSize;
-        }
-    }
 }
 
 function removeEmptyEditorGroupIfNeeded(
@@ -195,79 +176,6 @@ export const useLayoutStore = create<LayoutState>()(
             }
         }),
 
-        removeNode: (id) => set((state) => {
-            const node = state.nodes[id];
-            if (!node || !node.parentId) return;
-
-            // 识别编辑器组（非固定组件）
-            const isEditor = node.type === 'component' && !node.data?.isFixed;
-            if (isEditor) {
-                const editorGroups = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
-                if (editorGroups.length <= 1) {
-                    // 如果是最后一个编辑器组，不执行删除，仅清空其内容
-                    node.data = {
-                        ...node.data,
-                        tabs: [],
-                        activeTabId: undefined
-                    };
-                    return;
-                }
-            }
-
-            const parent = state.nodes[node.parentId];
-            if (parent && parent.children) {
-                parent.children = parent.children.filter(childId => childId !== id);
-
-                // 如果父容器只剩一个子节点，提升该子节点以替代父容器，避免 pixelSize 导致空白
-                if (parent.children.length === 1 && parent.parentId) {
-                    const grandParent = state.nodes[parent.parentId];
-                    if (grandParent?.children) {
-                        const singleChildId = parent.children[0];
-                        const singleChild = state.nodes[singleChildId];
-                        if (singleChild) {
-                            const parentIndex = grandParent.children.indexOf(parent.id);
-                            grandParent.children[parentIndex] = singleChildId;
-                            singleChild.parentId = grandParent.id;
-                            singleChild.size = parent.size ?? 1;
-                            singleChild.pixelSize = undefined; // 清除固定尺寸，让其填满空间
-                            delete state.nodes[parent.id];
-                        }
-                    }
-                } else if (parent.children.length === 0 && parent.parentId) {
-                    const grandParent = state.nodes[parent.parentId];
-                    if (grandParent?.children) {
-                        grandParent.children = grandParent.children.filter(cid => cid !== parent.id);
-                        delete state.nodes[parent.id];
-                    }
-                }
-            }
-            delete state.nodes[id];
-
-            // 自动重设焦点到剩余的编辑器组
-            const remainingEditors = Object.values(state.nodes).filter(n => n.type === 'component' && !n.data?.isFixed);
-            if (state.activeEditorGroupId === id) {
-                state.activeEditorGroupId = remainingEditors[0]?.id || null;
-            }
-
-            // 最后验证：确保激活的编辑器存在且有效
-            const activeNode = state.nodes[state.activeEditorGroupId || ''];
-            if (!activeNode || activeNode.type !== 'component' || activeNode.data?.isFixed) {
-                if (remainingEditors.length > 0) {
-                    state.activeEditorGroupId = remainingEditors[0].id;
-                }
-            }
-        }),
-
-        splitNode: (targetId, direction, newComponentType) => {
-            const activeTab = getActiveLayoutTab(targetId, get().nodes)?.tab;
-            get().splitEditorGroupAtEdge(targetId, direction === 'row' ? 'right' : 'bottom', {
-                component: newComponentType,
-                tabs: activeTab ? [{ ...activeTab, pinned: true as const }] : [],
-                activeTabId: activeTab?.id,
-                pinSourceActiveTab: true,
-            });
-        },
-
         splitEditorGroupAtEdge: (targetGroupId, edge, payload) => {
             let createdGroupId: string | null = null;
             set((state) => {
@@ -292,10 +200,15 @@ export const useLayoutStore = create<LayoutState>()(
             return createdGroupId;
         },
 
-        resizeNode: (nodeId, size) => set((state) => {
+        resizeNode: (nodeId, size, panelPosition) => set((state) => {
             const node = state.nodes[nodeId];
             if (node) {
-                node.pixelSize = clampWorkbenchPartSize(node, size);
+                node.pixelSize = clampWorkbenchPartSize(
+                    node,
+                    size,
+                    undefined,
+                    panelPosition ?? inferPanelPosition(state.nodes),
+                );
             }
         }),
 
@@ -359,6 +272,19 @@ export const useLayoutStore = create<LayoutState>()(
             state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
         }),
 
+        removeEditorGroup: (groupId) => {
+            let removed = false;
+            set((state) => {
+                const result = removeEditorGroupFromTree(state.nodes, groupId);
+                removed = result.removed;
+                if (removed && state.activeEditorGroupId === groupId) {
+                    state.activeEditorGroupId = result.nextActiveGroupId;
+                }
+                ensureValidActiveEditorGroup(state);
+            });
+            return removed;
+        },
+
         toggleMaximizeEditorGroup: (groupId) => set((state) => {
             const editorArea = state.nodes[EDITOR_AREA_ID];
             if (!editorArea || !state.nodes[groupId]) return;
@@ -386,9 +312,14 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         resetWorkbenchLayout: () => set((state) => {
+            const defaults = createInitialWorkbenchNodes();
             state.rootId = WORKBENCH_ROOT_ID;
-            state.nodes = createInitialWorkbenchNodes();
-            state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
+            state.nodes[WORKBENCH_ROOT_ID] = defaults[WORKBENCH_ROOT_ID]!;
+            state.nodes.center = defaults.center!;
+            state.nodes.sidebar = defaults.sidebar!;
+            state.nodes.panel = defaults.panel!;
+            state.nodes.detail = defaults.detail!;
+            state.zenMode = false;
         }),
 
         moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => set((state) => {
@@ -479,7 +410,6 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         removeTab: (nodeId, tabId) => set((state) => {
-            const savedChromeSizes = snapshotFixedChromeSizes(state.nodes);
             const node = state.nodes[nodeId];
             if (!node || !node.data?.tabs) return;
 
@@ -490,15 +420,10 @@ export const useLayoutStore = create<LayoutState>()(
             const newTabs = currentTabs.filter(t => t.id !== tabId);
 
             if (newTabs.length === 0) {
+                node.data.tabs = [];
+                node.data.activeTabId = undefined;
                 if (listEditorGroupIds(state.nodes).length > 1) {
-                    const { removed, nextActiveGroupId } = removeEditorGroupFromTree(state.nodes, nodeId);
-                    if (removed) {
-                        state.activeEditorGroupId = nextActiveGroupId;
-                    }
-                } else {
-                    // 最后一个组，保留但清空
-                    node.data.tabs = [];
-                    node.data.activeTabId = undefined;
+                    removeEmptyEditorGroupIfNeeded(state, nodeId);
                 }
             } else {
                 const data = node.data!;
@@ -516,7 +441,6 @@ export const useLayoutStore = create<LayoutState>()(
             }
 
             ensureValidActiveEditorGroup(state);
-            restoreFixedChromeSizes(state, savedChromeSizes);
         }),
 
         addTab: (nodeId, tab) => set((state) => {

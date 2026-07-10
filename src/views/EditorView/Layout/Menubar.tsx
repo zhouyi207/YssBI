@@ -121,6 +121,7 @@ export function Menubar() {
     openSettings,
     isDetailVisible,
     isLogPanelVisible,
+    isSidebarVisible,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
@@ -128,6 +129,7 @@ export function Menubar() {
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,
+    toggleSidebar,
     handleResetLayout,
     openNewWindow,
   } = useMenubar();
@@ -199,14 +201,13 @@ export function Menubar() {
     { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
     { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },
-    { label: isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail"), shortcut: "Ctrl+Alt+B", onClick: toggleDetail },
+    { label: isSidebarVisible ? t("menubar.hideSidebar") : t("menubar.showSidebar"), shortcut: "Ctrl+B", onClick: toggleSidebar },
+    { label: isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail"), shortcut: "Ctrl+I", onClick: toggleDetail },
     { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
     { label: zenMode ? t("menubar.exitZenMode") : t("menubar.enterZenMode"), shortcut: "Ctrl+K Z", onClick: toggleZenMode },
     { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
     { label: "-" },
     { label: t("menubar.resetLayout"), onClick: handleResetLayout },
-    { label: t("menubar.zoomIn"), shortcut: "Ctrl++" },
-    { label: t("menubar.zoomOut"), shortcut: "Ctrl+-" },
   ];
 
   const toolItems: MenuItem[] = [
@@ -259,6 +260,7 @@ export function Menubar() {
             isDetailVisible ? 'text-foreground' : 'text-muted-foreground',
           )}
           tooltip={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
+          aria-label={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
         </ToolbarIconButton>

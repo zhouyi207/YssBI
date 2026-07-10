@@ -3,11 +3,14 @@
  */
 import { useCallback } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import type { SidebarTabId } from '@/features/application/editor/useSidebarTab';
+import {
+  useSidebarTab,
+  type SidebarTabId,
+} from '@/features/application/editor/useSidebarTab';
 
 export function useEditorLayoutActions() {
   const setActiveGroup = useLayoutStore((s) => s.setActiveGroup);
-  const showSidebarTab = useLayoutStore((s) => s.showSidebarTab);
+  const showSidebarTab = useSidebarTab();
 
   const setActiveGroupId = useCallback((id: string) => {
     useLayoutStore.getState().setActiveGroup(id);

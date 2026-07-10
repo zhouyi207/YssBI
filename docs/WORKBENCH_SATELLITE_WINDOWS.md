@@ -5,8 +5,9 @@ YssBI uses two window shells:
 ## Main Workbench (`EditorWindow`)
 
 - Full VS Code-style layout: Activity Bar, Sidebar, Editor Grid, Panel, Detail, Status Bar.
-- Layout persisted via `workbenchLayoutMemento` (`localStorage` key `yssbi-workbench-layout`).
-- Multiple editor windows share project state; secondary window geometry uses `usePersistedSecondaryWindow`.
+- Layout persisted via `workbenchLayoutMemento`, **scoped per Tauri window label** (`setWorkbenchLayoutWindowScope` during `useWorkbenchLayout` bootstrap).
+- Secondary editor windows open `#/editor`, use secondary geometry (`usePersistedSecondaryWindow`), and maintain **independent** workbench mementos — not a shared global layout.
+- **Reset Layout** (Window menu) restores chrome defaults only; editor grid topology, tabs, and active group are preserved.
 
 ## Presentation Windows (`PresentationWindowShell`)
 
@@ -24,10 +25,15 @@ These windows **do not** read/write the workbench layout tree. They reuse theme/
 ## Detaching Panel Views
 
 - **Logs**: drag handle in `LogPanelContent` → standalone `LogWindow` (reference implementation).
-- Future Terminal/Webview panels should follow the same pattern: embedded in `PanelPart` tab strip, optional detach to satellite shell.
+- Future Terminal/Webview panels should follow the same pattern: embedded in `PanelPart` tab strip, optional detach to satellite shell. **Terminal is not implemented yet** (Output/Logs placeholders only).
+
+## Multi-window sync (deferred)
+
+- Theme/settings sync via `CLIENT_SETTINGS_UPDATED_EVENT` is implemented.
+- Workbench layout, editor grid, and open-tab state are **not** synchronized across editor windows; each window hydrates its own memento scope.
 
 ## Boundaries
 
-- Do **not** mount workbench `LayoutNodeRenderer` inside satellite windows.
-- Part resize / sash APIs apply only to the main workbench window.
-- Editor tabs and graph documents remain tied to the main workbench editor grid unless explicitly designed otherwise.
+- **Presentation satellites** (Plot, Database Editor, Log, etc.) do **not** mount workbench `LayoutNodeRenderer` or read/write workbench layout mementos.
+- **Secondary editor windows** (`#/editor`) are full per-window workbenches: each mounts `LayoutNodeRenderer`, scopes layout persistence via `setWorkbenchLayoutWindowScope`, and owns its own editor grid, tabs, and chrome Part state.
+- Part resize / sash APIs apply within each editor workbench window instance (main or secondary), not across windows.

@@ -19,12 +19,16 @@ function toViewModel(
   item: StatusBarItemRegistration,
   ctx: StatusBarRenderContext,
 ): StatusBarItemViewModel {
+  const tooltip = item.tooltip?.(ctx);
+  const ariaLabel = item.ariaLabel?.(ctx) ?? (item.onClick ? tooltip : undefined);
+
   return {
     id: item.id,
     alignment: item.alignment,
     priority: item.priority ?? 100,
     content: item.render(ctx),
-    tooltip: item.tooltip?.(ctx),
+    ariaLabel,
+    tooltip,
     onClick: item.onClick ? () => item.onClick?.(ctx) : undefined,
     className: resolveClassName(item, ctx),
   };

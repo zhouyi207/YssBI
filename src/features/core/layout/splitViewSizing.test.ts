@@ -35,5 +35,11 @@ describe('computeFlexSplitSizes', () => {
   it('respects minimum sizes', () => {
     const pair = { beforeId: 'a', afterId: 'b', beforeStart: 300, afterStart: 300 };
     expect(computeFlexSplitSizes(pair, -500, 200, 200)).toEqual({ beforeSize: 200, afterSize: 400 });
+    expect(computeFlexSplitSizes(pair, 500, 200, 200)).toEqual({ beforeSize: 400, afterSize: 200 });
+  });
+
+  it('preserves the available total when it is smaller than both minimums', () => {
+    const pair = { beforeId: 'a', afterId: 'b', beforeStart: 100, afterStart: 100 };
+    expect(computeFlexSplitSizes(pair, 500, 200, 200)).toEqual({ beforeSize: 100, afterSize: 100 });
   });
 });

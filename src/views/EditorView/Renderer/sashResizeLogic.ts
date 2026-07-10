@@ -26,9 +26,11 @@ import {
 import {
   isEditorGridSash,
   panelStartSizeFromNode,
+  resolveEditorGroupMinSize,
 } from '@/features/core/layout/editorGridLayout';
 import { schedulePartResizeCommit } from '@/features/core/layout/partResizeNotifier';
 import type { WorkbenchPartId } from '@/features/core/layout/workbenchLayoutDefaults';
+import { isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 export type SashAxis = 'x' | 'y';
@@ -101,6 +103,7 @@ export type SashResizeTarget = {
   minSize: number;
   maxSize: number;
   deltaSign: 1 | -1;
+  panelPosition?: PanelPosition;
 };
 
 function panelTarget(
@@ -115,6 +118,7 @@ function panelTarget(
     minSize: node.minSize ?? 0,
     maxSize: resolveWorkbenchPartMaxSize(node, resolveWorkbenchViewport(), panelPosition),
     deltaSign,
+    panelPosition,
   };
 }
 
@@ -148,11 +152,14 @@ export function isSashAtLimit(target: SashResizeTarget, pointerDelta: number): b
 
 /** VS Code: restore collapsed adjacent panel when sash drag starts. */
 export function restoreAdjacentPanelVisibility(beforeNodeId: string, afterNodeId: string): void {
+  if (isZenModeActive()) return;
+
   const { nodes, updateNode } = useLayoutStore.getState();
 
   for (const nodeId of [beforeNodeId, afterNodeId] as const) {
     const node = nodes[nodeId];
     if (node?.data?.visible !== false) continue;
+    if (node.id === 'detail' && node.data?.userHidden === true) continue;
 
     const restored = { ...node.data, visible: true as const };
     if (!restored.currentTab && restored.component === 'Sidebar') {
@@ -200,6 +207,8 @@ type FlexDragSession = {
   axis: SashAxis;
   startPointer: number;
   pair: FlexSplitPair;
+  minBefore: number;
+  minAfter: number;
   beforeEl: HTMLDivElement;
   afterEl: HTMLDivElement;
   containEls: HTMLDivElement[];
@@ -225,7 +234,12 @@ export function attachSashDrag(sash: HTMLElement, ctx: SashDragContext): () => v
     if (!session) return;
 
     if (session.mode === 'flex-pair') {
-      const { beforeSize, afterSize } = computeFlexSplitSizes(session.pair, pointerDelta);
+      const { beforeSize, afterSize } = computeFlexSplitSizes(
+        session.pair,
+        pointerDelta,
+        session.minBefore,
+        session.minAfter,
+      );
       session.beforeEl.style.flex = panelFlexBasis(beforeSize);
       session.afterEl.style.flex = panelFlexBasis(afterSize);
       return;
@@ -257,7 +271,12 @@ export function attachSashDrag(sash: HTMLElement, ctx: SashDragContext): () => v
     }
 
     if (session.mode === 'flex-pair') {
-      const { beforeSize, afterSize } = computeFlexSplitSizes(session.pair, latestDelta);
+      const { beforeSize, afterSize } = computeFlexSplitSizes(
+        session.pair,
+        latestDelta,
+        session.minBefore,
+        session.minAfter,
+      );
       useLayoutStore.getState().commitFlexSplitResize(
         session.pair.beforeId,
         session.pair.afterId,
@@ -267,14 +286,24 @@ export function attachSashDrag(sash: HTMLElement, ctx: SashDragContext): () => v
       persistEditorGridDebounced();
     } else {
       const finalSize = computeSashSize(session.target, latestDelta);
-      useLayoutStore.getState().resizeNode(session.target.nodeId, finalSize);
+      if (session.target.nodeId === PANEL_PART_ID) {
+        useLayoutStore.getState().resizeNode(
+          session.target.nodeId,
+          finalSize,
+          session.target.panelPosition ?? 'bottom',
+        );
+      } else {
+        useLayoutStore.getState().resizeNode(session.target.nodeId, finalSize);
+      }
       if (
         session.target.nodeId === PANEL_PART_ID
         || session.target.nodeId === 'sidebar'
         || session.target.nodeId === 'detail'
       ) {
-        schedulePartResizeCommit(session.target.nodeId as WorkbenchPartId, finalSize);
-        persistWorkbenchLayoutDebounced();
+        if (!isZenModeActive()) {
+          schedulePartResizeCommit(session.target.nodeId as WorkbenchPartId, finalSize);
+          persistWorkbenchLayoutDebounced();
+        }
       } else {
         persistEditorGridDebounced();
       }
@@ -319,8 +348,9 @@ export function attachSashDrag(sash: HTMLElement, ctx: SashDragContext): () => v
     const afterNode = nodes[ctx.afterNodeId];
     const beforeSize = panelStartSize(beforeNode, beforeEl, axis);
     const afterSize = panelStartSize(afterNode, afterEl, axis);
+    const editorGridSash = isEditorGridSash(ctx.beforeNodeId, ctx.afterNodeId, nodes);
 
-    if (isFlexSplitPair(beforeNode, afterNode)) {
+    if (editorGridSash || isFlexSplitPair(beforeNode, afterNode)) {
       session = {
         mode: 'flex-pair',
         axis,
@@ -331,6 +361,12 @@ export function attachSashDrag(sash: HTMLElement, ctx: SashDragContext): () => v
           beforeStart: beforeSize,
           afterStart: afterSize,
         },
+        minBefore: editorGridSash
+          ? resolveEditorGroupMinSize(beforeNode, ctx.orientation)
+          : beforeNode?.minSize ?? 0,
+        minAfter: editorGridSash
+          ? resolveEditorGroupMinSize(afterNode, ctx.orientation)
+          : afterNode?.minSize ?? 0,
         beforeEl,
         afterEl,
         containEls: [beforeEl, afterEl],

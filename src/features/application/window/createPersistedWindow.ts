@@ -1,12 +1,23 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { WindowStateService } from "@/services/window/windowStateService";
-import type { WindowKind } from "@/shared/types/settings";
+import type { WindowKind, WindowState } from "@/shared/types/settings";
 import { readWindowDecorationsFromSettings } from "@/features/application/window/windowDecorationPolicy";
 import { logger } from "@/utils/appLogger";
 
+export type WindowGeometryPolicy =
+    | {
+        source: "backend";
+        kind: WindowKind;
+        fallbackX?: number;
+        fallbackY?: number;
+    }
+    | {
+        source: "provided";
+        state: WindowState;
+    };
+
 export interface PersistedWindowOptions {
-    /** 窗口种类，决定从后端 `window_state.json` 读哪份几何状态 */
-    kind: WindowKind;
+    geometry: WindowGeometryPolicy;
     label: string;
     url: string;
     title: string;
@@ -14,37 +25,41 @@ export interface PersistedWindowOptions {
     decorations?: boolean;
     /** 是否在创建时立即可见，默认 false 由窗口自身在准备好后调用 show() */
     visible?: boolean;
-    /** 当后端中没有保存位置且调用方希望提供初始坐标时使用 */
-    fallbackX?: number;
-    fallbackY?: number;
+}
+
+async function resolveWindowGeometry(policy: WindowGeometryPolicy): Promise<WindowState> {
+    if (policy.source === "provided") return policy.state;
+
+    try {
+        const saved = await WindowStateService.get(policy.kind);
+        return {
+            ...saved,
+            x: saved.x ?? policy.fallbackX ?? null,
+            y: saved.y ?? policy.fallbackY ?? null,
+        };
+    } catch (e) {
+        logger.app.warn(
+            `Failed to fetch persisted window state for ${policy.kind}: ${e instanceof Error ? e.message : String(e)}`,
+            "Window",
+        );
+        return {
+            width: 1000,
+            height: 700,
+            x: policy.fallbackX ?? null,
+            y: policy.fallbackY ?? null,
+            isMaximized: false,
+        };
+    }
 }
 
 /**
- * 异步创建一个 `WebviewWindow`，启动尺寸/位置/最大化状态来自后端
- * `window_state.json`。状态读取失败时回退到后端的内置默认值。
+ * 异步创建一个 `WebviewWindow`。几何状态由显式 policy 决定：
+ * 普通窗口读取后端，独立窗口可提供自己的 per-label 状态。
  *
  * 调用方应 `await` 本函数；这与「创建窗口本身就是异步操作」一致。
  */
 export async function createPersistedWindow(opts: PersistedWindowOptions): Promise<WebviewWindow> {
-    let saved;
-    try {
-        saved = await WindowStateService.get(opts.kind);
-    } catch (e) {
-        logger.app.warn(
-            `Failed to fetch persisted window state for ${opts.kind}: ${e instanceof Error ? e.message : String(e)}`,
-            "Window",
-        );
-        saved = {
-            width: 1000,
-            height: 700,
-            x: null,
-            y: null,
-            isMaximized: false,
-        };
-    }
-
-    const x = saved.x ?? opts.fallbackX;
-    const y = saved.y ?? opts.fallbackY;
+    const saved = await resolveWindowGeometry(opts.geometry);
 
     const config: Record<string, unknown> = {
         url: opts.url,
@@ -54,9 +69,9 @@ export async function createPersistedWindow(opts: PersistedWindowOptions): Promi
         decorations: opts.decorations ?? readWindowDecorationsFromSettings(),
         visible: opts.visible ?? false,
     };
-    if (typeof x === "number" && typeof y === "number") {
-        config.x = x;
-        config.y = y;
+    if (typeof saved.x === "number" && typeof saved.y === "number") {
+        config.x = saved.x;
+        config.y = saved.y;
     }
     if (saved.isMaximized) {
         config.maximized = true;

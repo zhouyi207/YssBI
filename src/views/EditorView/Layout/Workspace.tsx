@@ -133,7 +133,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
             resolveTabBarDropIndex(targetNodeId as string, dropData.targetTabIndex),
           );
         } else if (isLayoutRegionDrop(dropData)) {
-          splitEditorWithTab(
+          void splitEditorWithTab(
             sourceNodeId,
             tabId,
             targetNodeId as string,

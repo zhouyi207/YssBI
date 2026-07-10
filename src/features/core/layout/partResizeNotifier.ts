@@ -16,19 +16,21 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 function flushPartResizeCommits(): void {
   timer = null;
   if (typeof document !== 'undefined' && document.body.classList.contains(SASH_DRAG_BODY_CLASS)) {
+    timer = setTimeout(flushPartResizeCommits, DEBOUNCE_MS);
     return;
   }
-  for (const [partId, pixelSize] of pending.entries()) {
+  const commits = Array.from(pending.entries());
+  pending.clear();
+  for (const [partId, pixelSize] of commits) {
     window.dispatchEvent(
       new CustomEvent<PartResizeCommitDetail>(PART_RESIZE_COMMIT_EVENT, {
         detail: { partId, pixelSize },
       }),
     );
   }
-  pending.clear();
 }
 
-/** Debounced part size commit — skipped while sash drag preview is active. */
+/** Debounced part size commit — deferred while sash drag preview is active. */
 export function schedulePartResizeCommit(partId: WorkbenchPartId, pixelSize: number): void {
   pending.set(partId, pixelSize);
   if (timer) clearTimeout(timer);

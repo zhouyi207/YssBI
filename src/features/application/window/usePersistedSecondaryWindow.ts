@@ -1,4 +1,3 @@
-import { PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
 import { useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowState } from '@/shared/types/settings';
@@ -33,60 +32,75 @@ function saveSecondaryWindowState(label: string, state: WindowState): void {
   }
 }
 
+export function readSecondaryWindowState(label: string): WindowState {
+  const saved = loadSecondaryWindowState(label);
+  if (saved) return saved;
+  const { x, y } = readSecondaryWindowFallbackPosition(label);
+  return {
+    width: 1000,
+    height: 700,
+    x,
+    y,
+    isMaximized: false,
+  };
+}
+
 /** Persist geometry for auxiliary editor windows (label !== "main") in localStorage. */
 export function usePersistedSecondaryWindow(): void {
   useEffect(() => {
     let cancelled = false;
+    let unlistenClose: (() => void) | null = null;
 
     const setup = async () => {
       const win = getCurrentWindow();
       if (win.label === 'main') return;
 
-      const saved = loadSecondaryWindowState(win.label);
-      if (saved && !saved.isMaximized) {
-        try {
-          if (typeof saved.x === 'number' && typeof saved.y === 'number') {
-            await win.setPosition(new PhysicalPosition(saved.x, saved.y));
+      try {
+        const unlisten = await win.onCloseRequested(async () => {
+          try {
+            const isMaximized = await win.isMaximized();
+            if (isMaximized) {
+              saveSecondaryWindowState(win.label, {
+                ...readSecondaryWindowState(win.label),
+                isMaximized: true,
+              });
+              return;
+            }
+            const size = await win.innerSize();
+            const position = await win.outerPosition();
+            saveSecondaryWindowState(win.label, {
+              width: size.width,
+              height: size.height,
+              x: position.x,
+              y: position.y,
+              isMaximized: false,
+            });
+          } catch (error) {
+            logger.app.warn(
+              `Failed to persist secondary window: ${error instanceof Error ? error.message : String(error)}`,
+              'Window',
+            );
           }
-          await win.setSize(new PhysicalSize(saved.width, saved.height));
-        } catch {
-          // ignore apply failures on secondary windows
-        }
-      }
+        });
 
-      const unlisten = await win.onCloseRequested(async () => {
-        try {
-          const isMaximized = await win.isMaximized();
-          if (isMaximized) {
-            const prev = loadSecondaryWindowState(win.label);
-            if (prev) saveSecondaryWindowState(win.label, { ...prev, isMaximized: true });
-            return;
-          }
-          const size = await win.innerSize();
-          const position = await win.outerPosition();
-          saveSecondaryWindowState(win.label, {
-            width: size.width,
-            height: size.height,
-            x: position.x,
-            y: position.y,
-            isMaximized: false,
-          });
-        } catch (error) {
-          logger.app.warn(
-            `Failed to persist secondary window: ${error instanceof Error ? error.message : String(error)}`,
-            'Window',
-          );
+        if (cancelled) {
+          unlisten();
+        } else {
+          unlistenClose = unlisten;
         }
-      });
-
-      if (cancelled) {
-        unlisten();
+      } catch (error) {
+        logger.app.warn(
+          `Failed to attach secondary window close listener: ${error instanceof Error ? error.message : String(error)}`,
+          'Window',
+        );
       }
     };
 
     void setup();
     return () => {
       cancelled = true;
+      unlistenClose?.();
+      unlistenClose = null;
     };
   }, []);
 }

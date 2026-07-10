@@ -5,18 +5,18 @@ import {
   resetWorkbenchLayout,
   toggleDetailVisibility,
   togglePanelVisibility,
+  toggleSidebarVisibility,
 } from "@/features/core/layout/workbenchLayoutService";
 import { normalizePanelPosition } from "@/features/core/layout/panelPartLayout";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { EditorGroupsService } from "@/features/core/layout/editorGroupsService";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
+import { splitEditorAtEdge } from "@/features/application/editor/editorGroupCommands";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import {
-  createPersistedWindow,
   openDatabaseEditorWindow,
   openLogsWindow,
-  readSecondaryWindowFallbackPosition,
+  openSecondaryEditorWindow,
 } from "@/features/application/window";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { i18n } from "@/app/i18n";
@@ -35,9 +35,11 @@ export function useMenubar() {
   const activeEditorGroupId = useLayoutStore((s) => s.activeEditorGroupId);
   const detailNode = useLayoutStore((s) => s.nodes["detail"]);
   const panelNode = useLayoutStore((s) => s.nodes["panel"]);
+  const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
 
   const isDetailVisible = detailNode?.data?.visible !== false;
   const isLogPanelVisible = panelNode?.data?.visible !== false;
+  const isSidebarVisible = sidebarNode?.data?.visible !== false;
 
   useEffect(() => {
     const appWindow = getCurrentWindow();
@@ -105,13 +107,13 @@ export function useMenubar() {
 
   const handleSplitRight = useCallback(() => {
     if (activeEditorGroupId) {
-      EditorGroupsService.splitActiveTabRight(activeEditorGroupId);
+      void splitEditorAtEdge(activeEditorGroupId, "right");
     }
   }, [activeEditorGroupId]);
 
   const handleSplitDown = useCallback(() => {
     if (activeEditorGroupId) {
-      EditorGroupsService.splitActiveTabDown(activeEditorGroupId);
+      void splitEditorAtEdge(activeEditorGroupId, "bottom");
     }
   }, [activeEditorGroupId]);
 
@@ -123,14 +125,6 @@ export function useMenubar() {
     void openLogsWindow();
   }, []);
 
-  const toggleDetail = useCallback(() => {
-    toggleDetailVisibility();
-  }, []);
-
-  const toggleLogPanel = useCallback(() => {
-    togglePanelVisibility();
-  }, []);
-
   const handleResetLayout = useCallback(() => {
     const panelPosition = normalizePanelPosition(
       useSettingsStore.getState().appearance.panelPosition,
@@ -140,17 +134,7 @@ export function useMenubar() {
 
   const openNewWindow = useCallback(async () => {
     try {
-      const label = `window-${Math.random().toString(36).substring(7)}`;
-      const { x, y } = readSecondaryWindowFallbackPosition(label);
-      await createPersistedWindow({
-        kind: "main",
-        label,
-        url: "index.html",
-        title: "YssBI Node Editor",
-        visible: true,
-        fallbackX: x,
-        fallbackY: y,
-      });
+      await openSecondaryEditorWindow();
     } catch (error) {
       logger.app.error(`Failed to open new window: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
     }
@@ -160,13 +144,15 @@ export function useMenubar() {
     openSettings,
     isDetailVisible,
     isLogPanelVisible,
+    isSidebarVisible,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
     handleDatabaseEditor,
     handleOpenLogs,
-    toggleDetail,
-    toggleLogPanel,
+    toggleDetail: toggleDetailVisibility,
+    toggleLogPanel: togglePanelVisibility,
+    toggleSidebar: toggleSidebarVisibility,
     handleResetLayout,
     openNewWindow,
   };

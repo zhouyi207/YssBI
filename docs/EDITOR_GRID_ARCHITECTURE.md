@@ -43,19 +43,30 @@ splitViewSizing.ts    — flex pair math (shared with workbench chrome)
 
 ## Persistence (Workbench vs Editor Grid)
 
-Editor grid and workbench chrome share one localStorage key (`yssbi-workbench-layout`) but **logical slices** are decoupled:
+Editor grid and workbench chrome share one localStorage key scoped by **Tauri window label** (`yssbi-workbench-layout:<label>`; main window uses the default scope). Logical slices stay decoupled:
 
 | Slice | Schema field | Hydrate | Persist |
 |-------|--------------|---------|---------|
-| Chrome (sidebar/panel/detail) | `parts` | `hydrateWorkbenchChrome()` | `persistWorkbenchLayoutDebounced()` — merges `parts` only |
+| Chrome (sidebar/panel/detail) | `parts` | `hydrateWorkbenchChrome()` | `persistWorkbenchLayoutDebounced()` — snapshots chrome at schedule time; merges `parts` only |
 | Editor grid | `editorGrid` | `hydrateEditorGrid()` | `persistEditorGridDebounced()` — merges `editorGrid` only |
-| Full reset | both | `hydrateWorkbenchLayout()` | `persistWorkbenchLayoutNow()` |
+| Full reset | chrome only | n/a | `resetWorkbenchLayout()` → `persistWorkbenchLayoutNow()` |
 
-`mergeWorkbenchLayoutMemento()` in `workbenchLayoutPersistence.ts` patches one slice without overwriting the other.
+`mergeWorkbenchLayoutMemento()` in `workbenchLayoutPersistence.ts` uses a slice-aware pending queue: parts and editorGrid scheduled in the same debounce window are merged, not overwritten.
+
+**Reset Layout semantics:** `resetWorkbenchLayout()` restores default chrome visibility, sizes, panel position, and maximize state only. It does **not** collapse editor groups, close tabs, or change `activeEditorGroupId`.
+
+**Zen mode:** chrome toggles and chrome persistence are no-ops while Zen is active; viewport reclamp may still update in-memory panel size but does not schedule chrome writes.
 
 **Project switch:** `collapseEditorGroupsForProjectSwitch()` collapses the in-memory grid and immediately persists a single-group `editorGrid` memento so refresh does not restore a stale split layout.
 
-Sash drag commits call the appropriate persist function from `sashResizeLogic` (chrome vs grid sash). No duplicate sash-end listener.
+## Editor Grid pair sizing
+
+Workbench chrome sashes and editor-grid sashes share `splitViewSizing.ts` / `sashResizeLogic.ts`, but commits are separate:
+
+- **Chrome sash:** `resizePart` + `persistWorkbenchLayoutDebounced()`.
+- **Grid sash:** adjacent editor-group pair resize (including after both leaves are pixelized) + `persistEditorGridDebounced()`.
+
+Flex-only grid splits are pixelized on first drag via `commitFlexSplitResize`; persisted `pixelSize` values restore split ratios on hydrate.
 
 ## Deferred (not grid replacement)
 

@@ -8,9 +8,11 @@ export function StatusBarItem({
   item: StatusBarItemViewModel;
 }) {
   const interactive = Boolean(item.onClick);
+  const accessibleName = item.ariaLabel ?? item.tooltip;
   const cell = (
     <div
       role={interactive ? "button" : undefined}
+      aria-label={interactive ? accessibleName : undefined}
       tabIndex={interactive ? 0 : undefined}
       onClick={item.onClick}
       onKeyDown={
