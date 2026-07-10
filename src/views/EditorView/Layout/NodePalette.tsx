@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Pin, Variable } from '@/shared/types/domain';
-import type { FunctionCatalogEntry } from '@/features/core/editor/hooks/useFunctionCatalog';
+import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
 import { buildContextualCatalogItems, type NodeCatalogItem } from '@/features/domain/nodeCatalog';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { Card } from '@/components/ui/card';
@@ -21,7 +21,7 @@ export function NodePalette({
   onSelect: (item: NodeCatalogItem) => void;
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
-  functions?: Record<string, FunctionCatalogEntry>;
+  functions?: Record<string, FunctionResourceView>;
   graphKind?: 'event' | 'function';
   graphPath?: string;
 }) {

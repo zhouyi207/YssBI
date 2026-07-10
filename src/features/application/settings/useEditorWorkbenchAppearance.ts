@@ -10,6 +10,3 @@ export function useEditorWorkbenchAppearance(): void {
     applyPanelPositionFromSetting(panelPosition);
   }, [panelPosition]);
 }
-
-/** @deprecated Use `useEditorWorkbenchAppearance` — global appearance runs in SettingsEffectsProvider. */
-export const useAppearanceSettings = useEditorWorkbenchAppearance;

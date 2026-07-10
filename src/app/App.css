@@ -230,7 +230,7 @@ body.layout-sash-dragging canvas {
   pointer-events: none;
 }
 
-/* Indeterminate progress bar — sliding stripe used by LoadingOverlay */
+/* Indeterminate progress bar — sliding stripe */
 @keyframes loading-indeterminate {
   0%   { left: -40%; right: 100%; }
   60%  { left: 100%; right: -40%; }

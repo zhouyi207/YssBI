@@ -8,5 +8,3 @@ export {
   type PlotPointDTO,
   type XySeriesPlotDTO,
 } from '@/shared/types/dto/plotPayload';
-
-export type { CorrelogramBarDTO, PlotCorrelogramBarDTO } from '@/shared/types/report';

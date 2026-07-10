@@ -1719,47 +1719,60 @@ PinInstance 新增字段:
 
 ## 新发现与修复
 
-### 8. 重复逻辑：双重 `loadGraph`
-- **问题**：`useGraphManagement.openCreatedGraph` 先 `loadGraph`，再调 `openGraph` → `openGraphInEditor` 又 `loadGraph` 一次。
-- **修复**：`openGraphInEditor` 在 `hasGraph(id)` 为真时跳过加载（`openGraphInEditor.ts`）。
+### 8. 重复逻辑：双重 `loadGraph`（已收口）
+- **原问题**：创建图后打开时，可能在 UI 层与 `activateGraphTab` 各触发一次 `loadGraph`；`activateGraphTab` 与 `projectIOStore.loadGraph` 还重复做缓存判断 / viewport 激活。
+- **现状**：`openCreatedGraph` 仅调 `openGraph` → `openGraphInEditor` → `switchEditorTab` → `activateGraphTab`；**唯一** IO 入口为 `projectIOStore.loadGraph`（含 in-flight 去重）。
+- **架构**：
+  - `graphDocumentLoadPolicy.isGraphCachedInMemory`（core）：是否需打后端
+  - `loadGraph`（IO）：缓存命中只返回 `true`；未命中才 fetch + hydrate
+  - `activateGraphTab`（editor）：session + 单次 `loadGraph` + `activateCachedGraph`（viewport / loaded flag）
+- **删除**：`loadGraph` 内 `activateCachedGraph` / `ensureGraphViewport`；`activateGraphTab` 内重复的 `isGraphCachedInMemory` 分支。
 
-### 9. 多事实源：`activeGroupId` vs `activeEditorGroupId`（续）
-- **问题**：`useTabManagement.setActiveTabId` 用 `activeGroupId` 回退；`useEditorGroup.ensureActiveGroup` 比较的是 `activeGroupId` 而非编辑器组。
-- **修复**：`setActiveTabId` 改用 `resolveEditorGroupId`；`ensureActiveGroup` 改为比较 `activeEditorGroupId`。
+### 9. 多事实源：`activeGroupId` vs `activeEditorGroupId`（已收口）
+- **原问题**：`useActiveEditorGroup` 在 override 时把 `activeEditorGroupId` 误设为 `groupId`；`useEditorState` 同时暴露 `activeGroupId` / `activeEditorGroupId` 别名；Tab 激活用 nullable `resolveEditorGroupId` 可能静默失败。
+- **架构**：
+  - **唯一事实源**：`layoutStore.activeEditorGroupId`（全局焦点 editor group）
+  - **`useActiveEditorGroup`**：`groupId`（上下文组）与 `focusedEditorGroupId`（store 焦点）分离
+  - **Tab 路由**：需保证有效 editor group 时用 `resolveEditorTargetGroupId`（`useTabManagement`）
+  - **焦点判定**：`useIsActiveEditorGroup` / `ensureActiveGroup` 直接比较 `activeEditorGroupId`
+- **删除**：`useEditorState.activeGroupId` 别名；`useEditorGroupWorkspace.activeGroupId`；`CanvasOverlays` 冗余 `activeGroupId === groupId` 守卫（已由 `Canvas interactive` 门控）。
 
-### 10. 重复逻辑：Plot 时间轴与容器尺寸
-- **问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
-- **修复**：
-  - 新增 `shared/plot/plotTime.ts`（`numToPlotDate`、`plotAxisTickFormatter`）
-  - 新增 `shared/plot/usePlotContainerSize.ts`
-  - `plotShellStyles.ts` 统一 `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN`
-  - 已迁移：`Scatter`、`Line`、`Histogram`、`BarChart`
+### 10. 重复逻辑：Plot 时间轴与容器尺寸（已收口）
+- **原问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
+- **架构**：
+  - `shared/plot/plotTime.ts` — `numToPlotDate`、`plotAxisTickFormatter`（date/datetime 轴）
+  - `shared/plot/usePlotContainerSize.ts` — 容器 `ResizeObserver` 单点
+  - `plotShellStyles.ts` — `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN` / `CORRELOGRAM_MARGIN` / `PARALLEL_COORDINATES_MARGIN`
+- **已迁移全部 PlotView 组件**：`Scatter`、`Line`、`Histogram`、`BarChart`、`ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart`、`ParallelCoordinates`
 
-### 11. 无效逻辑：deprecated `buildPinResultSearchEntries`
-- **问题**：仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
-- **修复**：删除该函数，测试改为 `buildPinResultSearchEntry`，并从 `execution/index.ts` 移除导出。
+### 11. 无效逻辑：deprecated `buildPinResultSearchEntries`（已收口）
+- **原问题**：`buildPinResultSearchEntries`（复数）仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
+- **架构**（当前）：
+  - `buildPinResultSearchEntry` — 单条 entry 构建（模块内 primitive，测试直引 `pinResultSearch.ts`）
+  - `collectPinResultSearchEntries` — 从 `ExecutionStore.pinResults` 批量收集（`usePinResultSearch` 唯一生产路径）
+  - `filterPinResultSearchEntries` — 查询过滤
+- **已删除**：`buildPinResultSearchEntries`、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`
+- **已收敛**：`buildPinResultSearchEntry` 不再从 `execution/index.ts` 公开导出
 
-### 12. 代码漂移：InfoView 类型导入路径
-- **问题**：`InfoView/shared/types.ts` 标注 `@deprecated`，多处仍从该路径导入，实际仅 re-export `@/shared/types/report`。
-- **修复**：删除 `InfoView/shared/types.ts`；全部 InfoView 组件改 `@/shared/types/report`；`InfoView/shared/index.ts` 移除 types re-export。
+### 12. 代码漂移：InfoView 类型导入路径（已收口）
+- **原问题**：`InfoView/shared/types.ts` 薄 re-export `@/shared/types/report`，与领域类型双源漂移。
+- **架构**（当前）：
+  - **类型真源**：`shared/types/report/`（`index.ts` 聚合导出）
+  - **解析边界**：`parseReportPayload.ts`（IPC 单点窄化）
+  - **视图层**：InfoView 组件直引 `@/shared/types/report`；`InfoView/shared/index.ts` 仅导出 UI 块，不含 types
+- **已删除**：`InfoView/shared/types.ts`；各 `*Component.tsx` 上无引用的 `export type { … } from '@/shared/types/report'` 再导出
 
-### 13. `@deprecated` 兼容层清零
-- **问题**：前后端仍保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
-- **修复**：
-
-| 废弃项 | 处理 |
-|--------|------|
-| `parseSourceIdFromLocation` | 删除；统一 `parsePresentationWindowQuery().sourceId` |
-| `SCAN_CANCELLED` / `cancelProjectScan` | 从 `projectService` 删除 |
-| `pickNodeDocumentation` / `resolveNodeDescription` | 删除 |
-| `LoadingOverlay` | 删除 |
-| `CreateNodeSpawnParams` / `PaletteItem` | 删除；改用 `NodeSpawnParams` / `NodeCatalogItem` |
-| `CorrelogramDatum`（TS 导出） | 删除 |
-| `ConnectPinsResult.autoDisconnectedFrom/To` | 从 TS + Rust DTO 删除 |
-| `NodeMetaData.node_metadata` / `ui_style` | 删除双字段；统一 `nodeMetadata` / `uiStyle` |
-| `LayoutTab.title` | 从类型与测试 fixtures 删除 |
-| `withLegacyPinLinks` | 从 `graphFixtures.ts` 删除 |
-| `yss-sci/typing.rs` `@deprecated` 注释 | 删除 |
+### 13. `@deprecated` 兼容层清零（已收口）
+- **原问题**：前后端保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
+- **架构**（当前）：
+  - Presentation：`parsePresentationWindowQuery().sourceId`（无 `parseSourceIdFromLocation`）
+  - 节点创建：`NodeSpawnParams` / `NodeCatalogItem`（无 `CreateNodeSpawnParams` / `PaletteItem`）
+  - 连线结果：`ConnectPinsResult.autoDisconnected[]`（无 `autoDisconnectedFrom/To`）
+  - 布局 Tab：`LayoutTab` 无 `title`；`LayoutTabInput.title` 仅 hydrate 入站，`normalizeLayoutTab` + `reconcileOpenLayoutTabsWithResources` 剥离
+  - 节点 DTO：前端 `nodeMetadata` / `uiStyle`（camelCase）；Rust DTO `#[serde(rename_all = "camelCase")]` 单字段序列化
+  - Correlogram：TS 用 `CorrelogramBarDTO` / `PlotCorrelogramBarDTO`；Rust plot 节点内部 `CorrelogramDatum` 不导出到前端
+- **已删除**：`LoadingOverlay`、`pickNodeDocumentation` / `resolveNodeDescription`、`cancelProjectScan` / `SCAN_CANCELLED`、`withLegacyPinLinks`、InfoView types shim 等
+- **验证**：`src/` / `src-tauri/` 无 `@deprecated` / `#[deprecated]` 业务标注（`Cargo.lock` 第三方 crate 除外）
 
 ---
 
@@ -1767,7 +1780,6 @@ PinInstance 新增字段:
 
 | 领域 | 说明 |
 |------|------|
-| Plot 其余组件 | `ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart` 仍有内联 `ResizeObserver`，可逐步改用 `usePlotContainerSize` |
 | Plot 网格线绘制 | 各 XY 图内联 d3 grid 逻辑相似，但 `axisScale.ts` 注释明确单图可内联，暂不强制抽取 |
 | `normalizeVariables` | `projectIOStore` 本地 helper 与 `variableService` 模式略重复，但边界清晰，暂保留 |
 
@@ -1778,16 +1790,18 @@ PinInstance 新增字段:
 - `npx tsc --noEmit` — 通过
 - `cargo check` — 通过
 - vitest：plotTime、pinResultSearch、execution、graphModel、layoutTabModel — 通过
-- 全项目 `@deprecated` 标注 — 已清零（`src/` / `src-tauri/`）
+- 全项目 `@deprecated` 业务标注 — 已清零（`src/` / `src-tauri/`）
 
-如需继续，建议下一批处理 **剩余 Plot 组件迁移 `usePlotContainerSize`**。
+---
 
+## 仍待收敛（非 §13，独立任务）
 
-
-1. loadGraph 每次激活会 loadProjectGraph + resolveGraphDynamicPins 两次 IPC——为保证动态 pin 物化，属有意设计
-2. 路径变更时 persist_loaded_graph 可能二次保存——保证 local variables scope 正确
-
-这两点可以优化吗？
+| 领域 | 说明 |
+|------|------|
+| ACF/PACF IPC 与 Plot DTO 对齐 | `command_acf_pacf` 与 `correlogram.rs` 字段统一（见 TODO §1547） |
+| Plot 网格线绘制 | 各 XY 图内联 d3 grid，暂不强制抽取 |
+| `normalizeVariables` | `projectIOStore` 本地 helper，边界清晰，暂保留 |
+| `loadGraph` 双 IPC | 动态 pin 物化所需，属有意设计 |
 
 
 

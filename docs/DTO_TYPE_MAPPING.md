@@ -373,7 +373,7 @@ delete / disconnect / paste redo
 | 回归族 | `parseRegressionResultData` | OLS / WLS / GLS / Logit / Probit 等共用 |
 | 面板 / VAR / VEC / DF-ADF | `parsePanel` / `parseVar` / `parseVec` / `parseDfadf` | 按模型单文件维护 |
 | 共享字段 | `parseCommon` | 系数、`serialTests`、`correlogram` |
-| 类型真源 | `shared/types/report/*.ts` | `InfoView/shared/types.ts` 仅 re-export |
+| 类型真源 | `shared/types/report/*.ts` | 视图直引；禁止 InfoView 层 types shim |
 
 **扩展**：新增 `ReportKind` 时同步 Rust struct、`parseReportPayload` 分支、`ReportView` 渲染分支与 `report.test.ts`。展示层数值仍须 [§2.9](./DESIGN_RULE.md#29-infoview-统计数值展示) / §十五 二次防御。
 

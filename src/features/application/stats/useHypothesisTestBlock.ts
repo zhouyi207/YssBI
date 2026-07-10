@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { hypothesisTest } from '@/features/application/stats/statsActions';
 import type { HypothesisTestResponse } from '@/features/application/stats/statsActions';
-import { buildParamNames } from '@/views/InfoView/shared/utils';
+import { buildParamNames } from '@/shared/stats/regressionReportUtils';
 import type { RegressionResultData } from '@/shared/types/report';
 
 export function useHypothesisTestBlock(data: RegressionResultData) {

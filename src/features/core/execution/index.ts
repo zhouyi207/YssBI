@@ -43,7 +43,6 @@ export {
   type PinResultWirePayload,
 } from './normalizePinResult';
 export {
-  buildPinResultSearchEntry,
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
   type PinResultSearchEntry,

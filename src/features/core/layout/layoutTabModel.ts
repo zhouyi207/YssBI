@@ -53,7 +53,6 @@ export function findPreviewTabInTabs(tabs: readonly LayoutTab[] | undefined): La
 
 export function buildGraphLayoutTab(
   path: string,
-  _title: string,
   type: GraphResourceKind,
   options?: { pinned?: boolean },
 ): LayoutTab {

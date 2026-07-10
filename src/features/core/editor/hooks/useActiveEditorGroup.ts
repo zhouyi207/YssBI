@@ -6,11 +6,14 @@
 import { useMemo } from 'react';
 import type { LayoutTab } from '@/shared/types';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import { normalizeLayoutTabs } from '@/features/core/layout/layoutTabModel';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
-  const groupId = overrideGroupId ?? activeEditorGroupId ?? 'default_editor';
+  /** Globally focused editor group in layout store (nullable before hydrate). */
+  const focusedEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  /** Group identity for this hook consumer (explicit override, else focused, else default). */
+  const groupId = overrideGroupId ?? focusedEditorGroupId ?? DEFAULT_EDITOR_GROUP_ID;
 
   const node = useLayoutStore((s: LayoutState) => s.nodes[groupId]);
 
@@ -23,7 +26,7 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
 
   return {
     groupId,
-    activeEditorGroupId: groupId,
+    focusedEditorGroupId,
     activeTabId,
     tabs,
     selectedNodeIds,

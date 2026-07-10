@@ -14,8 +14,7 @@ import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { ensureGraphViewport } from '@/features/core/viewport';
-import { buildGraphResourceMeta, markResourceLoaded, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
@@ -28,7 +27,7 @@ import {
 } from '@/features/core/variable/variableCatalog';
 import { resetClientProjectState } from './projectClientReset';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
-import { activateCachedGraph, isGraphCachedInMemory } from '@/features/application/editor/graphLoadPolicy';
+import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
 import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
 
 interface ProjectIOStore {
@@ -281,7 +280,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
 
   loadGraph: async (graphPath) => {
     if (isGraphCachedInMemory(graphPath)) {
-      return activateCachedGraph(graphPath);
+      return true;
     }
 
     const existing = loadGraphInFlight.get(graphPath);
@@ -308,12 +307,10 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         useResourceStore.getState().upsertResource(
           buildGraphResourceMeta(frontendGraph.type, graphPath, frontendGraph.name),
         );
-        markResourceLoaded({ id: graphPath, kind: frontendGraph.type });
         syncFunctionSignatureFromGraph({
           ...frontendGraph,
         });
         useGraphDataStore.getState().addGraphFromData(graphPath, frontendGraph);
-        ensureGraphViewport(graphPath);
         return true;
       } catch (err) {
         const errorMessage = formatErrorMessage(err, 'Failed to load graph');

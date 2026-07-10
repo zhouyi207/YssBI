@@ -6,9 +6,6 @@ import {
   type FunctionResourceView,
 } from '@/features/core/resource/functionResourceView';
 
-/** @deprecated 使用 `FunctionResourceView` */
-export type FunctionCatalogEntry = FunctionResourceView;
-
 /** 函数 palette / Detail / 右键菜单：名称 ResourceStore + 签名 graphMetaStore。 */
 export function useFunctionCatalog(): Record<string, FunctionResourceView> {
   const resources = useGraphResourcesByKind('function');

@@ -8,7 +8,7 @@ import { buildViewMenuItems } from "@/features/application/menubar/menubarViewIt
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
@@ -138,7 +138,7 @@ export function Menubar() {
   const currentPath = useProjectIOStore((s) => s.currentPath);
   const zenMode = useLayoutStore((s) => s.zenMode);
   const saveableEditorTabId = useLayoutStore((s) => {
-    const editorGroupId = s.activeEditorGroupId || "default_editor";
+    const editorGroupId = resolveEditorTargetGroupId(undefined, s.nodes, s);
     const active = getActiveLayoutTab(editorGroupId, s.nodes);
     const tab = active?.tab;
     if (!active?.activeTabId || active.activeTabId === "settings") return null;

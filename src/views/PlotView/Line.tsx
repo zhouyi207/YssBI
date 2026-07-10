@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { cn } from '@/lib/utils';
-import { plotShellClass, plotToolbarClass, DEFAULT_PLOT_MARGIN } from './plotShellStyles';
+import { plotShellClass, plotToolbarClass, DEFAULT_PLOT_MARGIN, type PlotMargin } from './plotShellStyles';
 
 export interface LinePoint {
   x: number;
@@ -33,7 +33,7 @@ export interface LineProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
   /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
   embedded?: boolean;
 }

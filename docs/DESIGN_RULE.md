@@ -303,7 +303,7 @@ Rust `get_value` / `publish_report` 返回的 JSON 在边界上仍是 `unknown`�
 | 单点分发 | `parseReportPayload.ts` | `ReportKind` → 已校验 payload 或 `null` |
 | 聚合导出 | `index.ts` | 对外稳定 API |
 
-`views/InfoView/shared/types.ts` **仅薄 re-export** `@/shared/types/report`，禁止在该文件堆积新报告类型。
+报告类型 **仅** 定义于 `shared/types/report/`；视图层直引该路径，禁止在 `views/InfoView/` 再建 types shim 或 re-export。
 
 #### 2.13.2 数据流
 
@@ -333,7 +333,7 @@ InfoView 组件（假定 payload 已窄化；标量仍经 formatStat）
 | 反模式 | 原因 |
 | --- | --- |
 | InfoView 组件内手写 `typeof x === 'number'` 校验整包 JSON | 与 IPC 边界重复且易漏字段 |
-| `InfoView/shared/types.ts` 定义报告 struct | 与 `shared/types/report` 双源漂移 |
+| 在 `views/InfoView/` 定义报告 struct 或 types re-export shim | 与 `shared/types/report` 双源漂移 |
 | 跳过 `parseReportPayload` 直接 `raw as RegressionResult` | 后端字段嵌套（如 `{ d: number }`）导致展示层崩溃 |
 | Plot `CorrelogramDatum` 与 Report `CorrelogramBarDTO` 混用 | 字段可选性不同；须用 `correlogram.ts` 分流 |
 

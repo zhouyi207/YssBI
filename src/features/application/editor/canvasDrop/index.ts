@@ -1,4 +1,4 @@
-export type { CanvasCreateNodeParams, CreateNodeFn } from './createNodeFn';
+export type { CreateNodeFn } from './createNodeFn';
 export type { VariableDropMenu, VariableNodeType } from './variableDrop';
 export {
   buildVariableDropMenu,

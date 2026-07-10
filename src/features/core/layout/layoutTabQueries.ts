@@ -1,13 +1,12 @@
 import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types';
 import { useLayoutStore } from './layoutStore';
+import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
 
 export interface LayoutGroupContext {
   activeEditorGroupId: string | null;
 }
-
-const DEFAULT_EDITOR_GROUP_ID = 'default_editor';
 
 function readNodes(nodes?: LayoutTree): LayoutTree {
   return nodes ?? useLayoutStore.getState().nodes;
@@ -106,7 +105,7 @@ function areStringArraysEqual(a: string[], b: string[]): boolean {
   return b.every((value) => set.has(value));
 }
 
-/** 更新编辑器组内画布选中节点（`activeEditorGroupId` 优先于 `activeGroupId`） */
+/** 更新编辑器组内画布选中节点（目标组由 `resolveEditorGroupId` 解析） */
 export function updateEditorGroupSelectedNodeIds(
   updater: string[] | ((prev: string[]) => string[]),
   targetGroupId?: string | null,

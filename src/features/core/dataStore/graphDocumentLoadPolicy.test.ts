@@ -1,11 +1,11 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useGraphDataStore } from './graphDataStore';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { markResourceLoaded, resourceKey } from '@/features/core/resource';
-import { isGraphCachedInMemory } from './graphLoadPolicy';
+import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
 import { makeTestGraph } from '@/tests/helpers/graphFixtures';
 
-describe('graphLoadPolicy', () => {
+describe('graphDocumentLoadPolicy', () => {
   const graphPath = 'events/Main.yssbi-event';
   const docKey = resourceKey({ id: graphPath, kind: 'event' });
 

@@ -15,9 +15,9 @@ export function useWorkbenchLayout(): void {
     setWorkbenchLayoutWindowScope(getCurrentWindow().label);
     hydrateWorkbenchLayout();
     reclampWorkbenchPanelSize();
-    const activeGroupId = useLayoutStore.getState().activeEditorGroupId;
-    if (activeGroupId) {
-      void bootstrapEditorGraphSession(activeGroupId);
+    const activeEditorGroupId = useLayoutStore.getState().activeEditorGroupId;
+    if (activeEditorGroupId) {
+      void bootstrapEditorGraphSession(activeEditorGroupId);
     }
     return subscribeWorkbenchViewportResize();
   }, []);

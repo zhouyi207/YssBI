@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback, useEffect } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -114,9 +114,6 @@ export default function Canvas({ interactive = true }: CanvasProps) {
 
   const isDraggingPin = activePin != null;
 
-  const handlePinClick = useCallback(() => {}, []);
-  const handlePinValueChange = useCallback(() => {}, []);
-
   const contextMenuActions = useMemo((): CanvasContextMenuActions => ({
     selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
     copyNode: (nodeId) => copyNodes([nodeId]),
@@ -184,9 +181,7 @@ export default function Canvas({ interactive = true }: CanvasProps) {
                 onPointerDown={onNodePointerDown}
                 onAddInput={handleNodeAddInput}
                 onRemovePin={handleNodeRemovePin}
-                onPinClick={handlePinClick}
                 onPinPointerDown={onPinPointerDown}
-                onPinValueChange={handlePinValueChange}
               />
             );
           })}

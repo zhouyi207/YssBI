@@ -13,8 +13,6 @@ import {
 } from './var';
 import { sortVarStableRows, varCoeffsToOLSFormat } from './var/varReportUtils';
 
-export type { VARSummaryResultData } from '@/shared/types/report';
-
 export const VARComponent: React.FC<{ data: VARSummaryResultData }> = ({ data }) => {
   const {
     var_names,

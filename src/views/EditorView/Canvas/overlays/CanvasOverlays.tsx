@@ -34,8 +34,6 @@ export default function CanvasOverlays({
         functions,
         tabs,
         activeTabId,
-        activeGroupId,
-        groupId,
         executeGraph,
         cancelGraphExecution,
         clearGraphArtifacts,
@@ -83,7 +81,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Node Palette ================= */}
-            {activeGroupId === groupId && contextMenu?.visible && createPortal(
+            {contextMenu?.visible && createPortal(
                 <div className="menu-container">
                     <NodePalette
                         x={contextMenu.x}
@@ -100,7 +98,7 @@ export default function CanvasOverlays({
             )}
 
             {/* ================= Variable Drop Menu ================= */}
-            {activeGroupId === groupId && variableDropMenu && (
+            {variableDropMenu && (
                 <ContextMenu
                     position={{ x: variableDropMenu.x, y: variableDropMenu.y }}
                     sections={[

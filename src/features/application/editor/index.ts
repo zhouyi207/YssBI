@@ -1,4 +1,4 @@
-export { EditorSessionProvider, useEditorSession, useEditorSessionOptional } from './EditorSessionContext';
+export { EditorSessionProvider, useEditorSession } from './EditorSessionContext';
 export type {
   EditorSession,
   EditorGroupSession,

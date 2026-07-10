@@ -31,7 +31,7 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
           const newListener = new ProjectListener(callbacks);
           await newListener.start();
           return newListener;
-        }
+        },
       );
       listenerRef.current = listener;
 
@@ -51,7 +51,6 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
     };
   }, []);
 
-  // 当 callbacks 变化时更新（仅 useProjectSyncWithEditor 有此情况）
   useEffect(() => {
     if (callbacks && listenerRef.current) {
       listenerRef.current.updateCallbacks(callbacks);
@@ -61,43 +60,25 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
 
 /**
  * 带编辑器回调的项目同步（用于 EditorWindow）
- * Handlers 已直接更新 Store，callbacks 仅用于可选 UI 扩展（如打开新 Tab）
+ * Store 已由 Core handlers 更新；callbacks 仅用于失败 toast 等 UI 扩展。
  */
 export function useProjectSyncWithEditor() {
   const editor = useEditorSession();
-  const {
-    handleEventCreated,
-    handleEventCreatedFailed,
-    handleFunctionCreated,
-    handleFunctionCreatedFailed,
-    handleNodeCreated,
-    handleNodeDeleted,
-  } = pickEditorSessionSyncCallbacks(editor);
+  const { handleEventCreatedFailed, handleFunctionCreatedFailed } =
+    pickEditorSessionSyncCallbacks(editor);
 
   const callbacks = useMemo<EventCallbacks>(
     () => ({
-      onEventCreated: handleEventCreated,
       onEventCreatedFailed: handleEventCreatedFailed,
-      onFunctionCreated: handleFunctionCreated,
       onFunctionCreatedFailed: handleFunctionCreatedFailed,
-      onNodeCreated: handleNodeCreated as EventCallbacks['onNodeCreated'],
-      onNodeDeleted: handleNodeDeleted,
     }),
-    [
-      handleEventCreated,
-      handleEventCreatedFailed,
-      handleFunctionCreated,
-      handleFunctionCreatedFailed,
-      handleNodeCreated,
-      handleNodeDeleted,
-    ],
+    [handleEventCreatedFailed, handleFunctionCreatedFailed],
   );
   useProjectSyncCore(callbacks);
 }
 
 /**
  * 无回调的项目同步（用于 DatabaseEditorWindow 等非编辑器窗口）
- * Handlers 已直接更新 Store，无需编辑器回调
  */
 export function useProjectSync() {
   useProjectSyncCore(undefined);

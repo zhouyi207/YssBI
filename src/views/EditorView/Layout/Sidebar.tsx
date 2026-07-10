@@ -709,7 +709,6 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         collapsible={false}
         label={`${t("common.undo")} (${undoStack.length})`}
         expanded={true}
-        onToggle={() => {}}
       >
         {reversedUndo.length > 0 ? reversedUndo.map((entry, i) => (
           <div
@@ -732,7 +731,6 @@ function CommandsPanel({ activeTabId }: { activeTabId: string | null }) {
         collapsible={false}
         label={`${t("common.redo")} (${redoStack.length})`}
         expanded={true}
-        onToggle={() => {}}
       >
         {redoStack.length > 0 ? redoStack.map((entry) => (
           <div

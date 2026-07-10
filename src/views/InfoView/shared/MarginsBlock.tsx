@@ -9,7 +9,7 @@ import {
   infoStatsHeadClass,
 } from './InfoStatsTable';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildParamNames } from './utils';
+import { buildParamNames } from '@/shared/stats/regressionReportUtils';
 import { parseAtValues } from '@/features/application/stats/statsActions';
 import type { OLSResultData } from '@/shared/types/report';
 

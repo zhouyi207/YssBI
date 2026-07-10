@@ -5,7 +5,7 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
@@ -64,7 +64,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
 
   const editor = useLayoutStore(
     useShallow((state) => {
-      const groupId = state.activeEditorGroupId ?? "default_editor";
+      const groupId = resolveEditorTargetGroupId(undefined, state.nodes, state);
       const active = getActiveLayoutTab(groupId, state.nodes);
       const activeTabId = active?.activeTabId ?? null;
       const activeTab = active?.tab ?? null;

@@ -50,17 +50,7 @@ function makeTestPinData(params: {
 }
 
 /** Hydrate-safe `GraphDataLike` factory for store / canvas / sync tests. */
-export function makeTestGraph(options: MakeTestGraphOptions): GraphDataLike;
-export function makeTestGraph(id: string, title?: string): GraphDataLike;
-export function makeTestGraph(
-  optionsOrId: MakeTestGraphOptions | string,
-  legacyTitle?: string,
-): GraphDataLike {
-  const options: MakeTestGraphOptions =
-    typeof optionsOrId === 'string'
-      ? { path: optionsOrId, name: legacyTitle ?? optionsOrId, title: legacyTitle }
-      : optionsOrId;
-
+export function makeTestGraph(options: MakeTestGraphOptions): GraphDataLike {
   const path = options.path;
   const name = options.name ?? path;
   const nodeId = options.nodeId ?? 'local-node';

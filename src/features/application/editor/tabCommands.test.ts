@@ -25,12 +25,12 @@ describe('tabCommands', () => {
   });
 
   it('layoutTabResourceRef maps graph tabs to ResourceRef', () => {
-    const tab = buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event');
+    const tab = buildGraphLayoutTab('events/A.yssbi-event', 'event');
     expect(layoutTabResourceRef(tab)).toEqual({ id: 'events/A.yssbi-event', kind: 'event' });
   });
 
   it('switchTab delegates to switchEditorTab', async () => {
-    const tab = buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event');
+    const tab = buildGraphLayoutTab('events/A.yssbi-event', 'event');
     useLayoutStore.setState((state) => ({
       nodes: {
         ...state.nodes,

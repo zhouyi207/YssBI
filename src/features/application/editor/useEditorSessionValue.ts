@@ -89,5 +89,3 @@ export function useEditorSessionValue(): EditorSession {
     ],
   );
 }
-
-export type { EditorSession } from './editorSessionTypes';

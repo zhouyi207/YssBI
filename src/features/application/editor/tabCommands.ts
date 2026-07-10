@@ -93,10 +93,6 @@ export async function splitEditorGroupFromPointer(groupId: string, altPressed: b
   await splitEditorGroup(groupId, altPressed ? 'col' : 'row');
 }
 
-export function findTabInGroup(groupId: string, tabId: string): LayoutTab | undefined {
-  return useLayoutStore.getState().nodes[groupId]?.data?.tabs?.find((tab) => tab.id === tabId);
-}
-
 /** Pin a preview tab so it is no longer replaced by sidebar preview opens. */
 export async function pinTab(groupId: string, tabId: string): Promise<void> {
   await activateTabBarGroup(groupId);

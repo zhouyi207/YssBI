@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LayoutNode } from '@/shared/types/ui';
-import { computeSashSize, layoutNodeFlexStyle, panelFlexBasis, resolveSashResizeTarget } from './sashResizeLogic';
+import { panelFlexBasis } from '@/features/core/layout/splitView';
+import { computeSashSize, layoutNodeFlexStyle, resolveSashResizeTarget } from './sashResizeLogic';
 
 const fixed = (id: string, pixelSize: number, minSize = 0): LayoutNode => ({
   id,

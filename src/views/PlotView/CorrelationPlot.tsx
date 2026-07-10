@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleBand, scaleSequential, interpolateRdBu } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
   attachHoverTooltip,
   type D3Onable,
@@ -10,7 +11,7 @@ import {
   tooltipTickLine,
 } from '@/shared/plot/d3Tooltip';
 import { cn } from '@/lib/utils';
-import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
+import { CORRELATION_PLOT_MARGIN, plotContainerClass, plotTooltipClass, type PlotMargin } from './plotShellStyles';
 
 export interface CorrelationPlotProps {
   /** 变量名列表，与 matrix 行列顺序一致 */
@@ -22,35 +23,21 @@ export interface CorrelationPlotProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
 }
-
-const DEFAULT_MARGIN = { top: 40, right: 24, bottom: 120, left: 120 };
 
 const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
   labels,
   matrix,
   pMatrix,
   height: heightProp,
-  margin = DEFAULT_MARGIN,
+  margin = CORRELATION_PLOT_MARGIN,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);

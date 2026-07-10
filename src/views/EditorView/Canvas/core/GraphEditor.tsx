@@ -4,6 +4,7 @@ import { useEditorGroup, useIsActiveEditorGroup } from '@/features/application/e
 import { GroupContext } from '@/features/core/editor';
 import { WatermarkView } from '../overlays/WatermarkView';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import { useShallow } from 'zustand/react/shallow';
 import { CanvasDropZone } from './CanvasDropZone';
 
@@ -38,7 +39,7 @@ export const GraphEditor = memo(function GraphEditor() {
             aria-hidden={!isActiveGroup || undefined}
         >
             <div className="flex-1 relative overflow-hidden">
-                <CanvasDropZone groupId={nodeId ?? 'default_editor'} interactive={isActiveGroup}>
+                <CanvasDropZone groupId={nodeId ?? DEFAULT_EDITOR_GROUP_ID} interactive={isActiveGroup}>
                     {resolvedTabId ? (
                         <Canvas interactive={isActiveGroup} />
                     ) : (

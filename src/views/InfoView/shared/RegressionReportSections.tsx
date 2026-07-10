@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { KdePoint } from '@/shared/stats/regressionReportUtils';
 import {
   StatCard,
   Chi2TestCards,
@@ -229,7 +230,7 @@ export function ResidualDiagnosticsSection({
   labels = {},
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: ReturnType<typeof import('./utils').computeKDE>;
+  leverageKdeData: KdePoint[];
   labels?: ResidualDiagnosticsLabels;
 }) {
   const {
@@ -325,7 +326,7 @@ export function OlsStyleDiagnosticsSection({
   residualLabels,
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: ReturnType<typeof import('./utils').computeKDE>;
+  leverageKdeData: KdePoint[];
   residualLabels?: ResidualDiagnosticsLabels;
 }) {
   return (

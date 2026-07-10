@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { computeKDE } from '@/views/InfoView/shared/utils';
+import { computeKDE } from '@/shared/stats/regressionReportUtils';
 import type { RegressionResultData } from '@/shared/types/report';
 
 export function useRegressionReport(data: RegressionResultData) {

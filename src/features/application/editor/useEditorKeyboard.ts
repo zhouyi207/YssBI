@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { getViewport } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
@@ -57,7 +58,7 @@ export function useEditorKeyboard({
 
   const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const layoutStore = useLayoutStore.getState();
-    const gid = layoutStore.activeEditorGroupId || 'default_editor';
+    const gid = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();

@@ -22,13 +22,13 @@ describe('layoutTabModel', () => {
   });
 
   it('buildGraphLayoutTab and buildWorksheetLayoutTab produce typed tabs', () => {
-    expect(buildGraphLayoutTab('events/Main.yssbi-event', 'Main', 'event')).toMatchObject({
+    expect(buildGraphLayoutTab('events/Main.yssbi-event', 'event')).toMatchObject({
       id: 'events/Main.yssbi-event',
       type: 'event',
       component: 'GraphEditor',
     });
     expect(
-      buildGraphLayoutTab('untitled:function:Untitled-1', 'Draft', 'function'),
+      buildGraphLayoutTab('untitled:function:Untitled-1', 'function'),
     ).toMatchObject({
       id: 'untitled:function:Untitled-1',
       type: 'function',
@@ -47,7 +47,7 @@ describe('layoutTabModel', () => {
       parentId: 'root',
       data: {
         component: 'GraphEditor',
-        tabs: [buildGraphLayoutTab('functions/One.yssbi-function', 'One', 'function')],
+        tabs: [buildGraphLayoutTab('functions/One.yssbi-function', 'function')],
         activeTabId: 'functions/One.yssbi-function',
         params: { selectedNodeIds: ['n1'] },
       },
@@ -58,10 +58,10 @@ describe('layoutTabModel', () => {
   });
 
   it('isGraphLayoutTab and splitComponentForTab', () => {
-    const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'G', 'event');
+    const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'event');
     expect(isGraphLayoutTab(graphTab)).toBe(true);
     expect(isPreviewLayoutTab(graphTab)).toBe(false);
-    expect(isPreviewLayoutTab(buildGraphLayoutTab('events/P.yssbi-event', 'P', 'event', { pinned: false }))).toBe(true);
+    expect(isPreviewLayoutTab(buildGraphLayoutTab('events/P.yssbi-event', 'event', { pinned: false }))).toBe(true);
     expect(splitComponentForTab(graphTab)).toBe('GraphEditor');
     expect(splitComponentForTab(null)).toBe('GraphEditor');
   });

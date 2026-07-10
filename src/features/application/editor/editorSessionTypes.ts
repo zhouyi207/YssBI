@@ -27,7 +27,6 @@ type EditorActions = ReturnType<typeof useEditorActions>;
 /** Provider 暴露的布局 / UI / canvas ref 绑定（非完整 useEditorActions） */
 export interface EditorSessionLayoutBindings {
   setCanvas: EditorActions['setCanvas'];
-  setActiveGroupId: EditorActions['setActiveGroupId'];
   setContextMenu: EditorActions['setContextMenu'];
   setDetailFocus: EditorActions['setDetailFocus'];
   clearDetailFocus: EditorActions['clearDetailFocus'];
@@ -51,12 +50,7 @@ export type EditorSessionDataframeActions = ReturnType<typeof useDatabaseManagem
 
 export type EditorSessionNodeActions = Pick<
   ReturnType<typeof useNodeManagement>,
-  | 'createNode'
-  | 'createNodes'
-  | 'deleteNode'
-  | 'deleteNodes'
-  | 'handleNodeCreated'
-  | 'handleNodeDeleted'
+  'createNode' | 'createNodes' | 'deleteNode' | 'deleteNodes'
 >;
 
 /** 全窗口 EditorSessionProvider 契约 */
@@ -87,12 +81,7 @@ export type EditorSessionDetailActionsSlice = PickEditorSession<
 
 /** ProjectSync 事件回调 */
 export type EditorSessionSyncCallbacksSlice = PickEditorSession<
-  | 'handleEventCreated'
-  | 'handleEventCreatedFailed'
-  | 'handleFunctionCreated'
-  | 'handleFunctionCreatedFailed'
-  | 'handleNodeCreated'
-  | 'handleNodeDeleted'
+  'handleEventCreatedFailed' | 'handleFunctionCreatedFailed'
 >;
 
 // ─── EditorGroup 叠加层 ───────────────────────────────────────────────────
@@ -139,7 +128,6 @@ export function composeEditorGroupSession(
 export function pickEditorSessionLayoutBindings(actions: EditorActions): EditorSessionLayoutBindings {
   return {
     setCanvas: actions.setCanvas,
-    setActiveGroupId: actions.setActiveGroupId,
     setContextMenu: actions.setContextMenu,
     setDetailFocus: actions.setDetailFocus,
     clearDetailFocus: actions.clearDetailFocus,
@@ -158,8 +146,6 @@ export function pickEditorSessionNodeActions(
     createNodes: nodeMgmt.createNodes,
     deleteNode: nodeMgmt.deleteNode,
     deleteNodes: nodeMgmt.deleteNodes,
-    handleNodeCreated: nodeMgmt.handleNodeCreated,
-    handleNodeDeleted: nodeMgmt.handleNodeDeleted,
   };
 }
 
@@ -183,11 +169,7 @@ export function pickEditorSessionSyncCallbacks(
   session: EditorSession,
 ): EditorSessionSyncCallbacksSlice {
   return {
-    handleEventCreated: session.handleEventCreated,
     handleEventCreatedFailed: session.handleEventCreatedFailed,
-    handleFunctionCreated: session.handleFunctionCreated,
     handleFunctionCreatedFailed: session.handleFunctionCreatedFailed,
-    handleNodeCreated: session.handleNodeCreated,
-    handleNodeDeleted: session.handleNodeDeleted,
   };
 }

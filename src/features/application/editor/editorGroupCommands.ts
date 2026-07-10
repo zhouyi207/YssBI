@@ -6,7 +6,6 @@ import { createUntitledGraphResource } from '@/features/application/resource/res
 import { openGraphInEditor } from '@/features/application/editor/openGraphInEditor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { parseUntitledGraphPath } from '@/shared/types/domain/graphResourcePath';
-import type { LayoutTab } from '@/shared/types/ui';
 import { activateEditorGroup, switchEditorTab } from './switchEditorTab';
 
 async function activateCreatedEditorGroup(groupId: string | null): Promise<string | null> {
@@ -75,8 +74,4 @@ export async function createUntitledEventInGroup(groupId: string): Promise<void>
     uiStore.showToast(formatErrorMessage(error), 'error');
     throw error;
   }
-}
-
-export function findTabInEditorGroup(groupId: string, tabId: string): LayoutTab | undefined {
-  return useLayoutStore.getState().nodes[groupId]?.data?.tabs?.find((tab) => tab.id === tabId);
 }

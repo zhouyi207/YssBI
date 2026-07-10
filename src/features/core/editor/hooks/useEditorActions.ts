@@ -1,6 +1,6 @@
 /**
  * 编辑器操作（组合 hook）
- * 组合 useEditorCanvasActions、useEditorUIActions、useEditorLayoutActions
+ * 组合 useEditorCanvasActions、useEditorUIActions
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
 import { useRef, useEffect } from 'react';
@@ -8,12 +8,11 @@ import { getViewport, subscribeToViewport } from '@/features/core/viewport';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
-import { useEditorLayoutActions } from './useEditorLayoutActions';
 
 type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
 
 export function useEditorActions(active: ActiveEditorGroup) {
-  const editorGroupId = active.activeEditorGroupId;
+  const editorGroupId = active.focusedEditorGroupId ?? active.groupId;
   const activeGroupIdRef = useRef(editorGroupId);
   const activeTabIdRef = useRef(active.activeTabId);
   activeGroupIdRef.current = editorGroupId;
@@ -21,7 +20,6 @@ export function useEditorActions(active: ActiveEditorGroup) {
 
   const canvasActions = useEditorCanvasActions(activeTabIdRef);
   const uiActions = useEditorUIActions();
-  const layoutActions = useEditorLayoutActions();
 
   const viewportRef = useRef(getViewport(active.activeTabId ?? ''));
 
@@ -40,6 +38,5 @@ export function useEditorActions(active: ActiveEditorGroup) {
     viewportRef,
     ...canvasActions,
     ...uiActions,
-    ...layoutActions,
   };
 }

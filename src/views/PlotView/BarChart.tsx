@@ -9,7 +9,7 @@ import {
   tooltipTwoLine,
 } from '@/shared/plot/d3Tooltip';
 import { cn } from '@/lib/utils';
-import { COMPACT_PLOT_MARGIN, DEFAULT_PLOT_MARGIN, plotContainerClass, plotTooltipClass } from './plotShellStyles';
+import { COMPACT_PLOT_MARGIN, DEFAULT_PLOT_MARGIN, plotContainerClass, plotTooltipClass, type PlotMargin } from './plotShellStyles';
 
 export interface BarDatum {
   label: string;
@@ -23,7 +23,7 @@ export interface BarChartProps {
   color?: string;
   /** 图表高度，传 0 或不传则自适应容器高度 */
   height?: number;
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
   horizontal?: boolean;
   /** 紧凑模式：无轴线，用 tooltip 显示信息 */
   compact?: boolean;

@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEye, VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
-import { ContextMenu, type ContextMenuPosition, type ContextMenuSection, type ContextMenuItem } from "./ContextMenu";
+import { ContextMenu, type ContextMenuPosition, type ContextMenuSection, type ContextMenuItem } from "@/shared/ui/contextMenu";
 
 export interface PinContextMenuProps {
   position: ContextMenuPosition;

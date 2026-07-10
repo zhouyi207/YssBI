@@ -20,8 +20,4 @@ export function useEditorSession(): EditorSession {
   return session;
 }
 
-export function useEditorSessionOptional(): EditorSession | null {
-  return useContext(EditorSessionContext);
-}
-
 export type { EditorSession } from './editorSessionTypes';

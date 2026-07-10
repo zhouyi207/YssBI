@@ -19,7 +19,7 @@ export async function openGraphInEditor(
   logger.graph.trace(`openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`, 'TabManagement');
 
   const pinned = options?.pinned !== false;
-  const tab = buildGraphLayoutTab(graphPath, name, type, { pinned });
+  const tab = buildGraphLayoutTab(graphPath, type, { pinned });
   openEditorTab(tab, { targetGroupId, pinned });
   const groupId = resolveEditorTargetGroupId(targetGroupId);
   const activated = await switchEditorTab(groupId, tab);

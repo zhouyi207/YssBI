@@ -17,13 +17,6 @@ export function getGraphByPath(graphPath: string): GraphData | null {
 }
 
 /**
- * 获取所有 graphs（按 ResourceStore graphOrder 顺序）
- */
-export function getGraphs(): Record<string, GraphData> {
-  return buildGraphSnapshotFromStores();
-}
-
-/**
  * 初始化时从后端同步项目状态
  * 应该在应用启动时调用一次
  *
@@ -38,46 +31,4 @@ export async function initProjectSync(): Promise<ProjectData | null> {
   }
 
   return await loadProject();
-}
-
-/**
- * 获取当前项目路径
- */
-export function getCurrentProjectPath(): string | null {
-  const { status, currentPath } = useProjectIOStore.getState();
-
-  if (status !== LoadStatus.Ready) {
-    return null;
-  }
-
-  return currentPath;
-}
-
-/**
- * 检查项目是否已加载
- */
-export function isProjectLoaded(): boolean {
-  const { status } = useProjectIOStore.getState();
-  return status === LoadStatus.Ready;
-}
-
-/**
- * 获取项目数据（只读）
- */
-export function getProjectData(): ProjectData {
-  const { status, exportSnapshot } = useProjectIOStore.getState();
-
-  if (status !== LoadStatus.Ready) {
-    return {
-      variables: {},
-      graphs: {},
-      databases: {},
-      metadata: {
-        exportTime: '',
-        appVersion: '',
-      },
-    };
-  }
-
-  return exportSnapshot();
 }

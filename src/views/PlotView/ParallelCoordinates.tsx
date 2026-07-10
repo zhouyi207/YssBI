@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scalePoint, line } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
   attachHoverTooltip,
   type D3Onable,
@@ -16,7 +17,7 @@ import {
   type ColumnAxisScale,
 } from '@/shared/plot/axisScale';
 import { cn } from '@/lib/utils';
-import { plotContainerClass, plotTooltipRichClass } from './plotShellStyles';
+import { PARALLEL_COORDINATES_MARGIN, plotContainerClass, plotTooltipRichClass } from './plotShellStyles';
 
 export interface ParallelAxis {
   name: string;
@@ -34,7 +35,6 @@ export interface ParallelCoordinatesProps {
   maxLines?: number;
 }
 
-const MARGIN = { top: 28, right: 16, bottom: 12, left: 16 };
 const AXIS_LABEL_SIZE = 10;
 
 interface ParallelLineDatum {
@@ -49,24 +49,12 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
   color,
   maxLines = 200,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
   const plotColor = color ?? seriesColors.primary;
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -78,8 +66,8 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
     const width = size.width;
     const height = size.height;
 
-    const w = width - MARGIN.left - MARGIN.right;
-    const h = height - MARGIN.top - MARGIN.bottom;
+    const w = width - PARALLEL_COORDINATES_MARGIN.left - PARALLEL_COORDINATES_MARGIN.right;
+    const h = height - PARALLEL_COORDINATES_MARGIN.top - PARALLEL_COORDINATES_MARGIN.bottom;
 
     const sampled = rows.length > maxLines
       ? Array.from({ length: maxLines }, (_, i) => rows[Math.floor(i * rows.length / maxLines)])
@@ -102,7 +90,7 @@ const ParallelCoordinates: React.FC<ParallelCoordinatesProps> = ({
       .attr('width', width)
       .attr('height', height)
       .append('g')
-      .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+      .attr('transform', `translate(${PARALLEL_COORDINATES_MARGIN.left},${PARALLEL_COORDINATES_MARGIN.top})`);
 
     axes.forEach((axis, i) => {
       const x = xScale(String(i))!;

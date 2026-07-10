@@ -18,8 +18,6 @@ import {
 } from './shared';
 import type { PanelDidResultData, OLSResultData } from '@/shared/types/report';
 
-export type { PanelDidResultData } from '@/shared/types/report';
-
 export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
   const {
     title,

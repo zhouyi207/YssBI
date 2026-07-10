@@ -111,5 +111,3 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
     [session, workspace, interaction],
   );
 }
-
-export type { EditorGroupSession } from './editorSessionTypes';

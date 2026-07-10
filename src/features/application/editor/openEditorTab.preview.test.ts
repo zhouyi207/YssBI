@@ -23,10 +23,10 @@ describe('openEditorTab preview', () => {
   });
 
   it('replaces the preview tab when opening another preview in the same group', () => {
-    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event', { pinned: false }), {
+    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'event', { pinned: false }), {
       pinned: false,
     });
-    openEditorTab(buildGraphLayoutTab('events/B.yssbi-event', 'B', 'event', { pinned: false }), {
+    openEditorTab(buildGraphLayoutTab('events/B.yssbi-event', 'event', { pinned: false }), {
       pinned: false,
     });
 
@@ -37,20 +37,20 @@ describe('openEditorTab preview', () => {
   });
 
   it('pins an existing preview tab when reopened with pinned: true', () => {
-    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event', { pinned: false }), {
+    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'event', { pinned: false }), {
       pinned: false,
     });
-    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event'), { pinned: true });
+    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'event'), { pinned: true });
 
     const tab = useLayoutStore.getState().nodes.default_editor.data?.tabs?.[0];
     expect(tab?.pinned).toBe(true);
   });
 
   it('adds pinned tabs without replacing preview', () => {
-    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'A', 'event', { pinned: false }), {
+    openEditorTab(buildGraphLayoutTab('events/A.yssbi-event', 'event', { pinned: false }), {
       pinned: false,
     });
-    openEditorTab(buildGraphLayoutTab('events/B.yssbi-event', 'B', 'event'), { pinned: true });
+    openEditorTab(buildGraphLayoutTab('events/B.yssbi-event', 'event'), { pinned: true });
 
     const tabs = useLayoutStore.getState().nodes.default_editor.data?.tabs ?? [];
     expect(tabs).toHaveLength(2);

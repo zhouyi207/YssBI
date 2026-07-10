@@ -16,7 +16,7 @@ import { useMenubar } from "@/features/application/menubar";
 import { toggleSidebarVisibility } from "@/features/core/layout/workbenchLayoutService";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
-import { useEditorWorkbenchAppearance } from "@/features/application/settings/useAppearanceSettings";
+import { useEditorWorkbenchAppearance } from "@/features/application/settings/useEditorWorkbenchAppearance";
 import { useActivityBarLayout } from "@/features/application/settings/useActivityBarLayout";
 import { useEditorWindowGeometryPersistence } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";

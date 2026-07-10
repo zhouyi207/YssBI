@@ -18,18 +18,6 @@ export type PinDirection = "input" | "output";
  */
 export type RuntimePinKind = 'exec' | 'object';
 
-/** @deprecated 使用 `RuntimePinKind`；宽 union 仅作历史文档参考。 */
-export type PinType =
-    | RuntimePinKind
-    | "int"
-    | "float"
-    | "string"
-    | "bool"
-    | "array"
-    | "struct"
-    | "delegate"
-    | string;
-
 /**
  * Pin UI 配置
  * 用于渲染 Pin 的视觉样式

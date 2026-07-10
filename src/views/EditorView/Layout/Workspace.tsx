@@ -12,6 +12,7 @@ import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import {
@@ -84,7 +85,10 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     if (sidebarResource && isCanvasDrop(overData)) {
       finishSidebarDrag();
 
-      const targetGroupId = overData.groupId || useLayoutStore.getState().activeEditorGroupId || "default_editor";
+      const layoutState = useLayoutStore.getState();
+      const targetGroupId =
+        overData.groupId ||
+        resolveEditorTargetGroupId(undefined, layoutState.nodes, layoutState);
       void openGraphInEditor(sidebarResource.id, sidebarResource.name, sidebarResource.type, targetGroupId)
         .catch((error) => uiStore.showToast(formatErrorMessage(error), "error"));
       return;

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectIOStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
+import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
@@ -35,12 +35,6 @@ export function useProjectOperations() {
   const { t } = useTranslation();
   const currentPath = useProjectIOStore((s) => s.currentPath);
 
-  // 注意：新架构中不需要 syncActiveToCollection，后端事件会自动同步
-  const syncActiveToCollection = useCallback(() => {
-    // TODO: 如果需要，实现新的同步逻辑
-    logger.app.debug('syncActiveToCollection called (no-op in new architecture)', 'ProjectOperations');
-  }, []);
-
   const saveGraphAs = useCallback(async () => {
     if (!currentPath) {
       uiStore.showToast("项目尚未加载", "warning", 2000);
@@ -66,7 +60,6 @@ export function useProjectOperations() {
       uiStore.showToast("项目尚未加载", "warning", 2000);
       return;
     }
-    syncActiveToCollection();
     try {
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = resolveEditorGroupId(undefined, layoutStore);
@@ -101,7 +94,7 @@ export function useProjectOperations() {
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast(`保存失败：${formatErrorMessage(e)}`, "error", 2000);
     }
-  }, [currentPath, syncActiveToCollection, t]);
+  }, [currentPath, t]);
 
   const importGraph = useCallback(async () => {
     try {
@@ -118,7 +111,7 @@ export function useProjectOperations() {
 
       // 清空当前 tabs，用户从侧栏自行打开资源
       const layoutStore = useLayoutStore.getState();
-      const editorGroupId = layoutStore.activeEditorGroupId || 'default_editor';
+      const editorGroupId = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
       const editorNode = layoutStore.nodes[editorGroupId];
       if (editorNode?.data?.tabs) {
         layoutStore.updateNode(editorGroupId, {
@@ -177,7 +170,6 @@ export function useProjectOperations() {
     const { graph: currentGraph } = target;
 
     try {
-      syncActiveToCollection();
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
 
       const recording: RecordedEvent[] = [];
@@ -229,7 +221,7 @@ export function useProjectOperations() {
       finalizeExecutionRun(graphPath, [], 'error');
       uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
     }
-  }, [handleOpenSourceWindow, syncActiveToCollection, finalizeExecutionRun, t]);
+  }, [handleOpenSourceWindow, finalizeExecutionRun, t]);
 
   const cancelGraphExecution = useCallback(async () => {
     try {

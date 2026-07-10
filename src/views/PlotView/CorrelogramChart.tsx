@@ -4,9 +4,10 @@
  * Stata 风格：垂直柱状图，y 轴 -1..1，置信区间 ±1.96/√n
  * Hover tooltip 显示 lag、value、Q 统计量及 p-value
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
   attachHoverTooltip,
   type D3Onable,
@@ -17,9 +18,7 @@ import {
   type CorrelogramBarDTO,
   correlogramLjungBoxTooltipHtml,
 } from '@/shared/types/report';
-import { plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
-
-export type { CorrelogramBarDTO };
+import { CORRELOGRAM_MARGIN, plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
 
 export interface CorrelogramChartProps {
   data: CorrelogramBarDTO[];
@@ -30,8 +29,6 @@ export interface CorrelogramChartProps {
   valueLabel?: string;
 }
 
-const MARGIN = { top: 28, right: 24, bottom: 36, left: 52 };
-
 const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
   data,
   ciHalfWidth,
@@ -39,25 +36,13 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
   color,
   valueLabel = 'Value',
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
   const plotColor = color ?? seriesColors.primary;
   const negativeColor = seriesColors.negative;
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -65,15 +50,15 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
 
     if (data.length === 0 || size.width === 0 || size.height === 0) return;
 
-    const w = size.width - MARGIN.left - MARGIN.right;
-    const h = size.height - MARGIN.top - MARGIN.bottom;
+    const w = size.width - CORRELOGRAM_MARGIN.left - CORRELOGRAM_MARGIN.right;
+    const h = size.height - CORRELOGRAM_MARGIN.top - CORRELOGRAM_MARGIN.bottom;
     if (w <= 0 || h <= 0) return;
 
     const g = svg
       .attr('width', size.width)
       .attr('height', size.height)
       .append('g')
-      .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+      .attr('transform', `translate(${CORRELOGRAM_MARGIN.left},${CORRELOGRAM_MARGIN.top})`);
 
     const xBand = scaleBand()
       .domain(data.map((d) => String(d.lag)))

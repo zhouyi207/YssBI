@@ -9,7 +9,7 @@ import {
   resolveEffectiveDefinition,
 } from '@/features/domain/nodeDefinition';
 import { isNodeCompatibleWithPin, pinAcceptsType } from '@/shared/utils/pinCompatibility';
-import type { FunctionCatalogEntry } from '@/features/core/editor/hooks/useFunctionCatalog';
+import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
 import type { NodeCatalogItem } from './types';
 import { RESOURCE_SPAWNED_NODE_TYPES } from './types';
 
@@ -17,7 +17,7 @@ export function buildContextualCatalogItems(options: {
   definitions: NodeDefinition[];
   filterPin?: Pin | null;
   variables?: Record<string, Variable>;
-  functions?: Record<string, FunctionCatalogEntry>;
+  functions?: Record<string, FunctionResourceView>;
   graphKind?: 'event' | 'function';
   graphPath?: string;
 }): NodeCatalogItem[] {

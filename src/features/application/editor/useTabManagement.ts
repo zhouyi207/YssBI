@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { openGraphInEditor } from './openGraphInEditor';
-import { getActiveLayoutTab, locateLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
+import { getActiveLayoutTab, locateLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { logger } from '@/utils/appLogger';
 import { applyEditorTabSelection } from './editorTabSelection';
@@ -22,9 +22,9 @@ export function useTabManagement() {
   ) => {
     logger.graph.trace(`handleSetActiveTabId called: newId=${newId}, targetGroupId=${targetGroupId}`, 'TabManagement');
 
-    const groupId = resolveEditorGroupId(targetGroupId);
-    if (groupId) applyEditorTabSelection(groupId, newId);
-    if (!newId || !groupId) return;
+    const groupId = resolveEditorTargetGroupId(targetGroupId);
+    applyEditorTabSelection(groupId, newId);
+    if (!newId) return;
 
     void switchTab(groupId, newId);
   }, []);
@@ -49,9 +49,8 @@ export function useTabManagement() {
   }, []);
 
   const openSettingsTab = useCallback(() => {
-    const layoutStore = useLayoutStore.getState();
-    const targetGroupId = layoutStore.activeEditorGroupId || 'default_editor';
-    layoutStore.openSettings();
+    const targetGroupId = resolveEditorTargetGroupId();
+    useLayoutStore.getState().openSettings();
     handleSetActiveTabId("settings", "setting", targetGroupId);
   }, [handleSetActiveTabId]);
 

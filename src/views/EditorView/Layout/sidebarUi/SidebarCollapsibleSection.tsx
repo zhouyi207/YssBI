@@ -12,7 +12,7 @@ type SidebarCollapsibleSectionProps = {
   collapsible?: boolean;
   label: string;
   expanded: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
   onAdd?: () => void;
   indentDepth?: number;
   isActive?: boolean;
@@ -48,13 +48,13 @@ export function SidebarCollapsibleSection({
         if (!collapsible) return;
         if ((e.target as HTMLElement).closest("[data-add-btn]")) return;
         e.stopPropagation();
-        onToggle();
+        onToggle?.();
       }}
       onKeyDown={(e) => {
         if (!collapsible) return;
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
-        onToggle();
+        onToggle?.();
       }}
       onContextMenu={headerContextMenu}
       className={sidebarCollapsibleHeaderClass(isActive)}

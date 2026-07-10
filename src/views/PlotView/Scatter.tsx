@@ -4,7 +4,7 @@ import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartT
 import { plotAxisTickFormatter } from '@/shared/plot/plotTime';
 import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { cn } from '@/lib/utils';
-import { DEFAULT_PLOT_MARGIN, plotContainerClass } from './plotShellStyles';
+import { DEFAULT_PLOT_MARGIN, plotContainerClass, type PlotMargin } from './plotShellStyles';
 
 export interface ScatterPoint {
   x: number;
@@ -28,7 +28,7 @@ export interface ScatterProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
   /** Y 轴是否关于 0 对称（如残差图），默认 false */
   symmetricY?: boolean;
   /** 是否绘制 y=0 参考线，默认 false */

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { getActiveLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layout/workbenchLayoutService';
 import { setViewportLive } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
@@ -25,7 +25,7 @@ export function useStatusBarActions() {
 
   const resetCanvasViewport = useCallback(() => {
     const state = useLayoutStore.getState();
-    const groupId = state.activeEditorGroupId ?? 'default_editor';
+    const groupId = resolveEditorTargetGroupId(undefined, state.nodes, state);
     const graphPath = getActiveLayoutTab(groupId, state.nodes)?.activeTabId ?? null;
     if (!graphPath) return;
     setViewportLive(graphPath, { ...DEFAULT_VIEWPORT });

@@ -62,19 +62,9 @@ export function useVariableManagement() {
     await deleteVariableAction(id);
   }, []);
 
-  const promoteVariable = useCallback((_id: string) => {
-    // No-op in document-owned variable architecture
-  }, []);
-
-  const demoteVariable = useCallback((_id: string) => {
-    // No-op in document-owned variable architecture
-  }, []);
-
   return {
     addVariable,
     updateVariable,
     deleteVariable,
-    promoteVariable,
-    demoteVariable,
   };
 }

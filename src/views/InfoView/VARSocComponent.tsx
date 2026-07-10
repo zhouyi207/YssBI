@@ -5,8 +5,6 @@ import { ReportLayout, ReportSection, formatNum } from './shared';
 import { InfoStatsTable, infoStatsRowEvenClass, infoStatsRowOddClass } from './shared/InfoStatsTable';
 import type { VARSocResultData } from '@/shared/types/report';
 
-export type { VARSocResultData } from '@/shared/types/report';
-
 function fmtCell(v: number | null | undefined, decimals = 4): string {
   if (v == null || Number.isNaN(v)) return '—';
   return formatNum(v, decimals);

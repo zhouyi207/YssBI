@@ -44,8 +44,6 @@ export interface LayoutFlexContext {
   panelPosition?: PanelPosition;
 }
 
-export { panelFlexBasis } from '@/features/core/layout/splitView';
-
 export function layoutNodeFlexStyle(
   node: LayoutNode | undefined,
   context?: LayoutFlexContext,

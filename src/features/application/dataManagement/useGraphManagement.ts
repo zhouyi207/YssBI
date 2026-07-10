@@ -73,10 +73,6 @@ export function useGraphManagement(
     }
   }, [openCreatedGraph, switchSidebarTab]);
 
-  const handleEventCreated = useCallback((id: string) => {
-    logger.graph.debug(`handleEventCreated: ${id}`, 'GraphManagement');
-  }, []);
-
   const handleEventCreatedFailed = useCallback((name: string, error: string) => {
     logger.graph.error(`handleEventCreatedFailed: ${name} - ${error}`, 'GraphManagement');
     uiStore.showToast(`创建 Event 失败: ${error}`, 'error');
@@ -117,10 +113,6 @@ export function useGraphManagement(
     }
   }, [openCreatedGraph, switchSidebarTab]);
 
-  const handleFunctionCreated = useCallback((id: string) => {
-    logger.graph.debug(`handleFunctionCreated: ${id}`, 'GraphManagement');
-  }, []);
-
   const handleFunctionCreatedFailed = useCallback((name: string, error: string) => {
     logger.graph.error(`handleFunctionCreatedFailed: ${name} - ${error}`, 'GraphManagement');
     uiStore.showToast(`创建 Function 失败: ${error}`, 'error');
@@ -160,11 +152,9 @@ export function useGraphManagement(
   return {
     addEvent,
     deleteEvent,
-    handleEventCreated,
     handleEventCreatedFailed,
     addFunction,
     deleteFunction,
-    handleFunctionCreated,
     handleFunctionCreatedFailed,
     renameGraph: renameGraphItem,
     duplicateGraph: duplicateGraphItem,
