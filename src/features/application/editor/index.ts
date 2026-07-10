@@ -34,6 +34,7 @@ export { resolveTabDisplayName } from './resolveTabDisplayName';
 export { reconcileOpenLayoutTabsWithResources } from './reconcileOpenLayoutTabs';
 export { useProjectOperations } from './useProjectOperations';
 export { useEditorGroup } from './useEditorGroup';
+export { useIsActiveEditorGroup } from './useIsActiveEditorGroup';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';

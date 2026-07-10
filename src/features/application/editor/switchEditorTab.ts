@@ -1,8 +1,6 @@
-import { getGraphByPath } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { ensureGraphViewport } from '@/features/core/viewport';
 import type { LayoutTab } from '@/shared/types/ui';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { activateGraphTab } from './activateGraphTab';
@@ -30,7 +28,6 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
     ensureDetailVisible();
     const loaded = await activateGraphTab(tab.id, groupId);
     if (!loaded) return false;
-    ensureGraphViewport(tab.id, getGraphByPath(tab.id)?.canvas);
     syncVariablesGraphScopeFromActiveTab();
     return true;
   }
@@ -65,7 +62,6 @@ export async function activateCurrentEditorTab(groupId: string): Promise<boolean
   if (activeTab.type === 'event' || activeTab.type === 'function') {
     const loaded = await activateGraphTab(activeTab.id, groupId);
     if (!loaded) return false;
-    ensureGraphViewport(activeTab.id, getGraphByPath(activeTab.id)?.canvas);
     syncVariablesGraphScopeFromActiveTab();
     return true;
   }

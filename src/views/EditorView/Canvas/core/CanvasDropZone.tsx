@@ -7,19 +7,22 @@ import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
  */
 export function CanvasDropZone({
   groupId,
+  interactive = true,
   children,
 }: {
   groupId: string;
+  interactive?: boolean;
   children: React.ReactNode;
 }) {
   const { setNodeRef } = useDroppable({
     id: getCanvasDropZoneId(groupId),
     data: { dropType: DROP_TYPES.CANVAS, groupId },
+    disabled: !interactive,
   });
 
   return (
     <div ref={setNodeRef} className="absolute inset-0 pointer-events-none">
-      <div className="absolute inset-0 pointer-events-auto">
+      <div className={`absolute inset-0 ${interactive ? 'pointer-events-auto' : ''}`}>
         {children}
       </div>
     </div>

@@ -1283,7 +1283,7 @@ Editor Part（占 Workbench 中央 flex 区）
 | Tab 移动/复制语义 | 拖 TabBar=move，拖边=copy | [x] 已对齐 |
 | 关组合并 | `removeView` 自动合并 | [x] `removeNode` 单子提升；需与 **空 Tab 组** 场景回归 |
 | 组内 Editor 槽 | **1 Monaco / 组，切 Tab 换 model** | 每组 `GraphEditor`；[x] Tab 切换 **graphEntities 缓存**、窄订阅（见画布架构重构） |
-| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | 仅 **active 组** mount `Canvas`；非 active 组 `InactiveEditorGroupPlaceholder` |
+| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | [x] 每组 mount `Canvas`；非 active 组 **preview 模式**（可见、无交互）；单焦点 session + LRU 控 hydrated 上限 |
 | Active group | `IEditorGroupsService.activeGroup` | [x] `activeEditorGroupId` + `GroupContext` |
 | TabBar 订阅 | 轻量 model | [x] `useEditorGroupTabStrip` 窄订阅 |
 | Grid 与 Workbench 持久化解耦 | 独立 `workbench.editor.layout` | [x] `workbenchLayoutMemento.editorGrid` 与 chrome parts 分开 hydrate/debounce |
@@ -1310,10 +1310,10 @@ Editor Part（占 Workbench 中央 flex 区）
 
 **P0 — 性能（Editor Grid 热路径）**
 
-- [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`。
+- [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`；`Canvas interactive={false}` 跳过 gesture / drop / execution binder。
 - [x] **组内 Tab 切换不 remount GraphEditor 壳**：同组切 Tab 仅换 `activeTabId` / Canvas `graphPath`；`GraphEditor` `memo` + 组件类型不变不 unmount。
 - [x] **Grid resize 不触发 loadGraph**：layout 层无 `loadGraph` 调用；sash 仅改 flex / `pixelSize` + viewport scale。
-- [x] **多组同屏 Canvas 上限策略**：单焦点 `focusedSession` + `suspendEditorGroupGraphSession`；非 active 组 `InactiveEditorGroupPlaceholder`（不 mount Canvas）；LRU（max 4）仅保护 focused graph + dirty；切换组/Tab 时 lazy unload 并 `releaseGraphViewport`。
+- [x] **多组同屏 Canvas 策略**：单焦点 `focusedSession` + `shouldRetainGraphDocument`；每组渲染 active tab 的 `Canvas`（preview / interactive 双模）；LRU（max 4）保护 focused + open tab + dirty；切换组时 lazy unload。
 
 **P1 — 交互 parity**
 
@@ -1349,7 +1349,7 @@ Editor Part（占 Workbench 中央 flex 区）
 | **隐藏 Part 内容** | 保留 DOM 或轻量占位 | [x] chrome Part keep-alive（`invisible`）；GraphEditor 按需 mount |
 | **Editor Grid** | `GridWidget` + 独立 storage | [x] `layoutStore` row/col + `editorGridMemento`（见 **§7.4**） |
 | **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] sash 提交同步 flex 权重；memento 仅存归一化 `size` |
-| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 单焦点 session + placeholder + LRU（文档级，max 4）；Canvas 仅 active 组 mount |
+| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 每组 `Canvas` preview/interactive 双模 + 单焦点 session + LRU（max 4）；`useIsActiveEditorGroup` 单点 |
 
 #### 收敛任务列表
 
@@ -1469,6 +1469,33 @@ Editor Part（占 Workbench 中央 flex 区）
 
 ## 2026.07.13
 
+> **源于编辑器 graph session 生命周期复盘**：点击 Detail / Sidebar / Tab bar 等非画布区域时，Tab 标题不变但节点数归零、Status Bar viewport 重置为 `X 0 Y 0 100%`；根因为 `unloadGraphDocument` 仅校验 focused session / dirty，未校验 tab 仍打开，且 session 解绑路径不完整。下列为修复与架构收敛项。
+
+**P0 — 行为修复**
+
+- [x] **`unloadGraphDocument` retention guard**：`shouldRetainGraphDocument` 统一判断 focused session、任意 editor tab 仍打开、资源 dirty；open tab 图不再被误卸载。
+- [x] **LRU 缓存保护对齐**：`graphDocumentCachePolicy` 淘汰路径走同一 retention 规则，session 未绑定时 open tab 图仍受保护。
+- [x] **`deactivateGraphTab` 精确解绑**：仅当关闭 tab 拥有 focused graph 时清 session；关闭背景 tab 不破坏当前 session。
+- [x] **`closeGraphTab` 仅 active tab 触发 deactivate**：避免背景 tab 关闭误清 session。
+- [x] **Workbench 启动 bootstrap**：`bootstrapEditorGraphSession` 替代 mount 时直接 `activateCurrentEditorTab`，失败重试 + toast。
+
+**P1 — 架构分层与去重**
+
+- [x] **Graph 文档 retention 单点**：`graphDocumentRetention.ts`（`shouldRetainGraphDocument`）← `graphDocumentUnload.ts`（`unloadGraphDocument`）← `graphDocumentCachePolicy` / `closeGraphTab`；打破 `graphSessionLifecycle` ↔ `graphDocumentCachePolicy` 循环依赖。
+- [x] **`graphSessionLifecycle` 职责收窄**：`suspendEditorGroupGraphSession` 仅 `clearFocusedSession` + `enforceGraphDocumentCacheLimit`；删除对 open tab 恒为 no-op 的 `unloadGraphDocument` 与 `resolveGroupGraphPath`。
+- [x] **suspend 时始终 enforce LRU**：不再仅在 active tab 为 graph 时才跑 cache limit（worksheet 分组切换也会触发淘汰）。
+- [x] **viewport 激活单点**：`activateGraphTab` 在 load / cache 成功后统一经 `activateCachedGraph` 调 `ensureGraphViewport`；`switchEditorTab` / `activateCurrentEditorTab` 去除重复调用。
+- [x] **删除无效薄包装**：移除 `releaseGraphCache.ts`（`closeGraphTab` 直接 fire-and-forget `unloadGraphDocument`）；移除 `graphTabQueries.isGraphTabDirty`（retention 直调 `isGraphResourceDirty`）；`enforceGraphDocumentCacheLimit` 内联 filter，去掉 `protectedGraphPaths` 与循环内重复 guard。
+
+**测试**
+
+- [x] **`graphDocumentRetention` / `graphSessionLifecycle` / `graphDocumentCachePolicy` / `activateGraphTab` / `closeGraphTab` / `bootstrapEditorGraphSession` / `graphTabQueries` vitest**（open tab 保留、closed tab 可 unload、split group、background tab close、LRU 淘汰等）。
+
+**P1 — 多 Editor Group 分屏渲染**
+
+- [x] **非激活组仍显示 Canvas（对齐 VS Code）**：删除 `InactiveEditorGroupPlaceholder`；`GraphEditor` 始终 mount `Canvas`，经 `useIsActiveEditorGroup` 切换 `interactive` preview / 编辑模式；`CanvasDropZone` 非激活组禁用 DnD 命中。
+- [x] **Preview 模式降载**：`Canvas interactive={false}` 跳过 drag preview、selection box、execution binder、wheel zoom、drop handler；保留 viewport culling 与节点/连线只读渲染；外层 `pointer-events-none` 点击穿透至 `LayoutNodeRenderer` → `activateEditorGroup`。
+
 ## v1.0 待办
 
 ### 窗口跨窗同步
@@ -1562,7 +1589,7 @@ Editor Part（占 Workbench 中央 flex 区）
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
 - [x] 函数的 `FunctionSignaturePin` 结构化 `DataType`（与项目变量同构；见 Phase D + `functionSignaturePin.ts`）
 - [ ] uistyle 可能需要根据节点类型来进行重构
-
+- [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
 
 
 # TODOLIST

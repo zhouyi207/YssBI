@@ -3,6 +3,7 @@ import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore'
 import { useEditorStore } from '@/features/core/editor';
 import { resolveDetailTarget } from '@/features/core/editor/detail/resolveDetailTarget';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { GraphService } from '@/services/graph/graphService';
 import { closeGraphTab } from './closeGraphTab';
 
@@ -37,6 +38,7 @@ describe('closeGraphTab', () => {
     });
     useGraphDataStore.getState().hydrateGraphs({});
     useEditorStore.getState().clearDetailFocus();
+    useGraphSessionStore.getState().reset();
     vi.spyOn(GraphService, 'unloadProjectGraph').mockResolvedValue();
   });
 
@@ -67,5 +69,14 @@ describe('closeGraphTab', () => {
     await closeGraphTab('g1', 'editor', true);
 
     expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g2' });
+  });
+
+  it('preserves focused session when closing a background tab', async () => {
+    useGraphSessionStore.getState().setFocusedSession('editor', 'g1');
+    vi.spyOn(useProjectIOStore.getState(), 'loadGraph').mockResolvedValue(true);
+
+    await closeGraphTab('g2', 'editor', true);
+
+    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe('g1');
   });
 });

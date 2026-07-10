@@ -12,6 +12,12 @@ vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: vi.fn(),
 }));
 
+vi.mock('@/features/application/editor/bootstrapEditorGraphSession', () => ({
+  bootstrapEditorGraphSession: vi.fn(async () => true),
+}));
+
+import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
+
 function Harness(): null {
   useWorkbenchLayout();
   return null;
@@ -51,5 +57,13 @@ describe('useWorkbenchLayout', () => {
     });
 
     expect(useLayoutStore.getState().nodes.sidebar?.pixelSize).toBe(420);
+  });
+
+  it('bootstraps the active editor graph session after layout hydrate', async () => {
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    expect(bootstrapEditorGraphSession).toHaveBeenCalledWith('default_editor');
   });
 });

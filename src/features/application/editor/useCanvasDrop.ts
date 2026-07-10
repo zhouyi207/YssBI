@@ -30,6 +30,8 @@ interface UseCanvasDropParams {
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
+  /** When false, skip drop handlers and global dismiss listeners (preview canvases). */
+  enabled?: boolean;
 }
 
 /**
@@ -44,10 +46,12 @@ export function useCanvasDrop({
   setContextMenu,
   setPendingConnection,
   createNode,
+  enabled = true,
 }: UseCanvasDropParams) {
   const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     const handleClickOutside = (e: PointerEvent) => {
       const target = e.target as HTMLElement;
       if (
@@ -70,7 +74,7 @@ export function useCanvasDrop({
       }
     };
     return addGlobalEventListener(window, "pointerdown", handleClickOutside, { capture: true });
-  }, [canvasElementRef, setContextMenu, setPendingConnection, variableDropMenu]);
+  }, [enabled, canvasElementRef, setContextMenu, setPendingConnection, variableDropMenu]);
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
@@ -162,11 +166,12 @@ export function useCanvasDrop({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     canvasDropHandlerStore.setHandler(groupId, (dragState, event) =>
       handleDropTemplate(dragState, event as MouseEvent),
     );
     return () => canvasDropHandlerStore.setHandler(groupId, null);
-  }, [groupId, handleDropTemplate]);
+  }, [enabled, groupId, handleDropTemplate]);
 
   return {
     variableDropMenu,

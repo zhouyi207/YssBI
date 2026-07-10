@@ -27,7 +27,6 @@ export const enUS = {
   },
   editor: {
     initializationFailed: "Initialization failed: {{error}}",
-    inactiveGroupPlaceholder: "Editor group inactive — click to focus",
   },
   panel: {
     logs: "Logs",
@@ -638,9 +637,9 @@ export const enUS = {
     },
     callSites: {
       title: "Referenced by ({{count}})",
-      loading: "Loading call sites…",
-      empty: "Not referenced by any Call Function nodes",
-      openCaller: "Open Call node {{nodeId}}",
+      loading: "Loading…",
+      empty: "Not referenced by any other graphs",
+      references: "{{count}} calls",
     },
     callFunction: {
       openTarget: "Open target function",

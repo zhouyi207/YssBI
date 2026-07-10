@@ -7,7 +7,7 @@ import {
 } from '@/features/core/layout/workbenchLayoutService';
 import { setWorkbenchLayoutWindowScope } from '@/features/core/layout/workbenchLayoutMemento';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { activateCurrentEditorTab } from '@/features/application/editor/switchEditorTab';
+import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
 
 /** Hydrate persisted workbench chrome + editor grid from localStorage on mount. */
 export function useWorkbenchLayout(): void {
@@ -17,7 +17,7 @@ export function useWorkbenchLayout(): void {
     reclampWorkbenchPanelSize();
     const activeGroupId = useLayoutStore.getState().activeEditorGroupId;
     if (activeGroupId) {
-      void activateCurrentEditorTab(activeGroupId);
+      void bootstrapEditorGraphSession(activeGroupId);
     }
     return subscribeWorkbenchViewportResize();
   }, []);

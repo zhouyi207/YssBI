@@ -27,7 +27,6 @@ export const zhCN = {
   },
   editor: {
     initializationFailed: "初始化失败: {{error}}",
-    inactiveGroupPlaceholder: "编辑器组未激活 — 点击以聚焦",
   },
   panel: {
     logs: "日志",
@@ -638,9 +637,9 @@ export const zhCN = {
     },
     callSites: {
       title: "被引用 ({{count}})",
-      loading: "正在加载调用点…",
-      empty: "暂无 Call Function 节点引用此函数",
-      openCaller: "打开 Call 节点 {{nodeId}}",
+      loading: "正在加载…",
+      empty: "暂无其他图引用此函数",
+      references: "{{count}} 处",
     },
     callFunction: {
       openTarget: "打开目标函数",

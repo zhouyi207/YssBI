@@ -12,6 +12,7 @@ import {
   touchGraphDocument,
 } from './graphDocumentCachePolicy';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 
 describe('graphDocumentCachePolicy', () => {
@@ -46,5 +47,49 @@ describe('graphDocumentCachePolicy', () => {
     expect(remaining).toContain('active-graph');
     expect(remaining.length).toBeLessThanOrEqual(MAX_HYDRATED_GRAPH_DOCUMENTS);
     expect(remaining).not.toContain('old-graph');
+  });
+
+  it('does not evict graphs that remain open in editor tabs when session is unbound', async () => {
+    useLayoutStore.setState({
+      rootId: 'root',
+      nodes: {
+        root: {
+          id: 'root',
+          type: 'row',
+          parentId: null,
+          children: ['editor'],
+        },
+        editor: {
+          id: 'editor',
+          type: 'component',
+          parentId: 'root',
+          data: {
+            component: 'GraphEditor',
+            tabs: [{ id: 'open-graph', component: 'GraphEditor', type: 'event' }],
+            activeTabId: 'open-graph',
+          },
+        },
+      },
+    });
+
+    touchGraphDocument('open-graph');
+    touchGraphDocument('ancient-graph');
+    touchGraphDocument('oldest-graph');
+    touchGraphDocument('older-graph');
+    touchGraphDocument('old-graph');
+
+    useGraphDataStore.setState({
+      graphEntities: {
+        'open-graph': {} as never,
+        'old-graph': {} as never,
+        'older-graph': {} as never,
+        'oldest-graph': {} as never,
+        'ancient-graph': {} as never,
+      },
+    });
+
+    await enforceGraphDocumentCacheLimit();
+
+    expect(useGraphDataStore.getState().graphEntities['open-graph']).toBeDefined();
   });
 });

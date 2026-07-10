@@ -1,12 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
 import type { FunctionCallSiteDTO } from '@/shared/types/dto';
-import { openGraphResource, resolveGraphResourceMeta } from '@/features/application/editor/openGraphResource';
-import { focusDetailOnNode } from '@/features/core/editor/detail/detailFocusCommands';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
+import { FunctionCallSitesSection } from '../shared/FunctionCallSitesSection';
 import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
-import { detailMetaTextClass, detailSectionTitleClass, detailSubsectionTitleClass } from '../shared/detailStyles';
 
 interface FunctionDetailPanelProps {
   fn: {
@@ -30,15 +28,6 @@ export function FunctionDetailPanel({
 }: FunctionDetailPanelProps) {
   const { t } = useTranslation();
 
-  const totalCalls = callSites.reduce((sum, site) => sum + site.nodeIds.length, 0);
-
-  const handleOpenCallSite = (callerGraphPath: string, nodeId: string) => {
-    void (async () => {
-      await openGraphResource(callerGraphPath);
-      focusDetailOnNode(nodeId);
-    })();
-  };
-
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: fn.name })}>
       <DetailForm>
@@ -51,41 +40,6 @@ export function FunctionDetailPanel({
           {t('detail.typeLabels.function')}
         </DetailReadonlyField>
       </DetailForm>
-      <section className="mt-4 space-y-2">
-        <h3 className={detailSectionTitleClass}>
-          {t('detail.callSites.title', { count: totalCalls })}
-        </h3>
-        {callSitesLoading ? (
-          <p className={detailMetaTextClass}>{t('detail.callSites.loading')}</p>
-        ) : callSites.length === 0 ? (
-          <p className={detailMetaTextClass}>{t('detail.callSites.empty')}</p>
-        ) : (
-          <ul className="space-y-1">
-            {callSites.map((site) => {
-              const meta = resolveGraphResourceMeta(site.callerGraphPath);
-              const name = meta?.name ?? site.callerGraphPath;
-              return (
-                <li key={site.callerGraphPath}>
-                  <div className={detailSubsectionTitleClass}>{name}</div>
-                  <ul className="mt-1 space-y-0.5">
-                    {site.nodeIds.map((nodeId) => (
-                      <li key={nodeId}>
-                        <button
-                          type="button"
-                          className="text-left text-xs text-[var(--accent-color)] hover:underline"
-                          onClick={() => handleOpenCallSite(site.callerGraphPath, nodeId)}
-                        >
-                          {t('detail.callSites.openCaller', { nodeId })}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
       <PinEditor
         title={t('detail.pinEditor.inputs')}
         emptyMessage={t('detail.pinEditor.noInputs')}
@@ -98,6 +52,7 @@ export function FunctionDetailPanel({
         pins={fn.outputs ?? []}
         onChange={(outputs) => onSignatureChange({ outputs })}
       />
+      <FunctionCallSitesSection callSites={callSites} loading={callSitesLoading} />
     </DetailPanelShell>
   );
 }

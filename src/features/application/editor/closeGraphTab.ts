@@ -3,7 +3,8 @@ import { isGraphLayoutTab, layoutTabResourceRef } from '@/features/core/layout/l
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { GraphService } from '@/services/graph/graphService';
-import { releaseGraphCacheIfClosed } from './releaseGraphCache';
+import { logger } from '@/utils/appLogger';
+import { unloadGraphDocument } from './graphDocumentUnload';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 import { focusDetailOnActiveGraph } from '@/features/core/editor/detail/detailFocusCommands';
@@ -53,8 +54,13 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
     }
   }
 
+  const closingActiveTab =
+    useLayoutStore.getState().nodes[located.nodeId]?.data?.activeTabId === effectivePath;
+
   useLayoutStore.getState().removeTab(located.nodeId, effectivePath);
-  deactivateGraphTab(located.nodeId);
+  if (closingActiveTab) {
+    deactivateGraphTab(located.nodeId, effectivePath);
+  }
   clearDetailFocusForClosedTab(effectivePath, located.tab.type);
   syncVariablesGraphScopeAfterClose(effectivePath);
   if (!useEditorStore.getState().detailFocus) {
@@ -64,6 +70,11 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
   if (isGraphLayoutTab(located.tab)) {
     clearResourceDocumentState({ id: effectivePath, kind: located.tab.type });
   }
-  releaseGraphCacheIfClosed(effectivePath);
+  void unloadGraphDocument(effectivePath).catch((error) => {
+    logger.graph.warn(
+      `Failed to release graph cache '${effectivePath}': ${error instanceof Error ? error.message : String(error)}`,
+      'closeGraphTab',
+    );
+  });
   return true;
 }

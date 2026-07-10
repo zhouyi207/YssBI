@@ -7,14 +7,6 @@ vi.mock('./activateGraphTab', () => ({
   activateGraphTab: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('@/features/core/dataStore', () => ({
-  getGraphByPath: vi.fn(),
-}));
-
-vi.mock('@/features/core/viewport', () => ({
-  ensureGraphViewport: vi.fn(),
-}));
-
 vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
   syncVariablesGraphScopeFromActiveTab: vi.fn(),
 }));

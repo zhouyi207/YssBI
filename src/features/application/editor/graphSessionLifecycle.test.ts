@@ -17,7 +17,8 @@ vi.mock('@/features/core/dataStore/projectIOStore', () => ({
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { suspendEditorGroupGraphSession, unloadGraphDocument } from './graphSessionLifecycle';
+import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
+import { unloadGraphDocument } from './graphDocumentUnload';
 import { activateEditorGroup } from './switchEditorTab';
 import { activateGraphTab } from './activateGraphTab';
 
@@ -68,7 +69,7 @@ describe('graphSessionLifecycle', () => {
     });
   });
 
-  it('unloads graph documents even when the tab remains open in an inactive group', async () => {
+  it('keeps graph documents when their tab remains open in a suspended group', async () => {
     useGraphDataStore.setState({
       graphEntities: { 'events/B.yssbi-event': {} as never },
     });
@@ -76,7 +77,7 @@ describe('graphSessionLifecycle', () => {
 
     await suspendEditorGroupGraphSession('group-b');
 
-    expect(useGraphDataStore.getState().graphEntities['events/B.yssbi-event']).toBeUndefined();
+    expect(useGraphDataStore.getState().graphEntities['events/B.yssbi-event']).toBeDefined();
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
   });
 
@@ -91,7 +92,27 @@ describe('graphSessionLifecycle', () => {
     expect(useGraphDataStore.getState().graphEntities['events/A.yssbi-event']).toBeDefined();
   });
 
-  it('activateEditorGroup suspends the previous group before hydrating the next', async () => {
+  it('does not unload a graph that is still open in a tab when session is unbound', async () => {
+    useGraphDataStore.setState({
+      graphEntities: { 'events/A.yssbi-event': {} as never },
+    });
+
+    await unloadGraphDocument('events/A.yssbi-event');
+
+    expect(useGraphDataStore.getState().graphEntities['events/A.yssbi-event']).toBeDefined();
+  });
+
+  it('unloads graphs that are no longer open in any tab', async () => {
+    useGraphDataStore.setState({
+      graphEntities: { 'events/closed.yssbi-event': {} as never },
+    });
+
+    await unloadGraphDocument('events/closed.yssbi-event');
+
+    expect(useGraphDataStore.getState().graphEntities['events/closed.yssbi-event']).toBeUndefined();
+  });
+
+  it('activateEditorGroup keeps previous group graphs when their tabs remain open', async () => {
     useGraphDataStore.setState({
       graphEntities: {
         'events/A.yssbi-event': {} as never,
@@ -103,7 +124,7 @@ describe('graphSessionLifecycle', () => {
     await activateEditorGroup('group-b');
 
     expect(useLayoutStore.getState().activeEditorGroupId).toBe('group-b');
-    expect(useGraphDataStore.getState().graphEntities['events/A.yssbi-event']).toBeUndefined();
+    expect(useGraphDataStore.getState().graphEntities['events/A.yssbi-event']).toBeDefined();
     expect(activateGraphTab).toHaveBeenCalledWith('events/B.yssbi-event', 'group-b');
   });
 });

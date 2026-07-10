@@ -1,7 +1,7 @@
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useProjectIOStore } from '@/features/core/dataStore';
-import { unloadGraphDocument } from './graphSessionLifecycle';
+import { unloadGraphDocument } from './graphDocumentUnload';
 import { activateCachedGraph, isGraphCachedInMemory } from './graphLoadPolicy';
 import {
   enforceGraphDocumentCacheLimit,
@@ -32,7 +32,7 @@ export async function activateGraphTab(
   if (loaded) {
     touchGraphDocument(graphPath);
     await enforceGraphDocumentCacheLimit();
-    return true;
+    return activateCachedGraph(graphPath);
   }
 
   if (previous) {
@@ -43,6 +43,11 @@ export async function activateGraphTab(
   return false;
 }
 
-export function deactivateGraphTab(groupId: string): void {
-  useGraphSessionStore.getState().clearFocusedSession(groupId);
+/** Clear session only when the closed tab owned the focused graph (background tabs keep protection). */
+export function deactivateGraphTab(groupId: string, closedGraphPath?: string | null): void {
+  const store = useGraphSessionStore.getState();
+  const focused = store.focusedSession;
+  if (focused?.groupId !== groupId) return;
+  if (closedGraphPath != null && focused.graphPath !== closedGraphPath) return;
+  store.clearFocusedSession(groupId);
 }
