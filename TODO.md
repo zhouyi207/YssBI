@@ -1644,6 +1644,7 @@ Editor Part（占 Workbench 中央 flex 区）
 - [ ] uistyle 可能需要根据节点类型来进行重构
 - [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
 - [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
+- [ ] sidebar 内容中的 scrollbar 以及日志及其他组件内容的拖动逻辑有问题
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
