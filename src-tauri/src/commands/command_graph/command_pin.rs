@@ -1,13 +1,17 @@
-use crate::project::emit_pin_change_events;
 use crate::graph::pin::PinDataTypeDefinition;
 use crate::graph::value::{DataType, DataValue};
-use crate::graph::{GraphId, NodeId, PinId};
+use crate::graph::{NodeId, PinId};
 use crate::log::log_app;
-use crate::project::ProjectState;
+use crate::project::emit_pin_change_events;
+use crate::project::{GraphResourcePath, ProjectState};
 use crate::schema::{GraphInstanceDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
+
+fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
+    GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
+}
 
 /// 检查 DataValue 的类型是否与 Pin 期望的 DataType 兼容
 fn is_type_compatible(value_type: Option<DataType>, expected: &DataType) -> bool {
@@ -43,17 +47,15 @@ fn is_type_compatible(value_type: Option<DataType>, expected: &DataType) -> bool
 #[tauri::command]
 pub fn update_pin_user_value(
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
     pin_id: String,
     value: DataValue,
 ) -> Result<(), String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let pin_uuid =
         PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
-    state.with_graph_mut(&graph_id, |mut ctx| {
+    state.with_graph_mut(&graph_path, |mut ctx| {
         let pin = ctx
             .graph_ref()
             .get_pin_instance_by_pin_id(pin_uuid)
@@ -76,7 +78,7 @@ pub fn update_pin_user_value(
 
         log_app::info!(
             "[command.update_pin_user_value] graph={}, pin={}, value={:?}",
-            subgraph_id,
+            graph_path,
             pin_id,
             value
         );
@@ -88,25 +90,23 @@ pub fn update_pin_user_value(
 
 /// 清除 Pin 的用户输入值（恢复为 None，使用默认值或连接值）
 ///
-/// 前端 PinService.clearPinUserValue(subgraphId, nodeId, pinId)
+/// 前端 PinService.clearPinUserValue(graphPath, nodeId, pinId)
 #[tauri::command]
 pub fn clear_pin_user_value(
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
     pin_id: String,
 ) -> Result<(), String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.clear_pin_user_value] graph={}, pin={}",
-        subgraph_id,
+        graph_path,
         pin_id
     );
 
-    state.with_graph_mut(&graph_id, |mut ctx| {
+    state.with_graph_mut(&graph_path, |mut ctx| {
         ctx.graph().clear_pin_user_value_by_pin_id(pin)?;
         Ok(())
     })
@@ -132,31 +132,29 @@ pub struct RemoveRepeatablePinResult {
 
 /// 向节点的 Repeatable 槽位追加一个新 pin
 ///
-/// 前端调用 `PinService.addRepeatablePin(subgraphId, nodeId, slotIndex)`
+/// 前端调用 `PinService.addRepeatablePin(graphPath, nodeId, slotIndex)`
 #[tauri::command]
 pub fn add_repeatable_pin(
     app: AppHandle,
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
     node_id: String,
     slot_index: usize,
 ) -> Result<AddRepeatablePinResult, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
 
     log_app::info!(
         "[command.add_repeatable_pin] graph={}, node={}, slot={}",
-        subgraph_id,
+        graph_path,
         node_id,
         slot_index
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (change_set, resolve_sets) = graph.add_repeatable_pin(nid, slot_index)?;
 
@@ -171,7 +169,7 @@ pub fn add_repeatable_pin(
 
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
-    emit_pin_change_events(&app, graph_id, &graph, &all_sets);
+    emit_pin_change_events(&app, &graph_path, &graph, &all_sets);
 
     Ok(AddRepeatablePinResult {
         pin_id: pin_id_str,
@@ -181,32 +179,30 @@ pub fn add_repeatable_pin(
 
 /// 从节点移除一个 Repeatable 槽位的 pin
 ///
-/// 前端调用 `PinService.removeRepeatablePin(subgraphId, nodeId, pinId)`
+/// 前端调用 `PinService.removeRepeatablePin(graphPath, nodeId, pinId)`
 #[tauri::command]
 pub fn remove_repeatable_pin(
     app: AppHandle,
     state: State<ProjectState>,
-    subgraph_id: String,
+    graph_path: String,
     node_id: String,
     pin_id: String,
 ) -> Result<RemoveRepeatablePinResult, String> {
-    let graph_id = GraphId::from(
-        Uuid::parse_str(&subgraph_id).map_err(|e| format!("Invalid subgraph_id: {}", e))?,
-    );
+    let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
     let pid = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
     log_app::info!(
         "[command.remove_repeatable_pin] graph={}, node={}, pin={}",
-        subgraph_id,
+        graph_path,
         node_id,
         pin_id
     );
 
     let graph = state
-        .get_graph(&graph_id)
-        .ok_or_else(|| format!("Graph '{}' not found", subgraph_id))?;
+        .get_graph(&graph_path)
+        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
 
     let (change_set, pin_index, resolve_sets) = graph.remove_repeatable_pin(nid, pid)?;
 
@@ -229,7 +225,7 @@ pub fn remove_repeatable_pin(
 
     let mut all_sets = vec![change_set];
     all_sets.extend(resolve_sets);
-    emit_pin_change_events(&app, graph_id, &graph, &all_sets);
+    emit_pin_change_events(&app, &graph_path, &graph, &all_sets);
 
     Ok(RemoveRepeatablePinResult {
         removed_pin_id: pin_id,
@@ -246,15 +242,16 @@ pub fn remove_repeatable_pin(
 pub fn resolve_graph_dynamic_pins(
     _app: AppHandle,
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: String,
 ) -> Result<GraphInstanceDTO, String> {
-    if state.get_graph(&graph_id).is_none() {
-        state.load_graph_from_current_project(&graph_id)?;
+    let graph_path = parse_graph_path(&graph_path)?;
+    if state.get_graph(&graph_path).is_none() {
+        state.load_graph_from_current_project(&graph_path)?;
     }
 
-    log_app::info!("[command.resolve_graph_dynamic_pins] graph={}", graph_id);
+    log_app::info!("[command.resolve_graph_dynamic_pins] graph={}", graph_path);
 
-    let (graph, _change_sets, _inferred) = state.resolve_graph_dynamic_pins(&graph_id)?;
+    let (graph, _change_sets, _inferred) = state.resolve_graph_dynamic_pins(&graph_path)?;
 
     Ok((&graph).into())
 }

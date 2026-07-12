@@ -122,3 +122,18 @@ pub fn apply_schema_snapshot(dto: &mut DatabaseDeclDTO, snapshot: DatabaseSchema
 pub fn enrich_database_decl_dto(dto: &mut DatabaseDeclDTO, instance: &DatabaseInstance) {
     apply_schema_snapshot(dto, extract_database_schema(instance));
 }
+
+pub fn enriched_database_dtos(
+    databases: &std::collections::HashMap<String, crate::database::DatabaseDecl>,
+    store: &crate::project::ProjectStore,
+) -> std::collections::HashMap<String, DatabaseDeclDTO> {
+    let mut enriched = std::collections::HashMap::new();
+    for (id, decl) in databases.iter() {
+        let mut db_dto = DatabaseDeclDTO::from(decl);
+        if let Some(instance) = store.databases.get(id) {
+            enrich_database_decl_dto(&mut db_dto, instance);
+        }
+        enriched.insert(id.clone(), db_dto);
+    }
+    enriched
+}

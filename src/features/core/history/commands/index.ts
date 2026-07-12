@@ -1,4 +1,5 @@
-import type { CommandHandler, CommandType } from '../types';
+import type { CommandType } from '../types';
+import type { CommandHandlerMap } from './registryTypes';
 import { moveNodesCommand } from './moveNodes';
 import { setPinValueCommand } from './setPinValue';
 import { connectPinsCommand } from './connectPins';
@@ -9,7 +10,7 @@ import { deleteNodesCommand } from './deleteNodes';
 import { batchCreateCommand } from './composite';
 import { addRepeatablePinCommand, removeRepeatablePinCommand } from './repeatablePin';
 
-export const commandRegistry: Record<string, CommandHandler<any, any>> = {
+export const commandRegistry: CommandHandlerMap = {
   MoveNodes: moveNodesCommand,
   SetPinValue: setPinValueCommand,
   ConnectPins: connectPinsCommand,
@@ -22,7 +23,7 @@ export const commandRegistry: Record<string, CommandHandler<any, any>> = {
   RemoveRepeatablePin: removeRepeatablePinCommand,
 };
 
-export function getCommandHandler(type: CommandType): CommandHandler<any, any> {
+export function getCommandHandler<K extends CommandType>(type: K): CommandHandlerMap[K] {
   const handler = commandRegistry[type];
   if (!handler) {
     throw new Error(`[CommandRegistry] Unknown command type: ${type}`);
@@ -30,6 +31,7 @@ export function getCommandHandler(type: CommandType): CommandHandler<any, any> {
   return handler;
 }
 
+export type { CommandArgsByType, CommandContextByType, CommandHandlerMap } from './registryTypes';
 export type { MoveNodesArgs, MoveNodesContext } from './moveNodes';
 export type { SetPinValueArgs, SetPinValueContext } from './setPinValue';
 export type { ConnectPinsArgs, ConnectPinsContext } from './connectPins';

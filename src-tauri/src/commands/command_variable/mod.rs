@@ -90,7 +90,7 @@ pub fn update_variable(
         emit_project_event(
             &app,
             Event::Node(EventNode::PinTypesInferred {
-                graph_id: sync.graph_id,
+                graph_path: sync.graph_path.as_str().to_string(),
                 pin_types: sync.pin_types,
             }),
         );

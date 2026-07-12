@@ -5,46 +5,9 @@ import type {
     DatasetOverview,
     EditState,
 } from "@/shared/types/domain/dataframe";
+import type { ColumnInfo, DatabaseRow, LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 
-/** CSV 引擎配置（与后端 DatabaseEngineDTO::Csv 对应） */
-export interface CsvEngineSpec {
-    path: string;
-    delimiter?: string;
-    hasHeader?: boolean;
-    inferSchemaLength?: number;
-}
-
-/** Parquet 引擎配置 */
-export interface ParquetEngineSpec {
-    path: string;
-    columns?: string[];
-}
-
-/** SQL 引擎配置（选表方案），支持 SQLite / PostgreSQL / MySQL */
-export type SqlEngineSpec =
-    | { engine: { sqlite: { autoCreate: boolean } }; connectionString: string; table: string }
-    | { engine: { postgres: { ssl?: boolean } }; connectionString: string; table: string }
-    | { engine: { mysql: { charset?: string } }; connectionString: string; table: string };
-
-/** Excel 引擎配置（选 Sheet 方案） */
-export interface ExcelEngineSpec {
-    path: string;
-    sheet: string;
-}
-
-/** DuckDB 引擎配置（项目内列存） */
-export interface DuckDbEngineSpec {
-    path: string;
-    table: string;
-}
-
-/** 加载数据库的引擎配置（与后端 DatabaseEngineDTO 对应） */
-export type LoadDatabaseEngineSpec =
-    | { csv: CsvEngineSpec }
-    | { duckDb: DuckDbEngineSpec }
-    | { parquet: ParquetEngineSpec }
-    | { sql: SqlEngineSpec }
-    | { excel: ExcelEngineSpec };
+export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 
 /** 加载结果（与后端 LoadDatabaseResult 对应） */
 export interface LoadDatabaseResult {
@@ -52,12 +15,12 @@ export interface LoadDatabaseResult {
     name: string;
     rowCount: number;
     columnCount: number;
-    columns: Array<{ name: string; type: string }>;
+    columns: ColumnInfo[];
 }
 
 /** 分页行数据（含稳定 rowIds） */
 export interface DatabaseRowsResult {
-    rows: unknown[][];
+    rows: DatabaseRow[];
     rowIds: number[];
 }
 
@@ -121,7 +84,7 @@ export class DatabaseService {
      * 获取数据库行数据（分页，含稳定 rowIds）
      */
     static async getDatabaseRows(id: string, offset: number, limit: number): Promise<DatabaseRowsResult> {
-        const payload = await invoke<{ rows?: unknown[][]; rowIds?: number[] } | unknown[][]>(
+        const payload = await invoke<{ rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]>(
             "get_database_rows",
             { id, offset, limit },
         );

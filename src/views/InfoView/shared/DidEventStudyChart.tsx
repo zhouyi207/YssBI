@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
 import { useChartThemeColors } from '@/shared/theme/chartTheme';
-import type { DidEventStudyPoint } from './types';
+import type { DidEventStudyPoint } from '@/shared/types/report';
 
 const MARGIN = { top: 20, right: 16, bottom: 36, left: 52 };
 

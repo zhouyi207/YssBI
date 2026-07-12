@@ -1,23 +1,26 @@
-﻿import { create } from 'zustand';
-import { GraphPosition } from '@/shared/types/domain';
+import { create } from 'zustand';
+
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+
+import type { EditorViewport } from './editorViewport';
+import { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
 import { resetLiveViewports } from './viewportSession';
 
 interface ViewportStore {
-  /** Committed viewports (persisted / loaded from project). Live wheel preview stays in viewportSession. */
-  viewports: Record<string, GraphPosition>;
+  /** Committed viewports for this session (live gesture preview stays in viewportSession). */
+  viewports: Record<string, EditorViewport>;
   setViewport: (
-    graphId: string,
-    updater: Partial<GraphPosition> | ((prev: GraphPosition) => GraphPosition),
+    graphPath: string,
+    updater: Partial<EditorViewport> | ((prev: EditorViewport) => EditorViewport),
   ) => void;
   clear: () => void;
 }
 
 export const useViewportStore = create<ViewportStore>((set) => ({
   viewports: {},
-  setViewport: (graphId, updater) =>
+  setViewport: (graphPath, updater) =>
     set((state) => {
-      const current = state.viewports[graphId] ?? { ...DEFAULT_VIEWPORT };
+      const current = state.viewports[graphPath] ?? { ...DEFAULT_VIEWPORT };
       const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
 
       if (current.x === next.x && current.y === next.y && current.scale === next.scale) {
@@ -27,7 +30,7 @@ export const useViewportStore = create<ViewportStore>((set) => ({
       return {
         viewports: {
           ...state.viewports,
-          [graphId]: next,
+          [graphPath]: next,
         },
       };
     }),
@@ -37,29 +40,41 @@ export const useViewportStore = create<ViewportStore>((set) => ({
   },
 }));
 
-export function normalizeGraphCanvas(canvas?: GraphPosition | null): GraphPosition {
-  if (!canvas) return { ...DEFAULT_VIEWPORT };
+export function remapGraphViewport(from: string, to: string): void {
+  if (from === to) return;
+  resetLiveViewports(from);
+  useViewportStore.setState((state) => {
+    const viewport = state.viewports[from];
+    if (!viewport) return state;
+    const viewports = { ...state.viewports };
+    delete viewports[from];
+    viewports[to] = viewport;
+    return { viewports };
+  });
+}
+
+export function normalizeEditorViewport(viewport?: EditorViewport | null): EditorViewport {
+  if (!viewport) return { ...DEFAULT_VIEWPORT };
   return {
-    x: canvas.x ?? 0,
-    y: canvas.y ?? 0,
-    scale: canvas.scale ?? DEFAULT_VIEWPORT.scale,
+    x: viewport.x ?? 0,
+    y: viewport.y ?? 0,
+    scale: viewport.scale ?? DEFAULT_VIEWPORT.scale,
   };
 }
 
-export function applyGraphViewport(graphId: string, canvas?: GraphPosition | null): void {
-  useViewportStore.getState().setViewport(graphId, normalizeGraphCanvas(canvas));
+/** Seed viewport on first open; session edits stay in memory until persisted to editor view state. */
+export function ensureGraphViewport(graphPath: string): void {
+  if (useViewportStore.getState().viewports[graphPath]) return;
+  useViewportStore.getState().setViewport(graphPath, resolveInitialGraphViewport(graphPath));
 }
 
-/** 首次打开 tab 时从 graph.canvas 恢复；会话内已 pan 过则保留内存值 */
-export function ensureGraphViewport(graphId: string, canvas?: GraphPosition | null): void {
-  if (useViewportStore.getState().viewports[graphId]) return;
-  applyGraphViewport(graphId, canvas);
-}
-
-export function syncGraphViewportsFromRecords(
-  graphs: Record<string, { canvas?: GraphPosition | null }>,
-): void {
-  for (const [graphId, graph] of Object.entries(graphs)) {
-    applyGraphViewport(graphId, graph.canvas);
-  }
+/** Drop committed + live viewport when a graph document is unloaded from memory. */
+export function releaseGraphViewport(graphPath: string): void {
+  resetLiveViewports(graphPath);
+  useViewportStore.setState((state) => {
+    if (!(graphPath in state.viewports)) return state;
+    const viewports = { ...state.viewports };
+    delete viewports[graphPath];
+    return { viewports };
+  });
 }

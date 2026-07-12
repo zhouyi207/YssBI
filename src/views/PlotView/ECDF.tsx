@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, curveStepAfter } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { cn } from '@/lib/utils';
-import { plotContainerClass } from './plotShellStyles';
+import { DEFAULT_PLOT_MARGIN, plotContainerClass, type PlotMargin } from './plotShellStyles';
 
 export interface ECDFPoint {
   x: number;
@@ -21,10 +22,8 @@ export interface ECDFProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
 }
-
-const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
 
 const ECDF: React.FC<ECDFProps> = ({
   data,
@@ -32,25 +31,13 @@ const ECDF: React.FC<ECDFProps> = ({
   yLabel = 'Cumulative Proportion',
   color,
   height: heightProp,
-  margin = DEFAULT_MARGIN,
+  margin = DEFAULT_PLOT_MARGIN,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
   const plotColor = color ?? seriesColors.primary;
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -78,7 +65,6 @@ const ECDF: React.FC<ECDFProps> = ({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // grid lines
     g.append('g')
       .selectAll('line')
       .data(yScale.ticks(5))
@@ -90,7 +76,6 @@ const ECDF: React.FC<ECDFProps> = ({
       .attr('stroke', chartTheme.grid)
       .attr('stroke-dasharray', '2,3');
 
-    // x axis
     g.append('g')
       .attr('transform', `translate(0,${h})`)
       .call(axisBottom(xScale).ticks(6).tickSize(-4))
@@ -100,7 +85,6 @@ const ECDF: React.FC<ECDFProps> = ({
         sel.selectAll('.tick text').attr('fill', chartTheme.tick).attr('font-size', '10px');
       });
 
-    // y axis
     g.append('g')
       .call(axisLeft(yScale).ticks(5).tickSize(-4))
       .call((sel) => {
@@ -130,7 +114,6 @@ const ECDF: React.FC<ECDFProps> = ({
         .text(yLabel);
     }
 
-    // ECDF 阶梯线：左连续，从 (x_min, 0) 开始
     const sorted = [...data].sort((a, b) => a.x - b.x);
     const stepPoints: { x: number; y: number }[] = [];
     if (sorted.length > 0) {

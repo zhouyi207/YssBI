@@ -4,7 +4,8 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
-import { useEditor } from '@/features/application/editor';
+import { useEditorSession } from '@/features/application/editor';
+import { pickEditorSessionSyncCallbacks } from '@/features/application/editor/editorSessionTypes';
 import type { EventCallbacks } from '@/features/core/sync/types';
 import { logger } from '@/utils/appLogger';
 
@@ -30,7 +31,7 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
           const newListener = new ProjectListener(callbacks);
           await newListener.start();
           return newListener;
-        }
+        },
       );
       listenerRef.current = listener;
 
@@ -50,7 +51,6 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
     };
   }, []);
 
-  // 当 callbacks 变化时更新（仅 useProjectSyncWithEditor 有此情况）
   useEffect(() => {
     if (callbacks && listenerRef.current) {
       listenerRef.current.updateCallbacks(callbacks);
@@ -60,34 +60,25 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
 
 /**
  * 带编辑器回调的项目同步（用于 EditorWindow）
- * Handlers 已直接更新 Store，callbacks 仅用于可选 UI 扩展（如打开新 Tab）
+ * Store 已由 Core handlers 更新；callbacks 仅用于失败 toast 等 UI 扩展。
  */
 export function useProjectSyncWithEditor() {
-  const editor = useEditor({ withCanvasInteraction: false });
+  const editor = useEditorSession();
+  const { handleEventCreatedFailed, handleFunctionCreatedFailed } =
+    pickEditorSessionSyncCallbacks(editor);
+
   const callbacks = useMemo<EventCallbacks>(
     () => ({
-      onEventCreated: editor.handleEventCreated,
-      onEventCreatedFailed: editor.handleEventCreatedFailed,
-      onFunctionCreated: editor.handleFunctionCreated,
-      onFunctionCreatedFailed: editor.handleFunctionCreatedFailed,
-      onNodeCreated: editor.handleNodeCreated as EventCallbacks['onNodeCreated'],
-      onNodeDeleted: editor.handleNodeDeleted,
+      onEventCreatedFailed: handleEventCreatedFailed,
+      onFunctionCreatedFailed: handleFunctionCreatedFailed,
     }),
-    [
-      editor.handleEventCreated,
-      editor.handleEventCreatedFailed,
-      editor.handleFunctionCreated,
-      editor.handleFunctionCreatedFailed,
-      editor.handleNodeCreated,
-      editor.handleNodeDeleted,
-    ]
+    [handleEventCreatedFailed, handleFunctionCreatedFailed],
   );
   useProjectSyncCore(callbacks);
 }
 
 /**
  * 无回调的项目同步（用于 DatabaseEditorWindow 等非编辑器窗口）
- * Handlers 已直接更新 Store，无需编辑器回调
  */
 export function useProjectSync() {
   useProjectSyncCore(undefined);

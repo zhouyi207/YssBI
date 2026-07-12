@@ -7,6 +7,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinDirection, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use ndarray::{Array2, Axis};
 use polars::prelude::Series;
@@ -39,7 +40,7 @@ fn register_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description("使用已拟合模型预测（如 OLS）；输入 pin 由模型训练输入派生", "Predict using a fitted model (e.g. OLS). Input pins are derived from the model's training inputs.")
+    .with_documentation(docs::prediction::PREDICT_ZH, docs::prediction::PREDICT_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
         PinSlot::fixed(PinDefinition::data_input(
@@ -50,10 +51,9 @@ fn register_predict(registry: &NodeRegistry) {
         PinSlot::derived_from_input(
             model_role.clone(),
             PinDirection::Input,
-            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(vec![
-                DataType::Float64,
-                DataType::Categorical,
-            ])))),
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::one_of(
+                vec![DataType::Float64, DataType::Categorical],
+            )))),
         ),
         PinSlot::fixed(PinDefinition::data_output(
             "Predicted",
@@ -64,14 +64,19 @@ fn register_predict(registry: &NodeRegistry) {
     ])
     .with_pin_resolver(Arc::new(|ctx: &PinResolverContext| {
         let mut pins = vec![];
-        if let Some(schema) = ctx.input_schemas.get(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string()))) {
+        if let Some(schema) = ctx
+            .input_schemas
+            .get(&PinRole::Data(DataRole::Custom(MODEL_ROLE.to_string())))
+        {
             for col in &schema.columns {
                 let role = prediction_input_role(&col.name);
                 pins.push(
                     PinDefinition::data_input(
                         &col.name,
                         role.clone(),
-                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(col.data_type.clone()))),
+                        PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(
+                            col.data_type.clone(),
+                        ))),
                     )
                     .with_dynamic(true),
                 );
@@ -250,9 +255,9 @@ fn register_logit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "使用 Logit 模型预测概率，输出 P(y=1)",
-        "Predict probabilities using a fitted Logit model. Outputs P(y=1).",
+    .with_documentation(
+        docs::prediction::LOGIT_PREDICT_ZH,
+        docs::prediction::LOGIT_PREDICT_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
@@ -476,9 +481,9 @@ fn register_probit_predict(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "使用 Probit 模型预测概率，输出 P(y=1)",
-        "Predict probabilities using a fitted Probit model. Outputs P(y=1).",
+    .with_documentation(
+        docs::prediction::PROBIT_PREDICT_ZH,
+        docs::prediction::PROBIT_PREDICT_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),

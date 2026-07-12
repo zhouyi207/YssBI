@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { select, scaleLinear, axisBottom, axisLeft, extent, line, timeFormat } from 'd3';
+import { select, scaleLinear, axisBottom, axisLeft, extent, line } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { plotAxisTickFormatter } from '@/shared/plot/plotTime';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { cn } from '@/lib/utils';
-import { plotShellClass, plotToolbarClass } from './plotShellStyles';
+import { plotShellClass, plotToolbarClass, DEFAULT_PLOT_MARGIN, type PlotMargin } from './plotShellStyles';
 
 export interface LinePoint {
   x: number;
@@ -31,7 +33,7 @@ export interface LineProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
   /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
   embedded?: boolean;
 }
@@ -47,16 +49,6 @@ function ToolbarToggle({ checked, onChange, label }: { checked: boolean; onChang
   );
 }
 
-/** 将数值转为 Date（date=天数, datetime=微秒） */
-function numToDate(v: number, format: 'date' | 'datetime'): Date {
-  if (format === 'date') {
-    return new Date(v * 86400000); // days since epoch -> ms
-  }
-  return new Date(v / 1000); // microseconds -> ms
-}
-
-const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-
 const Line: React.FC<LineProps> = ({
   data,
   xLabel,
@@ -67,12 +59,11 @@ const Line: React.FC<LineProps> = ({
   strokeWidth = 2,
   showPoints: showPointsInit = true,
   height: heightProp,
-  margin = DEFAULT_MARGIN,
+  margin = DEFAULT_PLOT_MARGIN,
   embedded = false,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const [toolbarOpen, setToolbarOpen] = useState(false);
   const [pointsVisible, setPointsVisible] = useState(showPointsInit);
   const chartTheme = useChartThemeColors();
@@ -80,17 +71,6 @@ const Line: React.FC<LineProps> = ({
   const plotColor = color ?? seriesColors.primary;
 
   const toggleToolbar = useCallback(() => setToolbarOpen((v) => !v), []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -129,11 +109,8 @@ const Line: React.FC<LineProps> = ({
 
     // x axis
     const xAxis = axisBottom(xScale).ticks(6).tickSize(-4);
-    if (xFormat === 'date') {
-      xAxis.tickFormat((d) => timeFormat('%Y-%m-%d')(numToDate(Number(d), 'date')));
-    } else if (xFormat === 'datetime') {
-      xAxis.tickFormat((d) => timeFormat('%Y-%m-%d %H:%M')(numToDate(Number(d), 'datetime')));
-    }
+    const xTickFormat = plotAxisTickFormatter(xFormat);
+    if (xTickFormat) xAxis.tickFormat(xTickFormat);
     g.append('g')
       .attr('transform', `translate(0,${h})`)
       .call(xAxis)
@@ -145,11 +122,8 @@ const Line: React.FC<LineProps> = ({
 
     // y axis
     const yAxis = axisLeft(yScale).ticks(5).tickSize(-4);
-    if (yFormat === 'date') {
-      yAxis.tickFormat((d) => timeFormat('%Y-%m-%d')(numToDate(Number(d), 'date')));
-    } else if (yFormat === 'datetime') {
-      yAxis.tickFormat((d) => timeFormat('%Y-%m-%d %H:%M')(numToDate(Number(d), 'datetime')));
-    }
+    const yTickFormat = plotAxisTickFormatter(yFormat);
+    if (yTickFormat) yAxis.tickFormat(yTickFormat);
     g.append('g')
       .call(yAxis)
       .call((sel) => {

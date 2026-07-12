@@ -2,7 +2,6 @@
 //!
 //! 提供图状态同步命令，用于 undo/redo 后将前端快照重建到后端。
 
-use crate::graph::GraphId;
 use crate::project::ProjectState;
 use crate::schema::GraphRebuildSnapshot;
 use tauri::State;
@@ -14,10 +13,11 @@ use tauri::State;
 #[tauri::command]
 pub fn sync_graph_state(
     state: State<ProjectState>,
-    graph_id: GraphId,
+    graph_path: String,
     snapshot: GraphRebuildSnapshot,
 ) -> Result<(), String> {
-    state.with_graph_mut(&graph_id, |mut ctx| {
+    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+    state.with_graph_mut(&graph_path, |mut ctx| {
         ctx.graph().rebuild_from_snapshot(snapshot)?;
         ctx.sync_runtime_symbols();
         Ok(())

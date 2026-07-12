@@ -4,37 +4,6 @@ use crate::graph::value::DataType;
 use crate::graph::{DataValue, NodeId, PinDirection, PinId, PinKind};
 use serde::{Deserialize, Serialize};
 
-/// 将 DataType 映射为前端 pin type 字符串（运行时数值仅 Int64/Float64）
-/// 容器类型（Array, DataSeries）会递归到内部类型
-pub fn data_type_to_pin_type(dt: &DataType) -> &'static str {
-    match dt {
-        DataType::Boolean => "bool",
-        DataType::Int64 => "Int64",
-        DataType::Float64 => "Float64",
-        DataType::String => "string",
-        DataType::Date => "date",
-        DataType::Datetime => "datetime",
-        DataType::Time => "time",
-        DataType::Categorical => "categorical",
-        DataType::Array(inner) => data_type_to_pin_type(inner),
-        DataType::Object => "object",
-        DataType::Any => "any",
-        DataType::DataFrame => "dataframe",
-        DataType::DataSeries(inner) => data_type_to_pin_type(inner),
-        DataType::Struct(_) => "struct",
-        DataType::OneOf(_) => "oneof",
-    }
-}
-
-/// 返回容器类型字符串（用于前端 pin 形状）
-pub fn data_type_to_container(dt: &DataType) -> Option<&'static str> {
-    match dt {
-        DataType::Array(_) => Some("array"),
-        DataType::DataSeries(_) => Some("dataseries"),
-        _ => None,
-    }
-}
-
 /// 从 PinDataTypeDefinition 提取 DataType（仅 Concrete 类型）
 fn definition_to_data_type(def: &PinDataTypeDefinition) -> Option<DataType> {
     match def {
@@ -73,10 +42,6 @@ pub struct PinInstanceDTO {
     pub default_value: Option<DataValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_value: Option<DataValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub container_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub type_display: Option<String>,
     /// 结构化类型（前端兼容判断的单一来源，serde 形如 {kind,inner}）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_type: Option<DataType>,
@@ -102,16 +67,8 @@ impl PinInstanceDTO {
 
         let pin_type = match pin.definition.kind {
             PinKind::Exec => "exec".to_string(),
-            PinKind::Data => match &dt {
-                Some(d) => data_type_to_pin_type(d).to_string(),
-                None => "object".to_string(),
-            },
+            PinKind::Data => "object".to_string(),
         };
-
-        let container_type = dt
-            .as_ref()
-            .and_then(|d| data_type_to_container(d).map(|s| s.to_string()));
-        let type_display = dt.as_ref().map(|d| d.to_string());
 
         Self {
             id: pin.id,
@@ -121,8 +78,6 @@ impl PinInstanceDTO {
             direction: pin.definition.direction,
             default_value: pin.definition.default_value.clone(),
             user_value: pin.user_value.clone(),
-            container_type,
-            type_display,
             data_type: dt.clone(),
             optional: pin.definition.optional,
             ui: None,
@@ -236,8 +191,8 @@ mod tests {
 
         assert_eq!(json["dataType"]["kind"], "DataSeries");
         assert_eq!(json["dataType"]["inner"]["kind"], "Float64");
-        // typeDisplay 仍随结构化字段同源下发，作展示用
-        assert_eq!(json["typeDisplay"], "DataSeries<Float64>");
+        assert_eq!(json["type"], "object");
+        assert!(json.get("typeDisplay").is_none());
         assert!(json.get("links").is_none());
     }
 }

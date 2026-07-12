@@ -2,7 +2,7 @@ use crate::execution::ExecutionDataStore;
 use crate::graph::NodeDefinition;
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::value::{DataType, DataValue};
-use crate::graph::{GraphInstance, NodeId, NodeRuntimeState, PinId, PinInstance, PinRole, PinRuntimeState};
+use crate::graph::{GraphInstance, NodeId, PinId, PinInstance, PinRole, PinRuntimeState};
 use crate::project::{ProjectData, ProjectStore};
 use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableScope};
@@ -14,11 +14,11 @@ use uuid::Uuid;
 pub struct GraphRuntime {
     graph_instance: Arc<GraphInstance>,
 
-    // 运行期 pin 状态
+    // 运行期 pin 状态（单次执行内有效，每次 run 前清空）
     pins_runtime_state: HashMap<PinId, PinRuntimeState>,
 
-    // 运行期 node 状态
-    nodes_runtime_state: HashMap<NodeId, NodeRuntimeState>,
+    /// 控制流循环计数（For / While），每次执行 run 前清空
+    loop_counters: HashMap<NodeId, i64>,
 
     // 执行期数据缓存（中间 DataFrame / Series）
     data_store: ExecutionDataStore,
@@ -39,7 +39,7 @@ impl GraphRuntime {
         Self {
             graph_instance,
             pins_runtime_state: HashMap::new(),
-            nodes_runtime_state: HashMap::new(),
+            loop_counters: HashMap::new(),
             data_store: ExecutionDataStore::new(),
             project_data,
             project_store,
@@ -55,8 +55,26 @@ impl GraphRuntime {
         )
     }
 
-    pub fn graph_id(&self) -> crate::graph::GraphId {
-        self.graph_instance.id
+    pub fn graph_path(&self) -> crate::project::GraphResourcePath {
+        self.graph_instance.resource_path.clone()
+    }
+
+    /// 项目数据引用（用于函数调用时加载目标函数图）。
+    pub fn project_data(&self) -> Arc<RwLock<ProjectData>> {
+        Arc::clone(&self.project_data)
+    }
+
+    /// 项目运行时存储引用。
+    pub fn project_store(&self) -> Arc<RwLock<ProjectStore>> {
+        Arc::clone(&self.project_store)
+    }
+
+    /// 节点是否带有任意 exec pin（用于区分「纯数据可拉取」节点）。
+    pub fn node_has_exec_pins(&self, node_id: NodeId) -> bool {
+        self.graph_instance
+            .get_pin_instances_by_node_id(node_id)
+            .iter()
+            .any(|pin| pin.is_exec())
     }
 
     pub fn set_pin_current_value(&mut self, pin_id: PinId, value: DataValue) {
@@ -247,6 +265,33 @@ impl GraphRuntime {
     }
 
     // ========================================================================
+    // 控制流循环计数
+    // ========================================================================
+
+    pub fn get_loop_counter(&self, node_id: NodeId) -> i64 {
+        self.loop_counters.get(&node_id).copied().unwrap_or(0)
+    }
+
+    pub fn set_loop_counter(&mut self, node_id: NodeId, value: i64) {
+        self.loop_counters.insert(node_id, value);
+    }
+
+    pub fn reset_loop_counter(&mut self, node_id: NodeId) {
+        self.loop_counters.remove(&node_id);
+    }
+
+    pub fn clear_loop_counters(&mut self) {
+        self.loop_counters.clear();
+    }
+
+    /// 每次图执行开始前重置运行期状态（与 `ExecutionDataStore` 生命周期对齐）。
+    pub fn reset_execution_state(&mut self) {
+        self.pins_runtime_state.clear();
+        self.loop_counters.clear();
+        self.data_store.clear();
+    }
+
+    // ========================================================================
     // 执行期数据缓存操作
     // ========================================================================
 
@@ -310,7 +355,12 @@ impl GraphRuntime {
         if is_variable_handle(db_id) {
             let store = self.project_store.read().map_err(|e| e.to_string())?;
             if let Some(entry) = store.variable_tabular.get(db_id) {
-                return Ok(entry.schema.columns.iter().map(|c| c.name.clone()).collect());
+                return Ok(entry
+                    .schema
+                    .columns
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect());
             }
             return Err(format!("Variable tabular '{db_id}' not found"));
         }
@@ -330,7 +380,11 @@ impl GraphRuntime {
     }
 
     /// 按列加载 Series：DuckDB 列裁剪 → Polars；结果缓存在 `data_store`。
-    pub fn load_database_data_series(&mut self, db_id: &str, column: &str) -> Result<Series, String> {
+    pub fn load_database_data_series(
+        &mut self,
+        db_id: &str,
+        column: &str,
+    ) -> Result<Series, String> {
         let cache_key = Self::data_series_cache_key(db_id, column);
         if let Some(series) = self.data_store.get_data_series(&cache_key) {
             return Ok(series.clone());
@@ -433,10 +487,10 @@ impl GraphRuntime {
             .variables
             .get(&var_id)
             .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
-        if !Self::variable_visible_in_graph(&var.scope, &self.graph_instance.id) {
+        if !Self::variable_visible_in_graph(&var.scope, &self.graph_instance.resource_path) {
             return Err(format!(
                 "Variable '{}' is not visible in graph '{}'",
-                variable_id, self.graph_instance.id
+                variable_id, self.graph_instance.resource_path
             ));
         }
 
@@ -452,10 +506,10 @@ impl GraphRuntime {
             .get(&var_id)
             .map(|v| v.scope.clone())
             .ok_or_else(|| format!("Variable '{}' not found", variable_id))?;
-        if !Self::variable_visible_in_graph(&scope, &self.graph_instance.id) {
+        if !Self::variable_visible_in_graph(&scope, &self.graph_instance.resource_path) {
             return Err(format!(
                 "Variable '{}' is not visible in graph '{}'",
-                variable_id, self.graph_instance.id
+                variable_id, self.graph_instance.resource_path
             ));
         }
         let var = data
@@ -466,11 +520,14 @@ impl GraphRuntime {
         Ok(())
     }
 
-    fn variable_visible_in_graph(scope: &VariableScope, graph_id: &crate::graph::GraphId) -> bool {
+    fn variable_visible_in_graph(
+        scope: &VariableScope,
+        graph_path: &crate::project::GraphResourcePath,
+    ) -> bool {
         match scope {
             VariableScope::Global => true,
-            VariableScope::Event { event_id } => event_id == &graph_id.to_string(),
-            VariableScope::Function { function_id } => function_id == &graph_id.to_string(),
+            VariableScope::Event { event_path } => event_path == graph_path.as_str(),
+            VariableScope::Function { function_path } => function_path == graph_path.as_str(),
         }
     }
 
@@ -484,6 +541,7 @@ impl GraphRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::pin::DataRole;
     use crate::graph::value::{DataType, DataValue};
     use crate::project::{ProjectState, ProjectStore};
     use crate::variable::VariableScope;
@@ -507,11 +565,11 @@ mod tests {
             DataValue::Int64(2),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -538,11 +596,11 @@ mod tests {
             DataValue::DataFrame(r#"{"a":[1,2]}"#.to_string()),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -571,11 +629,11 @@ mod tests {
             DataValue::Int64(9),
             "",
             VariableScope::Event {
-                event_id: event_a.id.to_string(),
+                event_path: event_a.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph_b = state.get_graph(&event_b.id).unwrap();
+        let graph_b = state.get_graph(&event_b.resource_path).unwrap();
         let mut runtime = GraphRuntime::new(
             Arc::new(graph_b.clone()),
             Arc::new(RwLock::new(state.get_data())),
@@ -586,5 +644,36 @@ mod tests {
             .get_variable_value(&local.id.to_string())
             .unwrap_err();
         assert!(err.contains("not visible"));
+    }
+
+    #[test]
+    fn reset_execution_state_clears_pins_and_loop_counters() {
+        let registry = Arc::new(crate::graph::register::NodeRegistry::new());
+        crate::graph::register::catalog::register_builtin_nodes(&registry);
+        let graph = Arc::new(GraphInstance::new_with_path(
+            "Reset State",
+            crate::graph::GraphKind::Event,
+            registry,
+            crate::project::GraphResourcePath::new("events/Reset State.yssbi-event").unwrap(),
+        ));
+        let const_node = graph
+            .create_node("Value:Constants:Int64")
+            .expect("create constant");
+        let result_pin = graph
+            .get_pin_instances_by_node_id(const_node)
+            .into_iter()
+            .find(|p| p.definition.role == PinRole::Data(DataRole::Result))
+            .expect("result pin");
+
+        let mut runtime = GraphRuntime::new_standalone(graph);
+        runtime.set_pin_current_value(result_pin.id, DataValue::Int64(1));
+        runtime.set_loop_counter(const_node, 3);
+        assert!(runtime.pin_has_executed_value(result_pin.id));
+        assert_eq!(runtime.get_loop_counter(const_node), 3);
+
+        runtime.reset_execution_state();
+
+        assert!(!runtime.pin_has_executed_value(result_pin.id));
+        assert_eq!(runtime.get_loop_counter(const_node), 0);
     }
 }

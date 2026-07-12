@@ -3,6 +3,7 @@
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use std::sync::Arc;
 
@@ -20,7 +21,10 @@ fn register_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-    .with_localized_description("判断两值是否相等", "Check if two values are equal")
+    .with_documentation(
+        docs::logic::documentation("Equal (==)").unwrap().0,
+        docs::logic::documentation("Equal (==)").unwrap().1,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -60,7 +64,10 @@ fn register_not_equal(registry: &NodeRegistry) {
         vec!["Logic".to_string(), "Comparison".to_string()],
     )
     .with_ui_style("logic")
-    .with_localized_description("判断两值是否不等", "Check if two values are not equal")
+    .with_documentation(
+        docs::logic::documentation("Not Equal (!=)").unwrap().0,
+        docs::logic::documentation("Not Equal (!=)").unwrap().1,
+    )
     .with_pin_slots(vec![
         PinSlot::fixed(
             PinDefinition::data_input(
@@ -98,7 +105,10 @@ fn register_and(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("And (&&)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_localized_description("逻辑与运算", "Logical AND operation")
+            .with_documentation(
+                docs::logic::documentation("And (&&)").unwrap().0,
+                docs::logic::documentation("And (&&)").unwrap().1,
+            )
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(
@@ -144,7 +154,10 @@ fn register_or(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Or (||)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_localized_description("逻辑或运算", "Logical OR operation")
+            .with_documentation(
+                docs::logic::documentation("Or (||)").unwrap().0,
+                docs::logic::documentation("Or (||)").unwrap().1,
+            )
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(
@@ -190,7 +203,10 @@ fn register_not(registry: &NodeRegistry) {
     let definition =
         NodeDefinition::new("Not (!)", vec!["Logic".to_string(), "Boolean".to_string()])
             .with_ui_style("logic")
-            .with_localized_description("逻辑非运算", "Logical NOT operation")
+            .with_documentation(
+                docs::logic::documentation("Not (!)").unwrap().0,
+                docs::logic::documentation("Not (!)").unwrap().1,
+            )
             .with_pin_slots(vec![
                 PinSlot::fixed(
                     PinDefinition::data_input(

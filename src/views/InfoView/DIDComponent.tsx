@@ -1,21 +1,24 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import type { FC } from 'react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PanelDidService } from '@/features/application/stats/statsActions';
+import { useDidFakeGroupRi } from '@/features/application/stats/statsActions';
 import {
-  SectionHeader,
+  ReportLayout,
+  ReportSection,
   PanelFESummaryGrid,
   ModelSummaryGrid,
   CoefficientsBlock,
   HypothesisTestBlock,
   DidEventStudyChart,
+  OmittedVariablesAlert,
+  formatNum,
+  formatNullableNum,
 } from './shared';
-import type { PanelDidResultData, OLSResultData, DidPlaceboFakeGroupBlock } from './shared/types';
+import type { PanelDidResultData, OLSResultData } from '@/shared/types/report';
 
-export type { PanelDidResultData } from './shared/types';
-
-export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) => {
+export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
   const {
     title,
     endog_name,
@@ -29,32 +32,7 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
     placebo_fake_group,
   } = data;
 
-  const [permReps, setPermReps] = useState(399);
-  const [rngSeed, setRngSeed] = useState(42);
-  const [fakeGroupRi, setFakeGroupRi] = useState<DidPlaceboFakeGroupBlock | null>(null);
-  const [fgLoading, setFgLoading] = useState(false);
-  const [fgErr, setFgErr] = useState<string | null>(null);
-
-  const fakeGroupDisplay = fakeGroupRi ?? placebo_fake_group ?? null;
-
-  const runFakeGroupRi = useCallback(async () => {
-    if (!fake_group_engine) return;
-    setFgErr(null);
-    setFgLoading(true);
-    try {
-      const n_perm = Math.max(1, Math.min(2000, Math.floor(permReps) || 399));
-      const res = await PanelDidService.computeFakeGroupRi<typeof fake_group_engine & { n_perm: number; rng_seed: number }, DidPlaceboFakeGroupBlock>({
-        ...fake_group_engine,
-        n_perm,
-        rng_seed: Number.isFinite(rngSeed) ? Math.max(0, Math.floor(Number(rngSeed))) : 42,
-      });
-      setFakeGroupRi(res);
-    } catch (e) {
-      setFgErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setFgLoading(false);
-    }
-  }, [fake_group_engine, permReps, rngSeed]);
+  const fakeGroup = useDidFakeGroupRi(fake_group_engine, placebo_fake_group);
 
   const didLabel = `${treat_name}×${post_name}`;
   const didRow = useMemo(() => {
@@ -64,34 +42,32 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
 
   const hasCategorical = useMemo(
     () => (fe_twoway ? fe_twoway.coefficients.some((c) => c.category != null) : false),
-    [fe_twoway]
+    [fe_twoway],
   );
 
   if (error) {
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-2">{title}</h1>
+      <ReportLayout title={title}>
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
-      </div>
+      </ReportLayout>
     );
   }
 
   if (!fe_twoway) {
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
-        <h1 className="text-xl font-bold text-foreground mb-2">{title}</h1>
+      <ReportLayout title={title}>
         <p className="text-sm text-muted-foreground">No two-way FE result.</p>
-      </div>
+      </ReportLayout>
     );
   }
 
   const ols = fe_twoway as OLSResultData;
 
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground mb-2">{title}</h1>
-        <p className="text-xs text-muted-foreground leading-relaxed">
+    <ReportLayout
+      title={title}
+      subtitle={
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Outcome: <span className="text-muted-foreground">{endog_name}</span>
           {' · '}
           Treat: <span className="text-muted-foreground">{treat_name}</span>
@@ -100,104 +76,75 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
           {' · '}
           Two-way FE (entity + time), VCE 与 Panel Summary Config 一致（默认按个体聚类）
         </p>
-      </div>
-
-      <div className="mb-6 rounded-lg border border-indigo-500/25 bg-indigo-500/5 p-4 text-sm text-foreground leading-relaxed">
-        <div className="font-medium text-indigo-300 mb-1">单期 DID（2×2）</div>
+      }
+    >
+      <div className="mb-6 rounded-lg border border-indigo-500/25 bg-indigo-500/5 p-4 text-sm leading-relaxed text-foreground">
+        <div className="mb-1 font-medium text-indigo-300">单期 DID（2×2）</div>
         <p>
-          回归在 Y 上对可选控制变量与交互项{' '}
-          <code className="text-emerald-400/90">{didLabel}</code> 做双向固定效应（与 Stata{' '}
+          回归在 Y 上对可选控制变量与交互项 <code className="text-emerald-400/90">{didLabel}</code> 做双向固定效应（与 Stata{' '}
           <code className="text-muted-foreground">reghdfe Y X i.treat#i.post, absorb(id t)</code> 同类）。Treat/Post
           主效应由 FE 吸收，仅报告 Treat×Post。平行趋势为事件研究前导项联合 Wald；安慰剂为政策前 H 期伪窗口×处理组。
         </p>
         {didRow && (
           <p className="mt-2 text-muted-foreground">
             点估计（{didLabel}）:{' '}
-            <span className="text-foreground font-mono tabular-nums">{didRow.coef.toFixed(6)}</span>
+            <span className="font-mono tabular-nums text-foreground">{formatNum(didRow.coef, 6)}</span>
             {' · '}
             p ={' '}
-            <span className="text-foreground font-mono tabular-nums">{didRow.p_value.toFixed(4)}</span>
+            <span className="font-mono tabular-nums text-foreground">
+              {formatNullableNum(didRow.p_value)}
+            </span>
           </p>
         )}
       </div>
 
-      <SectionHeader
-        title="Model Summary"
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-        }
-      />
-      {fe_twoway.diagnostic_info?.panel_fe_info ? (
-        <PanelFESummaryGrid info={fe_twoway.model_basic_info} panelFe={fe_twoway.diagnostic_info.panel_fe_info} />
-      ) : (
-        <ModelSummaryGrid info={fe_twoway.model_basic_info} />
-      )}
+      <ReportSection title="Model Summary" icon="modelSummary">
+        {fe_twoway.diagnostic_info?.panel_fe_info ? (
+          <PanelFESummaryGrid info={fe_twoway.model_basic_info} panelFe={fe_twoway.diagnostic_info.panel_fe_info} />
+        ) : (
+          <ModelSummaryGrid info={fe_twoway.model_basic_info} />
+        )}
+      </ReportSection>
 
       <CoefficientsBlock
         coefficients={fe_twoway.coefficients}
         hasCategorical={hasCategorical}
-        useZStat={
-          fe_twoway.model_basic_info?.wald_chi2 != null || fe_twoway.model_basic_info?.lr_chi2 != null
-        }
+        useZStat={fe_twoway.model_basic_info?.wald_chi2 != null || fe_twoway.model_basic_info?.lr_chi2 != null}
       />
 
-      {fe_twoway.diagnostic_info?.omit_info && fe_twoway.diagnostic_info.omit_info.omitted.length > 0 && (
-        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-          <div className="font-medium text-amber-400 mb-1">Omitted variables (collinearity)</div>
-          <ul className="mt-2 space-y-1 text-sm font-mono text-muted-foreground">
-            {fe_twoway.diagnostic_info.omit_info.omitted.map((o, i) => (
-              <li key={i}>
-                {o.variable}
-                {o.category != null ? (
-                  <span className="text-indigo-300 border border-indigo-500/25 rounded px-1.5 py-0.5 ml-1">
-                    {o.category}
-                  </span>
-                ) : null}
-                <span className="text-muted-foreground text-xs ml-1">({o.reason})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {fe_twoway.diagnostic_info ? <OmittedVariablesAlert diag={fe_twoway.diagnostic_info} /> : null}
 
       <HypothesisTestBlock data={ols} />
 
       {parallel_trends ? (
         <div className="mb-6 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-4 text-sm text-foreground">
-          <div className="font-medium text-cyan-300 mb-2">平行趋势检验（事件研究 / Wald）</div>
+          <div className="mb-2 font-medium text-cyan-300">平行趋势检验（事件研究 / Wald）</div>
           {parallel_trends.available &&
           parallel_trends.chi2 != null &&
           parallel_trends.df != null &&
           parallel_trends.p_value != null ? (
             <div className="space-y-2">
               <p className="tabular-nums">
-                Wald χ² = <span className="text-foreground font-mono">{parallel_trends.chi2.toFixed(4)}</span>
+                Wald χ² = <span className="font-mono text-foreground">{formatNum(parallel_trends.chi2)}</span>
                 {' · '}
-                df = <span className="text-foreground font-mono">{parallel_trends.df}</span>
+                df = <span className="font-mono text-foreground">{parallel_trends.df}</span>
                 {' · '}
-                p = <span className="text-foreground font-mono">{parallel_trends.p_value.toFixed(4)}</span>
+                p = <span className="font-mono text-foreground">{formatNum(parallel_trends.p_value)}</span>
               </p>
               {parallel_trends.reference_rel != null ? (
-                <p className="text-muted-foreground text-xs">
+                <p className="text-xs text-muted-foreground">
                   参照期 rel_time = {parallel_trends.reference_rel}（省略）；检验前导项：
                   {(parallel_trends.tested_rel_periods ?? []).join(', ') || '—'}
                 </p>
               ) : null}
-              <p className="text-muted-foreground text-xs leading-relaxed">{parallel_trends.method_note}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{parallel_trends.method_note}</p>
             </div>
           ) : (
-            <p className="text-amber-200/90 text-xs leading-relaxed">{parallel_trends.method_note}</p>
+            <p className="text-xs leading-relaxed text-amber-200/90">{parallel_trends.method_note}</p>
           )}
           {(parallel_trends.event_study?.length ?? 0) > 0 ? (
             <>
-              <div className="text-xs text-muted-foreground mt-3 mb-1">事件研究系数（相对政策时点 × 处理组）</div>
+              <div className="mb-1 mt-3 text-xs text-muted-foreground">事件研究系数（相对政策时点 × 处理组）</div>
               <DidEventStudyChart points={parallel_trends.event_study!} treatLabel={treat_name} />
             </>
           ) : null}
@@ -206,7 +153,7 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
 
       {placebo ? (
         <div className="mb-6 rounded-lg border border-violet-500/25 bg-violet-500/5 p-4 text-sm text-foreground">
-          <div className="font-medium text-violet-300 mb-2">安慰剂 ① 虚构政策时点（政策前 H 期 × 真实处理组）</div>
+          <div className="mb-2 font-medium text-violet-300">安慰剂 ① 虚构政策时点（政策前 H 期 × 真实处理组）</div>
           {placebo.available &&
           placebo.coef != null &&
           placebo.p_value != null &&
@@ -215,25 +162,25 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
             <div className="space-y-2">
               <p className="tabular-nums">
                 H = {placebo.horizon} 期伪窗口 · coef ={' '}
-                <span className="text-foreground font-mono">{placebo.coef.toFixed(6)}</span>
+                <span className="font-mono text-foreground">{formatNum(placebo.coef, 6)}</span>
                 {' · '}
-                se = <span className="text-foreground font-mono">{placebo.std_err.toFixed(6)}</span>
+                se = <span className="font-mono text-foreground">{formatNum(placebo.std_err, 6)}</span>
                 {' · '}
-                t = <span className="text-foreground font-mono">{placebo.t_value.toFixed(4)}</span>
+                t = <span className="font-mono text-foreground">{formatNum(placebo.t_value)}</span>
                 {' · '}
-                p = <span className="text-foreground font-mono">{placebo.p_value.toFixed(4)}</span>
+                p = <span className="font-mono text-foreground">{formatNum(placebo.p_value)}</span>
               </p>
-              <p className="text-muted-foreground text-xs leading-relaxed">{placebo.method_note}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{placebo.method_note}</p>
             </div>
           ) : (
-            <p className="text-amber-200/90 text-xs leading-relaxed">{placebo.method_note}</p>
+            <p className="text-xs leading-relaxed text-amber-200/90">{placebo.method_note}</p>
           )}
         </div>
       ) : null}
 
-      {fake_group_engine || fakeGroupDisplay ? (
+      {fake_group_engine || fakeGroup.display ? (
         <div className="mb-6 rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/5 p-4 text-sm text-foreground">
-          <div className="font-medium text-fuchsia-300 mb-2">安慰剂 ② 虚构处理组（实体级随机置换）</div>
+          <div className="mb-2 font-medium text-fuchsia-300">安慰剂 ② 虚构处理组（实体级随机置换）</div>
           {fake_group_engine ? (
             <div className="mb-4 flex flex-wrap items-end gap-3 text-xs">
               <div className="flex flex-col gap-1.5">
@@ -245,8 +192,8 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
                   type="number"
                   min={1}
                   max={2000}
-                  value={permReps}
-                  onChange={(ev) => setPermReps(Number(ev.target.value))}
+                  value={fakeGroup.permReps}
+                  onChange={(ev) => fakeGroup.setPermReps(Number(ev.target.value))}
                   className="h-8 w-28 border-fuchsia-500/30 bg-muted/50 font-mono tabular-nums"
                 />
               </div>
@@ -257,8 +204,8 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
                 <Input
                   id="did-rng-seed"
                   type="number"
-                  value={rngSeed}
-                  onChange={(ev) => setRngSeed(Number(ev.target.value))}
+                  value={fakeGroup.rngSeed}
+                  onChange={(ev) => fakeGroup.setRngSeed(Number(ev.target.value))}
                   className="h-8 w-28 border-fuchsia-500/30 bg-muted/50 font-mono tabular-nums"
                 />
               </div>
@@ -266,55 +213,54 @@ export const DIDComponent: React.FC<{ data: PanelDidResultData }> = ({ data }) =
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={fgLoading}
-                onClick={() => void runFakeGroupRi()}
+                disabled={fakeGroup.loading}
+                onClick={() => void fakeGroup.run()}
                 className="border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-100 hover:bg-fuchsia-500/30"
               >
-                {fgLoading ? '计算中…' : '计算置换检验'}
+                {fakeGroup.loading ? '计算中…' : '计算置换检验'}
               </Button>
             </div>
           ) : null}
-          {fgErr ? (
-            <p className="mb-2 text-red-300/90 text-xs leading-relaxed">{fgErr}</p>
+          {fakeGroup.error ? (
+            <p className="mb-2 text-xs leading-relaxed text-red-300/90">{fakeGroup.error}</p>
           ) : null}
-          {fakeGroupDisplay ? (
-            fakeGroupDisplay.available &&
-            fakeGroupDisplay.p_value_ri != null &&
-            fakeGroupDisplay.observed_coef != null &&
-            fakeGroupDisplay.perm_coef_mean != null &&
-            fakeGroupDisplay.perm_coef_std != null ? (
+          {fakeGroup.display ? (
+            fakeGroup.display.available &&
+            fakeGroup.display.p_value_ri != null &&
+            fakeGroup.display.observed_coef != null &&
+            fakeGroup.display.perm_coef_mean != null &&
+            fakeGroup.display.perm_coef_std != null ? (
               <div className="space-y-2">
                 <p className="tabular-nums">
                   置换次数（成功拟合）{' '}
-                  <span className="text-foreground font-mono">
-                    {fakeGroupDisplay.n_perm_valid}/{fakeGroupDisplay.n_perm}
+                  <span className="font-mono text-foreground">
+                    {fakeGroup.display.n_perm_valid}/{fakeGroup.display.n_perm}
                   </span>
                   {' · '}
                   主回归 coef_obs ={' '}
-                  <span className="text-foreground font-mono">{fakeGroupDisplay.observed_coef.toFixed(6)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.observed_coef, 6)}</span>
                 </p>
                 <p className="tabular-nums">
                   置换系数 mean ={' '}
-                  <span className="text-foreground font-mono">{fakeGroupDisplay.perm_coef_mean.toFixed(6)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.perm_coef_mean, 6)}</span>
                   {' · '}
-                  sd ={' '}
-                  <span className="text-foreground font-mono">{fakeGroupDisplay.perm_coef_std.toFixed(6)}</span>
+                  sd = <span className="font-mono text-foreground">{formatNum(fakeGroup.display.perm_coef_std, 6)}</span>
                   {' · '}
                   RI p（双侧）={' '}
-                  <span className="text-foreground font-mono">{fakeGroupDisplay.p_value_ri.toFixed(4)}</span>
+                  <span className="font-mono text-foreground">{formatNum(fakeGroup.display.p_value_ri)}</span>
                 </p>
-                <p className="text-muted-foreground text-xs leading-relaxed">{fakeGroupDisplay.method_note}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{fakeGroup.display.method_note}</p>
               </div>
             ) : (
-              <p className="text-amber-200/90 text-xs leading-relaxed">{fakeGroupDisplay.method_note}</p>
+              <p className="text-xs leading-relaxed text-amber-200/90">{fakeGroup.display.method_note}</p>
             )
           ) : fake_group_engine ? (
-            <p className="text-muted-foreground text-xs leading-relaxed">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               默认不在图执行时做大量置换；确认样本量后在此设置次数并点击「计算置换检验」。
             </p>
           ) : null}
         </div>
       ) : null}
-    </div>
+    </ReportLayout>
   );
 };

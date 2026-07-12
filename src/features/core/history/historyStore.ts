@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { getCommandHandler } from './commands';
+import type { CommandHandler } from './types';
 import { notifyStructuralChange } from './structuralChange';
 import type {
   CommandType,
@@ -34,34 +35,34 @@ interface HistoryStoreState {
 
   /** Push a completed command onto the undo stack (called by commandExecutor) */
   push: (
-    graphId: string,
+    graphPath: string,
     commandType: CommandType,
     context: unknown,
     options?: ExecuteOptions,
   ) => void;
 
   /** Undo the last command for the given graph */
-  undo: (graphId: string) => Promise<boolean>;
+  undo: (graphPath: string) => Promise<boolean>;
 
   /** Redo the last undone command for the given graph */
-  redo: (graphId: string) => Promise<boolean>;
+  redo: (graphPath: string) => Promise<boolean>;
 
-  canUndo: (graphId: string) => boolean;
-  canRedo: (graphId: string) => boolean;
+  canUndo: (graphPath: string) => boolean;
+  canRedo: (graphPath: string) => boolean;
 
   /** Clear history for a specific graph or all graphs */
-  clear: (graphId?: string) => void;
+  clear: (graphPath?: string) => void;
 }
 
 export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
   histories: {},
 
-  push: (graphId, commandType, context, options) => {
+  push: (graphPath, commandType, context, options) => {
     const now = Date.now();
     const mergeKey = options?.mergeKey;
 
     set((state) => {
-      const hist = state.histories[graphId] ?? emptyHistory();
+      const hist = state.histories[graphPath] ?? emptyHistory();
       const stack = hist.undoStack;
       const top = stack[stack.length - 1];
 
@@ -75,14 +76,14 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
         return {
           histories: {
             ...state.histories,
-            [graphId]: { undoStack: updated, redoStack: [] },
+            [graphPath]: { undoStack: updated, redoStack: [] },
           },
         };
       }
 
       const entry: HistoryEntry = {
         id: nextEntryId(),
-        graphId,
+        graphPath,
         commandType,
         context,
         timestamp: now,
@@ -92,7 +93,7 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
       return {
         histories: {
           ...state.histories,
-          [graphId]: {
+          [graphPath]: {
             undoStack: [...stack, entry].slice(-MAX_HISTORY),
             redoStack: [],
           },
@@ -101,22 +102,22 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     });
   },
 
-  undo: async (graphId) => {
-    const hist = get().histories[graphId];
+  undo: async (graphPath) => {
+    const hist = get().histories[graphPath];
     if (!hist || hist.undoStack.length === 0) return false;
 
     const entry = hist.undoStack[hist.undoStack.length - 1];
 
     try {
-      const handler = getCommandHandler(entry.commandType);
-      await handler.undo(graphId, entry.context);
-      notifyStructuralChange(entry.commandType, graphId);
+      const handler = getCommandHandler(entry.commandType) as CommandHandler;
+      await handler.undo(graphPath, entry.context);
+      notifyStructuralChange(entry.commandType, graphPath);
       set((state) => {
-        const h = state.histories[graphId]!;
+        const h = state.histories[graphPath]!;
         return {
           histories: {
             ...state.histories,
-            [graphId]: {
+            [graphPath]: {
               undoStack: h.undoStack.slice(0, -1),
               redoStack: [entry, ...h.redoStack].slice(0, MAX_HISTORY),
             },
@@ -132,22 +133,22 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     }
   },
 
-  redo: async (graphId) => {
-    const hist = get().histories[graphId];
+  redo: async (graphPath) => {
+    const hist = get().histories[graphPath];
     if (!hist || hist.redoStack.length === 0) return false;
 
     const entry = hist.redoStack[0];
 
     try {
-      const handler = getCommandHandler(entry.commandType);
-      await handler.redo(graphId, entry.context);
-      notifyStructuralChange(entry.commandType, graphId);
+      const handler = getCommandHandler(entry.commandType) as CommandHandler;
+      await handler.redo(graphPath, entry.context);
+      notifyStructuralChange(entry.commandType, graphPath);
       set((state) => {
-        const h = state.histories[graphId]!;
+        const h = state.histories[graphPath]!;
         return {
           histories: {
             ...state.histories,
-            [graphId]: {
+            [graphPath]: {
               undoStack: [...h.undoStack, entry].slice(-MAX_HISTORY),
               redoStack: h.redoStack.slice(1),
             },
@@ -163,20 +164,20 @@ export const useHistoryStore = create<HistoryStoreState>((set, get) => ({
     }
   },
 
-  canUndo: (graphId) => {
-    const hist = get().histories[graphId];
+  canUndo: (graphPath) => {
+    const hist = get().histories[graphPath];
     return !!(hist && hist.undoStack.length > 0);
   },
 
-  canRedo: (graphId) => {
-    const hist = get().histories[graphId];
+  canRedo: (graphPath) => {
+    const hist = get().histories[graphPath];
     return !!(hist && hist.redoStack.length > 0);
   },
 
-  clear: (graphId) => {
-    if (graphId) {
+  clear: (graphPath) => {
+    if (graphPath) {
       set((state) => {
-        const { [graphId]: _, ...rest } = state.histories;
+        const { [graphPath]: _, ...rest } = state.histories;
         return { histories: rest };
       });
     } else {

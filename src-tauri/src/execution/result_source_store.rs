@@ -107,7 +107,7 @@ pub struct ResultSourceRecord {
 enum SourceOwner {
     Window,
     RuntimePin {
-        graph_id: String,
+        graph_path: String,
         pin_id: String,
         run_id: String,
     },
@@ -144,7 +144,7 @@ impl ResultSourceStore {
 
     pub fn insert_runtime_pin_source(
         &self,
-        graph_id: String,
+        graph_path: String,
         pin_id: String,
         run_id: String,
         record: ResultSourceRecord,
@@ -154,7 +154,7 @@ impl ResultSourceStore {
         let mut registry = self.registry.write().unwrap();
         if let Some(previous) = registry
             .runtime_index
-            .insert((graph_id.clone(), pin_id.clone()), source_id.clone())
+            .insert((graph_path.clone(), pin_id.clone()), source_id.clone())
         {
             registry.descriptors.remove(&previous);
             registry.sources.remove(&previous);
@@ -167,7 +167,7 @@ impl ResultSourceStore {
         registry.owners.insert(
             source_id,
             SourceOwner::RuntimePin {
-                graph_id,
+                graph_path,
                 pin_id,
                 run_id,
             },
@@ -184,11 +184,11 @@ impl ResultSourceStore {
             .cloned()
     }
 
-    pub fn get_pin_descriptor(&self, graph_id: &str, pin_id: &str) -> Option<SourceDescriptor> {
+    pub fn get_pin_descriptor(&self, graph_path: &str, pin_id: &str) -> Option<SourceDescriptor> {
         let registry = self.registry.read().unwrap();
         let source_id = registry
             .runtime_index
-            .get(&(graph_id.to_string(), pin_id.to_string()))?;
+            .get(&(graph_path.to_string(), pin_id.to_string()))?;
         registry.descriptors.get(source_id).cloned()
     }
 
@@ -236,16 +236,16 @@ impl ResultSourceStore {
         }
     }
 
-    pub fn clear_runtime_graph(&self, graph_id: &str) {
+    pub fn clear_runtime_graph(&self, graph_path: &str) {
         let mut registry = self.registry.write().unwrap();
         let source_ids: Vec<_> = registry
             .owners
             .iter()
             .filter_map(|(source_id, owner)| match owner {
                 SourceOwner::RuntimePin {
-                    graph_id: owner_graph,
+                    graph_path: owner_graph_path,
                     ..
-                } if owner_graph == graph_id => Some(source_id.clone()),
+                } if owner_graph_path == graph_path => Some(source_id.clone()),
                 _ => None,
             })
             .collect();
@@ -256,18 +256,18 @@ impl ResultSourceStore {
         }
         registry
             .runtime_index
-            .retain(|(owner_graph_id, _), _| owner_graph_id != graph_id);
+            .retain(|(owner_graph_path, _), _| owner_graph_path != graph_path);
     }
 
     /// Remove runtime pin sources for the given pins on a graph. Returns pin ids actually removed.
-    pub fn invalidate_runtime_pins(&self, graph_id: &str, pin_ids: &[PinId]) -> Vec<PinId> {
+    pub fn invalidate_runtime_pins(&self, graph_path: &str, pin_ids: &[PinId]) -> Vec<PinId> {
         if pin_ids.is_empty() {
             return Vec::new();
         }
         let mut registry = self.registry.write().unwrap();
         let mut invalidated = Vec::new();
         for pin_id in pin_ids {
-            let key = (graph_id.to_string(), pin_id.to_string());
+            let key = (graph_path.to_string(), pin_id.to_string());
             let Some(source_id) = registry.runtime_index.remove(&key) else {
                 continue;
             };
@@ -364,17 +364,23 @@ fn dataframe_page(df: &DataFrame, offset: usize, limit: usize) -> Result<SourceP
     })
 }
 
-fn data_series_page(data_series: &Series, offset: usize, limit: usize) -> Result<SourcePage, String> {
+fn data_series_page(
+    data_series: &Series,
+    offset: usize,
+    limit: usize,
+) -> Result<SourcePage, String> {
     let total_count = data_series.len();
     let start = offset.min(total_count);
     let end = (offset.saturating_add(limit)).min(total_count);
     let columns = crate::execution::data_series_table_columns(data_series);
     let rows: Vec<Vec<serde_json::Value>> = (start..end)
         .map(|i| {
-            vec![data_series
-                .get(i)
-                .map(anyvalue_to_json)
-                .unwrap_or(serde_json::Value::Null)]
+            vec![
+                data_series
+                    .get(i)
+                    .map(anyvalue_to_json)
+                    .unwrap_or(serde_json::Value::Null),
+            ]
         })
         .collect();
     Ok(SourcePage {
@@ -541,8 +547,16 @@ mod tests {
 
         let removed = store.invalidate_runtime_pins("graph", &[pin_a]);
         assert_eq!(removed, vec![pin_a]);
-        assert!(store.get_pin_descriptor("graph", &pin_a.to_string()).is_none());
-        assert!(store.get_pin_descriptor("graph", &pin_b.to_string()).is_some());
+        assert!(
+            store
+                .get_pin_descriptor("graph", &pin_a.to_string())
+                .is_none()
+        );
+        assert!(
+            store
+                .get_pin_descriptor("graph", &pin_b.to_string())
+                .is_some()
+        );
     }
 
     #[test]

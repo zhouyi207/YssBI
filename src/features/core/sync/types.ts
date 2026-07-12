@@ -33,12 +33,12 @@ export interface ProjectSavedPayload {
 }
 
 export interface GraphCreatedPayload {
-    id: string;
+    path: string;
     data: Graph;
 }
 
 export interface GraphUpdatedPayload {
-    id: string;
+    path: string;
     data: Partial<Graph> & {
         functionInputs?: FunctionSignaturePin[];
         functionOutputs?: FunctionSignaturePin[];
@@ -46,7 +46,7 @@ export interface GraphUpdatedPayload {
 }
 
 export interface GraphDeletedPayload {
-    id: string;
+    path: string;
 }
 
 export interface GraphCreatedFailedPayload {
@@ -70,6 +70,12 @@ export interface ResourceDeletedPayload {
 export interface ProjectIndexInvalidatedPayload {
     source: string;
     version: number;
+}
+
+export interface GraphResourceMovedPayload {
+    from: string;
+    to: string;
+    kind: 'event' | 'function';
 }
 
 /** 变量创建/更新事件 payload（与后端 EventVariable 对应） */
@@ -116,36 +122,36 @@ export interface DataFrameSchemaUpdatedPayload {
 }
 
 export interface NodeCreatedPayload {
-    graphId: string;
+    graphPath: string;
     nodeId: string;
     data: NodeInstanceDTO;
     pins: PinInstanceDTO[];
 }
 
 export interface NodesBatchCreatedPayload {
-    graphId: string;
+    graphPath: string;
     nodes: Array<[string, NodeInstanceDTO, PinInstanceDTO[]]>;
 }
 
 export interface NodeDeletedPayload {
-    graphId: string;
+    graphPath: string;
     nodeId: string;
 }
 
 export interface NodesBatchDeletedPayload {
-    graphId: string;
+    graphPath: string;
     nodeIds: string[];
 }
 
 export interface NodePositionsUpdatedPayload {
-    graphId: string;
+    graphPath: string;
     /** [[nodeId, x, y], ...] from backend */
     updates: Array<[string, number, number]>;
 }
 
 /** 节点动态 pins 变化事件（由 PinResolver 触发） */
 export interface NodePinsUpdatedPayload {
-    graphId: string;
+    graphPath: string;
     nodeId: string;
     removedPinIds: string[];
     addedPins: PinInstanceDTO[];
@@ -156,36 +162,88 @@ export interface NodePinsUpdatedPayload {
 
 /** 类型推断后 pin 的解析类型变化事件 */
 export interface PinTypesInferredPayload {
-    graphId: string;
-    pinTypes: Array<{ pinId: string; pinType: string; containerType?: string; typeDisplay?: string; dataType?: DataTypeBackendFormat }>;
+    graphPath: string;
+    pinTypes: Array<{ pinId: string; dataType: DataTypeBackendFormat }>;
 }
 
 export interface RuntimeSourcesInvalidatedPayload {
-    graphId: string;
+    graphPath: string;
     pinIds: string[];
 }
+
+// ==================== Backend event typing ====================
+
+export type BackendEventType =
+    | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectSaved'
+    | 'EventCreated' | 'EventUpdated' | 'EventDeleted' | 'EventCreatedFailed'
+    | 'FunctionCreated' | 'FunctionUpdated' | 'FunctionDeleted' | 'FunctionCreatedFailed'
+    | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
+    | 'DataFrameCreated' | 'DataFrameDeleted' | 'DataFrameSchemaUpdated'
+    | 'ResourceChanged' | 'ResourceDeleted' | 'GraphResourceMoved' | 'ProjectIndexInvalidated'
+    | 'NodeCreated' | 'NodesBatchCreated' | 'NodeUpdated' | 'NodeDeleted' | 'NodesBatchDeleted'
+    | 'NodePositionsUpdated' | 'NodePinsUpdated' | 'PinTypesInferred' | 'RuntimeSourcesInvalidated'
+    | 'ConnectionCreated' | 'ConnectionDeleted' | 'ConnectionsBatchDeleted' | 'ConnectionsBatchCreated';
+
+export interface BackendEventPayloadMap {
+    ProjectLoaded: ProjectLoadedPayload;
+    ProjectCleared: void;
+    ProjectSaved: ProjectSavedPayload;
+    EventCreated: GraphCreatedPayload;
+    EventUpdated: GraphUpdatedPayload;
+    EventDeleted: GraphDeletedPayload;
+    EventCreatedFailed: GraphCreatedFailedPayload;
+    FunctionCreated: GraphCreatedPayload;
+    FunctionUpdated: GraphUpdatedPayload;
+    FunctionDeleted: GraphDeletedPayload;
+    FunctionCreatedFailed: GraphCreatedFailedPayload;
+    VariableCreated: VariableCreatedPayload;
+    VariableUpdated: VariableUpdatedPayload;
+    VariableDeleted: VariableDeletedPayload;
+    DataFrameCreated: DataFrameCreatedPayload;
+    DataFrameDeleted: DataFrameDeletedPayload;
+    DataFrameSchemaUpdated: DataFrameSchemaUpdatedPayload;
+    ResourceChanged: ResourceChangedPayload;
+    ResourceDeleted: ResourceDeletedPayload;
+    GraphResourceMoved: GraphResourceMovedPayload;
+    ProjectIndexInvalidated: ProjectIndexInvalidatedPayload;
+    NodeCreated: NodeCreatedPayload;
+    NodesBatchCreated: NodesBatchCreatedPayload;
+    NodeUpdated: unknown;
+    NodeDeleted: NodeDeletedPayload;
+    NodesBatchDeleted: NodesBatchDeletedPayload;
+    NodePositionsUpdated: NodePositionsUpdatedPayload;
+    NodePinsUpdated: NodePinsUpdatedPayload;
+    PinTypesInferred: PinTypesInferredPayload;
+    RuntimeSourcesInvalidated: RuntimeSourcesInvalidatedPayload;
+    ConnectionCreated: ConnectionCreatedPayload;
+    ConnectionDeleted: ConnectionDeletedPayload;
+    ConnectionsBatchDeleted: ConnectionsBatchDeletedPayload;
+    ConnectionsBatchCreated: ConnectionsBatchCreatedPayload;
+}
+
+export type RawBackendEvent = BaseEvent | NestedEvent;
 
 // ==================== Connection 事件 Payload ====================
 
 export interface ConnectionCreatedPayload {
-    graphId: string;
+    graphPath: string;
     fromPin: string;
     toPin: string;
 }
 
 export interface ConnectionDeletedPayload {
-    graphId: string;
+    graphPath: string;
     fromPin: string;
     toPin: string;
 }
 
 export interface ConnectionsBatchDeletedPayload {
-    graphId: string;
+    graphPath: string;
     removedConnections: Array<[string, string]>;
 }
 
 export interface ConnectionsBatchCreatedPayload {
-    graphId: string;
+    graphPath: string;
     connections: Array<[string, string]>;
 }
 
@@ -220,8 +278,8 @@ export interface EventCallbacks {
     onDataFrameDeleted?: (id: string) => void;
     
     // Node callbacks
-    onNodeCreated?: (graphId: string, nodeId: string, data: NodeInstanceDTO | Node) => void;
-    onNodeDeleted?: (graphId: string, nodeId: string) => void;
+    onNodeCreated?: (graphPath: string, nodeId: string, data: NodeInstanceDTO | Node) => void;
+    onNodeDeleted?: (graphPath: string, nodeId: string) => void;
 }
 
 // ==================== 监听器配置 ====================

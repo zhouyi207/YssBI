@@ -1,5 +1,5 @@
 import { NodeService } from '@/services';
-import type { GraphUndoPatch } from '@/services/graph/node/graphUndoPatch';
+import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 import type { CommandHandler } from '../types';
 
 export interface DeleteNodesArgs {
@@ -11,17 +11,17 @@ export interface DeleteNodesContext {
 }
 
 export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, DeleteNodesContext> = {
-  async execute(graphId, args) {
-    const patch = await NodeService.batchDeleteNodes(graphId, args.nodeIds);
+  async execute(graphPath, args) {
+    const patch = await NodeService.batchDeleteNodes(graphPath, args.nodeIds);
     return { patch };
   },
 
-  async undo(graphId, context) {
-    await NodeService.applyGraphPatch(graphId, context.patch);
+  async undo(graphPath, context) {
+    await NodeService.applyGraphPatch(graphPath, context.patch);
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     const nodeIds = context.patch.nodes.map((n) => n.id);
-    await NodeService.batchDeleteNodes(graphId, nodeIds);
+    await NodeService.batchDeleteNodes(graphPath, nodeIds);
   },
 };

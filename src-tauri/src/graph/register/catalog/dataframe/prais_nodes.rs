@@ -2,13 +2,14 @@
 //!
 //! Stata: prais y x1 x2 [, corc]
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{CategoricalRole, DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, Series};
@@ -525,9 +526,9 @@ fn register_prais_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "Prais-Winsten / Cochrane-Orcutt 配置",
-        "Prais-Winsten / Cochrane-Orcutt configuration",
+    .with_documentation(
+        docs::prais::PRAIS_CONFIGURE_ZH,
+        docs::prais::PRAIS_CONFIGURE_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(
@@ -604,10 +605,7 @@ fn register_prais(registry: &NodeRegistry) {
 
     let def = NodeDefinition::new("Prais", vec!["Data".to_string(), "Statistics".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description(
-            "Prais-Winsten / Cochrane-Orcutt AR(1) 回归 — Stata prais",
-            "Prais-Winsten / Cochrane-Orcutt AR(1) regression — Stata prais",
-        )
+        .with_documentation(docs::prais::PRAIS_ZH, docs::prais::PRAIS_EN)
         .with_pin_slots(slots)
         .with_flow_processor(Arc::new(|ctx| {
             let fit = run_prais_regression(ctx)?;
@@ -660,10 +658,7 @@ fn register_prais_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "Prais-Winsten / Cochrane-Orcutt — 输出结果并打开 Summary 窗口",
-        "Prais-Winsten / Cochrane-Orcutt — outputs results and opens summary window",
-    )
+    .with_documentation(docs::prais::PRAIS_SUMMARY_ZH, docs::prais::PRAIS_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let fit = run_prais_regression(ctx)?;

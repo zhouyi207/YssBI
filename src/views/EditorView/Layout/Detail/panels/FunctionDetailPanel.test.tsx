@@ -1,4 +1,5 @@
 import { Children, isValidElement, type ReactElement } from 'react';
+import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import { describe, expect, it, vi } from 'vitest';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailNameField } from '../shared/DetailForm';
@@ -29,10 +30,10 @@ describe('FunctionDetailPanel', () => {
     const onSignatureChange = vi.fn();
     const element = FunctionDetailPanel({
       fn: {
-        id: 'function-1',
+        path: 'function-1',
         name: 'Compute',
-        inputs: [{ id: 'input-1', name: 'Value', type: 'int' }],
-        outputs: [{ id: 'output-1', name: 'Result', type: 'float' }],
+        inputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
+        outputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       },
       onRename,
       onSignatureChange,
@@ -43,18 +44,18 @@ describe('FunctionDetailPanel', () => {
 
     const pinEditors = findAllByType(element, PinEditor);
     (pinEditors[0].props as { onChange: (pins: unknown[]) => void }).onChange([
-      { id: 'input-2', name: 'Next', type: 'string' },
+      createDataSignaturePin('input-2', 'Next', { kind: 'String' }),
     ]);
     (pinEditors[1].props as { onChange: (pins: unknown[]) => void }).onChange([
-      { id: 'output-2', name: 'Done', type: 'bool' },
+      createDataSignaturePin('output-2', 'Done', { kind: 'Boolean' }),
     ]);
 
     expect(onRename).toHaveBeenCalledWith('Renamed');
     expect(onSignatureChange).toHaveBeenNthCalledWith(1, {
-      inputs: [{ id: 'input-2', name: 'Next', type: 'string' }],
+      inputs: [createDataSignaturePin('input-2', 'Next', { kind: 'String' })],
     });
     expect(onSignatureChange).toHaveBeenNthCalledWith(2, {
-      outputs: [{ id: 'output-2', name: 'Done', type: 'bool' }],
+      outputs: [createDataSignaturePin('output-2', 'Done', { kind: 'Boolean' })],
     });
   });
 });

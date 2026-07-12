@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import {
   applyViewportTransform,
   getViewport,
@@ -6,18 +6,18 @@ import {
   viewportTransformStyle,
 } from '@/features/core/viewport';
 
-export const TransformContainer = ({ graphId, children }: { graphId: string; children: React.ReactNode }) => {
+export const TransformContainer = ({ graphPath, children }: { graphPath: string; children: React.ReactNode }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!graphId) return;
-    return subscribeToViewport(graphId, (viewport) => {
+    if (!graphPath) return;
+    return subscribeToViewport(graphPath, (viewport) => {
       const el = containerRef.current;
       if (el) applyViewportTransform(el, viewport);
     });
-  }, [graphId]);
+  }, [graphPath]);
 
-  const initial = graphId ? getViewport(graphId) : { x: 0, y: 0, scale: 1 };
+  const initial = graphPath ? getViewport(graphPath) : { x: 0, y: 0, scale: 1 };
 
   return (
     <div ref={containerRef} style={viewportTransformStyle(initial)}>

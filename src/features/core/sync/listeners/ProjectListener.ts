@@ -3,7 +3,7 @@
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { EventRegistry } from '../registry/EventRegistry';
 import { createEventHandlers } from '../handlers';
-import { EventCallbacks } from '../types';
+import type { EventCallbacks, RawBackendEvent } from '../types';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -32,7 +32,7 @@ export class ProjectListener {
 
         this.unlisten = await listen('project-event', (event) => {
             logger.sys.trace('Received event: ' + JSON.stringify(event.payload), 'ProjectListener');
-            this.registry.dispatch(event.payload);
+            this.registry.dispatch(event.payload as RawBackendEvent);
         });
 
         logger.sys.info('Project event listener started', 'ProjectListener');

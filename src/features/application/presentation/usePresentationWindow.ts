@@ -6,10 +6,11 @@ import { usePresentationWindowLifecycle } from '@/features/application/window/us
 import { useWindowMaximized } from '@/features/application/window/useWindowMaximized';
 import { logger } from '@/utils/appLogger';
 import { loadPresentationWindow, type PresentationWindowState } from './loadPresentationWindow';
-import { parseSourceIdFromLocation } from './parseSourceIdFromLocation';
+import { parsePresentationWindowQuery } from './parsePresentationWindowQuery';
 
 export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
-  const sourceId = useMemo(() => parseSourceIdFromLocation(), []);
+  const query = useMemo(() => parsePresentationWindowQuery(), []);
+  const sourceId = query.sourceId;
   const [state, setState] = useState<PresentationWindowState>(() =>
     sourceId ? { status: 'loading' } : { status: 'missing_source_id' },
   );

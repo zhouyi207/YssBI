@@ -1,8 +1,9 @@
 import { useCallback, useRef } from 'react';
-import { Node } from '@/shared/types/ui';
-import { getGraphById } from '@/features/core/dataStore';
+import { getGraphByPath } from '@/features/core/dataStore';
+import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
 import { useClipboardStore } from '@/features/core/editor';
 import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
 import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
@@ -21,7 +22,6 @@ export function useEditorOperations() {
   const clipboard = useClipboardStore((s) => s.clipboard);
   const setClipboard = useClipboardStore((s) => s.setClipboard);
 
-  const activeGroupId = useLayoutStore((s: LayoutState) => s.activeGroupId);
   const activeEditorNode = useLayoutStore((s: LayoutState) =>
     s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
   );
@@ -34,23 +34,12 @@ export function useEditorOperations() {
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
 
-  const setSelectedNodeIds = useCallback((updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-    const gid = targetGroupId || activeGroupId;
-    if (gid) {
-      const state = useLayoutStore.getState() as LayoutState;
-      const node = state.nodes[gid];
-      if (node) {
-        const current = node.data?.params?.selectedNodeIds || [];
-        const next = typeof updater === 'function' ? updater(current) : updater;
-        useLayoutStore.getState().updateNode(gid, {
-          data: {
-            ...node.data,
-            params: { ...node.data?.params, selectedNodeIds: next }
-          }
-        });
-      }
-    }
-  }, [activeGroupId]);
+  const setSelectedNodeIds = useCallback(
+    (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
+      updateEditorGroupSelectedNodeIds(updater, targetGroupId);
+    },
+    [],
+  );
 
   // ===== History =====
   const undo = useCallback(async () => {
@@ -71,7 +60,7 @@ export function useEditorOperations() {
     if (!tid) return;
 
     const dataStore = useGraphDataStore.getState();
-    const graphNodeIds = dataStore.graphNodes[tid] ?? [];
+    const graphNodeIds = dataStore.getGraphNodeIds(tid);
     const selectedNodeIdList = graphNodeIds.filter((nid) => sIds.has(nid));
     const snapshot = buildClipboardSnapshot(selectedNodeIdList, tid);
     if (snapshot) setClipboard(snapshot);
@@ -79,7 +68,8 @@ export function useEditorOperations() {
 
   const copyNodes = useCallback((nodeIds: string[]) => {
     const tid = activeTabIdRef.current;
-    const snapshot = buildClipboardSnapshot(nodeIds, tid ?? undefined);
+    if (!tid) return;
+    const snapshot = buildClipboardSnapshot(nodeIds, tid);
     if (snapshot) setClipboard(snapshot);
   }, [setClipboard]);
 
@@ -149,7 +139,7 @@ export function useEditorOperations() {
     for (const pinId of pinIds) {
       const connIds = store.getGraphPinConnections(tid, pinId);
       for (const connId of connIds) {
-        const conn = store.graphEntities[tid]?.connections[connId] ?? store.connections[connId];
+        const conn = store.getGraphConnection(tid, connId);
         if (!conn) continue;
         const otherPinId = conn.from === pinId ? conn.to : conn.from;
         const otherPin = store.getGraphPin(tid, otherPinId);
@@ -210,7 +200,7 @@ export function useEditorOperations() {
       logger.graph.error(`Failed to paste nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
       uiStore.showToast("粘贴失败", "error", 2000);
     }
-  }, [activeGroupId, clipboard]);
+  }, [clipboard]);
 
   const deleteSelected = useCallback(async () => {
     const sIds = new Set(selectedNodeIdsRef.current);
@@ -218,12 +208,12 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
-    const currentGraph = getGraphById(tid);
+    const currentGraph = getGraphByPath(tid);
     if (!currentGraph) return;
 
-    const currentNodes = (currentGraph.nodes || []) as unknown as Node[];
+    const currentNodes = currentGraph.nodes;
     const idsToDelete = currentNodes
-      .filter(n => sIds.has(n.id) && !n.isInternal)
+      .filter(n => sIds.has(n.id) && !n.isInternal && !isShellNode(tid, n.id))
       .map(n => n.id);
     if (idsToDelete.length === 0) return;
 

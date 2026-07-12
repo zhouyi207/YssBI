@@ -6,6 +6,7 @@ import { findAutoConnectPinIndex } from '@/shared/utils/pinCompatibility';
 import { trackPending } from '@/features/core/sync/utils/echoSuppressor';
 import { waitForPinOffset } from '@/features/core/canvas/pinOffsetWaiter';
 import type { Pin } from '@/shared/types/domain/pin';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import type { CommandHandler } from '../types';
 import { NODE_CREATE_ECHO_DOMAIN } from './createNode';
 import { CONNECTION_ECHO_DOMAIN } from './connectPins';
@@ -19,13 +20,7 @@ export interface CreateNodeWithConnectionArgs {
   nodeType: string;
   x: number;
   y: number;
-  params?: {
-    variableId?: string;
-    variableName?: string;
-    variableType?: string;
-    subGraphId?: string;
-    dataframeId?: string;
-  };
+  params?: NodeSpawnParams;
   /** 拖拽的源 pin（完整对象，用于计算自动连线的目标 pin） */
   sourcePin: Pin;
 }
@@ -52,16 +47,15 @@ export const createNodeWithConnectionCommand: CommandHandler<
   CreateNodeWithConnectionArgs,
   CreateNodeWithConnectionContext
 > = {
-  async execute(graphId, args) {
+  async execute(graphPath, args) {
     const store = useGraphDataStore.getState();
     const definition = useNodeRegistryStore.getState().getDefinition(args.nodeType);
     if (!definition) {
       throw new Error(`No node definition for type "${args.nodeType}"`);
     }
 
-    // 1) 乐观插入节点（同步，先于任何 await 渲染）。
-    const { node, pins } = buildNodeDraft(
-      graphId,
+    const { node, pins, effectiveDefinition } = buildNodeDraft(
+      graphPath,
       args.nodeType,
       definition,
       args.x,
@@ -70,39 +64,33 @@ export const createNodeWithConnectionCommand: CommandHandler<
     );
     const nodeId = node.id;
     const pinIds = pins.map((p) => p.id);
-    store.applyNodeDraft(graphId, node, pins);
+    store.applyNodeDraft(graphPath, node, pins);
 
-    // 2) 计算自动连线目标并乐观建立连接（同步，连线立即出现）。
     let targetPinId: string | null = null;
     let connDraft: ReturnType<typeof store.applyConnectionDraft> = null;
-    const matchIdx = definition.pinSlots
-      ? findAutoConnectPinIndex(definition.pinSlots, args.sourcePin)
-      : -1;
+    const matchIdx = findAutoConnectPinIndex(effectiveDefinition.pinSlots, args.sourcePin);
     if (matchIdx >= 0 && matchIdx < pinIds.length) {
       targetPinId = pinIds[matchIdx];
-      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphId);
+      connDraft = store.applyConnectionDraft(args.sourcePin.id, targetPinId, graphPath);
     }
 
-    // 3) 位置对齐：等待目标 pin 偏移被测量出来后，反向平移节点，使该 pin 精确落在
-    //    拖拽释放点（args.x/args.y）。节点宽高随内容变化，故用测量值而非常量推算。
     let finalX = args.x;
     let finalY = args.y;
     if (targetPinId) {
-      const offset = await waitForPinOffset(graphId, targetPinId);
+      const offset = await waitForPinOffset(graphPath, targetPinId);
       if (offset) {
         finalX = args.x - offset.x;
         finalY = args.y - offset.y;
-        store.updateNode(nodeId, { position: { x: finalX, y: finalY } }, graphId);
+        store.updateNode(nodeId, { position: { x: finalX, y: finalY } }, graphPath);
       }
     }
 
-    // 4) 后端创建节点（id 与对齐后的位置由客户端提供）。失败则回滚连线与节点。
     try {
       await trackPending(
         NODE_CREATE_ECHO_DOMAIN,
         [nodeId],
         NodeService.createNodeWithId(
-          graphId,
+          graphPath,
           nodeId,
           pinIds,
           args.nodeType,
@@ -112,12 +100,11 @@ export const createNodeWithConnectionCommand: CommandHandler<
         ),
       );
     } catch (error) {
-      if (connDraft) store.revertConnectionDraft(connDraft, graphId);
-      store.revertNodeDraft(nodeId, graphId);
+      if (connDraft) store.revertConnectionDraft(connDraft, graphPath);
+      store.revertNodeDraft(nodeId, graphPath);
       throw error;
     }
 
-    // 5) 节点已存在于后端后再连线。连线失败仅回滚连线，保留节点。
     let autoDisconnectedList: AutoDisconnectedEntry[] = [];
     if (connDraft && targetPinId) {
       const keys = [connDraft.connectionId, ...connDraft.disconnectedIds];
@@ -125,11 +112,11 @@ export const createNodeWithConnectionCommand: CommandHandler<
         const result = await trackPending(
           CONNECTION_ECHO_DOMAIN,
           keys,
-          ConnectionService.connectPins(graphId, args.sourcePin.id, targetPinId),
+          ConnectionService.connectPins(graphPath, args.sourcePin.id, targetPinId),
         );
         autoDisconnectedList = result.autoDisconnected;
       } catch {
-        store.revertConnectionDraft(connDraft, graphId);
+        store.revertConnectionDraft(connDraft, graphPath);
         targetPinId = null;
       }
     }
@@ -147,17 +134,16 @@ export const createNodeWithConnectionCommand: CommandHandler<
     };
   },
 
-  async undo(graphId, context) {
-    // 删除节点会一并移除其上的新连接；随后恢复被自动断开的源端连接。
-    await NodeService.deleteNode(graphId, context.nodeId);
+  async undo(graphPath, context) {
+    await NodeService.deleteNode(graphPath, context.nodeId);
     for (const entry of context.autoDisconnectedList) {
-      await ConnectionService.connectPins(graphId, entry.fromPin, entry.toPin);
+      await ConnectionService.connectPins(graphPath, entry.fromPin, entry.toPin);
     }
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     await NodeService.createNodeWithId(
-      graphId,
+      graphPath,
       context.nodeId,
       context.pinIds,
       context.nodeType,
@@ -166,7 +152,7 @@ export const createNodeWithConnectionCommand: CommandHandler<
       context.params,
     );
     if (context.targetPinId) {
-      await ConnectionService.connectPins(graphId, context.sourcePinId, context.targetPinId);
+      await ConnectionService.connectPins(graphPath, context.sourcePinId, context.targetPinId);
     }
   },
 };

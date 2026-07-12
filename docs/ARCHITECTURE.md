@@ -165,13 +165,16 @@ components/ui and shared/ui → reusable UI
 
 - 项目/数据：`features/core/dataStore/`
 - 布局：`features/core/layout/layoutStore.ts`
-- 编辑器：`features/core/editor/`
+- 编辑器 core 状态：`features/core/editor/`（layout tab、detail focus、clipboard 等）
+- 编辑器 application 编排：`features/application/editor/`（`EditorSessionProvider`、`useEditorSession`、`useEditorGroup`）
 - Schema / Node Registry：`features/core/schema`、`features/core/nodeRegister`
 - 历史：`features/core/history`
 - UI Modal / Toast：`features/core/ui/UIStore.ts`
 - 视口、选择、手势、侧边栏、日志、执行状态等：分别由多个 core store 管理
 
 项目初始化由 `useAppInitialization` 驱动：先等待 schema store 从后端同步节点定义，再调用 `initProjectSync` 同步项目数据。
+
+Editor 窗口在 `EditorWindow` 根节点挂载 `EditorSessionProvider`，全窗口共享一份 editor session（tab/命令/资源操作）。Canvas pointer loop 仅由 `useEditorGroup({ withCanvasInteraction: true })` 在 `Canvas.tsx` 中启用一次；Sidebar、Menubar、Overlays 等通过 `useEditorGroup()` 或 `useEditorSession()` 消费同一 session，不再重复实例化完整 editor 组合链。
 
 ### 4.6 前端 IPC 边界
 
@@ -412,7 +415,7 @@ execute_project command
 
 ### 8.4 结果窗口数据
 
-节点通过 `NodeExecutionContext` 的 `publish_plot` / `publish_report` / `open_registered_source` 注册结果。执行器写入 `ResultSourceStore`，并通过 `OpenSourceWindow` 事件（携带 `sourceId`、`presentation`、`windowTitle`）通知前端开窗。前端按 `presentation.route()` 打开 `/inspect`、`/plot` 或 `/info`，再通过 `SourceService` 按 `sourceId` 拉取数据。
+节点通过 `NodeExecutionContext` 的 `publish_plot` / `publish_report` / `publish_record` / `ensure_view_source_for_input` 注册结果。View 节点每次执行对输入拍不可变 `window_{uuid}` 快照（不复用上游 `runtime_pin` source）。执行器写入 `ResultSourceStore`，并通过 `OpenSourceWindow` 事件（携带 `sourceId`、`presentation`、`windowTitle`）通知前端开窗。前端按 `presentation.route()` 打开 `/inspect`、`/plot` 或 `/info`，再通过 `SourceService` 按 `sourceId` 拉取数据。
 
 ## 9. `yss-sci` 计算库架构
 
@@ -680,7 +683,7 @@ App mount
 
 - Zustand store 不带 selector 会导致过度重渲染。
 - 全局事件监听器较多，捕获阶段监听器可能影响 React 事件链。
-- `useEditorGroup` 链路较重，非 Canvas 组件可能被迫实例化 Canvas 交互逻辑。
+- ~~`useEditorGroup` 链路较重，非 Canvas 组件可能被迫实例化 Canvas 交互逻辑。~~ 已通过 `EditorSessionProvider` + 仅 Canvas 启用 `withCanvasInteraction` 缓解（2026.07）。
 - DnD context 存在嵌套和潜在冲突。
 - store 粒度不统一，存在全局变量/手动 Map 等绕开 React 数据流的状态。
 

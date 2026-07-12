@@ -1,4 +1,3 @@
-use crate::graph::GraphId;
 use crate::schema::GraphInstanceDTO;
 use serde::{Deserialize, Serialize};
 
@@ -6,11 +5,11 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "payload")]
 pub enum EventEvent {
     #[serde(rename_all = "camelCase")]
-    EventCreated { id: GraphId, data: GraphInstanceDTO },
+    EventCreated { path: String, data: GraphInstanceDTO },
     #[serde(rename_all = "camelCase")]
-    EventUpdated { id: GraphId, data: GraphInstanceDTO },
+    EventUpdated { path: String, data: GraphInstanceDTO },
     #[serde(rename_all = "camelCase")]
-    EventDeleted { id: GraphId },
+    EventDeleted { path: String },
     #[serde(rename_all = "camelCase")]
     EventCreatedFailed { name: String, error: String },
 }

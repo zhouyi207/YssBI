@@ -1,23 +1,24 @@
 use super::NodeExecutionContextTrait;
-use crate::execution::{ExecutionEvent, PlotChart, Presentation, ReportKind, ResultSourceRecord, ResultSourceStore};
-use crate::graph::GraphId;
+use crate::execution::{
+    Executor, ExecutionEvent, NoopEmitter, PlotChart, Presentation, ReportKind, ResultSourceRecord,
+    ResultSourceStore,
+};
 use crate::graph::core::GraphRuntime;
 use crate::graph::infer::TypeVarId;
 use crate::graph::node::{NodeId, NodeInstanceParams};
-use crate::graph::pin::{ExecRole, PinId, PinRole};
+use crate::graph::pin::{DataRole, ExecRole, PinId, PinRole};
 use crate::graph::value::{DataType, DataValue};
 use polars::prelude::{DataFrame, Series};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
-/// Result source publish / open request collected during node execution.
+/// Result source publish request collected during node execution.
 pub enum SourceAction {
     PublishJson {
         presentation: Presentation,
         data: String,
     },
     PublishRecord(ResultSourceRecord),
-    OpenExisting(String),
 }
 
 /// 具体的执行上下文实现
@@ -55,22 +56,21 @@ impl NodeExecutionContext {
 
     fn register_output_source(
         &mut self,
-        graph_id: GraphId,
+        graph_path: &str,
         pin_id: PinId,
         value: &DataValue,
     ) -> Result<(), String> {
-        let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_id, pin_id);
-        let record =
-            self.build_source_record_for_value(source_id.clone(), "", value, None)?;
+        let source_id = format!("runtime_{}_{}_{}", self.run_id, graph_path, pin_id);
+        let record = self.build_source_record_for_value(source_id.clone(), "", value, None)?;
 
         let descriptor = self.result_source_store.insert_runtime_pin_source(
-            graph_id.to_string(),
+            graph_path.to_string(),
             pin_id.to_string(),
             self.run_id.clone(),
             record,
         );
         self.pin_result_events.push(ExecutionEvent::PinResultReady {
-            graph_id: graph_id.to_string(),
+            graph_path: graph_path.to_string(),
             node_id: self.node_id.to_string(),
             pin_id: pin_id.to_string(),
             source_id,
@@ -169,7 +169,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     }
 
     fn emit_output_by_role(&mut self, role: &PinRole, value: DataValue) -> Result<(), String> {
-        let (graph_id, pin_id) = {
+        let (graph_path, pin_id) = {
             let mut graph = self.graph.lock().unwrap();
             let pin = graph
                 .get_pin_instance_by_pin_role(self.node_id, role)
@@ -180,10 +180,10 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             }
 
             graph.set_pin_current_value(pin.id, value.clone());
-            (graph.graph_id(), pin.id)
+            (graph.graph_path(), pin.id)
         };
 
-        self.register_output_source(graph_id, pin_id, &value)?;
+        self.register_output_source(graph_path.as_str(), pin_id, &value)?;
 
         Ok(())
     }
@@ -193,7 +193,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         role: &PinRole,
         values: Vec<DataValue>,
     ) -> Result<(), String> {
-        let (graph_id, output_pins) = {
+        let (graph_path, output_pins) = {
             let graph = self.graph.lock().unwrap();
             let pins = graph.get_pin_instances_by_pin_role(self.node_id, role);
             let output_pins: Vec<PinId> = pins
@@ -201,7 +201,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 .filter(|p| !p.is_input())
                 .map(|p| p.id)
                 .collect();
-            (graph.graph_id(), output_pins)
+            (graph.graph_path(), output_pins)
         };
 
         if output_pins.len() != values.len() {
@@ -217,7 +217,7 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
                 let mut graph = self.graph.lock().unwrap();
                 graph.set_pin_current_value(pin_id, value.clone());
             }
-            self.register_output_source(graph_id, pin_id, &value)?;
+            self.register_output_source(graph_path.as_str(), pin_id, &value)?;
         }
 
         Ok(())
@@ -256,6 +256,19 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         graph.get_pin_data_value_by_pin_id(pin.id)
     }
 
+    fn get_exec_output_roles(&self) -> Vec<ExecRole> {
+        let graph = self.graph.lock().unwrap();
+        graph
+            .get_pin_instances_by_node_id(self.node_id)
+            .into_iter()
+            .filter(|pin| pin.is_output() && pin.is_exec())
+            .filter_map(|pin| match pin.definition.role {
+                PinRole::Exec(role) => Some(role),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn get_exec_step_outputs(&self) -> Vec<ExecRole> {
         let graph = self.graph.lock().unwrap();
         let mut steps: Vec<(usize, ExecRole)> = graph
@@ -271,6 +284,36 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         steps.into_iter().map(|(_, role)| role).collect()
     }
 
+    fn get_exec_case_outputs(&self) -> Vec<ExecRole> {
+        let graph = self.graph.lock().unwrap();
+        let mut cases: Vec<(usize, ExecRole)> = graph
+            .get_pin_instances_by_node_id(self.node_id)
+            .iter()
+            .filter(|pin| pin.is_output() && pin.is_exec())
+            .filter_map(|pin| match pin.definition.role {
+                PinRole::Exec(ExecRole::Cases(index)) => Some((index, ExecRole::Cases(index))),
+                _ => None,
+            })
+            .collect();
+        cases.sort_by_key(|(index, _)| *index);
+        cases.into_iter().map(|(_, role)| role).collect()
+    }
+
+    fn get_loop_counter(&self) -> i64 {
+        let graph = self.graph.lock().unwrap();
+        graph.get_loop_counter(self.node_id)
+    }
+
+    fn set_loop_counter(&mut self, value: i64) {
+        let mut graph = self.graph.lock().unwrap();
+        graph.set_loop_counter(self.node_id, value);
+    }
+
+    fn reset_loop_counter(&mut self) {
+        let mut graph = self.graph.lock().unwrap();
+        graph.reset_loop_counter(self.node_id);
+    }
+
     // ====================================================================
     // 节点实例参数
     // ====================================================================
@@ -278,6 +321,126 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     fn get_instance_params(&self) -> NodeInstanceParams {
         let graph = self.graph.lock().unwrap();
         graph.get_node_instance_params(self.node_id)
+    }
+
+    fn call_subgraph(&mut self) -> Result<(), String> {
+        let call_node_id = self.node_id;
+
+        // 目标函数 id（来自 Call 节点 SubGraph 参数）
+        let sub_graph_path = {
+            let rt = self.graph.lock().unwrap();
+            rt.get_node_instance_params(call_node_id)
+                .sub_graph_path()
+                .map(|s| s.to_string())
+        }
+        .ok_or_else(|| "Call Function: subGraphPath 未设置".to_string())?;
+
+        let function_path = crate::project::GraphResourcePath::new(sub_graph_path.clone())
+            .map_err(|e| format!("Call Function: 无效 subGraphPath '{}': {}", sub_graph_path, e))?;
+
+        // 取项目引用 + 目标函数图（来自执行快照 bundle，与编辑器 live 图隔离）
+        let (project_data, project_store, function_graph) = {
+            let rt = self.graph.lock().unwrap();
+            let pd = rt.project_data();
+            let ps = rt.project_store();
+            let fg = pd
+                .read()
+                .unwrap()
+                .graphs
+                .get(&function_path)
+                .cloned()
+                .ok_or_else(|| format!("Call Function: 目标函数图 {} 未加载", sub_graph_path))?;
+            (pd, ps, fg)
+        };
+
+        let (entry_id, return_id) = function_graph.find_function_shell_nodes();
+        // 以 Call 节点实例上的 exec 引脚为准（签名投影结果），避免与目标图签名二次判定分叉。
+        let has_exec_input = {
+            let rt = self.graph.lock().unwrap();
+            rt.node_has_exec_pins(call_node_id)
+        };
+        let function_inputs = function_graph.function_inputs.clone();
+        let function_outputs = function_graph.function_outputs.clone();
+        let return_id =
+            return_id.ok_or_else(|| "Call Function: 目标函数缺少 Return 节点".to_string())?;
+
+        // 读取本 Call 节点数据输入（按签名 id 的 Data(Custom) role；跳过 exec 项）。
+        let mut inputs: Vec<(String, DataValue)> = Vec::new();
+        for sig in &function_inputs {
+            if sig.is_exec() {
+                continue;
+            }
+            let role = PinRole::Data(DataRole::Custom(sig.id.clone()));
+            if let Ok(value) = self.get_input_by_role(&role) {
+                inputs.push((sig.id.clone(), value));
+            }
+        }
+
+        // 递归深度保护（同一执行线程内）
+        let _depth = CallDepthGuard::enter()?;
+
+        // 构建嵌套 runtime，预置 Entry 输出（入参）值。
+        //
+        // 每次调用新建独立 runtime 是刻意为之，且开销很低：
+        // - `GraphInstance` 浅克隆仅共享同一快照内的 `data_state` Arc。
+        // - `GraphRuntime::new` 只分配空 HashMap，执行期状态独立于 `data_state`。
+        // 不缓存复用：递归 / 多 Call 指向同一函数时会共享可变执行状态而互相污染。
+        let mut runtime = GraphRuntime::new(Arc::new(function_graph), project_data, project_store);
+        runtime.reset_execution_state();
+        if let Some(entry) = entry_id {
+            for (sig_id, value) in inputs {
+                let role = PinRole::Data(DataRole::Custom(sig_id));
+                if let Some(pin) = runtime.get_pin_instance_by_pin_role(entry, &role) {
+                    runtime.set_pin_current_value(pin.id, value);
+                }
+            }
+        }
+
+        let runtime = Arc::new(Mutex::new(runtime));
+        let mut executor = Executor::new(
+            Arc::clone(&runtime),
+            NoopEmitter,
+            self.result_source_store.clone(),
+        );
+
+        // 运行函数体：无 exec 入参时按数据拉取 Return；否则从 Entry 走控制流子程序。
+        if !has_exec_input {
+            executor.evaluate_data_target(return_id)?;
+        } else {
+            let entry =
+                entry_id.ok_or_else(|| "Call Function: 目标函数缺少 Entry 节点".to_string())?;
+            executor.run_subroutine(entry)?;
+        }
+        self.logs.extend(executor.logs().iter().cloned());
+
+        // 读取 Return 数据输入值（跳过 exec 项）。
+        let mut outputs: Vec<(String, DataValue)> = Vec::new();
+        {
+            let rt = runtime.lock().unwrap();
+            for sig in &function_outputs {
+                if sig.is_exec() {
+                    continue;
+                }
+                let role = PinRole::Data(DataRole::Custom(sig.id.clone()));
+                if let Ok(value) = rt.get_pin_data_value_by_pin_role(return_id, &role) {
+                    outputs.push((sig.id.clone(), value));
+                }
+            }
+        }
+
+        // 写回本 Call 节点输出（若对应 pin 存在）
+        for (sig_id, value) in outputs {
+            let role = PinRole::Data(DataRole::Custom(sig_id));
+            let has_pin = {
+                let rt = self.graph.lock().unwrap();
+                rt.get_pin_instance_by_pin_role(call_node_id, &role).is_some()
+            };
+            if has_pin {
+                self.emit_output_by_role(&role, value)?;
+            }
+        }
+
+        Ok(())
     }
 
     // ====================================================================
@@ -345,7 +508,8 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     // ====================================================================
 
     fn publish_json(&mut self, presentation: Presentation, data: String) {
-        self.source_actions.push(SourceAction::PublishJson { presentation, data });
+        self.source_actions
+            .push(SourceAction::PublishJson { presentation, data });
     }
 
     fn publish_plot(&mut self, chart: PlotChart, data: String) {
@@ -357,21 +521,11 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
     }
 
     fn publish_record(&mut self, record: ResultSourceRecord) {
-        self.source_actions.push(SourceAction::PublishRecord(record));
-    }
-
-    fn open_registered_source(&mut self, source_id: String) {
-        self.source_actions.push(SourceAction::OpenExisting(source_id));
+        self.source_actions
+            .push(SourceAction::PublishRecord(record));
     }
 
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String> {
-        if let Some(source_id) = self.get_input_source_id_by_role(role) {
-            if self.result_source_store.get_descriptor(&source_id).is_some() {
-                self.open_registered_source(source_id.clone());
-                return Ok(source_id);
-            }
-        }
-
         let value = match self.get_input_by_role(role) {
             Ok(value) => value,
             Err(_) if !self.is_input_connected(role) => DataValue::Null,
@@ -379,22 +533,9 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         };
         let source_id = format!("window_{}", uuid::Uuid::new_v4().simple());
         let title = crate::execution::default_view_title(&value, None);
-        let record =
-            self.build_source_record_for_value(source_id.clone(), title, &value, None)?;
+        let record = self.build_source_record_for_value(source_id.clone(), title, &value, None)?;
         self.publish_record(record);
         Ok(source_id)
-    }
-
-    fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String> {
-        let (graph_id, upstream_pin_id) = {
-            let graph = self.graph.lock().ok()?;
-            let input = graph.get_pin_instance_by_pin_role(self.node_id, role)?;
-            let upstream = graph.get_upstream_by_pin_id(input.id)?;
-            (graph.graph_id().to_string(), upstream.to_string())
-        };
-        self.result_source_store
-            .get_pin_descriptor(&graph_id, &upstream_pin_id)
-            .map(|descriptor| descriptor.source_id)
     }
 
     fn log(&mut self, message: String) {
@@ -403,5 +544,36 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
 
     fn error(&mut self, message: String) {
         self.logs.push(format!("ERROR: {}", message));
+    }
+}
+
+/// 函数调用最大嵌套深度（防止直接 / 间接递归导致栈溢出）。
+const MAX_CALL_DEPTH: usize = 64;
+
+thread_local! {
+    static CALL_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// RAII：进入函数调用时 +1，离开（含出错）时 -1。
+struct CallDepthGuard;
+
+impl CallDepthGuard {
+    fn enter() -> Result<Self, String> {
+        CALL_DEPTH.with(|d| {
+            if d.get() >= MAX_CALL_DEPTH {
+                return Err(format!(
+                    "Call Function: 调用嵌套超过上限 {}（可能存在递归调用）",
+                    MAX_CALL_DEPTH
+                ));
+            }
+            d.set(d.get() + 1);
+            Ok(CallDepthGuard)
+        })
+    }
+}
+
+impl Drop for CallDepthGuard {
+    fn drop(&mut self) {
+        CALL_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
     }
 }

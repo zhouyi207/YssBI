@@ -7,15 +7,15 @@ import { getDragPreview, subscribeDragPreview } from './dragPreview';
  * do not re-render every frame.
  */
 export function useNodeDragPreview(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
-  graphId: string | null,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
+  graphPath: string | null,
 ): void {
   const lastDraggedRef = useRef<Set<string>>(new Set());
   const rafRef = useRef(0);
 
   useEffect(() => {
-    const root = canvasRef.current;
-    if (!root || !graphId) return;
+    const root = canvasElementRef.current;
+    if (!root || !graphPath) return;
 
     const apply = () => {
       const preview = getDragPreview();
@@ -24,7 +24,7 @@ export function useNodeDragPreview(
       if (!preview.active) {
         for (const nodeId of lastDraggedRef.current) {
           const el = root.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null;
-          const pos = store.getGraphNode(graphId, nodeId)?.position;
+          const pos = store.getGraphNode(graphPath, nodeId)?.position;
           if (!el || !pos) continue;
           el.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
         }
@@ -35,7 +35,7 @@ export function useNodeDragPreview(
       lastDraggedRef.current = new Set(preview.dragNodeIds);
       for (const nodeId of preview.dragNodeIds) {
         const el = root.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null;
-        const pos = store.getGraphNode(graphId, nodeId)?.position;
+        const pos = store.getGraphNode(graphPath, nodeId)?.position;
         if (!el || !pos) continue;
         el.style.transform = `translate3d(${pos.x + preview.dragDelta.x}px, ${pos.y + preview.dragDelta.y}px, 0)`;
       }
@@ -60,5 +60,5 @@ export function useNodeDragPreview(
       unsub();
       cancelAnimationFrame(rafRef.current);
     };
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphPath]);
 }

@@ -15,6 +15,7 @@ export type ExecutionEvent =
   | { event: 'nodeComplete'; data: { nodeId: string; durationMs?: number } }
   | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
+  | { event: 'connectionFlow'; data: { fromPinId: string; toPinId: string } }
   | {
       event: 'openSourceWindow';
       data: { sourceId: string; presentation: Presentation; windowTitle: string };
@@ -22,7 +23,7 @@ export type ExecutionEvent =
   | {
       event: 'pinResultReady';
       data: {
-        graphId: string;
+        graphPath: string;
         nodeId: string;
         pinId: string;
         sourceId: string;
@@ -49,7 +50,7 @@ export interface NodeExecutionState {
 }
 
 export interface PinResultState {
-  graphId: string;
+  graphPath: string;
   nodeId: string;
   pinId: string;
   sourceId: string;
@@ -60,7 +61,10 @@ export interface PinResultState {
 export interface GraphExecutionState {
   status: ExecutionStatus;
   nodeStates: Map<string, NodeExecutionState>;
+  /** data 取数阶段已声明的 input 连线（ConnectionActive） */
   completedConnections: Set<string>;
+  /** data 值已就绪、沿 output→input 流动的连线（ConnectionFlow）；exec 仍只用 completedConnections */
+  flowingConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
   /** output pin id -> latest backend source descriptor */
@@ -69,9 +73,9 @@ export interface GraphExecutionState {
 
 /** 全局执行状态 */
 export interface ExecutionState {
-  /** 按 graphId 存储的执行状态 */
+  /** 按 graphPath 存储的执行状态 */
   graphs: Record<string, GraphExecutionState>;
-  /** 当前正在回放的 graphId */
-  playbackGraphId: string | null;
+  /** 当前正在回放的 graphPath */
+  playbackGraphPath: string | null;
   isPlaying: boolean;
 }

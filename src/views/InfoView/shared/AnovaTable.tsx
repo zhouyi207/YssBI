@@ -1,11 +1,9 @@
-import React from 'react';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNum } from './RegressionShared';
-import type { ModelBasicInfo } from './types';
+import type { ModelBasicInfo } from '@/shared/types/report';
 import {
   InfoStatsTable,
   infoStatsCellClass,
-  infoStatsCellCompactClass,
   infoStatsCellRightClass,
   infoStatsHeadClass,
   infoStatsHeadCompactClass,

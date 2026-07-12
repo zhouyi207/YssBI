@@ -16,11 +16,17 @@ export {
   presentationRoute,
   presentationRouteForDescriptor,
 } from './presentation';
+export {
+  resolveInspectableSource,
+  runtimePinRef,
+  windowSourceRef,
+  type InspectableSourceRef,
+} from './inspectableSource';
 export { resolveSourceRenderer } from './resolveRenderer';
 export { useSourceValue } from './useSourceValue';
 export { usePagedSourceRows } from './usePagedSourceRows';
 export { UnifiedSourceView } from './components/UnifiedSourceView';
+export { ReportSourceView } from './components/ReportSourceView';
 export { SourceViewShell } from './components/SourceViewShell';
-export type { SourceViewLayout } from './components/SourceViewShell';
 export { JsonTreeView } from './components/JsonTreeView';
 export { ReadOnlyDataGrid } from './components/ReadOnlyDataGrid';

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
-import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins } from './pinCompatibility';
+import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins, findAutoConnectPinIndex } from './pinCompatibility';
+import { defaultFunctionSignature, resolveEffectiveDefinition, CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 const FLOAT64: DataType = { kind: 'Float64' };
 const STRING: DataType = { kind: 'String' };
@@ -31,23 +32,22 @@ function pin(partial: Partial<Pin> & { direction: PinDirection }): Pin {
 }
 
 describe('buildPinDataType', () => {
-  it('prefers the structured dataType over typeDisplay', () => {
+  it('requires structured dataType for data pins', () => {
     const p = pin({
       direction: 'output',
-      type: 'number',
-      typeDisplay: 'String', // intentionally conflicting display string
+      type: 'object',
       dataType: SERIES_FLOAT64,
     });
     expect(buildPinDataType(p)).toEqual(SERIES_FLOAT64);
   });
 
   it('throws for data pins without structured dataType', () => {
-    const p = pin({ direction: 'output', type: 'object', typeDisplay: 'Float64' });
+    const p = pin({ direction: 'output', type: 'object' });
     expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 
-  it('does not infer data pin types from type + containerType', () => {
-    const p = pin({ direction: 'output', type: 'number', containerType: 'dataseries' });
+  it('does not infer data pin types from legacy type strings alone', () => {
+    const p = pin({ direction: 'output', type: 'object' });
     expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 
@@ -116,6 +116,31 @@ describe('pinAcceptsType - Struct family matching', () => {
   it('does not allow unrelated Struct outputs into a Model family input', () => {
     const draggedResultOutput = pin({ direction: 'output', dataType: OLS_RESULT });
     expect(pinAcceptsType(draggedResultOutput, MODEL, TYPE_SYSTEM)).toBe(false);
+  });
+});
+
+describe('findAutoConnectPinIndex via effective call definition', () => {
+  const callBase = {
+    name: 'Call Function',
+    category: ['Functions'],
+    nodeType: CALL_FUNCTION_NODE_TYPE,
+    nodeMetadata: {
+      uiStyle: 'function',
+      supports_dynamic_pins: true,
+      graph_scope: 'any' as const,
+      shell_role: null,
+    },
+    pinSlots: [],
+    typeCapabilities: [],
+  };
+
+  it('connects exec output drag to exec input on projected call pinSlots', () => {
+    const effective = resolveEffectiveDefinition(callBase, {
+      subGraphPath: 'fn-1',
+      ...defaultFunctionSignature(),
+    });
+    const draggedExecOutput = pin({ direction: 'output', type: 'exec' });
+    expect(findAutoConnectPinIndex(effective.pinSlots, draggedExecOutput)).toBe(0);
   });
 });
 

@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
+
 export interface ClipboardPinEntry {
   pinId: string;
   name: string;
@@ -10,13 +12,7 @@ export interface ClipboardPinEntry {
 export interface ClipboardEntry {
   nodeType: string;
   position: { x: number; y: number };
-  params?: {
-    variableId?: string;
-    variableName?: string;
-    variableType?: string;
-    subGraphId?: string;
-    dataframeId?: string;
-  };
+  params?: NodeSpawnParams;
   pins: ClipboardPinEntry[];
 }
 

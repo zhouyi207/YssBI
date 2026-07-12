@@ -1,12 +1,13 @@
 //! Panel Summary node — runs FE, FD, RE and displays all results
 
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame};
@@ -986,73 +987,6 @@ fn pooled_vs_unrestricted_f_test(
     }
 }
 
-fn re_chibar2_test(
-    id: &str,
-    group: &str,
-    label: &str,
-    h0: &str,
-    re_mle: Option<&OLSResult>,
-    sig_recommendation: &str,
-    nsig_recommendation: &str,
-) -> PanelSelectionTest {
-    let Some(re_res) = re_mle else {
-        return unavailable_test(
-            id,
-            group,
-            label,
-            h0,
-            "chibar2(01)",
-            "Cannot decide because RE(MLE) result is unavailable.",
-            "RE(MLE) result is missing",
-        );
-    };
-    let Some(chibar2) = re_res.model_basic_info.chibar2 else {
-        return unavailable_test(
-            id,
-            group,
-            label,
-            h0,
-            "chibar2(01)",
-            "Cannot decide because chibar2 statistic is missing.",
-            "RE(MLE) did not report chibar2",
-        );
-    };
-    let Some(p) = re_res.model_basic_info.prob_chibar2 else {
-        return unavailable_test(
-            id,
-            group,
-            label,
-            h0,
-            "chibar2(01)",
-            "Cannot decide because p-value is missing.",
-            "RE(MLE) did not report Prob>=chibar2",
-        );
-    };
-    let significant = p < 0.05;
-    PanelSelectionTest {
-        id: id.to_string(),
-        group: group.to_string(),
-        label: label.to_string(),
-        h0: h0.to_string(),
-        stat_type: "chibar2(01)".to_string(),
-        stat: Some(chibar2),
-        df1: None,
-        df2: None,
-        p_value: Some(p),
-        decision: if significant {
-            "significant".to_string()
-        } else {
-            "not_significant".to_string()
-        },
-        recommendation: if significant {
-            sig_recommendation.to_string()
-        } else {
-            nsig_recommendation.to_string()
-        },
-        note: None,
-    }
-}
-
 /// Breusch-Pagan LM test for random effects (Stata xttest0).
 /// Uses pooled OLS residuals to test H0: sigma_u^2 = 0.
 /// For unbalanced panels: LM = N^2 / (2 * sum_i T_i(T_i-1)) * (A/B - 1)^2
@@ -1409,9 +1343,9 @@ fn register_panel_configure(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板回归配置 — 常数项与 VCE（默认按 entity 聚类）",
-        "Panel regression configuration — Constant and VCE (cluster by entity default)",
+    .with_documentation(
+        docs::panel::PANEL_CONFIGURE_ZH,
+        docs::panel::PANEL_CONFIGURE_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(
@@ -1492,9 +1426,9 @@ fn register_panel_vce_cluster(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板 VCE：按 Entity ID 聚类稳健（默认）",
-        "Panel VCE: cluster-robust by Entity ID (default)",
+    .with_documentation(
+        docs::panel::PANEL_VCE_CLUSTER_ZH,
+        docs::panel::PANEL_VCE_CLUSTER_EN,
     )
     .with_pin_slots(vec![PinSlot::fixed(PinDefinition::data_output(
         "VCE",
@@ -1534,10 +1468,7 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "面板回归 — 固定效应（Within）、LSDV、一阶差分、随机效应；需 Entity ID 与 Time ID（类似 Stata xtset）；VCE 默认按 entity 聚类",
-        "Panel data regression — FE (Within), LSDV, First Difference, Random Effects. Entity ID and Time ID required (like Stata xtset). VCE: cluster by entity.",
-    )
+        .with_documentation(docs::panel::PANEL_SUMMARY_ZH, docs::panel::PANEL_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let config = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("panel_config".to_string()))) {

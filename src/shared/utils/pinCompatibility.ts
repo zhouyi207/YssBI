@@ -1,5 +1,6 @@
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
+import { isExecPin } from '@/shared/types/domain/pinSemantics';
 import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
 import type {
   PinDataTypeDefinition,
@@ -46,7 +47,7 @@ function canAcceptDataType(
  * Exec pin 不进入数据类型系统；Data pin 缺少 `dataType` 是 schema/乐观创建错误。
  */
 export function buildPinDataType(pin: Pin): DataType {
-  if (pin.type === 'exec') return { kind: 'Any' };
+  if (isExecPin(pin)) return { kind: 'Any' };
   if (pin.dataType) return pin.dataType;
   throw new Error(`Pin ${pin.id} (${pin.name}) is missing structured dataType`);
 }
@@ -88,8 +89,8 @@ export function canConnectPins(
   const source = a.direction === 'output' ? a : b;
   const target = a.direction === 'input' ? a : b;
 
-  const sourceIsExec = source.type === 'exec';
-  const targetIsExec = target.type === 'exec';
+  const sourceIsExec = isExecPin(source);
+  const targetIsExec = isExecPin(target);
   if (sourceIsExec !== targetIsExec) return false;
   if (sourceIsExec) return true;
 
@@ -115,8 +116,8 @@ function isCapabilityCompatible(
   const neededDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
   if (cap.direction !== neededDir) return false;
 
-  const isExecPin = draggedPin.type === 'exec';
-  if (isExecPin) return cap.kind === 'Exec';
+  const draggedIsExec = isExecPin(draggedPin);
+  if (draggedIsExec) return cap.kind === 'Exec';
   if (cap.kind === 'Exec') return false;
 
   const concreteType = extractConcreteType(cap.dataType);
@@ -155,7 +156,7 @@ function generateSlotName(prefix: string, index: number): string {
  * Generate the ordered list of initial PinDefinitionDTOs from pin slots.
  * Matches the backend's generate_initial_pins() ordering.
  */
-export function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
+function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
   const pins: PinDefinitionDTO[] = [];
   for (const slot of slots) {
     if (slot.slotKind === 'fixed') {
@@ -180,15 +181,15 @@ export function findAutoConnectPinIndex(
   typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
 ): number {
   const targetDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
-  const isExecPin = draggedPin.type === 'exec';
-  const draggedDataType = isExecPin ? null : buildPinDataType(draggedPin);
+  const draggedIsExec = isExecPin(draggedPin);
+  const draggedDataType = draggedIsExec ? null : buildPinDataType(draggedPin);
 
   const initialPins = generateInitialPinsFromSlots(slots);
   for (let i = 0; i < initialPins.length; i++) {
     const p = initialPins[i];
     if (p.direction !== targetDir) continue;
 
-    if (isExecPin) {
+    if (draggedIsExec) {
       if (p.kind === 'Exec') return i;
       continue;
     }

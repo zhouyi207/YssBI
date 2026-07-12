@@ -6,8 +6,8 @@ const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   'AddRepeatablePin', 'RemoveRepeatablePin',
 ]);
 
-export function notifyStructuralChange(type: CommandType, graphId: string) {
+export function notifyStructuralChange(type: CommandType , graphPath: string) {
   if (STRUCTURAL_COMMANDS.has(type)) {
-    useExecutionStore.getState().markGraphDirty(graphId);
+    useExecutionStore.getState().markGraphDirty(graphPath);
   }
 }

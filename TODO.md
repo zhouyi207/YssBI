@@ -6,12 +6,17 @@
 
 由于历史代码重构原因，目前项目中存在许多的历史遗留代码，或多余或逻辑重复或实现低效；请检查整体项目，寻找出项目中的重复逻辑和未使用的逻辑，分析必要性，如果有更高效的更干净的架构请添加到 todo 的 v1.0 待办中，如果单纯的逻辑重复或者多余，也请添加到 v1.0 待办中
 
+请分析这个问题有没有必要修复，如果有必要，则使用高效且干净的架构来执行这个逻辑，同时清除掉无效逻辑代码和重复逻辑代码
+
+重复逻辑问题？无效逻辑问题？代码漂移问题？多事实源问题？代码冲突问题？
+
 ```
-同步改三处版本（例如 0.1.1）：
+同步改四处版本（例如 0.1.1）：
 
 src-tauri/Cargo.toml
 src-tauri/tauri.conf.json
 package.json
+src/app/appConfig/appLinks.ts
 
 
 提交并 push，或手动再跑 publish.yml
@@ -340,7 +345,7 @@ package.json
 - [x] 修复 Detail 点击节点报错：`nodeMetadata`（camelCase）与 `node_metadata` 字段不一致；Zustand pins selector 无限循环（`useShallow`）
 - [x] 修复 Detail 左侧 Sash 拖动卡顿：拖动过程 DOM 直改 + rAF 节流，松手再写 layout store；文档 Panel `memo` + 拖动时 `contain`
 - [x] Detail 面板 UI i18n：`detail.*` 键（`en-US` / `zh-CN`）；NodeDetailPanel、Pin 接口、文档区、空状态等按当前语言展示
-- [x] 节点短描述 i18n：后端 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 全部 `.with_description` 已迁移（Get DataFrame、Event Begin、控制/逻辑/数学/分布/转换/回归/面板/绘图等）；Detail 优先 `documentation` → `localizedDescription` → 旧 `description`
+- [x] 节点短描述 i18n（已废弃并移除）：曾用 `NodeMetaData.localized_description { zh, en }` + `with_localized_description()`；catalog 已全部改为仅 `with_documentation()` + `catalog/docs/en|zh/*.md`；Detail 仅展示 Markdown 长文档
 - [x] OLS / OLS Summary Markdown 文档去重：移除与 Pin 接口重复的 Input/Output 表格，保留公式与 Usage
 - [x] Tableau 式 Worksheet 工作区（Phase 1）：ActivityBar **Charts**（位于 Data 与 Commands 之间）；Sidebar 折叠 **Worksheets** 列表（与 Event/Variable 同风格）；Menubar **Data → 新建 Worksheet**
 - [x] Worksheet 配置迁至 **Detail** 面板（数据集 / 图表类型 / X·Y 编码 / 列列表）；打开 Worksheet Tab 自动展开 Detail
@@ -422,7 +427,7 @@ package.json
   - 执行 data 线高亮：执行器在每次 `NodeStart` 后调用 `emit_data_input_connections`，为该节点所有已连线 data input 发 `ConnectionActive`；`EdgesOverlay` 改读 `graphDataStore.connections` 作单一数据源
 - [x] 批量节点复制粘贴「一个一个出现并连接」：粘贴改为单次 `ConnectionsBatchCreated` + 一次 `PinTypesInferred`，前端 `batchConnect` 单次 set，节点与连线同时出现（2026.06.28）
 - [x] 连接 Pin 卡顿（后端）：schema 改为增量传播（`propagate_schemas_from` 下游闭包），连接/断开/批量统一经 `finish_graph_effects`，批量粘贴由 O(N) 次全图收尾降为每轮一次；类型推断暂保留全图以确保 unify 正确性（2026.06.28）
-- [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（执行器在 `NodeStart` 后对节点全部已连线 data input 发 `ConnectionActive`，`EdgesOverlay` 读 store 连接，2026.06.28 根治）
+- [x] 连接 pin 的线在执行的时候执行动画只有一部分会亮（2026.07.07 按边取数/流动重构，见上条；`EdgesOverlay` 区分 pull/flow 双态）
 - [x] **Sequence 执行顺序修复**：`TriggerOutput` / `TriggerSequence` 触发后立即完成的子帧改挂 `frame.parent_frame`（最近 waiting 祖先），不再挂到即将出栈的本帧；`TriggerAndContinue` 仍挂 `frame.id`；Loop 路径不变 → Then1 整条下游子树执行完毕后再执行 Then2，避免 Then 分支交错（`executor.rs`）
 - [x] **Sequence 执行顺序回归测试**：`tests/common/mod.rs` 新增 `RecordingEmitter` 记录 `NodeStart` 顺序；`logic_test.rs` 新增 `test_sequence_runs_branch_fully_before_next`（Then1→A→A2、Then2→B→B2，断言 `[Seq, A, A2, B, B2]`）
 - [x] **导入数据窗口与卡顿修复**：
@@ -595,7 +600,7 @@ package.json
 - [x] **执行可视化 cleanup**：移除 store 死字段（`currentNodeId` / `errorConnections` / `nodeDurations`）、`isExecuting` 死 UI 路径；`clearedVisualPatch()` 合并 reset 逻辑；`resolveTabId` 提取至 `canvasInteractionUtils.ts`；移除 `data-edge-from/to` 等遗留属性。
 - [x] **C 节技术债清理完成**：删除 `useEditorInit`、`connections.ts`、`SettingsService`、`update_subgraph_io` stub、`syncFromBackend`（node registry）、`default_type_system_snapshot`；`useShemaStore`→`useSchemaStore`；`PinRuntimeState::from_instance` 保留 pin id；`window_data_store`→`result_source_store`；`ColumnInfo` 合并为 `ColumnInfoDTO`；移除 `executedNodes` 双写；`GroupContext`/`services` barrel 收口；`useGraphManagement` 统一 `uiStore.showToast`。
 - [x] **B 节 Layout tab / 窗口 helper 收口**：`layoutTabQueries.ts`（`getLayoutTabById` / `locateLayoutTab` / `getActiveLayoutTab` / `getActiveLayoutTabAmongGroups` / `resolveEditorGroupId`）+ barrel `features/core/layout/index.ts`；close-tab / detail / menubar split / BottomBar / TabBar / layoutStore 迁移；`openDatabaseEditorWindow` / `openLogsWindow` + `windowLabels.ts`；Sidebar / menubar / LogPanel 去重。
-- [x] **IPC 分层 + Toast 单通道**：`SourceService`→`services/resultSource`；`GraphService.renameGraphResource`；`pinViewTarget.ts`（core 纯逻辑）+ `pinViewActions.ts`（开窗/toast）；`openGraphInEditor` / `sidebarResourceActions` / `statsActions`；views 去直连 services 与 sonner。
+- [x] **IPC 分层 + Toast 单通道**：`SourceService`→`services/resultSource`；`GraphService.renameGraphResource`；`pinViewTarget.ts`（core 纯逻辑）+ `openInspectableSource.ts`（开窗/toast）；`openGraphInEditor` / `sidebarResourceActions` / `statsActions`；views 去直连 services 与 sonner。
 
 ## 2026.07.05
 
@@ -626,33 +631,998 @@ package.json
 
 ## 2026.07.06
 
-- [ ] **View：embedded 预览 UX 收口**：Canvas Runtime Results 浮层与 Detail pin result 预览统一 `layout=embedded`；embedded 模式可考虑隐藏 `SourceViewShell` 重复标题（左侧已有 source 列表）；Detail 侧栏若展示 pin result，接入同一套 `UnifiedSourceView` renderer。
-- [ ] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**短描述 i18n 已完成**：`localized_description` 全覆盖；**长文档待补充**：目前仅 OLS / OLS Summary 有 `catalog/docs/` Markdown，其余统计/计量节点待批量编写）
+- [x] **Editor 组合层瘦身**：`useEditor` / `useEditorGroup` 在同一窗口多次挂载（`EditorWindow.tsx`、`useProjectSync.ts`、Canvas 子树）；`useActiveEditorGroup` 在 state/actions/workspace 重复调用；`withCanvasInteraction: false` 仍是 band-aid。目标：引入 `EditorSessionProvider` 或拆分为 `useEditorTabs` / `useEditorCommands` / `useCanvasInteractionProvider`，仅 Canvas 挂载 pointer loop。涉及 `useEditor.ts`、`useEditorGroup.ts`、`useEditorState.ts`
+- [x] **IPC / 分层边界统一**：`SourceService`（`features/core/resultSource/sourceService.ts`）直接 `invoke` 应迁至 `services/`；`resourceActions.ts` 的 `rename_graph_resource` 绕过 `GraphService`；Views 直连 services（`Sidebar.tsx`、`Workspace.tsx`、InfoView stats blocks）；`resolvePinViewTarget.ts` 在 core 层开窗 + toast，应上移到 application hook
+- [x] **Toast 单通道**：`uiStore.showToast` → `Toast.tsx` → sonner 与 ~6 处直接 `import { toast } from 'sonner'` 并存（`useProjectPicker.ts`、`resolvePinViewTarget.ts` 等）。统一为 `uiStore.showToast` 或 `shared/ui/toast` 薄封装
+- [x] **GraphDataStore flat mirror 退役**：`graphEntities[graphId]` 为权威，但 `nodes/pins/connections` flat mirror 仍被 ~15 处 `?? store.connections[cid]` fallback 使用（`graphDataStore.ts`、sync handlers、clipboard）。所有读写强制 graph-scoped API，删除 mirror 与 fallback
+- [x] **后端 ProjectState 变异 API**：graph commands 直接锁 `project_data`（`command_node.rs` 等），与 `prepare_graph_runtime` / `compile_graph` 规则易漂移。引入 `ProjectState::with_graph_mut` + 统一 `GraphInstance::recompile(scope)` 入口（`project_state_graph_mut.rs`；`GraphRecompileScope` 覆盖 RuntimePrepare / Full / FromSeeds / TopologyEffects / InferOnly；graph commands 已全部迁移）
+- [x] **后端 graph compile / rename 去重**：rename 收口至 `ProjectState::rename_graph` + 单一 command `rename_graph_resource`（含 unique name、持久化、`ResourceChanged`）；已删除 `rename_subgraph` 与 `ProjectService.renameSubgraph`；compile 已统一为 `GraphInstance::recompile`
+- [x] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
+- [x] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
+- [x] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
+- [x] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
+- [x] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
+- [x] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
+- [x] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
+- [x] **Summary 节点 Info / Inspect 双轨 source**：执行 `publish_report` 开 `/info` 报告窗（`window_{uuid}` + `Presentation::Report`）；Result output pin 保持 `emit_output` 注册的 runtime source（`Presentation::Inspector` + Struct JSON），Pin 查看走 `/inspect` + `JsonTreeView`。两套 source 不合并为同一 presentation
+- [x] **`ReportSourceView` 报告渲染收口**：新增 `features/core/resultSource/components/ReportSourceView.tsx`（`ReportView` + 可选预加载 data）；`InfoWindow` 复用；`UnifiedSourceView` 增加 `info` renderer；`SourceInspectorWindow` 对误路由的 report payload 兜底展示
+- [x] **`VarEigenvalueStabilityPanel` import 修复**：`VARStableChart` 从 `VARStableChart.tsx` default import，不再误从 `VarModelTable.tsx` 具名导入
+- [x] **框选预览蓝点**：`useSelectionBoxPreview` mount 时先 `sync()` 再订阅，避免 0×0 marquee div 在 (0,0) 显示 accent 边框
+- [x] **移除 Editor 自动打开首个 graph**：删除 `useAutoOpenFirstGraph` 与 import 后自动 open；用户从侧栏自行打开资源
 
+
+## 2026.07.07
+
+- [x] **View：Pin 结果搜索 + Inspector 窗口**：移除 Canvas Runtime Results embedded 浮层；Canvas 左上 Pin 搜索入口，筛选 node/pin 后打开 `SourceInspectorWindow`；统一 `openInspectableSource` 出口；删除 `SourceViewLayout=embedded` 死代码；Detail 侧栏保留 pin 行「View」按钮，不做 inline 预览。
+- [x] **View：Pin 搜索 UX 内联展开**：点击搜索图标 spring 展开为 input（同容器宽度动画）；再次点击图标 / Esc / 点击外部收起；input 与下拉列表合并为同一 bordered shell，避免错位；列表单行展示 `节点 · Pin`。
+- [x] **View：Pin 搜索纳入 input pins（已 supersede）**：历史版本曾枚举图中已连接 input pin；现以 `pinResults` 为唯一索引，仅展示执行后实际产出的 runtime 结果。
+- [x] **View：Pin 搜索列表滚轮修复**：Pin search 根节点加 `menu-container`，避免 Canvas 全局 wheel 拦截 `OverlayScrollbar` 原生滚动（后随 Canvas wheel 移除一并解决根因）。
+- [x] **Canvas：移除全局滚轮平移/缩放**：删除 `viewportWheel.ts` / `attachViewportWheel`（`window` capture + `preventDefault`）；Canvas 不再响应滚轮 pan/zoom，保留中键/右键/Alt+拖拽平移。
+- [x] **滚轮事件收口**：审计全项目无 `window`/`document` 级 wheel 监听；移除 Menubar / Sidebar / Detail 上仅为挡 Canvas wheel 而设的 `onWheel stopPropagation`；TabBar 拖拽时仅在容器 ref 上绑定非 passive wheel listener。
+- [x] **Canvas：Ctrl/Cmd + 滚轮缩放**：新增 `canvasWheelZoom.ts` / `useCanvasWheelZoom`，监听绑定在画布根元素（非全局 `window`）；仅 `ctrlKey`/`metaKey` + wheel 以光标为中心缩放（0.1x~5x）；普通滚轮不平移；视口走 `viewportSession` 提交与 `persistGraphViewport` 持久化。
+- [x] 给每一个节点都设置完整 Markdown 文档（含公式），点击节点时在 Detail 侧边栏展示（**builtin 139/139 已挂载、278 个 include_str 引用**）
+- [x] **节点长文档（批次 1：OLS 家族 + WLS/GLS/Predict）**：`catalog/docs/en|zh/` 新增 Configure、Fixed Scale/Cluster/HAC/Newey、VCE NonRobust/HC0–HC3、WLS、WLS Summary、GLS Configure、GLS、GLS Summary、Predict；`docs/{ols,wls,gls,prediction}.rs` + 各节点 `with_documentation` 挂载；Detail `NodeDocumentationPanel` 渲染 KaTeX 公式。
+- [x] **节点长文档（批次 2：Logit/Probit/IV/Prais/Panel）**：Logit & Probit（Configure/Summary/Predict）、IV:2SLS Configure & Summary、IV:LIML Summary、Prais 三节点、Panel Configure / VCE Cluster / Panel Summary / Panel DID (TWFE)；`docs/{logit,probit,iv,prais,panel}.rs` + 扩展 `prediction.rs`。
+- [x] **节点长文档（批次 3：VAR/ADF/VEC + DataSeries/Align/Plot）**：VAR Summary & varsoc、DF & ADF & Summary、VEC & VECRANK；Get DataSeries / Int Range / Length / Sum / Mean 与 6 个 Compare；TS Align/Diff/Pct Change/Rolling Mean/Lag、XT Align/Diff；Histogram/KDE/Line/Scatter/ECDF/Correlogram/Correlation Plot；`docs/{var,adf,vec,data_series,align,plot}.rs`。
+- [x] **节点长文档（批次 4：Distribution/Math/Logic/Value/DataFrame/Control/Debug）**：23 分布 + 10 数学 + 5 逻辑 + 22 Value（Convert/常量/变量/Call）+ 7 DataFrame（Get/Decompose/Combine/Filter/Standardize/Dummy）+ Branch/Sequence/Event Begin/Print/View；`catalog/docs/en|zh/*.md` 外部 Markdown + `docs/{distribution,math,logic,value,dataframe,control,event,debug}.rs` 以 `include_str!` 引用 + `apply_docs` 挂载（**不再使用内联 Markdown**）。
+- [x] **节点长文档（批次 5：收尾与质量）**：① 批次 4 迁回 `catalog/docs/en|zh/*.md` ✅；② 批次 4 + 批次 1–3 薄文档扩写（Pin 表、公式、Convert 类型表等）✅；③ `nodeDocumentation.test.ts` 中英回退与 KaTeX 样本断言 ✅；④ **移除节点短描述层**（后端 `localized_description` / `with_localized_description()` / catalog `*_DESC_*`；前端 Detail 仅 `documentation` → 实例 `description`）✅；⑤ 删除 `scripts/audit_node_docs.py`、`.github/workflows/ci.yml` 与 `npm run audit:node-docs`（不做文档 CI 门禁）✅。
+- [x] 节点短描述层已移除（原 `localized_description` + Detail fallback 几乎不可见，与 Markdown 长文档重复）
+- [x] **ActivityBar 节点目录（Sidebar Nodes）**：ActivityBar **图与变量之间**新增「节点」Tab；Sidebar 按 category 展示全部 **builtin** 节点（`features/domain/nodeCatalog/buildBuiltinCatalogItems`）；**拖动**到画布走现有 `NODE_TEMPLATE` / `useCanvasDrop`；**单击** Detail 展示 `NodeDefinitionDetailPanel`（Pin 规格 + Markdown 文档，无需图中实例）；画布右键 `NodePalette` 保留 pin 过滤 + 变量/函数动态项（`buildContextualCatalogItems`）；共享 UI `NodeCatalogTreeView` + 虚拟列表，消除 `NodePalette` 与侧栏重复逻辑。
+- [x] **节点目录 Sidebar UX**：搜索框置于侧栏**底部**（Popover palette 仍顶部）；分类行对齐 `SidebarCollapsibleSection`（chevron + 普通大小写）；节点行复用侧栏 hover/active token（`nodeCatalogLeafRowClass` / `sidebarItemIndent`），13px 字号与 `--sidebar-hover` 统一。
+- [x] **Charts Worksheet 无法在主编辑器打开（Detail 仍有效）**：根因是从 Charts 侧栏点击时 `activeGroupId` 可能为固定 chrome（`sidebar`），`useOpenWorksheet` 误将 tab 挂到侧栏节点；新增 `resolveEditorTargetGroupId`（跳过 sidebar/detail/panel）+ 统一 `openEditorTab`（含从 chrome 节点 `moveTab` 回收）；`openGraphInEditor` 共用；Sidebar 去掉重复 `setDetailFocus`。
+
+## 2026.07.08
+
+- [x] **画布执行中断**：右上角运行按钮左侧新增「中断执行」；`ExecutionCancelRegistry` + `cancel_execution` command + `Executor` 协作式取消（帧间检查）；前端 `cancelGraphExecution` / `interruptExecution`；与回放 `stopReplay` 分离。
+- [x] **控制流节点 Phase 1（Do / Merge / Sleep）**：`Do`（In→Out 透传 exec）；`Merge`（多路 exec 输入汇合为 Out）；`Sleep`（`Duration` 秒，上限 60s，同步 `thread::sleep`）；`catalog/control` + `docs/en|zh` + 单测。
+- [x] **控制流节点 Phase 2（For Loop / Switch）**：`For Loop`（`Count` + Index + Body/Completed，`ExecutionEffect::Loop` + `loop_counters`）；`Switch`（`Selector: Int64` + Case* + Default，`ExecRole::Cases(usize)`）；文档与单测。
+- [x] **控制流节点 Phase 3（While Loop）**：`While`（`Condition` + `MaxIterations` 默认 1000 + Body/Completed）；`On Error` 待错误传播模型定型后再做。
+- [x] **执行器等待协议根治（join 作用域 + 子任务计数）**：用显式 `join_target` / `pending_children` / `WaitKind` 替换隐式 `parent_frame` + `has_active_children` 扫栈；`ExecutionStack` 拆为 `frames` + `ready`；执行器收敛为 `spawn(+1)` / `complete(-1)` / `resume` 三单点；删除 `Suspend`/`ResumeToken` 死代码及 `insert_at`/`trigger_output` 等冗余；修复 Sequence×For/While 嵌套时 Then1 未跑完就执行 Then2；`logic_test` 新增 `test_sequence_waits_for_for_loop_before_next` / `test_sequence_waits_for_while_loop_before_next`。
+- [x] **View 快照与死代码清理**：View 改为 `ensure_view_source_for_input` 每次发布 `window_{uuid}`；删除 `open_registered_source` / `SourceAction::OpenExisting` / executor 对应分支；测试 `RecordingEmitter` + `WindowSourceEmitter` 合并为 `CapturingEmitter`。
+- [x] **执行前清空运行期状态**：`GraphRuntime::reset_execution_state()` 清空 `pins_runtime_state`、`loop_counters`、`ExecutionDataStore`；`Executor::run` 每次执行前调用；删除从未读写的 `nodes_runtime_state` 及 `NodeRuntimeState`/`NodeState`；`logic_test` 新增 `test_rerun_clears_pins_runtime_state_and_reexecutes_data_nodes`。
+- [x] **运行结果清除（Clear）**：重跑 = 替换（`reset_execution_state` + `clear_runtime_graph` + 前端 `startExecution` 清 artifacts）；工具栏新增 Clear（`VscClearAll`）手动清当前图 runtime pin sources + 前端 `pinResults`/回放/动效；`window_*` 快照保留；`clear_graph_execution_artifacts` command + `clearGraphRunArtifacts` store 单点；取消执行同步清 partial artifacts。
+- [x] **函数图设计（对齐 UE5 Blueprint）**：把「图的数据接口（签名）」与「图上的执行边界（壳节点）」彻底分开。签名（`function_inputs`/`function_outputs`）继续由 graph document + Detail 面板 `PinEditor` 作为**单一事实来源**；画布上的 Event Begin / Function Entry / Function Return 只是系统托管的**壳节点（Shell）**，其 pin 是签名的**投影**，用户不能删除 / 复制 / 从 palette 再添加，可自由移动连线。
+  - **壳节点协议（后端为准）**：`NodeMetaData` 增加 `graph_scope`（`Any` / `Event` / `Function`，决定该节点能出现在哪种图）+ `shell_role`（`Option<EventBegin | FunctionEntry | FunctionReturn>`）。派生语义：`shell_role.is_some()` ⇒ 不可删、不可复制、每图至多 1 个、palette 隐藏。删除/创建保护与作用域校验统一在后端 `create_node_raw`（作用域 + 单例校验）与删除命令（壳节点跳过/拒绝）里做，前端仅做 UX 预防。
+  - [x] **Phase 1（已完成）**：`NodeMetaData` 新增 `graph_scope`（`node_scope.rs`：`NodeGraphScope`）+ `shell_role`（`ShellRole`），`NodeDefinition::with_graph_scope` / `as_shell` 构建器；Event Begin 标记为 `EventBegin` 壳 + `NodeGraphScope::Event`；`create_node_raw` 统一做作用域 + 壳单例校验；`delete_node` 拒绝壳节点、`batch_delete_nodes` 过滤壳节点；`create_event` 自动种 Event Begin（复用 `EVENT_BEGIN_NODE_TYPE` 常量，`project_execution` 也改用该常量）；前端 DTO `graph_scope`/`shell_role` + `isShellNodeDefinition`/`nodeDefinitionAllowedInGraphKind`；palette/sidebar catalog 隐藏壳节点 + 按 GraphKind 过滤；`buildClipboardSnapshot` 与删除路径（`useEditorOperations.deleteSelected`、`useNodeManagement`）跳过壳节点；清理失效 `pub mod function`；新增 `tests/shell_node_test.rs`。
+  - [x] **Phase 2（已完成，Function Entry/Return）**：注册 `Functions:Function Entry` / `Functions:Function Return` 壳节点（`register/catalog/function/mod.rs`，`NodeGraphScope::Function` + `ShellRole::FunctionEntry/Return`）；`create_function` 自动种 Entry + Return；新增 `graph_instance/function_shell.rs`：`sync_function_shell_pins` 把 `function_inputs`→Entry 输出 pin、`function_outputs`→Return 输入 pin，按 role 编码的签名 `id` 匹配复用（改名/改类型/重排保连接，删除断连接）；`update_function_signature`（state）改签名后调用同步并返回 `Vec<PinChangeSet>`，command 复用 `emit_pin_change_events` 发 `NodePinsUpdated`，前端 `NodeEventHandler` 现有路径即可实时刷新画布 pin；`graph_scope` 统一驱动 Event 图屏蔽 Entry/Return、Function 图屏蔽 Event Begin；投影 pin 标 `with_dynamic(true)` 以持久化并避免静态同步覆盖；壳保护（不可删/复制）沿用 Phase 1 机制；新增 4 个投影测试于 `tests/shell_node_test.rs`。**同时去掉 Phase 1 兼容代码**：`NodeMetaData.graph_scope`/`shell_role` 去掉 `#[serde(default)]` 与前端可选 `?`（改为必填 + 恒序列化）。
+  - [x] **Phase 3（局部变量，已完成）**：函数作用域 local variables 后端已就绪（`VariableScope::Function` + Runtime SymbolTable 作用域校验）；前端 palette Get/Set 按可见性过滤——新增 `variableVisibleInGraph`（`domain/variable.ts`），`buildContextualCatalogItems` 接收 `graphId`/`graphKind` 过滤 `Variables:Get/Set Variable`，`NodePalette` / `CanvasOverlays` 透传 `activeTabId` 作为 `graphId`。
+  - [x] **Phase 4（Call Function 执行 + 签名 exec，已完成）**：`function_shell.rs` 以 `pins_from_signature` 将签名 data/exec 项统一投影到 Entry/Return/Call（`DataRole::Custom` / `ExecRole::Custom(sig.id)`）；`Call Function` 动态投影所有 pin，签名含 exec 入参走 `flow_processor` + `run_subroutine`，否则 `data_evaluator` + `evaluate_data_target`（pull gate 按 `node_has_exec_pins`）；`call_subgraph` 嵌套 `Executor`（`NoopEmitter`）+ `CallDepthGuard`；`update_function_signature` 经 `sync_call_nodes_for_function` 扇出 Call pin 更新，`invoke` 回包 `callerGraphs` 供前端即时刷新；`create_node_with_id` / `project_call_node_pins` 创建后即投影；`tests/function_call_test.rs`（exec 控制流透传 / 数据拉取 / 签名变更同步）、`shell_node_test.rs`（含 exec 签名投影）全绿。
+- [x] **函数图 Phase 3–4（承接上一条）**：局部变量与签名驱动的 Call Function 执行已落地；节点长文档与签名 exec 模型一致。
+- [x] **节点长文档（函数图 / 未来节点）**：补齐函数图三节点的 Markdown 长文档并接入节点文档面板——`docs/en|zh/call_function.md`、`function_entry.md`、`function_return.md` 已改为「签名 exec/data 投影」表述（移除 Pure/Impure / is_pure）；`docs/function.rs` + `docs/mod.rs` 注册；`nodeDocumentation.test.ts` 全绿。
+- [x] **函数图 Phase 3–4 复审的四项修复/增强**：
+  - **未加载图的 Call pin 陈旧根治**：`ProjectState::sync_all_call_nodes_in_graph` + `resolve_graph_dynamic_pins`（tab 打开）按目标函数当前签名重投影 Call pin——持久化仅作缓存。
+  - **嵌套调用 runtime 文档化（不加缓存）**：`call_subgraph` 每次新建嵌套 runtime，避免递归/多 Call 共享可变执行态。
+  - ~~**签名无 exec 但含副作用节点警告**~~（**已删除**）：曾用 `sideEffectWarning` toast；data-only 函数为合法形态，改由用户自行理解 exec/data 求值差异。
+  - ~~**纯函数 Call 节点视觉区分**~~（**已取消**）：不再为无 exec 的 Call 节点做绿色标题 / `pure` 徽章。
+- [x] **函数签名统一为 exec/data 单一事实来源（移除 is_pure）**：删除 `GraphInstance.is_pure`、持久化、DTO、`set_function_purity` command 及前端 `Graph.isPure` / `FunctionDetailPanel` 纯度 Switch / `setFunctionPurity` 全链；新建函数默认签名含 `exec-in`/`exec-out`；Entry/Call `flow_processor` 经 `get_exec_output_roles()` 触发签名 exec 输出；`NodePinsUpdated` `updatePins` 采用完整 pin 字段（修复签名就地修改后画布 pin 对不上）；`applyCallerGraphUpdates` 合并 invoke 回包与打开图 fallback 刷新。
+- [x] **函数图签名就地修改后画布 pin「对不上」修复**：后端投影方向经 `function_call_test` 新增 `call_node_input_output_directions_match_signature` 验证无误；根因在前端 `NodePinsUpdatedHandler` 的 `updatePins` 只 patch `name`，丢弃了就地更新 pin 的 type/direction/container/typeDisplay/dataType——改为采用 DTO 完整可见字段（与 `addPins` 一致），惠及函数壳节点、repeatable pin 重排、动态 pin reconcile 所有走 `updated_pins` 的路径。
+- [x] **Call Function 节点画布显示函数名**：`useNodeView` 对 `Functions:Call Function` 节点按 `subGraphId` 从 ResourceStore（重命名单一事实来源）解析函数名作标题，随函数重命名实时更新；函数已删除时回退默认标题。
+- [x] **图下拉/palette 函数项去掉「Call 」前缀**：`buildContextualCatalogItems` 函数项 `title` 由 `Call ${sub.name}` 改为裸 `sub.name`；并清理由此失效的 `template.subName`（palette / sidebar drag data 生产端 + `Workspace.tsx` preview 消费端全部移除，改由 `template.title` 承载，落节点仍只用 `subGraphId`）。
+- [x] **日志 sash 拖动方向修复**：`resolveSashResizeTarget` 中 after 节点（sash 右侧/下方）无论行/列 `deltaSign` 统一为 `-1`（原列布局误用 `1` 导致向上拖反而缩小日志高度）；同步更新 `sashResizeLogic.test.ts` 的列布局断言，未用的 `orientation` 参数标记为 `_orientation`。
+- [x] **函数图架构复审六项修复（去重 / 去失效逻辑）**：
+  - **文档漂移**：`docs/en|zh/call_function.md`、`function_entry.md`、`function_return.md` 全文改为「签名 exec/data 投影」模型，移除 Pure/Impure / `is_pure` / 硬编码 Then/In/Out 叙述。
+  - **过期注释**：`project_state.rs`、`project_state_graph.rs` 中「纯度」表述改为「签名」。
+  - **前端三重刷新**：新增 `incrementalPinUpdateGuard.ts`；`updateFunctionSignature` 全量 `addGraphFromData` 期间 guard 函数图 + 调用方图；`NodePinsUpdatedHandler` / `FunctionUpdatedHandler` 在 guard 激活时跳过增量 pin / 全图事件，避免与 invoke 回包重复应用。
+  - **签名 meta 单入口**：新增 `functionSignatureSync.ts`（`syncFunctionSignatureFromGraph`）；删除 `graphDocumentMeta.ts`；`graphDocumentActions` / `GraphEventHandler` / `projectIOStore` 统一经此写入 `graphMetaStore`（Detail 面板签名来源）。
+  - **Call 创建单步事件**：`command_node.rs` 提取 `node_create_dto_from_graph` + `sync_call_function_pins_if_needed`；`create_node` / `create_node_with_id` / `batch_create_nodes` / `batch_create_with_connections` 先投影 Call pin 再发一次 `NodeCreated` / `NodesBatchCreated`；移除 `emit_derived_pin_projection_after_create`（不再 0 pin → `NodePinsUpdated` 两步）。
+  - **执行分支单一判定**：`call_subgraph` 以 Call 节点实例 `node_has_exec_pins` 分支（签名投影结果），不再读取目标图 `signature_has_exec_input()`；`applyCallerGraphUpdates` 并入 `graphDocumentActions.ts`。
+  - **验证**：`function_call_test`（6）、`shell_node_test`（7）、`functionSignatureSync` / `graphDocumentActions` / `GraphEventHandler` vitest 全绿。
+- [x] **函数签名项目索引层 + 单事实源（对齐 graphMetaStore，根治 Call 投影死锁）**：
+  - **后端 `FunctionSignatureTable`**（`function_signature_table.rs`）：`ProjectState` 持有内存签名表；`read_project_index` 扩展 `function_inputs`/`function_outputs`；`rebuild_function_signature_table` 于项目加载时从索引 hydrate，已加载函数图覆盖；`get_function_signature` 读路径：已加载图 > 表 > 图文件头（不加载整图）；`update_function_signature` / `insert_graph` / `remove_graph` 维护 upsert/remove。
+  - **Call 投影只读签名**：删除 `resolve_call_projection_target` / `ensure_call_target_graph_loaded`；`resolve_call_projection_signature` 锁外解析；`sync_call_function_pins_from_signature` 替代整图 clone；`with_graph_mut` 内禁止再调 `get_graph`/`load_graph`（`project_state_graph_mut.rs` 文档化锁规则）。
+  - **前端对齐**：`hydrateFunctionSignaturesFromProjectIndex` + `ProjectGraphIndexRow.functionInputs/Outputs`；`useFunctionCatalog`（ResourceStore 名称 + graphMetaStore 签名）供 palette/右键；`buildContextualCatalogItems` 修复 `sub.inputs`/`sub.outputs` 误用；`CanvasOverlays` 去掉 `functions as Graph` 强转。
+  - **验证**：`function_call_test`（7，含 `resolve_call_projection_signature_then_sync_inside_graph_mut`）、`shell_node_test`（7）、`functionSignatureSync` vitest 全绿。
+- [x] **Call 调用点索引（Phase 1–3，`FunctionCallSiteIndex`）**：
+  - **Phase 1**：`read_graph_call_sites_from_file` / `read_graph_call_sites_from_project` 轻量 stub 扫描；`sync_call_nodes_for_function` 改读 `get_function_signature` + `sync_call_function_pins_from_signature`（不再加载目标整图）；删除 `sync_call_function_pins` 包装。
+  - **Phase 2**：`function_call_site_index.rs` 反向索引；`rebuild_function_call_site_index` 于项目加载；`insert_graph` / `remove_graph` / `unload_graph` + 节点 create/delete/patch 增量维护。
+  - **Phase 3**：`collect_function_call_sites` 只查内存索引（零磁盘）；`sync_all_call_nodes_in_graph` 单次 `with_graph_mut` 批量投影；未加载 caller 同步后批量 `persist_loaded_graph`。
+  - **验证**：`function_call_test`（8，含 `call_site_index_tracks_create_and_delete_without_full_graph_scan`）、`shell_node_test`（7）、`function_call_site_index` 单测全绿。
+- [x] **执行连线动画根治（live 绿高亮 + 取数/流动双态 + 架构去重）**：
+  - **根因**：`invoke("execute_project")` 在 Channel 排空前返回 → `finalize` 用不完整 recording 提交视觉；`nodeError` 立即把全局 `status` 置 `error` → `isRunning=false` 提前关掉连线动画；旧执行器在 `NodeStart` 批量 `emit_data_input_connections` + `execute_upstream_data_nodes` 导致 fan-out、纯 data 链 pull/flow 顺序错乱、exec 驱动上游无 flow。
+  - **后端执行器拆分**：删除单体 `executor.rs`（~697 行）→ `executor/mod.rs` + `wire_events.rs`（`ConnectionActive`/`ConnectionFlow` **唯一发射点**）+ `data_inputs.rs`（`satisfy_data_inputs` → 按边 `emit_data_pull` → 递归求值 → `emit_data_flow`）；`absorb_pin_side_effects` 共用 pin 副作用收集；`halted` 标志 + 清空 ready 队列，节点失败后 Sequence 不再继续 Then 3。
+  - **Call Function 执行隔离**：`prepare_execution_bundle`（BFS 收集依赖 + `snapshot_for_execution` 深拷贝）于 `execute.rs` spawn 前构建隔离 bundle，修复「目标函数图未加载」与执行中外部图被编辑污染。
+  - **Channel 排空**：`executionChannelDrain.ts`（`createExecutionStreamDrain` / `bindExecutionEventChannel`）在 invoke 返回后 `waitForStreamEnd` 直至 `executionComplete` 处理完毕。
+  - **前端视觉单会话**：`executionVisualSession.ts` 承载 live/replay 快照（`completedConnections`=取数 pull、`flowingConnections`=流动 flow）；`executionLiveFeed.ts` 按帧批处理，`connectionFlow` 延后一帧以区分双态；`commitExecutionVisual` 单次 flush + 写入 store。
+  - **live 结束 / replay**：`finalizeExecutionRun` 统一 `commit` → `setRecording` → `ensureGraphExecutionTerminal`（仅 status 仍为 `running` 时兜底）；replay 不再调 `startExecution`（避免清空 recording 导致只能播一次）；`play()` 对 recording 做 spread 快照。
+  - **错误与 toast**：`nodeError` 保持 `running` 直至 `executionComplete`；`executionRecording.ts`（`recordingHadError` 优先读 `executionComplete.hasError`）；`useProjectOperations` 按录制结果 toast。
+  - **画布连线渲染**：`Edge.tsx` / `EdgesOverlay.tsx` 区分 `isPullActive` / `isFlowActive`（pull 脉冲发光 + flow 流动虚线）；`GraphExecutionState` 增 `flowingConnections`。
+  - **死代码清理**：移除 `waitForRecordingIdle`、`commitExecutionVisualFromRecording`、`replayRecordingToVisual`、`applyExecutionVisualEventInternal` 薄包装；`wire_events` 共用 `emit_connection_active`。
+  - **验证**：`cargo check`；`function_call_test` + `logic_test`；vitest `executionVisualSession` / `executionRecording` / `executionChannelDrain` / `useExecutionPlayback` / `graphRunArtifacts`（20 项）全绿。
+- [x] **执行 data 线高亮文档同步（2026.07.07 条目更正）**：历史描述中的 NodeStart 批量 `emit_data_input_connections` 已 supersede 为按边取数/流动模型（见上条）。
+- [x] **Call Function 右键拖线自动连接 + 签名 pin 类型解析**：
+  - **有效定义层（方案 C）**：新增 `features/domain/nodeDefinition/resolveEffectiveDefinition.ts`——`signatureToPinSlots` + `resolveEffectiveDefinition` 为 Call Function 注入投影后 `pinSlots` / `typeCapabilities`（对齐 Rust `function_shell`）；`buildNodeDraft` / `createNodeWithConnection` / `buildContextualCatalogItems` 统一走标准路径（`findAutoConnectPinIndex` / `isNodeCompatibleWithPin`）。
+  - **删除重复逻辑**：移除 `callFunctionDraft.ts`、`findAutoConnectPinIndexFromPins`；`CALL_FUNCTION_NODE_TYPE` 单点导出；后端保留 `predetermined_new_pin_ids` 与乐观 pin id 对齐。
+- [x] **前端 `tsc --noEmit` 清零（~92 个既有类型错误 → 0）**：本次函数图改动未引入新错误；系统性修复而非单点 suppress。
+  - **共享类型 / 环境**：`vite-env.d.ts` 补 `import.meta.hot`；`node.ts` 导出 `PinDirection`；`GraphData` 增 `functionInputs`/`functionOutputs`；`graphConverters` / `viewportTransform` 等清理无用导入。
+  - **features/**：`projectIOStore` 补 `useGraphDataStore` 导入 + 快照 `as unknown as`；`useNodeManagement` `batchCreateNodes` 改为 `{ nodeType, x, y }[]` 请求数组；`useCanvasDrop` `setPendingConnection: Pin | null`；`Detail.tsx` Function/Data 分支类型收窄（`selectedFunction` + `DatabaseRecord` 显式映射）；`resolveNodePinSpecs` / `graphDataStore` / canvas 交互等多处小修。
+  - **views/**：`BarChart` D3 tooltip 回调改 `D3Onable` + `this` 取 datum；`CorrelogramChart` `q_stat`/`p_value` 可选；`CorrelationPlot` 清理未用变量；InfoView 13 个组件去掉无用 `React` 导入；`Edge`/`EdgesOverlay`/`NodeDetailPanel`/`Sidebar`/`SettingsView`/`EditorWindow` 未使用符号清理。
+  - **测试夹具**：`graphDataStore.test` / `NodeEventHandler.test` / `EdgesOverlay.test` pin `direction: 'input'|'output' as const`，返回类型 `GraphDataLike`。
+  - **验证**：`npx tsc --noEmit` 退出码 0。
+- [x] **OLS Summary Serial Correlation 点击崩溃修复**：`result.dw` 为 `{ d: number }` 非裸 number，传入 `formatNum` 触发 `toFixed is not a function`；`SerialTestsBlock` 改为 `formatNum(result.dw.d)`；`formatNum` 对非 number 做防御。
+- [x] **Rust 编译 warning 清零**：`yssbi`（`command_project/types`、`pin_data_type`、`persistence`、`lexer`、`panel_nodes` 等）与 `yss-sci`（`prais`/`be`/`mle`/`time`/`twoway` 未使用赋值）清理；`cargo build` 0 warning；`function_call_test` 9/9 通过。
+
+## 2026.07.09
+
+- [x] **`DatabaseRecord` 强类型化**：`shared/types/dto/database.ts` 对齐 Rust `DatabaseDeclDTO`；入库边界 `normalizeDatabaseRecord` / `normalizeDatabases`；`Detail.tsx` / `DataDetailPanel` / `Sidebar` / 事件 handler / import 路径去除 `Record<string, unknown>` 与重复字段映射；`sourcePath` 由 `databaseSourcePath(engine)` 派生。
+- [x] **`LoadDatabaseEngineSpec` 去重 + import 写入 engine**：`databaseService` 删除重复 engine 类型，复用 `dto/database`；`databaseRecordFromLoad` + `commitLoadedDatabase` 在 import 时持久化 engine，Detail 数据源路径无需等项目重载。
+- [x] **`projectIOStore` 快照路径单测**：`projectSnapshot.ts` 纯函数 + 8 项 vitest（`database.test` / `projectSnapshot.test` / `projectIOStore.test`）。
+- [x] **`GraphData` ↔ `Graph` 转换层**：`dto/graphModel.ts`；`exportSnapshot`/`loadProjectFromData`/`toFrontendGraph` 显式转换，删除 `as unknown as` 与 `toFrontendGraph` 内 ~90 行重复 pin 解析。
+- [x] **Detail 面板 props 单入口**：`resolveDetailPanelModel` / `useDetailPanelModel` / `DetailPanelModel` 判别联合 + vitest。
+- [x] **共享测试图工厂**：`@/tests/helpers/graphFixtures`（`makeTestGraph` / `makeOverlappingLocalIdGraphPair`）+ 3 项消费方测试迁移。
+- [x] **PlotView D3 交互工具层**：`shared/plot/d3Tooltip.ts` 统一 tooltip 坐标与 theme HTML；7 个图表组件迁移 + 4 项 positioning 单测。
+- [x] **Plot payload 解析类型收敛**：`dto/plotPayload.ts` + 9 项 vitest；`PlotWindow` toast + 空态。
+- [x] **`ConnectionLine` gesture 类型收窄**：`getConnectGesture` 类型守卫；`ConnectionLine` / `Canvas` 去除 gesture `any`。
+- [x] **画布拖放 `data.current` 类型契约**：`CanvasDragPayload` + 守卫；生产/消费端贯通 + 5 项 vitest。
+- [x] **Info / 报告统计块 DTO 结构化**：`types/report` serialTests + correlogram；6 项 vitest。
+- [x] **`dataStore` barrel 与跨 store 依赖审计**：lifecycle 模块拆分 + audit 单测 + `loadProject` 路径测试。
+- [x] **`batchCreateNodes` 请求类型单点定义**：`dto/batchCreateNode.ts` + 2 项 vitest；Hook 改 `requests[]` API。
+- [x] **`GraphData.connections` 双格式收敛**：store 固定 `ConnectionData[]`；`normalizeGraphDataLike` hydrate 单点 + `buildGraphBucket` 去分支；export 仍经 `graphDataToDomainGraph` 包装。
+- [x] **Canvas 编辑器资源类型贯通**：`EditorCollections` + `EditorVariables`/`EditorFunctions`；canvas drop 路径编译期校验 + 2 项 vitest。
+- [x] **Store `NodeData` → UI `Node` 单点桥接**：`toUiNode` + `UINode` 渲染层；3 项 vitest。
+- [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`layoutTabModel` + `EditorGroupSnapshot`；`useEditorGroups` 去 `any`；4 项 vitest。
+- [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts`；连接/值写入以 `dataType` 为准；`pinViewTarget` 改 `isExec`；5 项 vitest。
+- [x] **InfoView 报告类型分层**：`shared/types/report/` 按模型拆分 + `guards` 去重；曾用 `InfoView/shared/types.ts` 薄 re-export（后续已删除，直接 `@/shared/types/report`）；IV 契约测试 7 项 vitest。
+- [x] **Info 报告 IPC 边界窄化**：`parseReportPayload` 单点分发 + `parseRegression`/`parsePanel`/`parseVar` 等；`ReportView` 渲染前校验；`parseCommon` 去重系数解析；11 项 vitest。
+
+## 2026.07.10
+
+### 身份收敛（path 取代 graph id）
+
+Event/Function 资源身份已统一为磁盘相对路径；Domain `Graph.path`、Store `GraphData.path`、`GraphPath` 类型别名、执行/历史/画布 API 参数 `graphPath`、`playbackGraphPath`、`variablesGraphScopePath`、`getGraphByPath` 已落地；Rust `command_node` IPC 参数 `graph_path` 与前端 `graphPath` invoke 对齐。
+
+- [x] **消灭前端 Graph 资源 `graphId` 命名**：`GraphId` → `GraphPath`；`NodeData.graphId` → `graphPath`；`graphDataToDomainGraph` / hydrate / 测试夹具同步；`resolveExecutionGraphPath` 取代 `resolveExecutionGraphId`。
+- [x] **图级 IPC 参数统一 `graphPath`**：`NodeService` / `ConnectionService` / `PinService` / `SourceService.getPinDescriptor` invoke 键与 Rust `graph_path` 对齐（去除 `subgraphId` / `graphId` invoke 键漂移）；删除未使用的 Rust `graph_id.rs`（UUID `GraphId` 包装）。
+
+> **VS Code 架构对照 & YssBI 收敛方向**（目标：图编辑器向「资源 URI + 单文档实例 + Tab 引用」模型靠拢）
+
+| 概念 | VS Code | YssBI 当前（收敛后） | 差距 / 待办 |
+|------|---------|----------------------|-------------|
+| **资源身份** | `URI`（`file:///…`、`untitled:…`） | `Graph.path` + `GraphResourceUri` helpers | [x] `toGraphResourceUri` / `parseGraphResourceUri`；[x] ResourceStore 逻辑键 = `meta.uri`（`resourceKey` / `buildGraphResourceMeta` / `lookupGraphResource`） |
+| **已打开文档** | `ITextDocument` / model，按 URI 单实例 | `graphEntities[graphPath]` + `GraphSessionStore` 单活跃 reload | [x] 单活跃图加载；[x] 未打开图零正文（`deactivateInactiveGraphPath` unload）；[x] 脏/版本/冲突状态机（`DocumentStateStore` 单源；`reconcileResourceSnapshot` stale/conflict；Tab 读 `documentState`） |
+| **Tab / Editor** | Tab = 资源 URI 引用，可重复打开同 URI 多组 | `LayoutTab.id` = graph path | [x] 值已是 path；[x] `LayoutTab` / `buildGraphLayoutTab` 文档化 + 校验；[x] 禁止 tab 级 UUID（规则 + `isValidGraphResourceTabId`） |
+| **工作区索引** | `workspace.fs` 扫描 + 文件监听 | `scan_graph_resource_index` + `ResourceStore` | [x] 扫描索引；[x] Rust `project_watcher` + `ProjectIndexInvalidated` → `refreshResourceIndex` |
+| **图内实体** | 符号/AST 局部 id（非文件路径） | `NodeId` / `PinId` UUID | [x] 正确分层，保持 |
+| **跨文件引用** | Import path、Find References | `subGraphPath` on Call、`FunctionCallSiteIndex` | [x] `get_function_call_sites` IPC + Function Detail 调用方列表（基础 Find References）；[x] 跳转定义（`openGraphResource` + Node Detail）；[x] 重命名 path 级联（Rust `move_graph_resource_path` + 前端 `cascadeGraphPathReferences` / `migrateGraphResourcePath`） |
+| **局部状态** | 函数内变量不在文件 URI 层 | `VariableScope::{Event,Function}` + Sidebar Local（`variablesGraphScopePath`） | [x] scope path 字段；[x] Sidebar Local 为唯一入口（已删 Detail 重复区块） |
+| **Pin 画布上下文** | N/A | React props `graphPath` | [x] `Pin`/`Node`/`CanvasNode`/`usePinInput` props `subgraphId` → `graphPath`，与 store 一致 |
+| **Detail 选中** | Resource 选中 | `DetailFocus` event/function 用 `path` | [x] `DetailFocus` 图资源分支 `id` → `path`；`ResourceRef.id` 保留（值=path，见原则 4） |
+| **临时资源** | `untitled:Untitled-1` | 不使用 untitled 句柄 | [x] 已移除 `untitled:…` 草稿模型；创建即分配 `events/…` / `functions/…`；`GraphResourceMoved` 仅用于重命名/保存 path 变更 |
+| **执行上下文** | 无直接对标 | `playbackGraphPath`、`targetGraphPath` | [x] 已改名；保持与活跃 tab path 一致 |
+
+**收敛原则（写进后续 PR / 规则）**
+
+1. **图资源只认 path（或 URI）**，禁止新增 `graphId` / `GraphId` / UUID 图键。
+2. **Tab / 执行 / 历史 / viewport / 变量 scope** 全部传递 `graphPath: GraphPath`，禁止第二套别名；**Tab.id 禁止 UUID**。
+3. **Node/Pin/Connection** 继续 UUID，类比 VS Code 文档内符号。
+4. **ResourceStore** 逻辑键 = `ProjectResourceMeta.uri`；`ResourceRef.id` / `Graph.path` 保留为磁盘相对路径（见原则 1）。
+5. **文档脏/版本/冲突** 以 `DocumentStateStore`（键 = `resourceKey`）为单源；Tab 仅引用资源，禁止再写 `LayoutTab.isDirty`。
+
+### tabbar 收敛
+
+> **结论**：**可以向 VS Code 收敛，且主体模型已基本对齐**——Tab = 资源引用（`LayoutTab.id` = graph path / worksheet id）、标题与脏状态外置（`ResourceStore` + `DocumentStateStore`）、正文单实例（`graphEntities[graphPath]` + 后端单 loaded graph）。剩余差距不在「能不能收敛」，而在 **TabBar 职责分层**、**Tab 元数据去重**、**统一切换/关闭门面**，以及部分交互细节与 `useTabManagement` / `TabBar.tsx` 重复编排。
+
+#### VS Code vs YssBI（TabBar / EditorGroup 专项）
+
+| 概念 | VS Code | YssBI 当前 | 差距 / 待办 |
+|------|---------|------------|-------------|
+| **Tab 身份** | `ITabInput` → resource URI | `LayoutTab.id` = path / worksheet id | [x] graph path 已收敛；[x] `layoutTabResourceRef` + `resourceKey` |
+| **Tab 标题** | `IEditorLabelService` 从资源派生 | `resolveTabDisplayName` + ResourceStore | [x] 删除 `updateOpenResourceLabels`；title 仅 hydrate 快照 |
+| **Tab 脏点** | `ITextDocument.isDirty` | `DocumentStateStore` → TabBar 圆点 | [x] 已单源读取；[x] 不再读 `LayoutTab.isDirty` |
+| **Tab 状态装饰** | problem / readonly / preview / pinned | icon + tooltip（missing/stale/conflict）+ preview 斜体 | [x] preview / pin |
+| **Tab 切换** | `IEditorService.openEditor` 统一入口 | `switchEditorTab` | [x] graph + worksheet 统一入口 |
+| **Tab 关闭** | `closeEditor` / `closeEditors` / 中键 | `closeEditorTab` → graph / worksheet | [x] `resolveTabDisplayName` 用于确认文案 |
+| **TabBar 职责** | View 薄层 + `EditorService` 编排 | `tabCommands` + 薄 `TabBar` | [x] 编排下沉 |
+| **组操作** | 关闭组 / 拆分编辑器 | `closeEditorGroup` / `splitEditorGroup` | [x] 单点实现，无重复 release |
+
+#### 已对齐（可视为收敛基线）
+
+- [x] **Tab.id = 资源 path**：graph `events/…` / `functions/…`；worksheet id；禁止 tab 级 UUID（见身份收敛表）。
+- [x] **Tab 标题优先 ResourceStore**：`resolveTabDisplayName` + `ResourceStore`。
+- [x] **脏状态单源**：`DocumentStateStore`；`collectDirtyGraphTabs` / TabBar 圆点不读 `LayoutTab.isDirty`。
+- [x] **打开/激活单入口（graph）**：`openGraphInEditor` → `openEditorTab` + `switchEditorGraphTab`。
+- [x] **关闭单入口**：`closeEditorTab` 按 type 分发 graph / worksheet。
+- [x] **跨组 Tab 移动**：`layoutStore.moveTab` + 空组折叠（注释已标 VS Code 逻辑）。
+- [x] **分屏复制 Tab**：拖画布边缘创建新 editor group 并复制当前 tab（`editorGroupCommands` + `splitEditorGroupAtEdge`）。
+- [x] **重命名/路径迁移同步 Tab**：`migrateGraphResourcePath` 更新 `LayoutTab.id`；标题由 `ResourceStore` 派生，不再写回 `LayoutTab.title`。
+
+#### 待收敛（按优先级）
+
+- [x] **P0 — TabBar 编排下沉**：`tabCommands.ts` 收敛 `switchTab` / `closeTab` / `closeEditorGroup` / `splitEditorGroup`；`TabBar.tsx` 仅调用 commands；`useTabManagement` 为薄封装。
+- [x] **P0 — 统一 Tab 切换 API**：`switchEditorTab(groupId, tab)` 覆盖 graph + worksheet；`switchEditorGraphTab` 保留为薄兼容层。
+- [x] **P1 — Tab 元数据单源**：`LayoutTab.title` 改为可选 hydrate 快照；删除 `updateOpenResourceLabels`；`reconcileOpenLayoutTabsWithResources` 在 project load 剥离 title。
+- [x] **P1 — Tab 资源引用显式化**：`layoutTabResourceRef(tab)`；TabBar / close / dirty 统一走 `resourceKey`。
+- [x] **P1 — 关闭/保存文案单源**：`resolveTabDisplayName` 供 `closeGraphTab` / `closeEditorTab` / `collectDirtyGraphTabs` 使用。
+- [x] **P2 — 组关闭去重**：`closeEditorGroup` 单点关闭 + `removeNode`；移除多余 `releaseGraphCacheIfClosed` 批量调用。
+- [x] **P2 — Tab 状态 UI 规范**：`missing` / `stale` / `conflict` icon + tooltip（i18n）。
+- [x] **P2 — Tab 上下文菜单**：右键 Close / Close Others / Close All / Close Saved；Reveal in Sidebar。
+- [x] **P3 — Preview / Pin tab**：侧栏单击 preview、双击/显式打开 pin；每组至多一个 preview；脏状态自动 pin；Tab 斜体 + 右键「保持打开」。
+- [x] **P3 — 布局恢复与资源索引对齐**：`reconcileOpenLayoutTabsWithResources` 在 load / refresh index 后剥离 `LayoutTab.title` 快照。
+
+#### Tab 激活性能架构（对标 VS Code Model 缓存）
+
+> **结论**：TabBar 卡顿主因不是标签 DOM，而是 **每次切换都 `loadGraph` 打后端 IPC** + **layout 节点粗粒度订阅**。目标：Tab = 轻量引用；正文常驻 `graphEntities`；切换 = 内存命中 + 窄订阅重绘。
+
+##### VS Code vs YssBI（激活热路径）
+
+| 维度 | VS Code | YssBI 改造前 | 目标 |
+|------|---------|--------------|------|
+| **Tab 存什么** | `EditorInput`（URI 句柄） | `LayoutTab` 嵌在 `layoutStore.nodes` | [x] 保持引用模型；[ ] 长期拆 `editorTabsStore` |
+| **切换 Tab** | 显示已有 `ITextModel` | 每次 `ProjectService.loadProjectGraph` | [x] `graphLoadPolicy` 内存命中跳过 IPC |
+| **正文缓存** | `ModelService` 单例 per URI | `graphDataStore` 已有 | [x] `isGraphCachedInMemory`；stale/conflict 仍强制 reload |
+| **激活编排** | `EditorService.openEditor` | `switchEditorTab` → `activateGraphTab` | [x] 缓存命中走 `activateCachedGraph` |
+| **layout 更新** | Grid 与 model 分离 | `updateNode` 整包 spread `data` | [x] `setEditorGroupActiveTab` 仅 patch `activeTabId` |
+| **TabBar 订阅** | 轻量 tab 模型事件 | `LeafNodeRenderer` 读整节点 | [x] `useEditorGroupTabStrip` 窄订阅 |
+| **TabBar 渲染** | 自定义 pointer 拖拽 | N×`useDraggable` + smooth scroll | [x] 事件委托 + `scrollIntoView auto` + `TabItem` 精准 memo |
+
+##### 目标架构（分层）
+
+```
+TabBar (View)
+  → useEditorGroupTabStrip(groupId)     // tabs + activeTabId only
+  → tabCommands / switchEditorTab       // application 编排
+      → applyEditorTabSelection         // layoutStore.setEditorGroupActiveTab
+      → activateGraphTab
+          → graphLoadPolicy             // isGraphCachedInMemory?
+          │     ├─ hit  → activateCachedGraph (viewport + loaded flag)
+          │     └─ miss → projectIOStore.loadGraph (IPC once)
+          └─ graphSessionStore.setGroupActivePath
+graphDataStore[graphPath]               // 正文单实例（与 Tab 解耦）
+```
+
+##### 收敛原则
+
+1. **已打开且非 stale/conflict 的图禁止重复 load**：同 path 多 Tab / 多组共享 `graphEntities`。
+2. **Tab 切换先同步 layout activeTabId，再异步激活正文**：UI 立即反馈；缓存命中时激活近即时。
+3. **TabBar 订阅粒度 ≤ `{ tabs, activeTabId }`**：不因 editor content / selection 变化重绘 Tab 条。
+4. **删除重复激活 API**：统一 `switchEditorTab`；移除 `switchEditorGraphTab` 兼容层。
+
+##### 待办 checklist
+
+- [x] **P0 — 图加载缓存策略**：`graphLoadPolicy.ts` + `loadGraph` / `activateGraphTab` 内存命中。
+- [x] **P0 — 轻量 activeTab 更新**：`layoutStore.setEditorGroupActiveTab` 替代 `updateNode` spread。
+- [x] **P1 — TabBar 窄订阅**：`useEditorGroupTabStrip` + `EditorGroupTabStrip` 包裹层。
+- [x] **P1 — TabBar 渲染瘦身**：strip 事件委托、可见时才 `scrollIntoView`、 `TabItem` 比较函数 memo。
+- [x] **P1 — 删除重复 API**：移除 `switchEditorGraphTab.ts`；`openGraphInEditor` 直调 `switchEditorTab`。
+- [ ] **P2 — editorTabsStore 与 layout 持久化分离**：运行时 Tab 顺序/激活态独立 store；layout 仅 hydrate/dehydrate。
+- [ ] **P2 — Tab 拖拽去 dnd-kit 逐 Tab 注册**：改 strip 级 pointer 监听或虚拟化 Tab 列表。
+- [ ] **P3 — 多 Canvas 保活**（大图频繁切换可选）：隐藏保活 vs 单 Canvas 换 model 权衡。
+
+#### Pin Result Search（执行后查结果）
+
+> **结论（已修复）**：执行后 Pin 结果写入 `ExecutionStore.pinResults`；搜索以 `pinResults` 为唯一索引，`openInspectableSource(entry.ref)` 单管道打开。
+
+##### 架构
+
+```
+PinResultSearch (View)
+  → usePinResultSearch(graphPath, query)
+      → collectPinResultSearchEntries(pinResults)   // 唯一数据源
+      → resolveLabels from graphDataStore（仅展示）
+      → filterPinResultSearchEntries
+  → openInspectableSource(entry.ref)
+```
+
+- [x] **P1 — 以 pinResults 为索引**：删除图 pin 遍历、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`。
+
+#### TabBar 收敛原则（写入规则 / PR checklist）
+
+1. **Tab 不拥有正文与脏状态**：仅引用 `ResourceRef`；正文在 `graphEntities` / worksheet store；脏在 `DocumentStateStore`。
+2. **TabBar 是 View**：用户手势 → application `tabCommands` / `editorGroupCommands`；禁止在 `TabBar.tsx` 新增业务分支（save/load/migrate）。
+3. **同 path 多 Tab 合法**：允许多 editor group 引用同一 `graphPath`；禁止为「避免重复」复制 `graphEntities` 或二次 load 后端。
+4. **切换/关闭必须带 `groupId`**：session（`GraphSessionStore`）、viewport、selection 清理与组上下文绑定。
+5. **标题与状态只读派生**：`ResourceStore.name` + `DocumentStateStore`；`LayoutTab` 仅存 `id` / `type` / `component`（+ 可选 hydrate 快照）。
+
+#### 编辑器拆分 / EditorGroup 架构收敛（对标 VS Code）
+
+> **结论**：Tab 元数据已收敛，但 **EditorGroup 布局树操作仍分散**——`layoutStore.splitNode`（按钮分屏）、`Workspace.handleDragEnd`（内联 `setState` 四向分屏）、`moveTab`（TabBar 合并）三套逻辑重复且能力不对齐。需将 **布局树插入** 收敛到 `layoutStore.splitEditorGroupAtEdge`，将 **用户手势编排** 收敛到 `editorGroupCommands`，TabBar / Workspace 仅转发。
+
+##### VS Code vs YssBI（EditorGroup 专项）
+
+| 行为 | VS Code | YssBI 改造前 | 目标 |
+|------|---------|--------------|------|
+| **拖 Tab → 编辑器四边** | 新 EditorGroup + 复制 Tab | `Workspace.tsx` 内联 ~80 行 `setState` | [x] `splitEditorWithTab` → `splitEditorGroupAtEdge` |
+| **拖 Tab → 另一组 TabBar** | `moveEditor` 移动 Tab | `layoutStore.moveTab` | [x] 保持；经 `editorGroupCommands` 导出 |
+| **按钮分屏（右/下）** | `splitEditor` | `splitEditorGroup` → `splitNode`（仅右/下） | [x] 统一走 `splitEditorGroupAtEdge` |
+| **双击 TabBar 空白** | 新建 `Untitled-1` | 有意不实现（Event/Function 需显式选择） | [x] 空白双击：preview → pin；否则 toggle maximize group |
+| **中键关闭 Tab** | `closeEditor` | 未实现 | [x] TabItem `auxclick` |
+| **Tab 视觉** | 底边高亮、inactive 底色差、hover 显关闭 | 顶边 `before:bg-primary` | [x] `editorTabStyles` 底边 accent |
+
+##### 目标架构（分层）
+
+```
+TabBar / Workspace (View)
+    → editorGroupCommands（application 编排）
+        → layoutStore.splitEditorGroupAtEdge / moveTab（布局树单点）
+        → openGraphInEditor / createGraphResource（resourceActions）
+editorSplitLayout.ts（纯函数：edge → direction/isAfter）
+```
+
+##### 收敛原则
+
+1. **禁止在 View 内联布局树 mutation**：`Workspace` 不得再 `useLayoutStore.setState` 手写分屏。
+2. **四向分屏与按钮分屏共用同一 store action**：`splitEditorGroupAtEdge(targetId, edge, payload)`。
+3. **拖边分屏 = 复制 Tab**；**拖 TabBar = 移动 Tab**（VS Code 语义，源组保留）。
+4. **新建图走资源层 + 显式 kind**：Sidebar / 菜单 `createGraphResource('event'|'function', name?)` → 后端 `add_graph_with_existing_names` 分配 path → `openGraphInEditor`。
+5. **样式与交互分离**：`editorTabStyles.ts` 管视觉；`TabBar.tsx` 仅绑事件到 commands。
+
+##### 待办 checklist
+
+- [x] **P0 — 布局树分屏单点**：`editorSplitLayout.ts` + `layoutStore.splitEditorGroupAtEdge`；删除 `Workspace` 内联分屏。
+- [x] **P0 — 编排门面**：`editorGroupCommands.ts`（`splitEditorWithTab` / `splitEditorAtEdge` / `moveTabBetweenGroups`）。
+- [x] **P1 — Tab 双击语义**：preview tab 双击 pin；非 preview 双击 maximize editor group（不新建空白图）。
+- [x] **P1 — Tab 样式 VS Code 化**：底边 active accent、inactive 底色、hover 关闭按钮。
+
+##### 统一拖放预览（`EditorDropPreview`）
+
+```
+useEditorDragPreviewMonitor（DndContext 子组件）
+  ├── tabBarReorderStore     → Tab 重排槽位 + TabDragOverlay
+  ├── editorDropPreviewStore → EditorDropPreviewOverlay
+  │     ├── kind: split        → Tab 拖向编辑器四边（半屏高亮）
+  │     └── kind: canvas-open  → Sidebar Event/Function 拖向画布/Watermark（全屏高亮）
+  └── WorkspaceDragOverlay     → 浮动拖拽芯片（Tab / Sidebar 共用 editorDragChipClass）
+```
+
+- [x] **P1 — 侧栏 graph 打开预览收敛**：删除 `CanvasDropZone` 内联蓝色预览，并入 `EditorDropPreviewOverlay`。
+- [x] **P1 — Tab 重排预览（VS Code 挤开槽）**：`tabBarInsertIndex` + `useEditorDragPreviewMonitor`。
+- [x] **P1 — 分屏拖放预览**：`editorDropPreview` + `EditorDropPreviewOverlay`（半屏淡色高亮）。
+- [ ] **P2 — 拖 Tab 到组边缘合并**（center drop 合并 editor group，对标 VS Code dock）。
+- [ ] **P2 — 空组自动折叠**（最后一 tab 拖走后折叠组，已有 `moveTab` 部分逻辑，需与四向分屏联调）。
+- [ ] **P3 — Tab 溢出菜单**（`…` 列出不可见 tabs，对标 VS Code tab actions）。
+
+
+### 重复逻辑：双重 `loadGraph`（已收口）
+- **原问题**：创建图后打开时，可能在 UI 层与 `activateGraphTab` 各触发一次 `loadGraph`；`activateGraphTab` 与 `projectIOStore.loadGraph` 还重复做缓存判断 / viewport 激活。
+- **现状**：`openCreatedGraph` 仅调 `openGraph` → `openGraphInEditor` → `switchEditorTab` → `activateGraphTab`；**唯一** IO 入口为 `projectIOStore.loadGraph`（含 in-flight 去重）。
+- **架构**：
+  - `graphDocumentLoadPolicy.isGraphCachedInMemory`（core）：是否需打后端
+  - `loadGraph`（IO）：缓存命中只返回 `true`；未命中才 fetch + hydrate
+  - `activateGraphTab`（editor）：session + 单次 `loadGraph` + `activateCachedGraph`（viewport / loaded flag）
+- **删除**：`loadGraph` 内 `activateCachedGraph` / `ensureGraphViewport`；`activateGraphTab` 内重复的 `isGraphCachedInMemory` 分支。
+
+### 多事实源：`activeGroupId` vs `activeEditorGroupId`（已收口）
+- **原问题**：`useActiveEditorGroup` 在 override 时把 `activeEditorGroupId` 误设为 `groupId`；`useEditorState` 同时暴露 `activeGroupId` / `activeEditorGroupId` 别名；Tab 激活用 nullable `resolveEditorGroupId` 可能静默失败。
+- **架构**：
+  - **唯一事实源**：`layoutStore.activeEditorGroupId`（全局焦点 editor group）
+  - **`useActiveEditorGroup`**：`groupId`（上下文组）与 `focusedEditorGroupId`（store 焦点）分离
+  - **Tab 路由**：需保证有效 editor group 时用 `resolveEditorTargetGroupId`（`useTabManagement`）
+  - **焦点判定**：`useIsActiveEditorGroup` / `ensureActiveGroup` 直接比较 `activeEditorGroupId`
+- **删除**：`useEditorState.activeGroupId` 别名；`useEditorGroupWorkspace.activeGroupId`；`CanvasOverlays` 冗余 `activeGroupId === groupId` 守卫（已由 `Canvas interactive` 门控）。
+
+### 重复逻辑：Plot 时间轴与容器尺寸（已收口）
+- **原问题**：`Scatter` / `Line` 各有一份 `numToDate` + 轴 tick 格式化；多图重复 `ResizeObserver`；`DEFAULT_MARGIN` 在 6+ 文件重复定义。
+- **架构**：
+  - `shared/plot/plotTime.ts` — `numToPlotDate`、`plotAxisTickFormatter`（date/datetime 轴）
+  - `shared/plot/usePlotContainerSize.ts` — 容器 `ResizeObserver` 单点
+  - `plotShellStyles.ts` — `DEFAULT_PLOT_MARGIN` / `COMPACT_PLOT_MARGIN` / `CORRELATION_PLOT_MARGIN` / `CORRELOGRAM_MARGIN` / `PARALLEL_COORDINATES_MARGIN`
+- **已迁移全部 PlotView 组件**：`Scatter`、`Line`、`Histogram`、`BarChart`、`ECDF`、`KDE`、`CorrelationPlot`、`CorrelogramChart`、`ParallelCoordinates`
+
+### 无效逻辑：deprecated `buildPinResultSearchEntries`（已收口）
+- **原问题**：`buildPinResultSearchEntries`（复数）仅测试使用，与 `collectPinResultSearchEntries` 功能重叠。
+- **架构**（当前）：
+  - `buildPinResultSearchEntry` — 单条 entry 构建（模块内 primitive，测试直引 `pinResultSearch.ts`）
+  - `collectPinResultSearchEntries` — 从 `ExecutionStore.pinResults` 批量收集（`usePinResultSearch` 唯一生产路径）
+  - `filterPinResultSearchEntries` — 查询过滤
+- **已删除**：`buildPinResultSearchEntries`、`collectPinResultSearchEntriesFromCache`、`PinResultSearchPinRef`、`graphBucketHasPinResults`
+- **已收敛**：`buildPinResultSearchEntry` 不再从 `execution/index.ts` 公开导出
+
+### 代码漂移：InfoView 类型导入路径（已收口）
+- **原问题**：`InfoView/shared/types.ts` 薄 re-export `@/shared/types/report`，与领域类型双源漂移。
+- **架构**（当前）：
+  - **类型真源**：`shared/types/report/`（`index.ts` 聚合导出）
+  - **解析边界**：`parseReportPayload.ts`（IPC 单点窄化）
+  - **视图层**：InfoView 组件直引 `@/shared/types/report`；`InfoView/shared/index.ts` 仅导出 UI 块，不含 types
+- **已删除**：`InfoView/shared/types.ts`；各 `*Component.tsx` 上无引用的 `export type { … } from '@/shared/types/report'` 再导出
+
+### `@deprecated` 兼容层清零（已收口）
+- **原问题**：前后端保留多组 `@deprecated` 别名、双字段序列化或测试兼容 shim，增加漂移与多事实源风险。
+- **架构**（当前）：
+  - Presentation：`parsePresentationWindowQuery().sourceId`（无 `parseSourceIdFromLocation`）
+  - 节点创建：`NodeSpawnParams` / `NodeCatalogItem`（无 `CreateNodeSpawnParams` / `PaletteItem`）
+  - 连线结果：`ConnectPinsResult.autoDisconnected[]`（无 `autoDisconnectedFrom/To`）
+  - 布局 Tab：`LayoutTab` 无 `title`；`LayoutTabInput.title` 仅 hydrate 入站，`normalizeLayoutTab` + `reconcileOpenLayoutTabsWithResources` 剥离
+  - 节点 DTO：前端 `nodeMetadata` / `uiStyle`（camelCase）；Rust DTO `#[serde(rename_all = "camelCase")]` 单字段序列化
+  - Correlogram：TS 用 `CorrelogramBarDTO` / `PlotCorrelogramBarDTO`；Rust plot 节点内部 `CorrelogramDatum` 不导出到前端
+- **已删除**：`LoadingOverlay`、`pickNodeDocumentation` / `resolveNodeDescription`、`cancelProjectScan` / `SCAN_CANCELLED`、`withLegacyPinLinks`、InfoView types shim 等
+- **验证**：`src/` / `src-tauri/` 无 `@deprecated` / `#[deprecated]` 业务标注（`Cargo.lock` 第三方 crate 除外）
+
+## 2026.07.11
+
+- [x] **P1 — Pin Result Search 修复**：以 `pinResults` 为唯一索引源；`pinResultCacheKey(graphPath,pinId)` 对齐后端 runtime index；`pinResultsForSourceGraph` 支持函数图 Detail/Canvas 查看嵌套 Call 结果；`evaluatePinViewState` 单 pass UI 判定。
+- [x] 在执行图的时候，首先需要递归加载外部图，并进行存储，避免修改外部图的时候导致原来的执行出现变化
+- [x] **`@deprecated` 兼容层清零**：删除 `InfoView/shared/types.ts`、`parseSourceIdFromLocation`、`LoadingOverlay`、`PaletteItem`/`CreateNodeSpawnParams` 等别名；`LayoutTab.title`、`ConnectPinsResult.autoDisconnected*`、`node_metadata`/`ui_style` 双字段、测试 `withLegacyPinLinks` 一并移除；Presentation 统一 `parsePresentationWindowQuery`；`src/` / `src-tauri/` 无 `@deprecated` 标注。
+- [x] **`EventRegistry.dispatch` 异构事件联合**：`dispatch(event: RawBackendEvent)`；`BackendEventType` / `BackendEventPayloadMap` 定义于 `sync/types.ts`；`ProjectListener` IPC 边界收窄。
+- [x] **`commandRegistry` 泛型收口**：`commands/registryTypes.ts` 定义 `CommandArgsByType` / `CommandContextByType` / `CommandHandlerMap`；`getCommandHandler<K>()` + `executeCommand<K>()` 窄化；undo/redo 栈仍以 `CommandHandler` 不透明 context 回放。
+- [x] **DatabaseEditor 表格行 `any[][]`**：`DatabaseCellValue` / `DatabaseRow`（`dto/database.ts`）；`useDataLoader` / `useEditActions` / `DataTable` / `DatabaseService.getDatabaseRows` 贯通。
+- [x] **`SettingsView` 表单 `onChange` 去 `any`**：`SettingItemProps` 判别联合（checkbox/text/number/select/color）；移除 `eslint-disable`。
+- [x] **Pin 视觉语义统一架构（形状 / 颜色 / 连线）**：`shared/types/domain/pinVisual.ts` 导出 `resolvePinVisualSpec` / `resolvePinRenderStyle`；`Pin.tsx` / `EdgesOverlay` / `ConnectionLine` 迁移；`EdgeData` 改 `colorKey` + `edgeKind`；6 项 vitest 矩阵覆盖。
+- [x] **删除函数前引用检查**：`deleteFunctionWithConfirm` + `uiStore.confirm3`（取消 / 仍删除 / 删除并清理 Call）；`purge_function_call_sites` IPC。
+- [x] **删除函数后 `by_function` 索引清理**：`remove_graph` + `remove_function`；可选 `purge_function_call_sites` 批量移除 Call 节点并刷新 caller 图 store。
+- [x] **删除函数同步清理 `graphMetaStore`**：`FunctionDeletedHandler` / `deleteResource` 调用 `useGraphMetaStore.deleteGraph`。
+- [x] **打开函数 Tab 时壳节点 reconcile**：`resolve_graph_dynamic_pins` 对 Function 图先 `sync_function_shell_pins_in_graph`；`function_call_test::resolve_graph_dynamic_pins_reconciles_function_shell_pins` 回归。
+
+
+## 2026.07.12
+
+> **源于 2026.07.08 `tsc` 清零复盘**：以下多为根因治理与类型债清扫，避免修复回潮；优先级按「阻断开发 → 架构单点 → 体验验证」排列。
+
+- [x] **`DatabaseRecord` 强类型化**：`shared/types/dto/database.ts` 定义 `DatabaseDeclDTO` / `DatabaseRecord` + `normalizeDatabaseRecord` / `normalizeDatabases`；`projectIOStore`、事件 handler、import 路径在入库边界一次规范化；store 与 `DataDetailPanel` 共用，`sourcePath` 由 `databaseSourcePath(engine)` 派生。
+- [x] **`GraphData` ↔ domain `Graph` 显式转换层**：`dto/graphModel.ts` 提供 `graphDataToDomainGraph` / `domainGraphToGraphData` / `graphDataRecordToDomainGraphs`；`exportSnapshot` 与 `loadProjectFromData` 走转换层，去掉 `as unknown as`；`toFrontendGraph` 复用 `graphInstanceDtoToGraphData`。
+- [x] **`Detail 面板 props 解析单入口**：`resolveDetailPanelModel` + `useDetailPanelModel`；`DetailPanelModel` 判别联合；`Detail.tsx` 仅 switch 渲染与回调，删除 `targetId`/`selectedFunction` 重复收窄。
+- [x] **共享测试图工厂 `makeTestGraph()`**：`src/tests/helpers/graphFixtures.ts` 提供 `makeTestGraph` / `makeOverlappingLocalIdGraphPair`；`graphDataStore` / `NodeEventHandler` / `EdgesOverlay` 测试去重，去掉 `as const` / `as never` pin 夹具。
+- [x] **PlotView D3 交互工具层**：`shared/plot/d3Tooltip.ts`（`PlotTooltipController` / `attachHoverTooltip` / `attachOverlayCursorTooltip` / theme HTML helpers）；`BarChart` / `Histogram` / `CorrelogramChart` / `CorrelationPlot` / `ParallelCoordinates` / InfoView `IRFChartSingle` / `VARStableChart` 已迁移，消灭各图重复 `select(this)` + 手写坐标逻辑。
+- [x] **Plot payload 解析类型收敛**：`shared/types/dto/plotPayload.ts` 对齐 Rust plot 序列化 + 类型守卫窄化；`parsePlotPayload` 返回判别联合；解析失败 `PlotWindow` toast + 空态；`PlotWindowContent` 无裸 cast。
+- [x] **`ConnectionLine` gesture 类型收窄**：`getConnectGesture` / `ConnectGesture` 置于 `shared/types/ui/editor.ts`；`ConnectionLine` 与 `Canvas` selector 去除 `gesture as any` / `gesture: any`。
+- [x] **画布拖放 `data.current` 类型契约**：`dndContracts.ts` 扩展 `CanvasDragPayload` / `NodeSpawnTemplate` + 守卫；`buildSidebarDragData` / `buildNodeTemplateDragData` 生产端对齐；`Workspace` / sidebar UI / drop handler 去除 `as any`。
+- [x] **Info / 报告统计块 DTO 结构化**：`shared/types/report/`（`serialTests` DW `{ d }` 窄化、`correlogram` Report vs Plot 柱条分离 + `hasLjungBoxStats`）；IPC/service 边界 normalize；`CorrelogramChart` / `ACFPACFBlock` / `plotPayload` 贯通 + 6 项 vitest。
+- [x] **`dataStore` barrel 与跨 store 依赖审计**：`projectSnapshotBridge` / `projectClientReset` 集中跨 store 编排；`index.ts` 显式导出 snapshot API；`projectStoreDeps` + `dataStore.audit.test` 校验 hook import；`loadProject` / `exportSnapshot` 单测覆盖。
+- [x] **残余 `as any` / `as unknown as` 分期清扫（报告 IPC + 边角）**：`ParallelCoordinates` / `CanvasNode` / `useEditorGroups` 等已在前期条目清零；本轮清除 `shared/types/report/*` 全部 `as unknown as`（`assignPresentKeys` + 显式字段构建）、`useGraphManagement` `any`、`Workspace` drop `position: any`、测试 mock 双 cast；`src/` 现 0 处 `as unknown as`。
+- [x] **OLS Summary 取数连线动画验证**：根因修复见上条「执行连线动画根治」（Channel 排空、`executionVisualSession` pull/flow 双态、`EdgesOverlay` `isPullActive`/`isFlowActive`、按边 `emit_data_pull`→`emit_data_flow`）；函数图报错修复后无新增缺口；执行相关 vitest 20 项全绿。OLS Summary 走标准 data input 取数链，无专项 bypass。
+- [x] **`DatabaseDecl.engine` 与 `LoadDatabaseEngineSpec` 单点定义**：`dto/database.ts` 派生 `SqlEngineConfig` / `CsvEngineConfig` 等 + `LoadDatabaseEngineSpec`；`databaseService` 复用 DTO 类型；import 经 `databaseRecordFromLoad` 写入 `engine`，Detail `sourcePath` 即时可见。
+- [x] **Store `NodeData` → UI `Node` 单点桥接**：`nodeView.ts` 的 `toUiNode`；`useNodeView` 复用；渲染层改 `UINode`；去除 `CanvasNode` `as unknown as NodeModel`。
+- [x] **`LayoutTab` / 编辑器组 tabs 强类型**：`LayoutTabType` / `EditorGroupSnapshot` / `layoutTabModel` 工厂与规范化；`useEditorGroups` 去 `any`；`openEditorTab` / TabBar split 共用。
+- [x] **`PinData.type` 与 `dataType` 职责分离**：`pinSemantics.ts` 统一 exec 判别 / 展示标签 / 主题键；连接与 palette 以 `buildPinDataType` + `TypeSystemSnapshot` 为准；`setPinValue` 改读 store `dataType`；去除 `resolveNodePinSpecs` 裸 `type` fallback；5 项 vitest。
+- [x] **InfoView 报告类型分层（`types.ts` 治理）**：`shared/types/report/` 拆为 `regression` / `iv` / `panel` / `did` / `var` / `vec` / `dfadf` + `guards`；曾用 `InfoView/shared/types.ts` 薄 re-export（后续已删除）；`parseIv2slsFirstStageResult` + 7 项 vitest；去除未用 `DidPlaceboBlock` 别名。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)、[DTO_TYPE_MAPPING.md §十六](./docs/DTO_TYPE_MAPPING.md#十六info-报告-payloadipc-边界)
+- [x] **Info 报告 IPC 边界 `normalize*` 补齐**：`parseReportPayload(report, raw)` 覆盖全部 `ReportKind`；回归五类共用 `parseRegressionResultData`；`ReportView` 无效 payload 展示错误文案；`serialTests`/`correlogram`/`iv` 共用 `parseCommon`；11 项 vitest。→ 见 [DESIGN_RULE.md §2.13](./docs/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)
+- [x] **InfoView 数值展示统一防御**：除已修的 `SerialTestsBlock` 外，`RSquaredBadge`、`PanelFESummaryGrid`、`VARStableChart` 等仍裸 `.toFixed()`；推广 `formatNum` / `formatNullableNum` 或 `StatValue` 组件，避免后端返回嵌套对象时再次 `toFixed is not a function`。→ 见 [DESIGN_RULE.md §2.9](./docs/DESIGN_RULE.md#29-infoview-统计数值展示)
+- [x] **`graphUndoPatch` / 节点 params 强类型**：`GraphUndoPatch.definition`、`layout` 的 `params?: Record<string, any>` 仍为弱类型；与 Rust `NodeParams` / undo DTO 对齐为 tagged union，减少 command 层静默字段丢失。→ 见 [DESIGN_RULE.md §3.8](./docs/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)、[DTO_TYPE_MAPPING.md §十二–十四](./docs/DTO_TYPE_MAPPING.md#十二nodeinstanceparams节点实例参数)
+- [x] **`ParallelCoordinates` 坐标轴 scale 类型层**：`YScale` 自定义 union + 多处 `as unknown as scaleLinear`；提取 `plot/axisScale.ts`（按列 numeric/category 选 scale），与 PlotView 其他图的 D3 工具层一并规划。→ 见 [DESIGN_RULE.md §2.10](./docs/DESIGN_RULE.md#210-plotview-d3-工具层)
+- [x] **Tauri / WebView 平台类型增补**：`TitleBar` `WebkitAppRegion`、`devHmrIpc` `Channel<unknown>`、`window.__yssbiTauriCallbackFilter__` 等靠 cast；扩展 `src/tauri-env.d.ts`（或扩展现有 env d.ts）声明拖拽区 CSS 与 HMR 全局，平台 glue 集中一处。→ 见 [DESIGN_RULE.md §2.11](./docs/DESIGN_RULE.md#211-tauri--webview-平台类型)
+- [x] **`EditorSession` 显式契约**：`EditorSession = ReturnType<typeof useEditorSessionValue>` 推断链过长，Canvas/Detail/Sidebar 难以只依赖所需切片；导出命名 interface（或 `Pick<EditorSession, …>` 工具类型），新 hook 禁止从 session Spread 未知字段。→ 见 [DESIGN_RULE.md §2.12](./docs/DESIGN_RULE.md#212-editorsession-显式契约)
+- [x] **`NodeTemplateDragPayload` 端到端类型**：`NodeSpawnTemplate` 单点构建 + `SidebarDragState` 判别联合；`spawnNodeFromTemplate` 收口落点逻辑；`useCanvasDrop` / `canvasDropHandlerStore` 仅收 `NodeTemplateDragState`；去除 graph-resource 假 template 与废弃 `DragState`。→ `dndContracts.ts` / `nodeSpawnTemplate.ts` / `spawnFromTemplate.ts`
+- [x] **`GraphDataLike` / `RuntimeNodeInput` 归一化文档**：`graph.ts` hydrate 契约 + `docs/adr/graph-store-hydrate.md`；`runtimePinRefsToIds` 单点；`graphInstanceDtoToGraphData` 委托 `normalizeGraphDataLike`；测试迁移 `makeTestGraph()`。→ 见 [DESIGN_RULE.md §2.14](./docs/DESIGN_RULE.md#214-graph-store-hydrate)
+
+> **Pin 视觉语义 — 架构说明**（前后端已收敛；Phase A–D 完成）
+
+**原则**
+
+- **Pin 画布视觉（形状 / 主题色键 / 连线语义）100% 前端**：权威实现 `src/shared/types/domain/pinVisual.ts` → `resolvePinVisualSpec` + `pinTypeTheme.ts`。
+- **后端只下发领域类型**：结构化 `dataType`（+ exec 判别）；**不做** `pin_visual_spec` DTO，**不**再派生 `pinType` / `containerType` / `typeDisplay`。
+- **主题 hex 只在前端**：`settingsStore` + `ThemeSettings`（localStorage）；已删除 Rust `ThemeSettings` / `load_settings` / `save_settings`。
+
+**已完成（前端）**
+
+- [x] `pinVisual.ts` + `pinVisual.test.ts`；`Pin.tsx` / `EdgesOverlay` / `ConnectionLine` 统一消费 `resolvePinVisualSpec`。
+- [x] `EdgeData` 改 `colorKey` + `edgeKind`；视觉层不再读 `pin.type` 做颜色/形状。
+
+**目标数据结构（前端本地推导）**
+
+```ts
+interface PinVisualSpec {
+  label: string;       // tooltip：typeDisplay ?? dataTypeDisplay
+  shape: PinShape;     // exec | circle | diamond | roundedRect | gridRect | hexagon
+  colorKey: string;    // 查 ThemeSettings，容器递归到内层标量
+  container?: 'array' | 'dataseries';
+  edgeKind: 'exec' | 'data';
+}
+```
+
+| 维度 | 规则 |
+|------|------|
+| 形状 | Exec→箭头；DataFrame→网格；Array→圆角方框；DataSeries→菱形；Struct→六边形；标量→圆 |
+| 颜色 | 由 `dataType` 递归到标量再映射 `colorKey`（与旧 Rust `data_type_to_pin_type` 语义对齐，但**实现仅在前端**） |
+| 连线 | 颜色跟 source pin `colorKey`；动画跟 `edgeKind` |
+
+---
+
+### 后端视觉相关配置盘点（迁移清单）
+
+> 审计日期：2026.07.11。性质：**纯视觉** / **半视觉** / **展示文案** / **非视觉（易混淆）**。优先级：**P0** 应迁前端 / **P1** 可收敛 / **P2** 另议。
+
+#### 一、Pin 视觉派生（P0 — 核心）
+
+| ID | 后端配置 | 位置 | IPC / 事件字段 | 前端消费 | 迁移建议 |
+|----|----------|------|----------------|----------|----------|
+| P1 | `data_type_to_pin_type()` | `schema/pin.rs` | `PinInstanceDTO.type`、`InferredPinType.pinType` | 历史 `Pin.type`；视觉已改 `pinVisual` | 删除函数；DTO 停止填 `type`（exec 除外） |
+| P2 | `data_type_to_container()` | `schema/pin.rs` | `containerType` | store + `pinVisual`（已从 `dataType` 推导） | 停止下发；前端单源 |
+| P3 | `PinInstanceDTO::from_pin_with_context` | `schema/pin.rs` | 图加载 / `NodeCreated` / `NodePinsUpdated` 每 pin | `NodeEventHandler`、`graphModel` hydrate | 仅保留 `dataType`；`typeDisplay` 可前端 `dataTypeDisplay()` |
+| P4 | `InferredPinType` | `event/event_node.rs` | `PinTypesInferred.pinTypes[]` | `PinTypesInferredHandler` 写 store | payload 缩为 `{ pinId, dataType }` |
+| P5 | `emit_inferred_types` | `project/graph_events.rs` | 同上 | 同上 | 删对 P1/P2 的调用 |
+| P6 | 变量类型变更联动 | `project/project_state_variable.rs` | 变量更新时 `InferredPinType` 列表 | 变量 IPC → store | 与 P4/P5 同步 |
+| P7 | 图序列化 pin 列表 | `schema/graph.rs` | `get_project_data` pins[] | 项目加载 → `graphDataStore` | 加载路径只依赖 `dataType` |
+
+#### 二、Pin UI 覆盖（P1）
+
+| ID | 配置 | 位置 | 字段 | 说明 |
+|----|------|------|------|------|
+| P8 | `PinUIDTO` | `schema/pin.rs` | `ui.{x,y,color}` | Rust 恒 `ui: None`；若做 per-pin 着色应前端本地，不走 IPC 默认 |
+| P9 | `type` fallback `"object"` | `from_pin_with_context` | 无 `dataType` 时 | 收敛后 data pin 必有 `dataType`，去掉兜底 |
+
+#### 三、节点壳层视觉（P2 — 与 Pin 迁移分开）
+
+| ID | 配置 | 位置 | 字段 | 前端消费 | 建议 |
+|----|------|------|------|----------|------|
+| N1 | `NodeMetaData.ui_style` | `graph/node/node_definition.rs` | `NodeDefinitionDTO` / `NodeInstanceDTO.uiStyle` | `Node.tsx` 布局（math vs default） | 可保留 catalog 声明，或前端 `nodeType → uiStyle` 表 |
+| N2 | `with_ui_style(...)` | `graph/register/catalog/**` | 注册表 | 同上 | 工作量大，非 Pin P0 阻塞项 |
+
+#### 四、客户端主题副本（P1）
+
+| ID | 配置 | 位置 | 说明 |
+|----|------|------|------|
+| T1 | `ThemeSettings`（含 Pin/画布色 hex） | `editor/settings/theme.rs` | 前端实际用 `settingsStore` + localStorage；Rust 副本冗余 |
+| T2 | `AppearanceSettings` | `editor/settings/appearance.rs` | 同上 |
+| T3 | `load_settings` / `save_settings` | `commands/command_settings.rs`、`lib.rs` | 前端无 invoke；可删 command |
+| T4 | `EditorSettings` / `ProjectSettings` | `editor/settings/*.rs` | 非 Pin 视觉；随 T3 一并清理 |
+
+#### 五、易混淆 — 勿当视觉删
+
+| ID | 名称 | 位置 | 实际用途 |
+|----|------|------|----------|
+| X1 | `GraphDataState.pin_types` | `graph_data_state.rs` | `HashMap<PinId, DataType>`，推断/校验 |
+| X2 | `TypeInferenceContext.pin_types` | `type_inference_context.rs` | 推断会话内部 |
+| X3 | `FunctionSignaturePin.data_type` | `graph_instance/types.rs` | 签名结构化 `DataType`（exec 缺省），非画布渲染 |
+| X4 | `get_pin_type_by_role` | `node_execution_context*.rs` | 执行期取 `DataType` |
+| X5 | `type_display` | `pin.rs`、`event_node.rs` | Tooltip 文案；可迁前端，优先级低于 P1–P7 |
+
+#### 六、前端已本地化（无需后端参与）
+
+| 能力 | 权威位置 |
+|------|----------|
+| Pin 形状 / 色键 / 连线语义 | `pinVisual.ts` |
+| 主题色 hex | `pinTypeTheme.ts` + `ThemeSettings` |
+| 客户端设置持久化 | `settingsStore` + localStorage |
+
+---
+
+### 迁移阶段
+
+- [x] **Phase A — Pin IPC 瘦身（P0）**：`PinTypesInferred` / 图 DTO / `NodePinsUpdated` 只传 `dataType`；删 `data_type_to_pin_type` / `data_type_to_container`；`NodeEventHandler` + `pinHydrate.ts` 本地推导展示字段；`pinVisual` + 图加载 vitest 回归。
+- [x] **Phase B — 后端主题副本清理（P1）**：删 Rust `editor/settings` 与 `load_settings`/`save_settings` command；前端无 invoke 引用。
+- [x] **Phase C — 节点 uiStyle（P2）**：`resolveNodeViewMeta` / hydrate 仅从节点注册表推导 `uiStyle`；`NodeInstanceDTO` 停止下发 `uiStyle`。
+- [x] **FunctionSignaturePin 结构化 `DataType`**：`type`+`containerType` 字符串 DSL 已删除；签名直接存 `dataType`（exec 缺省）；Rust `function_shell` / TS `resolveEffectiveDefinition` / `functionSignaturePin.ts` 单源；删 `dataTypeFromPinType` / `dataTypeFromFunctionSignaturePin`。
+- [x] **Phase D — 扫尾**：运行时 `Pin` / `PinData` / `PinInstanceDTO` 删除 `containerType`；data pin `type` 恒为 `object`（exec 除外）；`FunctionSignaturePin` 同步改为结构化 `dataType`（exec 缺省），与 Pin IPC 契约一致。
+
+---
+
+### Workbench / Sash 向 VS Code 收敛
+
+> **参考**：VS Code 布局内核为 Monaco **`SplitView` + `Sash`**（`src/vs/base/browser/ui/splitview/`、`sash/`），由 **`IWorkbenchLayoutService`** 统一编排各 **Part** 的尺寸与显隐；YssBI 当前为 `layoutStore` 树 + CSS Flex + `sashResizeLogic.ts`（2026.07.09 已部分对齐）。
+
+#### VS Code 布局架构（目标参照）
+
+**1. 区域划分（Workbench Grid）**
+
+```
+┌ Titlebar（可选）────────────────────────────────────────┐
+├ Act ├ Primary ├──────── Editor Groups ────────├ Aux ───┤
+│ Bar │ Side Bar│         （独立 GridWidget）    │ Bar   │
+│     │         ├──────── Panel ────────────────┤       │
+├─────┴─────────┴───────────────────────────────┴───────┤
+└ Status Bar ────────────────────────────────────────────┘
+```
+
+| Part | 职责 | 尺寸模型 |
+|------|------|----------|
+| Activity Bar | 切换 Primary Side Bar 视图 | 固定 ~48px，不参与 sash |
+| Primary Side Bar | Explorer / Search 等 | **像素宽**，min/max，可隐藏 |
+| Editor Part | 多 Editor Group 网格 | 占剩余空间；组间另有 sash |
+| Panel | Terminal / Output / Problems | **像素高**（或左/右时为宽），可最大化 |
+| Auxiliary Bar / Secondary Side Bar | 右侧属性类面板 | 同 Side Bar 模型 |
+| Status Bar | 状态信息 | 固定高度 |
+
+**2. SplitView 尺寸语义（核心）**
+
+- 每个子 View 在**父容器主轴**上只有一个 `size`（像素或比例）；**不在 cross-axis 设 width/height**（避免 Panel 误设 `width: 200px` 类 bug）。
+- 通常一个 View 为 **flex 填充剩余**（`size: 0` + 权重），其余为固定像素 View。
+- 隐藏 View：**存储里保留上次 size**，渲染为 0；再次显示或拖相邻 sash 时恢复，而非丢失尺寸。
+
+**3. Sash 交互（Monaco `Sash`）**
+
+| 行为 | VS Code 做法 |
+|------|----------------|
+| 热区 | 4px（`--vscode-sash-size`） |
+| 分隔线 | 居中 1px，hover/active 用 `--vscode-sash-hoverBorder` |
+| 光标 | 垂直 sash → `ew-resize`；水平 sash → `ns-resize` |
+| **拖拽中** | **仅 SplitView 内部 imperative 改尺寸**，不广播 workbench 全局状态、不触发 Part 重挂载 |
+| **松手** | `IWorkbenchLayoutService` 写入 Part size，**debounce 持久化**到 `IStorageService` |
+| 起始尺寸 | 以 **存储的 size** 为基准，不用 content min-width 测量的 DOM |
+| 双击 sash | Panel **最大化 / 还原**（toggle） |
+| 拖向折叠邻居 | 可 **展开** 已隐藏的相邻 Part |
+| 全局 | 拖拽时 `pointer-events: none` 作用于 iframe/canvas；`user-select: none` |
+
+**4. 与 Editor Group 的边界**
+
+- **Workbench sash**：Side Bar ↔ Editor ↔ Panel ↔ Auxiliary（外层）。
+- **Editor Grid sash**：Tab 组分屏（内层，`GridWidget`），与外层 Part 尺寸**独立存储**。
+- YssBI 对应：外层 `root` 树（sidebar / center / detail）+ 内层 `splitEditorGroupAtEdge`（编辑器组）——应对齐「两层 sash、两套持久化键」心智。
+- 内层 Grid 的完整逻辑、性能与待办见下文 **§7**；Tab/分屏命令收敛见前文「编辑器拆分 / EditorGroup 架构收敛」。
+
+**5. 持久化**
+
+- 键示例：`workbench.sidebar.size`、`workbench.panel.size`、`workbench.auxiliaryBar.size`（workspace / global scope）。
+- 启动 hydrate → 运行期 Part API 读写 → 关闭 / debounce 写回。
+
+**6. 性能策略（Layout / Sash — VS Code 如何做）**
+
+> VS Code Workbench **不是 React 树**，布局层用原生 DOM + `SplitView` imperative API，性能目标：**拖 sash 时 60fps、零 workbench 级状态广播、零 Storage 写入**。
+
+| 策略 | VS Code 做法 | 目的 |
+|------|----------------|------|
+| **拖拽期零状态广播** | `SplitView.resizeView()` 只改**当前 split 内**子 View 的 DOM 尺寸；**不**触发 `IWorkbenchLayoutService` 全局事件、**不**写 `IStorageService` | 避免整窗 Part 与 Editor 重算布局 |
+| **松手才 commit** | `onDidEndSash` 一次写入 LayoutService；Storage **debounce**（通常 100–300ms 量级） | 磁盘 / JSON 序列化不进热路径 |
+| **rAF 合并 pointer move** | Sash `mousemove` 合并到 animation frame，一帧最多 layout 一次 | 避免一帧多次 reflow |
+| **增量 layout** | 仅被拖 sash **相邻**的两个 View 参与 `layout()`；兄弟 Part（如 Activity Bar、Status Bar）不重算 | O(1) 级 resize 范围 |
+| **起始尺寸读存储** | `startSize` 来自 memento，**不**读 `getBoundingClientRect`（防 content min-width 触发额外 measure） | 减少 forced layout |
+| **拖拽全局隔离** | body：`user-select: none`；**iframe / webview / canvas / terminal**：`pointer-events: none` | 避免嵌入层 hit-test、选区、Monaco 抢事件 |
+| **CSS containment** | 部分 Part 在 resize 期间 `contain: layout style paint`（或等价合成层策略） | 限制 reflow 传播范围 |
+| **隐藏 Part 不重挂载** | Side Bar / Panel 隐藏时 **保留 DOM 或保留 size 快照**；显示时恢复，而非销毁后重建整棵 Part | 切换/拖 sash 展开无冷启动 |
+| **Part 内虚拟化** | Explorer / Outline 等 **List 虚拟滚动**（与 sash 正交，但 Side Bar 变窄时不渲染屏外千行） | 窄 width 下仍流畅 |
+| **Editor 与 Chrome 解耦** | Editor Part（Monaco）resize 走 **独立 observer / debounce**；Workbench sash 不触发 tab 切换、不 reload 文档 | 拖 sash 不卡编辑器 |
+| **Webview 尺寸通知节流** | Terminal / Webview Panel 收到 resize 事件 **debounce**，不在每个 pointermove 重算 PTY 列宽 | 底部 Panel 拉高不卡终端 |
+| **Grid 内层 sash** | Editor Group 的 `GridWidget` 与外层 Workbench sash **独立** resize 通道；拖外层不遍历所有 open editors | 双层 sash 互不拖累 |
+
+**YssBI 已有 / 部分对齐（2026.07.09）**
+
+- [x] 拖 sash：**DOM 预览 + 松手一次 `resizeNode`**（对齐「零 store 热路径」；历史曾因每帧 `resizeNode` 卡顿）。
+- [x] `ChildWrapper` **`useShallow` 单节点订阅**（对齐「增量更新」— 仅被 resize 的 Part 对应 wrapper 应更新）。
+- [x] **`layout-sash-dragging` 期间 canvas/iframe `pointer-events: none`**（`App.css`）。
+- [x] **`OverlayScrollbar`**：sash 拖动时跳过 `ResizeObserver` 触发的 thumb `setState`，松手 `layout-sash-drag-end` 补一次（见历史 TODO「Detail sash 拖拽卡顿优化」）。
+- [x] **`startSize` 优先 `pixelSize`**，避免 DOM inflated measure。
+
+**YssBI 仍缺 / 风险点**
+
+| 风险 | 说明 |
+|------|------|
+| ~~`LayoutNodeRenderer` 根仍订阅整节点~~ | [x] 根 / `LeafNodeRenderer` 已 `useShallow` 窄订阅；`GraphEditor` `memo` |
+| 拖 Side Bar 时 Detail / Panel 内 **OverlayScrollbar / 重内容** | 若 ResizeObserver 未统一 respect `layout-sash-dragging`，仍会 setState |
+| ~~无 **`contain`**~~ | [x] 拖 sash 时 `.layout-split-contain`（`contain: layout style paint`） |
+| Panel / Webview 未来接入 | 需 **debounce resize** 通知，勿每 pixel 调 backend |
+| ~~持久化~~ | [x] sash 松手 **debounce 250ms** 写 `workbenchLayoutMemento` |
+| `visible: false` 卸载子树 | `ChildWrapper` 已不渲染子节点 — 对齐 VS Code「隐藏不重算内容」；但再次显示有 remount 成本，可评估 keep-alive |
+
+**7. Editor Group Grid（VS Code 内层 — `GridWidget` + `IEditorGroupsService`）**
+
+> **参考**：`src/vs/base/browser/ui/grid/grid.ts`（**GridWidget**）、`src/vs/workbench/browser/parts/editor/editorPart.ts`、`IEditorGroupsService` / `IEditorService`。Editor Part **不是** Workbench 外层 SplitView 的一部分；它是 **独立 2D 网格**，有自己的 sash、序列化与生命周期。
+
+**7.1 网格模型（VS Code）**
+
+```
+Editor Part（占 Workbench 中央 flex 区）
+└── GridWidget（可嵌套 row/col 的二叉树或序列化 Grid）
+    ├── EditorGroup A（Tab 条 + 单槽 Editor 控件）
+    ├── Sash
+    ├── EditorGroup B
+    └── …
+```
+
+| 概念 | VS Code | 说明 |
+|------|---------|------|
+| **GridWidget** | 2D 网格容器 | 每个 **leaf** 是一个 `EditorGroup`；内部 fork 产生 row/col 分支 |
+| **EditorGroup** | Tab 条 + **一个** Editor 控件槽 | 组内 **仅 active tab** 挂载 Monaco/TextEditor；inactive tab 只占 Tab 条 |
+| **组间 sash** | 与 Workbench 相同 Monaco `Sash` | 拖组间 sash **不**触发 Side Bar / Panel resize |
+| **尺寸** | 序列化 **比例 + 像素** | `SerializableGrid` 存拓扑与各 split 的 size；resize 后 **debounce** 写 `workbench.editor.layout` |
+| **分屏** | 拖 Tab 到四边 / 命令 `splitEditor` | 新 Group + **复制或移动** Tab（拖 TabBar=移动，拖画布边=复制） |
+| **关组** | 组内最后一个 Tab 关闭 → **合并 Grid** | 相邻组吸收空间，不留下空壳 flex 节点 |
+| **最大化组** | 双击 Tab / `workbench.action.maximizeEditor` | 当前组占满 Editor Part，其它组 size→0（可还原） |
+| **Active Group** | 全局 `activeGroup` + 组内 `activeEditor` | 键盘焦点、命令目标、Status Bar 上下文 |
+
+**7.2 交互与数据流（VS Code）**
+
+```
+用户拖 Tab 到画布右缘
+  → IEditorGroupsService.splitEditor(OPEN_EDITOR, RIGHT)
+  → GridWidget.addView(newGroup, direction, referenceGroup)
+  → 复制 EditorInput 到新组（或 move，取决于 drop 目标）
+  → SerializableGrid.toJSON() debounce → IStorageService
+
+用户拖组间 sash
+  → GridWidget.resizeView（imperative，同 §6）
+  → onDidEndSash → 更新 SerializableGrid → Storage debounce
+
+用户切换 Tab（组内）
+  → 仅 swap Editor 控件绑定的 EditorInput
+  → **不**重建 Grid、**不**动 Workbench Part
+```
+
+**7.3 性能策略（Editor Grid 专项 — VS Code）**
+
+| 策略 | VS Code 做法 | 目的 |
+|------|----------------|------|
+| **组内单 Editor 槽** | 每个 EditorGroup 只 **1 个** Monaco 实例；切 Tab **换 model**，不 mount N 个编辑器 | 内存与 GPU 与 Tab 数解耦 |
+| **Inactive 组仍显示** | 非激活组 **保留** 其 active editor 的 DOM（缩略预览），但 **失去焦点、降低优先级** | 分屏对照时两图同屏；非激活组不跑 layout 重任务 |
+| **Preview Tab** | `workbench.editor.enablePreview`：单击资源 **不 pin** 则替换 preview tab | 减少 Tab / Document 实例 |
+| **Grid resize 与文档解耦** | 拖组间 sash **不** `loadModel`、**不**触发扩展 activate | 纯 layout reflow |
+| **SerializableGrid debounce** | 拓扑变更 / sash 松手后 **debounce** 写 storage | 分屏拖拽不进磁盘热路径 |
+| **IEditorGroupsService 事件粒度** | `onDidActiveGroupChange` / `onDidAddGroup` 等 **细粒度**；Sidebar 不订阅整 Grid | 减少无关 Part 刷新 |
+| **Editor Part resize** | 外层 Workbench 改 Editor Part 大小时，Grid **按比例**分配各 leaf | 拖 Side Bar 时各组同比缩放，无需用户重调 |
+| **关闭空组 O(1) 合并** | `GridWidget.removeView` 合并 sibling，**不**遍历所有 open editors | 关 Tab 不卡 |
+
+**7.4 YssBI 现状 vs VS Code（Editor Grid）**
+
+| 维度 | VS Code | YssBI 现状（2026.07.09） |
+|------|---------|---------------------------|
+| 布局 primitive | `GridWidget` + `SerializableGrid` | `layoutStore` 嵌套 `row`/`col` + `editor_area` |
+| 组尺寸 | 持久化比例/像素 | [x] `editorGridMemento` + flex 组 `commitFlexSplitResize` 首次 pixel 化 |
+| 组间 sash | Grid 内 Monaco Sash，imperative | 共用 `LayoutNodeRenderer` Sash；flex 组 **首次拖 sash 才 `pixelSize` 化** |
+| 分屏入口 | 四向 + 命令 | [x] `splitEditorGroupAtEdge` + `editorGroupCommands`（见前文 checklist） |
+| Tab 移动/复制语义 | 拖 TabBar=move，拖边=copy | [x] 已对齐 |
+| 关组合并 | `removeView` 自动合并 | [x] `removeNode` 单子提升；需与 **空 Tab 组** 场景回归 |
+| 组内 Editor 槽 | **1 Monaco / 组，切 Tab 换 model** | 每组 `GraphEditor`；[x] Tab 切换 **graphEntities 缓存**、窄订阅（见画布架构重构） |
+| 多组同屏渲染 | 每组 active tab 各 1 编辑器 | [x] 每组 mount `Canvas`；非 active 组 **preview 模式**（可见、无交互）；单焦点 session + LRU 控 hydrated 上限 |
+| Active group | `IEditorGroupsService.activeGroup` | [x] `activeEditorGroupId` + `GroupContext` |
+| TabBar 订阅 | 轻量 model | [x] `useEditorGroupTabStrip` 窄订阅 |
+| Grid 与 Workbench 持久化解耦 | 独立 `workbench.editor.layout` | [x] `workbenchLayoutMemento.editorGrid` 与 chrome parts 分开 hydrate/debounce |
+| 最大化 Editor Group | 支持 | [x] 双击 pinned Tab toggle |
+| Preview Tab | `pinned: false` 可替换 | [x] `LayoutTab.pinned` + preview 语义 |
+
+**7.5 YssBI 已有 / 部分对齐（Editor Grid）**
+
+- [x] **分屏单点**：`splitEditorGroupAtEdge` + `editorSplitLayout.resolveEditorSplitPlacement`。
+- [x] **编排门面**：`editorGroupCommands`（拖边复制 Tab、TabBar 移动 Tab）。
+- [x] **Tab 切换轻量 patch**：`setEditorGroupActiveTab` 不全量 spread `data`。
+- [x] **TabBar 窄订阅**：`useEditorGroupTabStrip`。
+- [x] **画布逐节点订阅 / 去全图反序列化**（见 ## 2026.07.03 画布渲染架构重构）——对齐「切 Tab 不重算整图」方向。
+- [x] **Viewport 按 graphPath 存 + 与图文件解耦**：运行时 zustand + project `editorViewStateMemento`；图文件不再读写 viewport（Rust 磁盘格式已移除 `position`，IPC DTO 已移除 `canvas`）。
+
+**7.6 Editor Grid 收敛任务列表**
+
+**P0 — 正确性 + 与 Workbench sash 分离**
+
+- [x] **`IEditorGroupsService` 薄封装**：`editorGroupsService.ts`；`editorGroupCommands` / `useMenubar` 已迁移。
+- [x] **Editor Grid 独立持久化**：`editorGridMemento` 并入统一 workbench memento；与 chrome 分开 hydrate/debounce。
+- [x] **组间 sash 首次 resize 行为**：flex 组双端 `commitFlexSplitResize` + `splitViewSizing`。
+- [x] **空 Editor Group 自动合并**：`removeTab` / `moveTab` 已有合并逻辑（回归通过）。
+
+**P0 — 性能（Editor Grid 热路径）**
+
+- [x] **非激活 Editor Group 降载**：非 `activeEditorGroupId` 组 `pointer-events-none` + `aria-hidden`；`Canvas interactive={false}` 跳过 gesture / drop / execution binder。
+- [x] **组内 Tab 切换不 remount GraphEditor 壳**：同组切 Tab 仅换 `activeTabId` / Canvas `graphPath`；`GraphEditor` `memo` + 组件类型不变不 unmount。
+- [x] **Grid resize 不触发 loadGraph**：layout 层无 `loadGraph` 调用；sash 仅改 flex / `pixelSize` + viewport scale。
+- [x] **多组同屏 Canvas 策略**：单焦点 `focusedSession` + `shouldRetainGraphDocument`；每组渲染 active tab 的 `Canvas`（preview / interactive 双模）；LRU（max 4）保护 focused + open tab + dirty；切换组时 lazy unload。
+
+**P1 — 交互 parity**
+
+- [x] **最大化 Editor Group**：双击 pinned Tab → `EditorGroupsService.toggleMaximizeGroup`；`editor_area` snapshot 还原。
+- [x] **Grid 比例 sash 持久化**：`editorGridMemento` debounce 250ms；sash 提交同步 `size` 权重 + 运行时 `pixelSize`；快照仅持久化归一化 `size`（viewport 无关），hydrate 走 flex 比例恢复。
+- [x] **拖组间 sash 双击**：editor grid sash 双击均分 → `resetEditorGridSplitEqual`。
+
+**P2 — 架构**
+
+- [x] **评估引入 `GridWidget` 等价模块**：结论见 `docs/EDITOR_GRID_ARCHITECTURE.md` — 无需 imperative GridWidget；`editorGridLayout` + `editorGridMemento` 即为等价层，已 Consolidate 树 mutation（`splitEditorGroupInTree` / `removeEditorGroupFromTree`）。
+- [x] **Editor Grid 与 Workbench 两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts` + 既有 sash 单测。
+- [x] **统一 `LeafNodeRenderer` 订阅**：`nodeId` + `useShallow` 单叶字段，与 `ChildWrapper` 一致。
+
+#### YssBI 现状 vs VS Code 差距
+
+| 维度 | VS Code | YssBI 现状（2026.07.09） |
+|------|---------|---------------------------|
+| 布局 primitive | SplitView（主轴 size） | `layoutStore` + Flex `flex: 0 0 Npx` |
+| Activity Bar | Grid 内固定 Part | `EditorWindow` 中与 `Workspace` **并列**，不在 layout 树 |
+| 隐藏 Part | size 与 visible 分离存储 | `visible: false` → flex 0，**pixelSize 仍保留**（类似） |
+| Sash 拖拽 | imperative，松手 commit | **已改**：DOM 预览 + 松手 `resizeNode` 一次 |
+| cross-axis 尺寸 | 不设 | **已改**：去掉 width/maxWidth 误伤 Panel |
+| 尺寸持久化 | settings / storage | [x] `workbenchLayoutMemento` localStorage；启动 hydrate + sash 松手 debounce |
+| 双击 sash | Panel maximize | [x] editor↔panel sash 双击 `togglePanelMaximized` |
+| activityBarPosition | 左/右/隐藏生效 | [x] Settings → `EditorWindow` 重排 Activity Bar |
+| Panel 位置 | 下/左/右 | [x] Settings `panelPosition` → `applyPanelPosition` |
+| maxSize | Panel ≤ ~80% 视口 | [x] `workbenchPanelSizing` |
+| 收敛 API | `IWorkbenchLayoutService` | [x] `workbenchLayoutService` + `editorGroupsService` |
+| **Sash 热路径** | SplitView imperative，零全局事件 | DOM 预览 + 松手 commit（**已对齐**） |
+| **ResizeObserver 节流** | Part 内 list/editor 各自 debounce / 虚拟化 | [x] OverlayScrollbar / canvas / ConnectionLine sash guard |
+| **拖拽 containment** | `contain: layout` 等 | [x] `.layout-split-contain` |
+| **Storage 写入** | debounce 松手后 | [x] 250ms debounce localStorage |
+| **隐藏 Part 内容** | 保留 DOM 或轻量占位 | [x] chrome Part keep-alive（`invisible`）；GraphEditor 按需 mount |
+| **Editor Grid** | `GridWidget` + 独立 storage | [x] `layoutStore` row/col + `editorGridMemento`（见 **§7.4**） |
+| **组间 sash / 比例持久化** | `SerializableGrid` debounce | [x] sash 提交同步 flex 权重；memento 仅存归一化 `size` |
+| **多组同屏 Canvas** | 非 active 组降优先级 | [x] 每组 `Canvas` preview/interactive 双模 + 单焦点 session + LRU（max 4）；`useIsActiveEditorGroup` 单点 |
+
+#### 收敛任务列表
+
+**P0 — 行为正确 + 不卡顿（Workbench 外层 sash）**
+
+- [x] **主轴仅用 flex-basis**：固定 Part 只设 `flex: 0 0 Npx` + `min-w/h-0`，禁止 cross-axis `width/maxWidth`（修复日志 Panel 宽度异常）。
+- [x] **Sash 拖拽 imperative + 松手 commit**：拖动中只改目标 DOM `flex`，mouseup 一次 `resizeNode`；避免每帧写 store 卡顿。
+- [x] **`startSize` 以 store `pixelSize` 为准**：不用 content 撑开后的 DOM 宽度作拖拽基准。
+- [x] **Sash 样式 VS Code 化**：4px 热区、1px 分隔线、hover/active accent、`ew-resize`/`ns-resize`（`App.css` `.workbench-sash-*`）。
+- [x] **拖 sash 展开相邻隐藏 Part**：`restoreAdjacentPanelVisibility`（隐藏 Side Bar / Panel 时拖相邻 sash 自动 `visible: true`）。
+- [x] **`ChildWrapper` 窄订阅**：`useShallow` 单节点，避免拖 Side Bar 时重渲染 Detail/Panel。
+- [x] **单测**：`sashResizeLogic.test.ts`（target 解析、minSize 钳制、flex 不含 width）。
+- [x] **`IWorkbenchLayoutService` 薄封装**：`workbenchLayoutService` 暴露 `resizePart` / `togglePart` / `getPartSize` / `setWorkbenchPartVisible`；UI 经 service 访问 chrome。
+- [x] **Workbench 尺寸持久化**：统一 `workbenchLayoutMemento`（localStorage），启动 hydrate；sash 松手 debounce 250ms 保存。
+- [x] **Panel `maxSize`**：`workbenchPanelSizing` 默认 `min(floor(0.8 * viewport), …)`。
+
+**P0 — 性能（对齐 VS Code 热路径）**
+
+- [x] **Sash 拖动全仓 ResizeObserver 审计**：`OverlayScrollbar` / `useCanvasViewport` / `ConnectionLine` 已 respect `layout-sash-dragging`。
+- [x] **Sash 拖动 `.layout-split-view` containment**：`.layout-split-contain` 拖时加 `contain: layout style paint`，松手移除。
+- [x] **Workbench 尺寸持久化 debounce**：250ms debounce 写 localStorage。
+- [x] **`LeafNodeRenderer` / Editor 区 sash 隔离**：`GraphEditor` `memo` + 窄订阅；非激活组 `pointer-events-none`。
+- [x] **Sash rAF 合并断言 / 性能回归**：`sashDrag.test.ts` — mousemove 期间 store 不变，mouseup 一次 `resizeNode`。
+
+**P1 — 交互 parity**
+
+- [x] **双击水平 sash → Panel 最大化/还原**：editor↔panel sash 双击 toggle；`panel.data.maximized` + `restoredPixelSize`。
+- [x] **接入 `activityBarPosition`**：Settings 左/右/隐藏 → `EditorWindow` 重排 Activity Bar。
+- [x] **Side Bar toggle 与 size 分离收口**：toggle 仅改 `visible`/`currentTab`，`pixelSize` 保留。
+- [x] **Sash 拖至 minSize 视觉反馈**：`.workbench-sash.at-limit` 态。
+
+**P2 — 架构与 Editor 内层对齐**
+
+- [x] **抽 `SplitView` 模块**：`splitView.ts` 统一 flex 数学（`panelFlexBasis` / `splitViewSizing`）；imperative drag 仍在 `sashResizeLogic`。
+- [x] **两层 sash 测试矩阵**：`workbenchSashMatrix.test.ts`（外层 chrome + 内层 grid）。
+- [x] ~~**Editor Group Grid 与 Workbench 解耦持久化**~~ → 见 §7.6 P0；`workbenchLayoutPersistence` 分 slice merge + `collapseEditorGroupsForProjectSwitch`。
+
+**P2 — 性能（Part 内容与未来 Webview）**
+
+- [x] **Panel / Terminal / Webview resize 节流**：`partResizeNotifier` debounce 100ms + `usePartResizeCommit`；sash 预览期不 emit。
+- [x] **Side Bar 列表虚拟化复核**：Graphs Events/Functions、Variables 本地/全局、Data 列表已用 `SidebarVirtualList`；Nodes 仍走 `NodeCatalogTreeView` virtualizer。
+- [x] **隐藏 Part keep-alive 策略**：chrome Part（sidebar/panel/detail）已 `invisible` 保 DOM；GraphEditor 仍按需 mount。
+
+**P3 — 可选产品 parity（v1.0 后可排）**
+
+- [x] **Panel 位置** bottom / left / right（VS Code `workbench.panel.defaultLocation`）；Settings → `panelPartLayout` + `applyPanelPosition`。
+- [x] **Auxiliary Bar（Detail）** 可完全隐藏 + 快捷键：`Ctrl+I` toggle；`detail.userHidden` 尊重用户隐藏；**View** 菜单提供 Primary / Secondary Side Bar / Panel / Zen（对齐 VS Code View → Appearance）；Window 菜单仅保留窗口与布局操作。
+- [x] **Zen Mode** 隐藏 chrome 但保留 Part sizes 以便退出还原；`workbenchZenMode.ts` + `Ctrl+K Z` / `Esc` / Window 菜单 + `ZenModeHintOverlay`；不持久化。
+- [x] **原生/自定义标题栏切换**（VS Code `window.titleBarStyle`）；`appearance.titleBarStyle` + `windowDecorationPolicy` + `WindowChrome` / `WindowMenuBar` + `createPersistedWindow`。
+- [x] **Status Bar 可交互项**（VS Code 左/右 status item + command）；`statusBarRegistry` + `useStatusBarItems` + `BottomBar`。
+
+**8. Shell / 设置 / 多窗口 — 尚未写入 §1–§7 的收敛项**
+
+> 2026.07.09 全仓扫 layout/chrome 壳层：下列为 **TODO §1–§7 未单独列出**、但与 VS Code Workbench 体验相关的缺口。
+
+**8.1 VS Code 有、YssBI 缺或半实现**
+
+| 领域 | VS Code | YssBI 现状 |
+|------|---------|------------|
+| **View 菜单 Reset Layout** | 恢复默认 Part 尺寸/可见性 | [x] View → Reset Layout → `resetWorkbenchLayout`（chrome-only，保留 editor grid） |
+| **Sidebar 快捷键** | `Ctrl+B` toggle | [x] `Ctrl+B` / `Ctrl+I` / `Ctrl+\`` |
+| **Settings 呈现** | 可开 Settings **编辑器 Tab** | **Dialog 模态**（产品决策：不恢复 SettingsEditor Tab） |
+| **Appearance 预设** | 选 theme 即生效 | [x] `SettingsEffectsProvider` + `appearanceRuntime`（全窗口）；editor shell 另接 `panelPosition` / Activity Bar |
+| **Panel 多视图** | Output / Terminal / Problems **Tab 条** | [x] `PanelPart` Tab 条（Logs + Output 占位）；Terminal **deferred**（需 PTY + xterm，见 `WORKBENCH_SATELLITE_WINDOWS.md`） |
+| **Tab 拖边分屏预览** | 半屏高亮 | [x] `EditorDropPreviewOverlay` 四向 split 预览 |
+| **项目切换布局** | 可保留 workspace layout 或 reset | [x] `collapseEditorGroups` on project reset |
+| **Detail 自动展开** | 用户隐藏后尊重选择 | [x] `detail.userHidden` memento |
+| **多 Editor 窗口** | 独立 window 状态 | [x] 副窗口 `#/editor` + per-label memento + secondary geometry；跨窗 layout/tab **deferred**（各窗独立 workbench，见 `WORKBENCH_SATELLITE_WINDOWS.md`） |
+| **Satellite 窗口** | 部分复用 workbench Part | [x] 见 `docs/WORKBENCH_SATELLITE_WINDOWS.md` |
+
+**8.2 半实现 / 死代码（应收敛或删除）**
+
+- [x] **`LayoutNodeRenderer` 叶子组 drag**：已删除无效 `useDraggable` / `moveNode` 路径。
+- [x] **`SettingsEditor` viewRegistry 注册**：已删除（Settings 仅 Dialog）。
+- [x] **`activeGroupId` vs `activeEditorGroupId`**：合并为单一 `activeEditorGroupId`（UI 层 alias 仍可能存在，非 store 字段）。
+- [x] **`clampPanelSize` 重复**：统一到 `workbenchPanelSizing`。
+- [x] **`Detail` 未使用的 `width` prop**：已删除。
+
+**8.3 性能补漏（具体文件，补充 §6 P0 审计）**
+
+- [x] **`useCanvasViewport.ts` ResizeObserver**：sash guard 已接入。
+- [x] **`ConnectionLine.tsx` ResizeObserver**：`bindSashAwareResizeObserver` 已接入。
+
+**8.4 收敛任务（Shell / 设置 / 多窗口）**
+
+**P0**
+
+- [x] **实现或移除 `resetLayout`**：`resetWorkbenchLayout` 已接 View 菜单（chrome-only）。
+- [x] **渲染 Tab 分屏 drop preview**（`kind:'split'` 半屏 overlay）。
+- [x] **`ensureDetailVisible` 尊重用户隐藏**：`detail.userHidden` memento。
+- [x] **项目切换 Editor Grid 策略**：`collapseEditorGroups` on project reset（已修 `collectDescendantIds` 误删 `editor_area`）。
+- [x] **多主窗口 geometry**：`useEditorWindowGeometryPersistence`（main → backend；secondary → per-label localStorage + cascade fallback）。
+
+**P1**
+
+- [x] **快捷键**：`Ctrl+B` Side Bar；`Ctrl+I` Detail；`Ctrl+\`` Panel。
+- [x] **Appearance → 运行时**：`SettingsEffectsProvider` 统一应用 `colorTheme` / `smoothScroll`（全路由）；`useEditorWorkbenchAppearance` 仅接 `panelPosition`；`useActivityBarLayout` 接 Activity Bar；`smoothScroll`  intentionally 仅 OverlayScrollbar 纵向滚动（canvas 为 transform pan，menubar 无滚动容器）。
+- [x] **Canvas/连线 sash 节流**：§8.3 两文件已加 guard。
+
+**P2**
+
+- [x] **统一 workbench memento schema**：`workbenchLayoutMemento` 含 parts + editorGrid。
+- [x] **Panel 多 Tab 模型**：`PanelPart` + `panelPartModel`（`PANEL_VIEW_SPECS` 注册表；Logs / Output 占位；Terminal `implemented: false` 待 PTY）。
+- [x] **Settings：Dialog vs Editor Tab** → 保持 Dialog，不恢复 Tab 编辑器。
+- [x] **卫星窗口策略文档**：`docs/WORKBENCH_SATELLITE_WINDOWS.md`。
+
+**P3**
+
+- [x] **BottomBar 命令入口**、**原生标题栏选项**（见 §P3 已列项）；Status Bar 交互项支持 `aria-label` + Enter/Space 激活。
+
+**8.5 已对齐 VS Code、无需重复排期**
+
+- Log Panel **拖出独立窗口**（`LogPanelContent` HTML5 DnD）。
+- Log 列表 **虚拟化** + OverlayScrollbar。
+- 跨窗 **主题 settings 同步**（`CLIENT_SETTINGS_UPDATED_EVENT`）。
+- Tab 分屏/移动 **命令单点**（`editorGroupCommands` + `splitEditorGroupAtEdge`，见前文 EditorGroup checklist）。
+
+## 2026.07.13
+
+> **源于编辑器 graph session 生命周期复盘**：点击 Detail / Sidebar / Tab bar 等非画布区域时，Tab 标题不变但节点数归零、Status Bar viewport 重置为 `X 0 Y 0 100%`；根因为 `unloadGraphDocument` 仅校验 focused session / dirty，未校验 tab 仍打开，且 session 解绑路径不完整。下列为修复与架构收敛项。
+
+**P0 — 行为修复**
+
+- [x] **`unloadGraphDocument` retention guard**：`shouldRetainGraphDocument` 统一判断 focused session、任意 editor tab 仍打开、资源 dirty；open tab 图不再被误卸载。
+- [x] **LRU 缓存保护对齐**：`graphDocumentCachePolicy` 淘汰路径走同一 retention 规则，session 未绑定时 open tab 图仍受保护。
+- [x] **`deactivateGraphTab` 精确解绑**：仅当关闭 tab 拥有 focused graph 时清 session；关闭背景 tab 不破坏当前 session。
+- [x] **`closeGraphTab` 仅 active tab 触发 deactivate**：避免背景 tab 关闭误清 session。
+- [x] **Workbench 启动 bootstrap**：`bootstrapEditorGraphSession` 替代 mount 时直接 `activateCurrentEditorTab`，失败重试 + toast。
+
+**P1 — 架构分层与去重**
+
+- [x] **Graph 文档 retention 单点**：`graphDocumentRetention.ts`（`shouldRetainGraphDocument`）← `graphDocumentUnload.ts`（`unloadGraphDocument`）← `graphDocumentCachePolicy` / `closeGraphTab`；打破 `graphSessionLifecycle` ↔ `graphDocumentCachePolicy` 循环依赖。
+- [x] **`graphSessionLifecycle` 职责收窄**：`suspendEditorGroupGraphSession` 仅 `clearFocusedSession` + `enforceGraphDocumentCacheLimit`；删除对 open tab 恒为 no-op 的 `unloadGraphDocument` 与 `resolveGroupGraphPath`。
+- [x] **suspend 时始终 enforce LRU**：不再仅在 active tab 为 graph 时才跑 cache limit（worksheet 分组切换也会触发淘汰）。
+- [x] **viewport 激活单点**：`activateGraphTab` 在 load / cache 成功后统一经 `activateCachedGraph` 调 `ensureGraphViewport`；`switchEditorTab` / `activateCurrentEditorTab` 去除重复调用。
+- [x] **删除无效薄包装**：移除 `releaseGraphCache.ts`（`closeGraphTab` 直接 fire-and-forget `unloadGraphDocument`）；移除 `graphTabQueries.isGraphTabDirty`（retention 直调 `isGraphResourceDirty`）；`enforceGraphDocumentCacheLimit` 内联 filter，去掉 `protectedGraphPaths` 与循环内重复 guard。
+
+**测试**
+
+- [x] **`graphDocumentRetention` / `graphSessionLifecycle` / `graphDocumentCachePolicy` / `activateGraphTab` / `closeGraphTab` / `bootstrapEditorGraphSession` / `graphTabQueries` vitest**（open tab 保留、closed tab 可 unload、split group、background tab close、LRU 淘汰等）。
+
+**P1 — 多 Editor Group 分屏渲染**
+
+- [x] **非激活组仍显示 Canvas（对齐 VS Code）**：删除 `InactiveEditorGroupPlaceholder`；`GraphEditor` 始终 mount `Canvas`，经 `useIsActiveEditorGroup` 切换 `interactive` preview / 编辑模式；`CanvasDropZone` 非激活组禁用 DnD 命中。
+- [x] **Preview 模式降载**：`Canvas interactive={false}` 跳过 drag preview、selection box、execution binder、wheel zoom、drop handler；保留 viewport culling 与节点/连线只读渲染；外层 `pointer-events-none` 点击穿透至 `LayoutNodeRenderer` → `activateEditorGroup`。
+
+**P1 — Editor viewport 与图文件解耦**
+
+- [x] **Viewport 三层模型**：运行时 `viewportSession` + `useViewportStore`（按 `graphPath`）；跨会话 `editorViewStateMemento`（按 `projectPath` + `graphPath`，localStorage）；图文件不含 viewport 字段。
+- [x] **删除图文件 viewport 热路径写入**：移除 `ProjectService.updateCanvas` / Rust `update_canvas`；`persistGraphViewport` 改写 project memento；`buildGraphSnapshot` 导出恒为 default stub。
+- [x] **首屏 resolve 单点**：`resolveInitialGraphViewport`（memento → default）← `ensureGraphViewport`；path 重命名 cascade 同步 memento（`remapEditorViewStateGraphPath`）。
+
+
+> **源于 2026.07.08 函数图层复盘**（Phase 1–4 + 签名索引已落地；缺口主要在**引用生命周期**、**打开图 reconcile**、**UE5 导航 UX**、**三处投影漂移**）：
+
+- [x] **Find References（调用方列表，基础）**：`get_function_call_sites` command + `GraphService.getFunctionCallSites` + `FunctionDetailPanel`「被引用」区块；点击打开 caller 图并 focus Call 节点。
+- [x] **Call Function「跳转定义」（基础）**：`openGraphResource` 共享导航；Node Detail「打开目标函数」；画布 Call 节点目标缺失时标题 `(missing function)`。
+- [x] **Call Function 目标重绑定**：`update_call_function_target`（改 `subGraphPath` + 重投影 pin + 维护 call-site 索引）+ Node Detail `Select` 入口；`function_call_test` 覆盖重绑定与索引迁移。
+- [x] **断裂引用图级诊断**：`graphDiagnostics/callFunctionDiagnostics` 扫描缺失/无效 `subGraphPath` 的 Call 节点；画布节点 amber 徽章、侧栏图项徽章、保存前 warning toast；`resolveGraphResourceMeta` 统一校验 `exists`。
+- [x] **签名投影三处手写 → 契约测试**：`FunctionSignaturePin` 已统一为结构化 `dataType`；Rust `types.rs` + TS `functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts` roundtrip；删 `signature_data_type` 与 `dataTypeFromFunctionSignaturePin`。
+- [x] **`get_function_call_sites` 去全量 rescan**：删除 `sync_call_site_index_from_loaded_graphs` 与 `collect_function_call_sites` 死包装；索引仅增量维护 + 项目加载时 `rebuild_function_call_site_index`。
+- [x] **Call 节点 Node Detail 走有效定义层**：`NodeDetailPanel` 对 Call Function 使用 `resolveEffectiveDefinition` 解析 pin 元数据。
+- [x] **签名更新刷新路径收敛**：`update_function_signature` invoke 回包为发起方唯一灌图权威；后端不再 emit `NodePinsUpdated`（对齐 `resolve_graph_dynamic_pins`）；`FunctionUpdated` 保留供非发起方/后续多窗口，发起方经 `graphRefreshEchoGuard` 整段跳过；删除 `incrementalPinUpdateGuard`。
+- [x] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`；`functionResourceView` + `useFunctionCatalog` 单点合并；Detail 经 `session.functions` 不再双订阅；`buildGraphSnapshotFromStores` 导出组装签名；删 `graphMetaStore.graphOrder`；见 `docs/adr/function-metadata-projection.md`。
+- [x] **Function Detail 局部变量区块（不实现）**：局部变量统一由 Sidebar Local 管理；已删除 `GraphLocalVariablesSection` 与 Detail 重复 wiring；`focusDetail` 对 event/function 同步 `variablesGraphScope`。
 
 ## v1.0 待办
 
-### 技术债 / 重构（2026.07 审计）
+### 窗口跨窗同步
 
-> 建议实施顺序：Phase1 快速清理（C + B1/B3）→ Phase2 边界收口（A2/A3 + B2/B5）→ Phase3 后端核心（A5/A6/A7 + command 拆分/下沉）→ Phase4 结构重构（A1/A4/A8/A9）。共 36 条（2026.07 审计 + 补充）。
+> **8.6 多 Editor 窗口跨窗同步（v1.0 设计 / 待办）**：**基线（已实现）**：副窗口 `#/editor`、per-label `workbenchLayoutMemento`（`setWorkbenchLayoutWindowScope`）、`useEditorWindowGeometryPersistence`（main → backend / secondary → localStorage）、各窗独立 `layoutStore` + editor grid。主题/设置跨窗；项目/图事件经 Tauri + `ProjectListener` 共享。**layout / open-tabs 跨窗不同步**为当前有意 defer。详见 [`docs/WORKBENCH_SATELLITE_WINDOWS.md`](./docs/WORKBENCH_SATELLITE_WINDOWS.md) § Secondary Editor Windows / Multi-window sync。
 
-#### A. 架构重构（高收益，需设计）
+**Phase 0 — 设计与产品定稿（Implement 前必做）**
 
-- [ ] **Editor 组合层瘦身**：`useEditor` / `useEditorGroup` 在同一窗口多次挂载（`EditorWindow.tsx`、`useProjectSync.ts`、Canvas 子树）；`useActiveEditorGroup` 在 state/actions/workspace 重复调用；`withCanvasInteraction: false` 仍是 band-aid。目标：引入 `EditorSessionProvider` 或拆分为 `useEditorTabs` / `useEditorCommands` / `useCanvasInteractionProvider`，仅 Canvas 挂载 pointer loop。涉及 `useEditor.ts`、`useEditorGroup.ts`、`useEditorState.ts`
-- [x] **IPC / 分层边界统一**：`SourceService`（`features/core/resultSource/sourceService.ts`）直接 `invoke` 应迁至 `services/`；`resourceActions.ts` 的 `rename_graph_resource` 绕过 `GraphService`；Views 直连 services（`Sidebar.tsx`、`Workspace.tsx`、InfoView stats blocks）；`resolvePinViewTarget.ts` 在 core 层开窗 + toast，应上移到 application hook
-- [x] **Toast 单通道**：`uiStore.showToast` → `Toast.tsx` → sonner 与 ~6 处直接 `import { toast } from 'sonner'` 并存（`useProjectPicker.ts`、`resolvePinViewTarget.ts` 等）。统一为 `uiStore.showToast` 或 `shared/ui/toast` 薄封装
-- [ ] **GraphDataStore flat mirror 退役**：`graphEntities[graphId]` 为权威，但 `nodes/pins/connections` flat mirror 仍被 ~15 处 `?? store.connections[cid]` fallback 使用（`graphDataStore.ts`、sync handlers、clipboard）。所有读写强制 graph-scoped API，删除 mirror 与 fallback
-- [x] **后端 ProjectState 变异 API**：graph commands 直接锁 `project_data`（`command_node.rs` 等），与 `prepare_graph_runtime` / `compile_graph` 规则易漂移。引入 `ProjectState::with_graph_mut` + 统一 `GraphInstance::recompile(scope)` 入口（`project_state_graph_mut.rs`；`GraphRecompileScope` 覆盖 RuntimePrepare / Full / FromSeeds / TopologyEffects / InferOnly；graph commands 已全部迁移）
-- [x] **后端 graph compile / rename 去重**：rename 收口至 `ProjectState::rename_graph` + 单一 command `rename_graph_resource`（含 unique name、持久化、`ResourceChanged`）；已删除 `rename_subgraph` 与 `ProjectService.renameSubgraph`；compile 已统一为 `GraphInstance::recompile`
-- [ ] **执行性能：`execute_project` 避免全量 clone**：`command_project.rs` / `project_execution.rs` 在 spawn 前 clone 整个 `ProjectData`
-- [ ] **InfoView 报告组件模板化**：13 个 `*Component.tsx` 重复 Suspense fallback、区块布局、IPC 编排（OLS/2SLS/LIML/Prais 等）。共享 `ReportLayout` + application hooks（如 `useStatsBlock`），组件只填 chart/table 插槽
-- [ ] **`graph_instance.rs` 拆分**：~1964 行 god module（CRUD / infer / schema / undo 混杂），是 command 层重复调用的根因之一
-- [ ] **`command_project.rs` 拆分**：~674 行混合 registry CRUD、项目 I/O、schema enrichment、execution、result-source commands；与 A5 ProjectState API 收口配合，按 domain 拆至 `command_project/`、`command_execution/` 等
-- [ ] **`command_hypothesis.rs` 业务下沉**：假设检验 parse → linearize → format H0/H1 → `yss_sci` dispatch 全在 command 层；应提取至 `hypothesis/` 或 `application/hypothesis.rs`，command 仅薄包装
-- [ ] **`canvasRef` / `viewportRef` 命名澄清**：canvas 栈中同名 ref 在不同层表示 DOM element vs `GraphPosition`（含 scale）；统一命名为 `canvasElementRef` / `viewportRef`，避免 gesture / pointer loop 误读
-- [ ] **框选 hit-target 与 viewport 变更不同步**：框选 pointer down 时缓存节点 screen bounds，缩放/平移过程中 marquee 命中可能偏移；需在 viewport 变更时 invalidate 命中缓存或框选期间锁定 viewport
+- [ ] **跨窗能力范围定稿**：明确 v1.0 需要哪些能力（勾选后写进设计 doc）：① `Window → New Window` 空白副 workbench（**已有**）；② **Tab 移到新窗**（源窗 remove + 副窗 add，VS Code「Move into New Window」）；③ 多窗 **镜像** 同一 tab 集（VS Code **不做**，默认排除）；④ 仅共享项目数据（**已有**，非 layout）；⑤ chrome 可见性克隆（sidebar/panel/detail 开关，不含 tabs/grid 拓扑）。
+- [ ] **权威源与冲突模型**：文档化 write authority——每窗 `workbenchLayoutMemento:${label}` 为 layout 真源；同一 `graphPath` 多窗同时打开时的 dirty / save / `graphSessionLifecycle`（focused hydrate）冲突策略；副窗关闭时 tab 回收到主窗还是丢弃。
+- [ ] **IPC / 事件边界草案**：与 `CLIENT_SETTINGS_UPDATED_EVENT`、`ProjectListener` 分工；跨窗 workbench 变更的 Tauri event 命名与 payload（例：`editor-tab-moved`、`workbench-chrome-changed`）、窗口 `label` scope、debounce / fan-out；禁止 layout sash 热路径跨窗广播（对齐 §6「拖拽期零状态广播」）。
+
+**Phase 1 — 首选 MVP（定稿后实现）**
+
+- [ ] **Tab 跨窗移动**：命令 + Tab 上下文菜单「Move to New Window」——`openSecondaryEditorWindow` 创建副窗 → IPC/handoff 传递 tab descriptor → 源窗 `closeTab`、副窗 `openTab` + `setPanelActiveView('logs')` 可选；vitest + 手工双窗回归。
+- [ ] **同一 graph 多窗打开提示（非阻断）**：检测多 label 下相同 `activeTabId` / open tabs 含同一 path 时，Tab 标题或 Status Bar 弱提示「已在其他窗口打开」；与 save 冲突 toast 文案联动。
+
+**Phase 2 — 可选增强（v1.0 后 / 有明确需求再排）**
+
+- [ ] **跨窗 layout 镜像或跟随**：仅当产品明确要求（VS Code 默认 **per-window layout**）；若做，需 global layout revision + merge 规则，勿破坏现有 per-label memento。
+- [ ] **副窗 ↔ 主窗 tab 回收**：副窗关闭前 prompt「将未保存 tab 移回主窗？」（应用内 Modal，非原生 dialog）；与 dirty-tab 关闭拦截（`useMenubar`）统一。
+- [ ] **跨窗执行 / 日志焦点**：Run graph 时自动 `openLogsPanel` 是否仅焦点窗生效；多窗同时 playback 的 `graphSessionStore.focusedSession` 策略。
+
+**Phase 3 — 测试与文档**
+
+- [ ] **双窗 E2E 清单**：新建副窗、per-label memento 隔离、geometry 持久化、Tab 移动、同 path 双开、主题同步、项目事件双窗一致；写入 `WORKBENCH_SATELLITE_WINDOWS.md` 或独立 `docs/MULTI_WINDOW_SYNC.md`。
+- [ ] **Rust 侧 window registry（若 IPC 需要）**：可选 `command/list_editor_windows` 返回 label + 前台状态，供冲突检测与 handoff；保持 command 层薄包装。
 
 ---
+
+### Rust 后端复盘
+
+> **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
+
+- [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
+- [ ] **`yss-sci` clippy warning 分期清理（~90+）**：冗余 field name、identity `filter_map`、`too_many_arguments`、索引 loop 等；按模块（`database/`、`regression/`、`ts/`）分批 `-D warnings`，避免一次性大爆炸。
+- [ ] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
+- [ ] **`NodeExecutionContext::get_bound_type` 实现**：`node_execution_context.rs` 仍 TODO 恒返回 `None`，运行时 type var 绑定不可查；在 `GraphRuntime` 暴露 bound 查询，供泛型 pin / 节点求值与连接校验闭环。
+- [ ] **执行期 Graph 锁粒度优化**：`node_execution_context` + `executor/data_inputs` 对 `Arc<Mutex<GraphInstance>>` 高频 `lock().unwrap()`；引入 scoped read guard 或执行帧级缓存，缩短临界区，降低 lock poison 一次拖垮整次执行的概率。
+- [ ] **`with_graph_mut` 死锁规则回归测**：`project_state_graph_mut.rs` 文档禁止闭包内再调 `get_graph`/`load_graph`（`RwLock` 不可重入），但无测试；补 integration test 或 code-review checklist，覆盖 `sync_all_call_nodes_in_graph` / `update_function_signature` 等高频路径。
+- [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
+- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
+- [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
+- [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs` 或 CI 校验「样例 JSON ↔ TypeScript」契约（与前端 `DatabaseRecord` 强类型化项联动）。
+- [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
+- [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
+- [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。
+- [ ] **`RwLock` poison 策略文档化**：`project_data` / `function_signatures` / `graph.data_state` 普遍 `read().unwrap()`，中毒即 panic IPC 线程；明确运维策略（重启项目会话）或关键 command 改返回 `LockPoisoned` 而非 panic。
+- [ ] **Executor 模块路径确认**：执行器已拆为 `execution/engine/executor/mod.rs` + `wire_events`/`data_inputs`；确认无残留 `executor.rs` 双份实现或 dead re-export，防止合并回潮。
+- [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
+
+### 口语化表达
 
 - [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
@@ -660,10 +1630,30 @@ package.json
 - [ ] **变量类型切换时的值迁移 / 智能转换（暂缓）**：当前策略——切换类型且未显式提交新值时，重置为 `DataType::default_value()`；Array / Object / DataFrame / DataSeries 已用 JSON 列式编辑 + `tabular/` 存储（见 ## 2026.07.03 已勾项）。**暂不实现**跨类型自动保留或 coerce（如 Int→String、DataFrame↔Array、Object 字段映射等）；后续可考虑接入 `DataValue::coerce_to`、切换前「将丢失当前值」提示。变量类型不可选 Any。
 - [ ] **View：大 Array 分页 tabular（暂缓，没有合适的前端表现）**：一维、同质、较长 Array 走后端 `getPage`（2 列 `#` / `value`，与 DataSeries 同 API 形状）；短数组 / 嵌套 / 异构仍走 `json` + `JsonTreeView`；需 `ResultSource` 或虚拟 tabular 存储与 builder 分支。
 - [ ] **Struct handle → View JSON 架构重设计（暂缓实现）**：当前 `ExecutionDataStore` 仅存 `Arc<dyn Any>`，`DataValue::Struct` 的 `typeKey` 与 handle 分离；View / `build_struct_source` 只能事后按 `typeKey` downcast，临时用 `execution/struct_json.rs` 中央 match 表（OLSModel、OLSResult 等逐个注册）——每增 Struct 要改表，且 `typeKey` 双写，不可持续。**待选方向（均未定稿，先不实现）**：① **入库 JSON 快照**：`put_struct(type_key, T: Serialize)` 写入 handle 时同步 `view_json`，View 只读快照、Predict 仍 downcast；② **`dyn ViewPayload` trait**：handle 自带 `view_json()` + `as_any()`；③ **TypeId 注册表 + macro**：注册点贴近类型定义，替代 central match；④ **View 永不碰 handle**：所有 output 注册 source 时必须带 JSON（仍要解决无 upstream source 时的首次序列化）。实施前需统一：handle 层 vs `ResultSourceStore` 谁为 JSON 真源、不可 `Serialize` 的类型（如 `StandardizeTransform1D`）策略、与现有 `source_id` 复用链如何衔接。完成后删除 `struct_json.rs` 式 per-type 注册。
-- [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、embedded UX、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
-- [ ] 函数图应该如何设计？？？设置不可删除节点，但是可以移动，如 event 中的 event begin，function 中的 inputs 节点 和 outputs 节点？？或许 function 中不应该使用节点形式？？在这里还需要对 event begin 屏蔽，同理 event 需要对 inputs 节点和 outputs 节点屏蔽
+- [ ] **View 节点展示（续）**：核心 renderer / source 统一 / 子窗口 layout 已完成，见 ## 2026.07.03 未完成项（Array 分页 tabular、子窗口 chrome、runtime source 生命周期、Struct handle JSON 架构重设计）。
 - [ ] 复制粘贴撤回逻辑的快捷键效果有问题
 - [ ] 值类型处理
+- [ ] 还有 7 个组件属于「壳统一了、内部还没拆干净」，优先级建议：VEC → Panel → DID → VARSoc → DFADFSummaryList → VecRank → DFADF。
+- [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
+- [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
+- [ ] 节点样式问题
+- [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
+- [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
+- [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
+- [x] 函数的 `FunctionSignaturePin` 结构化 `DataType`（与项目变量同构；见 Phase D + `functionSignaturePin.ts`）
+- [ ] uistyle 可能需要根据节点类型来进行重构
+- [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
+- [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
+- [ ] sidebar 内容中的 scrollbar 以及日志及其他组件内容的拖动逻辑有问题
+
+
+函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
+
+useGraphManagement 里 addEvent / addFunction、deleteEvent / deleteFunction 几乎镜像，底层已是 createGraphResource(kind) / deleteGraphWithConfirm(kind)
+GraphResourceKind vs GraphResourceType 两处 type alias（sidebar / editor）
+快捷键 Ctrl+N 仅新建 Event（产品选择，非 bug）
+Menubar / Watermark 仍分「新建 Event / 新建 Function」两项（入口文案差异，合理）
+若要进一步收敛，可以把 Session 对外 API 收成 addGraph(kind) / deleteGraph(kind)，Sidebar/Menubar 只传 kind，不再暴露四套函数名。
 
 # TODOLIST
 
@@ -778,3 +1768,65 @@ PinInstance 新增字段:
 **优先级链**：`type_narrowing` > 类型推断结果 > Pin 定义默认值
 
 结构估计
+
+
+---
+
+## 仍待收敛（未改，风险较低）
+
+| 领域 | 说明 |
+|------|------|
+| Plot 网格线绘制 | 各 XY 图内联 d3 grid 逻辑相似，但 `axisScale.ts` 注释明确单图可内联，暂不强制抽取 |
+| `normalizeVariables` | `projectIOStore` 本地 helper 与 `variableService` 模式略重复，但边界清晰，暂保留 |
+
+---
+
+## 验证
+
+- `npx tsc --noEmit` — 通过
+- `cargo check` — 通过
+- vitest：plotTime、pinResultSearch、execution、graphModel、layoutTabModel — 通过
+- 全项目 `@deprecated` 业务标注 — 已清零（`src/` / `src-tauri/`）
+
+---
+
+## 仍待收敛（非 §13，独立任务）
+
+| 领域 | 说明 |
+|------|------|
+| ACF/PACF IPC 与 Plot DTO 对齐 | `command_acf_pacf` 与 `correlogram.rs` 字段统一（见 TODO §1547） |
+| Plot 网格线绘制 | 各 XY 图内联 d3 grid，暂不强制抽取 |
+| `normalizeVariables` | `projectIOStore` 本地 helper，边界清晰，暂保留 |
+| `loadGraph` 双 IPC | 动态 pin 物化所需，属有意设计 |
+
+
+
+# functionsignature（已完成 2026.07.09）
+
+`FunctionSignaturePin` 已从 `type` + `containerType` 字符串 DSL 迁移为结构化 `DataType`（exec pin 缺省 `dataType`）。
+
+**契约**
+
+```ts
+interface FunctionSignaturePin {
+  id: string;
+  name: string;
+  dataType?: DataType; // 缺省 = exec
+}
+```
+
+**实现单源**
+
+| 层 | 权威位置 |
+|----|----------|
+| Rust 签名类型 | `graph_instance/types.rs`（`exec()` / `data()` 构造器） |
+| 壳节点 / Call 投影 | `function_shell.rs`、`sync_call_function_pins_from_signature` |
+| Call 索引 | `register_call_site`（`sync_call_node` 成功后幂等登记） |
+| 前端编辑 | `functionSignaturePin.ts` + `PinEditor.tsx` |
+| Call 有效定义 | `resolveEffectiveDefinition.ts` |
+
+**已删除**：`signature_data_type`、`dataTypeFromPinType`、`dataTypeFromFunctionSignaturePin`。
+
+**测试**：`types.rs` serde 单测；`functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts`；`function_call_test` / `shell_node_test`（共享 `tests/common::function_signature_pin`）。
+
+**后续（非阻塞）**：`PinEditor` 可逐步接入变量面板级类型选择器（`DataFrame` / `Struct` / `OneOf` 等），无需再改字符串映射表。

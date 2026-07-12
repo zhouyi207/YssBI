@@ -14,8 +14,8 @@ import type { VariableScope } from '@/shared/types/domain/variable';
 import { rebuildVariableResourceProjection } from '@/features/application/dataManagement/variableActions';
 
 function markVariableScopeDirty(scope: VariableScope) {
-  if (scope.type === 'event') markGraphTabDirty(scope.eventId);
-  if (scope.type === 'function') markGraphTabDirty(scope.functionId);
+  if (scope.type === 'event') markGraphTabDirty(scope.eventPath);
+  if (scope.type === 'function') markGraphTabDirty(scope.functionPath);
 }
 
 export class VariableCreatedHandler extends BaseEventHandler<VariableCreatedPayload> {

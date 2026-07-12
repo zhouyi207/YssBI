@@ -1,108 +1,55 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
-use crate::graph::GraphId;
-use crate::project::{
+use super::graph_resource_path::{GraphResourcePath, normalize_graph_resource_path};
+use super::project_error::ProjectError;
+use super::{
     EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind,
-    ProjectError, ProjectManifest,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GraphResourceManifestEntry {
-    pub id: GraphId,
-    pub path: String,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScannedGraphEntry {
+    pub path: GraphResourcePath,
     pub kind: GraphDocumentKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct GraphResourceIndex {
-    entries: Vec<GraphResourceManifestEntry>,
-    by_id: HashMap<GraphId, GraphResourceManifestEntry>,
-    by_path: HashMap<String, GraphResourceManifestEntry>,
+    entries: Vec<ScannedGraphEntry>,
+    by_path: HashMap<String, ScannedGraphEntry>,
 }
 
 impl GraphResourceIndex {
-    pub fn entries(&self) -> &[GraphResourceManifestEntry] {
+    pub fn entries(&self) -> &[ScannedGraphEntry] {
         &self.entries
     }
 
-    pub fn get_by_id(&self, id: &GraphId) -> Option<&GraphResourceManifestEntry> {
-        self.by_id.get(id)
-    }
-
-    pub fn get_by_path(&self, path: &str) -> Option<&GraphResourceManifestEntry> {
+    pub fn get_by_path(&self, path: &str) -> Option<&ScannedGraphEntry> {
         self.by_path.get(&normalize_resource_path(path))
     }
 }
 
-pub fn reconcile_graph_resources(
-    root: &Path,
-    manifest: &mut ProjectManifest,
-) -> Result<(GraphResourceIndex, bool), ProjectError> {
+/// 扫描 `events/` 与 `functions/` 目录，路径为唯一身份。
+pub fn scan_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
     let files = collect_graph_resource_files(root)?;
-    let live_paths: HashSet<String> = files.iter().map(|(path, _)| path.clone()).collect();
-    let mut existing: HashMap<String, GraphResourceManifestEntry> = manifest
-        .graphs
-        .iter()
-        .filter(|entry| live_paths.contains(&normalize_resource_path(&entry.path)))
-        .map(|entry| (normalize_resource_path(&entry.path), entry.clone()))
-        .collect();
-
     let mut entries = Vec::with_capacity(files.len());
     for (path, kind) in files {
-        let path = normalize_resource_path(&path);
-        let entry = existing
-            .remove(&path)
-            .filter(|entry| entry.kind == kind)
-            .unwrap_or(GraphResourceManifestEntry {
-                id: GraphId::new(),
-                path: path.clone(),
-                kind,
-            });
-        entries.push(GraphResourceManifestEntry {
-            path,
-            kind,
-            ..entry
-        });
+        let path = GraphResourcePath::new(path)?;
+        entries.push(ScannedGraphEntry { path, kind });
     }
-    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    entries.sort_by(|a, b| a.path.as_str().cmp(b.path.as_str()));
 
-    let changed = manifest.graphs != entries;
-    if changed {
-        manifest.graphs = entries.clone();
-    }
-
-    let by_id = entries
-        .iter()
-        .cloned()
-        .map(|entry| (entry.id, entry))
-        .collect();
     let by_path = entries
         .iter()
         .cloned()
-        .map(|entry| (entry.path.clone(), entry))
+        .map(|entry| (entry.path.as_str().to_string(), entry))
         .collect();
 
-    Ok((
-        GraphResourceIndex {
-            entries,
-            by_id,
-            by_path,
-        },
-        changed,
-    ))
+    Ok(GraphResourceIndex { entries, by_path })
 }
 
 pub fn normalize_resource_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim_matches('/')
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("/")
+    normalize_graph_resource_path(path)
 }
 
 fn collect_graph_resource_files(
@@ -162,3 +109,4 @@ fn relative_slash_path(root: &Path, path: &Path) -> Result<String, ProjectError>
         .map(|relative| relative.to_string_lossy().replace('\\', "/"))
         .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))
 }
+

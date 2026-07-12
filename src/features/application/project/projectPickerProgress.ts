@@ -8,6 +8,7 @@ import type {
 
 export interface ProjectPickerProgressHandle {
   update: (patch: Partial<ProgressState>) => void;
+  markDone: () => void;
   isCancelled: () => boolean;
 }
 

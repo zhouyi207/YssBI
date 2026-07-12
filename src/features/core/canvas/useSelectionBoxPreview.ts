@@ -24,12 +24,12 @@ function applySelectionBox(
 /** Imperative marquee rect — no React re-render per pointer frame. */
 export function useSelectionBoxPreview(
   boxRef: React.RefObject<HTMLDivElement | null>,
-  canvasRef: React.RefObject<HTMLDivElement | null>,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
   groupId: string | undefined,
 ): void {
   useEffect(() => {
     const box = boxRef.current;
-    const canvas = canvasRef.current;
+    const canvas = canvasElementRef.current;
     if (!box || !canvas || !groupId) return;
 
     if (!box.className) box.className = BOX_CLASS;
@@ -43,6 +43,7 @@ export function useSelectionBoxPreview(
       applySelectionBox(box, canvas, session);
     };
 
+    sync();
     return subscribeSelectionSession(sync);
-  }, [boxRef, canvasRef, groupId]);
+  }, [boxRef, canvasElementRef, groupId]);
 }

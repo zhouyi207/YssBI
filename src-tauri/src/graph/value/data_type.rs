@@ -280,7 +280,9 @@ impl DataType {
             DataType::Float64 => DataValue::Float64(num_traits::Zero::zero()),
             DataType::String => DataValue::String(String::new()),
             // 时间/分类标量默认以空字符串表示（运行时值经 String 承载）
-            DataType::Date | DataType::Datetime | DataType::Time => DataValue::String(String::new()),
+            DataType::Date | DataType::Datetime | DataType::Time => {
+                DataValue::String(String::new())
+            }
             DataType::Categorical => DataValue::String(String::new()),
             DataType::Array(_) => default_array_value(),
             DataType::Object => default_object_value(),

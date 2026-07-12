@@ -110,9 +110,9 @@ export const DatabaseEditorWindow: React.FC = () => {
   // Auto-fetch meta if missing
   useEffect(() => {
     if (!selectedDfId) return;
-    const df = dataframes[selectedDfId] as Record<string, unknown> | undefined;
+    const df = dataframes[selectedDfId];
     if (!df) return;
-    if (df.name && Array.isArray(df.columns) && df.columns.length > 0) return;
+    if (df.name && (df.columns?.length ?? 0) > 0) return;
     let cancelled = false;
     const id = selectedDfId;
     DatabaseService.getDatabaseMeta(selectedDfId)

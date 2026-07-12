@@ -6,6 +6,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
 use serde::Serialize;
 use statrs::distribution::{ContinuousCDF, StudentsT};
@@ -77,7 +78,7 @@ fn numeric_dataseries_type() -> PinDataTypeDefinition {
 pub fn register(registry: &NodeRegistry) {
     let definition = NodeDefinition::new("Correlation Plot", vec!["Plot".to_string()])
         .with_ui_style("plot")
-        .with_localized_description("由数值 DataSeries 绘制相关热力图（可用 + 添加更多序列）", "Plot correlation heatmap from numeric DataSeries (use + to add more)")
+                .with_documentation(docs::plot::CORRELATION_PLOT_ZH, docs::plot::CORRELATION_PLOT_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::exec_input("In", ExecRole::ExecIn)),
             PinSlot::repeatable(

@@ -16,9 +16,9 @@ interface EditorStore {
   setDetailFocus: (focus: DetailFocus) => void;
   clearDetailFocus: () => void;
 
-  /** Stable graph id for Variables sidebar local scope — survives tab close. */
-  variablesGraphScopeId: string | null;
-  setVariablesGraphScope: (graphId: string | null) => void;
+  /** 变量侧栏 Local scope 锚定的图 path；关闭 tab 后仍保留。 */
+  variablesGraphScopePath: string | null;
+  setVariablesGraphScope: (graphPath: string | null) => void;
 
   pendingConnection: Pin | null;
   setPendingConnection: (pin: Pin | null) => void;
@@ -32,8 +32,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setDetailFocus: (focus) => set({ detailFocus: focus }),
   clearDetailFocus: () => set({ detailFocus: null }),
 
-  variablesGraphScopeId: null,
-  setVariablesGraphScope: (graphId) => set({ variablesGraphScopeId: graphId }),
+  variablesGraphScopePath: null,
+  setVariablesGraphScope: (graphPath) => set({ variablesGraphScopePath: graphPath }),
 
   pendingConnection: null,
   setPendingConnection: (pin) => set({ pendingConnection: pin }),

@@ -1,169 +1,153 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { VscSplitHorizontal, VscSplitVertical, VscChromeClose } from "react-icons/vsc";
+import { VscSplitHorizontal, VscSplitVertical, VscChromeClose, VscWarning, VscSync, VscError } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { computeTabShiftOffset } from "@/features/core/layout/tabBarInsertIndex";
+import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ContextMenu } from "@/shared/ui/contextMenu";
+import type { ContextMenuPosition } from "@/shared/ui/contextMenu";
 import {
   editorTabBarActionsClass,
   editorTabBarShellClass,
-  editorTabDropIndicatorClass,
+  editorTabBarStripClass,
+  editorTabCloseButtonClass,
   editorTabItemVariants,
+  editorTabReorderGapClass,
 } from "./editorTabStyles";
-import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
-import { releaseGraphCacheIfClosed } from "@/features/application/editor/releaseGraphCache";
-import { closeEditorTab } from "@/features/application/editor/closeEditorTab";
-import { useEditorStore } from "@/features/core/editor";
-import { syncVariablesGraphScopeFromActiveTab } from "@/features/core/editor/detail/variablesGraphScope";
-import { resourceKey, resourceRefFromLayoutTab, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
+import {
+  closeEditorGroup,
+  closeTab,
+  pinTab,
+  splitEditorGroupFromPointer,
+  switchTab,
+  toggleMaximizeEditorGroup,
+} from "@/features/application/editor/tabCommands";
+import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/application/editor/tabBarReorderStore";
+import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
+import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
+import { isPreviewLayoutTab } from "@/features/core/layout/layoutTabModel";
+import { useSidebarTab } from "@/features/application/editor/useSidebarTab";
+import { resourceKey, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
 interface TabBarProps {
-    layoutNodeId: string;
-    tabs: LayoutTab[];
-    activeTabId?: string;
+  layoutNodeId: string;
+  tabs: LayoutTab[];
+  activeTabId?: string;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeTabId }) => {
   const { t } = useTranslation();
-  // 使用 useShallow 和单个选择器订阅所有需要的状态，避免多次重渲染
-  const { 
-    updateNode, 
-    splitNode, 
-    removeNode, 
-    setActiveGroup, 
-    isAltPressed, 
-    isDragging 
-  } = useLayoutStore(useShallow(s => ({
-    updateNode: s.updateNode,
-    splitNode: s.splitNode,
-    removeNode: s.removeNode,
-    setActiveGroup: s.setActiveGroup,
+  const switchSidebarTab = useSidebarTab();
+  const { isAltPressed, isDragging } = useLayoutStore(useShallow((s) => ({
     isAltPressed: s.isAltPressed,
     isDragging: s.isDragging,
   })));
+  const reorderPreview = useTabBarReorderStore((state) => state.preview);
+  const showReorderPreview = reorderPreview?.targetGroupId === layoutNodeId;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dropIndicatorIndex, setDropIndicatorIndex] = React.useState<number | null>(null);
-  
-  // 为 TabBar 添加 droppable 区域，用于标签页移动（作为最后位置的 fallback）
-  const { setNodeRef: setDropRef, isOver: isTabBarOver } = useDroppable({
+  const { setNodeRef: setTabBarDropRef } = useDroppable({
     id: `tabbar-${layoutNodeId}`,
-    data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length }
+    data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length },
   });
-  
-  // 当拖动到 TabBar 的空白区域时，显示在最后位置的指示器
-  React.useEffect(() => {
-    if (isTabBarOver && isDragging) {
-      setDropIndicatorIndex(tabs.length);
-    }
-  }, [isTabBarOver, isDragging, tabs.length]);
 
-  const handleTabClick = (id: string) => {
-    setActiveGroup(layoutNodeId);
-    const currentData = useLayoutStore.getState().nodes[layoutNodeId].data;
-    const tab = currentData?.tabs?.find((item) => item.id === id);
-    updateNode(layoutNodeId, {
-        data: {
-            ...currentData,
-            activeTabId: id,
-            params: currentData?.activeTabId === id
-              ? currentData?.params
-              : { ...currentData?.params, selectedNodeIds: [] },
-        }
-    });
-    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
-      useEditorStore.getState().setDetailFocus({ kind: tab.type, id });
-    }
-    if (tab?.type === "event" || tab?.type === "function") {
-      syncVariablesGraphScopeFromActiveTab();
-    }
-  };
+  const handleTabStripClick = useCallback((e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
+    if (!target) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    const tabId = target.dataset.tabId;
+    if (!tabId) return;
+    const tab = tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    void switchTab(layoutNodeId, tab.id, tab);
+  }, [layoutNodeId, tabs]);
 
-  const handleCloseTab = (id: string, e: React.MouseEvent) => {
+  const handleTabStripAuxClick = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 1) return;
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
+    if (!target) return;
+    const tabId = target.dataset.tabId;
+    if (!tabId) return;
+    e.preventDefault();
     e.stopPropagation();
-    void closeEditorTab(id, layoutNodeId);
-  };
+    void closeTab(layoutNodeId, tabId);
+  }, [layoutNodeId]);
 
-  const handleSplit = (e: React.MouseEvent) => {
+  const handleSplit = (e: Pick<PointerEvent, 'altKey' | 'stopPropagation'>) => {
     e.stopPropagation();
-    const nodes = useLayoutStore.getState().nodes;
-    const activeTab = getActiveLayoutTab(layoutNodeId, nodes)?.tab;
-    
-    // 优先使用事件中的 altKey 状态，实现零延迟响应
-    const currentAlt = e.altKey || isAltPressed;
-    
-    // 默认左右分栏 (row)，按住 Alt 时上下分栏 (col)
-    // 注意：在我们的布局引擎中，'row' 表示子节点水平排列（左右），'col' 表示垂直排列（上下）
-    const direction = currentAlt ? 'col' : 'row';
-    
-    splitNode(layoutNodeId, direction, activeTab?.component || 'GraphEditor');
+    void splitEditorGroupFromPointer(layoutNodeId, e.altKey || isAltPressed);
   };
 
   const handleCloseGroup = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const tabIds = useLayoutStore.getState().nodes[layoutNodeId]?.data?.tabs?.map((tab) => tab.id) ?? [];
-    for (const tabId of tabIds) {
-      const closed = await closeEditorTab(tabId, layoutNodeId);
-      if (!closed) return;
-    }
-    removeNode(layoutNodeId);
-    tabIds.forEach(releaseGraphCacheIfClosed);
+    await closeEditorGroup(layoutNodeId);
   };
 
-  // Auto-scroll to active tab
+  const revealInSidebar = useCallback((tab: LayoutTab) => {
+    if (tab.type === 'event' || tab.type === 'function') {
+      switchSidebarTab('graphs');
+    } else if (tab.type === 'worksheet') {
+      switchSidebarTab('charts');
+    }
+  }, [switchSidebarTab]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !activeTabId) return;
+    const activeEl = container.querySelector(`[data-tab-id="${activeTabId}"]`) as HTMLElement | null;
+    if (!activeEl) return;
 
-    const activeEl = container.querySelector(`[data-tab-id="${activeTabId}"]`) as HTMLElement;
-    if (activeEl) {
-      activeEl.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'nearest'
-      });
+    const tabRect = activeEl.getBoundingClientRect();
+    const viewportRect = container.getBoundingClientRect();
+    const isVisible =
+      tabRect.left >= viewportRect.left
+      && tabRect.right <= viewportRect.right;
+    if (!isVisible) {
+      activeEl.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
     }
   }, [activeTabId]);
-  
-  // 拖动结束时清除插入指示器
-  useEffect(() => {
-    if (!isDragging) {
-      setDropIndicatorIndex(null);
-    }
-  }, [isDragging]);
-  
-  // 在拖动时禁用滚动
+
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    
-    if (isDragging) {
-      const preventScroll = (e: WheelEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      
-      container.addEventListener('wheel', preventScroll, { passive: false });
-      return () => {
-        container.removeEventListener('wheel', preventScroll);
-      };
-    }
+    if (!container || !isDragging) return;
+    const preventScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    container.addEventListener('wheel', preventScroll, { passive: false });
+    return () => container.removeEventListener('wheel', preventScroll);
   }, [isDragging]);
 
+  const handleTabClose = useCallback((tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    void closeTab(layoutNodeId, tabId);
+  }, [layoutNodeId]);
+
   return (
-    <div
-      ref={setDropRef}
-      className={editorTabBarShellClass}
-    >
-      <div className="relative flex-1 flex items-start h-full min-w-0">
-        {isDragging ? (
-          <div ref={containerRef} className="absolute inset-0 overflow-hidden flex items-start">
+    <div className={editorTabBarShellClass}>
+      <div
+        ref={setTabBarDropRef}
+        data-tabbar-drop={layoutNodeId}
+        className="relative flex min-h-0 flex-1 items-stretch h-full min-w-0"
+      >
+        <OverlayScrollbar
+          ref={containerRef}
+          direction="horizontal"
+          className="flex min-h-0 flex-1 items-stretch h-full"
+        >
+          <div
+            data-tab-strip={layoutNodeId}
+            className={editorTabBarStripClass}
+            onClick={handleTabStripClick}
+            onAuxClick={handleTabStripAuxClick}
+          >
             {tabs.map((tab, index) => (
               <TabItem
                 key={tab.id}
@@ -171,49 +155,24 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
                 index={index}
                 layoutNodeId={layoutNodeId}
                 isActive={activeTabId === tab.id}
-                onClick={() => handleTabClick(tab.id)}
-                onClose={(e) => handleCloseTab(tab.id, e)}
-                onDragOver={(index) => setDropIndicatorIndex(index)}
+                reorderPreview={showReorderPreview ? reorderPreview : null}
+                onClose={handleTabClose}
+                onRevealInSidebar={() => revealInSidebar(tab)}
               />
             ))}
-            {dropIndicatorIndex !== null && (
+            {showReorderPreview && reorderPreview ? (
               <div
-                className={editorTabDropIndicatorClass}
+                className={editorTabReorderGapClass}
                 style={{
-                  left: (() => {
-                    const container = containerRef.current;
-                    if (!container) return 0;
-                    const tabElement = container.children[dropIndicatorIndex] as HTMLElement;
-                    if (!tabElement) {
-                      const lastTab = container.children[tabs.length - 1] as HTMLElement;
-                      if (lastTab) return lastTab.offsetLeft + lastTab.offsetWidth;
-                      return 0;
-                    }
-                    return tabElement.offsetLeft;
-                  })(),
+                  left: reorderPreview.gapLeft,
+                  width: reorderPreview.gapWidth,
                 }}
               />
-            )}
+            ) : null}
           </div>
-        ) : (
-          <OverlayScrollbar ref={containerRef} direction="horizontal" className="flex-1 flex items-start h-full">
-            {tabs.map((tab, index) => (
-              <TabItem
-                key={tab.id}
-                tab={tab}
-                index={index}
-                layoutNodeId={layoutNodeId}
-                isActive={activeTabId === tab.id}
-                onClick={() => handleTabClick(tab.id)}
-                onClose={(e) => handleCloseTab(tab.id, e)}
-                onDragOver={(index) => setDropIndicatorIndex(index)}
-              />
-            ))}
-          </OverlayScrollbar>
-        )}
+        </OverlayScrollbar>
       </div>
 
-      {/* Group Action Buttons */}
       <div className={editorTabBarActionsClass}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -223,7 +182,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
               size="icon-sm"
               onPointerDown={(e) => {
                 if (e.button !== 0) return;
-                handleSplit(e as any);
+                handleSplit(e);
               }}
               onMouseEnter={(e) => {
                 if (e.altKey !== isAltPressed) {
@@ -260,116 +219,153 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
 };
 
 interface TabItemProps {
-    tab: LayoutTab;
-    index: number;
-    layoutNodeId: string;
-    isActive: boolean;
-    onClick: () => void;
-    onClose: (e: React.MouseEvent) => void;
-    onDragOver: (index: number) => void;
+  tab: LayoutTab;
+  index: number;
+  layoutNodeId: string;
+  isActive: boolean;
+  reorderPreview: TabBarReorderPreview | null;
+  onClose: (tabId: string, e: React.MouseEvent) => void;
+  onRevealInSidebar: () => void;
 }
 
-const TabItem: React.FC<TabItemProps> = React.memo(({ tab, index, layoutNodeId, isActive, onClick, onClose, onDragOver }) => {
-    const tabRef = React.useRef<HTMLDivElement>(null);
-    const resourceRef = resourceRefFromLayoutTab(tab);
-    const resourceTitle = useResourceStore((state) => {
-        if (!resourceRef) return undefined;
-        return state.resources[resourceKey(resourceRef)]?.name;
-    });
-    const documentState = useDocumentStateStore((state) => {
-        if (!resourceRef) return undefined;
-        return state.documents[resourceKey(resourceRef)];
-    });
-    const title = resourceTitle ?? tab.title;
-    const statusLabel = documentState?.missing
-        ? "missing"
-        : documentState?.conflict
-            ? "conflict"
-            : documentState?.stale
-                ? "stale"
-                : null;
-    const isDirty = documentState?.dirty ?? tab.isDirty;
-    
-    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-        id: `tab-${layoutNodeId}-${tab.id}`,
-        data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId }
-    });
-    
-    const { setNodeRef: setDropRef, isOver } = useDroppable({
-        id: `tab-drop-${layoutNodeId}-${index}`,
-        data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: index }
-    });
-    
-    // 合并 draggable 和 droppable 的 refs
-    const setRefs = React.useCallback((node: HTMLDivElement | null) => {
-        tabRef.current = node;
-        setNodeRef(node);
-        setDropRef(node);
-    }, [setNodeRef, setDropRef]);
-    
-    // 当拖动到这个标签上时，根据鼠标位置决定插入到左边还是右边
-    React.useEffect(() => {
-        if (!isOver || !tabRef.current) return;
-        
-        const handleMouseMove = (e: MouseEvent) => {
-            const rect = tabRef.current!.getBoundingClientRect();
-            const mouseX = e.clientX;
-            const tabCenter = rect.left + rect.width / 2;
-            
-            // 如果鼠标在标签左半部分，插入到当前位置；右半部分则插入到下一个位置
-            if (mouseX < tabCenter) {
-                onDragOver(index);
-            } else {
-                onDragOver(index + 1);
-            }
-        };
-        
-        return addGlobalEventListener(window, 'mousemove', handleMouseMove);
-    }, [isOver, index, onDragOver]);
+function areTabItemPropsEqual(prev: TabItemProps, next: TabItemProps): boolean {
+  if (prev.tab.id !== next.tab.id) return false;
+  if (prev.tab.pinned !== next.tab.pinned) return false;
+  if (prev.isActive !== next.isActive) return false;
+  if (prev.index !== next.index) return false;
+  if (prev.layoutNodeId !== next.layoutNodeId) return false;
+  if (prev.onClose !== next.onClose) return false;
+  if (prev.onRevealInSidebar !== next.onRevealInSidebar) return false;
+  if (prev.reorderPreview !== next.reorderPreview) return false;
+  return true;
+}
 
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: 100,
-        opacity: isDragging ? 0.5 : 1,
-        height: 'var(--titlebar-height)',
-    } : {
-        opacity: isDragging ? 0.5 : 1,
-        height: 'var(--titlebar-height)',
-    };
+const TabItem: React.FC<TabItemProps> = React.memo(({
+  tab, index, layoutNodeId, isActive, reorderPreview, onClose, onRevealInSidebar,
+}) => {
+  const { t } = useTranslation();
+  const [menuPosition, setMenuPosition] = useState<ContextMenuPosition | null>(null);
+  const resourceRef = layoutTabResourceRef(tab);
+  const resourceTitle = useResourceStore((state) => {
+    if (!resourceRef) return undefined;
+    return state.resources[resourceKey(resourceRef)]?.name;
+  });
+  const documentState = useDocumentStateStore((state) => {
+    if (!resourceRef) return undefined;
+    return state.documents[resourceKey(resourceRef)];
+  });
 
-    return (
-        <div
-            ref={setRefs}
-            style={style}
-            {...attributes}
-            {...listeners}
-            data-tab-id={tab.id}
-            onClick={onClick}
-            className={editorTabItemVariants({ active: isActive, dragging: isDragging })}
+  const baseTitle = resolveTabDisplayName(resourceRef, tab.id);
+  const title = resourceTitle ?? baseTitle;
+
+  const isPreview = isPreviewLayoutTab(tab);
+
+  const statusKey = documentState?.missing
+    ? 'missing'
+    : documentState?.conflict
+      ? 'conflict'
+      : documentState?.stale
+        ? 'stale'
+        : null;
+
+  const statusIcon = statusKey === 'missing'
+    ? <VscError size={12} className="text-red-500" />
+    : statusKey === 'conflict'
+      ? <VscWarning size={12} className="text-amber-500" />
+      : statusKey === 'stale'
+        ? <VscSync size={12} className="text-amber-500" />
+        : null;
+
+  const isDirty = resourceRef ? (documentState?.dirty ?? false) : false;
+
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `tab-${layoutNodeId}-${tab.id}`,
+    data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId },
+  });
+
+  const shiftX = !isDragging && reorderPreview && reorderPreview.sourceGroupId === layoutNodeId
+    ? computeTabShiftOffset(
+        index,
+        reorderPreview.draggedIndex,
+        reorderPreview.insertIndex,
+        reorderPreview.gapWidth,
+      )
+    : 0;
+
+  const style: React.CSSProperties = {
+    transform: shiftX !== 0 ? `translate3d(${shiftX}px, 0, 0)` : undefined,
+    height: 'var(--titlebar-height)',
+  };
+
+  return (
+    <>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        data-tab-id={tab.id}
+        data-tab-group={layoutNodeId}
+        data-tab-title={title}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (isPreview) {
+            void pinTab(layoutNodeId, tab.id);
+            return;
+          }
+          void toggleMaximizeEditorGroup(layoutNodeId);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuPosition({ x: e.clientX, y: e.clientY });
+        }}
+        className={editorTabItemVariants({ active: isActive, dragging: isDragging, preview: isPreview })}
+      >
+        {isPreview ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="max-w-[120px] truncate">{title}</span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('tabBar.previewHint')}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="max-w-[120px] truncate">{title}</span>
+        )}
+        {statusKey && statusIcon ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-1 flex items-center">{statusIcon}</span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t(`tabBar.status.${statusKey}`)}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          data-dirty={isDirty ? 'true' : 'false'}
+          onClick={(e) => onClose(tab.id, e)}
+          className={editorTabCloseButtonClass}
         >
-            <span className="max-w-[120px] truncate">
-                {title}
-            </span>
-            {statusLabel ? (
-                <span className="ml-1 text-[10px] uppercase text-amber-500">
-                    {statusLabel}
-                </span>
-            ) : null}
-            <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                onClick={onClose}
-                className="text-muted-foreground hover:text-foreground"
-            >
-                {isDirty ? (
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                )}
-            </Button>
-        </div>
-    );
-});
+          {isDirty ? (
+            <span className="h-2 w-2 rounded-full bg-current" />
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          )}
+        </Button>
+      </div>
+      {menuPosition ? (
+        <ContextMenu
+          position={menuPosition}
+          sections={buildTabContextMenuSections(layoutNodeId, tab, t, {
+            revealInSidebar: () => onRevealInSidebar(),
+          })}
+          onClose={() => setMenuPosition(null)}
+        />
+      ) : null}
+    </>
+  );
+}, areTabItemPropsEqual);

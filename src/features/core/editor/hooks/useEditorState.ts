@@ -3,30 +3,29 @@
  * 组合 useActiveEditorGroup、useEditorCollections、useEditorGroups、useEditorUIState
  */
 
-import { useMemo } from 'react';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorCollections } from './useEditorCollections';
 import { useEditorGroups } from './useEditorGroups';
 import { useEditorUIState } from './useEditorUIState';
 
-export function useEditorState(overrideGroupId?: string | null) {
-  const active = useActiveEditorGroup(overrideGroupId);
-  const collections = useEditorCollections();
-  const groups = useEditorGroups();
-  const uiState = useEditorUIState();
+type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
 
-  return useMemo(
-    () => ({
-      activeGroupId: active.activeGroupId,
-      activeEditorGroupId: active.activeEditorGroupId,
-      activeTabId: active.activeTabId,
-      groupId: active.groupId,
-      tabs: active.tabs,
-      selectedNodeIds: active.selectedNodeIds,
-      ...collections,
-      groups,
-      ...uiState,
-    }),
-    [active, collections, groups, uiState]
-  );
+function buildEditorState(
+  active: ActiveEditorGroup,
+  collections: ReturnType<typeof useEditorCollections>,
+  groups: ReturnType<typeof useEditorGroups>,
+  uiState: ReturnType<typeof useEditorUIState>,
+) {
+  return {
+    activeEditorGroupId: active.focusedEditorGroupId ?? active.groupId,
+    activeTabId: active.activeTabId,
+    groupId: active.groupId,
+    tabs: active.tabs,
+    selectedNodeIds: active.selectedNodeIds,
+    ...collections,
+    groups,
+    ...uiState,
+  };
 }
+
+export { buildEditorState };

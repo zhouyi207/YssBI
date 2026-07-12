@@ -13,13 +13,15 @@ import type { PinView } from '../store/graph';
  * 扩展领域节点，添加 UI 特定的属性和方法
  */
 export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
+    /** 壳层布局样式（注册表推导，仅视图层；不落 store / domain 持久化）。 */
+    uiStyle: string;
     position: { x: number; y: number };
     isInternal?: boolean;
     paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
     variableId?: string;
     variableName?: string;
     variableType?: string;
-    subGraphId?: string;
+    subGraphPath?: string;
     dataframeId?: string;
     centerSymbol?: string;
     inputs: PinView[];
@@ -27,7 +29,7 @@ export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
 }
 
 /**
- * 节点类
+ * 节点类（可变工具对象；画布渲染请使用 `UINode` + `toUiNode`）
  * 提供节点的克隆和操作方法
  */
 export class Node implements UINode {
@@ -45,7 +47,7 @@ export class Node implements UINode {
     variableId?: string;
     variableName?: string;
     variableType?: string;
-    subGraphId?: string;
+    subGraphPath?: string;
     dataframeId?: string;
     centerSymbol?: string;
 
@@ -64,7 +66,7 @@ export class Node implements UINode {
         this.variableId = data.variableId;
         this.variableName = data.variableName;
         this.variableType = data.variableType;
-        this.subGraphId = data.subGraphId;
+        this.subGraphPath = data.subGraphPath;
         this.dataframeId = data.dataframeId;
         this.centerSymbol = data.centerSymbol;
     }
@@ -74,7 +76,12 @@ export class Node implements UINode {
     }
 
     addInput(pin: Pin): void {
-        this.inputs.push(pin);
+        this.inputs.push({
+            ...pin,
+            connected: false,
+            linkCount: 0,
+            connectionIds: [],
+        });
     }
 
     clone(): Node {
@@ -93,7 +100,7 @@ export class Node implements UINode {
             variableId: this.variableId,
             variableName: this.variableName,
             variableType: this.variableType,
-            subGraphId: this.subGraphId,
+            subGraphPath: this.subGraphPath,
             dataframeId: this.dataframeId,
             centerSymbol: this.centerSymbol,
         });
@@ -141,41 +148,12 @@ export type EditorGesture =
     }
     | null;
 
-/**
- * 编辑器标签页
- * 表示编辑器中的一个标签页
- */
-export interface EditorTab {
-    id: string;
-    title: string;
-    type: "event" | "function" | "project" | "setting";
-    isDirty?: boolean;
-}
+export type ConnectGesture = Extract<NonNullable<EditorGesture>, { type: 'connect' }>;
 
-/**
- * 编辑器组
- * 表示一个编辑器分组（可以包含多个标签页）
- */
-export interface EditorGroup {
-    id: string;
-    tabs: EditorTab[];
-    activeTabId: string | null;
-    selectedNodeIds: string[];
-    width?: number;  // 用于调整大小
+/** Narrow `EditorGesture` to an active connect drag, or null. */
+export function getConnectGesture(gesture: EditorGesture): ConnectGesture | null {
+    return gesture?.type === 'connect' ? gesture : null;
 }
-
-/**
- * 拖拽状态
- * 表示从节点模板拖拽到画布的状态
- */
-export type DragState = {
-    type: "node-template";
-    template: any;
-    x: number;
-    y: number;
-    startX: number;
-    startY: number;
-} | null;
 
 /**
  * 上下文菜单状态

@@ -1,6 +1,5 @@
-import React from 'react';
 import { formatNum } from './RegressionShared';
-import type { PanelSelectionTest } from './types';
+import type { PanelSelectionTest } from '@/shared/types/report';
 
 function DecisionBadge({ decision }: { decision: string }) {
   if (decision === 'significant') {

@@ -21,22 +21,19 @@ export interface ConnectPinsContext {
   pinB: string;
   fromPin: string;
   toPin: string;
-  /** @deprecated use autoDisconnectedList */
-  autoDisconnectedFrom: string | null;
-  autoDisconnectedTo: string | null;
   autoDisconnectedList: AutoDisconnectedEntry[];
 }
 
 export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsContext> = {
-  async execute(_graphId, args) {
+  async execute(_graphPath, args) {
     const store = useGraphDataStore.getState();
-    const draft = store.applyConnectionDraft(args.pinA, args.pinB, _graphId);
+    const draft = store.applyConnectionDraft(args.pinA, args.pinB, _graphPath);
     const keys = draft ? [draft.connectionId, ...draft.disconnectedIds] : [];
     try {
       const result = await trackPending(
         CONNECTION_ECHO_DOMAIN,
         keys,
-        ConnectionService.connectPins(_graphId, args.pinA, args.pinB),
+        ConnectionService.connectPins(_graphPath, args.pinA, args.pinB),
       );
 
       return {
@@ -44,27 +41,24 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, ConnectPinsCont
         pinB: args.pinB,
         fromPin: result.fromPin,
         toPin: result.toPin,
-        autoDisconnectedFrom: result.autoDisconnectedFrom,
-        autoDisconnectedTo: result.autoDisconnectedTo,
         autoDisconnectedList: result.autoDisconnected,
       };
     } catch (error) {
-      if (draft) store.revertConnectionDraft(draft, _graphId);
+      if (draft) store.revertConnectionDraft(draft, _graphPath);
       throw error;
     }
   },
 
-  async undo(graphId, context) {
+  async undo(graphPath, context) {
     const connectionId = `${context.fromPin}->${context.toPin}`;
-    await ConnectionService.deleteConnection(graphId, connectionId);
+    await ConnectionService.deleteConnection(graphPath, connectionId);
 
-    const toRestore = context.autoDisconnectedList ?? [];
-    for (const entry of toRestore) {
-      await ConnectionService.connectPins(graphId, entry.fromPin, entry.toPin);
+    for (const entry of context.autoDisconnectedList) {
+      await ConnectionService.connectPins(graphPath, entry.fromPin, entry.toPin);
     }
   },
 
-  async redo(graphId, context) {
-    await ConnectionService.connectPins(graphId, context.pinA, context.pinB);
+  async redo(graphPath, context) {
+    await ConnectionService.connectPins(graphPath, context.pinA, context.pinB);
   },
 };

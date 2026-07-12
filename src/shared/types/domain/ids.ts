@@ -4,7 +4,8 @@
  */
 export type NodeId = string;
 export type PinId = string;
-export type GraphId = string;
+/** 图资源相对路径（与 Domain `Graph.path`、Store 桶键一致） */
+export type GraphPath = string;
 export type ConnectionId = string;
 export type VariableId = string;
 export type DatabaseId = string;

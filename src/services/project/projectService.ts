@@ -2,13 +2,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
-import { Graph, ProjectData, GraphPosition, Pin } from "@/shared/types/domain";
+import { Graph, ProjectData } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
+import {
+  graphDataToDomainGraph,
+  graphInstanceDtoToGraphData,
+} from "@/shared/types/dto/graphModel";
 import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
-
-type CanvasState = GraphPosition;
+import { bindExecutionEventChannel } from "./executionChannelDrain";
 
 export interface ProjectRecordRow {
     id: string;
@@ -44,23 +47,22 @@ export type ProjectCleanupProgressEvent =
     | { kind: "removing"; removed: number; total: number };
 
 export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
-
-/** @deprecated 使用 PICKER_TASK_CANCELLED */
-export const SCAN_CANCELLED = PICKER_TASK_CANCELLED;
+export const EXECUTION_CANCELLED = "EXECUTION_CANCELLED";
 
 export function isPickerTaskCancelledError(error: unknown): boolean {
     return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
 }
 
-/** @deprecated 使用 isPickerTaskCancelledError */
-export function isScanCancelledError(error: unknown): boolean {
-    return isPickerTaskCancelledError(error);
+export function isExecutionCancelledError(error: unknown): boolean {
+    return formatErrorMessage(error, "") === EXECUTION_CANCELLED;
 }
 
 export interface ProjectGraphIndexRow {
-    id: string;
+    path: string;
     name: string;
     type: "event" | "function";
+    functionInputs?: import('@/shared/types/domain').FunctionSignaturePin[];
+    functionOutputs?: import('@/shared/types/domain').FunctionSignaturePin[];
 }
 
 export interface ProjectWorksheetIndexRow {
@@ -78,7 +80,7 @@ export interface ProjectVariableIndexRow {
   description: string;
   scope: import('@/shared/types/domain/variable').VariableScope;
   tags: string[];
-  ownerGraphId?: string | null;
+  ownerGraphPath?: string | null;
   ownerGraphName?: string | null;
   ownerGraphKind?: 'event' | 'function' | null;
 }
@@ -102,119 +104,12 @@ export interface LoadedProjectGraphRow {
  */
 export function toFrontendGraph(data: GraphInstanceDTO): Graph {
     logger.app.trace(`[toFrontendGraph] Input data: ${JSON.stringify(data)}`, 'ProjectService');
-    
-    // 后端返回的结构（GraphInstanceDTO）：{ id, name, type, nodes: [], pins: [], connections: {...}, canvas }
-    
-    let nodes: Graph["nodes"] = [];
-    let pins: Graph["pins"] = [];
-    let connectionsArray: { fromPin: string; toPin: string }[] = [];
-    
-    if (data.nodes && Array.isArray(data.nodes)) {
-        // 先处理 pins 数组，创建 Pin ID 到 Pin 对象的映射
-        const pinMap = new Map<string, Pin>();
-        if (data.pins && Array.isArray(data.pins)) {
-            data.pins.forEach((pin) => {
-                const pinType = pin.type ?? 'any';
-                pinMap.set(pin.id, {
-                    id: pin.id,
-                    nodeId: pin.nodeId,
-                    name: pin.name,
-                    type: pinType,
-                    direction: pin.direction,
-                    containerType: pin.containerType,
-                    typeDisplay: pin.typeDisplay,
-                    dataType: pin.dataType,
-                    optional: pin.optional ?? false,
-                    defaultValue: pin.defaultValue,
-                    userValue: pin.userValue,
-                    ui: pin.ui ? { x: pin.ui.x, y: pin.ui.y, color: pin.ui.color } : undefined,
-                });
-            });
-        }
-        
-        // 转换节点，并从 pinMap 中获取对应的 Pin
-        nodes = data.nodes.map((node) => {
-            const nodeInputs: Pin[] = [];
-            const nodeOutputs: Pin[] = [];
-            
-            // 从 node.inputs (Pin IDs) 中获取完整的 Pin 对象
-            if (node.inputs && Array.isArray(node.inputs)) {
-                node.inputs.forEach((pinId: string) => {
-                    const pin = pinMap.get(pinId);
-                    if (pin) {
-                        nodeInputs.push(pin);
-                    }
-                });
-            }
-            
-            // 从 node.outputs (Pin IDs) 中获取完整的 Pin 对象
-            if (node.outputs && Array.isArray(node.outputs)) {
-                node.outputs.forEach((pinId: string) => {
-                    const pin = pinMap.get(pinId);
-                    if (pin) {
-                        nodeOutputs.push(pin);
-                    }
-                });
-            }
-            
-            return {
-                id: node.id,
-                nodeType: node.nodeType,
-                category: node.category || [],
-                title: node.title,
-                inputs: nodeInputs,
-                outputs: nodeOutputs,
-                uiStyle: node.uiStyle ?? 'default',
-                description: node.description,
-                position: node.position || { x: 0, y: 0 },
-                paramsKind: node.paramsKind ?? 'none', // 缺失这个会导致初始化的节点和复制的节点类型不一致
-                variableId: node.variableId,
-                variableName: node.variableName,
-                variableType: node.variableType,
-                subGraphId: node.subGraphId,
-                dataframeId: node.dataframeId,
-            };
-        });
-        
-        pins = Array.from(pinMap.values());
-        
-        // connections 可能是对象或数组
-        if (data.connections) {
-            if (Array.isArray(data.connections)) {
-                connectionsArray = data.connections;
-            } else if (data.connections.connections && Array.isArray(data.connections.connections)) {
-                connectionsArray = data.connections.connections;
-            } else if (typeof data.connections === 'object') {
-                // 将对象转换为数组
-                for (const [_key, value] of Object.entries(data.connections)) {
-                    if (Array.isArray(value) && value.length === 2) {
-                        connectionsArray.push({
-                            fromPin: value[0],
-                            toPin: value[1]
-                        });
-                    } else if (typeof value === 'object' && value !== null) {
-                        connectionsArray.push(value);
-                    }
-                }
-            }
-        }
-    }
-    
-    logger.app.trace(`[toFrontendGraph] Converted: nodes=${nodes.length}, pins=${pins.length}, connections=${connectionsArray.length}`, 'ProjectService');
-    
-    const rawType = data.type ?? 'event';
-    const graphType = (typeof rawType === 'string' ? rawType : String(rawType)).toLowerCase() as "event" | "function";
-    return {
-        id: data.id,
-        name: data.name,
-        type: graphType,
-        functionInputs: data.functionInputs ?? [],
-        functionOutputs: data.functionOutputs ?? [],
-        nodes,
-        pins,
-        connections: { connections: connectionsArray },
-        canvas: data.canvas ?? (data as GraphInstanceDTO & { position?: GraphPosition }).position ?? { x: 0, y: 0, scale: 1 }
-    };
+    const graph = graphDataToDomainGraph(graphInstanceDtoToGraphData(data));
+    logger.app.trace(
+        `[toFrontendGraph] Converted: nodes=${graph.nodes.length}, pins=${graph.pins.length}, connections=${graph.connections.connections.length}`,
+        'ProjectService',
+    );
+    return graph;
 }
 
 /**
@@ -284,11 +179,11 @@ export class ProjectService {
      */
     static async getProjectGraphs(): Promise<{
         graphs: Record<string, GraphInstanceDTO>;
-        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
     }> {
         const data = await invoke<{
             graphs: Record<string, GraphInstanceDTO>;
-            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subGraphId?: string }>>;
+            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
         }>("get_project_graphs");
         return {
             graphs: data.graphs || {},
@@ -307,8 +202,8 @@ export class ProjectService {
         return await invoke("get_project_index");
     }
 
-    static async loadProjectGraph(graphId: string): Promise<LoadedProjectGraphRow> {
-        return await invoke("load_project_graph", { graphId });
+    static async loadProjectGraph(graphPath: string): Promise<LoadedProjectGraphRow> {
+        return await invoke("load_project_graph", { graphPath });
     }
 
     /**
@@ -346,11 +241,6 @@ export class ProjectService {
 
     static async cancelProjectPickerTask(): Promise<void> {
         await invoke("cancel_project_picker_task");
-    }
-
-    /** @deprecated 使用 cancelProjectPickerTask */
-    static async cancelProjectScan(): Promise<void> {
-        return ProjectService.cancelProjectPickerTask();
     }
 
     static async cleanupInvalidRegisteredProjects(
@@ -473,32 +363,33 @@ export class ProjectService {
             throw e;
         }
     }
-
-    static async updateCanvas(subgraphId: string, canvas: CanvasState): Promise<void> {
-        await invoke("update_canvas", { subgraphId, canvas });
-    }
-
     /**
      * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
-     * @param graphId 要执行的 graph ID，传 undefined 则执行所有 Event 图
+     * @param graphPath 要执行的 graph 路径，传 undefined 则执行所有 Event 图
      */
     static async executeProject(
         onEvent?: (event: ExecutionEvent) => void,
-        graphId?: string,
+        graphPath?: string,
     ): Promise<{ executedGraphs: number; logs: string[] }> {
-        const channel = trackChannel(new Channel<ExecutionEvent>());
-        channel.onmessage = (msg) => {
-            onEvent?.(msg);
-        };
+        const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
         try {
             const res = await invoke<{ executedGraphs: number; logs: string[] }>(
                 "execute_project",
-                { onEvent: channel, graphId: graphId ?? null },
+                { onEvent: channel , graphPath: graphPath ?? null },
             );
+            await waitForStreamEnd(res.executedGraphs);
             return res;
         } finally {
             untrackChannel(channel);
         }
+    }
+
+    static async cancelExecution(): Promise<void> {
+        await invoke("cancel_execution");
+    }
+
+    static async clearGraphExecutionArtifacts(graphPath: string): Promise<void> {
+        await invoke("clear_graph_execution_artifacts", { graphPath });
     }
 
     static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {

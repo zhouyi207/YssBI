@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { executeCommand } from "@/features/core/history";
 import { logger } from '@/utils/appLogger';
+import type { DataType } from '@/shared/types/domain/dataType';
+import { scalarPinInputKey } from '@/shared/types/domain/pinSemantics';
 
 /**
- * Get default value for a pin type.
- * Extracted from PinInput.tsx.
+ * Get default value for a scalar pin dataType.
  */
-export function getDefaultValue(pinType: string): unknown {
-  switch (pinType) {
+export function getDefaultValue(dataType: DataType | undefined): unknown {
+  const key = scalarPinInputKey(dataType);
+  switch (key) {
     case "Int64":
       return 0;
     case "Float64":
@@ -23,24 +25,24 @@ export function getDefaultValue(pinType: string): unknown {
 
 /**
  * Pin input logic: value state, save on blur, keyboard handling.
- * Extracted from PinInput.tsx - view should only consume this hook.
  */
 export function usePinInput({
   pinId,
   nodeId,
-  subgraphId,
-  pinType,
+  graphPath,
+  dataType,
   initialValue,
   onValueChange,
 }: {
   pinId: string;
   nodeId: string;
-  subgraphId: string;
-  pinType: string;
+  graphPath: string;
+  dataType?: DataType;
   initialValue?: unknown;
   onValueChange?: (value: unknown) => void;
 }) {
-  const [value, setValue] = useState<unknown>(initialValue ?? getDefaultValue(pinType));
+  const inputKey = scalarPinInputKey(dataType);
+  const [value, setValue] = useState<unknown>(initialValue ?? getDefaultValue(dataType));
   const [isFocused, setIsFocused] = useState(false);
   const skipNextBlurSaveRef = useRef(false);
 
@@ -63,16 +65,16 @@ export function usePinInput({
       const raw = val !== undefined ? val : value;
       try {
         await executeCommand(
-          subgraphId,
+          graphPath,
           'SetPinValue',
-          { pinId, nodeId, pinType, newValue: raw },
+          { pinId, nodeId, newValue: raw },
           { mergeKey: `pin-value-${pinId}` },
         );
       } catch (error) {
         logger.graph.error(`Failed to update pin value: ${error instanceof Error ? error.message : String(error)}`, 'PinInput');
       }
     },
-    [subgraphId, nodeId, pinId, pinType, value]
+    [graphPath, nodeId, pinId, value]
   );
 
   const cancelBlurCommit = useCallback(() => {
@@ -93,14 +95,14 @@ export function usePinInput({
       if (e.key === "Enter") {
         (e.currentTarget as HTMLElement).blur();
       } else if (e.key === "Escape") {
-        const restored = initialValue ?? getDefaultValue(pinType);
+        const restored = initialValue ?? getDefaultValue(dataType);
         skipNextBlurSaveRef.current = true;
         setValue(restored);
         onValueChange?.(restored);
         (e.currentTarget as HTMLElement).blur();
       }
     },
-    [initialValue, onValueChange, pinType]
+    [initialValue, onValueChange, dataType]
   );
 
   return {
@@ -112,5 +114,6 @@ export function usePinInput({
     handleKeyDown,
     cancelBlurCommit,
     savePinValue,
+    inputKey,
   };
 }

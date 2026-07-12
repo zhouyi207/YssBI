@@ -19,8 +19,8 @@ describe('variablesGraphScope', () => {
           data: {
             component: 'GraphEditor',
             tabs: [
-              { id: 'g1', title: 'G1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', title: 'G2', component: 'GraphEditor', type: 'event' },
+              { id: 'g1', component: 'GraphEditor', type: 'event' },
+              { id: 'g2', component: 'GraphEditor', type: 'event' },
             ],
             activeTabId: 'g2',
           },
@@ -35,7 +35,7 @@ describe('variablesGraphScope', () => {
     useLayoutStore.getState().removeTab('editor', 'g1');
     syncVariablesGraphScopeAfterClose('g1');
 
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g2');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g2');
   });
 
   it('keeps scope when the last open tab is closed', () => {
@@ -48,7 +48,7 @@ describe('variablesGraphScope', () => {
           parentId: 'root',
           data: {
             component: 'GraphEditor',
-            tabs: [{ id: 'g1', title: 'G1', component: 'GraphEditor', type: 'event' }],
+            tabs: [{ id: 'g1', component: 'GraphEditor', type: 'event' }],
             activeTabId: 'g1',
           },
         },
@@ -60,11 +60,11 @@ describe('variablesGraphScope', () => {
 
     syncVariablesGraphScopeAfterClose('g1');
 
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g1');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g1');
   });
 
   it('syncs scope from active tab', () => {
     syncVariablesGraphScopeFromActiveTab();
-    expect(useEditorStore.getState().variablesGraphScopeId).toBe('g2');
+    expect(useEditorStore.getState().variablesGraphScopePath).toBe('g2');
   });
 });

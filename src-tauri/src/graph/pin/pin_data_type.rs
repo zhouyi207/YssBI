@@ -32,7 +32,7 @@ impl PinDataTypeDefinition {
     pub fn to_inference(&self, type_var_id: TypeVarId) -> PinDataTypeInference {
         match self {
             PinDataTypeDefinition::Concrete(vt) => PinDataTypeInference::concrete(vt.clone()),
-            PinDataTypeDefinition::TypeVar(key) => PinDataTypeInference::type_var(type_var_id),
+            PinDataTypeDefinition::TypeVar(_key) => PinDataTypeInference::type_var(type_var_id),
             PinDataTypeDefinition::Unknown => PinDataTypeInference::unknown(),
         }
     }

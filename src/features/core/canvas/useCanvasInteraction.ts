@@ -1,30 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { getGraphById, useGraphDataStore } from "@/features/core/dataStore";
+import { getGraphByPath } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useGestureStore } from "@/features/core/gesture";
 import { persistGraphViewport } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { executeCommand } from "@/features/core/history";
-import { GraphPosition, Pin } from "@/shared/types/domain";
+import { Pin } from "@/shared/types/domain";
+import type { EditorViewport } from "@/features/core/viewport";
 import { logger } from '@/utils/appLogger';
 import { canConnectPins } from "@/shared/utils/pinCompatibility";
 
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
 import { attachCanvasPointerLoop } from "./canvasPointerLoop";
 import {
-    buildSelectionHitTargets,
-    queryCanvasElement,
-} from "./selectionHitTargets";
-import {
     startSelectionSession,
     abortSelectionSession,
-    setSelectionHitTargets,
 } from "./selectionSession";
 
 interface UseCanvasInteractionProps {
     activeGroupIdRef: React.RefObject<string>;
     activeTabIdRef: React.RefObject<string | null>;
-    canvasRef: React.RefObject<GraphPosition>;
+    viewportRef: React.RefObject<EditorViewport>;
     setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
     /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
     enabled?: boolean;
@@ -33,7 +29,7 @@ interface UseCanvasInteractionProps {
 export function useCanvasInteraction({
     activeGroupIdRef,
     activeTabIdRef,
-    canvasRef,
+    viewportRef,
     setSelectedNodeIds,
     enabled = true,
 }: UseCanvasInteractionProps) {
@@ -46,15 +42,15 @@ export function useCanvasInteraction({
     const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
     setSelectedNodeIdsRef.current = setSelectedNodeIds;
 
-    const persistViewport = useCallback((graphId?: string | null) => {
-        persistGraphViewport(graphId ?? activeTabIdRef.current);
+    const persistViewport = useCallback((graphPath?: string | null) => {
+        persistGraphViewport(graphPath ?? activeTabIdRef.current);
     }, [activeTabIdRef]);
 
     const connectPins = useCallback(async (groupId: string, a: string, b: string) => {
         const tid = resolveTabId(groupId, activeTabIdRef);
         if (!tid) return;
 
-        const graph = getGraphById(tid);
+        const graph = getGraphByPath(tid);
         const pinA = graph?.pins.find((pin) => pin.id === a);
         const pinB = graph?.pins.find((pin) => pin.id === b);
         if (pinA && pinB && !canConnectPins(pinA as Pin, pinB as Pin)) {
@@ -84,11 +80,6 @@ export function useCanvasInteraction({
         }
         if (e.button === 0 && groupId) {
             abortSelectionSession(groupId);
-            const canvasEl = queryCanvasElement(groupId);
-            const tabId = resolveTabId(groupId, activeTabIdRef);
-            setSelectionHitTargets(
-                canvasEl ? buildSelectionHitTargets(canvasEl, tabId ? useGraphDataStore.getState().graphNodes[tabId] ?? [] : []) : [],
-            );
             startSelectionSession({
                 groupId,
                 startX: e.clientX,
@@ -110,7 +101,7 @@ export function useCanvasInteraction({
         let dragNodeIds = currentSelected;
         if (e.shiftKey) {
             if (currentSelected.includes(nodeId)) {
-                dragNodeIds = currentSelected.filter(id => id !== nodeId);
+                dragNodeIds = currentSelected.filter((id: string) => id !== nodeId);
                 setSelectedNodeIdsRef.current(dragNodeIds, gid);
             } else {
                 dragNodeIds = [...currentSelected, nodeId];
@@ -157,14 +148,14 @@ export function useCanvasInteraction({
         return attachCanvasPointerLoop({
             activeGroupIdRef,
             activeTabIdRef,
-            canvasRef,
+            viewportRef,
             setSelectedNodeIds: (updater, targetGroupId) => setSelectedNodeIdsRef.current(updater, targetGroupId),
             connectPins,
             persistViewport,
             setContextMenu,
             setPendingConnection,
         });
-    }, [enabled, activeGroupIdRef, activeTabIdRef, canvasRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
+    }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
 
     return useMemo(() => ({
         contextMenu,

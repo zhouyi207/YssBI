@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
-import type { Node } from "@/shared/types/ui";
+import type { UINode } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { getPinMetaData } from "@/features/core/pin";
@@ -9,13 +9,14 @@ import {
   getRepeatableSlot,
 } from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
+import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
 
 interface MathNodeLayoutProps {
-  node: Node;
+  node: UINode;
   activePinId?: string | null;
   activePin?: PinModel | null;
-  subgraphId?: string;
+  graphPath?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -34,7 +35,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   node,
   activePinId,
   activePin,
-  subgraphId,
+  graphPath,
   onAddInput,
   onRemovePin,
   onPinClick,
@@ -43,10 +44,10 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
 }) => {
   const { centerSymbol } = useNodeStyle(node);
   
-  const inputsExec = node.inputs.filter(p => p.type === 'exec');
-  const inputsData = node.inputs.filter(p => p.type !== 'exec');
-  const outputsExec = node.outputs.filter(p => p.type === 'exec');
-  const outputsData = node.outputs.filter(p => p.type !== 'exec');
+  const inputsExec = node.inputs.filter(isExecPin);
+  const inputsData = node.inputs.filter((p) => !isExecPin(p));
+  const outputsExec = node.outputs.filter(isExecPin);
+  const outputsData = node.outputs.filter((p) => !isExecPin(p));
 
   const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
     if (!activePin) return "normal";
@@ -93,7 +94,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 metaData={getPinMetaData(nodeDef, pin.name)}
-                subgraphId={subgraphId}
+                graphPath={graphPath}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -109,7 +110,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 metaData={getPinMetaData(nodeDef, pin.name)}
-                subgraphId={subgraphId}
+                graphPath={graphPath}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -129,7 +130,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               metaData={getPinMetaData(nodeDef, pin.name)}
-              subgraphId={subgraphId}
+              graphPath={graphPath}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
@@ -161,7 +162,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               metaData={getPinMetaData(nodeDef, pin.name)}
-              subgraphId={subgraphId}
+              graphPath={graphPath}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}

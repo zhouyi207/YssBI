@@ -219,7 +219,6 @@ pub fn create_event(
     //   - nodes: Vec::new()
     //   - pins: Vec::new()
     //   - connections: ConnectionGraph::new()
-    //   - position: GraphPosition::default()
     // - 存储到 ProjectState.graphs
     
     // 4.2 发送事件

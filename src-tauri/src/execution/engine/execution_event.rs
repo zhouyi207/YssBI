@@ -33,9 +33,16 @@ pub enum ExecutionEvent {
         duration_ms: u64,
     },
 
-    /// 连接激活（数据/控制流经过该连接）
+    /// 数据取数：消费者节点开始执行时声明依赖的 data 输入连线。
     #[serde(rename_all = "camelCase")]
     ConnectionActive {
+        from_pin_id: String,
+        to_pin_id: String,
+    },
+
+    /// 数据流动：上游产出可用值后，值沿 output→input 连线传向消费者。
+    #[serde(rename_all = "camelCase")]
+    ConnectionFlow {
         from_pin_id: String,
         to_pin_id: String,
     },
@@ -51,7 +58,7 @@ pub enum ExecutionEvent {
     /// 数据输出 pin 已注册为可检查 source。
     #[serde(rename_all = "camelCase")]
     PinResultReady {
-        graph_id: String,
+        graph_path: String,
         node_id: String,
         pin_id: String,
         source_id: String,
@@ -63,6 +70,26 @@ pub enum ExecutionEvent {
 mod tests {
     use super::*;
     use crate::execution::Presentation;
+
+    fn test_descriptor(source_id: &str) -> SourceDescriptor {
+        SourceDescriptor {
+            source_id: source_id.into(),
+            kind: crate::execution::SourceKind::Json,
+            presentation: Presentation::Inspector,
+            title: "Result".into(),
+            message: None,
+            execution_time_ms: None,
+            columns: None,
+            total_rows: None,
+            name: None,
+            dtype: None,
+            length: None,
+            value_type: None,
+            type_key: None,
+            handle_id: None,
+            struct_kind: None,
+        }
+    }
 
     #[test]
     fn open_source_window_serializes_for_channel() {
@@ -76,5 +103,21 @@ mod tests {
         assert_eq!(json["data"]["sourceId"], "window_test");
         assert_eq!(json["data"]["presentation"]["kind"], "inspector");
         assert_eq!(json["data"]["windowTitle"], "View: (null)");
+    }
+
+    #[test]
+    fn pin_result_ready_serializes_graph_path() {
+        let event = ExecutionEvent::PinResultReady {
+            graph_path: "events/Main.yssbi-event".into(),
+            node_id: "node-1".into(),
+            pin_id: "out-1".into(),
+            source_id: "runtime_run_events/out-1".into(),
+            descriptor: test_descriptor("runtime_run_events/out-1"),
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+        assert_eq!(json["event"], "pinResultReady");
+        assert_eq!(json["data"]["graphPath"], "events/Main.yssbi-event");
+        assert_eq!(json["data"]["nodeId"], "node-1");
+        assert_eq!(json["data"]["pinId"], "out-1");
     }
 }

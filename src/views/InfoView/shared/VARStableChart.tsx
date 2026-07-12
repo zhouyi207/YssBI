@@ -4,10 +4,17 @@
  * 在复平面上绘制特征值，单位圆（模=1）作为参考。
  * X 轴：实部，Y 轴：虚部。
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
-import type { VARStableRow } from './types';
+import {
+  attachHoverTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  tooltipRichBlock,
+} from '@/shared/plot/d3Tooltip';
+import { formatNum } from './utils';
+import type { VARStableRow } from '@/shared/types/report';
 
 export interface VARStableChartProps {
   data: VARStableRow[];
@@ -33,11 +40,6 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
     ro.observe(container);
     setSize({ width: container.clientWidth, height: container.clientHeight });
     return () => ro.disconnect();
-  }, []);
-
-  const hideTooltip = useCallback(() => {
-    const tip = tooltipRef.current;
-    if (tip) tip.style.opacity = '0';
   }, []);
 
   useEffect(() => {
@@ -90,15 +92,16 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('y1', 0).attr('y2', h)
       .attr('stroke', chartTheme.axis).attr('stroke-width', 1);
 
-    const tipEl = tooltipRef.current;
+    const tip = new PlotTooltipController(tooltipRef.current, containerRef.current);
 
-    // 特征值点
     data.forEach((d, i) => {
       const x = xScale(d.re);
       const y = yScale(d.im);
       const isUnstable = d.modulus >= 1.0;
 
-      g.append('circle')
+      const point = g
+        .append('circle')
+        .datum(d)
         .attr('cx', x)
         .attr('cy', y)
         .attr('r', 5)
@@ -106,35 +109,29 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         .attr('stroke', isUnstable ? seriesColors.negative : seriesColors.primary)
         .attr('stroke-width', 1.5)
         .attr('fill-opacity', 0.9)
-        .style('cursor', 'pointer')
-        .on('mouseenter', function (event) {
-          select(this).attr('r', 6).attr('stroke-width', 2);
-          if (!tipEl) return;
-          const evStr = d.im >= 0
-            ? `${d.re.toFixed(4)} + ${d.im.toFixed(4)}i`
-            : `${d.re.toFixed(4)} - ${Math.abs(d.im).toFixed(4)}i`;
-          tipEl.style.opacity = '1';
-          tipEl.innerHTML =
-            `<div style="font-size:11px;line-height:1.6">` +
+        .style('cursor', 'pointer');
+
+      attachHoverTooltip(point as D3Onable<SVGCircleElement, VARStableRow>, {
+        tooltip: tip,
+        position: 'anchor',
+        getHtml: () => {
+          const evStr =
+            d.im >= 0
+              ? `${formatNum(d.re)} + ${formatNum(d.im)}i`
+              : `${formatNum(d.re)} - ${formatNum(Math.abs(d.im))}i`;
+          return tooltipRichBlock(
             `<b>Eigenvalue ${i + 1}</b><br/>` +
-            `${evStr}<br/>` +
-            `Modulus: <b>${d.modulus.toFixed(6)}</b>` +
-            (isUnstable ? `<br/><span style="color:${seriesColors.negative}">≥ 1 (unstable)</span>` : '') +
-            `</div>`;
-          const rect = (event.currentTarget as SVGCircleElement).getBoundingClientRect();
-          const containerRect = containerRef.current!.getBoundingClientRect();
-          const tipW = tipEl.offsetWidth;
-          let left = rect.left + rect.width / 2 - containerRect.left - tipW / 2;
-          left = Math.max(4, Math.min(left, containerRect.width - tipW - 4));
-          const above = rect.top - containerRect.top - tipEl.offsetHeight - 6;
-          const below = rect.bottom - containerRect.top + 6;
-          tipEl.style.left = `${left}px`;
-          tipEl.style.top = above > 0 ? `${above}px` : `${below}px`;
-        })
-        .on('mouseleave', function () {
-          select(this).attr('r', 5).attr('stroke-width', 1.5);
-          hideTooltip();
-        });
+              `${evStr}<br/>` +
+              `Modulus: <b>${formatNum(d.modulus, 6)}</b>` +
+              (isUnstable
+                ? `<br/><span style="color:${seriesColors.negative}">≥ 1 (unstable)</span>`
+                : ''),
+            chartTheme,
+          );
+        },
+        onEnter: (el) => select(el).attr('r', 6).attr('stroke-width', 2),
+        onLeave: (el) => select(el).attr('r', 5).attr('stroke-width', 1.5),
+      });
     });
 
     g.append('g')
@@ -169,7 +166,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('fill', chartTheme.label)
       .attr('font-size', '11px')
       .text('Imaginary');
-  }, [data, size, hideTooltip, chartTheme, seriesColors]);
+  }, [data, size, chartTheme, seriesColors]);
 
   return (
     <div ref={containerRef} className="relative w-full flex-1 min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
-import { formatNum, SignificanceStars } from './shared';
+import { ReportLayout, formatNum, SignificanceStars } from './shared';
 import {
   InfoStatsTable,
   infoStatsCellClass,
@@ -18,7 +18,7 @@ import type {
   DFADFRegRowData,
   DFADFSummaryListResultData,
   DFADFSummaryResultData,
-} from './shared/types';
+} from '@/shared/types/report';
 
 function itemLabel(item: DFADFSummaryResultData): string {
   return `${item.regression} · lags=${item.lags}`;
@@ -28,19 +28,21 @@ function findRegRow(table: DFADFRegRowData[], name: string): DFADFRegRowData | u
   return table.find((r) => r.variable === name);
 }
 
-export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultData }> = ({ data }) => {
+export const DFADFSummaryListComponent: FC<{ data: DFADFSummaryListResultData }> = ({ data }) => {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<DFADFSummaryResultData | null>(null);
 
   return (
     <div className="relative">
-      <div className="mx-auto max-w-[1100px] p-6">
-        <div className="mb-6">
-          <h1 className="mb-2 text-xl font-bold text-foreground">{data.title}</h1>
-          <div className="text-xs text-muted-foreground">
+      <ReportLayout
+        title={data.title}
+        size="extraWide"
+        badges={
+          <span className="text-xs text-muted-foreground">
             Variable: {data.var_name} · {data.items.length} combinations
-          </div>
-        </div>
+          </span>
+        }
+      >
         <InfoStatsTable>
           <TableHeader>
             <TableRow className="border-0 hover:bg-transparent">
@@ -115,7 +117,7 @@ export const DFADFSummaryListComponent: React.FC<{ data: DFADFSummaryListResultD
             <span className="text-yellow-400">*</span> p&lt;0.05, <span className="text-muted-foreground">.</span> p&lt;0.1
           </span>
         </div>
-      </div>
+      </ReportLayout>
 
       {selected && (
         <>

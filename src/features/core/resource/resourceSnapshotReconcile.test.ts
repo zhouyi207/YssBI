@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useDocumentStateStore, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
+import { useDocumentStateStore, useResourceStore, buildGraphResourceMeta, type ProjectResourceMeta } from '@/features/core/resource';
 import {
   reconcileResourceSnapshot,
   applySnapshotDocumentPatches,
 } from './resourceSnapshotReconcile';
-import { selectFirstGraphResource, selectGraphResourcesByKind } from './resourceSelectors';
+import { selectGraphResourcesByKind } from './resourceSelectors';
 import { resourceKey } from './resourceTypes';
 
 function graphResource(
@@ -12,17 +12,7 @@ function graphResource(
   kind: 'event' | 'function',
   name: string,
 ): ProjectResourceMeta {
-  return {
-    id,
-    kind,
-    name,
-    uri: `yssbi://graph/${kind}/${id}`,
-    exists: true,
-    loaded: false,
-    hasDirtyDocument: false,
-    hasStaleDocument: false,
-    hasConflictDocument: false,
-  };
+  return buildGraphResourceMeta(kind, id, name);
 }
 
 describe('resource snapshot reconcile', () => {
@@ -56,7 +46,7 @@ describe('resource snapshot reconcile', () => {
       hasStaleDocument: true,
       hasConflictDocument: false,
     });
-    expect(useDocumentStateStore.getState().documents['graph:event:g1']?.stale).toBe(true);
+    expect(useDocumentStateStore.getState().documents[resourceKey(previous)]?.stale).toBe(true);
   });
 
   it('retains missing loaded resources absent from the snapshot', () => {
@@ -83,7 +73,7 @@ describe('resource snapshot reconcile', () => {
       exists: false,
       loaded: true,
     });
-    expect(useDocumentStateStore.getState().documents['graph:event:g1']?.missing).toBe(true);
+    expect(useDocumentStateStore.getState().documents[resourceKey(previous)]?.missing).toBe(true);
   });
 });
 
@@ -101,6 +91,5 @@ describe('resource selectors', () => {
     expect(selectGraphResourcesByKind(resources, 'event')).toEqual({
       e1: { id: 'e1', name: 'Event A' },
     });
-    expect(selectFirstGraphResource(resources, ['e1', 'f1'])?.id).toBe('e1');
   });
 });

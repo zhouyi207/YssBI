@@ -6,7 +6,6 @@ pub mod application;
 pub mod ast;
 pub mod commands;
 pub mod database;
-pub mod editor;
 pub mod event;
 pub mod execution;
 pub mod frontend;
@@ -14,9 +13,9 @@ pub mod graph;
 pub mod log;
 pub mod project;
 pub mod schema;
+pub mod tabular;
 pub mod variable;
 pub mod window_state;
-pub mod tabular;
 
 use commands::*;
 use tauri::Manager;
@@ -63,6 +62,7 @@ pub fn run() {
         .manage(project::ProjectWatcherState::new())
         .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
+        .manage(project::ExecutionCancelRegistry::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
@@ -121,14 +121,13 @@ pub fn run() {
             flush_project,
             save_project_as,
             execute_project,
+            cancel_execution,
+            clear_graph_execution_artifacts,
             get_result_source_descriptor,
             get_result_source_value,
             get_result_source_page,
             get_pin_result_descriptor,
             release_result_source,
-            // ==================== 设置 ====================
-            load_settings,
-            save_settings,
             // ==================== 窗口几何状态 ====================
             get_window_states,
             get_window_state,
@@ -143,6 +142,8 @@ pub fn run() {
             create_event,
             create_function,
             update_function_signature,
+            get_function_call_sites,
+            purge_function_call_sites,
             // ==================== Variable CRUD ====================
             create_variable,
             get_variable,
@@ -157,6 +158,7 @@ pub fn run() {
             apply_graph_patch,
             update_node_positions,
             batch_create_with_connections,
+            update_call_function_target,
             // ==================== Connection ====================
             connect_pins,
             disconnect_pin,
@@ -172,8 +174,6 @@ pub fn run() {
             resolve_graph_dynamic_pins,
             // ==================== History ====================
             sync_graph_state,
-            // ==================== 子图管理 ====================
-            update_canvas,
             // ==================== Database ====================
             load_database,
             list_sqlite_tables,

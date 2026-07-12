@@ -6,13 +6,22 @@
 
 // ==================== 数据库声明 ====================
 
-/** 数据库声明（与后端 DatabaseDeclDTO 对应） */
-export interface DatabaseDecl {
-  id: string;
-  engine: Record<string, unknown>;
-  schemaVersion: number;
-  required: boolean;
-}
+export type {
+  ColumnInfo,
+  DatabaseDeclDTO,
+  DatabaseDeclDTO as DatabaseDecl,
+  DatabaseEngineDTO,
+  LoadDatabaseEngineSpec,
+  DatabaseRecord,
+} from '../dto/database';
+
+export {
+  databaseRecordFromLoad,
+  databaseSourcePath,
+  displayNameFromEngine,
+  normalizeDatabaseRecord,
+  normalizeDatabases,
+} from '../dto/database';
 
 // ==================== 数据来源配置 ====================
 

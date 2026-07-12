@@ -2,11 +2,12 @@ import { useState, useRef, useCallback } from 'react';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { DATABASE_EDITOR_CHUNK_SIZE } from '@/app/appConfig/default';
+import type { DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 
 export function useDataLoader(selectedDfId: string | null) {
-  const selectedRowCount = useDatabaseStore(s => selectedDfId ? ((s.databases[selectedDfId]?.rowCount as number) ?? 0) : 0);
-  const [loadedRows, setLoadedRows] = useState<any[][]>([]);
+  const selectedRowCount = useDatabaseStore(s => selectedDfId ? (s.databases[selectedDfId]?.rowCount ?? 0) : 0);
+  const [loadedRows, setLoadedRows] = useState<DatabaseRow[]>([]);
   const [loadedRowIds, setLoadedRowIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
@@ -23,7 +24,7 @@ export function useDataLoader(selectedDfId: string | null) {
 
   const loadPageRows = useCallback(async (id: string, nextPageIndex: number) => {
     const requestId = ++initialRowsRequestRef.current;
-    const rowCount = (useDatabaseStore.getState().databases[id]?.rowCount as number | undefined) ?? 0;
+    const rowCount = useDatabaseStore.getState().databases[id]?.rowCount ?? 0;
     const maxPageIndex = rowCount > 0
       ? Math.max(0, Math.ceil(rowCount / CHUNK_SIZE) - 1)
       : nextPageIndex;
@@ -45,9 +46,9 @@ export function useDataLoader(selectedDfId: string | null) {
   }, [CHUNK_SIZE]);
 
   const ensureDatabaseMeta = useCallback(async (id: string) => {
-    const db = useDatabaseStore.getState().databases[id] as Record<string, unknown> | undefined;
-    const hasColumns = Array.isArray(db?.columns) && (db.columns as unknown[]).length > 0;
-    const hasRowCount = typeof db?.rowCount === 'number' && (db.rowCount as number) > 0;
+    const db = useDatabaseStore.getState().databases[id];
+    const hasColumns = (db?.columns?.length ?? 0) > 0;
+    const hasRowCount = (db?.rowCount ?? 0) > 0;
     if (hasColumns && hasRowCount) return;
 
     const meta = await DatabaseService.getDatabaseMeta(id);

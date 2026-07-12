@@ -6,15 +6,14 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
+import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
 
 interface EdgesOverlayProps {
-  graphId: string;
+  graphPath: string;
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
   dimmed?: boolean;
 }
-
-const EMPTY_IDS: string[] = [];
 
 export interface EdgeData {
   id: string;
@@ -22,7 +21,8 @@ export interface EdgeData {
   toPinId: string;
   sourceNodeId: string;
   targetNodeId?: string;
-  pinType: string;
+  colorKey: string;
+  edgeKind: 'exec' | 'data';
   pinColor?: string;
 }
 
@@ -37,42 +37,45 @@ export function buildEdgeData(
     const fromPin = getPin(conn.from);
     if (!fromPin || !nodeIdSet.has(fromPin.nodeId)) continue;
     const toPin = getPin(conn.to);
+    const visual = resolvePinVisualSpec(fromPin);
     result.push({
       id: conn.id,
       fromPinId: conn.from,
       toPinId: conn.to,
       sourceNodeId: fromPin.nodeId,
       targetNodeId: toPin?.nodeId,
-      pinType: fromPin.type ?? "any",
+      colorKey: visual.colorKey,
+      edgeKind: visual.edgeKind,
       pinColor: fromPin.ui?.color,
     });
   }
   return result;
 }
 
-export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorldPos, dimmed }) => {
+export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWorldPos, dimmed }) => {
   const { theme } = useTheme();
   const visual = useSyncExternalStore(subscribeExecutionVisual, getExecutionVisual, getExecutionVisual);
-  const graphState = useExecutionStore((s) => s.graphs[graphId]);
-  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphId === graphId);
+  const graphState = useExecutionStore((s) => s.graphs[graphPath]);
+  const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphPath === graphPath);
 
-  const useVisual = (visual.active && visual.graphId === graphId) || isReplay;
+  const useVisual = (visual.active && visual.graphPath === graphPath) || isReplay;
   const status = useVisual ? visual.status : (graphState?.status ?? "idle");
   const completedConnections = useVisual ? visual.completedConnections : graphState?.completedConnections;
+  const flowingConnections = useVisual ? visual.flowingConnections : graphState?.flowingConnections;
   const nodeStates = useVisual ? undefined : graphState?.nodeStates;
   const isRunning = status === "running";
 
   const graphNodeIds = useGraphDataStore(
-    useShallow((s) => s.graphNodes[graphId] ?? EMPTY_IDS),
+    useShallow((s) => s.getGraphNodeIds(graphPath)),
   );
   const connections = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId)),
+    useShallow((s) => s.getGraphConnections(graphPath)),
   );
   const sourcePins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.from))),
+    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.from))),
   );
   const targetPins = useGraphDataStore(
-    useShallow((s) => s.getGraphConnections(graphId).map((conn) => s.getGraphPin(graphId, conn.to))),
+    useShallow((s) => s.getGraphConnections(graphPath).map((conn) => s.getGraphPin(graphPath, conn.to))),
   );
 
   const edges = useMemo<EdgeData[]>(() => {
@@ -94,8 +97,10 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
     >
       <style>{`
         @keyframes edgeFlowData { to { stroke-dashoffset: -40; } }
+        @keyframes edgePullData { to { stroke-dashoffset: 40; } }
         @keyframes edgeFlowExec { to { stroke-dashoffset: -16; } }
         @keyframes edgeGlowData { 0%,100% { opacity: .3; } 50% { opacity: .7; } }
+        @keyframes edgePullGlow { 0%,100% { opacity: .2; } 50% { opacity: .5; } }
         @keyframes edgeGlowExec { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
       `}</style>
       {edges.map((edge) => {
@@ -104,13 +109,16 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
         if (!start || !end) return null;
 
         const connKey = connectionKey(edge.fromPinId, edge.toPinId);
-        const isCompleted = completedConnections?.has(connKey) ?? false;
-        const sourceState = nodeStates?.get(edge.sourceNodeId);
         const isError = useVisual
           ? visual.errorNodeIds.has(edge.sourceNodeId)
-          : sourceState?.status === "error";
-        const color = edge.pinColor ?? getPinTypeColor(edge.pinType, theme);
-        const edgeKind = edge.pinType === "exec" ? "exec" : "data";
+          : nodeStates?.get(edge.sourceNodeId)?.status === "error";
+        const hasPull = completedConnections?.has(connKey) ?? false;
+        const hasFlow = flowingConnections?.has(connKey) ?? false;
+        // data：先取数、后流动；ConnectionFlow 仅在 pin 已有值时由后端发出
+        const isPullActive = edge.edgeKind === 'data' && hasPull && !hasFlow && !isError;
+        const isFlowActive = edge.edgeKind === 'exec' ? hasPull : hasFlow;
+        const color = edge.pinColor ?? getPinTypeColor(edge.colorKey, theme);
+        const edgeKind = edge.edgeKind;
 
         return (
           <Edge
@@ -125,7 +133,8 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphId, getPinWorl
             color={color}
             thickness={2}
             edgeKind={edgeKind}
-            isCompleted={isCompleted}
+            isPullActive={isPullActive}
+            isFlowActive={isFlowActive}
             isError={isError}
             isRunning={isRunning}
             dimmed={dimmed}

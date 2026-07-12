@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useEditorGroup } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
+import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { getActiveLayoutTab } from "@/features/core/layout/layoutTabQueries";
+import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
+import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
-import { WindowTitleBar, WindowTitleBarActions } from "@/shared/ui/WindowTitleBar";
+import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import { AboutModal } from "./AboutModal";
 
@@ -114,12 +116,13 @@ export function Menubar() {
     addEvent,
     addFunction,
     addWorksheet,
-  } = useEditorGroup({ withCanvasInteraction: false });
+  } = useEditorGroup();
 
   const {
     openSettings,
     isDetailVisible,
     isLogPanelVisible,
+    isSidebarVisible,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
@@ -127,12 +130,15 @@ export function Menubar() {
     handleOpenLogs,
     toggleDetail,
     toggleLogPanel,
+    toggleSidebar,
+    handleResetLayout,
     openNewWindow,
   } = useMenubar();
 
   const currentPath = useProjectIOStore((s) => s.currentPath);
+  const zenMode = useLayoutStore((s) => s.zenMode);
   const saveableEditorTabId = useLayoutStore((s) => {
-    const editorGroupId = s.activeEditorGroupId || "default_editor";
+    const editorGroupId = resolveEditorTargetGroupId(undefined, s.nodes, s);
     const active = getActiveLayoutTab(editorGroupId, s.nodes);
     const tab = active?.tab;
     if (!active?.activeTabId || active.activeTabId === "settings") return null;
@@ -190,18 +196,19 @@ export function Menubar() {
     { label: t("menubar.schemaViewer") },
   ];
 
+  const viewItems: MenuItem[] = buildViewMenuItems(
+    t,
+    { isSidebarVisible, isDetailVisible, isLogPanelVisible, zenMode },
+    { toggleSidebar, toggleDetail, toggleLogPanel, toggleZenMode, resetLayout: handleResetLayout },
+  );
+
   const windowItems: MenuItem[] = [
     { label: t("menubar.newWindow"), onClick: openNewWindow },
     { label: "-" },
     { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
     { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },
-    { label: isLogPanelVisible ? t("menubar.hideLogs") : t("menubar.showLogs"), shortcut: "Ctrl+`", onClick: toggleLogPanel },
     { label: t("menubar.openLogsInNewWindow"), onClick: handleOpenLogs },
-    { label: "-" },
-    { label: t("menubar.resetLayout") },
-    { label: t("menubar.zoomIn"), shortcut: "Ctrl++" },
-    { label: t("menubar.zoomOut"), shortcut: "Ctrl+-" },
   ];
 
   const toolItems: MenuItem[] = [
@@ -223,36 +230,9 @@ export function Menubar() {
 
   return (
     <>
-    <WindowTitleBar
-      elevated
-      className="menubar-container"
-      onWheel={(e) => e.stopPropagation()}
-    >
-      {/* Left: Icon & Brand */}
-      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
-        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
-          <span className="text-white font-black text-xs">Y</span>
-        </div>
-        <div className="text-foreground font-bold text-sm tracking-tight">
-          Yss<span className="text-[var(--accent-color)]">BI</span>
-        </div>
-      </div>
-
-      {/* Center Left: Menus */}
-      <div className="flex items-center gap-1 self-center">
-        <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
-        <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
-        <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
-        <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
-        <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
-        <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
-      </div>
-
-      <div className="flex-1 min-w-[20px]" data-tauri-drag-region />
-
-      {/* Right side: Window Buttons */}
-      <WindowTitleBarActions>
-        {/* Theme Toggle Button */}
+    <WindowMenuBar
+      toolbar={
+        <>
         <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
@@ -280,11 +260,11 @@ export function Menubar() {
             'self-center',
             isDetailVisible ? 'text-foreground' : 'text-muted-foreground',
           )}
-          tooltip={isDetailVisible ? t("menubar.hideDetail") : t("menubar.showDetail")}
+          tooltip={isDetailVisible ? t("menubar.hideSecondarySideBar") : t("menubar.showSecondarySideBar")}
+          aria-label={isDetailVisible ? t("menubar.hideSecondarySideBar") : t("menubar.showSecondarySideBar")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
         </ToolbarIconButton>
-
         <ToolbarIconButton
           variant="ghost"
           size="icon-lg"
@@ -294,9 +274,31 @@ export function Menubar() {
         >
           <VscSettingsGear size={14} />
         </ToolbarIconButton>
-        <WindowChromeControls isMaximized={isMaximized} />
-      </WindowTitleBarActions>
-    </WindowTitleBar>
+        </>
+      }
+      windowActions={<WindowChromeControls isMaximized={isMaximized} />}
+    >
+      {/* Left: Icon & Brand */}
+      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
+        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
+          <span className="text-white font-black text-xs">Y</span>
+        </div>
+        <div className="text-foreground font-bold text-sm tracking-tight">
+          Yss<span className="text-[var(--accent-color)]">BI</span>
+        </div>
+      </div>
+
+      {/* Center Left: Menus */}
+      <div className="flex items-center gap-1 self-center">
+        <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
+        <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
+        <MenuButton id="data" label={t("menubar.data")} items={dataItems} />
+        <MenuButton id="view" label={t("menubar.view")} items={viewItems} />
+        <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
+        <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
+        <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
+      </div>
+    </WindowMenuBar>
     <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   );

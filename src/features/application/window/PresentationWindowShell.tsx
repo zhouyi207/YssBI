@@ -6,7 +6,7 @@ import {
   type PresentationWindowState,
 } from '@/features/application/presentation';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
-import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
+import { WindowChrome } from '@/shared/ui/WindowChrome';
 import { logger } from '@/utils/appLogger';
 
 interface PresentationWindowShellProps {
@@ -71,22 +71,24 @@ export function PresentationWindowShell({
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-foreground">
-      <WindowTitleBar childWindow>
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-4" data-tauri-drag-region>
-          {icon}
-          <span className="min-w-0 truncate text-sm font-bold tracking-tight text-foreground">
-            {title}
-          </span>
-        </div>
-        <WindowTitleBarActions>
+      <WindowChrome
+        childWindow
+        actions={
           <WindowChromeControls
             isMaximized={isMaximized}
             onMinimize={handleMinimize}
             onMaximize={handleMaximize}
             onClose={handleClose}
           />
-        </WindowTitleBarActions>
-      </WindowTitleBar>
+        }
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-4" data-tauri-drag-region>
+          {icon}
+          <span className="min-w-0 truncate text-sm font-bold tracking-tight text-foreground">
+            {title}
+          </span>
+        </div>
+      </WindowChrome>
 
       <div className={contentClassName}>
         {error ? (

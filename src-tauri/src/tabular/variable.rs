@@ -3,11 +3,14 @@ use crate::project::ProjectStore;
 use crate::variable::{VariableId, VariableInstance};
 
 use super::catalog::build_variable_cache_entry;
-use super::snapshot::{is_json_literal, TabularSnapshot};
+use super::snapshot::{TabularSnapshot, is_json_literal};
 use super::{variable_handle, variable_handle_str};
 
 /// 从前端/API 提交的值 ingest 为 tabular snapshot（JSON 列式对象）。
-pub fn ingest_tabular_input(data_type: &DataType, data_value: &DataValue) -> Result<Option<TabularSnapshot>, String> {
+pub fn ingest_tabular_input(
+    data_type: &DataType,
+    data_value: &DataValue,
+) -> Result<Option<TabularSnapshot>, String> {
     match data_type {
         DataType::DataFrame => match data_value {
             DataValue::Null => Ok(None),
@@ -96,9 +99,7 @@ pub fn remove_variable_cache(store: &mut ProjectStore, variable_id: &VariableId)
 /// API/DTO 展示：tabular 变量以 JSON 列式对象返回给前端编辑器。
 pub fn display_data_value(var: &VariableInstance) -> DataValue {
     if let Some(snapshot) = &var.tabular {
-        let json = snapshot
-            .to_json()
-            .unwrap_or_else(|_| "{}".to_string());
+        let json = snapshot.to_json().unwrap_or_else(|_| "{}".to_string());
         return match var.data_type {
             DataType::DataFrame => DataValue::DataFrame(json),
             DataType::DataSeries(_) => DataValue::DataSeries(DataSeriesValue::new(json)),

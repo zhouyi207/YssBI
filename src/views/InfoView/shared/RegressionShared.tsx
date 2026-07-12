@@ -1,10 +1,10 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { formatNum } from './utils';
-import type { BreuschPaganTests } from './types';
+import { formatNum, formatNullableNum, coerceFiniteNumber } from './utils';
+import type { BreuschPaganTests } from '@/shared/types/report';
 
-export { formatNum };
+export { formatNum, formatNullableNum, formatPercent, coerceFiniteNumber } from './utils';
 
 export function SignificanceStars({ pValue }: { pValue: number }) {
   if (pValue < 0.001) return <span className="text-yellow-400 font-bold ml-1">***</span>;
@@ -14,14 +14,28 @@ export function SignificanceStars({ pValue }: { pValue: number }) {
   return null;
 }
 
-export function RSquaredBadge({ value }: { value: number }) {
-  const variant = value >= 0.7 ? 'success' : value >= 0.4 ? 'warning' : 'destructive';
+export function RSquaredBadge({ value }: { value: unknown }) {
+  const n = coerceFiniteNumber(value);
+  const variant =
+    n == null ? 'destructive' : n >= 0.7 ? 'success' : n >= 0.4 ? 'warning' : 'destructive';
 
   return (
     <Badge variant={variant} className="rounded-full px-2.5 py-0.5 text-xs font-semibold normal-case tracking-normal">
-      R² = {value.toFixed(3)}
+      R² = {formatNullableNum(value, 3, 'N/A')}
     </Badge>
   );
+}
+
+export function StatValue({
+  value,
+  decimals = 4,
+  fallback = '—',
+}: {
+  value: unknown;
+  decimals?: number;
+  fallback?: string;
+}) {
+  return <>{formatNullableNum(value, decimals, fallback)}</>;
 }
 
 export function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {

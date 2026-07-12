@@ -35,9 +35,9 @@ impl PinRuntimeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::DataType;
     use crate::graph::node::NodeId;
     use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition};
-    use crate::graph::DataType;
 
     #[test]
     fn from_instance_preserves_pin_id() {

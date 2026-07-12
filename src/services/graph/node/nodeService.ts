@@ -1,47 +1,65 @@
 import { invoke } from "@tauri-apps/api/core";
 import { logger } from '@/utils/appLogger';
-import type { GraphUndoPatch } from './graphUndoPatch';
+import {
+  toBatchCreateNodeIpcItems,
+  spawnParamsToInstanceParams,
+  type BatchCreateNodeRequest,
+  type NodeSpawnParams,
+} from '@/shared/types/dto/batchCreateNode';
+import { EMPTY_GRAPH_UNDO_PATCH, type GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 
-export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from './graphUndoPatch';
+export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from '@/shared/types/dto/graphUndoPatch';
+export type {
+  BatchCreateNodeRequest,
+  NodeSpawnParams,
+  BatchCreateNodeIpcItem,
+  NodeInstanceParamsDTO,
+} from '@/shared/types/dto/batchCreateNode';
 
 export interface CreateNodeResult {
     nodeId: string;
     pinIds: string[];
 }
 
+export interface BatchCreateWithConnectionsEntry extends BatchCreateNodeRequest {
+    x: number;
+    y: number;
+    pins: Array<{
+        pinId: string;
+        name: string;
+        direction: 'input' | 'output';
+        userValue?: unknown;
+    }>;
+}
+
 export class NodeService {
    // ==================== Nodes 操作 ====================
 
-    static async getNodes(subgraphId: string): Promise<unknown[]> {
-        return await invoke<unknown[]>("get_nodes", { subgraphId });
+    static async getNodes(graphPath: string): Promise<unknown[]> {
+        return await invoke<unknown[]>("get_nodes", { graphPath });
     }
 
-    static async setNodes(subgraphId: string, nodes: unknown[]): Promise<void> {
-        await invoke("set_nodes", { subgraphId, nodes });
+    static async setNodes(graphPath: string, nodes: unknown[]): Promise<void> {
+        await invoke("set_nodes", { graphPath, nodes });
     }
 
     /**
      * 创建单个节点（后端生成和验证）
      */
     static async createNode(
-        subgraphId: string, 
+        graphPath: string, 
         nodeType: string,
         x?: number,
         y?: number,
-        params?: {
-            variableId?: string;
-            subGraphId?: string;
-            dataframeId?: string;
-        }
+        params?: NodeSpawnParams,
     ): Promise<CreateNodeResult> {
-        logger.graph.debug(`Creating node: subgraphId=${subgraphId}, nodeType=${nodeType}, x=${x}, y=${y}`, 'NodeService');
-        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
+        logger.graph.debug(`Creating node: graphPath=${graphPath}, nodeType=${nodeType}, x=${x}, y=${y}`, 'NodeService');
         const result = await invoke<CreateNodeResult>("create_node", { 
-            graphId: subgraphId, 
+            graphPath, 
             nodeType: nodeType,
             x: x !== undefined ? x : null,
             y: y !== undefined ? y : null,
-            params: taggedParams,
+            params: spawnParamsToInstanceParams(params),
         });
         logger.graph.info(`Node created successfully, ID: ${result.nodeId}`, 'NodeService');
         return result;
@@ -51,27 +69,22 @@ export class NodeService {
      * Create a node with specific IDs (for redo — preserves node/pin identity)
      */
     static async createNodeWithId(
-        graphId: string,
+        graphPath: string,
         nodeId: string,
         pinIds: string[],
         nodeType: string,
         x?: number,
         y?: number,
-        params?: {
-            variableId?: string;
-            subGraphId?: string;
-            dataframeId?: string;
-        }
+        params?: NodeSpawnParams,
     ): Promise<void> {
-        const taggedParams = params ? NodeService.buildTaggedParams(params) : null;
         await invoke("create_node_with_id", {
-            graphId,
+            graphPath,
             nodeId,
             pinIds,
             nodeType,
             x: x ?? null,
             y: y ?? null,
-            params: taggedParams,
+            params: spawnParamsToInstanceParams(params),
         });
     }
 
@@ -79,92 +92,63 @@ export class NodeService {
      * 批量删除节点（单次 IPC）；返回删除前捕获的 undo patch。
      */
     static async batchDeleteNodes(
-        graphId: string,
+        graphPath: string,
         nodeIds: string[],
     ): Promise<GraphUndoPatch> {
         if (nodeIds.length === 0) {
-            return { nodes: [], neighborNodes: [], connections: [] };
+            return EMPTY_GRAPH_UNDO_PATCH;
         }
-        return await invoke<GraphUndoPatch>("batch_delete_nodes", { graphId, nodeIds });
+        return await invoke<GraphUndoPatch>("batch_delete_nodes", { graphPath, nodeIds });
     }
 
     /**
      * Apply a previously captured undo patch (DeleteNodes undo / DisconnectPin undo / Composite redo).
      */
     static async applyGraphPatch(
-        graphId: string,
+        graphPath: string,
         patch: GraphUndoPatch,
     ): Promise<void> {
-        await invoke("apply_graph_patch", { graphId, patch });
+        await invoke("apply_graph_patch", { graphPath, patch });
     }
 
     /**
      * 批量创建节点（单次 IPC 调用，后端一次性创建并发出 NodesBatchCreated 事件）
      */
     static async batchCreateNodes(
-        graphId: string,
-        requests: Array<{
-            nodeType: string;
-            x?: number;
-            y?: number;
-            params?: {
-                variableId?: string;
-                subGraphId?: string;
-                dataframeId?: string;
-            };
-        }>
+        graphPath: string,
+        requests: BatchCreateNodeRequest[],
     ): Promise<string[]> {
         if (requests.length === 0) return [];
         return await invoke<string[]>("batch_create_nodes", {
-            graphId,
-            requests: requests.map(r => ({
-                nodeType: r.nodeType,
-                x: r.x ?? null,
-                y: r.y ?? null,
-                params: r.params ? NodeService.buildTaggedParams(r.params) : null,
-            })),
+            graphPath,
+            requests: toBatchCreateNodeIpcItems(requests),
         });
     }
 
     /**
      * 删除单个节点
      */
-    static async deleteNode(graphId: string, nodeId: string): Promise<void> {
-        await invoke("delete_node", { graphId, nodeId });
+    static async deleteNode(graphPath: string, nodeId: string): Promise<void> {
+        await invoke("delete_node", { graphPath, nodeId });
     }
 
     /**
      * 批量更新节点位置（拖拽结束时调用，CQRS 模式）
      */
     static async updateNodePositions(
-        graphId: string,
+        graphPath: string,
         updates: Array<{ nodeId: string; x: number; y: number }>
     ): Promise<void> {
         if (updates.length === 0) return;
-        await invoke("update_node_positions", { graphId, updates });
+        await invoke("update_node_positions", { graphPath, updates });
     }
 
     /**
      * Batch-create nodes with pin remapping and connection restoration.
      */
     static async batchCreateWithConnections(
-        graphId: string,
-        entries: Array<{
-            nodeType: string;
-            x: number;
-            y: number;
-            params?: {
-                variableId?: string;
-                subGraphId?: string;
-                dataframeId?: string;
-            };
-            pins: Array<{
-                pinId: string;
-                name: string;
-                direction: 'input' | 'output';
-                userValue?: unknown;
-            }>;
-        }>,
+        graphPath: string,
+        entries: BatchCreateWithConnectionsEntry[],
         connections: Array<{ fromPin: string; toPin: string }>,
     ): Promise<{
         nodeIds: string[];
@@ -172,38 +156,18 @@ export class NodeService {
         undoPatch: GraphUndoPatch;
     }> {
         if (entries.length === 0) {
-            return { nodeIds: [], pinMapping: {}, undoPatch: { nodes: [], neighborNodes: [], connections: [] } };
+            return { nodeIds: [], pinMapping: {}, undoPatch: EMPTY_GRAPH_UNDO_PATCH };
         }
         return await invoke("batch_create_with_connections", {
-            graphId,
-            entries: entries.map(e => ({
-                nodeType: e.nodeType,
-                x: e.x,
-                y: e.y,
-                params: e.params ? NodeService.buildTaggedParams(e.params) : null,
-                pins: e.pins,
+            graphPath,
+            entries: entries.map((entry) => ({
+                nodeType: entry.nodeType,
+                x: entry.x,
+                y: entry.y,
+                params: spawnParamsToInstanceParams(entry.params),
+                pins: entry.pins,
             })),
             connections,
         });
-    }
-
-    private static buildTaggedParams(params: {
-        variableId?: string;
-        subGraphId?: string;
-        dataframeId?: string;
-    }): Record<string, unknown> {
-        if (params.variableId) {
-            return {
-                paramsKind: 'variable',
-                variableId: params.variableId,
-            };
-        }
-        if (params.subGraphId) {
-            return { paramsKind: 'subGraph', subGraphId: params.subGraphId };
-        }
-        if (params.dataframeId) {
-            return { paramsKind: 'dataFrame', dataframeId: params.dataframeId };
-        }
-        return { paramsKind: 'none' };
     }
 }

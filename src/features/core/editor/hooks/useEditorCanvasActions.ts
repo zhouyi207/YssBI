@@ -1,17 +1,17 @@
 import { useCallback, type RefObject } from 'react';
 import { commitViewport, setViewportLive } from '@/features/core/viewport';
-import { GraphPosition } from '@/shared/types/domain';
+import type { EditorViewport } from '@/features/core/viewport';
 
 export function useEditorCanvasActions(activeTabIdRef: RefObject<string | null>) {
   const setCanvas = useCallback(
     (
-      updater: GraphPosition | ((prev: GraphPosition) => GraphPosition),
-      targetGraphId?: string,
+      updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
+      targetGraphPath?: string,
     ) => {
-      const graphId = targetGraphId ?? activeTabIdRef.current;
-      if (!graphId) return;
-      setViewportLive(graphId, updater);
-      commitViewport(graphId);
+      const graphPath = targetGraphPath ?? activeTabIdRef.current;
+      if (!graphPath) return;
+      setViewportLive(graphPath, updater);
+      commitViewport(graphPath);
     },
     [activeTabIdRef],
   );

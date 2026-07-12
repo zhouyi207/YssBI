@@ -1,4 +1,5 @@
 import { Connection } from "./connection";
+import type { DataType } from "./dataType";
 import { Node } from "./node";
 import { Pin } from "./pin";
 
@@ -14,36 +15,26 @@ import { Pin } from "./pin";
 export type GraphType = 'event' | 'function';
 
 /**
- * 图的视口位置
- * 用于记录画布的平移和缩放状态
- */
-export interface GraphPosition {
-    x: number;      // X 轴偏移
-    y: number;      // Y 轴偏移
-    scale: number;  // 缩放比例
-}
-
-/**
  * 图实例
- * 代表一个完整的节点图
+ * 代表一个完整的节点图（不含编辑器视口；视口为前端 EditorViewport）
  */
 export interface Graph {
-    id: string;                 // 图 ID
-    name: string;               // 图名称
-    type: GraphType;            // 图类型
+    /** 图资源相对路径（如 `events/Main.yssbi-event`） */
+    path: string;
+    name: string;
+    type: GraphType;
     functionInputs?: FunctionSignaturePin[];
     functionOutputs?: FunctionSignaturePin[];
-    nodes: Node[];              // 节点列表
-    pins: Pin[];                // Pin 列表（所有节点的 Pin）
-    connections: Connection;    // 连接关系
-    canvas: GraphPosition;      // 画布状态
+    nodes: Node[];
+    pins: Pin[];
+    connections: Connection;
 }
 
 export interface FunctionSignaturePin {
     id: string;
     name: string;
-    type: string;
-    containerType?: string;
+    /** 结构化类型；缺省表示 exec pin */
+    dataType?: DataType;
 }
 
 export type FunctionPinSpec = FunctionSignaturePin;

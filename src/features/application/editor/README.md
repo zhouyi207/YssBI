@@ -6,13 +6,13 @@ Editor UI orchestration lives under `features/application/editor/`. Core editor 
 
 ```
 features/application/editor/
-├── useEditor.ts              # Composes core state + dataManagement hooks
-├── useEditorGroup.ts         # Group-scoped wrapper (GroupContext from core)
+├── EditorSessionContext.tsx  # Single EditorSessionProvider per Editor window
+├── editorSessionTypes.ts     # 显式 EditorSession / EditorGroupSession 切片契约
+├── useEditorSessionSlices.ts # useEditorSessionResources / DetailActions 等窄接口
+├── useEditorSessionValue.ts  # 组装 session（无 pointer loop）
+├── useEditorGroup.ts         # Group-scoped wrapper; optional canvas pointer loop
 ├── useEditorOperations.ts    # Clipboard, history, node ops
 ├── useTabManagement.ts       # Tab open/close/switch
-├── useProjectOperations.ts   # Save, load, execute
-├── useCanvasViewport.ts      # Viewport persistence
-├── useCanvasDrop.ts          # Canvas drop handlers
 └── index.ts
 
 features/core/editor/
@@ -23,39 +23,52 @@ features/core/editor/
 
 ## Usage
 
-### Canvas / graph editing (with pointer loop)
+### Editor window shell
 
 ```tsx
-import { useEditorGroup } from '@/features/application/editor';
+import { EditorSessionProvider } from '@/features/application/editor';
 
-function CanvasArea() {
-  const editor = useEditorGroup(); // withCanvasInteraction defaults true for editor groups
-  // editor.onCanvasPointerDown, editor.onNodePointerDown, …
-}
+<EditorSessionProvider>
+  <EditorWindowReady />
+</EditorSessionProvider>
 ```
 
-### Chrome only (Sidebar, Menubar, sync hooks)
+### Canvas (only place that mounts the pointer loop)
 
 ```tsx
-import { useEditor } from '@/features/application/editor';
-
-const editor = useEditor({ withCanvasInteraction: false });
+const editor = useEditorGroup({ withCanvasInteraction: true });
 ```
 
-### Group scope
+### Chrome / overlays / sidebar (shared session, no pointer loop)
 
 ```tsx
-import { GroupContext } from '@/features/core/editor';
-
-<GroupContext.Provider value={groupId}>
-  <GraphEditor />
-</GroupContext.Provider>
+const editor = useEditorGroup();
+// or
+const editor = useEditorSession();
 ```
 
-`useEditorGroup()` reads `GroupContext` and scopes pointer handlers to that layout group.
+### Project sync / auto-open hooks
+
+```tsx
+const editor = useEditorSession();
+```
+
+## API 约定
+
+| Hook | 用途 | 挂载位置 |
+|------|------|----------|
+| `EditorSessionProvider` | 全窗口单例 session | `EditorWindow` 根节点 |
+| `useEditorSession()` | 读共享 session（命令、tab、资源） | Provider 内任意 hook/组件 |
+| `useEditorSessionResources()` | 仅 events/functions/variables/dataframes | Detail、侧栏资源列表 |
+| `useEditorGroup()` | group 工作区 + 可选 canvas 交互 + 完整 session | Workspace / Canvas / Menubar |
+| `useEditorGroup()` | 组级 scope + 可选 pointer 包装 | Sidebar、Menubar、Overlays 等 |
+| `useEditorGroup({ withCanvasInteraction: true })` | 启用 canvas pointer loop | **仅** `Canvas.tsx` |
+
+> `useEditor()` 已删除。Provider 外不应再构建独立 editor session。新 hook **禁止** `...session` 透传；使用 `editorSessionTypes` 中的 `PickEditorSession` / 切片 hook / `composeEditorGroupSession`。
+
+设计约定详见 [DESIGN_RULE.md §2.12](../../../docs/DESIGN_RULE.md#212-editorsession-显式契约)。
 
 ## Related modules
 
 - Graph CRUD UI: `features/application/dataManagement/useGraphManagement.ts`
-- Resource actions: `features/application/resource/resourceActions.ts`
 - Canvas interaction primitives: `features/core/canvas/`

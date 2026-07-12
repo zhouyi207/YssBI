@@ -9,7 +9,7 @@ import {
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
 } from './InfoStatsTable';
-import type { Iv2slsFirstStage, Iv2slsFirstStageSummary } from './types';
+import type { Iv2slsFirstStageResult, Iv2slsFirstStageSummary } from '@/shared/types/report';
 
 export function IvFirstStageSummaryTables({
   summary,
@@ -17,7 +17,7 @@ export function IvFirstStageSummaryTables({
   variant,
 }: {
   summary: Iv2slsFirstStageSummary;
-  firstStage?: Iv2slsFirstStage[];
+  firstStage?: Iv2slsFirstStageResult[];
   variant: '2sls' | 'liml';
 }) {
   const stockYogoLabel = variant === 'liml' ? 'Stock-Yogo (2005) LIML' : 'Stock-Yogo (2005)';
@@ -55,9 +55,9 @@ export function IvFirstStageSummaryTables({
               <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
                 {firstStage?.[0]?.endog_name ?? '—'}
               </TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.r2, 4)}</TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.r2_adjusted, 4)}</TableCell>
-              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(summary.partial_r2, 4)}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.r2 != null ? formatNum(summary.r2, 4) : '—'}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.r2_adjusted != null ? formatNum(summary.r2_adjusted, 4) : '—'}</TableCell>
+              <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{summary.partial_r2 != null ? formatNum(summary.partial_r2, 4) : '—'}</TableCell>
               <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
                 {summary.f_stat != null ? formatNum(summary.f_stat, 4) : '—'}
               </TableCell>
@@ -130,16 +130,16 @@ export function IvFirstStageSummaryTables({
                         {summary.min_eigenvalue_cv.bias ? (
                           <>
                             <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                              {summary.min_eigenvalue_cv.bias.pct_5.toFixed(2)}
+                              {formatNum(summary.min_eigenvalue_cv.bias.pct_5, 2)}
                             </TableCell>
                             <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                              {summary.min_eigenvalue_cv.bias.pct_10.toFixed(2)}
+                              {formatNum(summary.min_eigenvalue_cv.bias.pct_10, 2)}
                             </TableCell>
                             <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                              {summary.min_eigenvalue_cv.bias.pct_20.toFixed(2)}
+                              {formatNum(summary.min_eigenvalue_cv.bias.pct_20, 2)}
                             </TableCell>
                             <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                              {summary.min_eigenvalue_cv.bias.pct_30.toFixed(2)}
+                              {formatNum(summary.min_eigenvalue_cv.bias.pct_30, 2)}
                             </TableCell>
                           </>
                         ) : (
@@ -166,16 +166,16 @@ export function IvFirstStageSummaryTables({
                           2SLS size of nominal 5% Wald test
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_10.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_10, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_15.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_15, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_20.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_20, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_25.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_25, 2)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -199,16 +199,16 @@ export function IvFirstStageSummaryTables({
                           LIML size of nominal 5% Wald test
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_10.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_10, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_15.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_15, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_20.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_20, 2)}
                         </TableCell>
                         <TableCell className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
-                          {summary.min_eigenvalue_cv.size.pct_25.toFixed(2)}
+                          {formatNum(summary.min_eigenvalue_cv.size.pct_25, 2)}
                         </TableCell>
                       </TableRow>
                     </TableBody>

@@ -1,10 +1,9 @@
 /**
- * Viewport culling, wheel zoom, pin offsets, and coordinate helpers for Canvas.
+ * Viewport culling, pin offsets, and coordinate helpers for Canvas.
  */
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
-  attachViewportWheel,
   getViewport,
   subscribeToViewport,
 } from '@/features/core/viewport';
@@ -12,6 +11,8 @@ import { useGraphDataStore } from '@/features/core/dataStore';
 import { getDragPreview } from '@/features/core/canvas/dragPreview';
 import { NODE_WIDTH, NODE_HEIGHT, CULLING_PADDING_FACTOR } from '@/app/appConfig/default';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
+import { createSashAwareResizeHandler } from '@/shared/utils/sashResizeGuard';
+import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
 
 /** 线段 (x1,y1)-(x2,y2) 与矩形 [left,top,right,bottom] 是否相交 */
 function segmentIntersectsRect(
@@ -35,8 +36,8 @@ function segmentIntersectsRect(
 }
 
 export function useCanvasViewport(
-  canvasRef: React.RefObject<HTMLDivElement | null>,
-  graphId: string | null,
+  canvasElementRef: React.RefObject<HTMLDivElement | null>,
+  graphPath: string | null,
   gestureType: string | null,
 ) {
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
@@ -45,10 +46,10 @@ export function useCanvasViewport(
 
   const nodePositionMap = useGraphDataStore(
     useShallow((s) => {
-      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const ids = graphPath ? s.getGraphNodeIds(graphPath) : [];
       const m: Record<string, { x: number; y: number }> = {};
       for (const id of ids) {
-        const n = graphId ? s.getGraphNode(graphId, id) : undefined;
+        const n = graphPath ? s.getGraphNode(graphPath, id) : undefined;
         if (n?.position) m[id] = n.position;
       }
       return m;
@@ -57,32 +58,26 @@ export function useCanvasViewport(
 
   const pinNodeIdMap = useGraphDataStore(
     useShallow((s) => {
-      const ids = graphId ? s.graphNodes[graphId] ?? [] : [];
+      const ids = graphPath ? s.getGraphNodeIds(graphPath) : [];
       const m: Record<string, string> = {};
       for (const nid of ids) {
-        if (!graphId) continue;
-        for (const pid of s.getGraphNodePins(graphId, nid)) m[pid] = nid;
+        if (!graphPath) continue;
+        for (const pid of s.getGraphNodePins(graphPath, nid)) m[pid] = nid;
       }
       return m;
     }),
   );
 
   const connectionsRef = useGraphDataStore(
-    useShallow((s) => (graphId ? s.getGraphConnections(graphId) : [])),
+    useShallow((s) => (graphPath ? s.getGraphConnections(graphPath) : [])),
   );
 
-  useEffect(() => {
-    const canvasEl = canvasRef.current;
-    if (!canvasEl || !graphId) return;
-    return attachViewportWheel(canvasEl, graphId);
-  }, [canvasRef, graphId]);
-
   const updateVisibleNodes = useCallback(() => {
-    const el = canvasRef.current;
-    if (!el || !graphId) return;
+    const el = canvasElementRef.current;
+    if (!el || !graphPath) return;
 
     const rect = el.getBoundingClientRect();
-    const viewport = getViewport(graphId);
+    const viewport = getViewport(graphPath);
 
     const padding = CULLING_PADDING_FACTOR / viewport.scale;
     const worldViewLeft = -viewport.x / viewport.scale - padding;
@@ -91,11 +86,11 @@ export function useCanvasViewport(
     const worldViewBottom = (rect.height - viewport.y) / viewport.scale + padding;
 
     const store = useGraphDataStore.getState();
-    const nodeIds = store.graphNodes[graphId] ?? [];
+    const nodeIds = store.getGraphNodeIds(graphPath);
 
     const visible = new Set<string>();
     for (const nid of nodeIds) {
-      const node = store.getGraphNode(graphId, nid);
+      const node = store.getGraphNode(graphPath, nid);
       if (!node?.position) continue;
       const isVisible =
         node.position.x + NODE_WIDTH > worldViewLeft &&
@@ -107,19 +102,19 @@ export function useCanvasViewport(
 
     const pinToNode = new Map<string, string>();
     for (const nid of nodeIds) {
-      for (const pid of store.getGraphNodePins(graphId, nid)) {
+      for (const pid of store.getGraphNodePins(graphPath, nid)) {
         pinToNode.set(pid, nid);
       }
     }
     const nodeCenter = (nid: string) => {
-      const node = store.getGraphNode(graphId, nid);
+      const node = store.getGraphNode(graphPath, nid);
       if (!node?.position) return null;
       return {
         x: node.position.x + NODE_WIDTH / 2,
         y: node.position.y + NODE_HEIGHT / 2,
       };
     };
-    for (const conn of store.getGraphConnections(graphId)) {
+    for (const conn of store.getGraphConnections(graphPath)) {
       const fromNode = pinToNode.get(conn.from);
       const toNode = pinToNode.get(conn.to);
       if (!fromNode || !toNode) continue;
@@ -139,7 +134,7 @@ export function useCanvasViewport(
     }
 
     setVisibleNodes(visible);
-  }, [canvasRef, graphId]);
+  }, [canvasElementRef, graphPath]);
 
   const scheduleCullingUpdate = useCallback(() => {
     if (cullingTimerRef.current !== null) return;
@@ -154,9 +149,9 @@ export function useCanvasViewport(
   }, [nodePositionMap, connectionsRef, updateVisibleNodes]);
 
   useEffect(() => {
-    if (!graphId) return;
-    return subscribeToViewport(graphId, scheduleCullingUpdate);
-  }, [graphId, scheduleCullingUpdate]);
+    if (!graphPath) return;
+    return subscribeToViewport(graphPath, scheduleCullingUpdate);
+  }, [graphPath, scheduleCullingUpdate]);
 
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
@@ -172,13 +167,18 @@ export function useCanvasViewport(
   const resizeRafRef = useRef(0);
 
   useEffect(() => {
-    const root = canvasRef.current;
+    const root = canvasElementRef.current;
     if (!root) return;
+
+    const bumpResizeVersion = () => {
+      setNodeResizeVersion((v) => v + 1);
+    };
+    const { handler, flushAfterSashDrag } = createSashAwareResizeHandler(bumpResizeVersion);
 
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(resizeRafRef.current);
       resizeRafRef.current = requestAnimationFrame(() => {
-        setNodeResizeVersion((v) => v + 1);
+        handler();
       });
     });
 
@@ -187,17 +187,20 @@ export function useCanvasViewport(
       if (el) observer.observe(el);
     });
 
+    window.addEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
+
     return () => {
       cancelAnimationFrame(resizeRafRef.current);
       observer.disconnect();
+      window.removeEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
     };
-  }, [canvasRef, visibleNodeIds]);
+  }, [canvasElementRef, visibleNodeIds]);
 
   useLayoutEffect(() => {
-    const root = canvasRef.current;
-    if (!root || !graphId) return;
+    const root = canvasElementRef.current;
+    if (!root || !graphPath) return;
 
-    const scale = getViewport(graphId).scale;
+    const scale = getViewport(graphPath).scale;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
 
     visibleNodeIds.forEach((nodeId) => {
@@ -235,8 +238,8 @@ export function useCanvasViewport(
       return nextOffsets;
     });
 
-    resolvePinOffsetWaiters(graphId, nextOffsets);
-  }, [canvasRef, visibleNodeIds, nodeResizeVersion, graphId]);
+    resolvePinOffsetWaiters(graphPath, nextOffsets);
+  }, [canvasElementRef, visibleNodeIds, nodeResizeVersion, graphPath]);
 
   const getPinWorldPos = useCallback(
     (pinId: string) => {
@@ -258,16 +261,16 @@ export function useCanvasViewport(
 
   const getCanvasLocalPoint = useCallback(
     (clientX: number, clientY: number) => {
-      const root = canvasRef.current;
-      if (!root || !graphId) return { x: 0, y: 0 };
+      const root = canvasElementRef.current;
+      if (!root || !graphPath) return { x: 0, y: 0 };
       const rect = root.getBoundingClientRect();
-      const viewport = getViewport(graphId);
+      const viewport = getViewport(graphPath);
       return {
         x: (clientX - rect.left - viewport.x) / viewport.scale,
         y: (clientY - rect.top - viewport.y) / viewport.scale,
       };
     },
-    [canvasRef, graphId],
+    [canvasElementRef, graphPath],
   );
 
   return {

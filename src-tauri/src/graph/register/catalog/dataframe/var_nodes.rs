@@ -12,6 +12,7 @@ use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::DataValue;
 use ndarray::Array2;
 use polars::prelude::DataType;
@@ -544,10 +545,7 @@ fn register_varsoc(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "VAR 滞后阶选择 — LL、LR、FPE、AIC、HQIC、SBIC（Stata varsoc varlist, maxlag(#)）",
-        "VAR lag-order selection — LL, LR, FPE, AIC, HQIC, SBIC (Stata varsoc varlist, maxlag(#))",
-    )
+    .with_documentation(docs::var::VAR_VARSOC_ZH, docs::var::VAR_VARSOC_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_varsoc(ctx)?;
@@ -593,10 +591,7 @@ fn register_var_summary(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "向量自回归 VAR(p)，含 OIRF 与 FEVD（Stata varbasic）。外生 DataFrame 行数须与 Variables 一致；缺失/非有限值按 listwise 删除。",
-        "Vector Autoregression — VAR(p) with OIRF and FEVD (Stata varbasic). Exog DataFrame must have the same row count as Variables; missing/non-finite cells use listwise deletion.",
-    )
+    .with_documentation(docs::var::VAR_SUMMARY_ZH, docs::var::VAR_SUMMARY_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
         let result = run_var(ctx)?;

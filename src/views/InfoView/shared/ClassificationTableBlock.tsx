@@ -1,6 +1,6 @@
-import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { ClassificationTable } from './types';
+import { formatNum, formatPercent } from './RegressionShared';
+import type { ClassificationTable } from '@/shared/types/report';
 
 /** Stata estat classification — classification table and statistics */
 export function ClassificationTableBlock({ data }: { data: ClassificationTable }) {
@@ -65,12 +65,12 @@ export function ClassificationTableBlock({ data }: { data: ClassificationTable }
             <div key={label} className="flex justify-between items-center py-1.5 border-b border-border">
               <span className="text-muted-foreground">{label}</span>
               <span className="text-muted-foreground font-mono text-[11px] mr-4">{formula}</span>
-              <span className="text-foreground font-mono font-medium">{(value * 100).toFixed(2)}%</span>
+              <span className="text-foreground font-mono font-medium">{formatPercent(value)}</span>
             </div>
           ))}
           <div className="flex justify-between py-2 mt-2 bg-muted/40 rounded px-3">
             <span className="text-muted-foreground font-medium">Correctly classified</span>
-            <span className="text-[var(--accent-color)] font-mono font-semibold">{data.pct_correct.toFixed(2)}%</span>
+            <span className="text-[var(--accent-color)] font-mono font-semibold">{formatNum(data.pct_correct, 2)}%</span>
           </div>
         </div>
       </div>

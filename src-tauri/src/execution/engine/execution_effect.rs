@@ -4,11 +4,6 @@
 //! 执行器负责解释效果并更新 continuation 栈
 
 use crate::graph::pin::ExecRole;
-use serde::{Deserialize, Serialize};
-
-/// 恢复令牌（用于 Delay / Async）
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ResumeToken(pub String);
 
 /// 节点执行效果
 ///
@@ -41,10 +36,9 @@ pub enum ExecutionEffect {
     /// - 需要按顺序执行多个输出的节点
     ///
     /// 执行器会：
-    /// 1. 保存当前帧（标记为 WaitingForChild）
-    /// 2. 将 remaining 保存为 continuation
-    /// 3. 触发 current 输出
-    /// 4. 当 current 的子流程完成后，继续执行 remaining
+    /// 1. 将当前帧标记为 Waiting 并 park（新建 join 作用域）
+    /// 2. 触发 current 输出，其子帧计入本作用域
+    /// 3. 当 current 整棵子树排空后，依次触发 remaining
     TriggerAndContinue {
         /// 当前要触发的输出
         current: ExecRole,
@@ -59,23 +53,6 @@ pub enum ExecutionEffect {
     ///
     /// 注意：当前实现会按顺序执行（逆序压栈）
     TriggerSequence(Vec<ExecRole>),
-
-    /// 暂停执行，等待外部事件
-    ///
-    /// 适用于：
-    /// - Delay 节点
-    /// - Async / Await 节点
-    /// - 等待用户输入的节点
-    ///
-    /// 执行器会：
-    /// 1. 将当前帧保存到挂起队列
-    /// 2. 继续执行栈中的其他帧
-    /// 3. 当外部事件触发时，通过 resume_token 恢复执行
-    Suspend {
-        resume_token: ResumeToken,
-        /// 恢复时要触发的输出
-        resume_output: ExecRole,
-    },
 
     /// 循环执行
     ///
@@ -123,14 +100,6 @@ impl ExecutionEffect {
         ExecutionEffect::TriggerAndContinue {
             current: roles[0].clone(),
             remaining: roles[1..].to_vec(),
-        }
-    }
-
-    /// 创建暂停效果
-    pub fn suspend(token: impl Into<String>, resume_output: ExecRole) -> Self {
-        ExecutionEffect::Suspend {
-            resume_token: ResumeToken(token.into()),
-            resume_output,
         }
     }
 

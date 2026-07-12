@@ -1,13 +1,13 @@
 import type { PinView } from '@/shared/types/store/graph';
 import type { NodeDefinition, PinDefinitionDTO, PinSlot } from '@/shared/types/domain/node';
+import { pinFlowKind, pinTypeLabel } from '@/shared/types/domain/pinSemantics';
 
 export interface ResolvedPinSpec {
   id: string;
   name: string;
   direction: 'input' | 'output';
   kind: 'Data' | 'Exec';
-  type: string;
-  typeDisplay?: string;
+  typeLabel: string;
   optional: boolean;
   slotKind?: 'fixed' | 'repeatable' | 'derivedFromInput';
   slotNote?: { kind: 'repeatableRange'; min: number; max: number | null } | { kind: 'derivedFromInput' };
@@ -15,9 +15,6 @@ export interface ResolvedPinSpec {
   connectionIds: string[];
 }
 
-function pinKindFromType(type: string): 'Data' | 'Exec' {
-  return type === 'exec' ? 'Exec' : 'Data';
-}
 
 function formatDefinitionType(def: PinDefinitionDTO): string {
   if (def.kind === 'Exec') return 'exec';
@@ -49,7 +46,7 @@ function slotNote(slot: PinSlot): ResolvedPinSpec['slotNote'] {
 function findDefinitionForPin(
   pin: PinView,
   slots: PinSlot[] | undefined,
-): { optional: boolean; slotKind?: ResolvedPinSpec['slotKind']; slotNote?: string } {
+): { optional: boolean; slotKind?: ResolvedPinSpec['slotKind']; slotNote?: ResolvedPinSpec['slotNote'] } {
   if (!slots?.length) return { optional: pin.optional ?? false };
 
   for (const slot of slots) {
@@ -91,13 +88,13 @@ function resolvePin(
   definition: NodeDefinition | undefined,
 ): ResolvedPinSpec {
   const meta = findDefinitionForPin(pin, definition?.pinSlots);
+  const label = pinTypeLabel(pin);
   return {
     id: pin.id,
     name: pin.name,
     direction: pin.direction,
-    kind: pinKindFromType(String(pin.type)),
-    type: pin.typeDisplay ?? String(pin.type),
-    typeDisplay: pin.typeDisplay,
+    kind: pinFlowKind(pin),
+    typeLabel: label,
     optional: meta.optional,
     slotKind: meta.slotKind,
     slotNote: meta.slotNote,
@@ -135,7 +132,7 @@ export function listDefinitionOnlyPins(
         name: def.name,
         direction: def.direction,
         kind: def.kind,
-        type: formatDefinitionType(def),
+        typeLabel: formatDefinitionType(def),
         optional: def.optional ?? false,
         slotKind: 'fixed',
         connected: false,
@@ -149,7 +146,7 @@ export function listDefinitionOnlyPins(
         name: `${slot.namePrefix}*`,
         direction: def.direction,
         kind: def.kind,
-        type: formatDefinitionType(def),
+        typeLabel: formatDefinitionType(def),
         optional: def.optional ?? false,
         slotKind: 'repeatable',
         slotNote: slotNote(slot),

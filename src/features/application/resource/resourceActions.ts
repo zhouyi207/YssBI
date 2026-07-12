@@ -1,17 +1,18 @@
-import { useGraphDataStore, useProjectIOStore, useDatabaseStore } from '@/features/core/dataStore';
+import { useGraphDataStore, useGraphMetaStore, useProjectIOStore, useDatabaseStore } from '@/features/core/dataStore';
 import {
   graphResourceRef,
   normalizeBackendResourceMeta,
-  updateOpenResourceLabels,
   useResourceStore,
   type ResourceRef,
 } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
-import { closeEditorTab } from '@/features/application/editor/closeEditorTab';import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
+import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
 
-export type GraphResourceKind = 'event' | 'function';
+export type { GraphResourceKind };
 
 async function refreshResourceIndex(): Promise<void> {
   await useProjectIOStore.getState().refreshResourceIndex();
@@ -24,8 +25,16 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   if (ref.kind === 'event' || ref.kind === 'function') {
     const backendMeta = await GraphService.renameGraphResource(ref.id, name);
     const meta = normalizeBackendResourceMeta(backendMeta);
-    useResourceStore.getState().upsertResource(meta);
-    updateOpenResourceLabels(graphResourceRef(ref.id, meta.kind === 'function' ? 'function' : 'event'), meta.name);
+    const targetRef = graphResourceRef(meta.id, ref.kind);
+
+    // Path migration is owned by GraphResourceMoved; patch name/uri only to preserve document state.
+    useResourceStore.getState().patchResource(targetRef, {
+      name: meta.name,
+      uri: meta.uri,
+      exists: meta.exists,
+      loaded: meta.loaded,
+    });
+    useGraphMetaStore.getState().updateGraph(meta.id, { name: meta.name });
     return;
   }
 
@@ -46,15 +55,13 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
 
 export async function createGraphResource(kind: GraphResourceKind, name?: string): Promise<string> {
   const graphName = name?.trim() || (kind === 'event' ? DEFAULT_EVENT_NAME : DEFAULT_FUNCTION_NAME);
-  const id = kind === 'event'
-    ? await GraphService.createEvent(graphName)
-    : await GraphService.createFunction(graphName);
-  await refreshResourceIndex();
-  return id;
+  return kind === 'event'
+    ? GraphService.createEvent(graphName)
+    : GraphService.createFunction(graphName);
 }
 
-export async function duplicateGraphResource(graphId: string): Promise<void> {
-  await GraphService.duplicateGraph(graphId);
+export async function duplicateGraphResource(graphPath: string): Promise<void> {
+  await GraphService.duplicateGraph(graphPath);
   await refreshResourceIndex();
 }
 
@@ -63,6 +70,7 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
     await closeEditorTab(ref.id, undefined, true);
     await GraphService.removeGraph(ref.id);
     useGraphDataStore.getState().clearGraph(ref.id);
+    useGraphMetaStore.getState().deleteGraph(ref.id);
     useResourceStore.getState().removeResource(ref);
     await refreshResourceIndex();
     return;

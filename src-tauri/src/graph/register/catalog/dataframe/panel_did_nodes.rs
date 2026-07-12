@@ -7,13 +7,14 @@ use super::panel_did_auxiliary::{
 };
 use super::panel_did_engine::{DidFakeGroupEnginePayload, ExogLabelEntry};
 use super::panel_nodes::{PanelConfigure, panel_result_to_ols_result, series_to_group_indices};
-use crate::execution::{ExecutionEffect, ReportKind};
 use crate::execution::context::NodeExecutionContextTrait;
+use crate::execution::{ExecutionEffect, ReportKind};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{
     DataRole, ExecRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot,
 };
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use ndarray::{Array1, Array2};
 use polars::prelude::{Column, DataFrame, DataType as PDataType, NamedFrom, Series};
@@ -300,7 +301,8 @@ fn build_panel_did_data(
             .with_name("__entity__".into()),
     ));
     df_cols.push(Column::from(
-        ctx.get_data_series(&time_id_str)?.with_name("__time__".into()),
+        ctx.get_data_series(&time_id_str)?
+            .with_name("__time__".into()),
     ));
 
     let df = DataFrame::new(n_raw, df_cols)
@@ -559,13 +561,12 @@ pub fn register(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Statistics".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "2×2 DID 双向固定效应（entity + time）。对 Y 回归可选 X 与 Treat×Post（主效应被 FE 吸收）；Treat×Post 系数为 DID 估计量。",
-        "2×2 DID with two-way FE (entity + time). Regresses Y on optional X and Treat×Post only (main effects absorbed by FE). Coef on Treat×Post is the DID estimate.",
-    )
+    .with_documentation(docs::panel::PANEL_DID_ZH, docs::panel::PANEL_DID_EN)
     .with_pin_slots(slots)
     .with_flow_processor(Arc::new(|ctx| {
-        let config = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("panel_config".to_string()))) {
+        let config = match ctx
+            .get_input_by_role(&PinRole::Data(DataRole::Custom("panel_config".to_string())))
+        {
             Ok(v) => v
                 .as_handle_id()
                 .and_then(|id| ctx.get_handle(id).ok())
@@ -578,28 +579,40 @@ pub fn register(registry: &NodeRegistry) {
             .map(|c| c.cov_type.as_str())
             .unwrap_or("cluster");
 
-        let (endog, exog, entity_id, time_id, all_labels, endog_name, _, treat_name, post_name, t_adopt, treat_f, post_f) =
-            match build_panel_did_data(ctx, constant) {
-                Ok(v) => v,
-                Err(e) => {
-                    let err_result = PanelDidResult {
-                        kind: "panel_did".to_string(),
-                        title: "Panel DID (TWFE)".to_string(),
-                        endog_name: "y".to_string(),
-                        treat_name: "treat".to_string(),
-                        post_name: "post".to_string(),
-                        fe_twoway: None,
-                        error: Some(e.clone()),
-                        parallel_trends: None,
-                        placebo: None,
-                        fake_group_engine: None,
-                    };
-                    let json = serde_json::to_string(&err_result)
-                        .map_err(|se| format!("DID: serialize: {}", se))?;
-                    ctx.publish_report(ReportKind::PanelDid, json);
-                    return Err(e);
-                }
-            };
+        let (
+            endog,
+            exog,
+            entity_id,
+            time_id,
+            all_labels,
+            endog_name,
+            _,
+            treat_name,
+            post_name,
+            t_adopt,
+            treat_f,
+            post_f,
+        ) = match build_panel_did_data(ctx, constant) {
+            Ok(v) => v,
+            Err(e) => {
+                let err_result = PanelDidResult {
+                    kind: "panel_did".to_string(),
+                    title: "Panel DID (TWFE)".to_string(),
+                    endog_name: "y".to_string(),
+                    treat_name: "treat".to_string(),
+                    post_name: "post".to_string(),
+                    fe_twoway: None,
+                    error: Some(e.clone()),
+                    parallel_trends: None,
+                    placebo: None,
+                    fake_group_engine: None,
+                };
+                let json = serde_json::to_string(&err_result)
+                    .map_err(|se| format!("DID: serialize: {}", se))?;
+                ctx.publish_report(ReportKind::PanelDid, json);
+                return Err(e);
+            }
+        };
 
         let k = exog.ncols();
         let col_is_dummy: Vec<bool> = all_labels.iter().map(|(_, cat)| cat.is_some()).collect();
@@ -636,13 +649,7 @@ pub fn register(registry: &NodeRegistry) {
             .collect();
 
         let fe_out = match fit_panel_fe_twoway(
-            &endog,
-            &exog_use,
-            &entity_id,
-            &time_id,
-            constant,
-            cov_type,
-            cov_params,
+            &endog, &exog_use, &entity_id, &time_id, constant, cov_type, cov_params,
         ) {
             Ok(pr) => {
                 let (kept_labels, fe_omit) = match &pr.omitted_indices {
@@ -660,10 +667,17 @@ pub fn register(registry: &NodeRegistry) {
                                 reason: "collinearity".to_string(),
                             })
                             .collect();
-                        let fe_omit = Some(OmitInfo { omitted: omitted_vars });
+                        let fe_omit = Some(OmitInfo {
+                            omitted: omitted_vars,
+                        });
                         let merged = match (omit_info.as_ref(), &fe_omit) {
                             (Some(a), Some(b)) => Some(OmitInfo {
-                                omitted: a.omitted.iter().chain(b.omitted.iter()).cloned().collect(),
+                                omitted: a
+                                    .omitted
+                                    .iter()
+                                    .chain(b.omitted.iter())
+                                    .cloned()
+                                    .collect(),
                             }),
                             (Some(a), None) => Some(a.clone()),
                             (None, Some(b)) => Some(b.clone()),
@@ -704,7 +718,10 @@ pub fn register(registry: &NodeRegistry) {
             }
         };
 
-        let run_parallel = config.as_ref().map(|c| c.did_parallel_trends).unwrap_or(true);
+        let run_parallel = config
+            .as_ref()
+            .map(|c| c.did_parallel_trends)
+            .unwrap_or(true);
         let run_placebo = config.as_ref().map(|c| c.did_placebo).unwrap_or(true);
         let placebo_horizon_cfg = config
             .as_ref()
@@ -712,40 +729,35 @@ pub fn register(registry: &NodeRegistry) {
             .unwrap_or(1);
 
         let parallel_trends = if run_parallel {
-            Some(match run_parallel_trends_test(
-                &endog,
-                &exog_use,
-                x_ncols,
-                &x_labels,
-                &entity_id,
-                &time_id,
-                &time_id,
-                t_adopt,
-                &treat_f,
-                constant,
-                cov_type,
-            ) {
-                Ok((chi2, df, p, k_ref, tested, method_note, event_study)) => DidParallelTrendsBlock {
-                    available: true,
-                    chi2: Some(chi2),
-                    df: Some(df),
-                    p_value: Some(p),
-                    reference_rel: Some(k_ref),
-                    tested_rel_periods: tested,
-                    event_study,
-                    method_note,
+            Some(
+                match run_parallel_trends_test(
+                    &endog, &exog_use, x_ncols, &x_labels, &entity_id, &time_id, &time_id, t_adopt,
+                    &treat_f, constant, cov_type,
+                ) {
+                    Ok((chi2, df, p, k_ref, tested, method_note, event_study)) => {
+                        DidParallelTrendsBlock {
+                            available: true,
+                            chi2: Some(chi2),
+                            df: Some(df),
+                            p_value: Some(p),
+                            reference_rel: Some(k_ref),
+                            tested_rel_periods: tested,
+                            event_study,
+                            method_note,
+                        }
+                    }
+                    Err(msg) => DidParallelTrendsBlock {
+                        available: false,
+                        chi2: None,
+                        df: None,
+                        p_value: None,
+                        reference_rel: None,
+                        tested_rel_periods: Vec::new(),
+                        event_study: Vec::new(),
+                        method_note: msg,
+                    },
                 },
-                Err(msg) => DidParallelTrendsBlock {
-                    available: false,
-                    chi2: None,
-                    df: None,
-                    p_value: None,
-                    reference_rel: None,
-                    tested_rel_periods: Vec::new(),
-                    event_study: Vec::new(),
-                    method_note: msg,
-                },
-            })
+            )
         } else {
             Some(DidParallelTrendsBlock {
                 available: false,
@@ -755,46 +767,49 @@ pub fn register(registry: &NodeRegistry) {
                 reference_rel: None,
                 tested_rel_periods: Vec::new(),
                 event_study: Vec::new(),
-                method_note: "Disabled: set did_parallel_trends=true in Panel Configure.".to_string(),
+                method_note: "Disabled: set did_parallel_trends=true in Panel Configure."
+                    .to_string(),
             })
         };
 
         let placebo_horizon = placebo_horizon_cfg;
         let placebo = if run_placebo {
-            Some(match run_placebo_test(
-                &endog,
-                &exog_use,
-                x_ncols,
-                &x_labels,
-                &entity_id,
-                &time_id,
-                &time_id,
-                t_adopt,
-                &treat_f,
-                placebo_horizon,
-                constant,
-                cov_type,
-                &treat_name,
-            ) {
-                Ok((coef, std_err, t_value, p_value, method_note)) => DidPlaceboTimingBlock {
-                    available: true,
-                    coef: Some(coef),
-                    std_err: Some(std_err),
-                    t_value: Some(t_value),
-                    p_value: Some(p_value),
-                    horizon: placebo_horizon,
-                    method_note,
+            Some(
+                match run_placebo_test(
+                    &endog,
+                    &exog_use,
+                    x_ncols,
+                    &x_labels,
+                    &entity_id,
+                    &time_id,
+                    &time_id,
+                    t_adopt,
+                    &treat_f,
+                    placebo_horizon,
+                    constant,
+                    cov_type,
+                    &treat_name,
+                ) {
+                    Ok((coef, std_err, t_value, p_value, method_note)) => DidPlaceboTimingBlock {
+                        available: true,
+                        coef: Some(coef),
+                        std_err: Some(std_err),
+                        t_value: Some(t_value),
+                        p_value: Some(p_value),
+                        horizon: placebo_horizon,
+                        method_note,
+                    },
+                    Err(msg) => DidPlaceboTimingBlock {
+                        available: false,
+                        coef: None,
+                        std_err: None,
+                        t_value: None,
+                        p_value: None,
+                        horizon: placebo_horizon,
+                        method_note: msg,
+                    },
                 },
-                Err(msg) => DidPlaceboTimingBlock {
-                    available: false,
-                    coef: None,
-                    std_err: None,
-                    t_value: None,
-                    p_value: None,
-                    horizon: placebo_horizon,
-                    method_note: msg,
-                },
-            })
+            )
         } else {
             Some(DidPlaceboTimingBlock {
                 available: false,
@@ -803,7 +818,8 @@ pub fn register(registry: &NodeRegistry) {
                 t_value: None,
                 p_value: None,
                 horizon: placebo_horizon,
-                method_note: "Disabled: set did_placebo=true in Panel Configure (虚构政策时点).".to_string(),
+                method_note: "Disabled: set did_placebo=true in Panel Configure (虚构政策时点)."
+                    .to_string(),
             })
         };
 

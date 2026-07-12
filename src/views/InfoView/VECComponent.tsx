@@ -1,16 +1,16 @@
 import React, { useMemo } from 'react';
 import {
-  SectionHeader,
+  ReportLayout,
+  ReportSection,
   formatNum,
   CoefficientsBlock,
   CoefficientTable,
-  VARStableChart,
   VarModelTable,
   VarModelRow,
   VarModelCell,
-  VarEigenvalueTable,
 } from './shared';
-import type { Coefficient, VECSummaryResultData } from './shared/types';
+import { VarEigenvalueStabilityPanel } from './shared/VarEigenvalueStabilityPanel';
+import type { Coefficient, VECSummaryResultData } from '@/shared/types/report';
 
 function vecCoeffsToOLSFormat(coefficients: VECSummaryResultData['coefficients']): Coefficient[] {
   const eqOrder = [...new Set(coefficients.map((x) => x.eq_name))];
@@ -136,10 +136,9 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
   );
 
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      {/* Title */}
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground mb-2">{data.title}</h1>
+    <ReportLayout
+      title={data.title}
+      badges={
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span>Variables: {var_names.join(', ')}</span>
           <span>n = {num_observation}</span>
@@ -147,51 +146,34 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
           <span>lags = {lags}</span>
           <span>trend: {trend_spec}</span>
         </div>
-      </div>
-
-      {/* Model Summary */}
-      <SectionHeader
-        title="Model Summary"
-        icon={
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        }
-      />
-      <div className="grid grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border mb-6">
-        <div className="bg-card px-4 py-2.5 flex justify-between">
-          <span className="text-muted-foreground text-xs">Log likelihood</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(log_likelihood)}</span>
+      }
+    >
+      <ReportSection title="Model Summary" icon="modelSummary">
+        <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
+          <div className="flex justify-between bg-card px-4 py-2.5">
+            <span className="text-xs text-muted-foreground">Log likelihood</span>
+            <span className="font-mono text-xs font-medium text-foreground">{formatNum(log_likelihood)}</span>
+          </div>
+          <div className="flex justify-between bg-card px-4 py-2.5">
+            <span className="text-xs text-muted-foreground">AIC</span>
+            <span className="font-mono text-xs font-medium text-foreground">{formatNum(aic)}</span>
+          </div>
+          <div className="flex justify-between bg-card px-4 py-2.5">
+            <span className="text-xs text-muted-foreground">HQIC</span>
+            <span className="font-mono text-xs font-medium text-foreground">{formatNum(hqic)}</span>
+          </div>
+          <div className="flex justify-between bg-card px-4 py-2.5">
+            <span className="text-xs text-muted-foreground">SBIC</span>
+            <span className="font-mono text-xs font-medium text-foreground">{formatNum(sbic)}</span>
+          </div>
+          <div className="col-span-2 flex justify-between bg-card px-4 py-2.5">
+            <span className="text-xs text-muted-foreground">Det(Sigma_ml)</span>
+            <span className="font-mono text-xs font-medium text-foreground">{formatNum(det_sigma_ml)}</span>
+          </div>
         </div>
-        <div className="bg-card px-4 py-2.5 flex justify-between">
-          <span className="text-muted-foreground text-xs">AIC</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(aic)}</span>
-        </div>
-        <div className="bg-card px-4 py-2.5 flex justify-between">
-          <span className="text-muted-foreground text-xs">HQIC</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(hqic)}</span>
-        </div>
-        <div className="bg-card px-4 py-2.5 flex justify-between">
-          <span className="text-muted-foreground text-xs">SBIC</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(sbic)}</span>
-        </div>
-        <div className="bg-card px-4 py-2.5 flex justify-between col-span-2">
-          <span className="text-muted-foreground text-xs">Det(Sigma_ml)</span>
-          <span className="text-foreground text-xs font-mono font-medium">{formatNum(det_sigma_ml)}</span>
-        </div>
-      </div>
-
-      {/* Equation Summary */}
+      </ReportSection>
       {equations.length > 0 && (
-        <>
-          <SectionHeader
-            title="Equation Summary"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M3 6h18M3 18h18" />
-              </svg>
-            }
-          />
+        <ReportSection title="Equation Summary" icon="anova">
           <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'RMSE', 'R-sq', 'chi2', 'P>chi2']}>
             {equations.map((eq, i) => (
               <VarModelRow key={i}>
@@ -204,9 +186,8 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </VarModelRow>
             ))}
           </VarModelTable>
-        </>
+        </ReportSection>
       )}
-
       {/* Coefficients */}
       {coeffsForTable.length > 0 && (
         <CoefficientsBlock
@@ -219,15 +200,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
 
       {/* Cointegrating equations (Stata style) */}
       {cointegrating_equations.length > 0 && (
-        <>
-          <SectionHeader
-            title="Cointegrating equations"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            }
-          />
+        <ReportSection title="Cointegrating equations" icon="classification">
           <VarModelTable className="mb-6" columns={['Equation', 'Parms', 'chi2', 'P>chi2']}>
             {cointegrating_equations.map((ce, i) => (
               <VarModelRow key={i}>
@@ -238,74 +211,34 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </VarModelRow>
             ))}
           </VarModelTable>
-          <div className="text-xs text-muted-foreground mt-2 mb-4">Identification: beta is exactly identified</div>
-        </>
+          <div className="mb-4 mt-2 text-xs text-muted-foreground">Identification: beta is exactly identified</div>
+        </ReportSection>
       )}
 
-      {/* Cointegration vectors (beta) - 使用 CoefficientTable 展示 */}
       {betaCoeffs.length > 0 && (
         <>
-          <div className="text-xs text-muted-foreground mb-2">Johansen normalization restriction imposed</div>
-          <SectionHeader
-            title="beta"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
-          />
-          <div className="mb-6">
+          <div className="mb-2 text-xs text-muted-foreground">Johansen normalization restriction imposed</div>
+          <ReportSection title="beta" icon="firstStage">
             <CoefficientTable
               coefficients={betaCoeffs}
               hasCategorical={true}
               useZStat={true}
               categoryLabel="Equation"
             />
-          </div>
+          </ReportSection>
         </>
       )}
 
-      {/* Eigenvalue stability condition (vecstable) */}
       {vecstableSorted.length > 0 && (
-        <>
-          <SectionHeader
-            title="Eigenvalue stability condition"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002-2V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
+        <ReportSection title="Eigenvalue stability condition" icon="margins">
+          <VarEigenvalueStabilityPanel
+            rows={vecstableSorted}
+            unstableMessage="At least one eigenvalue is at least 1.0. VEC does not satisfy stability condition."
           />
-          <div className="grid grid-cols-[auto_1fr] gap-4 mb-6 items-stretch min-h-[360px]">
-            <div className="flex flex-col h-full rounded-lg border border-border bg-muted overflow-hidden">
-              <div className="flex-1 min-h-0 flex flex-col">
-                <VarEigenvalueTable rows={vecstableSorted} />
-                <div className="flex-1 min-h-0 bg-muted" />
-              </div>
-              <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border shrink-0">
-                {vecstableSorted.some((r) => r.modulus >= 1)
-                  ? 'At least one eigenvalue is at least 1.0. VEC does not satisfy stability condition.'
-                  : 'All the eigenvalues lie inside the unit circle.'}
-              </div>
-            </div>
-            <div className="min-w-[240px] min-h-0 flex">
-              <VARStableChart data={vecstableSorted} />
-            </div>
-          </div>
-        </>
+        </ReportSection>
       )}
-
-      {/* Lagrange-multiplier test (veclmar) */}
       {veclmar.length > 0 && (
-        <>
-          <SectionHeader
-            title="Lagrange-multiplier test (veclmar)"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
-          />
+        <ReportSection title="Lagrange-multiplier test (veclmar)" icon="margins">
           <VarModelTable
             className="mb-6"
             columns={['lag', 'chi2', 'df', 'Prob > chi2']}
@@ -324,15 +257,14 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
               </VarModelRow>
             ))}
           </VarModelTable>
-        </>
+        </ReportSection>
       )}
 
-      {/* Placeholder when no estimation results */}
       {equations.length === 0 && coefficients.length === 0 && beta.length === 0 && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-900/10 px-4 py-3 text-sm text-amber-200/80 mb-6">
+        <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/10 px-4 py-3 text-sm text-amber-200/80">
           VEC 协整估计尚未实现，当前为占位结果。待实现 Johansen  procedure 后显示完整输出。
         </div>
       )}
-    </div>
+    </ReportLayout>
   );
 };

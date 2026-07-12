@@ -1,25 +1,20 @@
 import { useTranslation } from 'react-i18next';
+import type { DatabaseRecord } from '@/shared/types/dto/database';
+import { databaseSourcePath } from '@/shared/types/dto/database';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailColumnList } from '../shared/DetailColumnList';
 import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
 
 interface DataDetailPanelProps {
-  dataframe: {
-    id: string;
-    name: string;
-    columnCount?: number;
-    columns?: Array<{ name: string; type: string }>;
-    rowCount?: number;
-    rows?: unknown[];
-    sourcePath?: string;
-  };
-  onUpdate: (patch: Record<string, unknown>) => void;
+  dataframe: DatabaseRecord;
+  onUpdate: (patch: Partial<DatabaseRecord>) => void;
 }
 
 export function DataDetailPanel({ dataframe, onUpdate }: DataDetailPanelProps) {
   const { t } = useTranslation();
-  const columnCount = dataframe.columnCount || dataframe.columns?.length || 0;
-  const rowCount = dataframe.rowCount || dataframe.rows?.length || 0;
+  const columnCount = dataframe.columnCount ?? dataframe.columns?.length ?? 0;
+  const rowCount = dataframe.rowCount ?? 0;
+  const sourcePath = databaseSourcePath(dataframe.engine);
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: dataframe.name })}>
@@ -43,9 +38,9 @@ export function DataDetailPanel({ dataframe, onUpdate }: DataDetailPanelProps) {
         <DetailReadonlyField label={t('detail.fields.rows')}>
           {t('detail.counts.rows', { count: rowCount })}
         </DetailReadonlyField>
-        {dataframe.sourcePath && (
+        {sourcePath && (
           <DetailReadonlyField label={t('detail.fields.source')} tone="mono" valueClassName="break-all">
-            {dataframe.sourcePath}
+            {sourcePath}
           </DetailReadonlyField>
         )}
       </DetailForm>

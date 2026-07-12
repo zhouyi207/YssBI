@@ -1,15 +1,19 @@
 import React, { useState, useCallback } from "react";
-import { Node } from "@/shared/types/ui";
+import type { UINode } from "@/shared/types/ui";
+import { uiNodeHasNoHeader } from "@/features/core/dataStore";
 import { useNodeExecution } from "@/features/core/node";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
+import { useCallFunctionIssue } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
 import { NodeContextMenu } from "../ContextMenu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTranslation } from "react-i18next";
 
 interface NodeContainerProps {
-  node: Node;
-  graphId?: string;
+  node: UINode;
+  graphPath?: string;
   groupId?: string;
   selected?: boolean;
   dimmed?: boolean;
@@ -19,27 +23,28 @@ interface NodeContainerProps {
 
 export const NodeContainer = React.memo<NodeContainerProps>(({
   node,
-  graphId: _graphId,
+  graphPath: _graphPath,
   groupId,
   selected,
   dimmed,
   onPointerDown,
   children,
 }) => {
+  const { t } = useTranslation();
   const posX = node.position.x;
   const posY = node.position.y;
-  const graphStatus = useExecutionStore((s) => (_graphId ? s.graphs[_graphId]?.status ?? 'idle' : 'idle'));
-  const isReplay = useExecutionStore((s) => !!_graphId && s.isPlaying && s.playbackGraphId === _graphId);
+  const graphStatus = useExecutionStore((s) => (_graphPath ? s.graphs[_graphPath]?.status ?? 'idle' : 'idle'));
+  const isReplay = useExecutionStore((s) => !!_graphPath && s.isPlaying && s.playbackGraphPath === _graphPath);
   const useStoreExecVisual = graphStatus !== 'running' && !isReplay;
 
-  const { isCompleted, hasError } = useNodeExecution(node.id, _graphId, useStoreExecVisual);
+  const { isCompleted, hasError } = useNodeExecution(node.id, _graphPath, useStoreExecVisual);
+  const callIssue = useCallFunctionIssue(_graphPath, node.id);
   const menuActions = useCanvasContextMenuActionsOptional();
 
   const hasLinks = useGraphDataStore((s) => {
-    const pinIds = _graphId ? s.getGraphNodePins(_graphId, node.id) : s.nodePins[node.id] ?? [];
-    return pinIds.some((pid) =>
-      ((_graphId ? s.getGraphPinConnections(_graphId, pid) : s.pinConnections[pid])?.length ?? 0) > 0,
-    );
+    if (!_graphPath) return false;
+    const pinIds = s.getGraphNodePins(_graphPath, node.id);
+    return pinIds.some((pid) => s.getGraphPinConnections(_graphPath, pid).length > 0);
   });
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -62,7 +67,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
     isCompleted,
   });
 
-  const minSize = getNodeMinSize(node.noHeader);
+  const minSize = getNodeMinSize(uiNodeHasNoHeader(node));
 
   return (
     <div
@@ -85,6 +90,21 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
 
       {hasError && (
         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+      )}
+      {!hasError && callIssue && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="absolute -top-1 -left-1 h-3 w-3 rounded-full bg-amber-400 shadow-sm"
+              aria-label={t('graphDiagnostics.callFunctionNodeBadge')}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {callIssue.kind === 'empty_target'
+              ? t('graphDiagnostics.callFunctionEmptyTarget')
+              : t('graphDiagnostics.callFunctionMissingTarget', { path: callIssue.subGraphPath ?? '' })}
+          </TooltipContent>
+        </Tooltip>
       )}
       {isCompleted && (
         <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-green-500 rounded-full shadow-lg shadow-green-500/40" />

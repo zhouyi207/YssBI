@@ -10,6 +10,7 @@ use crate::database::polars_dtype_to_data_type;
 use crate::graph::node::{NodeDefinition, passthrough_input_schema_resolver};
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use polars::prelude::Series;
 use std::sync::Arc;
@@ -30,10 +31,7 @@ fn register_ts_align(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "对齐时间序列：补齐缺失时间点，拒绝重复时间。时间列需为 Int64 或 Date。",
-        "Align time series: fill missing timestamps, reject duplicates. Time column must be Int64 or Date.",
-    )
+    .with_documentation(docs::align::TS_ALIGN_ZH, docs::align::TS_ALIGN_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataFrame",
@@ -76,7 +74,7 @@ fn register_ts_align(registry: &NodeRegistry) {
             DataValue::String(s) if !s.is_empty() => s.clone(),
             DataValue::String(_) => return Err("TS Align: 时间列名不能为空".to_string()),
             DataValue::Null => {
-                return Err("TS Align: 请提供时间列名（或连接 String 常量）".to_string())
+                return Err("TS Align: 请提供时间列名（或连接 String 常量）".to_string());
             }
             _ => return Err("TS Align: 时间列名必须是 String".to_string()),
         };
@@ -122,80 +120,88 @@ fn register_ts_diff(registry: &NodeRegistry) {
         DataType::Int64,
         DataType::Date,
     ])));
-    let definition = NodeDefinition::new("TS Diff", vec!["Data".to_string(), "Time Series".to_string()])
-        .with_ui_style("dataframe")
-        .with_localized_description(
-            "对 DataSeries 做差分：y_t - y_{t-lag}。连接 Time Series 时与 Stata D. 一致，仅对相邻时间点（interval）差分，不跨 gap。",
-            "Difference on DataSeries: y_t - y_{t-lag}. With Time Series, matches Stata D. on adjacent intervals only.",
-        )
-        .with_pin_slots(vec![
-            PinSlot::fixed(PinDefinition::data_input(
-                "Value Series",
-                DataRole::Input,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
-            )),
-            PinSlot::fixed(
-                PinDefinition::data_input(
-                    "Time Series",
-                    DataRole::Custom("time_series".to_string()),
-                    PinDataTypeDefinition::concrete(time_series_type),
-                )
-                .with_optional(true),
-            ),
-            PinSlot::fixed(PinDefinition::data_input(
-                "Lag",
-                DataRole::Custom("lag".to_string()),
+    let definition = NodeDefinition::new(
+        "TS Diff",
+        vec!["Data".to_string(), "Time Series".to_string()],
+    )
+    .with_ui_style("dataframe")
+    .with_documentation(docs::align::TS_DIFF_ZH, docs::align::TS_DIFF_EN)
+    .with_pin_slots(vec![
+        PinSlot::fixed(PinDefinition::data_input(
+            "Value Series",
+            DataRole::Input,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Time Series",
+                DataRole::Custom("time_series".to_string()),
+                PinDataTypeDefinition::concrete(time_series_type),
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_input(
+            "Lag",
+            DataRole::Custom("lag".to_string()),
+            PinDataTypeDefinition::concrete(DataType::Int64),
+        )),
+        PinSlot::fixed(
+            PinDefinition::data_input(
+                "Interval",
+                DataRole::Custom("interval".to_string()),
                 PinDataTypeDefinition::concrete(DataType::Int64),
-            )),
-            PinSlot::fixed(
-                PinDefinition::data_input(
-                    "Interval",
-                    DataRole::Custom("interval".to_string()),
-                    PinDataTypeDefinition::concrete(DataType::Int64),
-                )
-                .with_optional(true),
-            ),
-            PinSlot::fixed(PinDefinition::data_output(
-                "Diff",
-                DataRole::Output,
-                PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
-            )),
-        ])
-        .with_data_evaluator(Arc::new(|ctx| {
-            let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
-            let series_id = match &series_value {
-                DataValue::DataSeries(v) => v.id.clone(),
-                DataValue::Null => return Err("TS Diff: 请连接 Value Series".to_string()),
-                _ => return Err("TS Diff: 输入必须是 DataSeries".to_string()),
-            };
-            let lag = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string()))) {
-                Ok(DataValue::Int64(i)) if i >= 0 => i as usize,
-                Ok(DataValue::Int64(_)) => return Err("TS Diff: Lag 必须为非负整数".to_string()),
-                _ => 1,
-            };
-            let series = ctx.get_data_series(&series_id)?;
+            )
+            .with_optional(true),
+        ),
+        PinSlot::fixed(PinDefinition::data_output(
+            "Diff",
+            DataRole::Output,
+            PinDataTypeDefinition::concrete(DataType::DataSeries(Box::new(DataType::Float64))),
+        )),
+    ])
+    .with_data_evaluator(Arc::new(|ctx| {
+        let series_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Input))?;
+        let series_id = match &series_value {
+            DataValue::DataSeries(v) => v.id.clone(),
+            DataValue::Null => return Err("TS Diff: 请连接 Value Series".to_string()),
+            _ => return Err("TS Diff: 输入必须是 DataSeries".to_string()),
+        };
+        let lag = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("lag".to_string()))) {
+            Ok(DataValue::Int64(i)) if i >= 0 => i as usize,
+            Ok(DataValue::Int64(_)) => return Err("TS Diff: Lag 必须为非负整数".to_string()),
+            _ => 1,
+        };
+        let series = ctx.get_data_series(&series_id)?;
 
-            let time_value = ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_series".to_string())));
-            let result = match time_value {
-                Ok(DataValue::DataSeries(v)) if !v.id.is_empty() => {
-                    let time_series = ctx.get_data_series(&v.id)?;
-                    let interval = match ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string()))) {
-                        Ok(DataValue::Int64(i)) if i > 0 => i,
-                        Ok(DataValue::Int64(_)) => return Err("TS Diff: Interval 必须为正整数".to_string()),
-                        _ => 1,
-                    };
-                    diff::ts_diff_with_time(&time_series, &series, lag, interval)
-                }
-                _ => diff::ts_diff(&series, lag),
-            };
-            let result = result.map_err(|e| format!("TS Diff: {}", e))?;
-            let result_id = ctx.put_data_series(result)?;
-            ctx.emit_output_by_role(
-                &PinRole::Data(DataRole::Output),
-                DataValue::DataSeries(DataSeriesValue::with_element_type(result_id, DataType::Float64)),
-            )?;
-            Ok(())
-        }));
+        let time_value =
+            ctx.get_input_by_role(&PinRole::Data(DataRole::Custom("time_series".to_string())));
+        let result = match time_value {
+            Ok(DataValue::DataSeries(v)) if !v.id.is_empty() => {
+                let time_series = ctx.get_data_series(&v.id)?;
+                let interval = match ctx
+                    .get_input_by_role(&PinRole::Data(DataRole::Custom("interval".to_string())))
+                {
+                    Ok(DataValue::Int64(i)) if i > 0 => i,
+                    Ok(DataValue::Int64(_)) => {
+                        return Err("TS Diff: Interval 必须为正整数".to_string());
+                    }
+                    _ => 1,
+                };
+                diff::ts_diff_with_time(&time_series, &series, lag, interval)
+            }
+            _ => diff::ts_diff(&series, lag),
+        };
+        let result = result.map_err(|e| format!("TS Diff: {}", e))?;
+        let result_id = ctx.put_data_series(result)?;
+        ctx.emit_output_by_role(
+            &PinRole::Data(DataRole::Output),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(
+                result_id,
+                DataType::Float64,
+            )),
+        )?;
+        Ok(())
+    }));
     registry.register(definition);
 }
 
@@ -205,10 +211,7 @@ fn register_ts_pct_change(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "百分比变化：(y_t - y_{t-lag}) / y_{t-lag}，前 lag 个为 null",
-        "Percent change: (y_t - y_{t-lag}) / y_{t-lag}; first lag values are null",
-    )
+    .with_documentation(docs::align::TS_PCT_CHANGE_ZH, docs::align::TS_PCT_CHANGE_EN)
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
             "DataSeries",
@@ -260,9 +263,9 @@ fn register_ts_rolling_mean(registry: &NodeRegistry) {
         vec!["Data".to_string(), "Time Series".to_string()],
     )
     .with_ui_style("dataframe")
-    .with_localized_description(
-        "滚动均值：前 (window-1) 个为 null",
-        "Rolling mean; first (window-1) values are null",
+    .with_documentation(
+        docs::align::TS_ROLLING_MEAN_ZH,
+        docs::align::TS_ROLLING_MEAN_EN,
     )
     .with_pin_slots(vec![
         PinSlot::fixed(PinDefinition::data_input(
@@ -321,10 +324,7 @@ fn register_ts_lag(registry: &NodeRegistry) {
     ])));
     let definition = NodeDefinition::new("TS Lag", vec!["Data".to_string(), "Time Series".to_string()])
         .with_ui_style("dataframe")
-        .with_localized_description(
-            "严格时间对齐的滞后（Stata L. 语义）。Time 为 Aligned 时跳过对齐。时间列支持 Int64 或 Date。",
-            "Time-aligned lag (Stata L.). Skips realign when Time is already aligned. Int64 or Date time column.",
-        )
+                .with_documentation(docs::align::TS_LAG_ZH, docs::align::TS_LAG_EN)
         .with_pin_slots(vec![
             PinSlot::fixed(PinDefinition::data_input(
                 "Time Series",

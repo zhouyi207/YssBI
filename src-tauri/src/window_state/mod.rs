@@ -72,13 +72,15 @@ impl WindowState {
                 y: None,
                 is_maximized: false,
             },
-            WindowKind::DatabaseEditor | WindowKind::Logs | WindowKind::SourceInspector => WindowState {
-                width: 1000,
-                height: 600,
-                x: None,
-                y: None,
-                is_maximized: false,
-            },
+            WindowKind::DatabaseEditor | WindowKind::Logs | WindowKind::SourceInspector => {
+                WindowState {
+                    width: 1000,
+                    height: 600,
+                    x: None,
+                    y: None,
+                    is_maximized: false,
+                }
+            }
             WindowKind::Plot | WindowKind::Info => WindowState {
                 width: 960,
                 height: 800,

@@ -1,17 +1,11 @@
-import React from 'react';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { VifEntry } from './types';
+import { formatNum } from './RegressionShared';
+import type { VifEntry } from '@/shared/types/report';
 import {
   InfoStatsTable,
   infoStatsCellClass,
   infoStatsHeadClass,
 } from './InfoStatsTable';
-
-function formatVifValue(v: number): string {
-  if (!Number.isFinite(v)) return 'Inf';
-  if (v >= 1e6) return v.toExponential(2);
-  return v.toFixed(4);
-}
 
 function vifRowKey(row: VifEntry, idx: number): string {
   return row.category != null ? `${row.variable}-${row.category}` : `${row.variable}-${idx}`;
@@ -45,8 +39,8 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
                 )}
               </TableCell>
             )}
-            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatVifValue(row.vif)}</TableCell>
-            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatVifValue(row.tolerance)}</TableCell>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatNum(row.vif)}</TableCell>
+            <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>{formatNum(row.tolerance)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

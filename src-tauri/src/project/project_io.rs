@@ -3,14 +3,15 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::function_signature_table::FunctionSignatureEntry;
 use super::{
-    GraphResourceIndex, GraphResourceManifestEntry, PROJECT_METADATA_FILE, ProjectData,
-    ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir, flatten_worksheet_layout,
-    read_worksheet_index_entries, reconcile_graph_resources,
+    GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
+    ProjectData, ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir,
+    flatten_worksheet_layout, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::NodeInstanceParams;
-use crate::graph::{GraphId, GraphInstance, GraphKind};
+use crate::graph::{FunctionSignaturePin, GraphInstance, GraphKind, NodeId};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -29,8 +30,6 @@ pub struct ProjectManifest {
     pub project_name: String,
     pub app_version: String,
     pub export_time: String,
-    #[serde(default)]
-    pub graphs: Vec<GraphResourceManifestEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,10 +58,15 @@ pub enum GraphDocumentKind {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectGraphIndexEntry {
-    pub id: GraphId,
+    pub path: String,
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
+    /// 函数图签名（仅 `type=function` 时有值；Event 图为空数组且不序列化）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_outputs: Vec<FunctionSignaturePin>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,7 +79,7 @@ pub struct ProjectVariableIndexEntry {
     pub description: String,
     pub scope: VariableScope,
     pub tags: Vec<String>,
-    pub owner_graph_id: Option<String>,
+    pub owner_graph_path: Option<String>,
     pub owner_graph_name: Option<String>,
     #[serde(rename = "ownerGraphKind", skip_serializing_if = "Option::is_none")]
     pub owner_graph_kind: Option<GraphDocumentKind>,
@@ -91,7 +95,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
             description: value.description,
             scope: value.scope,
             tags: value.tags,
-            owner_graph_id: None,
+            owner_graph_path: None,
             owner_graph_name: None,
             owner_graph_kind: None,
         }
@@ -137,18 +141,26 @@ pub fn save_project_to_file(project_data: &ProjectData, path: &str) -> Result<()
 pub fn save_project_graph_to_file(
     project_data: &ProjectData,
     path: &str,
-    graph_id: &GraphId,
-) -> Result<(), ProjectError> {
+    graph_path: &GraphResourcePath,
+) -> Result<String, ProjectError> {
     let root = project_root_from_path(path);
     std::fs::create_dir_all(root.as_path())?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
     ensure_worksheets_dir(root.as_path())?;
+    write_loaded_graph_document(project_data, root.as_path(), graph_path)
+}
 
-    let graph = project_data.graphs.get(graph_id).ok_or_else(|| {
-        ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_id))
+fn write_loaded_graph_document(
+    project_data: &ProjectData,
+    root: &Path,
+    graph_path: &GraphResourcePath,
+) -> Result<String, ProjectError> {
+    let graph = project_data.graphs.get(graph_path).ok_or_else(|| {
+        ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
     })?;
-    let local_variables = local_variables_for_graph(&project_data.variables, graph_id, &graph.kind);
+    let local_variables =
+        local_variables_for_graph(&project_data.variables, graph_path, &graph.kind);
     let (dir, extension, kind) = match graph.kind {
         GraphKind::Event => (EVENTS_DIR, EVENT_EXTENSION, GraphDocumentKind::Event),
         GraphKind::Function => (
@@ -160,7 +172,7 @@ pub fn save_project_graph_to_file(
     let graph = graph.clone();
     graph.data_state.write().unwrap().prepare_for_persistence();
     let relative_path =
-        graph_relative_path_for_save(root.as_path(), dir, extension, &graph.name, graph_id)?;
+        graph_relative_path_for_save(root, dir, extension, &graph.name, graph_path)?;
     write_json(
         root.join(&relative_path).as_path(),
         &GraphDocument {
@@ -170,14 +182,84 @@ pub fn save_project_graph_to_file(
             local_variables,
         },
     )?;
-    upsert_graph_resource_manifest_entry(
-        root.as_path(),
-        GraphResourceManifestEntry {
-            id: *graph_id,
-            path: relative_path,
-            kind,
-        },
-    )
+    Ok(relative_path)
+}
+
+fn remap_variable_scope_path(scope: &mut VariableScope, from: &str, to: &str) -> bool {
+    match scope {
+        VariableScope::Event { event_path } if super::graph_resource_index::normalize_resource_path(event_path) == from => {
+            *event_path = to.to_string();
+            true
+        }
+        VariableScope::Function { function_path }
+            if super::graph_resource_index::normalize_resource_path(function_path) == from =>
+        {
+            *function_path = to.to_string();
+            true
+        }
+        _ => false,
+    }
+}
+
+/// 当图资源路径变更时，级联更新磁盘上其它文件中的 Call 引用与变量 scope。
+pub fn cascade_graph_path_references_on_disk(
+    root: &Path,
+    from: &str,
+    to: &str,
+    skip_graph_file: Option<&Path>,
+) -> Result<(), ProjectError> {
+    let from = super::graph_resource_index::normalize_resource_path(from);
+    let to = super::graph_resource_index::normalize_resource_path(to);
+    if from == to {
+        return Ok(());
+    }
+
+    let global_path = root.join(GLOBAL_VARIABLES_FILE);
+    if global_path.is_file() {
+        let mut doc: GlobalVariablesDocument = read_json(global_path.as_path())?;
+        let mut changed = false;
+        for variable in doc.variables.values_mut() {
+            if remap_variable_scope_path(&mut variable.scope, &from, &to) {
+                changed = true;
+            }
+        }
+        if changed {
+            write_json(global_path.as_path(), &doc)?;
+        }
+    }
+
+    let index = super::graph_resource_index::scan_graph_resource_index(root)?;
+    for entry in index.entries() {
+        let file_path = root.join(entry.path.as_str());
+        if skip_graph_file == Some(file_path.as_path()) {
+            continue;
+        }
+        if !file_path.is_file() {
+            continue;
+        }
+        let mut document = read_graph_document(file_path.as_path(), entry.kind)?;
+        let mut changed = false;
+        for variable in document.local_variables.values_mut() {
+            if remap_variable_scope_path(&mut variable.scope, &from, &to) {
+                changed = true;
+            }
+        }
+        {
+            let mut data_state = document.graph.data_state.write().unwrap();
+            for node in data_state.nodes.values_mut() {
+                if let NodeInstanceParams::SubGraph { sub_graph_path } = &mut node.instance_params {
+                    if super::graph_resource_index::normalize_resource_path(sub_graph_path) == from {
+                        *sub_graph_path = to.clone();
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if changed {
+            write_json(file_path.as_path(), &document)?;
+        }
+    }
+    Ok(())
 }
 
 fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<(), ProjectError> {
@@ -201,45 +283,17 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         },
     )?;
 
-    let mut graph_resources = Vec::new();
-    for (graph_id, graph) in project_data.graphs.iter() {
-        let local_variables =
-            local_variables_for_graph(&project_data.variables, graph_id, &graph.kind);
-        let (dir, extension, kind) = match graph.kind {
-            GraphKind::Event => (EVENTS_DIR, EVENT_EXTENSION, GraphDocumentKind::Event),
-            GraphKind::Function => (
-                FUNCTIONS_DIR,
-                FUNCTION_EXTENSION,
-                GraphDocumentKind::Function,
-            ),
-        };
-        let relative_path =
-            graph_relative_path_for_save(root, dir, extension, &graph.name, graph_id)?;
-        graph_resources.push(GraphResourceManifestEntry {
-            id: *graph_id,
-            path: relative_path.clone(),
-            kind,
-        });
-        let graph = graph.clone();
-        graph.data_state.write().unwrap().prepare_for_persistence();
-        write_json(
-            root.join(&relative_path).as_path(),
-            &GraphDocument {
-                schema_version: SCHEMA_VERSION,
-                kind,
-                graph,
-                local_variables,
-            },
-        )?;
+    // Reconcile on-disk graph files first so nested layouts are flattened before save.
+    flatten_graph_layout(root)?;
+
+    for graph_path in project_data.graphs.keys() {
+        write_loaded_graph_document(project_data, root, graph_path)?;
     }
 
-    let manifest = ProjectManifest {
-        schema_version: SCHEMA_VERSION,
-        project_name: project_data.metadata.project_name.clone(),
-        app_version: project_data.metadata.app_version.clone(),
-        export_time: project_data.metadata.export_time.clone(),
-        graphs: graph_resources,
-    };
+    let mut manifest = read_project_manifest_from_root(root)?;
+    manifest.project_name = project_data.metadata.project_name.clone();
+    manifest.app_version = project_data.metadata.app_version.clone();
+    manifest.export_time = project_data.metadata.export_time.clone();
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
 }
@@ -267,11 +321,8 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
     let root = project_root_from_path(path);
     flatten_graph_layout(root.as_path())?;
     flatten_worksheet_layout(root.as_path())?;
-    let mut manifest = read_project_manifest_from_root(root.as_path())?;
-    let (graph_resources, changed) = reconcile_graph_resources(root.as_path(), &mut manifest)?;
-    if changed {
-        write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
-    }
+    let manifest = read_project_manifest_from_root(root.as_path())?;
+    let graph_resources = load_graph_resource_index(root.as_path())?;
     let mut graphs = Vec::new();
     graphs.extend(read_graph_index_entries(
         root.as_path(),
@@ -300,38 +351,96 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
     })
 }
 
+/// 仅读取函数图文件头部的签名（不反序列化 nodes/pins）。
+pub fn read_function_signature_header_from_project(
+    project_path: &str,
+    graph_path: &GraphResourcePath,
+) -> Result<Option<FunctionSignatureEntry>, ProjectError> {
+    let root = project_root_from_path(project_path);
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) else {
+        return Ok(None);
+    };
+    if resource.kind != GraphDocumentKind::Function {
+        return Ok(None);
+    }
+    let header = read_graph_file_header(root.join(resource.path.as_str()).as_path())?;
+    Ok(Some(FunctionSignatureEntry {
+        inputs: header.graph.function_inputs,
+        outputs: header.graph.function_outputs,
+    }))
+}
+
+/// 轻量 Call 扫描结果：仅 node id + 目标函数 id（不构建 `GraphInstance`）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphCallSiteStub {
+    pub node_id: NodeId,
+    pub target_function_path: Option<String>,
+}
+
+/// 从图文件读取 Call Function 节点 stub（跳过 pins / connections / localVariables 物化）。
+pub fn read_graph_call_sites_from_file(path: &Path) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
+    let scan: GraphCallSiteScanDocument = read_json(path)?;
+    Ok(scan
+        .graph
+        .nodes
+        .into_iter()
+        .filter(|node| {
+            node.node_type == crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE
+        })
+        .map(|node| GraphCallSiteStub {
+            node_id: node.id,
+            target_function_path: node
+                .instance_params
+                .sub_graph_path()
+                .and_then(|s| GraphResourcePath::new(s).ok())
+                .map(|path| path.as_str().to_string()),
+        })
+        .collect())
+}
+
+/// 从项目磁盘读取某张图的 Call stub（图未加载时使用）。
+pub fn read_graph_call_sites_from_project(
+    project_path: &str,
+    graph_path: &GraphResourcePath,
+) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
+    let root = project_root_from_path(project_path);
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) else {
+        return Ok(Vec::new());
+    };
+    read_graph_call_sites_from_file(root.join(resource.path.as_str()).as_path())
+}
+
 pub fn load_project_graph_from_file(
     path: &str,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<GraphDocument, ProjectError> {
     let root = project_root_from_path(path);
     let graph_resources = load_graph_resource_index(root.as_path())?;
-    if let Some(resource) = graph_resources.get_by_id(graph_id) {
-        let document = read_graph_document(root.join(&resource.path).as_path(), resource.kind)?;
-        return Ok(bind_graph_document_resource_identity(
+    if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
+        let document = read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
+        return Ok(bind_graph_document_scope_by_path(
             document,
             resource.kind,
-            resource.id,
+            resource.path.as_str(),
         ));
     }
 
     Err(ProjectError::InvalidProjectFormat(format!(
         "graph '{}' not found in project graph files",
-        graph_id
+        graph_path
     )))
 }
 
 pub fn remove_project_graph_from_file(
     path: &str,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<Option<GraphDocumentKind>, ProjectError> {
     let root = project_root_from_path(path);
-    let mut manifest = read_project_manifest_from_root(root.as_path())?;
-    let (graph_resources, _) = reconcile_graph_resources(root.as_path(), &mut manifest)?;
-    if let Some(resource) = graph_resources.get_by_id(graph_id) {
-        std::fs::remove_file(root.join(&resource.path))?;
-        manifest.graphs.retain(|entry| entry.id != *graph_id);
-        write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
+        std::fs::remove_file(root.join(resource.path.as_str()))?;
         return Ok(Some(resource.kind));
     }
     Ok(None)
@@ -339,12 +448,12 @@ pub fn remove_project_graph_from_file(
 
 pub fn duplicate_project_graph_file(
     path: &str,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<GraphDocument, ProjectError> {
     let root = project_root_from_path(path);
-    let (source_path, kind, mut document) = find_graph_document_path(root.as_path(), graph_id)?
+    let (source_path, kind, mut document) = find_graph_document_path(root.as_path(), graph_path)?
         .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_id))
+            ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_path))
         })?;
     let source_dir = source_path.parent().unwrap_or_else(|| root.as_path());
     let graph_resources = load_graph_resource_index(root.as_path())?;
@@ -358,9 +467,7 @@ pub fn duplicate_project_graph_file(
     .into_iter()
     .map(|entry| entry.name)
     .collect();
-    document.graph.id = GraphId::new();
     document.graph.name = crate::project::unique_name::unique_name(&document.graph.name, names);
-    rebind_graph_document_local_variable_scopes(&mut document, kind);
     let file_name = unique_graph_file_name(
         source_dir,
         &document.graph.name,
@@ -373,46 +480,32 @@ pub fn duplicate_project_graph_file(
         .strip_prefix(root.as_path())
         .map(path_to_slash_string)
         .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    upsert_graph_resource_manifest_entry(
-        root.as_path(),
-        GraphResourceManifestEntry {
-            id: document.graph.id,
-            path: relative_path,
-            kind,
-        },
-    )?;
+    document.graph.resource_path = GraphResourcePath::new(relative_path.clone())?;
+    rebind_graph_document_local_variable_scopes(&mut document, kind);
     Ok(document)
 }
 
 fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, ProjectError> {
     let manifest_path = root.join(PROJECT_METADATA_FILE);
     if !manifest_path.exists() {
-        return Err(ProjectError::FileNotFound(manifest_path));
+        let default_name = root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| "Untitled".to_string());
+        return Ok(ProjectManifest {
+            schema_version: SCHEMA_VERSION,
+            project_name: default_name,
+            app_version: String::new(),
+            export_time: String::new(),
+        });
     }
     read_json(manifest_path.as_path())
 }
 
 fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
     flatten_graph_layout(root)?;
-    let mut manifest = read_project_manifest_from_root(root)?;
-    let (index, changed) = reconcile_graph_resources(root, &mut manifest)?;
-    if changed {
-        write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
-    }
-    Ok(index)
-}
-
-fn upsert_graph_resource_manifest_entry(
-    root: &Path,
-    entry: GraphResourceManifestEntry,
-) -> Result<(), ProjectError> {
-    let mut manifest = read_project_manifest_from_root(root)?;
-    manifest
-        .graphs
-        .retain(|item| item.id != entry.id && item.path != entry.path);
-    manifest.graphs.push(entry);
-    manifest.graphs.sort_by(|a, b| a.path.cmp(&b.path));
-    write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)
+    scan_graph_resource_index(root)
 }
 
 pub fn project_root_from_path(path: &str) -> PathBuf {
@@ -513,16 +606,16 @@ pub fn save_project_as_to_directory(
 
 fn local_variables_for_graph(
     variables: &HashMap<VariableId, VariableInstance>,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
     graph_kind: &GraphKind,
 ) -> HashMap<VariableId, VariableInstance> {
-    let graph_id = graph_id.to_string();
+    let graph_path = graph_path.as_str();
     variables
         .iter()
         .filter(|(_, variable)| match (&variable.scope, graph_kind) {
-            (VariableScope::Event { event_id }, GraphKind::Event) => event_id == &graph_id,
-            (VariableScope::Function { function_id }, GraphKind::Function) => {
-                function_id == &graph_id
+            (VariableScope::Event { event_path }, GraphKind::Event) => event_path == graph_path,
+            (VariableScope::Function { function_path }, GraphKind::Function) => {
+                function_path == graph_path
             }
             _ => false,
         })
@@ -566,29 +659,51 @@ fn read_graph_document_for_resource(
             relative_path
         ))
     })?;
-    Ok(bind_graph_document_resource_identity(
+    Ok(bind_graph_document_scope_by_path(
         document,
         expected_kind,
-        resource.id,
+        resource.path.as_str(),
     ))
 }
 
-fn bind_graph_document_resource_identity(
+fn bind_graph_document_scope_by_path(
     mut document: GraphDocument,
     kind: GraphDocumentKind,
-    resource_id: GraphId,
+    resource_path: &str,
 ) -> GraphDocument {
-    document.graph.id = resource_id;
-    let graph_id_string = document.graph.id.to_string();
-    let scope = scoped_variable_scope(kind, &graph_id_string);
+    if let Ok(path) = GraphResourcePath::new(resource_path) {
+        document.graph.resource_path = path;
+    }
+    let scope = scoped_variable_scope(kind, resource_path);
     for variable in document.local_variables.values_mut() {
         variable.scope = scope.clone();
     }
     document
 }
 
-/// 仅读取当前图文件头部（`graph.name`）。
-/// 用于索引显示名，避免对每个文件做完整反序列化。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanDocument {
+    graph: GraphCallSiteScanGraph,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanGraph {
+    #[serde(default)]
+    nodes: Vec<GraphCallSiteScanNode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphCallSiteScanNode {
+    id: NodeId,
+    node_type: String,
+    #[serde(default)]
+    instance_params: NodeInstanceParams,
+}
+
+/// 仅读取图文件头部（`graph.name` + 函数签名），避免完整反序列化。
 #[derive(Deserialize)]
 struct GraphFileHeader {
     graph: GraphFileHeaderGraph,
@@ -599,6 +714,10 @@ struct GraphFileHeader {
 struct GraphFileHeaderGraph {
     #[serde(default)]
     name: String,
+    #[serde(default)]
+    function_inputs: Vec<FunctionSignaturePin>,
+    #[serde(default)]
+    function_outputs: Vec<FunctionSignaturePin>,
 }
 
 fn read_graph_file_header(path: &Path) -> Result<GraphFileHeader, ProjectError> {
@@ -633,10 +752,20 @@ fn read_graph_index_entries(
             continue;
         };
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.graph.name);
+        let (function_inputs, function_outputs) = if expected_kind == GraphDocumentKind::Function {
+            (
+                header.graph.function_inputs,
+                header.graph.function_outputs,
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
         entries.push(ProjectGraphIndexEntry {
-            id: resource.id,
+            path: resource.path.as_str().to_string(),
             name,
             graph_type: expected_kind,
+            function_inputs,
+            function_outputs,
         });
     }
     Ok(entries)
@@ -646,20 +775,20 @@ fn rebind_graph_document_local_variable_scopes(
     document: &mut GraphDocument,
     kind: GraphDocumentKind,
 ) {
-    let graph_id_string = document.graph.id.to_string();
-    let scope = scoped_variable_scope(kind, &graph_id_string);
+    let graph_path = document.graph.resource_path.as_str().to_string();
+    let scope = scoped_variable_scope(kind, &graph_path);
     for variable in document.local_variables.values_mut() {
         variable.scope = scope.clone();
     }
 }
 
-fn scoped_variable_scope(kind: GraphDocumentKind, graph_id: &str) -> VariableScope {
+fn scoped_variable_scope(kind: GraphDocumentKind, graph_path: &str) -> VariableScope {
     match kind {
         GraphDocumentKind::Event => VariableScope::Event {
-            event_id: graph_id.to_string(),
+            event_path: graph_path.to_string(),
         },
         GraphDocumentKind::Function => VariableScope::Function {
-            function_id: graph_id.to_string(),
+            function_path: graph_path.to_string(),
         },
     }
 }
@@ -692,7 +821,7 @@ fn read_graph_local_variable_index_entries(
             Err(_) => continue,
         };
         let graph_name = graph_name_from_file_path(path.as_path()).unwrap_or(document.graph.name);
-        let owner_graph_id = document.graph.id.to_string();
+        let owner_graph_path = document.graph.resource_path.as_str().to_string();
         for variable in document.local_variables.into_values() {
             entries.push(ProjectVariableIndexEntry {
                 id: variable.id.to_string(),
@@ -702,7 +831,7 @@ fn read_graph_local_variable_index_entries(
                 description: variable.description,
                 scope: variable.scope,
                 tags: variable.tags,
-                owner_graph_id: Some(owner_graph_id.clone()),
+                owner_graph_path: Some(owner_graph_path.clone()),
                 owner_graph_name: Some(graph_name.clone()),
                 owner_graph_kind: Some(expected_kind),
             });
@@ -763,11 +892,11 @@ fn graph_relative_path_for_save(
     dir: &str,
     extension: &str,
     graph_name: &str,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<String, ProjectError> {
     let target_dir = root.join(dir);
     std::fs::create_dir_all(&target_dir)?;
-    let existing_path = find_graph_file_path(root, dir, extension, graph_id)?;
+    let existing_path = find_graph_file_path(root, dir, extension, graph_path)?;
     let file_name = unique_graph_file_name(
         target_dir.as_path(),
         graph_name,
@@ -790,16 +919,16 @@ fn find_graph_file_path(
     root: &Path,
     dir: &str,
     _extension: &str,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<Option<PathBuf>, ProjectError> {
     let graph_resources = match load_graph_resource_index(root) {
         Ok(index) => index,
         Err(ProjectError::FileNotFound(_)) => return Ok(None),
         Err(error) => return Err(error),
     };
-    if let Some(resource) = graph_resources.get_by_id(graph_id) {
-        if resource.path.starts_with(&format!("{dir}/")) {
-            return Ok(Some(root.join(&resource.path)));
+    if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
+        if resource.path.as_str().starts_with(&format!("{dir}/")) {
+            return Ok(Some(root.join(resource.path.as_str())));
         }
     }
     Ok(None)
@@ -807,14 +936,14 @@ fn find_graph_file_path(
 
 pub(crate) fn find_graph_document_path(
     root: &Path,
-    graph_id: &GraphId,
+    graph_path: &GraphResourcePath,
 ) -> Result<Option<(PathBuf, GraphDocumentKind, GraphDocument)>, ProjectError> {
-    if let Some(resource) = load_graph_resource_index(root)?.get_by_id(graph_id) {
-        let path = root.join(&resource.path);
-        let document = bind_graph_document_resource_identity(
+    if let Some(resource) = load_graph_resource_index(root)?.get_by_path(graph_path.as_str()) {
+        let path = root.join(resource.path.as_str());
+        let document = bind_graph_document_scope_by_path(
             read_graph_document(path.as_path(), resource.kind)?,
             resource.kind,
-            resource.id,
+            resource.path.as_str(),
         );
         return Ok(Some((path, resource.kind, document)));
     }
@@ -889,11 +1018,6 @@ pub fn flatten_graph_layout(root: &Path) -> Result<bool, ProjectError> {
     if changed {
         remove_empty_graph_subdirs(&root.join(EVENTS_DIR))?;
         remove_empty_graph_subdirs(&root.join(FUNCTIONS_DIR))?;
-        let mut manifest = read_project_manifest_from_root(root)?;
-        let (_, manifest_changed) = reconcile_graph_resources(root, &mut manifest)?;
-        if manifest_changed {
-            write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
-        }
     }
     Ok(changed)
 }
@@ -914,7 +1038,6 @@ fn flatten_kind_graph_layout(
         return Ok(false);
     }
 
-    let mut manifest = read_project_manifest_from_root(root).ok();
     let mut changed = false;
     for nested_path in nested_paths {
         let graph_name = read_graph_file_header(nested_path.as_path())
@@ -928,32 +1051,8 @@ fn flatten_kind_graph_layout(
             continue;
         }
 
-        if let Some(manifest) = manifest.as_mut() {
-            let nested_relative = nested_path
-                .strip_prefix(root)
-                .map(path_to_slash_string)
-                .unwrap_or_default();
-            let new_relative = target_path
-                .strip_prefix(root)
-                .map(path_to_slash_string)
-                .unwrap_or_default();
-            for entry in manifest.graphs.iter_mut() {
-                if super::normalize_resource_path(&entry.path)
-                    == super::normalize_resource_path(&nested_relative)
-                {
-                    entry.path = new_relative.clone();
-                }
-            }
-        }
-
         std::fs::rename(&nested_path, &target_path)?;
         changed = true;
-    }
-
-    if changed {
-        if let Some(manifest) = manifest {
-            write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
-        }
     }
 
     Ok(changed)
@@ -1088,13 +1187,13 @@ mod tests {
         path
     }
 
-    fn graph_index_id(root: &Path, name: &str) -> GraphId {
+    fn graph_index_id(root: &Path, name: &str) -> GraphResourcePath {
         read_project_index(root.to_string_lossy().as_ref())
             .unwrap()
             .graphs
             .into_iter()
             .find(|graph| graph.name == name)
-            .map(|graph| graph.id)
+            .and_then(|graph| GraphResourcePath::new(graph.path).ok())
             .unwrap_or_else(|| panic!("graph '{name}' should be indexed"))
     }
 
@@ -1119,7 +1218,7 @@ mod tests {
             DataValue::Int64(1),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
@@ -1129,7 +1228,7 @@ mod tests {
             DataValue::Float64(2.0),
             "",
             VariableScope::Function {
-                function_id: function.id.to_string(),
+                function_path: function.resource_path.as_str().to_string(),
             },
             vec![],
         );
@@ -1187,7 +1286,7 @@ mod tests {
     }
 
     #[test]
-    fn graph_index_identity_is_derived_from_project_path_not_file_graph_id() {
+    fn graph_index_identity_is_derived_from_project_path_not_file_graph_path() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let event = state.add_event("Path Identity");
@@ -1209,20 +1308,24 @@ mod tests {
             .expect("renamed graph should be indexed");
 
         assert_ne!(
-            entry.id, event.id,
+            entry.path,
+            event.resource_path.as_str(),
             "resource identity should come from the project path, not the graph id persisted inside the file"
         );
 
-        let loaded = load_project_graph_from_file(root.to_string_lossy().as_ref(), &entry.id)
+        let loaded = load_project_graph_from_file(
+            root.to_string_lossy().as_ref(),
+            &GraphResourcePath::new(entry.path.clone()).unwrap(),
+        )
             .expect("path-derived id should load renamed graph");
-        assert_eq!(loaded.graph.id, entry.id);
+        assert_eq!(loaded.graph.resource_path.as_str(), entry.path);
         assert_eq!(loaded.graph.name, "Path Identity Copy");
 
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn saved_graph_file_does_not_persist_graph_identity() {
+    fn saved_graph_file_does_not_persist_separate_graph_path_identity() {
         let root = temp_project_dir();
         let state = ProjectState::new();
         state.add_event("No Persisted Id");
@@ -1253,7 +1356,9 @@ mod tests {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let event = state.add_event("RoundTrip");
-        let graph = state.get_graph(&event.id).expect("event graph");
+        let graph = state
+            .get_graph(&event.resource_path)
+            .expect("event graph");
 
         // 两个带可重复 Operands（动态 pin）的 Add 节点
         let node_a = graph.create_node("Math:Operators:Add (+)").expect("node a");
@@ -1367,15 +1472,6 @@ mod tests {
         let nested_file = nested_dir.join(format!("Nested Event.{}", EVENT_EXTENSION));
         std::fs::rename(&flat_file, &nested_file).unwrap();
 
-        let mut manifest: ProjectManifest =
-            read_json(root.join(PROJECT_METADATA_FILE).as_path()).unwrap();
-        for entry in manifest.graphs.iter_mut() {
-            if entry.path.starts_with(&format!("{EVENTS_DIR}/")) {
-                entry.path = format!("{EVENTS_DIR}/Sub/Nested Event.{EVENT_EXTENSION}");
-            }
-        }
-        write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest).unwrap();
-
         flatten_graph_layout(root.as_path()).unwrap();
 
         assert!(
@@ -1457,7 +1553,7 @@ mod tests {
             DataValue::Int64(1),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
@@ -1467,7 +1563,7 @@ mod tests {
             DataValue::Float64(2.0),
             "",
             VariableScope::Function {
-                function_id: function.id.to_string(),
+                function_path: function.resource_path.as_str().to_string(),
             },
             vec![],
         );
@@ -1479,27 +1575,60 @@ mod tests {
             index
                 .variables
                 .iter()
-                .any(|v| v.name == "Global Var" && v.owner_graph_id.is_none())
+                .any(|v| v.name == "Global Var" && v.owner_graph_path.is_none())
         );
         let event_resource_id = index
             .graphs
             .iter()
             .find(|graph| graph.name == "Indexed Event")
-            .map(|graph| graph.id.to_string())
+            .map(|graph| graph.path.clone())
             .expect("event resource id");
         let function_resource_id = index
             .graphs
             .iter()
             .find(|graph| graph.name == "Indexed Function")
-            .map(|graph| graph.id.to_string())
+            .map(|graph| graph.path.clone())
             .expect("function resource id");
         assert!(
             index.variables.iter().any(|v| v.name == "Event Local"
-                && v.owner_graph_id.as_deref() == Some(&event_resource_id))
+                && v.owner_graph_path.as_deref() == Some(&event_resource_id))
         );
         assert!(index.variables.iter().any(|v| {
-            v.name == "Function Local" && v.owner_graph_id.as_deref() == Some(&function_resource_id)
+            v.name == "Function Local"
+                && v.owner_graph_path.as_deref() == Some(&function_resource_id)
         }));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persist_current_project_preserves_unloaded_graph_manifest_entries() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        state.set_path(Some(root.to_string_lossy().to_string()));
+
+        let function = state.add_function("Helper");
+        let function_id = function.resource_path.clone();
+        state.persist_current_project().expect("save function");
+        state.unload_graph(&function_id);
+
+        let _event = state.add_event("Caller");
+        state
+            .persist_current_project()
+            .expect("save caller without dropping helper manifest entry");
+
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+        assert!(
+            index
+                .graphs
+                .iter()
+                .any(|graph| graph.path == function_id.as_str() && graph.name == "Helper"),
+            "unloaded function should remain indexed after partial persist"
+        );
+        assert!(
+            load_project_graph_from_file(root.to_string_lossy().as_ref(), &function_id).is_ok(),
+            "stale function id should still resolve from manifest"
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1515,7 +1644,7 @@ mod tests {
             DataValue::Int64(7),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
@@ -1532,7 +1661,8 @@ mod tests {
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
 
         assert_eq!(index.graphs.len(), 2);
-        let ids: std::collections::HashSet<_> = index.graphs.iter().map(|graph| graph.id).collect();
+        let ids: std::collections::HashSet<_> =
+            index.graphs.iter().map(|graph| graph.path.clone()).collect();
         assert_eq!(ids.len(), 2);
         let original_entry = index
             .graphs
@@ -1556,9 +1686,9 @@ mod tests {
             GraphDocumentKind::Event,
         )
         .unwrap();
-        assert_ne!(original_doc.graph.id, copied_doc.graph.id);
-        assert_eq!(original_doc.graph.id, original_entry.id);
-        assert_eq!(copied_doc.graph.id, copied_entry.id);
+        assert_ne!(original_doc.graph.resource_path, copied_doc.graph.resource_path);
+        assert_eq!(original_doc.graph.resource_path.as_str(), original_entry.path);
+        assert_eq!(copied_doc.graph.resource_path.as_str(), copied_entry.path);
 
         assert_eq!(original_doc.local_variables.len(), 1);
         assert_eq!(copied_doc.local_variables.len(), 1);
@@ -1570,13 +1700,13 @@ mod tests {
         assert_eq!(
             original_local.scope,
             VariableScope::Event {
-                event_id: original_doc.graph.id.to_string(),
+                event_path: original_doc.graph.resource_path.as_str().to_string(),
             }
         );
         assert_eq!(
             copied_local.scope,
             VariableScope::Event {
-                event_id: copied_doc.graph.id.to_string(),
+                event_path: copied_doc.graph.resource_path.as_str().to_string(),
             }
         );
 
@@ -1594,11 +1724,11 @@ mod tests {
             DataValue::Int64(7),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         graph
             .create_node_raw(
                 "Variables:Get Variable",
@@ -1618,7 +1748,7 @@ mod tests {
             duplicate_project_graph_file(root.to_string_lossy().as_ref(), &event_resource_id)
                 .unwrap();
 
-        assert_ne!(duplicated.graph.id, event.id);
+        assert_ne!(duplicated.graph.resource_path, event.resource_path);
         assert_eq!(duplicated.local_variables.len(), 1);
         let duplicated_local = duplicated.local_variables.values().next().unwrap();
         assert_eq!(duplicated_local.name, "Command Local");
@@ -1626,7 +1756,7 @@ mod tests {
         assert_eq!(
             duplicated_local.scope,
             VariableScope::Event {
-                event_id: duplicated.graph.id.to_string(),
+                event_path: duplicated.graph.resource_path.as_str().to_string(),
             }
         );
 
@@ -1649,11 +1779,11 @@ mod tests {
             DataValue::Int64(1),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         graph
             .create_node_raw(
                 "Variables:Get Variable",
@@ -1722,11 +1852,11 @@ mod tests {
             DataValue::Float64(1.5),
             "",
             VariableScope::Event {
-                event_id: event.id.to_string(),
+                event_path: event.resource_path.as_str().to_string(),
             },
             vec![],
         );
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         graph
             .create_node_raw(
                 "Variables:Get Variable",
@@ -1792,7 +1922,7 @@ mod tests {
                 },
             );
         }
-        let graph = state.get_graph(&event.id).unwrap();
+        let graph = state.get_graph(&event.resource_path).unwrap();
         graph
             .create_node_raw(
                 "Data:Get DataFrame",

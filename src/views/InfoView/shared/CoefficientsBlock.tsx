@@ -1,8 +1,7 @@
-import React from 'react';
 import { SectionHeader } from './RegressionShared';
 import { CoefficientTable } from './CoefficientTable';
 import { CoeffBarChart } from './CoeffBarChart';
-import type { Coefficient } from './types';
+import type { Coefficient } from '@/shared/types/report';
 
 const COEFF_ICON = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

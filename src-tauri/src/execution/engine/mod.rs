@@ -14,8 +14,8 @@ pub mod execution_stack;
 pub mod executor;
 
 pub use event_emitter::{ChannelEventEmitter, EventEmitter, NoopEmitter};
-pub use execution_effect::{ExecutionEffect, ResumeToken};
+pub use execution_effect::ExecutionEffect;
 pub use execution_event::ExecutionEvent;
-pub use execution_frame::{ExecutionFrame, FrameId, FrameState};
+pub use execution_frame::{ExecutionFrame, FrameId, FrameState, WaitKind};
 pub use execution_stack::ExecutionStack;
 pub use executor::Executor;

@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { select, scaleLinear, axisBottom, axisLeft, extent, timeFormat } from 'd3';
+import React, { useEffect, useRef } from 'react';
+import { select, scaleLinear, axisBottom, axisLeft, extent } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { plotAxisTickFormatter } from '@/shared/plot/plotTime';
+import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { cn } from '@/lib/utils';
-import { plotContainerClass } from './plotShellStyles';
+import { DEFAULT_PLOT_MARGIN, plotContainerClass, type PlotMargin } from './plotShellStyles';
 
 export interface ScatterPoint {
   x: number;
@@ -26,7 +28,7 @@ export interface ScatterProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: { top: number; right: number; bottom: number; left: number };
+  margin?: PlotMargin;
   /** Y 轴是否关于 0 对称（如残差图），默认 false */
   symmetricY?: boolean;
   /** 是否绘制 y=0 参考线，默认 false */
@@ -39,16 +41,6 @@ export interface ScatterProps {
   embedded?: boolean;
 }
 
-/** 将数值转为 Date（date=天数, datetime=微秒） */
-function numToDate(v: number, format: 'date' | 'datetime'): Date {
-  if (format === 'date') {
-    return new Date(v * 86400000); // days since epoch -> ms
-  }
-  return new Date(v / 1000); // microseconds -> ms
-}
-
-const DEFAULT_MARGIN = { top: 20, right: 24, bottom: 40, left: 56 };
-
 const Scatter: React.FC<ScatterProps> = ({
   data,
   xLabel,
@@ -58,31 +50,19 @@ const Scatter: React.FC<ScatterProps> = ({
   color,
   radius = 3,
   height: heightProp,
-  margin = DEFAULT_MARGIN,
+  margin = DEFAULT_PLOT_MARGIN,
   symmetricY = false,
   zeroLine = false,
   highlightIndices,
   highlightColor,
   embedded = false,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { containerRef, size } = usePlotContainerSize();
   const chartTheme = useChartThemeColors();
   const seriesColors = useChartSeriesColors();
   const plotColor = color ?? seriesColors.primary;
   const plotHighlightColor = highlightColor ?? seriesColors.highlight;
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -137,11 +117,8 @@ const Scatter: React.FC<ScatterProps> = ({
 
     // x axis
     const xAxis = axisBottom(xScale).ticks(6).tickSize(-4);
-    if (xFormat === 'date') {
-      xAxis.tickFormat((d) => timeFormat('%Y-%m-%d')(numToDate(Number(d), 'date')));
-    } else if (xFormat === 'datetime') {
-      xAxis.tickFormat((d) => timeFormat('%Y-%m-%d %H:%M')(numToDate(Number(d), 'datetime')));
-    }
+    const xTickFormat = plotAxisTickFormatter(xFormat);
+    if (xTickFormat) xAxis.tickFormat(xTickFormat);
     g.append('g')
       .attr('transform', `translate(0,${h})`)
       .call(xAxis)
@@ -153,11 +130,8 @@ const Scatter: React.FC<ScatterProps> = ({
 
     // y axis
     const yAxis = axisLeft(yScale).ticks(5).tickSize(-4);
-    if (yFormat === 'date') {
-      yAxis.tickFormat((d) => timeFormat('%Y-%m-%d')(numToDate(Number(d), 'date')));
-    } else if (yFormat === 'datetime') {
-      yAxis.tickFormat((d) => timeFormat('%Y-%m-%d %H:%M')(numToDate(Number(d), 'datetime')));
-    }
+    const yTickFormat = plotAxisTickFormatter(yFormat);
+    if (yTickFormat) yAxis.tickFormat(yTickFormat);
     g.append('g')
       .call(yAxis)
       .call((sel) => {

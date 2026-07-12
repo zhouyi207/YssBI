@@ -23,7 +23,7 @@ pub struct NodeCreationResult {
 /// 前端 DTO 格式示例：
 /// - `{ paramsKind: "none" }`
 /// - `{ paramsKind: "variable", variableId: "...", variableName: "...", variableType: "..." }`
-/// - `{ paramsKind: "subGraph", subGraphId: "..." }`
+/// - `{ paramsKind: "subGraph", subGraphPath: "..." }`
 /// - `{ paramsKind: "dataFrame", dataframeId: "..." }`
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "paramsKind")]
@@ -46,8 +46,8 @@ pub enum NodeInstanceParams {
     /// 函数调用节点（call_function）
     #[serde(rename = "subGraph")]
     SubGraph {
-        #[serde(rename = "subGraphId")]
-        sub_graph_id: String,
+        #[serde(rename = "subGraphPath")]
+        sub_graph_path: String,
     },
 
     /// DataFrame 节点（get_dataframe）
@@ -77,10 +77,10 @@ impl NodeInstanceParams {
         }
     }
 
-    /// 便捷方法：获取 sub_graph_id（仅 SubGraph 变体）
-    pub fn sub_graph_id(&self) -> Option<&str> {
+    /// 便捷方法：获取 sub_graph_path（仅 SubGraph 变体）
+    pub fn sub_graph_path(&self) -> Option<&str> {
         match self {
-            NodeInstanceParams::SubGraph { sub_graph_id } => Some(sub_graph_id),
+            NodeInstanceParams::SubGraph { sub_graph_path } => Some(sub_graph_path),
             _ => Option::None,
         }
     }
@@ -109,7 +109,7 @@ pub struct NodeInstance {
     /// UI 位置
     pub position: NodePosition,
 
-    /// 实例参数（variable_id, sub_graph_id 等）
+    /// 实例参数（variable_id, sub_graph_path 等）
     pub instance_params: NodeInstanceParams,
 
     // pins

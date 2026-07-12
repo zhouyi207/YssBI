@@ -80,9 +80,60 @@
   animation: zoomIn 0.2s ease-out forwards;
 }
 
+@keyframes pinResultSearchExpand {
+  0% { width: 2rem; }
+  70% { width: 19rem; }
+  100% { width: 18rem; }
+}
+
+@keyframes pinResultSearchCollapse {
+  from { width: 18rem; }
+  to { width: 2rem; }
+}
+
+@keyframes pinResultSearchPanelIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pin-result-search-shell {
+  width: 2rem;
+}
+
+.pin-result-search-shell.is-open {
+  width: 18rem;
+}
+
+.pin-result-search-shell.is-expanding {
+  animation: pinResultSearchExpand 0.42s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
+}
+
+.pin-result-search-shell.is-collapsing {
+  animation: pinResultSearchCollapse 0.26s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.pin-result-search-input {
+  transition:
+    opacity 0.22s ease,
+    margin 0.22s ease;
+}
+
+.pin-result-search-panel {
+  animation: pinResultSearchPanelIn 0.28s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
+}
+
 /* OverlayScrollbar：隐藏原生滚动条 */
 .overlay-scrollbar-viewport::-webkit-scrollbar {
   display: none;
+}
+
+/* OverlayScrollbar vertical viewports — toggled by appearance.smoothScroll via SettingsEffectsProvider */
+html[data-smooth-scroll='true'] .overlay-scrollbar-viewport {
+  scroll-behavior: smooth;
+}
+
+.layout-split-contain {
+  contain: layout style paint;
 }
 
 /* Hide number input spinners */
@@ -95,24 +146,74 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Sash Resizing Classes */
-body.col-resize, body.col-resize * {
-  cursor: col-resize !important;
+/* Sash — VS Code monaco-sash style */
+.workbench-sash {
+  position: relative;
+  z-index: 35;
+  flex-shrink: 0;
+  touch-action: none;
 }
 
-body.row-resize, body.row-resize * {
-  cursor: row-resize !important;
+.workbench-sash-vertical {
+  width: var(--workbench-sash-size, 4px);
+  height: 100%;
+  cursor: ew-resize;
 }
 
-/* Prevent text selection and interaction during drag */
+.workbench-sash-horizontal {
+  width: 100%;
+  height: var(--workbench-sash-size, 4px);
+  cursor: ns-resize;
+}
+
+.workbench-sash::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background-color: var(--border);
+  transition: background-color 80ms ease;
+}
+
+.workbench-sash-vertical::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.workbench-sash-horizontal::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.workbench-sash:hover::before,
+.workbench-sash.active::before {
+  background-color: var(--accent-color);
+}
+
+.workbench-sash:hover,
+.workbench-sash.active {
+  background-color: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+/* Sash drag — global cursor + interaction lock (VS Code IWorkbenchLayoutService) */
+body.col-resize,
+body.col-resize * {
+  cursor: ew-resize !important;
+}
+
+body.row-resize,
+body.row-resize * {
+  cursor: ns-resize !important;
+}
+
 body.layout-sash-dragging {
   user-select: none !important;
   -webkit-user-select: none;
-}
-
-body.layout-sash-dragging .right-sidebar-container {
-  contain: layout style paint;
-  pointer-events: none;
 }
 
 body.layout-sash-dragging iframe,
@@ -129,7 +230,7 @@ body.layout-sash-dragging canvas {
   pointer-events: none;
 }
 
-/* Indeterminate progress bar — sliding stripe used by LoadingOverlay */
+/* Indeterminate progress bar — sliding stripe */
 @keyframes loading-indeterminate {
   0%   { left: -40%; right: 100%; }
   60%  { left: 100%; right: -40%; }

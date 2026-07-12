@@ -1,5 +1,10 @@
 export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
+export { resolveExecutionGraphPath, getExecutionEventGraph } from './resolveExecutionGraphPath';
+export {
+  clearedRunArtifactsPatch,
+  graphHasClearableArtifacts,
+} from './graphRunArtifacts';
 export { useExecutionVisualBinder } from './useExecutionVisualBinder';
 export {
   getExecutionVisual,
@@ -14,11 +19,32 @@ export {
   flushLiveExecutionEventsNow,
 } from './executionLiveFeed';
 export {
+  recordingHadError,
+  firstNodeErrorMessage,
+  ensureGraphExecutionTerminal,
+} from './executionRecording';
+export {
   buildPinViewParams,
+  evaluatePinViewState,
+  inspectableRefsFromPinView,
   pinViewDisabledTitle,
-  resolvePinViewDisabledReason,
-  resolvePinViewTargetFromCache,
-  shouldShowPinViewMenuItem,
   type PinViewDisabledReason,
+  type PinViewUiState,
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
+export {
+  executionStatusForSourceGraph,
+  lookupPinResult,
+  pinResultCacheKey,
+  pinResultsForSourceGraph,
+} from './pinResultIndex';
+export {
+  normalizePinResultState,
+  type PinResultWirePayload,
+} from './normalizePinResult';
+export {
+  collectPinResultSearchEntries,
+  filterPinResultSearchEntries,
+  type PinResultSearchEntry,
+  type PinResultSearchLabels,
+} from './pinResultSearch';

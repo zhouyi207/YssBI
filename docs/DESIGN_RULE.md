@@ -52,7 +52,7 @@ src/
 │   │   └─ variable/    # 变量纯逻辑
 │   │
 │   ├─ application/     # 应用层：用例编排与 Hook 协调
-│   │   ├─ editor/      # 编辑器用例（useEditor、useEditorGroup、keyboard）
+│   │   ├─ editor/      # 编辑器用例（EditorSessionProvider、useEditorSession、useEditorGroup、keyboard）
 │   │   ├─ project/     # 项目用例（save/load/execute、useProjectSync）
 │   │   ├─ menubar/     # 菜单栏用例
 │   │   └─ initialization/ # 应用初始化
@@ -100,7 +100,7 @@ src/
 |------|-----------|------|
 | 视图组件 | `PascalCase.tsx` | `Canvas.tsx`、`NodeContainer.tsx`、`PinInput.tsx` |
 | 视图目录 | `PascalCase/` | `EditorView/`、`Canvas/`、`Nodes/` |
-| Hook | `useXxx.ts`（camelCase） | `useEditor.ts`、`useEditorGraphData.ts` |
+| Hook | `useXxx.ts`（camelCase） | `useEditorSession.ts`、`useEditorGroup.ts` |
 | Store | `xxxStore.ts`（camelCase） | `graphDataStore.ts`、`variableStore.ts` |
 | Service | `xxxService.ts`（camelCase） | `connectionService.ts`、`graphService.ts` |
 | 类型文件 | `camelCase.ts` | `graph.ts`、`node.ts`、`editor.ts` |
@@ -111,7 +111,7 @@ src/
 | 分类 | 命名约定 | 示例 |
 |------|---------|------|
 | React 组件 | `PascalCase` | `Canvas`、`NodeContainer`、`EditorWindow` |
-| 自定义 Hook | `use` + `PascalCase` | `useEditor`、`useCanvasViewport`、`useEditorOperations` |
+| 自定义 Hook | `use` + `PascalCase` | `useEditorSession`、`useEditorGroup`、`useCanvasViewport`、`useEditorOperations` |
 | Zustand Store | `use` + `PascalCase` + `Store` | `useGraphDataStore`、`useEditorStore`、`useVariableStore` |
 | Store 接口 | `PascalCase` + `Store` | `GraphDataStore`、`EditorStore`、`VariableStore` |
 | Service 类 | `PascalCase` + `Service` | `ConnectionService`、`GraphService`、`NodeService` |
@@ -176,6 +176,202 @@ src/
 - API 调用使用 domain 或 dto 类型；Store 读写使用 store 类型。
 - DTO → Store 可直接传入 `addGraphFromData`（支持 GraphInstanceDTO）；Canvas 视图从 Store 的 `pinConnections` 派生连接状态，不再在 domain `Pin` 上维护 `links`。
 
+**前端专项约定索引**（边界单点、禁止重复定义弱类型）：
+
+| 主题 | 章节 |
+| --- | --- |
+| InfoView 统计数值展示 | [§2.9](#29-infoview-统计数值展示) |
+| PlotView D3 / 按列 scale | [§2.10](#210-plotview-d3-工具层) |
+| Tauri / WebView 平台 glue | [§2.11](#211-tauri--webview-平台类型) |
+| EditorSession 显式契约 | [§2.12](#212-editorsession-显式契约) |
+| Info 报告 IPC 与类型分层 | [§2.13](#213-info-报告-ipc-边界与类型分层) |
+| Graph store hydrate | [§2.14](#214-graph-store-hydrate) |
+| 节点实例参数 / 结构性 Undo | [§3.8](#38-节点实例参数与结构性-undo-dto) |
+
+### 2.9 InfoView 统计数值展示
+
+报告 payload 在 `ReportView` 入口经 `parseReportPayload` 校验，但可选诊断块、未来字段未必全部窄化；展示层仍须防御，避免嵌套 JSON（如 `{ d: number }`）导致 `toFixed is not a function` 白屏。
+
+| 职责 | 单点模块 |
+| --- | --- |
+| 数值窄化与格式化 | `src/views/InfoView/shared/formatStat.ts` — `coerceFiniteNumber` / `formatNum` / `formatNullableNum` / `formatPercent` |
+| UI 组件 | `RegressionShared.tsx` — `StatValue`、`RSquaredBadge`（重导出 format 工具） |
+
+**约定**：
+
+- 新增 InfoView 数值展示时，从 `./shared/utils` 或 `RegressionShared` 引入上述 helper，**禁止**在组件内直接调用 `.toFixed()`。
+- `formatStat.ts` 是唯一允许内部使用 `.toFixed()` 的位置。
+- 与 IPC 边界解析（`parseReportPayload`，见 [§2.13](#213-info-报告-ipc-边界与类型分层)）形成双保险：边界校验结构，展示层校验标量。
+
+### 2.10 PlotView D3 工具层
+
+| 模块 | 路径 | 职责 |
+| --- | --- | --- |
+| 交互 / tooltip | `shared/plot/d3Tooltip.ts` | `PlotTooltipController`、`attachHoverTooltip`、主题 HTML |
+| 按列异质 scale | `shared/plot/axisScale.ts` | `ColumnAxisScale` discriminated union；`createColumnAxisScale` / `mapColumnAxisValue` |
+
+**分工**：
+
+- **单图同质轴**（Line、BarChart、Histogram、KDE 等）：继续在组件内内联 `scaleLinear` / `scaleBand`，无需抽象。
+- **多轴异质列**（平行坐标 `ParallelCoordinates`）：必须使用 `axisScale.ts`，**禁止** `type YScale = (v: any) => …` 或 `as unknown as scaleLinear`。
+- 新增按列 numeric/category 图表时复用 `ColumnAxisScale`；若整图仅一对 x/y 轴，保持组件内联。
+
+### 2.11 Tauri / WebView 平台类型
+
+| 模块 | 路径 | 职责 |
+| --- | --- | --- |
+| 环境增补 | `src/tauri-env.d.ts` | `Window.__yssbiTauriCallbackFilter__`、`React.CSSProperties.WebkitAppRegion` |
+| 平台 glue | `shared/platform/tauriWebview.ts` | `TAURI_NO_DRAG_STYLE`、`stopTauriDragPropagation`、HMR 警告过滤 |
+| HMR Channel | `services/devHmrIpc.ts` | `trackChannel` / `untrackChannel`（仅 `import.meta.hot`） |
+
+**约定**：
+
+- 标题栏 `data-tauri-drag-region` 内的 Select / Input / 按钮容器使用 `TAURI_NO_DRAG_STYLE`，**禁止** `{ WebkitAppRegion: 'no-drag' } as React.CSSProperties`。
+- 开发期 Tauri callback 噪声过滤通过 `installTauriCallbackWarningFilterOnce()` 安装，全局标记声明在 `tauri-env.d.ts`。
+- `devHmrIpc` 用 `Set<object>` 登记 Channel，dispose 时经 `clearChannelMessageHandler` 单点拆除，**禁止**在 `trackChannel` 路径使用 `as unknown as`。
+- `data-tauri-drag-region` 为 Tauri 约定属性，继续用 HTML `data-*` 即可，无需 cast。
+
+### 2.12 EditorSession 显式契约
+
+`useEditorSessionValue` 组装多路 application hook，若继续用 `ReturnType<typeof useEditorSessionValue>` 或在新 hook 中 `...session` 透传，Canvas / Detail / Sidebar 会隐式依赖整包 session，字段增删无法编译期约束。
+
+#### 2.12.1 类型分层
+
+| 类型 | 文件 | 职责 |
+| --- | --- | --- |
+| `EditorSession` | `editorSessionTypes.ts` | Provider 全窗口契约（state + layout bindings + 各 command slice 交集） |
+| `EditorGroupSession` | 同上 | `EditorSession` + 当前 group 工作区 + 可选 canvas 交互 |
+| `PickEditorSession<K>` | 同上 | 按需 `Pick` 工具类型 |
+| 命名切片 | 同上 | `EditorSessionResourcesSlice`、`EditorSessionDetailActionsSlice`、`EditorSessionSyncCallbacksSlice` 等 |
+
+Command slice 与各 application hook **1:1**（如 `EditorSessionTabActions` ↔ `useTabManagement`），禁止在 `editorSessionTypes` 外再定义平行 session 类型。
+
+#### 2.12.2 Hook 与挂载约定
+
+| Hook | 暴露范围 | 挂载位置 |
+| --- | --- | --- |
+| `EditorSessionProvider` | 单例 session 上下文 | `EditorWindow` 根 |
+| `useEditorSession()` | 完整 `EditorSession` | Provider 内任意 hook / 组件 |
+| `useEditorSessionResources()` | `events` / `functions` / `variables` / `dataframes` | Detail、侧栏资源列表 |
+| `useEditorSessionDetailActions()` | `updateVariable` / `updateDataFrame` | Detail 面板 |
+| `pickEditorSessionSyncCallbacks(session)` | ProjectSync 事件回调子集 | `useProjectSync` 等 |
+| `useEditorGroup()` | `EditorGroupSession`（默认无 pointer loop） | Workspace、Sidebar、Menubar、Overlays |
+| `useEditorGroup({ withCanvasInteraction: true })` | 含 canvas pointer loop | **仅** `Canvas.tsx` |
+
+- `useEditor()` 已删除；Provider 外**禁止**再构建独立 editor session。
+- `composeEditorGroupSession` 是 **唯一** 允许的 session 合并点（`useEditorGroup` 内部使用 `Object.assign`，禁止在其他 hook 重复 spread 合并）。
+
+#### 2.12.3 新 hook 依赖规则
+
+- **必须**：声明参数/返回为命名切片类型，或调用 `useEditorSessionResources` 等窄接口 hook。
+- **禁止**：`return { ...session, extra }` 向子树透传未声明字段。
+- **禁止**：`Pick` 整个 `EditorSession` 再解构——应使用已定义的 slice 类型或新增 slice。
+- Canvas 交互类型（`ConnectPinsHandler` 三参数、`activeGroupIdRef` 等）以 `editorSessionTypes.ts` 为准，避免各组件自行 widen。
+
+#### 2.12.4 反模式
+
+| 反模式 | 原因 |
+| --- | --- |
+| `type EditorSession = ReturnType<typeof useEditorSessionValue>` | 推断链过长，切片无法复用 |
+| 新 hook `...session` 透传 | 隐式依赖全量 API，重构无编译保护 |
+| 非 Canvas 路径 `withCanvasInteraction: true` | pointer loop 重复挂载、手势冲突 |
+| Provider 外 `useEditorGroup` / 自建 session | 破坏单例与 tab/group 一致性 |
+
+#### 2.12.5 相关实现位置
+
+| 职责 | 模块 |
+| --- | --- |
+| 类型契约 | `features/application/editor/editorSessionTypes.ts` |
+| 窄接口 hook | `features/application/editor/useEditorSessionSlices.ts` |
+| Session 组装 | `features/application/editor/useEditorSessionValue.ts` |
+| Group 包装 | `features/application/editor/useEditorGroup.ts` |
+| 使用说明 | `features/application/editor/README.md` |
+
+### 2.13 Info 报告 IPC 边界与类型分层
+
+Rust `get_value` / `publish_report` 返回的 JSON 在边界上仍是 `unknown`；须在进入 InfoView **之前**按 `ReportKind` 窄化为 typed payload，并与展示层 [§2.9](#29-infoview-统计数值展示) 形成双保险。
+
+#### 2.13.1 类型目录（`shared/types/report/`）
+
+| 分类 | 文件 | 职责 |
+| --- | --- | --- |
+| 领域模型 | `regression.ts`、`iv.ts`、`panel.ts`、`did.ts`、`var.ts`、`vec.ts`、`dfadf.ts` | 各报告结构的 TypeScript 类型 |
+| 判别与守卫 | `reportKinds.ts`、`guards.ts` | `ReportPayloadKind`、`isRegressionReportKind` 等 |
+| 共享解析 | `parseCommon.ts` | 系数、`serialTests`、`correlogram` 等共用窄化 |
+| 按模型解析 | `parseRegression.ts`、`parsePanel.ts`、`parseVar.ts`、`parseVec.ts`、`parseDfadf.ts` | 单模型 `normalize*` / `parse*` |
+| 诊断块 DTO | `serialTests.ts`、`correlogram.ts` | DW `{ d }`、Ljung-Box、Plot vs Report 柱条分离 |
+| 单点分发 | `parseReportPayload.ts` | `ReportKind` → 已校验 payload 或 `null` |
+| 聚合导出 | `index.ts` | 对外稳定 API |
+
+报告类型 **仅** 定义于 `shared/types/report/`；视图层直引该路径，禁止在 `views/InfoView/` 再建 types shim 或 re-export。
+
+#### 2.13.2 数据流
+
+```
+Rust ReportKind + JSON (unknown)
+        ↓
+parseReportPayload(report, raw)     ← IPC / service 边界单点
+        ↓
+ReportView：null → 错误文案；非 null → 按 report 选子视图
+        ↓
+InfoView 组件（假定 payload 已窄化；标量仍经 formatStat）
+```
+
+- `ReportView`（或等效入口）**必须**在渲染子组件前调用 `parseReportPayload`；无效 payload 展示用户可见错误，**禁止**将 `raw` 直接 cast 后传入图表。
+- 回归五类（OLS / WLS / GLS / Logit / Probit 等）共用 `parseRegressionResultData`，由 `isRegressionReportKind` 分流，避免各 `ReportKind` 重复解析逻辑。
+
+#### 2.13.3 扩展约定（新增 `ReportKind`）
+
+1. **Rust**：集中 `struct` + `serde` + roundtrip 测（见后端报告 schema 注册表项）。
+2. **前端类型**：在 `shared/types/report/` 增加模型文件或扩展现有 struct 类型。
+3. **解析**：实现 `parseXxxResultData`，在 `parseReportPayload` 的 `switch` 注册；共用字段进 `parseCommon`。
+4. **渲染**：`ReportView` 增加分支；InfoView 子组件只接收窄化后的类型，不在组件内 `as` 整个 payload。
+5. **测试**：`report.test.ts` 覆盖新 kind 的有效/无效 JSON；与 [§2.9](#29-infoview-统计数值展示) 展示测互补。
+
+#### 2.13.4 反模式
+
+| 反模式 | 原因 |
+| --- | --- |
+| InfoView 组件内手写 `typeof x === 'number'` 校验整包 JSON | 与 IPC 边界重复且易漏字段 |
+| 在 `views/InfoView/` 定义报告 struct 或 types re-export shim | 与 `shared/types/report` 双源漂移 |
+| 跳过 `parseReportPayload` 直接 `raw as RegressionResult` | 后端字段嵌套（如 `{ d: number }`）导致展示层崩溃 |
+| Plot `CorrelogramDatum` 与 Report `CorrelogramBarDTO` 混用 | 字段可选性不同；须用 `correlogram.ts` 分流 |
+
+#### 2.13.5 相关实现位置
+
+| 职责 | 模块 |
+| --- | --- |
+| 单点分发 | `shared/types/report/parseReportPayload.ts` |
+| 报告渲染入口 | `features/core/resultSource/components/ReportView.tsx`（或 `ReportSourceView`） |
+| 数值展示防御 | `views/InfoView/shared/formatStat.ts` — 见 §2.9 |
+| DTO 映射补充 | [DTO_TYPE_MAPPING.md §十六](./DTO_TYPE_MAPPING.md#十六info-报告-payload-ipc-边界) |
+
+### 2.14 Graph store hydrate
+
+Store 图实体桶的权威形态为 `GraphData`；所有入站数据须经 `normalizeGraphDataLike` 再写入 `graphDataStore`。
+
+| 类型 | 用途 |
+| --- | --- |
+| `GraphData` | store 权威快照 |
+| `GraphDataLike` | `hydrateGraphs` / `addGraphFromData` 入站联合 |
+| `RuntimeNodeInput` | `replaceGraphNodes` / `GraphDataInput.nodes`；pin 引用可为 Id 或完整 Pin 对象 |
+
+**入站路径**：
+
+```
+GraphInstanceDTO / Graph / GraphDataInput / GraphData
+        ↓
+normalizeGraphDataLike(graphPath, graph)     ← dto/graphModel.ts 单点
+        ↓
+buildGraphBucket → GraphEntityBucket
+```
+
+- Pin 连接真源为图级 `connections` + `pinConnections`；废弃 pin.`links` 在 `toStoredPin` 剥离。
+- `runtimePinRefsToIds` 为 pin 引用窄化单点（hydrate 与 `replaceGraphNodes` 共用）。
+- 测试夹具优先 `makeTestGraph()`（`@/tests/helpers/graphFixtures`）。
+
+约定详见 [docs/adr/graph-store-hydrate.md](./adr/graph-store-hydrate.md)、[DTO_TYPE_MAPPING.md §十七](./DTO_TYPE_MAPPING.md#十七graph-store-hydrate)。
+
 ### 2.5 状态管理（Zustand）
 
 - **必须使用选择器**：`useStore((s) => s.xxx)`，禁止无选择器订阅整个 Store，否则任意字段变化都会触发重渲染。
@@ -192,8 +388,8 @@ src/
 
 | 场景           | 约定                   | 示例                           |
 | -------------- | ---------------------- | ------------------------------ |
-| Domain / Store | snake_case             | node_type, ui_style, graph_id  |
-| DTO（JSON）    | camelCase              | nodeType, uiStyle, graphId     |
+| Domain / Store | snake_case             | node_type, ui_style, graph_path  |
+| DTO（JSON）    | camelCase              | nodeType, uiStyle, graphPath     |
 | 组件 / Hook    | PascalCase / camelCase | PinInput, useCanvasInteraction |
 | 文件           | camelCase              | graphDataStore.ts              |
 
@@ -229,7 +425,7 @@ src-tauri/src/
 │   ├─ core/                # 图实例与状态
 │   │   ├─ graph_instance.rs      # GraphInstance（持有 data_state，提供 mutation API）
 │   │   ├─ graph_data_state.rs    # GraphDataState（nodes、pins、connections 的容器）
-│   │   ├─ graph_id.rs            # GraphId（UUID 包装）
+│   │   ├─ graph_path.rs            # GraphId（UUID 包装）
 │   │   ├─ graph_kind.rs          # GraphKind（Event/Function）
 │   │   └─ graph_position.rs      # 画布位置 { x, y, scale }
 │   ├─ node/                # 节点系统
@@ -395,8 +591,9 @@ RuntimeState（执行态快照） ─ 持有 ID + 当前状态 + 运行时值，
 
 **ID 类型**（newtype wrapper over UUID）：
 
-- `GraphId(Uuid)`、`NodeId(Uuid)`、`PinId(Uuid)`、`TypeVarId(Uuid)`
-- 统一提供 `new()`（随机）、`nil()`（空）、`from(Uuid)` 方法。
+- `GraphResourcePath`：Event/Function **项目资源**身份（相对路径，如 `events/Foo.yssbi-event`）；IPC/Store/Tab 使用 `graphPath`。
+- `NodeId(Uuid)`、`PinId(Uuid)`、`TypeVarId(Uuid)`：图内实体仍用 UUID。
+- 统一提供 `new()`（随机）、`nil()`（空）、`from(Uuid)` 方法（节点/Pin 等）。
 
 **模块文档**：每个 `mod.rs` 使用 `//!` 注释说明模块职责。
 
@@ -514,10 +711,83 @@ Command 返回 `Result`，Event 通过 EventEmitter 推送至前端。
 | 槽位定义 | `graph/pin/pin_slot.rs` — `PinSlot` |
 | 前端同步 | `features/core/sync/` — `NodePinsUpdated`, `batchUpdatePins` |
 
+### 3.8 节点实例参数与结构性 Undo DTO
+
+参数化节点（变量 / 函数调用 / DataFrame 等）的 `instance_params` 在 Rust 侧为 **tagged enum**；前端须在 DTO 层镜像同一判别式，避免 command / history 层重复定义扁平 `params` 导致静默丢字段。
+
+#### 3.8.1 类型分层
+
+```
+Rust NodeInstanceParams (#[serde(tag = "paramsKind")])
+        ↕
+NodeInstanceParamsDTO          ← shared/types/dto/nodeInstanceParams.ts（tagged union，单一真源）
+        ↕ spawnParamsToInstanceParams / flattenInstanceParams
+NodeSpawnParams                ← 创建命令用的扁平 spawn 参数（variableId / subGraphPath / …）
+        ↕
+NodeData（store）              ← 扁平字段 + paramsKind，便于 UI 读写
+```
+
+| 类型 | 文件 | 用途 |
+| --- | --- | --- |
+| `NodeInstanceParamsDTO` | `nodeInstanceParams.ts` | IPC / 磁盘 / undo 的 tagged union |
+| `NodeSpawnParams` | 同上 | `CreateNode`、clipboard、canvas drop 等创建路径 |
+| `NodeInstanceDTO` | `dto/graph.ts` | `Core & NodeInstanceParamsDTO`（`#[serde(flatten)]` 展开） |
+| `GraphUndoPatch` | `dto/graphUndoPatch.ts` | 删除 / 断连 / 粘贴 redo 的结构性 undo |
+
+**与 Layout 区分**：编辑器布局树 `LayoutNode.data.params` 为 `EditorGroupNodeParams`（如 `selectedNodeIds`），与节点 `NodeInstanceParams` **无关**，不得混用类型。
+
+#### 3.8.2 Live DTO 与 Undo 子图形态差异
+
+| 场景 | Rust 序列化 | 前端类型 |
+| --- | --- | --- |
+| 运行时 / 事件 `NodeCreated` | `instance_params` **flatten** 到 `NodeInstanceDTO` 顶层 | `NodeInstanceDTO = Core & NodeInstanceParamsDTO` |
+| Undo `NodeSubgraphDTO` | `instance_params` **嵌套**在 `instanceParams` 字段 | `NodeSubgraphDTO.instanceParams?: NodeInstanceParamsDTO` |
+| Undo pin 快照 | 完整 `PinInstance`（`definition` 或 `pinContract`） | `SubgraphPinInstanceDTO` |
+
+前端对 `GraphUndoPatch` **原则上透传**至 `apply_graph_patch`；强类型用于编译期约束与防止误改字段，而非在前端重组 patch。
+
+#### 3.8.3 转换函数（单点）
+
+| 函数 | 方向 | 调用位置 |
+| --- | --- | --- |
+| `spawnParamsToInstanceParams` | `NodeSpawnParams` → tagged union | `NodeService.createNode*`、`toBatchCreateNodeIpcItems` |
+| `flattenInstanceParams` | `NodeInstanceParamsDTO` → store 扁平字段 | `NodeEventHandler.dtoToNodeData` |
+| `nodeSpawnFieldsToInstanceParams` | store 扁平 + `paramsKind` → tagged union | 导出 / undo 边界（按需） |
+
+#### 3.8.4 扩展约定（新增参数变体时）
+
+1. **先改 Rust**：`graph/node/node_instance.rs` — `NodeInstanceParams` 增加变体 + `#[serde(rename = "...")]`。
+2. **同步前端 union**：`NodeInstanceParamsDTO` 增加对应分支。
+3. **更新转换**：`spawnParamsToInstanceParams`（及必要时 `flattenInstanceParams`）。
+4. **更新 spawn 面**：若创建路径需要新字段，扩展 `NodeSpawnParams`；**禁止**在 command 文件内手写 inline `params?: { ... }`。
+5. **Undo pin 形态变更**：同步 `SubgraphPinInstanceDTO`（`PinDefinitionDTO` / `PinContractDTO`），对照 `graph/pin/pin_instance.rs` 序列化规则。
+6. **测试**：`nodeInstanceParams.test.ts`、`batchCreateNode.test.ts` 至少覆盖新变体 roundtrip。
+
+#### 3.8.5 反模式
+
+| 反模式 | 原因 |
+| --- | --- |
+| `instanceParams?: Record<string, unknown>` | undo 回传时无法发现字段丢失 |
+| 各 command 重复定义 `params?: { variableId?, ... }` | 与 Rust 漂移，静默丢 `variableName` 等 |
+| 前端修改 `GraphUndoPatch` 后再 apply | 破坏后端权威快照；应原样透传 |
+| 将 `EditorGroupNodeParams` 与 `NodeSpawnParams` 合并 | 职责不同，布局状态非节点实例参数 |
+
+#### 3.8.6 相关实现位置
+
+| 职责 | 模块 |
+| --- | --- |
+| Rust tagged enum | `graph/node/node_instance.rs` — `NodeInstanceParams` |
+| Undo 捕获 / 应用 | `graph/core/graph_subgraph.rs` — `capture_subgraph`, `apply_graph_patch` |
+| Undo schema | `schema/history.rs` — `GraphUndoPatch`, `NodeSubgraphDTO` |
+| 前端 DTO | `shared/types/dto/nodeInstanceParams.ts`, `graphUndoPatch.ts` |
+| IPC 封装 | `services/graph/node/nodeService.ts` — `applyGraphPatch`, `EMPTY_GRAPH_UNDO_PATCH` |
+| History 命令 | `features/core/history/commands/` — `deleteNodes`, `disconnectPin`, `composite` |
+
 ---
 
 ## 4. 参考文档
 
-- [DTO_TYPE_MAPPING.md](./DTO_TYPE_MAPPING.md) - 前后端类型映射
+- [DTO_TYPE_MAPPING.md](./DTO_TYPE_MAPPING.md) - 前后端类型映射（NodeInstanceParams / GraphUndoPatch §十二–十四；Info 报告 IPC §十六）
 - [ARCHITECTURE_ISSUES.md](./ARCHITECTURE_ISSUES.md) - 架构问题与优化路线
 - [runtime-source-lifecycle.md](./runtime-source-lifecycle.md) - RuntimePin / Window 结果 source 生命周期与前后端投影规则
+- [features/application/editor/README.md](../src/features/application/editor/README.md) - EditorSession Provider / slice hook 挂载说明（与 §2.12 对照）

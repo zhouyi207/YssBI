@@ -1,29 +1,10 @@
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
-import type { ProjectResourceMeta, ResourceKey, ResourceRef } from './resourceTypes';
+import type { ProjectResourceMeta, ResourceKey } from './resourceTypes';
 import { resourceKey } from './resourceTypes';
 
 export interface ResourceSnapshot {
   resources: ProjectResourceMeta[];
   graphOrder: string[];
-}
-
-function resourceRefFromKey(key: ResourceKey): ResourceRef | null {
-  if (key.startsWith('graph:event:')) {
-    return { kind: 'event', id: key.slice('graph:event:'.length) };
-  }
-  if (key.startsWith('graph:function:')) {
-    return { kind: 'function', id: key.slice('graph:function:'.length) };
-  }
-  if (key.startsWith('worksheet:')) {
-    return { kind: 'worksheet', id: key.slice('worksheet:'.length) };
-  }
-  if (key.startsWith('database:')) {
-    return { kind: 'database', id: key.slice('database:'.length) };
-  }
-  if (key.startsWith('variable:')) {
-    return { kind: 'variable', id: key.slice('variable:'.length) };
-  }
-  return null;
 }
 
 function snapshotMetaFingerprint(resource: ProjectResourceMeta): string {
@@ -37,7 +18,7 @@ export interface SnapshotReconcileResult {
 
 /**
  * Reconcile a backend index snapshot with open document state.
- * Loaded resources absent from the snapshot are retained as missing entries.
+ * Loaded persisted resources absent from the snapshot are retained as missing entries.
  */
 export function reconcileResourceSnapshot(
   incoming: ProjectResourceMeta[],
@@ -131,5 +112,3 @@ export function applySnapshotDocumentPatches(
     store.patchDocument(key, patch);
   }
 }
-
-export { resourceRefFromKey };

@@ -2,13 +2,16 @@ import type { ExecutionEvent } from '@/shared/types/ui/execution';
 
 export type ExecutionVisualSnapshot = {
   active: boolean;
-  graphId: string | null;
+  graphPath: string | null;
   status: 'idle' | 'running' | 'completed' | 'error';
   executingNodeId: string | null;
   executedNodeIds: Set<string>;
   errorNodeIds: Set<string>;
   nodeDurations: Map<string, number>;
+  /** data 取数（ConnectionActive） */
   completedConnections: Set<string>;
+  /** data 流动（ConnectionFlow） */
+  flowingConnections: Set<string>;
 };
 
 export function connectionKey(fromPinId: string, toPinId: string): string {
@@ -18,13 +21,14 @@ export function connectionKey(fromPinId: string, toPinId: string): string {
 function idleSnapshot(): ExecutionVisualSnapshot {
   return {
     active: false,
-    graphId: null,
+    graphPath: null,
     status: 'idle',
     executingNodeId: null,
     executedNodeIds: new Set(),
     errorNodeIds: new Set(),
     nodeDurations: new Map(),
     completedConnections: new Set(),
+    flowingConnections: new Set(),
   };
 }
 
@@ -44,16 +48,17 @@ export function subscribeExecutionVisual(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-export function resetExecutionVisual(graphId: string): void {
+export function resetExecutionVisual(graphPath: string): void {
   snapshot = {
     active: true,
-    graphId,
+    graphPath,
     status: 'running',
     executingNodeId: null,
     executedNodeIds: new Set(),
     errorNodeIds: new Set(),
     nodeDurations: new Map(),
     completedConnections: new Set(),
+    flowingConnections: new Set(),
   };
   publish();
 }
@@ -64,10 +69,10 @@ export function clearExecutionVisual(): void {
 }
 
 /** Apply one channel event to the live visual snapshot (no React store). */
-export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent): void {
-  if (!snapshot.active || snapshot.graphId !== graphId) {
+export function applyExecutionVisualEvent(graphPath: string, event: ExecutionEvent): void {
+  if (!snapshot.active || snapshot.graphPath !== graphPath) {
     if (event.event === 'executionStart') {
-      resetExecutionVisual(graphId);
+      resetExecutionVisual(graphPath);
       return;
     }
     return;
@@ -75,7 +80,7 @@ export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent
 
   switch (event.event) {
     case 'executionStart':
-      resetExecutionVisual(graphId);
+      resetExecutionVisual(graphPath);
       break;
     case 'executionComplete':
       snapshot = {
@@ -111,7 +116,7 @@ export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent
       }
       snapshot = {
         ...snapshot,
-        status: 'error',
+        // 保持 running，直到 executionComplete；避免后续连线动画被提前关掉
         executingNodeId: snapshot.executingNodeId === event.data.nodeId ? null : snapshot.executingNodeId,
         errorNodeIds,
         nodeDurations,
@@ -124,6 +129,12 @@ export function applyExecutionVisualEvent(graphId: string, event: ExecutionEvent
       snapshot = { ...snapshot, completedConnections };
       break;
     }
+    case 'connectionFlow': {
+      const flowingConnections = new Set(snapshot.flowingConnections);
+      flowingConnections.add(connectionKey(event.data.fromPinId, event.data.toPinId));
+      snapshot = { ...snapshot, flowingConnections };
+      break;
+    }
     default:
       break;
   }
@@ -134,6 +145,7 @@ export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
   status: ExecutionVisualSnapshot['status'];
   nodeStates: Map<string, import('@/shared/types/ui/execution').NodeExecutionState>;
   completedConnections: Set<string>;
+  flowingConnections: Set<string>;
 } {
   const nodeStates = new Map<string, import('@/shared/types/ui/execution').NodeExecutionState>();
   const now = Date.now();
@@ -159,5 +171,6 @@ export function snapshotToGraphPatch(snap: ExecutionVisualSnapshot): {
     status: snap.status === 'idle' ? 'completed' : snap.status,
     nodeStates,
     completedConnections: new Set(snap.completedConnections),
+    flowingConnections: new Set(snap.flowingConnections),
   };
 }

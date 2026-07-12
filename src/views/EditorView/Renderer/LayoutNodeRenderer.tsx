@@ -1,40 +1,60 @@
 import { useRef, Fragment, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { inferPanelPosition } from '@/features/core/layout/panelPartLayout';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { Sash } from './Sash';
 import { layoutNodeFlexStyle } from './sashResizeLogic';
 import { viewRegistry } from './viewRegistry';
-import { LayoutNode } from '@/shared/types/ui';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
 import { GroupContext } from '@/features/core/editor';
+import { useEditorGroupTabStrip } from '@/features/core/editor/hooks/useEditorGroupTabStrip';
 import { TabBar } from '../Layout/TabBar';
-import { DROP_TYPES, DRAG_TYPES } from '@/features/core/dnd';
+import { DROP_TYPES } from '@/features/core/dnd';
+import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 
 /**
  * 布局引擎核心渲染器
  * 负责根据节点类型（容器或组件）递归分发渲染任务
  */
 export const LayoutNodeRenderer = ({ nodeId }: { nodeId: string }) => {
-    const node = useLayoutStore((state) => state.nodes[nodeId]);
+    const nodeKind = useLayoutStore(useShallow((state) => {
+        const node = state.nodes[nodeId];
+        if (!node) return null;
+        if (node.type === 'component') return 'component' as const;
+        return {
+            orientation: node.type === 'row' ? 'row' as const : 'col' as const,
+            childrenIds: node.children ?? [],
+        };
+    }));
 
-    if (!node) return null;
+    if (!nodeKind) return null;
 
-    // 1. 如果是叶子组件节点
-    if (node.type === 'component') {
-        return <LeafNodeRenderer node={node} />;
+    if (nodeKind === 'component') {
+        return <LeafNodeRenderer nodeId={nodeId} />;
     }
 
-    // 2. 如果是容器节点（row 或 col）
-    return <ContainerNodeRenderer node={node} />;
+    return (
+        <ContainerNodeRenderer
+            nodeId={nodeId}
+            orientation={nodeKind.orientation}
+            childrenIds={nodeKind.childrenIds}
+        />
+    );
 };
 
 /**
  * 容器节点渲染器 (Row/Col)
  * 核心逻辑：自动在子节点之间插入可调节大小的 Sash
  */
-const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
-    const childrenIds = node.children || [];
-    const orientation = node.type === 'row' ? 'row' : 'col';
+const ContainerNodeRenderer = ({
+    orientation,
+    childrenIds,
+}: {
+    nodeId: string;
+    orientation: 'row' | 'col';
+    childrenIds: string[];
+}) => {
     const isRow = orientation === 'row';
 
     // 维护子节点 DOM 引用，供 Sash 调节大小使用
@@ -89,18 +109,40 @@ const ContainerNodeRenderer = ({ node }: { node: LayoutNode }) => {
  * 独立订阅节点状态，确保尺寸(pixelSize/size)变化时能实时触发重绘
  */
 const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDivElement | null) => void }) => {
-    const node = useLayoutStore((state) => state.nodes[nodeId]);
-    const style = useMemo(() => layoutNodeFlexStyle(node), [node?.data?.visible, node?.pixelSize, node?.size]);
+    const node = useLayoutStore(useShallow((state) => state.nodes[nodeId]));
+    const panelMaximized = useLayoutStore((s) => s.nodes.panel?.data?.maximized === true);
+    const panelPosition = useLayoutStore((s) => inferPanelPosition(s.nodes));
+    const style = useMemo(
+        () => layoutNodeFlexStyle(node, { panelMaximized, panelPosition }),
+        [node, panelMaximized, panelPosition],
+    );
 
     if (!node) return null;
+
+    const hidden = node.data?.visible === false;
+    const keepAlive = node.data?.isFixed === true;
+    const maximizedHidden = node.data?.groupMaximizedHidden === true;
 
     return (
         <div
             ref={setRef}
-            className="relative min-w-0 min-h-0"
+            className="layout-split-view relative min-h-0 min-w-0"
             style={style}
         >
-            {node.data?.visible !== false && <LayoutNodeRenderer nodeId={nodeId} />}
+            {maximizedHidden ? (
+                <div
+                    className="h-full w-full"
+                    data-editor-group-maximized-placeholder={nodeId}
+                    aria-hidden="true"
+                />
+            ) : (!hidden || keepAlive) && (
+                <div
+                    className={`h-full w-full ${hidden && keepAlive ? 'invisible pointer-events-none' : ''}`}
+                    aria-hidden={hidden || undefined}
+                >
+                    <LayoutNodeRenderer nodeId={nodeId} />
+                </div>
+            )}
         </div>
     );
 };
@@ -109,90 +151,69 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
  * 叶子节点渲染器
  * 负责渲染具体的业务组件以及处理 DND 区域
  */
-const LeafNodeRenderer = ({ node }: { node: LayoutNode }) => {
-    const activeGroupId = useLayoutStore(s => s.activeGroupId);
-    const setActiveGroup = useLayoutStore(s => s.setActiveGroup);
-    const isActive = activeGroupId === node.id;
+const LeafNodeRenderer = ({ nodeId }: { nodeId: string }) => {
+    const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
 
-    // 1. 获取 Tab 数据
-    const tabs = node?.data?.tabs || [];
-    const activeTabId = node?.data?.activeTabId;
-    const hasTabs = tabs.length > 0;
-
-    // 2. 确定当前要渲染的业务组件
-    const ActiveComponent = useMemo(() => {
+    const leaf = useLayoutStore(useShallow((s) => {
+        const node = s.nodes[nodeId];
         if (!node) return null;
-        let componentName = node.data?.component || ''; // 默认使用基础组件
-        
-        if (hasTabs) {
-            const activeTab = tabs.find(t => t?.id === activeTabId);
-            if (activeTab) {
-                componentName = activeTab.component;
-            }
-        }
-        
-        return componentName ? viewRegistry.get(componentName) : null;
-    }, [hasTabs, tabs, activeTabId, node?.data?.component]);
+        const tabs = node.data?.tabs;
+        const activeTabId = node.data?.activeTabId;
+        const activeTab = tabs?.find((tab) => tab.id === activeTabId);
+        const hasTabs = (tabs?.length ?? 0) > 0;
+        return {
+            hasTabs,
+            activeComponentName: activeTab?.component ?? node.data?.component ?? '',
+            isFixed: !!node.data?.isFixed,
+        };
+    }));
 
-    // DND 拖拽支持 - 只有非固定节点可以拖动
-    const isFixed = !!node.data?.isFixed;
+    const isActive = activeEditorGroupId === nodeId;
 
-    const { attributes: _attributes, listeners: _listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
-        id: node.id,
-        data: { type: DRAG_TYPES.LEAF, node },
-        disabled: isFixed // 禁用固定节点的拖拽功能
-    });
+    const ActiveComponent = useMemo(() => {
+        if (!leaf) return null;
+        return leaf.activeComponentName ? viewRegistry.get(leaf.activeComponentName) : null;
+    }, [leaf?.activeComponentName]);
 
-    const style = transform ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        zIndex: isDragging ? 100 : 'auto',
-        opacity: isDragging ? 0.5 : 1
-    } : {
-        opacity: isDragging ? 0.5 : 1
-    };
+    if (!leaf) return null;
 
     return (
-        <GroupContext.Provider value={node.id}>
+        <GroupContext.Provider value={nodeId}>
             <div
-                ref={setDragRef}
-                style={style}
-                onClick={() => setActiveGroup(node.id)}
-                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
-                id={`layout-node-${node.id}`}
+                onClick={() => void activateEditorGroup(nodeId)}
+                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${leaf.isFixed ? 'z-20' : ''} ${isActive && (leaf.hasTabs || !leaf.isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
+                id={`layout-node-${nodeId}`}
             >
-                {/* 统一 Header 区域 */}
-                {hasTabs ? (
+                {leaf.hasTabs ? (
                     <div className="flex-none flex items-center bg-[var(--workbench-bg)] select-none">
-                        <TabBar
-                            layoutNodeId={node.id}
-                            tabs={tabs}
-                            activeTabId={activeTabId}
-                        />
+                        <EditorGroupTabStrip layoutNodeId={nodeId} />
                     </div>
-                ) : !isFixed ? (
-                    // <div
-                    //     {...attributes}
-                    //     {...listeners}
-                    //     className="flex-none h-9 px-3 flex items-center bg-[var(--workbench-bg)] select-none text-[11px] font-medium text-gray-400 uppercase tracking-wider cursor-grab active:cursor-grabbing"
-                    // >
-                    //     {node.data?.title || node.id}
-                    // </div>
-                    <></>
                 ) : null}
 
-                {/* 内容区域 */}
-                <div className="flex-1 relative min-h-0">
+                <div className="flex-1 relative min-h-0" data-editor-content={nodeId}>
                     {ActiveComponent ? (
                         <ActiveComponent />
                     ) : (
                         <div className="p-4 italic text-muted-foreground">No content</div>
                     )}
 
-                    {/* 拖拽停靠区域覆盖层 - 固定节点不允许作为停靠目标 */}
-                    {!isFixed && <DropZoneOverlay nodeId={node.id} />}
+                    {!leaf.isFixed && <DropZoneOverlay nodeId={nodeId} />}
                 </div>
             </div>
         </GroupContext.Provider>
+    );
+};
+
+/** Tab strip with narrow layout subscription — avoids re-rendering editor content on tab chrome changes. */
+const EditorGroupTabStrip = ({ layoutNodeId }: { layoutNodeId: string }) => {
+    const { tabs, activeTabId } = useEditorGroupTabStrip(layoutNodeId);
+    if (!tabs.length) return null;
+    return (
+        <TabBar
+            layoutNodeId={layoutNodeId}
+            tabs={tabs}
+            activeTabId={activeTabId}
+        />
     );
 };
 
@@ -220,7 +241,7 @@ const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
 };
 
 const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: string, className: string }) => {
-    const { setNodeRef, isOver } = useDroppable({
+    const { setNodeRef } = useDroppable({
         id: `${nodeId}-${zone}`,
         data: { dropType: DROP_TYPES.LAYOUT_REGION, dropPosition: zone, targetNodeId: nodeId }
     });
@@ -229,7 +250,7 @@ const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: stri
         <div
             id={`${nodeId}-${zone}`}
             ref={setNodeRef}
-            className={`${className} ${isOver ? 'bg-blue-500/20 transition-colors' : ''}`}
+            className={className}
         />
     );
 };

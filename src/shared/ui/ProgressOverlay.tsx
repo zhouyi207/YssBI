@@ -74,6 +74,3 @@ export function ProgressOverlay({ progress }: ProgressOverlayProps) {
     </div>
   );
 }
-
-/** @deprecated 使用 ProgressOverlay */
-export const LoadingOverlay = ProgressOverlay;

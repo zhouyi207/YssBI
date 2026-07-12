@@ -3,8 +3,8 @@
 //! 执行帧表示一个执行上下文，包含：
 //! - 当前执行的节点
 //! - 触发该节点的输入 Pin
-//! - 父帧引用（用于嵌套控制流）
-//! - 剩余的 continuation（用于 Sequence）
+//! - join 目标（谁 join 我这棵子树，用于嵌套控制流的汇合）
+//! - 等待类型（Sequence continuation / Loop 重入）与未完成子任务计数
 
 use crate::graph::node::NodeId;
 use crate::graph::pin::{ExecRole, PinId};
@@ -27,12 +27,21 @@ pub enum FrameState {
     Ready,
     /// 正在执行
     Running,
-    /// 等待子流程完成
-    WaitingForChild,
+    /// 等待子任务全部完成（Sequence continuation / Loop body）
+    Waiting,
     /// 已完成
     Completed,
-    /// 已暂停（等待外部事件）
-    Suspended,
+}
+
+/// 等待类型
+///
+/// 一个 waiter 帧在 `pending_children` 归零后如何恢复。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WaitKind {
+    /// Sequence：按顺序触发剩余的 Then 分支
+    Continuation { remaining: Vec<ExecRole> },
+    /// Loop：重跑循环节点（计数器已在节点内推进）
+    LoopReentry,
 }
 
 /// 执行帧
@@ -49,17 +58,23 @@ pub struct ExecutionFrame {
     /// 触发该节点的输入 Pin（可选）
     pub triggered_by: Option<PinId>,
 
-    /// 父帧 ID（用于嵌套控制流）
-    pub parent_frame: Option<FrameId>,
+    /// join 目标：谁负责在我这棵子树完成后被通知
+    ///
+    /// 唯一不变量：`frames[join_target].pending_children`
+    /// == 当前存活且 `join_target` 指向它的帧数量。
+    pub join_target: Option<FrameId>,
 
     /// 帧状态
     pub state: FrameState,
 
-    /// 剩余的 continuation（用于 Sequence）
+    /// 未完成的子任务数量（仅 waiter 帧有意义）
     ///
-    /// 当节点返回 TriggerAndContinue 时，remaining 会被保存到这里
-    /// 当子流程完成后，执行器会继续执行这些 continuation
-    pub remaining_continuations: Vec<ExecRole>,
+    /// spawn 下游帧时 +1，帧完成时对其 `join_target` -1；归零且处于
+    /// `Waiting` 时恢复本帧。
+    pub pending_children: u32,
+
+    /// 等待类型（仅当 `state == Waiting` 时为 `Some`）
+    pub wait: Option<WaitKind>,
 
     /// 调试信息：帧创建时的描述
     pub debug_info: String,
@@ -71,63 +86,18 @@ impl ExecutionFrame {
         id: FrameId,
         node_id: NodeId,
         triggered_by: Option<PinId>,
-        parent_frame: Option<FrameId>,
+        join_target: Option<FrameId>,
     ) -> Self {
         Self {
             id,
             node_id,
             triggered_by,
-            parent_frame,
+            join_target,
             state: FrameState::Ready,
-            remaining_continuations: Vec::new(),
+            pending_children: 0,
+            wait: None,
             debug_info: format!("Frame for node {:?}", node_id),
         }
-    }
-
-    /// 创建根帧（没有父帧）
-    pub fn root(id: FrameId, node_id: NodeId) -> Self {
-        Self::new(id, node_id, None, None)
-    }
-
-    /// 创建子帧
-    pub fn child(
-        id: FrameId,
-        node_id: NodeId,
-        triggered_by: Option<PinId>,
-        parent_id: FrameId,
-    ) -> Self {
-        Self::new(id, node_id, triggered_by, Some(parent_id))
-    }
-
-    /// 设置剩余的 continuation
-    pub fn with_continuations(mut self, continuations: Vec<ExecRole>) -> Self {
-        self.remaining_continuations = continuations;
-        self
-    }
-
-    /// 设置调试信息
-    pub fn with_debug_info(mut self, info: impl Into<String>) -> Self {
-        self.debug_info = info.into();
-        self
-    }
-
-    /// 是否有剩余的 continuation
-    pub fn has_continuations(&self) -> bool {
-        !self.remaining_continuations.is_empty()
-    }
-
-    /// 弹出下一个 continuation
-    pub fn pop_continuation(&mut self) -> Option<ExecRole> {
-        if self.remaining_continuations.is_empty() {
-            None
-        } else {
-            Some(self.remaining_continuations.remove(0))
-        }
-    }
-
-    /// 是否是根帧
-    pub fn is_root(&self) -> bool {
-        self.parent_frame.is_none()
     }
 }
 
@@ -137,11 +107,9 @@ impl fmt::Debug for ExecutionFrame {
             .field("id", &self.id)
             .field("node_id", &self.node_id)
             .field("state", &self.state)
-            .field("parent_frame", &self.parent_frame)
-            .field(
-                "remaining_continuations",
-                &self.remaining_continuations.len(),
-            )
+            .field("join_target", &self.join_target)
+            .field("pending_children", &self.pending_children)
+            .field("wait", &self.wait)
             .field("debug_info", &self.debug_info)
             .finish()
     }

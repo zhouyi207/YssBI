@@ -1,13 +1,13 @@
 import type { LayoutTab } from '@/shared/types/ui';
+import {
+  toGraphResourceUri,
+  type GraphResourceKind,
+} from '@/shared/types/domain/graphResourcePath';
 
 export type ResourceKind = 'event' | 'function' | 'worksheet' | 'database' | 'variable';
 
-export type ResourceKey =
-  | `graph:event:${string}`
-  | `graph:function:${string}`
-  | `worksheet:${string}`
-  | `database:${string}`
-  | `variable:${string}`;
+/** Canonical store key — always equals `ProjectResourceMeta.uri`. */
+export type ResourceKey = string;
 
 export interface ResourceRef {
   kind: ResourceKind;
@@ -20,7 +20,7 @@ export interface ProjectResourceMeta {
   name: string;
   uri: string;
   parentId?: string;
-  scope?: { type: 'global' | 'event' | 'function'; graphId?: string };
+  scope?: { type: 'global' | 'event' | 'function'; graphPath?: string };
   exists: boolean;
   loaded: boolean;
   hasDirtyDocument: boolean;
@@ -40,18 +40,47 @@ export interface BackendProjectResourceMeta {
   hasConflictDocument: boolean;
 }
 
-export function resourceKey(ref: ResourceRef): ResourceKey {
+type ResourceKeyInput = ResourceRef | Pick<ProjectResourceMeta, 'kind' | 'id' | 'uri'>;
+
+export function resourceKey(input: ResourceKeyInput): ResourceKey {
+  if ('uri' in input && input.uri) {
+    return input.uri;
+  }
+  return resourceKeyFromRef(input as ResourceRef);
+}
+
+function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
   switch (ref.kind) {
     case 'event':
     case 'function':
-      return `graph:${ref.kind}:${ref.id}`;
+      return toGraphResourceUri(ref.kind, ref.id);
     case 'worksheet':
-      return `worksheet:${ref.id}`;
+      return `yssbi://worksheet/${ref.id}`;
     case 'database':
-      return `database:${ref.id}`;
+      return `yssbi://database/${ref.id}`;
     case 'variable':
-      return `variable:${ref.id}`;
+      return `yssbi://variable/${ref.id}`;
   }
+}
+
+export function buildGraphResourceMeta(
+  kind: GraphResourceKind,
+  path: string,
+  name: string,
+  overrides?: Partial<Omit<ProjectResourceMeta, 'id' | 'kind' | 'name' | 'uri'>>,
+): ProjectResourceMeta {
+  return {
+    id: path,
+    kind,
+    name,
+    uri: toGraphResourceUri(kind, path),
+    exists: true,
+    loaded: false,
+    hasDirtyDocument: false,
+    hasStaleDocument: false,
+    hasConflictDocument: false,
+    ...overrides,
+  };
 }
 
 export function graphResourceRef(id: string, kind: 'event' | 'function'): ResourceRef {

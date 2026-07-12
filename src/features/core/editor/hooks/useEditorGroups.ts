@@ -5,21 +5,21 @@
 
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import type { EditorGroupSnapshot } from '@/shared/types';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { isEditorGroupNode } from '@/features/core/layout/layoutTabQueries';
+import { readEditorGroupSnapshot } from '@/features/core/layout/layoutTabModel';
 
-export function useEditorGroups() {
+export function useEditorGroups(): EditorGroupSnapshot[] {
   const groupNodes = useLayoutStore(
-    useShallow((s: LayoutState) => Object.values(s.nodes).filter((n: any) => n.type === 'component' && n.data?.tabs))
+    useShallow((s: LayoutState) => Object.values(s.nodes).filter(isEditorGroupNode)),
   );
 
   return useMemo(
     () =>
-      groupNodes.map((n: any) => ({
-        id: n.id,
-        tabs: (n.data?.tabs || []).map((t: any) => ({ ...t, type: t.type || 'event' })) as any[],
-        activeTabId: n.data?.activeTabId || null,
-        selectedNodeIds: n.data?.params?.selectedNodeIds || [],
-      })),
-    [groupNodes]
+      groupNodes
+        .map((node) => readEditorGroupSnapshot(node))
+        .filter((group): group is EditorGroupSnapshot => group != null),
+    [groupNodes],
   );
 }

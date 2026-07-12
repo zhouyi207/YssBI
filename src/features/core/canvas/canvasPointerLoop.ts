@@ -3,13 +3,15 @@ import { useGestureStore } from '@/features/core/gesture';
 import { commitViewport, setViewportLive } from '@/features/core/viewport';
 import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
-import type { GraphPosition, Pin } from '@/shared/types/domain';
+import type { Pin } from '@/shared/types/domain';
+import type { EditorViewport } from '@/features/core/viewport';
 import type { EditorGesture } from '@/shared/types/ui';
 import { logger } from '@/utils/appLogger';
 import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { getCanvasWorldPoint, getGestureScreenMovement, resolveTabId } from './canvasInteractionUtils';
 import {
+  collectSelectionHitTargets,
   hitTestSelection,
   queryCanvasElement,
   syncSelectionPreview,
@@ -20,7 +22,6 @@ import {
   updateSelectionSession,
   endSelectionSession,
   abortSelectionSession,
-  getSelectionHitTargets,
   getSelectionPreviewIds,
   setSelectionPreviewIds,
   selectionScreenRect,
@@ -30,10 +31,10 @@ import {
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
   activeTabIdRef: RefObject<string | null>;
-  canvasRef: RefObject<GraphPosition>;
+  viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
-  persistViewport: (graphId?: string | null) => void;
+  persistViewport: (graphPath?: string | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
   setPendingConnection: (pin: Pin | null) => void;
 };
@@ -59,7 +60,7 @@ function installPointerLoop(): () => void {
       currentX: e.clientX,
       currentY: e.clientY,
     });
-    const newSelectedIds = hitTestSelection(getSelectionHitTargets(), rect);
+    const newSelectedIds = hitTestSelection(collectSelectionHitTargets(canvasEl), rect);
     syncSelectionPreview(canvasEl, getSelectionPreviewIds(), newSelectedIds);
     setSelectionPreviewIds(newSelectedIds);
   };
@@ -77,9 +78,9 @@ function installPointerLoop(): () => void {
       const dx = e.clientX - g.lastX;
       const dy = e.clientY - g.lastY;
       const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-      const graphId = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-      if (graphId) {
-        setViewportLive(graphId, (prev) => ({
+      const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
+      if (graphPath) {
+        setViewportLive(graphPath, (prev) => ({
           ...prev,
           x: prev.x + dx,
           y: prev.y + dy,
@@ -94,8 +95,8 @@ function installPointerLoop(): () => void {
       useGestureStore.getState().setGesture(nextGesture);
       nextGesture = null;
     } else if (g.type === 'drag') {
-      const canvas = deps.canvasRef.current || { scale: 1 };
-      const scale = canvas.scale || 1;
+      const viewport = deps.viewportRef.current ?? { scale: 1 };
+      const scale = viewport.scale || 1;
       const dx = (e.clientX - g.lastX) / scale;
       const dy = (e.clientY - g.lastY) / scale;
 
@@ -149,7 +150,9 @@ function installPointerLoop(): () => void {
     const finalSession = { ...session, currentX: e.clientX, currentY: e.clientY };
     const hadMovement = selectionSessionMoved(finalSession, CONTEXT_MENU_MOVE_THRESHOLD_PX);
     const rect = selectionScreenRect(finalSession);
-    const newSelectedIds = hitTestSelection(getSelectionHitTargets(), rect);
+    const newSelectedIds = canvasEl
+      ? hitTestSelection(collectSelectionHitTargets(canvasEl), rect)
+      : [];
 
     if (canvasEl) clearAllSelectionPreview(canvasEl);
     endSelectionSession();
@@ -184,9 +187,9 @@ function installPointerLoop(): () => void {
         deps.setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
       } else if (g.moved) {
         const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-        const graphId = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-        if (graphId) commitViewport(graphId);
-        deps.persistViewport(graphId);
+        const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
+        if (graphPath) commitViewport(graphPath);
+        deps.persistViewport(graphPath);
       }
     } else if (g.type === 'connect') {
       const gid = g.groupId || deps.activeGroupIdRef.current;
@@ -218,12 +221,12 @@ function installPointerLoop(): () => void {
           }
         }
       } else {
-        applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId });
+        applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId! });
       }
     }
 
     useGestureStore.getState().endConnection();
-    const hadMovement = getGestureScreenMovement(g, deps.canvasRef.current?.scale ?? 1);
+    const hadMovement = getGestureScreenMovement(g, deps.viewportRef.current?.scale ?? 1);
     useGestureStore.getState().clearGesture(hadMovement);
   };
 

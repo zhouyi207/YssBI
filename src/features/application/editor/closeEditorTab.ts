@@ -1,10 +1,13 @@
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { isResourceDocumentDirty } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
 
 export async function closeWorksheetTab(
   worksheetId: string,
@@ -14,10 +17,11 @@ export async function closeWorksheetTab(
   const located = locateLayoutTab(worksheetId, nodeId);
   if (!located?.tab) return false;
 
-  if (located.tab.isDirty && !skipDirtyPrompt) {
+  if (isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' }) && !skipDirtyPrompt) {
+    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetId);
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
-      message: `“${located.tab.title}” 已修改。关闭前是否保存？`,
+      message: `“${displayName}” 已修改。关闭前是否保存？`,
       confirmText: '保存',
       cancelText: '不保存',
       type: 'info',
@@ -52,7 +56,7 @@ export async function closeEditorTab(
   if (tabType === 'worksheet') {
     return closeWorksheetTab(tabId, nodeId, skipDirtyPrompt);
   }
-  if (tabType === 'event' || tabType === 'function' || !tabType) {
+  if (tabType === 'event' || tabType === 'function') {
     return closeGraphTab(tabId, nodeId, skipDirtyPrompt);
   }
 

@@ -8,67 +8,50 @@
  */
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
-import { derivePinConnectionView } from './pinLinks';
-import { resolveNodeViewMeta } from './serialization';
+import { useResourceStore } from '@/features/core/resource';
+import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { getFunctionResourceName } from '@/features/domain/graphDiagnostics';
+import { toUiNode } from './nodeView';
 
-const EMPTY_IDS: string[] = [];
+export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
+  const nodeData = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
 
-export function useNodeView(nodeId: string, graphId?: string): UINode | null {
-  const nodeData = useGraphDataStore((s) =>
-    graphId ? s.getGraphNode(graphId, nodeId) : s.nodes[nodeId],
-  );
+  // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
+  // 名称以 ResourceStore 为准（重命名的单一事实来源）。
+  const callFunctionName = useResourceStore((s) => {
+    if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphPath) return undefined;
+    return getFunctionResourceName(s.resources, nodeData.subGraphPath);
+  });
+
+  const callTitleOverride =
+    nodeData?.nodeType === CALL_FUNCTION_NODE_TYPE && nodeData.subGraphPath
+      ? (callFunctionName ?? '(missing function)')
+      : callFunctionName;
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
-      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
-        .map((pid) => (graphId ? s.getGraphPin(graphId, pid) : s.pins[pid])),
+      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPin(graphPath, pid)) : [],
     ),
   );
 
   const pinConns = useGraphDataStore(
     useShallow((s) =>
-      (graphId ? s.getGraphNodePins(graphId, nodeId) : s.nodePins[nodeId] ?? EMPTY_IDS)
-        .map((pid) => (graphId ? s.getGraphPinConnections(graphId, pid) : s.pinConnections[pid])),
+      graphPath ? s.getGraphNodePins(graphPath, nodeId).map((pid) => s.getGraphPinConnections(graphPath, pid)) : [],
     ),
   );
 
   return useMemo(() => {
-    if (!nodeData) return null;
+    if (!graphPath || !nodeData) return null;
 
-    const meta = resolveNodeViewMeta(nodeData);
-    const inputs: PinView[] = [];
-    const outputs: PinView[] = [];
+    const pins = pinObjs.flatMap((pin, index) =>
+      pin ? [{ pin, connectionIds: pinConns[index] ?? [] }] : [],
+    );
 
-    for (let i = 0; i < pinObjs.length; i++) {
-      const p = pinObjs[i];
-      if (!p) continue;
-      const connectionView = derivePinConnectionView(pinConns[i]);
-      const pin: PinView = { ...p, ...connectionView };
-      if (p.direction === 'output') outputs.push(pin);
-      else inputs.push(pin);
-    }
-
-    const view: UINode = {
-      id: nodeData.id,
-      nodeType: meta.nodeType,
-      category: meta.category,
-      title: meta.title,
-      uiStyle: meta.uiStyle,
-      description: meta.description,
-      position: nodeData.position ?? { x: 0, y: 0 },
-      isInternal: nodeData.isInternal,
-      paramsKind: nodeData.paramsKind,
-      variableId: nodeData.variableId,
-      variableName: nodeData.variableName,
-      variableType: nodeData.variableType,
-      subGraphId: nodeData.subGraphId,
-      dataframeId: nodeData.dataframeId,
-      inputs,
-      outputs,
-    };
-    return view;
-  }, [nodeData, pinObjs, pinConns]);
+    return toUiNode(nodeData, {
+      title: callTitleOverride,
+      pins,
+    });
+  }, [graphPath, nodeData, pinObjs, pinConns, callTitleOverride]);
 }

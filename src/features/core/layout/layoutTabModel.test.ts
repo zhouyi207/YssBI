@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import type { LayoutNode } from '@/shared/types';
+import type { LayoutTabInput } from './layoutTabModel';
+import {
+  buildGraphLayoutTab,
+  buildWorksheetLayoutTab,
+  isGraphLayoutTab,
+  isPreviewLayoutTab,
+  normalizeLayoutTab,
+  readEditorGroupSnapshot,
+  splitComponentForTab,
+} from './layoutTabModel';
+
+describe('layoutTabModel', () => {
+  it('normalizeLayoutTab fills missing graph tab type', () => {
+    const legacy: LayoutTabInput = { id: 'g1', title: 'G', component: 'GraphEditor' };
+    expect(normalizeLayoutTab(legacy)).toEqual({
+      id: 'g1',
+      component: 'GraphEditor',
+      type: 'event',
+    });
+  });
+
+  it('buildGraphLayoutTab and buildWorksheetLayoutTab produce typed tabs', () => {
+    expect(buildGraphLayoutTab('events/Main.yssbi-event', 'event')).toMatchObject({
+      id: 'events/Main.yssbi-event',
+      type: 'event',
+      component: 'GraphEditor',
+    });
+    expect(buildGraphLayoutTab('functions/Helper.yssbi-function', 'function')).toMatchObject({
+      id: 'functions/Helper.yssbi-function',
+      type: 'function',
+    });
+    expect(buildWorksheetLayoutTab('w1')).toMatchObject({
+      id: 'w1',
+      type: 'worksheet',
+      component: 'WorksheetEditor',
+    });
+  });
+
+  it('readEditorGroupSnapshot normalizes tabs and params', () => {
+    const node: LayoutNode = {
+      id: 'editor-a',
+      type: 'component',
+      parentId: 'root',
+      data: {
+        component: 'GraphEditor',
+        tabs: [buildGraphLayoutTab('functions/One.yssbi-function', 'function')],
+        activeTabId: 'functions/One.yssbi-function',
+        params: { selectedNodeIds: ['n1'] },
+      },
+    };
+    const snapshot = readEditorGroupSnapshot(node);
+    expect(snapshot?.tabs[0].type).toBe('function');
+    expect(snapshot?.selectedNodeIds).toEqual(['n1']);
+  });
+
+  it('isGraphLayoutTab and splitComponentForTab', () => {
+    const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'event');
+    expect(isGraphLayoutTab(graphTab)).toBe(true);
+    expect(isPreviewLayoutTab(graphTab)).toBe(false);
+    expect(isPreviewLayoutTab(buildGraphLayoutTab('events/P.yssbi-event', 'event', { pinned: false }))).toBe(true);
+    expect(splitComponentForTab(graphTab)).toBe('GraphEditor');
+    expect(splitComponentForTab(null)).toBe('GraphEditor');
+  });
+});

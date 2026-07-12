@@ -1,0 +1,81 @@
+import { useEditorStore } from '@/features/core/editor';
+import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import type { LayoutTab } from '@/shared/types/ui';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { activateGraphTab } from './activateGraphTab';
+import { applyEditorTabSelection } from './editorTabSelection';
+import { ensureDetailVisible } from './ensureDetailVisible';
+import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
+
+async function focusEditorGroup(groupId: string): Promise<void> {
+  const prevGroupId = useLayoutStore.getState().activeEditorGroupId;
+  if (prevGroupId && prevGroupId !== groupId) {
+    await suspendEditorGroupGraphSession(prevGroupId);
+  }
+  useLayoutStore.getState().setActiveGroup(groupId);
+}
+
+/**
+ * Unified editor tab activation: graph reload, worksheet detail, layout selection, session.
+ */
+export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
+  await focusEditorGroup(groupId);
+  applyEditorTabSelection(groupId, tab.id);
+
+  if (tab.type === 'event' || tab.type === 'function') {
+    useEditorStore.getState().setDetailFocus({ kind: tab.type, path: tab.id });
+    ensureDetailVisible();
+    const loaded = await activateGraphTab(tab.id, groupId);
+    if (!loaded) return false;
+    syncVariablesGraphScopeFromActiveTab();
+    return true;
+  }
+
+  if (tab.type === 'worksheet') {
+    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', id: tab.id });
+    ensureDetailVisible();
+    const sessionStore = useGraphSessionStore.getState();
+    if (sessionStore.getFocusedGroupId() === groupId) {
+      sessionStore.clearFocusedSession(groupId);
+    }
+    return true;
+  }
+
+  return true;
+}
+
+/** Restore session + backend load after close without changing detail focus. */
+export async function activateCurrentEditorTab(groupId: string): Promise<boolean> {
+  const node = useLayoutStore.getState().nodes[groupId];
+  const activeTabId = node?.data?.activeTabId;
+  if (!activeTabId) {
+    useGraphSessionStore.getState().clearFocusedSession(groupId);
+    return false;
+  }
+  const activeTab = node?.data?.tabs?.find((tab) => tab.id === activeTabId);
+  if (!activeTab) {
+    useGraphSessionStore.getState().clearFocusedSession(groupId);
+    return false;
+  }
+
+  if (activeTab.type === 'event' || activeTab.type === 'function') {
+    const loaded = await activateGraphTab(activeTab.id, groupId);
+    if (!loaded) return false;
+    syncVariablesGraphScopeFromActiveTab();
+    return true;
+  }
+
+  if (activeTab.type === 'worksheet') {
+    return true;
+  }
+
+  useGraphSessionStore.getState().clearFocusedSession(groupId);
+  return false;
+}
+
+/** Activate an editor group and hydrate its current graph-backed session as one application action. */
+export async function activateEditorGroup(groupId: string): Promise<boolean> {
+  await focusEditorGroup(groupId);
+  return activateCurrentEditorTab(groupId);
+}

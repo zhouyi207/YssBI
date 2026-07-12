@@ -1,7 +1,9 @@
-import { useVariableStore } from '@/features/core/dataStore';
 import { getViewport } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { logger } from '@/utils/appLogger';
+import type { EditorVariables } from '@/features/core/editor';
+import { isVariableAvailable } from './editorResources';
+import type { CreateNodeFn } from './createNodeFn';
 
 export type VariableNodeType = 'Variables:Get Variable' | 'Variables:Set Variable';
 
@@ -14,20 +16,14 @@ export interface VariableDropMenu {
   variableName: string;
 }
 
-export type CreateNodeFn = (
-  nodeType: string,
-  position: { x: number; y: number },
-  params?: Record<string, unknown>,
-) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
-
 export function clientToWorldInCanvas(
   canvasEl: HTMLElement,
-  graphId: string | null,
+  graphPath: string | null,
   clientX: number,
   clientY: number,
 ): { x: number; y: number } {
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
+  const viewport = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,
@@ -46,14 +42,6 @@ export function isPointInsideCanvas(
     && clientY >= rect.top
     && clientY <= rect.bottom
   );
-}
-
-export function isVariableAvailable(
-  variableId: string,
-  variables: Record<string, unknown>,
-): boolean {
-  if (variableId in variables) return true;
-  return variableId in useVariableStore.getState().variables;
 }
 
 export function resolveVariableSpawnType(
@@ -102,7 +90,7 @@ export async function spawnVariableNode(
 export async function spawnVariableFromMenu(
   menu: VariableDropMenu,
   nodeType: VariableNodeType,
-  variables: Record<string, unknown>,
+  variables: EditorVariables,
   createNode: CreateNodeFn,
 ): Promise<void> {
   if (!isVariableAvailable(menu.variableId, variables)) {

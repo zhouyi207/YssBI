@@ -10,25 +10,23 @@ export function queryCanvasElement(groupId: string): HTMLElement | null {
   return document.querySelector(`[data-editor-group-id="${groupId}"]`);
 }
 
-export function buildSelectionHitTargets(
-  canvasEl: HTMLElement,
-  nodeIds: readonly string[],
-): SelectionHitTarget[] {
+/** Live screen bounds for marquee hit-testing (re-read each frame so pan/zoom stay in sync). */
+export function collectSelectionHitTargets(canvasEl: HTMLElement): SelectionHitTarget[] {
   const targets: SelectionHitTarget[] = [];
 
-  for (const nodeId of nodeIds) {
-    const element = canvasEl.querySelector(`[data-node-id="${nodeId}"]`);
-    if (!element) continue;
+  canvasEl.querySelectorAll<HTMLElement>('[data-node-id]').forEach((element) => {
+    const id = element.dataset.nodeId;
+    if (!id) return;
 
     const bounds = element.getBoundingClientRect();
     targets.push({
-      id: nodeId,
+      id,
       left: bounds.left,
       right: bounds.right,
       top: bounds.top,
       bottom: bounds.bottom,
     });
-  }
+  });
 
   return targets;
 }

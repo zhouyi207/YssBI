@@ -3,28 +3,30 @@
  * 仅依赖 layout store
  */
 
+import { useMemo } from 'react';
+import type { LayoutTab } from '@/shared/types';
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
+import { normalizeLayoutTabs } from '@/features/core/layout/layoutTabModel';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
-  const activeGroupIdFromStore = useLayoutStore((s: LayoutState) => s.activeGroupId);
-  const activeEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
-  const groupId = overrideGroupId ?? activeGroupIdFromStore ?? 'default_editor';
-  const editorGroupId = activeEditorGroupId || 'default_editor';
+  /** Globally focused editor group in layout store (nullable before hydrate). */
+  const focusedEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  /** Group identity for this hook consumer (explicit override, else focused, else default). */
+  const groupId = overrideGroupId ?? focusedEditorGroupId ?? DEFAULT_EDITOR_GROUP_ID;
 
   const node = useLayoutStore((s: LayoutState) => s.nodes[groupId]);
-  const editorNode = useLayoutStore((s: LayoutState) => s.nodes[editorGroupId]);
 
-  const isEditor = node?.type === 'component' && !!node.data?.tabs;
-  const functionalNode = isEditor ? node : editorNode ?? node;
-
-  const tabs = functionalNode?.data?.tabs || [];
-  const activeTabId = functionalNode?.data?.activeTabId || null;
-  const selectedNodeIds = functionalNode?.data?.params?.selectedNodeIds || [];
+  const tabs: LayoutTab[] = useMemo(
+    () => normalizeLayoutTabs(node?.data?.tabs ?? []),
+    [node?.data?.tabs],
+  );
+  const activeTabId = node?.data?.activeTabId || null;
+  const selectedNodeIds = node?.data?.params?.selectedNodeIds || [];
 
   return {
     groupId,
-    activeGroupId: activeGroupIdFromStore ?? 'default_editor',
-    activeEditorGroupId: editorGroupId,
+    focusedEditorGroupId,
     activeTabId,
     tabs,
     selectedNodeIds,

@@ -1,7 +1,6 @@
-import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatNum } from './utils';
-import type { Coefficient } from './types';
+import type { Coefficient } from '@/shared/types/report';
 
 export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] }) {
   const maxAbs = Math.max(...coefficients.map((c) => Math.abs(c.coef)), 0.001);

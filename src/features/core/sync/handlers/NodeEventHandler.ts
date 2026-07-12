@@ -4,83 +4,85 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { NodeCreatedPayload, NodesBatchCreatedPayload, NodeDeletedPayload, NodesBatchDeletedPayload, NodePositionsUpdatedPayload, NodePinsUpdatedPayload, PinTypesInferredPayload, RuntimeSourcesInvalidatedPayload, EventCallbacks } from '../types';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 import { useExecutionStore } from '@/features/core/execution';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
+import { shouldSuppressGraphRefreshEcho } from '@/features/application/graphDocument/graphRefreshEchoGuard';
 import { isPending } from '../utils/echoSuppressor';
 import { NODE_POSITION_ECHO_DOMAIN } from '@/features/core/history/commands/moveNodes';
 import type { NodeData, PinData } from '@/shared/types';
 import type { NodeInstanceDTO } from '@/shared/types/dto';
+import { flattenInstanceParams } from '@/shared/types/dto/nodeInstanceParams';
+import { runtimePinRefsToIds } from '@/shared/types/dto/graphModel';
 import { dataTypeFromBackend } from '@/shared/types/dto/dataType';
+import { normalizePinDto, pinInferredPatch } from '@/shared/types/dto/pinHydrate';
 
-function resolveNodeTitle(dto: NodeInstanceDTO): string {
-    const raw = dto.title ?? '';
-    const nodeType = dto.nodeType ?? '';
-    if (raw && raw !== nodeType) return raw;
-    const def = useNodeRegistryStore.getState().getDefinition(nodeType);
-    return def?.name ?? raw ?? nodeType;
+function dtoToNodeData(graphPath: string, nodeId: string, d: NodeInstanceDTO): NodeData {
+    const meta = resolveNodeViewMeta({
+        nodeType: d.nodeType,
+        title: d.title,
+        category: d.category,
+        description: d.description,
+    });
+    const params = flattenInstanceParams(d);
+    return {
+        id: nodeId,
+        graphPath,
+        nodeType: meta.nodeType,
+        category: meta.category,
+        title: meta.title,
+        inputs: runtimePinRefsToIds(d.inputs),
+        outputs: runtimePinRefsToIds(d.outputs),
+        description: meta.description,
+        position: d.position ?? { x: 0, y: 0 },
+        paramsKind: params.paramsKind,
+        variableId: params.variableId,
+        variableName: params.variableName,
+        variableType: params.variableType,
+        subGraphPath: params.subGraphPath,
+        dataframeId: params.dataframeId,
+    };
 }
 
 export class NodeCreatedHandler extends BaseEventHandler<NodeCreatedPayload> {
     eventType = 'NodeCreated';
 
     handle(payload: NodeCreatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Node created:', payload.nodeId, 'in graph:', payload.graphId);
+        this.log('Node created:', payload.nodeId, 'in graph:', payload.graphPath);
 
         // reconcileNode 同时处理两种情形：
         // - 本地已乐观插入（创建命令，id 一致）：用后端权威字段覆盖，无重复节点；
         // - 节点尚不存在（redo / 其它来源）：按普通添加路径插入。
         const store = useGraphDataStore.getState();
         store.reconcileNode(
-            payload.graphId,
-            dtoToNodeData(payload.graphId, payload.nodeId, payload.data),
-            payload.pins as PinData[],
+            payload.graphPath,
+            dtoToNodeData(payload.graphPath, payload.nodeId, payload.data),
+            payload.pins.map((pin) => normalizePinDto(pin as PinData)),
         );
-        markGraphTabDirty(payload.graphId);
-        callbacks?.onNodeCreated?.(payload.graphId, payload.nodeId, payload.data);
+        markGraphTabDirty(payload.graphPath);
+        callbacks?.onNodeCreated?.(payload.graphPath, payload.nodeId, payload.data);
     }
-}
-
-function dtoToNodeData(graphId: string, nodeId: string, d: NodeInstanceDTO): NodeData {
-    return {
-        id: nodeId,
-        graphId,
-        nodeType: d.nodeType,
-        category: d.category ?? [],
-        title: resolveNodeTitle(d),
-        inputs: d.inputs ?? [],
-        outputs: d.outputs ?? [],
-        uiStyle: d.uiStyle ?? 'default',
-        description: d.description,
-        position: d.position ?? { x: 0, y: 0 },
-        paramsKind: d.paramsKind ?? 'none',
-        variableId: d.variableId,
-        variableName: d.variableName,
-        variableType: d.variableType,
-        subGraphId: d.subGraphId,
-        dataframeId: d.dataframeId,
-    };
 }
 
 export class NodesBatchCreatedHandler extends BaseEventHandler<NodesBatchCreatedPayload> {
     eventType = 'NodesBatchCreated';
 
     handle(payload: NodesBatchCreatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Batch nodes created:', payload.nodes.length, 'in graph:', payload.graphId);
+        this.log('Batch nodes created:', payload.nodes.length, 'in graph:', payload.graphPath);
 
         const store = useGraphDataStore.getState();
 
         const items = payload.nodes.map(([nodeId, data, pins]) => ({
-            node: dtoToNodeData(payload.graphId, nodeId, data),
-            pins: pins as PinData[],
+            node: dtoToNodeData(payload.graphPath, nodeId, data),
+            pins: pins.map((pin) => normalizePinDto(pin as PinData)),
         }));
 
-        store.batchAddNodesAndPins(payload.graphId, items);
-        markGraphTabDirty(payload.graphId);
+        store.batchAddNodesAndPins(payload.graphPath, items);
+        markGraphTabDirty(payload.graphPath);
 
         if (callbacks?.onNodeCreated) {
             for (const [nodeId, data] of payload.nodes) {
-                callbacks.onNodeCreated(payload.graphId, nodeId, data);
+                callbacks.onNodeCreated(payload.graphPath, nodeId, data);
             }
         }
     }
@@ -90,13 +92,13 @@ export class NodeDeletedHandler extends BaseEventHandler<NodeDeletedPayload> {
     eventType = 'NodeDeleted';
 
     handle(payload: NodeDeletedPayload, callbacks?: EventCallbacks): void {
-        this.log('Node deleted:', payload.nodeId, 'from graph:', payload.graphId);
+        this.log('Node deleted:', payload.nodeId, 'from graph:', payload.graphPath);
         const store = useGraphDataStore.getState();
-        if (store.getGraphNode(payload.graphId, payload.nodeId)) {
-            store.deleteNode(payload.nodeId, payload.graphId);
+        if (store.getGraphNode(payload.graphPath, payload.nodeId)) {
+            store.deleteNode(payload.nodeId, payload.graphPath);
         }
-        markGraphTabDirty(payload.graphId);
-        callbacks?.onNodeDeleted?.(payload.graphId, payload.nodeId);
+        markGraphTabDirty(payload.graphPath);
+        callbacks?.onNodeDeleted?.(payload.graphPath, payload.nodeId);
     }
 }
 
@@ -104,14 +106,14 @@ export class NodesBatchDeletedHandler extends BaseEventHandler<NodesBatchDeleted
     eventType = 'NodesBatchDeleted';
 
     handle(payload: NodesBatchDeletedPayload, callbacks?: EventCallbacks): void {
-        this.log('Batch nodes deleted:', payload.nodeIds.length, 'from graph:', payload.graphId);
+        this.log('Batch nodes deleted:', payload.nodeIds.length, 'from graph:', payload.graphPath);
         const store = useGraphDataStore.getState();
-        store.batchDeleteNodes(payload.nodeIds, payload.graphId);
-        markGraphTabDirty(payload.graphId);
+        store.batchDeleteNodes(payload.nodeIds, payload.graphPath);
+        markGraphTabDirty(payload.graphPath);
 
         if (callbacks?.onNodeDeleted) {
             for (const nodeId of payload.nodeIds) {
-                callbacks.onNodeDeleted(payload.graphId, nodeId);
+                callbacks.onNodeDeleted(payload.graphPath, nodeId);
             }
         }
     }
@@ -131,15 +133,15 @@ export class NodePositionsUpdatedHandler extends BaseEventHandler<NodePositionsU
             .map(([nodeId, x, y]) => ({ nodeId, x, y }));
 
         if (updates.length === 0) {
-            this.log('Node positions updated (all suppressed as self-echo):', payload.graphId);
+            this.log('Node positions updated (all suppressed as self-echo):', payload.graphPath);
             // Still mark dirty so save UI reflects the change.
-            markGraphTabDirty(payload.graphId);
+            markGraphTabDirty(payload.graphPath);
             return;
         }
 
-        this.log('Node positions updated:', payload.graphId, updates.length, 'nodes');
-        useGraphDataStore.getState().batchUpdateNodePositions(updates, payload.graphId);
-        markGraphTabDirty(payload.graphId);
+        this.log('Node positions updated:', payload.graphPath, updates.length, 'nodes');
+        useGraphDataStore.getState().batchUpdateNodePositions(updates, payload.graphPath);
+        markGraphTabDirty(payload.graphPath);
     }
 }
 
@@ -147,6 +149,11 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
     eventType = 'NodePinsUpdated';
 
     handle(payload: NodePinsUpdatedPayload, _callbacks?: EventCallbacks): void {
+        if (shouldSuppressGraphRefreshEcho(payload.graphPath)) {
+            this.log('Node pins updated (suppressed — invoke refresh authoritative):', payload.graphPath);
+            return;
+        }
+
         this.log(
             'Node pins updated:',
             payload.nodeId,
@@ -162,21 +169,29 @@ export class NodePinsUpdatedHandler extends BaseEventHandler<NodePinsUpdatedPayl
         store.batchUpdatePins({
             disconnectIds: payload.removedConnections.map(([from, to]) => `${from}->${to}`),
             removePinIds: payload.removedPinIds,
-            updatePins: (payload.updatedPins ?? []).map((pin) => ({
-                pinId: pin.id,
-                patch: { name: pin.name },
-            })),
+            updatePins: (payload.updatedPins ?? []).map((pin) => {
+                const normalized = normalizePinDto(pin);
+                return {
+                    pinId: pin.id,
+                    patch: {
+                        name: normalized.name,
+                        type: normalized.type,
+                        direction: normalized.direction,
+                        dataType: normalized.dataType,
+                    },
+                };
+            }),
             addPins: payload.addedPins.map((pin) => ({
                 nodeId: payload.nodeId,
-                pin: pin as PinData,
+                pin: normalizePinDto(pin),
             })),
-            graphId: payload.graphId,
+            graphPath: payload.graphPath,
         });
 
         if (payload.pinOrder) {
-            store.reorderNodePins(payload.nodeId, payload.pinOrder, payload.graphId);
+            store.reorderNodePins(payload.nodeId, payload.pinOrder, payload.graphPath);
         }
-        markGraphTabDirty(payload.graphId);
+        markGraphTabDirty(payload.graphPath);
     }
 }
 
@@ -184,21 +199,16 @@ export class PinTypesInferredHandler extends BaseEventHandler<PinTypesInferredPa
     eventType = 'PinTypesInferred';
 
     handle(payload: PinTypesInferredPayload, _callbacks?: EventCallbacks): void {
-        this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphId);
+        this.log('Pin types inferred:', payload.pinTypes.length, 'pins in graph:', payload.graphPath);
 
         useGraphDataStore.getState().batchUpdatePinFields(
-            payload.pinTypes.map(({ pinId, pinType, containerType, typeDisplay, dataType }) => ({
+            payload.pinTypes.map(({ pinId, dataType }) => ({
                 pinId,
-                patch: {
-                    type: pinType,
-                    containerType: containerType ?? undefined,
-                    typeDisplay: typeDisplay ?? undefined,
-                    dataType: dataType ? dataTypeFromBackend(dataType) : undefined,
-                },
+                patch: pinInferredPatch(dataTypeFromBackend(dataType)),
             })),
-            payload.graphId,
+            payload.graphPath,
         );
-        markGraphTabDirty(payload.graphId);
+        markGraphTabDirty(payload.graphPath);
     }
 }
 
@@ -210,8 +220,8 @@ export class RuntimeSourcesInvalidatedHandler extends BaseEventHandler<RuntimeSo
             'Runtime sources invalidated:',
             payload.pinIds.length,
             'pins in graph:',
-            payload.graphId,
+            payload.graphPath,
         );
-        useExecutionStore.getState().clearPinResults(payload.graphId, payload.pinIds);
+        useExecutionStore.getState().clearPinResults(payload.graphPath, payload.pinIds);
     }
 }

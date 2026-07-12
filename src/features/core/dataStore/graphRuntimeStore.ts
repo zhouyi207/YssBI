@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GraphId, NodeId, PinId } from '@/shared/types';
+import { GraphPath, NodeId, PinId } from '@/shared/types';
 
 interface Camera {
   zoom: number;
@@ -7,7 +7,7 @@ interface Camera {
 }
 
 interface GraphRuntimeStore {
-  activeGraphId: GraphId | null;
+  activeGraphPath: GraphPath | null;
 
   selection: {
     nodes: Set<NodeId>;
@@ -25,7 +25,7 @@ interface GraphRuntimeStore {
   // ==========================
   // Actions
   // ==========================
-  setActiveGraph(id: GraphId | null): void;
+  setActiveGraph(id: GraphPath | null): void;
   selectNode(id: NodeId, append?: boolean): void;
   clearSelection(): void;
 
@@ -37,7 +37,7 @@ interface GraphRuntimeStore {
 }
 
 export const useGraphRuntimeStore = create<GraphRuntimeStore>((set) => ({
-  activeGraphId: null,
+  activeGraphPath: null,
 
   selection: {
     nodes: new Set<NodeId>(),
@@ -55,9 +55,9 @@ export const useGraphRuntimeStore = create<GraphRuntimeStore>((set) => ({
   // ==========================
   // Active Graph
   // ==========================
-  setActiveGraph: (id) => {
+  setActiveGraph: (graphPath) => {
     set({
-      activeGraphId: id,
+      activeGraphPath: graphPath,
       selection: {
         nodes: new Set(),
         pins: new Set(),

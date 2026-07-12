@@ -774,7 +774,7 @@ pub fn fit_panel_re_mle_twoway(
     sigma2_lambda =
         (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
 
-    let mut kept: Vec<usize> = (0..k).collect();
+    let mut kept: Vec<usize>;
     let mut betas: Vec<f64> = vec![0.0; k];
     let mut mle_iter_log_lik: Vec<f64> = Vec::new();
 

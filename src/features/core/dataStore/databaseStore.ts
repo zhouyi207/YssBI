@@ -1,32 +1,24 @@
 import { create } from 'zustand';
 import { DatabaseId } from '@/shared/types/domain/ids';
+import type { DatabaseRecord } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 
-/** 数据库/数据帧记录（支持 DatabaseDecl 及 DataFrame 等扩展字段） */
-export type DatabaseRecord = Record<string, unknown>;
+export type { DatabaseRecord };
 
 interface DatabaseStore {
   databases: Record<DatabaseId, DatabaseRecord>;
 
-  // CRUD
   addDatabase(id: DatabaseId, db: DatabaseRecord): void;
   updateDatabase(id: DatabaseId, patch: Partial<DatabaseRecord>): void;
   deleteDatabase(id: DatabaseId): void;
 
-  // 项目级
   setDatabases(dbs: Record<DatabaseId, DatabaseRecord>): void;
   clear(): void;
 }
 
 export const useDatabaseStore = create<DatabaseStore>((set) => ({
-  // ======================
-  // State
-  // ======================
   databases: {},
 
-  // ======================
-  // CRUD
-  // ======================
   addDatabase: (id, db) =>
     set((state) => {
       if (state.databases[id]) {
@@ -74,9 +66,6 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
       return { databases: next };
     }),
 
-  // ======================
-  // Project-level
-  // ======================
   setDatabases: (dbs) =>
     set({
       databases: dbs ?? {},

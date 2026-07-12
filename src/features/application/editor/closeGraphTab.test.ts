@@ -3,6 +3,7 @@ import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore'
 import { useEditorStore } from '@/features/core/editor';
 import { resolveDetailTarget } from '@/features/core/editor/detail/resolveDetailTarget';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { GraphService } from '@/services/graph/graphService';
 import { closeGraphTab } from './closeGraphTab';
 
@@ -25,19 +26,19 @@ describe('closeGraphTab', () => {
           data: {
             component: 'GraphEditor',
             tabs: [
-              { id: 'g1', title: 'Graph 1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', title: 'Graph 2', component: 'GraphEditor', type: 'event' },
+              { id: 'g1', component: 'GraphEditor', type: 'event' },
+              { id: 'g2', component: 'GraphEditor', type: 'event' },
             ],
             activeTabId: 'g1',
             params: { selectedNodeIds: ['node-from-g1'] },
           },
         },
       },
-      activeGroupId: 'editor',
       activeEditorGroupId: 'editor',
     });
     useGraphDataStore.getState().hydrateGraphs({});
     useEditorStore.getState().clearDetailFocus();
+    useGraphSessionStore.getState().reset();
     vi.spyOn(GraphService, 'unloadProjectGraph').mockResolvedValue();
   });
 
@@ -63,10 +64,19 @@ describe('closeGraphTab', () => {
   });
 
   it('moves detail focus to the remaining active graph when the closed tab was focused', async () => {
-    useEditorStore.getState().setDetailFocus({ kind: 'event', id: 'g1' });
+    useEditorStore.getState().setDetailFocus({ kind: 'event', path: 'g1' });
 
     await closeGraphTab('g1', 'editor', true);
 
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', id: 'g2' });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: 'event', path: 'g2' });
+  });
+
+  it('preserves focused session when closing a background tab', async () => {
+    useGraphSessionStore.getState().setFocusedSession('editor', 'g1');
+    vi.spyOn(useProjectIOStore.getState(), 'loadGraph').mockResolvedValue(true);
+
+    await closeGraphTab('g2', 'editor', true);
+
+    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe('g1');
   });
 });

@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 pub enum ExecRole {
     /// 主执行输入
     ExecIn,
+    /// 多个执行输入（如 Merge 节点）
+    ExecInputs(usize),
     /// 主执行输出
     ExecOut,
     /// 条件分支 - True 路径
@@ -23,7 +25,7 @@ pub enum ExecRole {
     /// 序列步骤（如 Sequence 的多个执行输出）
     Steps(usize),
     /// 分支情况（如 Switch 的多个分支）
-    Cases,
+    Cases(usize),
     /// 自定义语义角色
     Custom(String),
 }
@@ -74,13 +76,14 @@ impl PinRole {
         match self {
             PinRole::Exec(item) => match item {
                 ExecRole::ExecIn => "exec.in",
+                ExecRole::ExecInputs(_) => "exec.inputs",
                 ExecRole::ExecOut => "exec.out",
                 ExecRole::ExecTrue => "exec.true",
                 ExecRole::ExecFalse => "exec.false",
                 ExecRole::ExecLoopBody => "exec.loop.body",
                 ExecRole::ExecLoopComplete => "exec.loop.complete",
                 ExecRole::Steps(_) => "exec.steps",
-                ExecRole::Cases => "exec.cases",
+                ExecRole::Cases(_) => "exec.cases",
                 ExecRole::Custom(name) => name.as_str(),
             },
             PinRole::Data(item) => match item {
@@ -104,6 +107,8 @@ impl PinRole {
                 Some(*i)
             }
             PinRole::Exec(ExecRole::Steps(i)) => Some(*i),
+            PinRole::Exec(ExecRole::ExecInputs(i)) => Some(*i),
+            PinRole::Exec(ExecRole::Cases(i)) => Some(*i),
             _ => None,
         }
     }
@@ -122,6 +127,10 @@ impl PinRole {
             PinRole::Data(DataRole::Inputs(_)) => Some(PinRole::Data(DataRole::Inputs(index))),
             PinRole::Data(DataRole::Outputs(_)) => Some(PinRole::Data(DataRole::Outputs(index))),
             PinRole::Exec(ExecRole::Steps(_)) => Some(PinRole::Exec(ExecRole::Steps(index))),
+            PinRole::Exec(ExecRole::ExecInputs(_)) => {
+                Some(PinRole::Exec(ExecRole::ExecInputs(index)))
+            }
+            PinRole::Exec(ExecRole::Cases(_)) => Some(PinRole::Exec(ExecRole::Cases(index))),
             _ => None,
         }
     }
@@ -135,6 +144,10 @@ impl PinRole {
             (PinRole::Data(DataRole::Inputs(_)), PinRole::Data(DataRole::Inputs(_))) => true,
             (PinRole::Data(DataRole::Outputs(_)), PinRole::Data(DataRole::Outputs(_))) => true,
             (PinRole::Exec(ExecRole::Steps(_)), PinRole::Exec(ExecRole::Steps(_))) => true,
+            (PinRole::Exec(ExecRole::ExecInputs(_)), PinRole::Exec(ExecRole::ExecInputs(_))) => {
+                true
+            }
+            (PinRole::Exec(ExecRole::Cases(_)), PinRole::Exec(ExecRole::Cases(_))) => true,
             // 精确匹配
             (a, b) => a == b,
         }

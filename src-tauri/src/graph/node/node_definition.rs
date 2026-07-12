@@ -76,9 +76,6 @@ pub struct NodeDocumentation {
     pub en: Option<String>,
 }
 
-/// 与 [`NodeDocumentation`] 相同结构，用于节点短描述（Detail fallback / 无 Markdown 时展示）
-pub type LocalizedDescription = NodeDocumentation;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMetaData {
     pub ui_style: String,
@@ -87,12 +84,15 @@ pub struct NodeMetaData {
     pub description: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub localized_description: Option<LocalizedDescription>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub documentation: Option<NodeDocumentation>,
 
     pub supports_dynamic_pins: bool,
+
+    /// 该节点允许出现的图类型。
+    pub graph_scope: super::NodeGraphScope,
+
+    /// 系统托管壳节点角色；`Some` 即为壳节点（不可删 / 不可复制 / 每图至多 1 个 / palette 隐藏）。
+    pub shell_role: Option<super::ShellRole>,
 }
 
 impl Default for NodeMetaData {
@@ -100,10 +100,18 @@ impl Default for NodeMetaData {
         Self {
             ui_style: "default".to_string(),
             description: None,
-            localized_description: None,
             documentation: None,
             supports_dynamic_pins: false,
+            graph_scope: super::NodeGraphScope::default(),
+            shell_role: None,
         }
+    }
+}
+
+impl NodeMetaData {
+    /// 是否为系统托管壳节点。
+    pub fn is_shell(&self) -> bool {
+        self.shell_role.is_some()
     }
 }
 
@@ -241,22 +249,25 @@ impl NodeDefinition {
         self
     }
 
-    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
-        self.metadata.description = Some(desc.into());
+    /// 限定该节点只能出现在指定图类型中。
+    pub fn with_graph_scope(mut self, scope: super::NodeGraphScope) -> Self {
+        self.metadata.graph_scope = scope;
         self
     }
 
-    pub fn with_localized_description(
-        mut self,
-        zh: impl Into<String>,
-        en: impl Into<String>,
-    ) -> Self {
-        let en = en.into();
-        self.metadata.localized_description = Some(LocalizedDescription {
-            zh: Some(zh.into()),
-            en: Some(en.clone()),
-        });
-        self.metadata.description = Some(en);
+    /// 标记为系统托管壳节点（不可删 / 不可复制 / 每图至多 1 个 / palette 隐藏）。
+    pub fn as_shell(mut self, role: super::ShellRole) -> Self {
+        self.metadata.shell_role = Some(role);
+        self
+    }
+
+    /// 是否为系统托管壳节点。
+    pub fn is_shell(&self) -> bool {
+        self.metadata.is_shell()
+    }
+
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.metadata.description = Some(desc.into());
         self
     }
 

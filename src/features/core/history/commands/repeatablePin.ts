@@ -13,8 +13,8 @@ export interface AddRepeatablePinContext {
 }
 
 export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs, AddRepeatablePinContext> = {
-  async execute(graphId, args) {
-    const result = await PinService.addRepeatablePin(graphId, args.nodeId, args.slotIndex);
+  async execute(graphPath, args) {
+    const result = await PinService.addRepeatablePin(graphPath, args.nodeId, args.slotIndex);
     return {
       nodeId: args.nodeId,
       slotIndex: args.slotIndex,
@@ -22,12 +22,12 @@ export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs, AddRe
     };
   },
 
-  async undo(graphId, context) {
-    await PinService.removeRepeatablePin(graphId, context.nodeId, context.pinId);
+  async undo(graphPath, context) {
+    await PinService.removeRepeatablePin(graphPath, context.nodeId, context.pinId);
   },
 
-  async redo(graphId, context) {
-    const result = await PinService.addRepeatablePin(graphId, context.nodeId, context.slotIndex);
+  async redo(graphPath, context) {
+    const result = await PinService.addRepeatablePin(graphPath, context.nodeId, context.slotIndex);
     context.pinId = result.pinId;
   },
 };
@@ -45,8 +45,8 @@ export interface RemoveRepeatablePinContext {
 }
 
 export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs, RemoveRepeatablePinContext> = {
-  async execute(graphId, args) {
-    const result = await PinService.removeRepeatablePin(graphId, args.nodeId, args.pinId);
+  async execute(graphPath, args) {
+    const result = await PinService.removeRepeatablePin(graphPath, args.nodeId, args.pinId);
     return {
       nodeId: args.nodeId,
       pinId: args.pinId,
@@ -55,12 +55,12 @@ export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs,
     };
   },
 
-  async undo(graphId, context) {
-    const result = await PinService.addRepeatablePin(graphId, context.nodeId, context.slotIndex);
+  async undo(graphPath, context) {
+    const result = await PinService.addRepeatablePin(graphPath, context.nodeId, context.slotIndex);
     context.pinId = result.pinId;
   },
 
-  async redo(graphId, context) {
-    await PinService.removeRepeatablePin(graphId, context.nodeId, context.pinId);
+  async redo(graphPath, context) {
+    await PinService.removeRepeatablePin(graphPath, context.nodeId, context.pinId);
   },
 };

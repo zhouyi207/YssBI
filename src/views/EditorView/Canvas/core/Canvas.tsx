@@ -1,12 +1,13 @@
-import { useRef, useMemo, useCallback, useEffect } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
-import { useEditorGroup, useCanvasViewport, useCanvasDrop } from "@/features/application/editor";
+import { useEditorGroup, useCanvasViewport, useCanvasWheelZoom, useCanvasDrop } from "@/features/application/editor";
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
 import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
+import { getConnectGesture, type EditorGesture } from "@/shared/types/ui";
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
 import { useExecutionVisualBinder } from "@/features/core/execution";
@@ -16,15 +17,18 @@ import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
 
-const selectGestureType = (state: { gesture: any }) => state.gesture?.type ?? null;
-const selectActivePin = (state: { gesture: any }) => {
-  const g = state.gesture;
-  return g?.type === "connect" ? g.startPin : null;
-};
+const selectGestureType = (state: { gesture: EditorGesture }) => state.gesture?.type ?? null;
+const selectActivePin = (state: { gesture: EditorGesture }) =>
+  getConnectGesture(state.gesture)?.startPin ?? null;
 
 const EMPTY_NODE_IDS: string[] = [];
 
-export default function Canvas() {
+export type CanvasProps = {
+  /** Interactive editing (active group). Preview mode keeps the graph visible without side effects. */
+  interactive?: boolean;
+};
+
+export default function Canvas({ interactive = true }: CanvasProps) {
   const {
     onCanvasPointerDown,
     onNodePointerDown,
@@ -48,18 +52,22 @@ export default function Canvas() {
     resetPinValue,
     setSelectedNodeIds,
     createNode,
-  } = useEditorGroup();
+  } = useEditorGroup({ withCanvasInteraction: interactive });
 
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
 
-  const ref = useRef<HTMLDivElement>(null);
+  const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => bindDragPreviewToGestureStore(), []);
-  useNodeDragPreview(ref, activeTabId);
-  useSelectionBoxPreview(selectionBoxRef, ref, groupId);
-  useExecutionVisualBinder(ref, activeTabId ?? undefined);
+  useEffect(() => {
+    if (!interactive) return;
+    return bindDragPreviewToGestureStore();
+  }, [interactive]);
+
+  useNodeDragPreview(canvasElementRef, interactive ? activeTabId : null);
+  useSelectionBoxPreview(selectionBoxRef, canvasElementRef, interactive ? groupId : undefined);
+  useExecutionVisualBinder(canvasElementRef, interactive ? activeTabId ?? undefined : undefined);
 
   const selectedNodeIdsSet = useMemo(
     () => new Set(selectedNodeIds),
@@ -67,14 +75,15 @@ export default function Canvas() {
   );
 
   const graphNodeIds = useGraphDataStore(
-    useShallow((s) => (activeTabId ? s.graphNodes[activeTabId] ?? EMPTY_NODE_IDS : EMPTY_NODE_IDS)),
+    useShallow((s) => (activeTabId ? s.getGraphNodeIds(activeTabId) : EMPTY_NODE_IDS)),
   );
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
-    ref,
+    canvasElementRef,
     activeTabId,
-    gestureType,
+    interactive ? gestureType : null,
   );
+  useCanvasWheelZoom(canvasElementRef, interactive ? activeTabId : null);
 
   const {
     variableDropMenu,
@@ -85,26 +94,25 @@ export default function Canvas() {
     handleVariableDropGet,
     handleVariableDropSet,
   } = useCanvasDrop({
-    canvasRef: ref,
+    canvasElementRef,
     groupId,
-    graphId: activeTabId,
+    graphPath: interactive ? activeTabId : null,
     variables,
     functions,
     setContextMenu,
     setPendingConnection,
     createNode,
+    enabled: interactive,
   });
 
   const activePin = useMemo(() => {
+    if (!interactive) return null;
     if (gesturePinData) return gesturePinData;
     if (pendingConnection && contextMenu?.visible) return pendingConnection;
     return null;
-  }, [gesturePinData, pendingConnection, contextMenu]);
+  }, [interactive, gesturePinData, pendingConnection, contextMenu]);
 
   const isDraggingPin = activePin != null;
-
-  const handlePinClick = useCallback(() => {}, []);
-  const handlePinValueChange = useCallback(() => {}, []);
 
   const contextMenuActions = useMemo((): CanvasContextMenuActions => ({
     selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
@@ -134,48 +142,46 @@ export default function Canvas() {
   return (
     <CanvasContextMenuProvider value={contextMenuActions}>
     <div
-      ref={ref}
+      ref={canvasElementRef}
       data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
-      <ViewportGrid graphId={activeTabId ?? ""} />
+      <ViewportGrid graphPath={activeTabId ?? ""} />
 
       <div
         className="absolute inset-0"
         onPointerDown={onCanvasPointerDown}
-        onContextMenu={handleContextMenu}
+        onContextMenu={interactive ? handleContextMenu : undefined}
       >
         <ConnectionLine
-          graphId={activeTabId ?? ""}
+          graphPath={activeTabId ?? ""}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
-          pendingConnection={pendingConnection}
-          menuPos={contextMenu}
+          pendingConnection={interactive ? pendingConnection : null}
+          menuPos={interactive ? contextMenu : null}
         />
 
-        <TransformContainer graphId={activeTabId ?? ""}>
+        <TransformContainer graphPath={activeTabId ?? ""}>
           <EdgesOverlay
-            graphId={activeTabId ?? ""}
+            graphPath={activeTabId ?? ""}
             getPinWorldPos={getPinWorldPos}
             dimmed={isDraggingPin}
           />
           {graphNodeIds.map((nodeId: string) => {
             if (!visibleNodeIds.has(nodeId)) return null;
-            const isSelected = selectedNodeIdsSet.has(nodeId);
+            const isSelected = interactive && selectedNodeIdsSet.has(nodeId);
             return (
               <CanvasNode
                 key={nodeId}
                 id={nodeId}
-                graphId={activeTabId || undefined}
+                graphPath={activeTabId || undefined}
                 groupId={groupId}
                 selected={isSelected}
                 activePin={activePin}
                 onPointerDown={onNodePointerDown}
                 onAddInput={handleNodeAddInput}
                 onRemovePin={handleNodeRemovePin}
-                onPinClick={handlePinClick}
                 onPinPointerDown={onPinPointerDown}
-                onPinValueChange={handlePinValueChange}
               />
             );
           })}
@@ -184,13 +190,15 @@ export default function Canvas() {
 
       <div ref={selectionBoxRef} aria-hidden />
 
-      <CanvasOverlays
-        canvasRef={ref}
-        variableDropMenu={variableDropMenu}
-        setVariableDropMenu={setVariableDropMenu}
-        onVariableDropGet={handleVariableDropGet}
-        onVariableDropSet={handleVariableDropSet}
-      />
+      {interactive ? (
+        <CanvasOverlays
+          canvasElementRef={canvasElementRef}
+          variableDropMenu={variableDropMenu}
+          setVariableDropMenu={setVariableDropMenu}
+          onVariableDropGet={handleVariableDropGet}
+          onVariableDropSet={handleVariableDropSet}
+        />
+      ) : null}
     </div>
     </CanvasContextMenuProvider>
   );

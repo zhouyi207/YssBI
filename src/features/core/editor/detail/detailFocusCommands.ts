@@ -4,10 +4,14 @@ import {
   resolveEditorGroupId,
 } from '@/features/core/layout/layoutTabQueries';
 import { useEditorStore } from '../stores/useEditorStore';
+import { setVariablesGraphScopeFromResource } from './variablesGraphScope';
 import type { DetailFocus } from './types';
 
 export function focusDetail(focus: DetailFocus): void {
   useEditorStore.getState().setDetailFocus(focus);
+  if (focus.kind === 'event' || focus.kind === 'function') {
+    setVariablesGraphScopeFromResource(focus.path);
+  }
 }
 
 export function focusDetailOnActiveGraph(groupId?: string | null): void {
@@ -17,7 +21,7 @@ export function focusDetailOnActiveGraph(groupId?: string | null): void {
 
   const active = getActiveLayoutTab(gid, layout.nodes);
   if (active?.tab.type === 'event' || active?.tab.type === 'function') {
-    focusDetail({ kind: active.tab.type, id: active.activeTabId });
+    focusDetail({ kind: active.tab.type, path: active.activeTabId });
   }
 }
 
@@ -26,10 +30,14 @@ export function focusDetailOnNode(nodeId: string, groupId?: string | null): void
   const gid = resolveEditorGroupId(groupId, layout);
   if (!gid) return;
 
-  const graphId = layout.nodes[gid]?.data?.activeTabId;
-  if (!graphId) return;
+  const graphPath = layout.nodes[gid]?.data?.activeTabId;
+  if (!graphPath) return;
 
-  focusDetail({ kind: 'node', id: nodeId, graphId });
+  focusDetail({ kind: 'node', id: nodeId, graphPath });
+}
+
+export function focusDetailOnNodeDefinition(nodeType: string): void {
+  focusDetail({ kind: 'nodeDefinition', nodeType });
 }
 
 export type CanvasDetailGesture =

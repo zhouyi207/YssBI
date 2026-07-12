@@ -70,7 +70,9 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
     colorTheme: "Dark Modern (Default)",
     language: "zh-CN",
     activityBarPosition: "Left",
+    panelPosition: "Bottom",
     smoothScroll: true,
+    titleBarStyle: "custom",
 };
 
 export const DEFAULT_PROJECT: ProjectSettings = {

@@ -1,4 +1,11 @@
-﻿export * from './useViewportStore';
+export type { EditorViewport } from './editorViewport';
+export {
+  useViewportStore,
+  remapGraphViewport,
+  normalizeEditorViewport,
+  ensureGraphViewport,
+  releaseGraphViewport,
+} from './useViewportStore';
 export {
   getViewport,
   setViewportLive,
@@ -6,11 +13,21 @@ export {
   subscribeToViewport,
   resetLiveViewports,
 } from './viewportSession';
-export { attachViewportWheel, applyWheelToViewport } from './viewportWheel';
 export { persistGraphViewport } from './persistGraphViewport';
+export {
+  loadEditorViewStateMemento,
+  patchEditorViewStateViewport,
+  remapEditorViewStateGraphPath,
+} from './editorViewStateMemento';
+export { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
 export {
   applyViewportTransform,
   applyViewportGrid,
   viewportTransformStyle,
   viewportGridStyle,
 } from './viewportTransform';
+export {
+  applyWheelZoomToViewport,
+  attachCanvasWheelZoom,
+  isCanvasWheelZoomGesture,
+} from './canvasWheelZoom';

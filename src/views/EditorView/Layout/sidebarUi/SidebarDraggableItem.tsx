@@ -1,4 +1,4 @@
-import { DRAG_TYPES } from "@/features/core/dnd";
+import { DRAG_TYPES, type SidebarDragPayload } from "@/features/core/dnd";
 import { useDraggable } from "@dnd-kit/core";
 
 /**
@@ -16,7 +16,7 @@ export function SidebarDraggableItem({
   onContextMenu,
 }: {
   id: string;
-  dragData: { type: string; template?: unknown } | null;
+  dragData: SidebarDragPayload | null;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
@@ -27,7 +27,7 @@ export function SidebarDraggableItem({
   const canDrag = !!dragData;
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: `sidebar-item-${id}`,
-    data: dragData ?? { type: DRAG_TYPES.NODE_TEMPLATE, template: {} },
+    data: dragData ?? { type: DRAG_TYPES.NODE_TEMPLATE, template: { nodeType: "" } },
     disabled: !canDrag,
   });
 

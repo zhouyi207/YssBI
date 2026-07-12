@@ -50,8 +50,23 @@ pub trait NodeExecutionContextTrait {
     /// 用于常数节点等仅输出、无输入的节点，获取输出 pin 的 user_value 或默认值
     fn get_resolved_value_by_role(&self, role: &PinRole) -> Result<DataValue, String>;
 
+    /// 获取当前节点所有 exec 输出 pin 的角色（按节点 pin 顺序）。
+    fn get_exec_output_roles(&self) -> Vec<ExecRole>;
+
     /// 获取当前节点所有 exec step 输出（如 Sequence 的 Then pins），按步骤索引排序
     fn get_exec_step_outputs(&self) -> Vec<ExecRole>;
+
+    /// 获取当前节点所有 Switch case 输出，按索引排序
+    fn get_exec_case_outputs(&self) -> Vec<ExecRole>;
+
+    /// 读取当前节点循环计数（For / While）
+    fn get_loop_counter(&self) -> i64;
+
+    /// 写入当前节点循环计数
+    fn set_loop_counter(&mut self, value: i64);
+
+    /// 重置当前节点循环计数
+    fn reset_loop_counter(&mut self);
 
     // ====================================================================
     // 节点实例参数
@@ -59,6 +74,17 @@ pub trait NodeExecutionContextTrait {
 
     /// 获取当前节点的实例参数（variable_id、dataframe_id 等）
     fn get_instance_params(&self) -> NodeInstanceParams;
+
+    // ====================================================================
+    // 函数调用
+    // ====================================================================
+
+    /// 以当前节点为 Call Function 节点：按目标函数签名把本节点输入映射到函数 Entry，
+    /// 同步运行目标函数图，再把 Return 值写回本节点输出。默认实现报错（仅
+    /// [`NodeExecutionContext`] 支持）。
+    fn call_subgraph(&mut self) -> Result<(), String> {
+        Err("call_subgraph is not supported in this context".to_string())
+    }
 
     // ====================================================================
     // 数据缓存操作（DataFrame / Series / 变量）
@@ -114,14 +140,11 @@ pub trait NodeExecutionContextTrait {
     /// Publish a fully-built source record.
     fn publish_record(&mut self, record: ResultSourceRecord);
 
-    /// Open an already-registered source using its descriptor presentation.
-    fn open_registered_source(&mut self, source_id: String);
-
-    /// 解析 View 输入对应的 source id：优先复用上游 pin source，否则从 DataValue 注册 window source。
+    /// 为 View 输入读取当前 pin 值，发布为独立的不可变 `window_{uuid}` 快照。
+    ///
+    /// 不复用上游 `runtime_pin` source（该 source 会随循环等同 pin 被覆盖）；
+    /// 每次 View 执行各得一份快照，供检视窗口稳定展示该次迭代的值。
     fn ensure_view_source_for_input(&mut self, role: &PinRole) -> Result<String, String>;
-
-    /// 读取输入 pin 上游 output pin 已注册的 source id。
-    fn get_input_source_id_by_role(&self, role: &PinRole) -> Option<String>;
 
     // ====================================================================
     // 日志

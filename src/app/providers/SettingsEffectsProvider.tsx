@@ -1,11 +1,23 @@
 import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
 import { subscribeClientSettingsCrossWindow, useSettingsStore } from "@/features/core/settings/settingsStore";
+import {
+  applySmoothScrollSetting,
+  syncColorThemePreset,
+} from "@/features/application/settings/appearanceRuntime";
+
+import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const theme = useSettingsStore((s) => s.theme);
     const language = useSettingsStore((s) => s.appearance.language);
+    const colorTheme = useSettingsStore((s) => s.appearance.colorTheme);
+    const smoothScroll = useSettingsStore((s) => s.appearance.smoothScroll);
+    const isLoading = useSettingsStore((s) => s.isLoading);
+    const updateTheme = useSettingsStore((s) => s.updateTheme);
     const load = useSettingsStore((s) => s.load);
+
+    useWindowDecorationEffect();
 
     useEffect(() => {
         load();
@@ -28,6 +40,15 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
             void i18n.changeLanguage(language);
         }
     }, [language]);
+
+    useEffect(() => {
+        if (isLoading) return;
+        syncColorThemePreset(colorTheme, updateTheme);
+    }, [colorTheme, updateTheme, isLoading]);
+
+    useEffect(() => {
+        applySmoothScrollSetting(smoothScroll);
+    }, [smoothScroll]);
 
     // 使用 useLayoutEffect 确保 CSS 变量在 DOM 更新前同步应用
     // 这样可以避免 TabBar 等组件渲染时读取到旧的 CSS 变量值

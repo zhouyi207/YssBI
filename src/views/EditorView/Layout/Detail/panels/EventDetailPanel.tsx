@@ -3,7 +3,7 @@ import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm, DetailNameField } from '../shared/DetailForm';
 
 interface EventDetailPanelProps {
-  event: { id: string; name: string };
+  event: { path: string; name: string };
   onUpdate: (patch: Record<string, unknown>) => void;
 }
 

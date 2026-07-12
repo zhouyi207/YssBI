@@ -2,7 +2,6 @@
  * 序列化相关类型（历史遗留；连接事实在 connections / pinConnections）
  */
 
-import type { GraphPosition } from '../domain/graph';
 import type { Variable } from '../domain/variable';
 
 /** 序列化后的 Pin（不含连接状态） */
@@ -12,7 +11,6 @@ export interface SerializedPin {
   type: string;
   defaultValue?: unknown;
   userValue?: unknown;
-  containerType?: string;
 }
 
 /** 序列化后的节点（camelCase 与后端 DTO 一致） */
@@ -25,7 +23,7 @@ export interface SerializedNode {
   variableId?: string;
   variableType?: string;
   variableName?: string;
-  subGraphId?: string;
+  subGraphPath?: string;
   dataframeId?: string;
   inputs: SerializedPin[];
   outputs: SerializedPin[];
@@ -36,7 +34,6 @@ export interface SerializedGraphData {
   id: string;
   name: string;
   type: 'event' | 'function';
-  canvas: GraphPosition;
   variables: Record<string, Variable>;
   connections: { connections: Array<{ fromPin: string; toPin: string }> };
   nodes: SerializedNode[];

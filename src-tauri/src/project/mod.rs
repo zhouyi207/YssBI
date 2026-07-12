@@ -1,6 +1,11 @@
 //! 项目管理模块
 
+pub mod execution_cancel;
+pub mod execution_graph_bundle;
 pub mod graph_events;
+pub mod function_call_site_index;
+pub mod function_signature_table;
+pub mod graph_resource_path;
 pub mod graph_resource_index;
 pub mod path_format;
 pub mod project_data;
@@ -17,12 +22,18 @@ pub mod project_state_graph;
 pub mod project_state_graph_mut;
 pub mod project_state_variable;
 pub mod project_store;
+pub mod project_validation;
 pub mod project_watcher;
 pub mod resource_reveal;
 pub mod unique_name;
 pub mod worksheet_io;
 
+pub use execution_cancel::*;
+pub use execution_graph_bundle::*;
 pub use graph_events::*;
+pub use function_call_site_index::*;
+pub use function_signature_table::*;
+pub use graph_resource_path::*;
 pub use graph_resource_index::*;
 pub use path_format::*;
 pub use project_data::*;
@@ -35,6 +46,7 @@ pub use project_registry::*;
 pub use project_scan::*;
 pub use project_state::*;
 pub use project_store::*;
+pub use project_validation::*;
 pub use project_watcher::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;

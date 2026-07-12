@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { getViewport } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 interface UseEditorKeyboardProps {
@@ -21,6 +23,9 @@ interface UseEditorKeyboardProps {
   setActiveTabId: (id: string | null, targetGroupId?: string) => void;
   splitEditorRight: (groupId: string) => void;
   toggleLogPanel?: () => void;
+  toggleSidebar?: () => void;
+  toggleDetail?: () => void;
+  toggleZenMode?: () => void;
 }
 
 /**
@@ -43,17 +48,22 @@ export function useEditorKeyboard({
   setActiveTabId,
   splitEditorRight,
   toggleLogPanel,
+  toggleSidebar,
+  toggleDetail,
+  toggleZenMode,
 }: UseEditorKeyboardProps) {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const pendingCtrlKRef = useRef(false);
+  const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
     const layoutStore = useLayoutStore.getState();
-    const gid = layoutStore.activeEditorGroupId || layoutStore.activeGroupId || 'default_editor';
+    const gid = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const graphId = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
-    const currentCanvas = graphId ? getViewport(graphId) : DEFAULT_VIEWPORT;
+    const graphPath = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
+    const currentCanvas = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
     return {
       x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
       y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,
@@ -75,8 +85,13 @@ export function useEditorKeyboard({
         return;
       }
 
-      if (e.key === 'Alt') {
+      if (e.key === 'Escape' && isZenModeActive()) {
         e.preventDefault();
+        exitZenMode();
+        return;
+      }
+
+      if (e.key === 'Alt') {
         if (e.repeat) return;
         useLayoutStore.getState().setAltPressed(true);
       }
@@ -128,7 +143,7 @@ export function useEditorKeyboard({
       } else if (isControlKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
         const layoutStore = useLayoutStore.getState();
-        const gid = layoutStore.activeEditorGroupId || layoutStore.activeGroupId;
+        const gid = layoutStore.activeEditorGroupId;
         if (gid) {
           const node = layoutStore.nodes[gid];
           const activeTabId = node?.data?.activeTabId;
@@ -136,7 +151,7 @@ export function useEditorKeyboard({
         }
       } else if (isControlKey && e.key === "Tab") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        const gid = useLayoutStore.getState().activeEditorGroupId;
         if (gid) {
           const node = useLayoutStore.getState().nodes[gid];
           const tabs = node?.data?.tabs || [];
@@ -151,11 +166,33 @@ export function useEditorKeyboard({
         }
       } else if (isControlKey && e.key === "\\") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId || useLayoutStore.getState().activeGroupId;
+        const gid = useLayoutStore.getState().activeEditorGroupId;
         if (gid) splitEditorRight(gid);
+      } else if (isControlKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar?.();
+      } else if (isControlKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        toggleDetail?.();
       } else if (isControlKey && e.key === "`") {
         e.preventDefault();
         toggleLogPanel?.();
+      } else if (isControlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        pendingCtrlKRef.current = true;
+        if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
+        pendingCtrlKTimerRef.current = setTimeout(() => {
+          pendingCtrlKRef.current = false;
+          pendingCtrlKTimerRef.current = null;
+        }, 2000);
+      } else if (pendingCtrlKRef.current && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        pendingCtrlKRef.current = false;
+        if (pendingCtrlKTimerRef.current) {
+          clearTimeout(pendingCtrlKTimerRef.current);
+          pendingCtrlKTimerRef.current = null;
+        }
+        toggleZenMode?.();
       }
     };
 
@@ -181,6 +218,7 @@ export function useEditorKeyboard({
       cleanupKeyUp();
       cleanupPointerMove();
       cleanupBlur();
+      if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
     };
   }, [
     deleteSelected,
@@ -198,5 +236,8 @@ export function useEditorKeyboard({
     setActiveTabId,
     splitEditorRight,
     toggleLogPanel,
+    toggleSidebar,
+    toggleDetail,
+    toggleZenMode,
   ]);
 }

@@ -3,6 +3,7 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { buildNodeDraft } from '@/features/core/dataStore/optimisticNodeDraft';
 import { useNodeRegistryStore } from '@/features/core/nodeRegister/useNodeRegistryStore';
 import { trackPending } from '@/features/core/sync/utils/echoSuppressor';
+import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
 import type { CommandHandler } from '../types';
 
 /** Echo 抑制域：create 期间后端回传的 NodeCreated 事件 key（按 nodeId） */
@@ -12,13 +13,7 @@ export interface CreateNodeArgs {
   nodeType: string;
   x: number;
   y: number;
-  params?: {
-    variableId?: string;
-    variableName?: string;
-    variableType?: string;
-    subGraphId?: string;
-    dataframeId?: string;
-  };
+  params?: NodeSpawnParams;
 }
 
 export interface CreateNodeContext {
@@ -31,14 +26,14 @@ export interface CreateNodeContext {
 }
 
 export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext> = {
-  async execute(graphId, args) {
+  async execute(graphPath, args) {
     const store = useGraphDataStore.getState();
     const definition = useNodeRegistryStore.getState().getDefinition(args.nodeType);
 
     // 无定义（理论上不应发生）：退回非乐观路径，由后端生成 id。
     if (!definition) {
       const result = await NodeService.createNode(
-        graphId,
+        graphPath,
         args.nodeType,
         args.x,
         args.y,
@@ -56,7 +51,7 @@ export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext
 
     // 乐观插入：本地立即渲染，后端用相同 id 创建并通过 NodeCreated 回传对齐。
     const { node, pins } = buildNodeDraft(
-      graphId,
+      graphPath,
       args.nodeType,
       definition,
       args.x,
@@ -66,14 +61,14 @@ export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext
     const nodeId = node.id;
     const pinIds = pins.map((p) => p.id);
 
-    store.applyNodeDraft(graphId, node, pins);
+    store.applyNodeDraft(graphPath, node, pins);
 
     try {
       await trackPending(
         NODE_CREATE_ECHO_DOMAIN,
         [nodeId],
         NodeService.createNodeWithId(
-          graphId,
+          graphPath,
           nodeId,
           pinIds,
           args.nodeType,
@@ -83,7 +78,7 @@ export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext
         ),
       );
     } catch (error) {
-      store.revertNodeDraft(nodeId, graphId);
+      store.revertNodeDraft(nodeId, graphPath);
       throw error;
     }
 
@@ -97,13 +92,13 @@ export const createNodeCommand: CommandHandler<CreateNodeArgs, CreateNodeContext
     };
   },
 
-  async undo(graphId, context) {
-    await NodeService.deleteNode(graphId, context.nodeId);
+  async undo(graphPath, context) {
+    await NodeService.deleteNode(graphPath, context.nodeId);
   },
 
-  async redo(graphId, context) {
+  async redo(graphPath, context) {
     await NodeService.createNodeWithId(
-      graphId,
+      graphPath,
       context.nodeId,
       context.pinIds,
       context.nodeType,

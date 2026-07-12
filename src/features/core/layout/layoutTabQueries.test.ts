@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { LayoutTree } from '@/shared/types';
 import {
   getActiveLayoutTab,
-  getActiveLayoutTabAmongGroups,
   getLayoutTabById,
   locateLayoutTab,
   resolveEditorGroupId,
+  resolveEditorTargetGroupId,
 } from './layoutTabQueries';
 
 const mockNodes: LayoutTree = {
@@ -16,8 +16,8 @@ const mockNodes: LayoutTree = {
     data: {
       component: 'GraphEditor',
       tabs: [
-        { id: 'g1', title: 'Graph 1', component: 'GraphEditor', type: 'event' },
-        { id: 'g2', title: 'Graph 2', component: 'GraphEditor', type: 'function' },
+        { id: 'g1', component: 'GraphEditor', type: 'event' },
+        { id: 'g2', component: 'GraphEditor', type: 'function' },
       ],
       activeTabId: 'g1',
     },
@@ -28,7 +28,7 @@ const mockNodes: LayoutTree = {
     parentId: 'root',
     data: {
       component: 'GraphEditor',
-      tabs: [{ id: 'g3', title: 'Graph 3', component: 'GraphEditor', type: 'event' }],
+      tabs: [{ id: 'g3', component: 'GraphEditor', type: 'event' }],
       activeTabId: 'g3',
     },
   },
@@ -37,7 +37,7 @@ const mockNodes: LayoutTree = {
     type: 'component',
     parentId: 'root',
     data: {
-      component: 'LogPanel',
+      component: 'PanelPart',
       tabs: [],
       activeTabId: undefined,
     },
@@ -89,19 +89,30 @@ describe('layoutTabQueries', () => {
     expect(getActiveLayoutTab('editor', broken)).toBeNull();
   });
 
-  it('picks the first valid active tab among groups in order', () => {
-    const tab = getActiveLayoutTabAmongGroups(['panel', 'editorB', 'editorA'], mockNodes);
-    expect(tab?.id).toBe('g3');
-    expect(getActiveLayoutTabAmongGroups(['editorA', 'editorB'], mockNodes)?.id).toBe('g1');
-  });
-
   it('resolves editor group id with fallbacks', () => {
-    expect(resolveEditorGroupId(undefined, { activeEditorGroupId: 'editorA', activeGroupId: 'editorB' })).toBe(
+    expect(resolveEditorGroupId(undefined, { activeEditorGroupId: 'editorA' })).toBe(
       'editorA',
     );
-    expect(resolveEditorGroupId(null, { activeEditorGroupId: null, activeGroupId: 'editorB' })).toBe('editorB');
-    expect(resolveEditorGroupId('explicit', { activeEditorGroupId: 'editorA', activeGroupId: 'editorB' })).toBe(
+    expect(resolveEditorGroupId(null, { activeEditorGroupId: null })).toBe(null);
+    expect(resolveEditorGroupId('explicit', { activeEditorGroupId: 'editorA' })).toBe(
       'explicit',
     );
+  });
+
+  it('resolveEditorTargetGroupId skips fixed chrome nodes', () => {
+    const tree: LayoutTree = {
+      ...mockNodes,
+      sidebar: {
+        id: 'sidebar',
+        type: 'component',
+        parentId: 'root',
+        data: { component: 'Sidebar', isFixed: true, tabs: [], activeTabId: undefined },
+      },
+    };
+    expect(
+      resolveEditorTargetGroupId(undefined, tree, {
+        activeEditorGroupId: null,
+      }),
+    ).toBe('editorA');
   });
 });

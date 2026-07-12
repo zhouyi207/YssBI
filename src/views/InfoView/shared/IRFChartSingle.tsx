@@ -1,9 +1,16 @@
 /**
  * 单张脉冲响应图（一个 impulse→response 的 IRF 折线图）
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, line } from 'd3';
 import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  attachOverlayCursorTooltip,
+  type D3Onable,
+  PlotTooltipController,
+  tooltipRichBlock,
+} from '@/shared/plot/d3Tooltip';
+import { formatNum } from './utils';
 
 export interface IRFChartSingleProps {
   /** 序列：step -> value */
@@ -36,11 +43,6 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
     ro.observe(container);
     setSize({ width: container.clientWidth, height: container.clientHeight });
     return () => ro.disconnect();
-  }, []);
-
-  const hideTooltip = useCallback(() => {
-    const tip = tooltipRef.current;
-    if (tip) tip.style.opacity = '0';
   }, []);
 
   useEffect(() => {
@@ -143,39 +145,34 @@ const IRFChartSingle: React.FC<IRFChartSingleProps> = ({ series, lower, upper, t
         sel.selectAll('.tick text').attr('fill', chartTheme.label).attr('font-size', '9px');
       });
 
-    const tipEl = tooltipRef.current;
-    g.append('rect')
+    const tip = new PlotTooltipController(tooltipRef.current, containerRef.current);
+    const overlay = g
+      .append('rect')
       .attr('width', w)
       .attr('height', h)
       .attr('fill', 'transparent')
-      .style('cursor', 'pointer')
-      .on('mousemove', function (event) {
-        if (!tipEl) return;
+      .style('cursor', 'pointer');
+
+    attachOverlayCursorTooltip(overlay as D3Onable<SVGRectElement, unknown>, {
+      tooltip: tip,
+      centered: true,
+      onMove: (event) => {
         const rect = (event.currentTarget as SVGRectElement).getBoundingClientRect();
         const mx = event.clientX - rect.left;
         const stepIdx = Math.round((mx / w) * (nSteps - 1));
         const step = Math.max(0, Math.min(stepIdx, nSteps - 1));
         const val = series[step]?.value ?? 0;
-        const loStr = lower?.[step] != null ? `<br/>95% CI: [${(lower[step] ?? 0).toFixed(4)}, ${(upper?.[step] ?? 0).toFixed(4)}]` : '';
-        tipEl.style.opacity = '1';
-        tipEl.innerHTML =
-          `<div style="font-size:11px;line-height:1.6">` +
-          `<b>${title}</b><br/>` +
-          `step: ${step}<br/>` +
-          `value: ${val.toFixed(6)}` +
-          loStr +
-          `</div>`;
-        const containerRect = containerRef.current!.getBoundingClientRect();
-        const tipW = tipEl.offsetWidth;
-        let left = event.clientX - containerRect.left - tipW / 2;
-        left = Math.max(4, Math.min(left, containerRect.width - tipW - 4));
-        const above = event.clientY - containerRect.top - tipEl.offsetHeight - 8;
-        const below = event.clientY - containerRect.top + 8;
-        tipEl.style.left = `${left}px`;
-        tipEl.style.top = above > 0 ? `${above}px` : `${below}px`;
-      })
-      .on('mouseleave', hideTooltip);
-  }, [series, lower, upper, title, size, hideTooltip, chartTheme, plotColor]);
+        const loStr =
+          lower?.[step] != null
+            ? `<br/>95% CI: [${formatNum(lower[step])}, ${formatNum(upper?.[step])}]`
+            : '';
+        return tooltipRichBlock(
+          `<b>${title}</b><br/>step: ${step}<br/>value: ${formatNum(val, 6)}${loStr}`,
+          chartTheme,
+        );
+      },
+    });
+  }, [series, lower, upper, title, size, chartTheme, plotColor]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full min-h-0 rounded-lg border border-border overflow-hidden" style={{ backgroundColor: chartTheme.canvas }}>

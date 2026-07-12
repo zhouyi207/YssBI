@@ -1,17 +1,16 @@
 use super::ProjectState;
 use super::unique_name;
 use crate::event::InferredPinType;
-use crate::graph::GraphId;
 use crate::graph::pin::PinKind;
 use crate::graph::value::{DataType, DataValue};
-use crate::schema::{data_type_to_container, data_type_to_pin_type};
+use crate::project::GraphResourcePath;
 use crate::tabular::{normalize_variable_tabular, remove_variable_cache, sync_variable_cache};
 use crate::variable::VariableId;
 use crate::variable::{VariableInstance, VariableScope};
 
 #[derive(Debug, Clone)]
 pub struct VariableReferenceSync {
-    pub graph_id: GraphId,
+    pub graph_path: GraphResourcePath,
     pub pin_types: Vec<InferredPinType>,
 }
 
@@ -156,7 +155,7 @@ impl ProjectState {
         let project_data = self.project_data.read().unwrap();
         let mut syncs = Vec::new();
 
-        for (graph_id, graph) in project_data.graphs.iter() {
+        for (graph_path, graph) in project_data.graphs.iter() {
             let data_state = graph.data_state.read().unwrap();
             let mut inferred_pins = Vec::new();
 
@@ -170,11 +169,7 @@ impl ProjectState {
                             if pin.definition.kind == PinKind::Data {
                                 inferred_pins.push(InferredPinType {
                                     pin_id,
-                                    pin_type: data_type_to_pin_type(new_data_type).to_string(),
-                                    container_type: data_type_to_container(new_data_type)
-                                        .map(|s| s.to_string()),
-                                    type_display: Some(new_data_type.to_string()),
-                                    data_type: Some(new_data_type.clone()),
+                                    data_type: new_data_type.clone(),
                                 });
                             }
                         }
@@ -223,7 +218,7 @@ impl ProjectState {
 
             if !inferred_pins.is_empty() {
                 syncs.push(VariableReferenceSync {
-                    graph_id: *graph_id,
+                    graph_path: graph_path.clone(),
                     pin_types: inferred_pins,
                 });
             }
@@ -330,14 +325,7 @@ mod tests {
         let variable = add_int_variable(&state);
 
         let updated = state
-            .update_variable(
-                &variable.id,
-                None,
-                Some(DataType::Object),
-                None,
-                None,
-                None,
-            )
+            .update_variable(&variable.id, None, Some(DataType::Object), None, None, None)
             .expect("updated variable");
 
         let DataValue::Object(map) = updated.data_value else {

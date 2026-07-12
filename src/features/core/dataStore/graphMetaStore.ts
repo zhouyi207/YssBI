@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { GraphId, NodeId, type FunctionSignaturePin } from '@/shared/types';
+import { GraphPath, NodeId, type FunctionSignaturePin } from '@/shared/types';
 import { logger } from '@/utils/appLogger';
 
+/** 函数签名投影（名称见 ResourceStore，图体见 GraphDataStore）。 */
 export interface GraphMeta {
-  id: GraphId;
+  path: GraphPath;
   name: string;
   type: 'event' | 'function';
   entryNodeId?: NodeId;
@@ -12,30 +13,27 @@ export interface GraphMeta {
 }
 
 interface GraphMetaStore {
-  graphs: Record<GraphId, GraphMeta>;
-  graphOrder: GraphId[];
+  graphs: Record<GraphPath, GraphMeta>;
 
   addGraph(meta: GraphMeta): void;
-  updateGraph(id: GraphId, patch: Partial<GraphMeta>): void;
-  deleteGraph(id: GraphId): void;
+  updateGraph(id: GraphPath, patch: Partial<GraphMeta>): void;
+  deleteGraph(id: GraphPath): void;
 
-  setGraphs(graphs: Record<GraphId, GraphMeta>, order?: GraphId[]): void;
+  setGraphs(graphs: Record<GraphPath, GraphMeta>): void;
   clear(): void;
 }
 
 export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
   graphs: {},
-  graphOrder: [],
 
   addGraph: (meta) => set((state) => {
-    if (state.graphs[meta.id]) {
-      logger.data.warn(`addGraph: Graph "${meta.id}" already exists`, 'GraphMetaStore');
+    if (state.graphs[meta.path]) {
+      logger.data.warn(`addGraph: Graph "${meta.path}" already exists`, 'GraphMetaStore');
       return state;
     }
 
     return {
-      graphs: { ...state.graphs, [meta.id]: meta },
-      graphOrder: [...state.graphOrder, meta.id],
+      graphs: { ...state.graphs, [meta.path]: meta },
     };
   }),
 
@@ -62,17 +60,14 @@ export const useGraphMetaStore = create<GraphMetaStore>((set) => ({
 
     return {
       graphs: nextGraphs,
-      graphOrder: state.graphOrder.filter(gid => gid !== id),
     };
   }),
 
-  setGraphs: (graphs, order) => set({
+  setGraphs: (graphs) => set({
     graphs: graphs ?? {},
-    graphOrder: order ?? Object.keys(graphs ?? {}),
   }),
 
   clear: () => set({
     graphs: {},
-    graphOrder: [],
   }),
 }));

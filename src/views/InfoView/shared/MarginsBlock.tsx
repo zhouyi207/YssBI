@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
@@ -9,9 +9,9 @@ import {
   infoStatsHeadClass,
 } from './InfoStatsTable';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { buildParamNames } from './utils';
+import { buildParamNames } from '@/shared/stats/regressionReportUtils';
 import { parseAtValues } from '@/features/application/stats/statsActions';
-import type { OLSResultData } from './types';
+import type { OLSResultData } from '@/shared/types/report';
 
 /** Standard normal PDF φ(x) */
 function phi(x: number): number {
@@ -66,7 +66,6 @@ function computeMargins(
   paramNames: string[],
   atOverrides: Record<string, number>
 ): { variable: string; margin: number }[] {
-  const k = betas.length;
   const isLogit = modelType === 'Logit';
 
   const getScale = (eta: number, p: number): number => {

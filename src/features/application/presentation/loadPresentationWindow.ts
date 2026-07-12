@@ -5,7 +5,7 @@ import type {
   SourceDescriptor,
   SourceValue,
 } from '@/features/core/resultSource';
-import { parsePlotChartFromLocation } from './parseSourceIdFromLocation';
+import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
 
 export type PresentationWindowState =
   | { status: 'loading' }
@@ -44,7 +44,13 @@ function resolvePlotChart(descriptor: SourceDescriptor): PlotChart {
   return 'scatter';
 }
 
-export async function loadPresentationWindow(sourceId: string): Promise<PresentationWindowState> {
+export async function loadPresentationWindow(
+  sourceId: string,
+): Promise<PresentationWindowState> {
+  if (!sourceId.trim()) {
+    return { status: 'missing_source_id' };
+  }
+
   try {
     const descriptor = await SourceService.getDescriptor(sourceId);
     if (!descriptor) {

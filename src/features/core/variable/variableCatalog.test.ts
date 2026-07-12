@@ -23,9 +23,9 @@ describe('variableCatalog', () => {
         dataType: { kind: 'Float64' },
         dataValue: { kind: 'Float64', value: 1.5 },
         description: '',
-        scope: { type: 'event', eventId: 'graph-a' },
+        scope: { type: 'event', eventPath: 'graph-a' },
         tags: [],
-        ownerGraphId: 'graph-a',
+        ownerGraphPath: 'graph-a',
       },
     ]);
 
@@ -49,7 +49,7 @@ describe('variableCatalog', () => {
         dataType: { kind: 'Boolean' },
         dataValue: { kind: 'Boolean', value: false },
         description: '',
-        scope: { type: 'function', functionId: 'fn-1' },
+        scope: { type: 'function', functionPath: 'fn-1' },
         tags: [],
       },
     });
@@ -59,7 +59,7 @@ describe('variableCatalog', () => {
       id: 'v1',
       kind: 'variable',
       name: 'Alpha',
-      scope: { type: 'function', graphId: 'fn-1' },
+      scope: { type: 'function' , graphPath: 'fn-1' },
     });
   });
 });

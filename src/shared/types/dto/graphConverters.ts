@@ -8,7 +8,6 @@ import type {
 } from './graph';
 import type { ConnectionData } from '../store/graph';
 import type { ProjectData } from '../domain';
-import type { ProjectDataDTO } from './api';
 
 /** 将 ConnectionItemDTO 转为 Store 的 ConnectionData */
 export function connectionItemToConnectionData(
@@ -24,6 +23,11 @@ export function connectionDataToItem(conn: ConnectionData): ConnectionItemDTO {
   return { fromPin: conn.from, toPin: conn.to };
 }
 
+/** 将 ConnectionData 列表转为 ConnectionItemDTO */
+export function connectionDataToItems(conns: ConnectionData[]): ConnectionItemDTO[] {
+  return conns.map(connectionDataToItem);
+}
+
 /** 验证 Graph DTO */
 export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
   valid: boolean;
@@ -31,7 +35,7 @@ export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
 } {
   const errors: string[] = [];
 
-  if (!graphDTO.id) errors.push('Missing graph id');
+  if (!graphDTO.path) errors.push('Missing graph path');
   if (!graphDTO.name) errors.push('Missing graph name');
   if (!graphDTO.type) errors.push('Missing graph type');
   if (!Array.isArray(graphDTO.nodes)) errors.push('Invalid nodes array');

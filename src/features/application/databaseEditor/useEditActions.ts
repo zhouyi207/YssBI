@@ -6,6 +6,7 @@ import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
 import { EMPTY_EDIT_STATE } from '@/features/core/dataStore/editStateStore';
 import { uiStore } from '@/features/core/ui/UIStore';
+import type { DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 
 export interface ColumnMeta { name: string; type: string; }
@@ -13,7 +14,7 @@ export interface ColumnMeta { name: string; type: string; }
 interface UseEditActionsParams {
   selectedDfId: string | null;
   columns: ColumnMeta[];
-  loadedRows: any[][];
+  loadedRows: DatabaseRow[];
   loadedRowIds: number[];
   rowOffset: number;
   reloadAllData: () => Promise<void>;

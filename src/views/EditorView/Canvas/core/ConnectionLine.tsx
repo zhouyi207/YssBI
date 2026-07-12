@@ -4,23 +4,26 @@ import { subscribeToViewport, getViewport } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
+import { bindSashAwareResizeObserver } from '@/shared/utils/sashResizeGuard';
 
 import { Pin } from "@/shared/types/domain";
+import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
+import { getConnectGesture } from "@/shared/types/ui";
 
 export const ConnectionLine = ({
-    graphId,
+    graphPath,
     getPinWorldPos,
     getCanvasLocalPoint,
     pendingConnection,
     menuPos,
 }: {
-    graphId: string;
+    graphPath: string;
     getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
     getCanvasLocalPoint: (x: number, y: number) => { x: number; y: number };
     pendingConnection?: Pin | null;
     menuPos?: { x: number; y: number } | null;
 }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const lineCanvasRef = useRef<HTMLCanvasElement>(null);
     const { theme } = useTheme();
 
     // 用 ref 存储高频变化的值，避免 effect 因依赖变化而反复重建订阅
@@ -43,12 +46,11 @@ export const ConnectionLine = ({
 
     useEffect(() => {
         const render = () => {
-            const { gesture } = useGestureStore.getState();
-            const isConnecting = gesture?.type === "connect";
-            const gestureStartPin = isConnecting ? (gesture as any).startPin : null;
+            const connectGesture = getConnectGesture(useGestureStore.getState().gesture);
+            const gestureStartPin = connectGesture?.startPin ?? null;
             const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
-            const canvasEl = canvasRef.current;
+            const canvasEl = lineCanvasRef.current;
             if (!canvasEl) return;
             const ctx = canvasEl.getContext("2d");
             if (!ctx) return;
@@ -60,22 +62,25 @@ export const ConnectionLine = ({
             let activeStart = null;
             let endWorld: { x: number, y: number } | null = null;
 
-            if (isConnecting && gestureStartPin) {
+            if (connectGesture && gestureStartPin) {
                 activeStart = gestureStartPin;
                 // 优先使用世界坐标（多 editor 同步正确），回退到屏幕坐标转换
-                if ((gesture as any).worldX != null && (gesture as any).worldY != null) {
-                    endWorld = { x: (gesture as any).worldX, y: (gesture as any).worldY };
+                if (connectGesture.worldX != null && connectGesture.worldY != null) {
+                    endWorld = { x: connectGesture.worldX, y: connectGesture.worldY };
                 } else {
-                    endWorld = getCanvasLocalPointRef.current((gesture as any).currentX, (gesture as any).currentY);
+                    endWorld = getCanvasLocalPointRef.current(
+                        connectGesture.currentX,
+                        connectGesture.currentY,
+                    );
                 }
-            } else if (hasPendingConnection) {
+            } else if (hasPendingConnection && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;
                 endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
             }
 
             if (!activeStart || !endWorld) return;
 
-            const viewport = getViewport(graphId);
+            const viewport = getViewport(graphPath);
             const currentTheme = themeRef.current;
 
             ctx.save();
@@ -84,11 +89,12 @@ export const ConnectionLine = ({
 
             const start = getPinWorldPosRef.current(activeStart.id);
             if (start) {
+                const colorKey = resolvePinVisualSpec(activeStart).colorKey;
                 drawEdge(
                     ctx,
                     start.x, start.y,
                     endWorld.x, endWorld.y,
-                    activeStart.ui?.color ?? getPinTypeColor(activeStart.type ?? "any", currentTheme),
+                    activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
                     2 / viewport.scale,
                     activeStart.direction === "input"
                 );
@@ -104,20 +110,20 @@ export const ConnectionLine = ({
             previousGesture = state.gesture;
             render();
         });
-        const unsubViewport = graphId ? subscribeToViewport(graphId, render) : () => {};
+        const unsubViewport = graphPath ? subscribeToViewport(graphPath, render) : () => {};
         render();
 
         return () => { unsubGesture(); unsubViewport(); };
-    }, [graphId]);
+    }, [graphPath]);
 
     // Handle canvas resizing
     useEffect(() => {
-        const canvasEl = canvasRef.current;
+        const canvasEl = lineCanvasRef.current;
         if (!canvasEl) return;
         const parent = canvasEl.parentElement;
         if (!parent) return;
 
-        const resizeObserver = new ResizeObserver(() => {
+        const resizeObserverCleanup = bindSashAwareResizeObserver(parent, () => {
             const rect = parent.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
             canvasEl.width = rect.width * dpr;
@@ -128,10 +134,9 @@ export const ConnectionLine = ({
             if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             renderRef.current();
         });
-        resizeObserver.observe(parent);
 
-        return () => resizeObserver.disconnect();
+        return resizeObserverCleanup;
     }, []);
 
-    return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-50" />;
+    return <canvas ref={lineCanvasRef} className="absolute inset-0 pointer-events-none z-50" />;
 };

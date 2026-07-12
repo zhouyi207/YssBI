@@ -1,15 +1,15 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { usePinInput } from "@/features/core/pin";
 import { Select } from "@/shared/ui";
-import type { PinMetaDataDTO } from "@/shared/types/domain";
+import type { DataType, PinMetaDataDTO } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
 export interface PinInputProps {
   pinId: string;
   nodeId: string;
-  subgraphId: string;
-  pinType: string;
+  graphPath: string;
+  dataType?: DataType;
   metaData?: PinMetaDataDTO;
   value?: unknown;
   onValueChange?: (value: unknown) => void;
@@ -67,8 +67,8 @@ function useAutoWidth(text: string, placeholder?: string) {
 export const PinInput: React.FC<PinInputProps> = ({
   pinId,
   nodeId,
-  subgraphId,
-  pinType,
+  graphPath,
+  dataType,
   metaData,
   value: initialValue,
   onValueChange,
@@ -82,16 +82,17 @@ export const PinInput: React.FC<PinInputProps> = ({
     handleKeyDown,
     cancelBlurCommit,
     savePinValue,
+    inputKey,
   } = usePinInput({
     pinId,
     nodeId,
-    subgraphId,
-    pinType,
+    graphPath,
+    dataType,
     initialValue,
     onValueChange,
   });
 
-  const isNumeric = pinType === "Int64" || pinType === "Float64";
+  const isNumeric = inputKey === "Int64" || inputKey === "Float64";
 
   const [inputText, setInputText] = useState(() =>
     isNumeric ? String(value ?? 0) : ""
@@ -105,15 +106,15 @@ export const PinInput: React.FC<PinInputProps> = ({
 
   const stop = useCallback((e: React.SyntheticEvent) => e.stopPropagation(), []);
 
-  const strText = pinType === "string" ? (value != null ? String(value) : "") : "";
+  const strText = inputKey === "string" ? (value != null ? String(value) : "") : "";
   const measureKey = isNumeric ? inputText : strText;
-  const placeholder = pinType === "string" ? "text" : undefined;
+  const placeholder = inputKey === "string" ? "text" : undefined;
   const { ref, width } = useAutoWidth(measureKey, placeholder);
 
   const isDropdown = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
 
   if (isDropdown && metaData?.widgetOptions) {
-    const strValue = pinType === "string" ? (value != null ? String(value) : metaData.widgetOptions[0] ?? "") : String(value ?? "");
+    const strValue = inputKey === "string" ? (value != null ? String(value) : metaData.widgetOptions[0] ?? "") : String(value ?? "");
     return (
       <div className="min-w-[60px] max-w-[120px]" onClick={stop} onPointerDown={stop}>
         <Select
@@ -129,7 +130,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     );
   }
 
-  switch (pinType) {
+  switch (inputKey) {
     case "Int64":
       return (
         <Input

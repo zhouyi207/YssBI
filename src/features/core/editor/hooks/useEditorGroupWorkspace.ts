@@ -10,11 +10,10 @@ export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   return useMemo(
     () => ({
       groupId: active.groupId,
-      activeGroupId: active.activeGroupId,
       tabs: active.tabs,
       activeTabId: active.activeTabId,
       selectedNodeIds: active.selectedNodeIds,
     }),
-    [active]
+    [active],
   );
 }

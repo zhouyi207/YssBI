@@ -4,6 +4,8 @@ import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import { isExecPin, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
+import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
@@ -14,13 +16,13 @@ import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import {
   buildPinViewParams,
+  evaluatePinViewState,
   pinViewDisabledTitle,
-  resolvePinViewDisabledReason,
-  resolvePinViewTargetFromCache,
-  shouldShowPinViewMenuItem,
+  pinResultsForSourceGraph,
+  executionStatusForSourceGraph,
   useExecutionStore,
 } from "@/features/core/execution";
-import { openPinView } from "@/features/application/execution/pinViewActions";
+import { openPinInspectableView } from "@/features/application/execution/openInspectableSource";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -31,8 +33,6 @@ function toDisplayValue(v: unknown): unknown {
   return v;
 }
 
-const PRIMITIVE_PIN_TYPES = new Set(["bool", "Int64", "Float64", "string"]);
-
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 
 export interface PinProps extends PinModel {
@@ -41,7 +41,7 @@ export interface PinProps extends PinModel {
   connectionIds?: string[];
   /** 来自 schema 的 pin metaData（如 dropdown 的 widgetOptions） */
   metaData?: PinMetaDataDTO;
-  subgraphId?: string;
+  graphPath?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
@@ -50,25 +50,6 @@ export interface PinProps extends PinModel {
   onRemovePin?: (pinId: string) => void;
   forceShowInput?: boolean;
 }
-
-const getPinTheme = (type: string, isConnected: boolean, baseColor: string, containerType?: string) => {
-  const isExec = type === "exec";
-  const isDataFrame = type === "dataframe";
-  const isStruct = type === "struct";
-  return {
-    isExec,
-    isDataFrame,
-    isStruct,
-    containerType,
-    fill: isConnected
-      ? baseColor
-      : isExec
-        ? "rgba(0,0,0,0.1)"
-        : "rgba(0,0,0,0.05)",
-    stroke: isExec && !isConnected ? "#666" : baseColor,
-    strokeWidth: isExec ? 1.5 : 2,
-  };
-};
 
 export const Pin: React.FC<PinProps> = (props) => {
   const {
@@ -81,13 +62,12 @@ export const Pin: React.FC<PinProps> = (props) => {
     linkCount = 0,
     ui,
     metaData,
-    subgraphId,
+    graphPath,
     onPinClick,
     onPinPointerDown,
     isActive,
     pinDragState = "normal",
-    containerType,
-    typeDisplay,
+    dataType,
     optional,
     defaultValue,
     userValue,
@@ -99,53 +79,65 @@ export const Pin: React.FC<PinProps> = (props) => {
   const { t } = useTranslation();
   const { theme: appTheme } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
-  const baseColor = ui?.color ?? getPinTypeColor(type ?? "any", appTheme);
+  const pinSemantics = useMemo(
+    () => ({ type: type ?? 'object', dataType }),
+    [type, dataType],
+  );
+  const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
+  const baseColor = ui?.color ?? getPinTypeColor(visualSpec.colorKey, appTheme);
 
-  const theme = useMemo(
-    () => getPinTheme(type, isConnected, baseColor, containerType),
-    [type, isConnected, baseColor, containerType]
+  const renderStyle = useMemo(
+    () => resolvePinRenderStyle(visualSpec, isConnected, baseColor),
+    [visualSpec, isConnected, baseColor],
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuActions = useCanvasContextMenuActionsOptional();
-  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, subgraphId);
+  const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, graphPath);
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
 
   const connectionIds = useGraphDataStore((s) =>
-    subgraphId ? s.getGraphPinConnections(subgraphId, id) : s.pinConnections[id],
+    graphPath ? s.getGraphPinConnections(graphPath, id) : [],
   );
-  const pinResults = useExecutionStore((s) =>
-    subgraphId ? s.graphs[subgraphId]?.pinResults : undefined,
-  );
-  const executionStatus = useExecutionStore((s) =>
-    subgraphId ? s.graphs[subgraphId]?.status : undefined,
+  const executionGraphs = useExecutionStore((s) => s.graphs);
+  const pinResults = useMemo(() => {
+    if (!graphPath) return undefined;
+    const merged = pinResultsForSourceGraph(executionGraphs, graphPath);
+    return merged.size > 0 ? merged : undefined;
+  }, [executionGraphs, graphPath]);
+  const executionStatus = useMemo(
+    () => (graphPath ? executionStatusForSourceGraph(executionGraphs, graphPath) : undefined),
+    [executionGraphs, graphPath],
   );
 
   const viewParams = useMemo(
     () =>
-      subgraphId
+      graphPath
         ? buildPinViewParams({
-            graphId: subgraphId,
+            graphPath: graphPath,
             pinId: id,
             direction,
-            pinType: type,
+            isExec: isExecPin(pinSemantics),
             connectionIds,
             pinResults,
             executionStatus,
           })
         : null,
-    [subgraphId, id, direction, type, connectionIds, pinResults, executionStatus],
+    [graphPath, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
   );
 
-  const showViewMenu = viewParams ? shouldShowPinViewMenuItem(viewParams) : false;
-  const viewTarget = viewParams ? resolvePinViewTargetFromCache(viewParams) : null;
-  const viewDisabledReason = viewParams ? resolvePinViewDisabledReason(viewParams) : null;
-  const viewEnabled =
-    showViewMenu &&
-    (Boolean(viewTarget) ||
-      (executionStatus === 'completed' &&
-        (direction === 'output' || (direction === 'input' && (connectionIds?.length ?? 0) > 0))));
+  const viewState = useMemo(
+    () =>
+      viewParams
+        ? evaluatePinViewState(viewParams)
+        : null,
+    [viewParams],
+  );
+
+  const showViewMenu = viewState?.showMenu ?? false;
+  const viewEnabled = viewState?.enabled ?? false;
+  const viewDisabledReason = viewState?.disabledReason ?? null;
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -157,14 +149,16 @@ export const Pin: React.FC<PinProps> = (props) => {
 
   const handleView = useCallback(() => {
     if (!viewParams) return;
-    void openPinView(viewParams, t);
+    void openPinInspectableView(viewParams, t);
   }, [viewParams, t]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
+  const scalarInputKey = scalarPinInputKey(dataType);
   const canReset =
     direction === "input" &&
-    PRIMITIVE_PIN_TYPES.has(type) &&
-    !containerType &&
+    scalarInputKey != null &&
+    PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
+    !visualSpec.container &&
     userValue != null &&
     userValue !== undefined;
 
@@ -177,15 +171,16 @@ export const Pin: React.FC<PinProps> = (props) => {
     []
   );
 
-  const shouldPulse = !optional && !isConnected && direction === "input" && type !== "exec";
+  const shouldPulse = !optional && !isConnected && direction === "input" && !isExecPin(pinSemantics);
 
   const isDropdownPin = metaData?.showWidget && metaData?.widgetType === "dropdown" && (metaData?.widgetOptions?.length ?? 0) > 0;
   const showInput =
     (!isConnected || forceShowInput === true) &&
-    (PRIMITIVE_PIN_TYPES.has(type) || (type === "string" && isDropdownPin)) &&
-    !containerType &&
+    scalarInputKey != null &&
+    (PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) || (scalarInputKey === "string" && isDropdownPin)) &&
+    !visualSpec.container &&
     (direction === "input" || forceShowInput === true) &&
-    subgraphId &&
+    graphPath &&
     nodeId;
 
   const effectivePinDragState = contextMenu ? "highlighted" : pinDragState;
@@ -196,7 +191,92 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const pinTooltip = `${name} (${typeDisplay ?? type})`;
+  const pinTooltip = `${name} (${visualSpec.label})`;
+
+  const pulseStrokeProps = shouldPulse
+    ? {
+        fill: 'none' as const,
+        stroke: baseColor,
+        strokeWidth: 2.5,
+        strokeDasharray: visualSpec.shape === 'exec' ? '6 24' : visualSpec.shape === 'gridRect' ? '8 28' : '7 21',
+        className: 'pin-flow-stroke',
+        filter: 'url(#pinGlow)',
+      }
+    : null;
+
+  const renderPinShape = () => {
+    const { fill, stroke, strokeWidth } = renderStyle;
+    const dashed = visualSpec.dashedStroke && !shouldPulse ? { strokeDasharray: '2 2' } : {};
+
+    switch (visualSpec.shape) {
+      case 'exec':
+        return (
+          <>
+            <path
+              d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="miter"
+              {...dashed}
+            />
+            {pulseStrokeProps && <path d="M2 2 L7 2 L11 6 L7 10 L2 10 Z" strokeLinejoin="miter" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'gridRect':
+        return (
+          <>
+            <g>
+              <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+              <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={stroke} strokeWidth="0.8" />
+              <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={stroke} strokeWidth="0.8" />
+            </g>
+            {pulseStrokeProps && <rect x="1.5" y="1.5" width="9" height="9" rx="1" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'roundedRect':
+        return (
+          <>
+            <rect x="2" y="2" width="8" height="8" rx="1.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+            {pulseStrokeProps && <rect x="2" y="2" width="8" height="8" rx="1.5" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'diamond':
+        return (
+          <>
+            <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="miter" {...dashed} />
+            {pulseStrokeProps && <polygon points="6,1 11,6 6,11 1,6" strokeLinejoin="miter" {...pulseStrokeProps} />}
+          </>
+        );
+      case 'hexagon':
+        return (
+          <>
+            <polygon
+              points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
+              strokeLinejoin="round"
+              {...dashed}
+            />
+            {pulseStrokeProps && (
+              <polygon
+                points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
+                strokeLinejoin="round"
+                {...pulseStrokeProps}
+              />
+            )}
+          </>
+        );
+      default:
+        return (
+          <>
+            <circle cx="6" cy="6" r="4.5" fill={fill} stroke={stroke} strokeWidth={strokeWidth} {...dashed} />
+            {pulseStrokeProps && <circle cx="6" cy="6" r="4.5" {...pulseStrokeProps} />}
+          </>
+        );
+    }
+  };
 
   return (
     <Tooltip>
@@ -239,132 +319,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           className="overflow-visible"
           style={{ display: "block" }}
         >
-          {theme.isExec ? (
-            <>
-              <path
-                d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="miter"
-              />
-              {shouldPulse && (
-                <path
-                  d="M2 2 L7 2 L11 6 L7 10 L2 10 Z"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="miter"
-                  strokeDasharray="6 24"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.isDataFrame ? (
-            <>
-              <g>
-                <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill={theme.fill} stroke={theme.stroke} strokeWidth={theme.strokeWidth} />
-                <line x1="1.5" y1="4.5" x2="10.5" y2="4.5" stroke={theme.stroke} strokeWidth="0.8" />
-                <line x1="5" y1="1.5" x2="5" y2="10.5" stroke={theme.stroke} strokeWidth="0.8" />
-              </g>
-              {shouldPulse && (
-                <rect
-                  x="1.5" y="1.5" width="9" height="9" rx="1"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="8 28"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.containerType === "array" ? (
-            <>
-              <rect
-                x="2" y="2" width="8" height="8" rx="1.5"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-              />
-              {shouldPulse && (
-                <rect
-                  x="2" y="2" width="8" height="8" rx="1.5"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="7 25"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.containerType === "dataseries" ? (
-            <>
-              <polygon
-                points="6,1 11,6 6,11 1,6"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="miter"
-              />
-              {shouldPulse && (
-                <polygon
-                  points="6,1 11,6 6,11 1,6"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="miter"
-                  strokeDasharray="7 21"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : theme.isStruct ? (
-            <>
-              <polygon
-                points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-                strokeLinejoin="round"
-              />
-              {shouldPulse && (
-                <polygon
-                  points="6,0.5 10.8,3.25 10.8,8.75 6,11.5 1.2,8.75 1.2,3.25"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeLinejoin="round"
-                  strokeDasharray="8 25"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <circle
-                cx="6" cy="6" r="4.5"
-                fill={theme.fill}
-                stroke={theme.stroke}
-                strokeWidth={theme.strokeWidth}
-              />
-              {shouldPulse && (
-                <circle
-                  cx="6" cy="6" r="4.5"
-                  fill="none"
-                  stroke={baseColor}
-                  strokeWidth={2.5}
-                  strokeDasharray="7 21"
-                  className="pin-flow-stroke"
-                  filter="url(#pinGlow)"
-                />
-              )}
-            </>
-          )}
+          {renderPinShape()}
           {shouldPulse && (
             <defs>
               <filter id="pinGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -372,7 +327,7 @@ export const Pin: React.FC<PinProps> = (props) => {
               </filter>
             </defs>
           )}
-          {isConnected && !theme.isExec && (
+          {isConnected && visualSpec.edgeKind === 'data' && (
             <circle
               cx="6"
               cy="6"
@@ -404,8 +359,8 @@ export const Pin: React.FC<PinProps> = (props) => {
         <PinInput
           pinId={id}
           nodeId={nodeId}
-          subgraphId={subgraphId}
-          pinType={type}
+          graphPath={graphPath}
+          dataType={dataType}
           metaData={metaData}
           value={toDisplayValue(userValue ?? defaultValue)}
           onValueChange={(value) => onValueChange?.(id, value)}

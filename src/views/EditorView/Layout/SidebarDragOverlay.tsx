@@ -1,18 +1,16 @@
+import { getSidebarDragOverlayLabel } from "@/features/core/dnd";
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
+import { editorDragChipClass } from "@/views/EditorView/Layout/editorDropPreviewStyles";
 
-/**
- * Overlay content for sidebar item drag (node-template).
- * Renders inside Workspace's DragOverlay when dragging from sidebar.
- */
+/** Floating chip while dragging from sidebar (node template or graph resource). */
 export function SidebarDragOverlay() {
   const activeDrag = useSidebarDragStore((s) => s.activeDrag);
   if (!activeDrag) return null;
+
   return (
-    <div className="flex cursor-grabbing items-center gap-2 rounded-md border border-primary/60 bg-card/95 px-3 py-1.5 shadow-xl backdrop-blur-sm">
-      <div className="h-2 w-2 rounded-full bg-primary" />
-      <span className="text-xs font-bold text-foreground">
-        {activeDrag.template?.title || activeDrag.template?.nodeType}
-      </span>
+    <div className={`${editorDragChipClass} shadow-lg ring-1 ring-primary/40`}>
+      <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+      <span className="max-w-[160px] truncate">{getSidebarDragOverlayLabel(activeDrag)}</span>
     </div>
   );
 }

@@ -1,24 +1,18 @@
 import { useCallback } from "react";
 import { findInternalNodeInGraph } from "@/features/core/dataStore";
-import { getViewport } from "@/features/core/viewport";
+import { getViewport, type EditorViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
+import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
+import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
 import type { Pin } from "@/shared/types/domain/pin";
+import type { EditorFunctions } from "@/features/core/editor";
 import { logger } from '@/utils/appLogger';
-import type { CreateNodeFn } from "./canvasDrop";
-
-export interface PaletteItem {
-  nodeType: string;
-  overrides?: {
-    subGraphId?: string;
-    variableId?: string;
-    dataframeId?: string;
-  };
-}
+import { isFunctionAvailable, type CreateNodeFn } from "./canvasDrop";
 
 export function useCanvasOverlayHandlers({
-  canvasRef,
+  canvasElementRef,
   activeTabId,
   functions,
   pendingConnection,
@@ -27,18 +21,21 @@ export function useCanvasOverlayHandlers({
   createNode,
   setCanvas,
 }: {
-  canvasRef: React.RefObject<HTMLDivElement | null>;
+  canvasElementRef: React.RefObject<HTMLDivElement | null>;
   activeTabId: string | null;
-  functions: Record<string, unknown>;
+  functions: EditorFunctions;
   pendingConnection: Pin | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: unknown) => void;
+  setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
-  setCanvas: (updater: unknown, targetGraphId?: string) => void;
+  setCanvas: (
+    updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
+    targetGraphPath?: string,
+  ) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
-    async (item: PaletteItem, contextMenu: { x: number; y: number }) => {
-      if (!contextMenu || !canvasRef.current) return;
+    async (item: NodeCatalogItem, contextMenu: { x: number; y: number }) => {
+      if (!contextMenu || !canvasElementRef.current) return;
 
       const internalNodeTypes = [
         "event_on_run",
@@ -51,7 +48,7 @@ export function useCanvasOverlayHandlers({
           ? findInternalNodeInGraph(activeTabId, item.nodeType)
           : undefined;
         if (existingNode) {
-          const rect = canvasRef.current.getBoundingClientRect();
+          const rect = canvasElementRef.current.getBoundingClientRect();
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
           const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
@@ -66,14 +63,14 @@ export function useCanvasOverlayHandlers({
         }
       }
 
-      const rect = canvasRef.current.getBoundingClientRect();
+      const rect = canvasElementRef.current.getBoundingClientRect();
       const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
-      if (item.nodeType === "Functions:Call Function") {
-        const subId = item.overrides?.subGraphId;
-        if (!subId || !functions[subId]) {
+      if (item.nodeType === CALL_FUNCTION_NODE_TYPE) {
+        const subId = item.overrides?.subGraphPath;
+        if (!subId || !isFunctionAvailable(subId, functions)) {
           setContextMenu(null);
           setPendingConnection(null);
           return;
@@ -106,7 +103,7 @@ export function useCanvasOverlayHandlers({
       setPendingConnection(null);
     },
     [
-      canvasRef,
+      canvasElementRef,
       activeTabId,
       functions,
       pendingConnection,

@@ -7,7 +7,6 @@
     "allowSyntheticDefaultImports": true,
 
     // shadcn ui
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
