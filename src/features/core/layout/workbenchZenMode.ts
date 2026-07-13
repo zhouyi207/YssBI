@@ -1,5 +1,6 @@
 import { useLayoutStore } from './layoutStore';
 import { WORKBENCH_PART_IDS, type WorkbenchPartId } from './workbenchLayoutDefaults';
+import { reflowWorkbenchAfterPartVisibilityChange } from './editorGridSizing';
 
 type ZenPartSnapshot = {
   visible: boolean;
@@ -40,7 +41,10 @@ class ZenModeSessionController {
     for (const partId of WORKBENCH_PART_IDS) {
       setPartSnapshot(partId, { visible: false });
     }
-    useLayoutStore.setState({ zenMode: true });
+    useLayoutStore.setState((state) => {
+      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      state.zenMode = true;
+    });
   }
 
   exit(): void {
@@ -54,6 +58,9 @@ class ZenModeSessionController {
     for (const partId of WORKBENCH_PART_IDS) {
       setPartSnapshot(partId, saved[partId]);
     }
+    useLayoutStore.setState((state) => {
+      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    });
   }
 
   clear(): void {

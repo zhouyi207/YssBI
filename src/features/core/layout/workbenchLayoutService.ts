@@ -10,6 +10,7 @@ import {
   type WorkbenchPartId,
 } from './workbenchLayoutDefaults';
 import { applyEditorGridMementoWithRepair, snapshotEditorGridMemento } from './editorGridMemento';
+import { reflowWorkbenchAfterPartVisibilityChange } from './editorGridSizing';
 import { reconcileEditorTabPlacements, useEditorTabStore } from './editorTabStore';
 import { schedulePartResizeCommit } from './partResizeNotifier';
 import type { PanelViewId } from './panelPartModel';
@@ -163,6 +164,7 @@ export function hydrateEditorGrid(): void {
   useLayoutStore.setState((state) => {
     state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
     state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
+    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
   });
   if (memento.editorTabs) {
     useEditorTabStore.getState().applyMemento(memento.editorTabs);
@@ -210,6 +212,9 @@ export function applyPanelPosition(position: PanelPosition): void {
     resizeNode(PANEL_PART_ID, clamped, position);
   }
   schedulePartResizeCommit(PANEL_PART_ID, clamped);
+  useLayoutStore.setState((state) => {
+    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+  });
   persistWorkbenchLayoutDebounced();
 }
 
@@ -260,6 +265,9 @@ export function subscribeWorkbenchViewportResize(delayMs = 100): () => void {
     timer = setTimeout(() => {
       timer = null;
       reclampWorkbenchPanelSize();
+      useLayoutStore.setState((state) => {
+        reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      });
     }, delayMs);
   };
 
@@ -280,6 +288,7 @@ export function setPanelActiveView(viewId: PanelViewId): void {
   persistWorkbenchLayoutDebounced();
 }
 
+
 export function setWorkbenchPartVisible(
   partId: WorkbenchPartId,
   visible: boolean,
@@ -296,6 +305,9 @@ export function setWorkbenchPartVisible(
   }
 
   useLayoutStore.getState().updateNode(partId, { data: nextData });
+  useLayoutStore.setState((state) => {
+    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+  });
   if (options?.persist !== false) {
     persistWorkbenchLayoutDebounced();
   }
@@ -341,6 +353,9 @@ export function togglePanelMaximized(): void {
     });
     const committedSize = useLayoutStore.getState().nodes[PANEL_PART_ID]?.pixelSize ?? restored;
     schedulePartResizeCommit(PANEL_PART_ID, committedSize);
+    useLayoutStore.setState((state) => {
+      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    });
   } else {
     updateNode(PANEL_PART_ID, {
       data: {
@@ -355,13 +370,22 @@ export function togglePanelMaximized(): void {
 
 export function showSidebarTab(tab: SidebarTabId): void {
   if (isZenModeActive()) return;
+  const wasHidden = useLayoutStore.getState().nodes[SIDEBAR_NODE_ID]?.data?.visible === false;
   useLayoutStore.getState().showSidebarTab(tab);
+  if (wasHidden) {
+    useLayoutStore.setState((state) => {
+      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    });
+  }
   persistWorkbenchLayoutDebounced();
 }
 
 export function toggleSidebarTab(tab: SidebarTabId): void {
   if (isZenModeActive()) return;
   useLayoutStore.getState().toggleSidebarTab(tab);
+  useLayoutStore.setState((state) => {
+    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+  });
   persistWorkbenchLayoutDebounced();
 }
 

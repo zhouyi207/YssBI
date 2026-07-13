@@ -92,4 +92,23 @@ describe('layoutNodeFlexStyle', () => {
       flex: '0 0 0px',
     });
   });
+
+  it('maximized editor group fills editor area instead of stale pixelSize', () => {
+    const style = layoutNodeFlexStyle(
+      {
+        id: 'default_editor',
+        type: 'component',
+        parentId: 'editor_area',
+        pixelSize: 640,
+        data: { component: 'GraphEditor' },
+      },
+      { maximizedEditorGroupId: 'default_editor' },
+    );
+    expect(style).toMatchObject({
+      flex: '1 1 0px',
+      minWidth: 0,
+      minHeight: 0,
+      overflow: 'hidden',
+    });
+  });
 });

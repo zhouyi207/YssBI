@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { inferPanelPosition } from '@/features/core/layout/panelPartLayout';
+import { readEditorAreaMaximizedGroupId } from '@/features/core/layout/editorGridLayout';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { Sash } from './Sash';
 import { layoutNodeFlexStyle } from './sashResizeLogic';
@@ -58,6 +59,17 @@ const ContainerNodeRenderer = ({
 }) => {
     const isRow = orientation === 'row';
 
+    const collapsedById = useLayoutStore(useShallow((state) => {
+        const map: Record<string, boolean> = {};
+        for (const id of childrenIds) {
+            const child = state.nodes[id];
+            map[id] =
+                child?.data?.visible === false
+                || child?.data?.groupMaximizedHidden === true;
+        }
+        return map;
+    }));
+
     // 维护子节点 DOM 引用，供 Sash 调节大小使用
     const childrenRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -77,7 +89,11 @@ const ContainerNodeRenderer = ({
     return (
         <div className={`flex w-full h-full overflow-hidden ${isRow ? 'flex-row' : 'flex-col'}`}>
             {childrenIds.map((childId, index) => {
-                const showSash = index < childrenIds.length - 1;
+                const nextId = childrenIds[index + 1];
+                const showSash =
+                    nextId != null
+                    && !collapsedById[childId]
+                    && !collapsedById[nextId];
 
                 return (
                     <Fragment key={childId}>
@@ -113,9 +129,10 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
     const node = useLayoutStore(useShallow((state) => state.nodes[nodeId]));
     const panelMaximized = useLayoutStore((s) => s.nodes.panel?.data?.maximized === true);
     const panelPosition = useLayoutStore((s) => inferPanelPosition(s.nodes));
+    const maximizedEditorGroupId = useLayoutStore((s) => readEditorAreaMaximizedGroupId(s.nodes));
     const style = useMemo(
-        () => layoutNodeFlexStyle(node, { panelMaximized, panelPosition }),
-        [node, panelMaximized, panelPosition],
+        () => layoutNodeFlexStyle(node, { panelMaximized, panelPosition, maximizedEditorGroupId }),
+        [node, panelMaximized, panelPosition, maximizedEditorGroupId],
     );
 
     if (!node) return null;
@@ -138,7 +155,7 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
                 />
             ) : (!hidden || keepAlive) && (
                 <div
-                    className={`h-full w-full ${hidden && keepAlive ? 'invisible pointer-events-none' : ''}`}
+                    className={`h-full w-full ${hidden && keepAlive ? 'hidden' : ''}`}
                     aria-hidden={hidden || undefined}
                 >
                     <LayoutNodeRenderer nodeId={nodeId} />

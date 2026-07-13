@@ -42,6 +42,7 @@ export const SASH_CONTAINMENT_CLASS = 'layout-split-contain';
 export interface LayoutFlexContext {
   panelMaximized?: boolean;
   panelPosition?: PanelPosition;
+  maximizedEditorGroupId?: string | null;
 }
 
 export function layoutNodeFlexStyle(
@@ -65,6 +66,10 @@ export function layoutNodeFlexStyle(
 
   if (node.data?.groupMaximizedHidden) {
     return { flex: panelFlexBasis(0), minWidth: 0, minHeight: 0, overflow: 'hidden' };
+  }
+
+  if (context?.maximizedEditorGroupId && node.id === context.maximizedEditorGroupId) {
+    return { flex: '1 1 0px', minWidth: 0, minHeight: 0, overflow: 'hidden' };
   }
 
   if (node.pixelSize != null) {

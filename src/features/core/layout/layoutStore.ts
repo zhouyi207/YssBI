@@ -26,7 +26,7 @@ import {
     splitEditorGroupInTree,
     writeEditorAreaMaximizeState,
 } from './editorGridLayout';
-import { commitSplitPairSizes } from './editorGridSizing';
+import { commitSplitPairSizes, normalizeEditorGridSplitWeights } from './editorGridSizing';
 import {
     isEditorGroupPlacementEmpty,
     readLegacyEmbeddedTab,
@@ -290,8 +290,9 @@ export const useLayoutStore = create<LayoutState>()(
             if (current === groupId) {
                 const restored = readEditorAreaRestoredGridSizes(state.nodes);
                 clearEditorGroupMaximizedHidden(state.nodes);
-                if (restored) applyEditorGridPixelSizes(state.nodes, restored);
                 writeEditorAreaMaximizeState(state.nodes, null, null);
+                if (restored) applyEditorGridPixelSizes(state.nodes, restored);
+                normalizeEditorGridSplitWeights(state.nodes);
                 return;
             }
 

@@ -104,6 +104,12 @@ export function computeEditorGridMementoSizes(nodes: LayoutTree): Record<string,
   return sizes;
 }
 
+/** Reclaim chrome space for editor grid after sidebar/detail/panel visibility changes. */
+export function reflowWorkbenchAfterPartVisibilityChange(nodes: LayoutTree): void {
+  if (readEditorAreaMaximizedGroupId(nodes)) return;
+  normalizeEditorGridSplitWeights(nodes);
+}
+
 export function isEditorGridNode(nodes: LayoutTree, nodeId: string): boolean {
   return nodeId === EDITOR_AREA_ID || isDescendantOf(nodes, nodeId, EDITOR_AREA_ID);
 }

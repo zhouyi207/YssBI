@@ -36,7 +36,9 @@ describe('toggleMaximizeEditorGroup', () => {
     useLayoutStore.getState().toggleMaximizeEditorGroup(DEFAULT_EDITOR_GROUP_ID);
 
     expect(useLayoutStore.getState().nodes.editor_group_2?.data?.groupMaximizedHidden).toBe(false);
-    expect(useLayoutStore.getState().nodes.editor_group_2?.pixelSize).toBe(400);
+    expect(useLayoutStore.getState().nodes.editor_group_2?.pixelSize).toBeUndefined();
+    expect(useLayoutStore.getState().nodes.default_editor?.pixelSize).toBeUndefined();
+    expect(useLayoutStore.getState().nodes.editor_group_2?.size).toBe(0.5);
   });
 });
 

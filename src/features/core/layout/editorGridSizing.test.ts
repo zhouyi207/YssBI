@@ -7,6 +7,7 @@ import {
   commitSplitPairSizes,
   computeEditorGridMementoSizes,
   normalizeEditorGridSplitWeights,
+  reflowWorkbenchAfterPartVisibilityChange,
 } from './editorGridSizing';
 import {
   createInitialWorkbenchNodes,
@@ -120,5 +121,24 @@ describe('editorGridSizing', () => {
     expect(nodes.editor_group_2?.pixelSize).toBeUndefined();
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.2);
     expect(nodes.editor_group_2?.size).toBeCloseTo(0.8);
+  });
+
+  it('reflowWorkbenchAfterPartVisibilityChange skips while an editor group is maximized', () => {
+    const nodes = createInitialWorkbenchNodes();
+    nodes[EDITOR_AREA_ID]!.children = [DEFAULT_EDITOR_GROUP_ID, 'editor_group_2'];
+    nodes.editor_group_2 = {
+      id: 'editor_group_2',
+      type: 'component',
+      parentId: EDITOR_AREA_ID,
+      pixelSize: 400,
+      data: { component: 'GraphEditor' },
+    };
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 400;
+    nodes[EDITOR_AREA_ID]!.data = { maximizedGroupId: DEFAULT_EDITOR_GROUP_ID };
+
+    reflowWorkbenchAfterPartVisibilityChange(nodes);
+
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(400);
+    expect(nodes.editor_group_2?.pixelSize).toBe(400);
   });
 });
