@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { THUMB_MIN_SIZE, TRACK_SIZE } from "@/app/appConfig/default";
-import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import {
+  computeHorizontalScrollbarMetrics,
+  computeVerticalScrollbarMetrics,
+  pageScrollFromTrackClick,
+} from "./overlayScrollbar/metrics";
+import {
+  beginThumbDragSession,
+  bindScrollbarThumbDrag,
+  withInstantViewportScroll,
+} from "./overlayScrollbar/thumbDrag";
 
 type Direction = "vertical" | "horizontal" | "both";
 
@@ -55,11 +64,12 @@ function ArrowButton({
     <button
       type="button"
       aria-label={`Scroll ${direction}`}
-      className="shrink-0 flex items-center justify-center cursor-pointer transition-opacity duration-100 hover:opacity-100 opacity-60"
+      className="shrink-0 flex items-center justify-center cursor-pointer transition-opacity duration-100 hover:opacity-100 opacity-60 touch-none"
       style={{ width: w, height: h }}
-      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); startScroll(); }}
-      onMouseUp={stopScroll}
-      onMouseLeave={stopScroll}
+      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); startScroll(); }}
+      onPointerUp={stopScroll}
+      onPointerLeave={stopScroll}
+      onPointerCancel={stopScroll}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
         e.preventDefault();
@@ -93,71 +103,73 @@ export const OverlayScrollbar = forwardRef<
 >(function OverlayScrollbar({ children, className = "", direction = "vertical", onScroll, scrollbarOffsetTop = 0, scrollbarOffsetLeft = 0 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const trackVRef = useRef<HTMLDivElement>(null);
+  const trackHRef = useRef<HTMLDivElement>(null);
+  const thumbVRef = useRef<HTMLDivElement>(null);
+  const thumbHRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef({ v: false, h: false });
+  const activeDragCleanupRef = useRef<(() => void) | null>(null);
   const [thumbStyle, setThumbStyle] = useState<{
     v?: { height: number; top: number };
     h?: { width: number; left: number };
   }>({});
   const [isVisible, setIsVisible] = useState<{ v?: boolean; h?: boolean }>({});
   const [isHovered, setIsHovered] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-  const skippedSashResizeUpdate = useRef(false);
+  const [isDragging, setIsDragging] = useState({ v: false, h: false });
 
   useImperativeHandle(ref, () => viewportRef.current!);
 
+  const getVerticalTrackLength = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return 0;
+    return container.clientHeight - scrollbarOffsetTop - ARROW_HEIGHT * 2;
+  }, [scrollbarOffsetTop]);
+
+  const getHorizontalTrackLength = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return 0;
+    const rightReserved = direction === "both" ? TRACK_SIZE + 4 : 0;
+    return container.clientWidth - scrollbarOffsetLeft - rightReserved - ARROW_HEIGHT * 2;
+  }, [direction, scrollbarOffsetLeft]);
+
   const updateThumb = useCallback(() => {
     const el = viewportRef.current;
-    const container = containerRef.current;
-    if (!el || !container) return;
+    if (!el) return;
 
     const next: typeof thumbStyle = {};
     const visible: typeof isVisible = {};
 
     if (direction === "vertical" || direction === "both") {
-      const { scrollHeight, clientHeight, scrollTop } = el;
-      const maxScroll = scrollHeight - clientHeight;
-      if (maxScroll > 0) {
+      const metrics = computeVerticalScrollbarMetrics(el, getVerticalTrackLength());
+      if (metrics) {
         visible.v = true;
-        const vHeight = container.clientHeight - scrollbarOffsetTop;
-        const trackHeight = vHeight - ARROW_HEIGHT * 2;
-        const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
-        const thumbTop = (scrollTop / maxScroll) * (trackHeight - thumbHeight);
-        next.v = { height: thumbHeight, top: thumbTop };
-      } else {
-        visible.v = false;
+        next.v = { height: metrics.thumbSize, top: metrics.thumbOffset };
       }
     }
 
     if (direction === "horizontal" || direction === "both") {
-      const { scrollWidth, clientWidth, scrollLeft } = el;
-      const maxScroll = scrollWidth - clientWidth;
-      if (maxScroll > 0) {
+      const metrics = computeHorizontalScrollbarMetrics(el, getHorizontalTrackLength());
+      if (metrics) {
         visible.h = true;
-        const rightReserved = direction === "both" ? TRACK_SIZE + 4 : 0;
-        const trackWidth = container.clientWidth - scrollbarOffsetLeft - rightReserved - ARROW_HEIGHT * 2;
-        const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
-        const thumbLeft = (scrollLeft / maxScroll) * (trackWidth - thumbWidth);
-        next.h = { width: thumbWidth, left: thumbLeft };
-      } else {
-        visible.h = false;
+        next.h = { width: metrics.thumbSize, left: metrics.thumbOffset };
       }
     }
 
     setThumbStyle(next);
     setIsVisible(visible);
-  }, [direction, scrollbarOffsetTop, scrollbarOffsetLeft]);
+  }, [direction, getHorizontalTrackLength, getVerticalTrackLength]);
 
   useEffect(() => {
     const el = viewportRef.current;
+    const container = containerRef.current;
     if (!el) return;
 
     updateThumb();
 
     let rafId: number | null = null;
-    const throttledUpdate = () => {
-      if (document.body.classList.contains("layout-sash-dragging")) {
-        skippedSashResizeUpdate.current = true;
-        return;
-      }
+    const scheduleThumbSync = () => {
+      if (isDraggingRef.current.v || isDraggingRef.current.h) return;
+      if (document.body.classList.contains("layout-sash-dragging")) return;
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
@@ -165,182 +177,171 @@ export const OverlayScrollbar = forwardRef<
       });
     };
 
-    const updateAfterSashDrag = () => {
-      if (!skippedSashResizeUpdate.current) return;
-      skippedSashResizeUpdate.current = false;
-      throttledUpdate();
-    };
-
-    const ro = new ResizeObserver(throttledUpdate);
+    const ro = new ResizeObserver(scheduleThumbSync);
     ro.observe(el);
+    if (container) ro.observe(container);
 
-    const mo = new MutationObserver(throttledUpdate);
+    const mo = new MutationObserver(scheduleThumbSync);
     mo.observe(el, { childList: true, subtree: true });
 
-    el.addEventListener("scroll", throttledUpdate, { passive: true });
-    window.addEventListener("layout-sash-drag-end", updateAfterSashDrag);
+    el.addEventListener("scroll", scheduleThumbSync, { passive: true });
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       ro.disconnect();
       mo.disconnect();
-      el.removeEventListener("scroll", throttledUpdate);
-      window.removeEventListener("layout-sash-drag-end", updateAfterSashDrag);
+      el.removeEventListener("scroll", scheduleThumbSync);
     };
   }, [updateThumb]);
 
-  const overflowX = direction === "horizontal" ? "auto" : "hidden";
-  const overflowY = direction === "vertical" ? "auto" : direction === "both" ? "auto" : "hidden";
+  useEffect(() => () => activeDragCleanupRef.current?.(), []);
 
   const scrollV = useCallback((delta: number) => {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, el.scrollTop + delta));
+    withInstantViewportScroll(el, () => {
+      el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, el.scrollTop + delta));
+    });
   }, []);
 
   const scrollH = useCallback((delta: number) => {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollLeft = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + delta));
+    withInstantViewportScroll(el, () => {
+      el.scrollLeft = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + delta));
+    });
   }, []);
 
-  const handleTrackClickV = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackPointerDownV = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || e.target !== e.currentTarget) return;
       const el = viewportRef.current;
-      if (!el || !thumbStyle.v) return;
+      if (!el) return;
 
-      const track = e.currentTarget;
-      const rect = track.getBoundingClientRect();
-      const clickY = e.clientY - rect.top;
-      const trackHeight = rect.height;
-      const { scrollHeight, clientHeight } = el;
-      const maxScroll = scrollHeight - clientHeight;
+      const metrics = computeVerticalScrollbarMetrics(el, getVerticalTrackLength());
+      if (!metrics) return;
 
-      const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
-      const thumbTop = (el.scrollTop / maxScroll) * (trackHeight - thumbHeight);
-
-      if (clickY < thumbTop) {
-        el.scrollTop = Math.max(0, el.scrollTop - clientHeight);
-      } else if (clickY > thumbTop + thumbHeight) {
-        el.scrollTop = Math.min(maxScroll, el.scrollTop + clientHeight);
-      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      const nextScroll = pageScrollFromTrackClick(
+        e.clientY - rect.top,
+        metrics,
+        el.scrollTop,
+        el.clientHeight,
+      );
+      if (nextScroll == null) return;
+      withInstantViewportScroll(el, () => {
+        el.scrollTop = nextScroll;
+      });
     },
-    [thumbStyle.v]
+    [getVerticalTrackLength],
   );
 
-  const handleTrackClickH = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleTrackPointerDownH = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || e.target !== e.currentTarget) return;
       const el = viewportRef.current;
-      if (!el || !thumbStyle.h) return;
+      if (!el) return;
 
-      const track = e.currentTarget;
-      const rect = track.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const trackWidth = rect.width;
-      const { scrollWidth, clientWidth } = el;
-      const maxScroll = scrollWidth - clientWidth;
+      const metrics = computeHorizontalScrollbarMetrics(el, getHorizontalTrackLength());
+      if (!metrics) return;
 
-      const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
-      const thumbLeft = (el.scrollLeft / maxScroll) * (trackWidth - thumbWidth);
-
-      if (clickX < thumbLeft) {
-        el.scrollLeft = Math.max(0, el.scrollLeft - clientWidth);
-      } else if (clickX > thumbLeft + thumbWidth) {
-        el.scrollLeft = Math.min(maxScroll, el.scrollLeft + clientWidth);
-      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      const nextScroll = pageScrollFromTrackClick(
+        e.clientX - rect.left,
+        metrics,
+        el.scrollLeft,
+        el.clientWidth,
+      );
+      if (nextScroll == null) return;
+      withInstantViewportScroll(el, () => {
+        el.scrollLeft = nextScroll;
+      });
     },
-    [thumbStyle.h]
+    [getHorizontalTrackLength],
   );
 
-  const handleThumbMouseDownV = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragStart.current = { x: e.clientX, y: e.clientY };
+  const handleThumbPointerDownV = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const thumb = thumbVRef.current;
+      const track = trackVRef.current;
+      const viewport = viewportRef.current;
+      if (!thumb || !track || !viewport) return;
 
-    const onMouseMove = (moveE: MouseEvent) => {
-      const el = viewportRef.current;
-      const container = containerRef.current;
-      if (!el || !container) return;
+      const metrics = computeVerticalScrollbarMetrics(viewport, getVerticalTrackLength());
+      if (!metrics) return;
 
-      const deltaY = moveE.clientY - dragStart.current.y;
-      dragStart.current = { x: moveE.clientX, y: moveE.clientY };
+      const session = beginThumbDragSession("y", e.nativeEvent, metrics);
+      if (!session) return;
 
-      const { scrollHeight, clientHeight } = el;
-      const maxScroll = scrollHeight - clientHeight;
-      const vHeight = container.clientHeight - scrollbarOffsetTop;
-      const trackHeight = vHeight - ARROW_HEIGHT * 2;
-      const thumbHeight = Math.max(THUMB_MIN_SIZE, (clientHeight / scrollHeight) * trackHeight);
-      const trackThumbSpace = trackHeight - thumbHeight;
+      e.preventDefault();
+      e.stopPropagation();
 
-      if (trackThumbSpace <= 0) return;
+      activeDragCleanupRef.current?.();
+      activeDragCleanupRef.current = bindScrollbarThumbDrag({
+        captureHost: track,
+        thumbEl: thumb,
+        viewport,
+        session,
+        onDraggingChange: (dragging) => {
+          isDraggingRef.current.v = dragging;
+          setIsDragging((prev) => ({ ...prev, v: dragging }));
+        },
+        onDragEnd: () => {
+          activeDragCleanupRef.current = null;
+          updateThumb();
+        },
+      });
+    },
+    [getVerticalTrackLength, updateThumb],
+  );
 
-      const scrollDelta = deltaY * (maxScroll / trackThumbSpace);
-      el.scrollTop = Math.max(0, Math.min(maxScroll, el.scrollTop + scrollDelta));
-    };
+  const handleThumbPointerDownH = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const thumb = thumbHRef.current;
+      const track = trackHRef.current;
+      const viewport = viewportRef.current;
+      if (!thumb || !track || !viewport) return;
 
-    let cleanupDragListeners: (() => void) | null = null;
-    const onMouseUp = () => {
-      cleanupDragListeners?.();
-      cleanupDragListeners = null;
-    };
+      const metrics = computeHorizontalScrollbarMetrics(viewport, getHorizontalTrackLength());
+      if (!metrics) return;
 
-    const cleanupMouseMove = addGlobalEventListener(document, "mousemove", onMouseMove);
-    const cleanupMouseUp = addGlobalEventListener(document, "mouseup", onMouseUp);
-    cleanupDragListeners = () => {
-      cleanupMouseMove();
-      cleanupMouseUp();
-    };
-  }, [scrollbarOffsetTop]);
+      const session = beginThumbDragSession("x", e.nativeEvent, metrics);
+      if (!session) return;
 
-  const handleThumbMouseDownH = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragStart.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      e.stopPropagation();
 
-    const onMouseMove = (moveE: MouseEvent) => {
-      const el = viewportRef.current;
-      const container = containerRef.current;
-      if (!el || !container) return;
+      activeDragCleanupRef.current?.();
+      activeDragCleanupRef.current = bindScrollbarThumbDrag({
+        captureHost: track,
+        thumbEl: thumb,
+        viewport,
+        session,
+        onDraggingChange: (dragging) => {
+          isDraggingRef.current.h = dragging;
+          setIsDragging((prev) => ({ ...prev, h: dragging }));
+        },
+        onDragEnd: () => {
+          activeDragCleanupRef.current = null;
+          updateThumb();
+        },
+      });
+    },
+    [getHorizontalTrackLength, updateThumb],
+  );
 
-      const deltaX = moveE.clientX - dragStart.current.x;
-      dragStart.current = { x: moveE.clientX, y: moveE.clientY };
+  const overflowX = direction === "horizontal" ? "auto" : "hidden";
+  const overflowY = direction === "vertical" ? "auto" : direction === "both" ? "auto" : "hidden";
 
-      const { scrollWidth, clientWidth } = el;
-      const maxScroll = scrollWidth - clientWidth;
-      const rightReserved = direction === "both" ? TRACK_SIZE + 4 : 0;
-      const trackWidth = container.clientWidth - scrollbarOffsetLeft - rightReserved - ARROW_HEIGHT * 2;
-      const thumbWidth = Math.max(THUMB_MIN_SIZE, (clientWidth / scrollWidth) * trackWidth);
-      const trackThumbSpace = trackWidth - thumbWidth;
-
-      if (trackThumbSpace <= 0) return;
-
-      const scrollDelta = deltaX * (maxScroll / trackThumbSpace);
-      el.scrollLeft = Math.max(0, Math.min(maxScroll, el.scrollLeft + scrollDelta));
-    };
-
-    let cleanupDragListeners: (() => void) | null = null;
-    const onMouseUp = () => {
-      cleanupDragListeners?.();
-      cleanupDragListeners = null;
-    };
-
-    const cleanupMouseMove = addGlobalEventListener(document, "mousemove", onMouseMove);
-    const cleanupMouseUp = addGlobalEventListener(document, "mouseup", onMouseUp);
-    cleanupDragListeners = () => {
-      cleanupMouseMove();
-      cleanupMouseUp();
-    };
-  }, [direction, scrollbarOffsetLeft]);
-
-  const showV = isVisible.v && isHovered;
-  const showH = isVisible.h && isHovered;
+  const chromeActiveV = isVisible.v && (isHovered || isDragging.v);
+  const chromeActiveH = isVisible.h && (isHovered || isDragging.h);
 
   return (
     <div
       ref={containerRef}
       className={`relative flex flex-col min-h-0 w-full ${className}`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
     >
       <div
         ref={viewportRef}
@@ -358,29 +359,34 @@ export const OverlayScrollbar = forwardRef<
         {children}
       </div>
 
-      {/* Vertical scrollbar - 从 scrollbarOffsetTop 开始，避开 sticky 表头 */}
       {(direction === "vertical" || direction === "both") && isVisible.v && (
         <div
           className="absolute right-0 bottom-0 w-6 flex justify-end pointer-events-none transition-opacity duration-150 ease-out z-20"
           style={{ top: scrollbarOffsetTop, paddingRight: 2 }}
         >
-          <div className={`flex flex-col h-full ${showV ? "pointer-events-auto" : ""}`} style={{ opacity: showV ? 1 : 0, width: TRACK_SIZE }}>
+          <div
+            className={`flex flex-col h-full ${chromeActiveV ? "pointer-events-auto" : ""}`}
+            style={{ opacity: chromeActiveV ? 1 : 0, width: TRACK_SIZE }}
+          >
             <ArrowButton direction="up" size={TRACK_SIZE} onScroll={() => scrollV(-SCROLL_STEP)} />
             <div
-              className="flex-1 min-h-0 relative cursor-pointer"
-              onClick={handleTrackClickV}
+              ref={trackVRef}
+              className="flex-1 min-h-0 relative cursor-pointer touch-none"
+              onPointerDown={handleTrackPointerDownV}
               style={{ width: TRACK_SIZE }}
             >
               {thumbStyle.v && (
                 <div
-                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)]"
+                  ref={thumbVRef}
+                  className="absolute left-0 right-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)] touch-none select-none"
                   style={{
                     top: thumbStyle.v.top,
                     height: thumbStyle.v.height,
                     width: TRACK_SIZE,
+                    minHeight: THUMB_MIN_SIZE,
                     backgroundColor: THUMB_COLOR,
                   }}
-                  onMouseDown={handleThumbMouseDownV}
+                  onPointerDown={handleThumbPointerDownV}
                 />
               )}
             </div>
@@ -389,29 +395,34 @@ export const OverlayScrollbar = forwardRef<
         </div>
       )}
 
-      {/* Horizontal scrollbar - 从 scrollbarOffsetLeft 开始，避开行号列 */}
       {(direction === "horizontal" || direction === "both") && isVisible.h && (
         <div
           className="absolute bottom-0 h-6 flex items-end pointer-events-none transition-opacity duration-150 ease-out z-20"
           style={{ left: scrollbarOffsetLeft, paddingBottom: 2, right: direction === "both" ? TRACK_SIZE + 4 : 0 }}
         >
-          <div className={`flex flex-row w-full ${showH ? "pointer-events-auto" : ""}`} style={{ opacity: showH ? 1 : 0, height: TRACK_SIZE }}>
+          <div
+            className={`flex flex-row w-full ${chromeActiveH ? "pointer-events-auto" : ""}`}
+            style={{ opacity: chromeActiveH ? 1 : 0, height: TRACK_SIZE }}
+          >
             <ArrowButton direction="left" size={TRACK_SIZE} onScroll={() => scrollH(-SCROLL_STEP)} />
             <div
-              className="flex-1 min-w-0 relative cursor-pointer"
-              onClick={handleTrackClickH}
+              ref={trackHRef}
+              className="flex-1 min-w-0 relative cursor-pointer touch-none"
+              onPointerDown={handleTrackPointerDownH}
               style={{ height: TRACK_SIZE }}
             >
               {thumbStyle.h && (
                 <div
-                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)]"
+                  ref={thumbHRef}
+                  className="absolute top-0 bottom-0 cursor-grab active:cursor-grabbing transition-colors duration-150 ease-out hover:bg-[var(--overlay-scrollbar-thumb-hover)] touch-none select-none"
                   style={{
                     left: thumbStyle.h.left,
                     width: thumbStyle.h.width,
                     height: TRACK_SIZE,
+                    minWidth: THUMB_MIN_SIZE,
                     backgroundColor: THUMB_COLOR,
                   }}
-                  onMouseDown={handleThumbMouseDownH}
+                  onPointerDown={handleThumbPointerDownH}
                 />
               )}
             </div>
