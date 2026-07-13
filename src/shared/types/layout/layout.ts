@@ -74,7 +74,7 @@ export interface LayoutNode {
     params?: EditorGroupNodeParams;
     visible?: boolean;
     currentTab?: string | null;
-    /** User explicitly hid detail panel; auto-show should not override. */
+    /** User explicitly hid a workbench chrome part; sash auto-restore should not override. */
     userHidden?: boolean;
     /** Panel maximized via sash double-click. */
     maximized?: boolean;

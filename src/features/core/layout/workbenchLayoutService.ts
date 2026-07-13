@@ -10,7 +10,7 @@ import {
   type WorkbenchPartId,
 } from './workbenchLayoutDefaults';
 import { applyEditorGridMementoWithRepair, snapshotEditorGridMemento } from './editorGridMemento';
-import { reflowWorkbenchAfterPartVisibilityChange } from './editorGridSizing';
+import { reflowEditorGridLayout } from './editorGridSizing';
 import { reconcileEditorTabPlacements, useEditorTabStore } from './editorTabStore';
 import { schedulePartResizeCommit } from './partResizeNotifier';
 import type { PanelViewId } from './panelPartModel';
@@ -49,6 +49,9 @@ function readPartMemento(partId: WorkbenchPartId): WorkbenchPartMemento {
   }
 
   if (partId === 'detail' && node.data?.userHidden === true) {
+    memento.userHidden = true;
+  }
+  if ((partId === SIDEBAR_NODE_ID || partId === PANEL_PART_ID) && node.data?.userHidden === true) {
     memento.userHidden = true;
   }
 
@@ -146,6 +149,9 @@ export function hydrateWorkbenchChrome(): void {
     if (saved.visible != null) nextData.visible = saved.visible;
     if (partId === SIDEBAR_NODE_ID && saved.currentTab) nextData.currentTab = saved.currentTab;
     if (partId === 'detail' && saved.userHidden != null) nextData.userHidden = saved.userHidden;
+    if ((partId === SIDEBAR_NODE_ID || partId === PANEL_PART_ID) && saved.userHidden != null) {
+      nextData.userHidden = saved.userHidden;
+    }
     if (partId === PANEL_PART_ID) {
       if (saved.maximized != null) nextData.maximized = saved.maximized;
       if (saved.restoredPixelSize != null) nextData.restoredPixelSize = saved.restoredPixelSize;
@@ -164,7 +170,7 @@ export function hydrateEditorGrid(): void {
   useLayoutStore.setState((state) => {
     state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
     state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
-    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    reflowEditorGridLayout(state.nodes);
   });
   if (memento.editorTabs) {
     useEditorTabStore.getState().applyMemento(memento.editorTabs);
@@ -213,7 +219,7 @@ export function applyPanelPosition(position: PanelPosition): void {
   }
   schedulePartResizeCommit(PANEL_PART_ID, clamped);
   useLayoutStore.setState((state) => {
-    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    reflowEditorGridLayout(state.nodes);
   });
   persistWorkbenchLayoutDebounced();
 }
@@ -266,7 +272,7 @@ export function subscribeWorkbenchViewportResize(delayMs = 100): () => void {
       timer = null;
       reclampWorkbenchPanelSize();
       useLayoutStore.setState((state) => {
-        reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+        reflowEditorGridLayout(state.nodes);
       });
     }, delayMs);
   };
@@ -300,13 +306,20 @@ export function setWorkbenchPartVisible(
   if (!node) return;
 
   const nextData = { ...node.data, visible };
-  if (partId === 'detail' && options?.userHidden != null) {
+  if (options?.userHidden != null) {
     nextData.userHidden = options.userHidden;
+  } else if (visible) {
+    nextData.userHidden = false;
+  }
+
+  if (partId === PANEL_PART_ID && !visible && node.data?.maximized === true) {
+    nextData.maximized = false;
+    nextData.restoredPixelSize = undefined;
   }
 
   useLayoutStore.getState().updateNode(partId, { data: nextData });
   useLayoutStore.setState((state) => {
-    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    reflowEditorGridLayout(state.nodes);
   });
   if (options?.persist !== false) {
     persistWorkbenchLayoutDebounced();
@@ -317,11 +330,7 @@ export function togglePart(partId: WorkbenchPartId): void {
   const node = useLayoutStore.getState().nodes[partId];
   if (!node) return;
   const isVisible = node.data?.visible !== false;
-  if (partId === 'detail') {
-    setWorkbenchPartVisible(partId, !isVisible, { userHidden: isVisible });
-    return;
-  }
-  setWorkbenchPartVisible(partId, !isVisible);
+  setWorkbenchPartVisible(partId, !isVisible, { userHidden: isVisible });
 }
 
 export function toggleSidebarVisibility(): void {
@@ -354,7 +363,7 @@ export function togglePanelMaximized(): void {
     const committedSize = useLayoutStore.getState().nodes[PANEL_PART_ID]?.pixelSize ?? restored;
     schedulePartResizeCommit(PANEL_PART_ID, committedSize);
     useLayoutStore.setState((state) => {
-      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      reflowEditorGridLayout(state.nodes);
     });
   } else {
     updateNode(PANEL_PART_ID, {
@@ -363,6 +372,9 @@ export function togglePanelMaximized(): void {
         maximized: true,
         restoredPixelSize: panel.pixelSize ?? 200,
       },
+    });
+    useLayoutStore.setState((state) => {
+      reflowEditorGridLayout(state.nodes);
     });
   }
   persistWorkbenchLayoutDebounced();
@@ -374,7 +386,7 @@ export function showSidebarTab(tab: SidebarTabId): void {
   useLayoutStore.getState().showSidebarTab(tab);
   if (wasHidden) {
     useLayoutStore.setState((state) => {
-      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      reflowEditorGridLayout(state.nodes);
     });
   }
   persistWorkbenchLayoutDebounced();
@@ -384,7 +396,7 @@ export function toggleSidebarTab(tab: SidebarTabId): void {
   if (isZenModeActive()) return;
   useLayoutStore.getState().toggleSidebarTab(tab);
   useLayoutStore.setState((state) => {
-    reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+    reflowEditorGridLayout(state.nodes);
   });
   persistWorkbenchLayoutDebounced();
 }

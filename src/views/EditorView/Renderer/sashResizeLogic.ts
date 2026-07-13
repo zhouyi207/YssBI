@@ -31,6 +31,8 @@ import {
 import { schedulePartResizeCommit } from '@/features/core/layout/partResizeNotifier';
 import type { WorkbenchPartId } from '@/features/core/layout/workbenchLayoutDefaults';
 import { isZenModeActive } from '@/features/core/layout/workbenchZenMode';
+import { shouldRestoreWorkbenchPartOnSashDrag } from '@/features/core/layout/workbenchPartVisibility';
+import { reflowEditorGridLayout } from '@/features/core/layout/editorGridSizing';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 export type SashAxis = 'x' | 'y';
@@ -153,22 +155,29 @@ export function isSashAtLimit(target: SashResizeTarget, pointerDelta: number): b
   return raw <= target.minSize || raw >= target.maxSize;
 }
 
-/** VS Code: restore collapsed adjacent panel when sash drag starts. */
+/** VS Code: restore sash-collapsed adjacent panel; respect explicit userHidden. */
 export function restoreAdjacentPanelVisibility(beforeNodeId: string, afterNodeId: string): void {
   if (isZenModeActive()) return;
 
   const { nodes, updateNode } = useLayoutStore.getState();
+  let restored = false;
 
   for (const nodeId of [beforeNodeId, afterNodeId] as const) {
     const node = nodes[nodeId];
-    if (node?.data?.visible !== false) continue;
-    if (node.id === 'detail' && node.data?.userHidden === true) continue;
+    if (!shouldRestoreWorkbenchPartOnSashDrag(node)) continue;
 
-    const restored = { ...node.data, visible: true as const };
-    if (!restored.currentTab && restored.component === 'Sidebar') {
-      restored.currentTab = 'graphs';
+    const nextData = { ...node.data, visible: true as const, userHidden: false };
+    if (!nextData.currentTab && nextData.component === 'Sidebar') {
+      nextData.currentTab = 'graphs';
     }
-    updateNode(nodeId, { data: restored });
+    updateNode(nodeId, { data: nextData });
+    restored = true;
+  }
+
+  if (restored) {
+    useLayoutStore.setState((state) => {
+      reflowEditorGridLayout(state.nodes);
+    });
   }
 }
 

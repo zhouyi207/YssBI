@@ -121,6 +121,19 @@ export function writeEditorAreaMaximizeState(
   };
 }
 
+/** Drop stale exit snapshot while a group stays maximized (chrome/viewport changed). */
+export function invalidateEditorAreaMaximizeSnapshot(nodes: LayoutTree): void {
+  const maximizedId = readEditorAreaMaximizedGroupId(nodes);
+  if (!maximizedId) return;
+
+  const maximized = nodes[maximizedId];
+  if (maximized?.pixelSize != null) {
+    maximized.pixelSize = undefined;
+  }
+
+  writeEditorAreaMaximizeState(nodes, maximizedId, null);
+}
+
 export function equalSplitPairSizes(beforeSize: number, afterSize: number): { beforeSize: number; afterSize: number } {
   const total = beforeSize + afterSize;
   const half = Math.floor(total / 2);

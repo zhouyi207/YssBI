@@ -122,6 +122,19 @@ describe('attachSashDrag store commits', () => {
     updateSpy.mockRestore();
   });
 
+  it('does not restore a sidebar that the user explicitly hid', () => {
+    const nodes = createInitialWorkbenchNodes();
+    nodes.sidebar!.data = { ...nodes.sidebar!.data, visible: false, userHidden: true };
+    useLayoutStore.setState({ nodes });
+    const updateSpy = vi.spyOn(useLayoutStore.getState(), 'updateNode');
+
+    restoreAdjacentPanelVisibility('sidebar', 'center');
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(useLayoutStore.getState().nodes.sidebar?.data?.visible).toBe(false);
+    updateSpy.mockRestore();
+  });
+
   it.each([
     {
       position: 'left',

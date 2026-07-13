@@ -210,7 +210,12 @@ export const useLayoutStore = create<LayoutState>()(
         showSidebarTab: (tab) => set((state) => {
             const sidebar = state.nodes[SIDEBAR_NODE_ID];
             if (!sidebar) return;
-            sidebar.data = { ...sidebar.data, visible: true, currentTab: tab };
+            sidebar.data = {
+                ...sidebar.data,
+                visible: true,
+                currentTab: tab,
+                userHidden: false,
+            };
         }),
 
         toggleSidebarTab: (tab) => set((state) => {
@@ -221,11 +226,16 @@ export const useLayoutStore = create<LayoutState>()(
             const activeTab = isSidebarTabId(sidebar.data?.currentTab) ? sidebar.data!.currentTab! : null;
 
             if (isVisible && activeTab === tab) {
-                sidebar.data = { ...sidebar.data, visible: false };
+                sidebar.data = { ...sidebar.data, visible: false, userHidden: true };
                 return;
             }
 
-            sidebar.data = { ...sidebar.data, visible: true, currentTab: tab };
+            sidebar.data = {
+                ...sidebar.data,
+                visible: true,
+                currentTab: tab,
+                userHidden: false,
+            };
         }),
 
         collapseEditorGroups: () => set((state) => {

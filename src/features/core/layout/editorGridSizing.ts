@@ -1,6 +1,10 @@
 import type { LayoutNode, LayoutTree } from '@/shared/types/ui';
 import { EDITOR_AREA_ID } from './workbenchLayoutDefaults';
-import { isDescendantOf, readEditorAreaMaximizedGroupId } from './editorGridLayout';
+import {
+  isDescendantOf,
+  invalidateEditorAreaMaximizeSnapshot,
+  readEditorAreaMaximizedGroupId,
+} from './editorGridLayout';
 
 function isSplitContainer(node: LayoutNode | undefined): node is LayoutNode & { type: 'row' | 'col' } {
   return node?.type === 'row' || node?.type === 'col';
@@ -104,12 +108,14 @@ export function computeEditorGridMementoSizes(nodes: LayoutTree): Record<string,
   return sizes;
 }
 
-/** Reclaim chrome space for editor grid after sidebar/detail/panel visibility changes. */
-export function reflowWorkbenchAfterPartVisibilityChange(nodes: LayoutTree): void {
-  if (readEditorAreaMaximizedGroupId(nodes)) return;
+/** Reclaim editor grid space after chrome or viewport changes. */
+export function reflowEditorGridLayout(nodes: LayoutTree): void {
+  if (readEditorAreaMaximizedGroupId(nodes)) {
+    invalidateEditorAreaMaximizeSnapshot(nodes);
+    return;
+  }
   normalizeEditorGridSplitWeights(nodes);
 }
-
 export function isEditorGridNode(nodes: LayoutTree, nodeId: string): boolean {
   return nodeId === EDITOR_AREA_ID || isDescendantOf(nodes, nodeId, EDITOR_AREA_ID);
 }

@@ -70,6 +70,13 @@ export {
   removeEditorGroupFromTree,
 } from './editorGridLayout';
 export { panelFlexBasis } from './splitView';
+export {
+  reflowEditorGridLayout,
+} from './editorGridSizing';
+export {
+  isWorkbenchPartUserHidden,
+  shouldRestoreWorkbenchPartOnSashDrag,
+} from './workbenchPartVisibility';
 export type { PanelViewId } from './panelPartModel';
 export { DEFAULT_PANEL_VIEWS } from './panelPartModel';
 export {

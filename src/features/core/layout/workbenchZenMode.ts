@@ -1,6 +1,6 @@
 import { useLayoutStore } from './layoutStore';
 import { WORKBENCH_PART_IDS, type WorkbenchPartId } from './workbenchLayoutDefaults';
-import { reflowWorkbenchAfterPartVisibilityChange } from './editorGridSizing';
+import { reflowEditorGridLayout } from './editorGridSizing';
 
 type ZenPartSnapshot = {
   visible: boolean;
@@ -13,7 +13,7 @@ function readPartSnapshot(partId: WorkbenchPartId): ZenPartSnapshot {
   const node = useLayoutStore.getState().nodes[partId];
   return {
     visible: node?.data?.visible !== false,
-    userHidden: partId === 'detail' ? node?.data?.userHidden === true : undefined,
+    userHidden: node?.data?.userHidden === true,
   };
 }
 
@@ -21,8 +21,7 @@ function setPartSnapshot(partId: WorkbenchPartId, snapshot: ZenPartSnapshot): vo
   const node = useLayoutStore.getState().nodes[partId];
   if (!node) return;
 
-  const data = { ...node.data, visible: snapshot.visible };
-  if (partId === 'detail') data.userHidden = snapshot.userHidden;
+  const data = { ...node.data, visible: snapshot.visible, userHidden: snapshot.userHidden ?? false };
   useLayoutStore.getState().updateNode(partId, { data });
 }
 
@@ -42,7 +41,7 @@ class ZenModeSessionController {
       setPartSnapshot(partId, { visible: false });
     }
     useLayoutStore.setState((state) => {
-      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      reflowEditorGridLayout(state.nodes);
       state.zenMode = true;
     });
   }
@@ -59,7 +58,7 @@ class ZenModeSessionController {
       setPartSnapshot(partId, saved[partId]);
     }
     useLayoutStore.setState((state) => {
-      reflowWorkbenchAfterPartVisibilityChange(state.nodes);
+      reflowEditorGridLayout(state.nodes);
     });
   }
 

@@ -26,7 +26,7 @@ export function createInitialWorkbenchNodes(): LayoutTree {
       parentId: WORKBENCH_ROOT_ID,
       pixelSize: 260,
       minSize: 240,
-      data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'graphs' },
+      data: { component: 'Sidebar', visible: true, title: 'Explorer', isFixed: true, currentTab: 'graphs', userHidden: false },
     },
     center: {
       id: 'center',
@@ -63,6 +63,7 @@ export function createInitialWorkbenchNodes(): LayoutTree {
         visible: true,
         title: 'Panel',
         isFixed: true,
+        userHidden: false,
       },
     },
     detail: {

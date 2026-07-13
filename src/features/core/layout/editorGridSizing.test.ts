@@ -7,7 +7,7 @@ import {
   commitSplitPairSizes,
   computeEditorGridMementoSizes,
   normalizeEditorGridSplitWeights,
-  reflowWorkbenchAfterPartVisibilityChange,
+  reflowEditorGridLayout,
 } from './editorGridSizing';
 import {
   createInitialWorkbenchNodes,
@@ -123,7 +123,7 @@ describe('editorGridSizing', () => {
     expect(nodes.editor_group_2?.size).toBeCloseTo(0.8);
   });
 
-  it('reflowWorkbenchAfterPartVisibilityChange skips while an editor group is maximized', () => {
+  it('reflowEditorGridLayout invalidates stale maximize snapshot during group maximize', () => {
     const nodes = createInitialWorkbenchNodes();
     nodes[EDITOR_AREA_ID]!.children = [DEFAULT_EDITOR_GROUP_ID, 'editor_group_2'];
     nodes.editor_group_2 = {
@@ -134,11 +134,15 @@ describe('editorGridSizing', () => {
       data: { component: 'GraphEditor' },
     };
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 400;
-    nodes[EDITOR_AREA_ID]!.data = { maximizedGroupId: DEFAULT_EDITOR_GROUP_ID };
+    nodes[EDITOR_AREA_ID]!.data = {
+      maximizedGroupId: DEFAULT_EDITOR_GROUP_ID,
+      restoredGridSizes: { [DEFAULT_EDITOR_GROUP_ID]: 400, editor_group_2: 400 },
+    };
 
-    reflowWorkbenchAfterPartVisibilityChange(nodes);
+    reflowEditorGridLayout(nodes);
 
-    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(400);
-    expect(nodes.editor_group_2?.pixelSize).toBe(400);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[EDITOR_AREA_ID]?.data?.restoredGridSizes).toBeUndefined();
+    expect(nodes[EDITOR_AREA_ID]?.data?.maximizedGroupId).toBe(DEFAULT_EDITOR_GROUP_ID);
   });
 });
