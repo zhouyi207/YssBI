@@ -1,11 +1,9 @@
 import { memo, useContext } from 'react';
 import Canvas from './Canvas';
-import { useEditorGroup, useIsActiveEditorGroup } from '@/features/application/editor';
-import { GroupContext } from '@/features/core/editor';
+import { useIsActiveEditorGroup } from '@/features/application/editor';
+import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
 import { WatermarkView } from '../overlays/WatermarkView';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
-import { useShallow } from 'zustand/react/shallow';
 import { CanvasDropZone } from './CanvasDropZone';
 
 /**
@@ -15,23 +13,9 @@ import { CanvasDropZone } from './CanvasDropZone';
 export const GraphEditor = memo(function GraphEditor() {
     const nodeId = useContext(GroupContext) as string | null;
     const isActiveGroup = useIsActiveEditorGroup(nodeId);
-    const { activeTabId: contextActiveTabId } = useEditorGroup();
+    const { activeTabId, tabs } = useEditorGroupWorkspace();
 
-    const { hasTabs, activeTabId } = useLayoutStore(useShallow((s) => {
-        if (!nodeId) {
-            return { hasTabs: false, activeTabId: contextActiveTabId as string | null };
-        }
-        const node = s.nodes[nodeId];
-        const tabsLen = node?.data?.tabs?.length ?? 0;
-        return {
-            hasTabs: tabsLen > 0,
-            activeTabId: tabsLen > 0 ? (node?.data?.activeTabId ?? null) : null,
-        };
-    }));
-
-    const resolvedTabId = nodeId
-        ? (hasTabs ? activeTabId : null)
-        : contextActiveTabId;
+    const resolvedTabId = tabs.length > 0 ? activeTabId : null;
 
     return (
         <div

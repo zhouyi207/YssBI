@@ -1,6 +1,7 @@
 import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { getEditorGroupActiveTabId, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import type { LayoutTab } from '@/shared/types/ui';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { activateGraphTab } from './activateGraphTab';
@@ -47,13 +48,12 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
 
 /** Restore session + backend load after close without changing detail focus. */
 export async function activateCurrentEditorTab(groupId: string): Promise<boolean> {
-  const node = useLayoutStore.getState().nodes[groupId];
-  const activeTabId = node?.data?.activeTabId;
+  const activeTabId = getEditorGroupActiveTabId(groupId);
   if (!activeTabId) {
     useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;
   }
-  const activeTab = node?.data?.tabs?.find((tab) => tab.id === activeTabId);
+  const activeTab = useEditorTabStore.getState().resolveTab(activeTabId);
   if (!activeTab) {
     useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;

@@ -17,6 +17,8 @@ import {
   subscribeWorkbenchViewportResize,
 } from './workbenchLayoutService';
 import { useLayoutStore } from './layoutStore';
+import { useEditorTabStore } from './editorTabStore';
+import { resetEditorTabStore, legacyEmbeddedNodeData } from './editorTabTestUtils';
 import { snapshotEditorGridMemento } from './editorGridMemento';
 import { enterZenMode } from './workbenchZenMode';
 import { restoreAdjacentPanelVisibility } from '@/views/EditorView/Renderer/sashResizeLogic';
@@ -26,6 +28,7 @@ describe('workbenchLayoutPersistence decoupling', () => {
     vi.useFakeTimers();
     localStorage.clear();
     setWorkbenchLayoutWindowScope('main');
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       nodes: createInitialWorkbenchNodes(),
@@ -46,7 +49,7 @@ describe('workbenchLayoutPersistence decoupling', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
     });
 
@@ -85,7 +88,7 @@ describe('workbenchLayoutPersistence decoupling', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
       state.activeEditorGroupId = 'editor_group_2';
     });
@@ -164,7 +167,7 @@ describe('workbenchLayoutPersistence decoupling', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
       state.activeEditorGroupId = 'editor_group_2';
     });
@@ -226,23 +229,23 @@ describe('workbenchLayoutPersistence decoupling', () => {
         visible: false,
         userHidden: true,
       };
-      state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data = {
-        ...state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data,
-        tabs: [{ id: 'events/one', component: 'GraphEditor', type: 'event' }],
-        activeTabId: 'events/one',
-        params: { selectedNodeIds: ['node-one'] },
-      };
+      state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data = legacyEmbeddedNodeData(
+        state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data!,
+        [{ id: 'events/one', component: 'GraphEditor', type: 'event' }],
+        'events/one',
+        ['node-one'],
+      );
       state.nodes[EDITOR_AREA_ID]!.children = [DEFAULT_EDITOR_GROUP_ID, 'editor_group_2'];
       state.nodes.editor_group_2 = {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: {
-          component: 'GraphEditor',
-          tabs: [{ id: 'events/two', component: 'GraphEditor', type: 'event' }],
-          activeTabId: 'events/two',
-          params: { selectedNodeIds: ['node-two'] },
-        },
+        data: legacyEmbeddedNodeData(
+          { component: 'GraphEditor' },
+          [{ id: 'events/two', component: 'GraphEditor', type: 'event' }],
+          'events/two',
+          ['node-two'],
+        ),
       };
       state.activeEditorGroupId = 'editor_group_2';
     });
@@ -250,12 +253,13 @@ describe('workbenchLayoutPersistence decoupling', () => {
     resetWorkbenchLayout();
 
     const state = useLayoutStore.getState();
+    const tabState = useEditorTabStore.getState();
     expect(state.nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID, 'editor_group_2']);
-    expect(state.nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.tabs?.map((tab) => tab.id)).toEqual(['events/one']);
-    expect(state.nodes.editor_group_2?.data?.tabs?.map((tab) => tab.id)).toEqual(['events/two']);
-    expect(state.nodes.editor_group_2?.data?.activeTabId).toBe('events/two');
-    expect(state.nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.params).toEqual({ selectedNodeIds: ['node-one'] });
-    expect(state.nodes.editor_group_2?.data?.params).toEqual({ selectedNodeIds: ['node-two'] });
+    expect(tabState.getPlacement(DEFAULT_EDITOR_GROUP_ID).tabIds).toEqual(['events/one']);
+    expect(tabState.getPlacement('editor_group_2').tabIds).toEqual(['events/two']);
+    expect(tabState.getPlacement('editor_group_2').activeTabId).toBe('events/two');
+    expect(tabState.getPlacement(DEFAULT_EDITOR_GROUP_ID).selectedNodeIds).toEqual(['node-one']);
+    expect(tabState.getPlacement('editor_group_2').selectedNodeIds).toEqual(['node-two']);
     expect(state.activeEditorGroupId).toBe('editor_group_2');
     expect(state.nodes.sidebar?.pixelSize).toBe(260);
     expect(state.nodes.sidebar?.data?.visible).toBe(true);
@@ -356,7 +360,7 @@ describe('workbenchLayoutPersistence decoupling', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
     });
     mergeWorkbenchLayoutMemento({

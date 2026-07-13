@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { activateEditorGroup } from './switchEditorTab';
 import { activateGraphTab } from './activateGraphTab';
 
@@ -14,6 +15,7 @@ vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
 describe('editor group activation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       activeEditorGroupId: 'group-a',
@@ -28,20 +30,19 @@ describe('editor group activation', () => {
           id: 'group-a',
           type: 'component',
           parentId: 'root',
-          data: { component: 'GraphEditor', tabs: [] },
+          data: { component: 'GraphEditor' },
         },
         'group-b': {
           id: 'group-b',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'events/B.yssbi-event', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'events/B.yssbi-event',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
     });
+    seedEditorGroupTabs('group-b', [
+      { id: 'events/B.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
   });
 
   it('activates the group and its current graph session together', async () => {

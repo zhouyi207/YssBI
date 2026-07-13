@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { getGraphByPath } from "@/features/core/dataStore";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { getEditorGroupSelectedNodeIds } from '@/features/core/layout/editorTabStore';
 import { useGestureStore } from "@/features/core/gesture";
-import { persistGraphViewport } from '@/features/core/viewport';
+import { persistGraphViewport, editorViewportScope } from '@/features/core/viewport';
 import { useEditorStore } from "@/features/core/editor";
 import { executeCommand } from "@/features/core/history";
 import { Pin } from "@/shared/types/domain";
@@ -26,6 +26,11 @@ interface UseCanvasInteractionProps {
     enabled?: boolean;
 }
 
+const DISABLED_UI = {
+    contextMenu: null,
+    pendingConnection: null,
+} as const;
+
 export function useCanvasInteraction({
     activeGroupIdRef,
     activeTabIdRef,
@@ -34,17 +39,21 @@ export function useCanvasInteraction({
     enabled = true,
 }: UseCanvasInteractionProps) {
 
-    const contextMenu = useEditorStore((s) => s.contextMenu);
+    const contextMenu = useEditorStore((s) => (enabled ? s.contextMenu : null));
     const setContextMenu = useEditorStore((s) => s.setContextMenu);
-    const pendingConnection = useEditorStore((s) => s.pendingConnection);
+    const pendingConnection = useEditorStore((s) => (enabled ? s.pendingConnection : null));
     const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
 
     const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
     setSelectedNodeIdsRef.current = setSelectedNodeIds;
 
-    const persistViewport = useCallback((graphPath?: string | null) => {
-        persistGraphViewport(graphPath ?? activeTabIdRef.current);
-    }, [activeTabIdRef]);
+    const persistViewport = useCallback((pane?: { groupId: string; graphPath: string } | null) => {
+      const groupId = pane?.groupId ?? activeGroupIdRef.current;
+      const graphPath = pane?.graphPath ?? activeTabIdRef.current;
+      if (groupId && graphPath) {
+        persistGraphViewport(editorViewportScope(groupId, graphPath));
+      }
+    }, [activeGroupIdRef, activeTabIdRef]);
 
     const connectPins = useCallback(async (groupId: string, a: string, b: string) => {
         const tid = resolveTabId(groupId, activeTabIdRef);
@@ -95,8 +104,7 @@ export function useCanvasInteraction({
         abortSelectionSession(gid);
         if (e.button !== 0) return;
 
-        const layoutNode = useLayoutStore.getState().nodes[gid];
-        const currentSelected = layoutNode?.data?.params?.selectedNodeIds || [];
+        const currentSelected = getEditorGroupSelectedNodeIds(gid);
 
         let dragNodeIds = currentSelected;
         if (e.shiftKey) {
@@ -158,15 +166,16 @@ export function useCanvasInteraction({
     }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
 
     return useMemo(() => ({
-        contextMenu,
+        contextMenu: enabled ? contextMenu : DISABLED_UI.contextMenu,
         setContextMenu,
-        pendingConnection,
+        pendingConnection: enabled ? pendingConnection : DISABLED_UI.pendingConnection,
         setPendingConnection,
         connectPins,
         onCanvasPointerDown,
         onNodePointerDown,
         onPinPointerDown
     }), [
+        enabled,
         contextMenu,
         setContextMenu,
         pendingConnection,

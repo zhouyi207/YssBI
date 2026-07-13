@@ -1,4 +1,5 @@
 import { useLayoutStore } from '@/features/core/layout';
+import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { getGraphByPath } from '@/features/core/dataStore';
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
@@ -6,8 +7,8 @@ export function resolveExecutionGraphPath(targetGraphPath?: string): string | un
 
   const layoutStore = useLayoutStore.getState();
   const editorGroupId = layoutStore.activeEditorGroupId;
-  const editorNode = editorGroupId ? layoutStore.nodes[editorGroupId] : null;
-  return editorNode?.data?.activeTabId as string | undefined;
+  if (!editorGroupId) return undefined;
+  return getEditorGroupActiveTabId(editorGroupId) ?? undefined;
 }
 
 export function getExecutionEventGraph(targetGraphPath?: string) {

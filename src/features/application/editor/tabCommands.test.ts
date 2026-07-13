@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
 import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import {
@@ -22,6 +23,7 @@ vi.mock('./closeEditorTab', () => ({
 describe('tabCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetEditorTabStore();
   });
 
   it('layoutTabResourceRef maps graph tabs to ResourceRef', () => {
@@ -31,39 +33,17 @@ describe('tabCommands', () => {
 
   it('switchTab delegates to switchEditorTab', async () => {
     const tab = buildGraphLayoutTab('events/A.yssbi-event', 'event');
-    useLayoutStore.setState((state) => ({
-      nodes: {
-        ...state.nodes,
-        default_editor: {
-          ...state.nodes.default_editor,
-          data: {
-            ...state.nodes.default_editor.data,
-            tabs: [tab],
-            activeTabId: tab.id,
-          },
-        },
-      },
-    }));
+    seedEditorGroupTabs('default_editor', [tab], tab.id);
 
     await switchTab('default_editor', tab.id);
     expect(switchEditorTab).toHaveBeenCalledWith('default_editor', tab);
   });
 
   it('activates an inactive group before running its TabBar close action', async () => {
-    useLayoutStore.setState((state) => ({
-      activeEditorGroupId: 'other-editor',
-      nodes: {
-        ...state.nodes,
-        default_editor: {
-          ...state.nodes.default_editor,
-          data: {
-            ...state.nodes.default_editor.data,
-            tabs: [{ id: 'events/A.yssbi-event', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'events/A.yssbi-event',
-          },
-        },
-      },
-    }));
+    seedEditorGroupTabs('default_editor', [
+      { id: 'events/A.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
+    useLayoutStore.setState({ activeEditorGroupId: 'other-editor' });
 
     await closeTab('default_editor', 'events/A.yssbi-event');
 

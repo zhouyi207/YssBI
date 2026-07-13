@@ -1,6 +1,7 @@
-import { useRef, Fragment, useMemo } from 'react';
+import { useRef, Fragment, useMemo, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { inferPanelPosition } from '@/features/core/layout/panelPartLayout';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { Sash } from './Sash';
@@ -152,57 +153,77 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
  * 负责渲染具体的业务组件以及处理 DND 区域
  */
 const LeafNodeRenderer = ({ nodeId }: { nodeId: string }) => {
-    const activeEditorGroupId = useLayoutStore(s => s.activeEditorGroupId);
-
-    const leaf = useLayoutStore(useShallow((s) => {
-        const node = s.nodes[nodeId];
-        if (!node) return null;
-        const tabs = node.data?.tabs;
-        const activeTabId = node.data?.activeTabId;
-        const activeTab = tabs?.find((tab) => tab.id === activeTabId);
-        const hasTabs = (tabs?.length ?? 0) > 0;
+    const defaultComponent = useLayoutStore((s) => s.nodes[nodeId]?.data?.component ?? '');
+    const isFixed = useLayoutStore((s) => !!s.nodes[nodeId]?.data?.isFixed);
+    const tabSlice = useEditorTabStore(useShallow((state) => {
+        const placement = state.placements[nodeId];
+        const activeTabId = placement?.activeTabId;
+        const activeTab = activeTabId ? state.registry[activeTabId] : null;
         return {
-            hasTabs,
-            activeComponentName: activeTab?.component ?? node.data?.component ?? '',
-            isFixed: !!node.data?.isFixed,
+            hasTabs: (placement?.tabIds.length ?? 0) > 0,
+            activeComponentName: activeTab?.component ?? '',
         };
     }));
 
-    const isActive = activeEditorGroupId === nodeId;
+    const activeComponentName = tabSlice.activeComponentName || defaultComponent;
 
     const ActiveComponent = useMemo(() => {
-        if (!leaf) return null;
-        return leaf.activeComponentName ? viewRegistry.get(leaf.activeComponentName) : null;
-    }, [leaf?.activeComponentName]);
+        return activeComponentName ? viewRegistry.get(activeComponentName) : null;
+    }, [activeComponentName]);
 
-    if (!leaf) return null;
+    if (!defaultComponent && !tabSlice.hasTabs) return null;
+
+    return (
+        <EditorGroupFocusShell
+            nodeId={nodeId}
+            isFixed={isFixed}
+            hasTabs={tabSlice.hasTabs}
+        >
+            {tabSlice.hasTabs ? (
+                <div className="flex-none flex items-center bg-[var(--workbench-bg)] select-none">
+                    <EditorGroupTabStrip layoutNodeId={nodeId} />
+                </div>
+            ) : null}
+
+            <div className="flex-1 relative min-h-0" data-editor-content={nodeId}>
+                {ActiveComponent ? (
+                    <ActiveComponent />
+                ) : (
+                    <div className="p-4 italic text-muted-foreground">No content</div>
+                )}
+
+                {!isFixed && <DropZoneOverlay nodeId={nodeId} />}
+            </div>
+        </EditorGroupFocusShell>
+    );
+};
+
+/** Isolated focus-ring subscription — switching active group does not re-render editor content. */
+const EditorGroupFocusShell = memo(function EditorGroupFocusShell({
+    nodeId,
+    isFixed,
+    hasTabs,
+    children,
+}: {
+    nodeId: string;
+    isFixed: boolean;
+    hasTabs: boolean;
+    children: React.ReactNode;
+}) {
+    const isActive = useLayoutStore((s) => s.activeEditorGroupId === nodeId);
 
     return (
         <GroupContext.Provider value={nodeId}>
             <div
                 onClick={() => void activateEditorGroup(nodeId)}
-                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${leaf.isFixed ? 'z-20' : ''} ${isActive && (leaf.hasTabs || !leaf.isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
+                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
                 id={`layout-node-${nodeId}`}
             >
-                {leaf.hasTabs ? (
-                    <div className="flex-none flex items-center bg-[var(--workbench-bg)] select-none">
-                        <EditorGroupTabStrip layoutNodeId={nodeId} />
-                    </div>
-                ) : null}
-
-                <div className="flex-1 relative min-h-0" data-editor-content={nodeId}>
-                    {ActiveComponent ? (
-                        <ActiveComponent />
-                    ) : (
-                        <div className="p-4 italic text-muted-foreground">No content</div>
-                    )}
-
-                    {!leaf.isFixed && <DropZoneOverlay nodeId={nodeId} />}
-                </div>
+                {children}
             </div>
         </GroupContext.Provider>
     );
-};
+});
 
 /** Tab strip with narrow layout subscription — avoids re-rendering editor content on tab chrome changes. */
 const EditorGroupTabStrip = ({ layoutNodeId }: { layoutNodeId: string }) => {

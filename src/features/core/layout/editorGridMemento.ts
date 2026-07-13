@@ -100,7 +100,7 @@ export function applyEditorGridMemento(
         parentId: snapshot.parentId,
         size: snapshot.size,
         pixelSize: undefined,
-        data: existing?.data ?? { component: 'GraphEditor', tabs: [] },
+        data: existing?.data ?? { component: 'GraphEditor' },
       };
       continue;
     }
@@ -135,7 +135,7 @@ export function repairEditorGridIntegrity(nodes: LayoutTree): LayoutTree {
   if (!next[DEFAULT_EDITOR_GROUP_ID]) {
     next[DEFAULT_EDITOR_GROUP_ID] = {
       ...initial[DEFAULT_EDITOR_GROUP_ID],
-      data: { component: 'GraphEditor', tabs: [] },
+      data: { component: 'GraphEditor' },
     };
   }
 
@@ -144,7 +144,7 @@ export function repairEditorGridIntegrity(nodes: LayoutTree): LayoutTree {
       if (childId === DEFAULT_EDITOR_GROUP_ID) {
         next[DEFAULT_EDITOR_GROUP_ID] = {
           ...initial[DEFAULT_EDITOR_GROUP_ID],
-          data: { component: 'GraphEditor', tabs: [] },
+          data: { component: 'GraphEditor' },
         };
       }
     }

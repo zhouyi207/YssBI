@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectIOStore } from '@/features/core/dataStore';
+import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -115,11 +116,8 @@ export function useProjectOperations() {
       // 清空当前 tabs，用户从侧栏自行打开资源
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
-      const editorNode = layoutStore.nodes[editorGroupId];
-      if (editorNode?.data?.tabs) {
-        layoutStore.updateNode(editorGroupId, {
-          data: { ...editorNode.data, tabs: [], activeTabId: undefined }
-        });
+      for (const tabId of [...listEditorGroupTabIds(editorGroupId)]) {
+        layoutStore.removeTab(editorGroupId, tabId);
       }
 
       uiStore.showToast("项目已加载", "success", 2000);

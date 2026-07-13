@@ -4,7 +4,7 @@ import { isGraphResourceDirty } from '@/features/core/resource';
 
 import { isPreviewLayoutTab, layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
 
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 
 import type { LayoutTab } from '@/shared/types/ui';
 
@@ -36,7 +36,7 @@ export interface TabContextMenuActions {
 
 function groupHasSavedTabs(groupId: string): boolean {
 
-  const tabs = useLayoutStore.getState().nodes[groupId]?.data?.tabs ?? [];
+  const tabs = useEditorTabStore.getState().resolveGroupTabs(groupId);
 
   return tabs.some((item) => {
 

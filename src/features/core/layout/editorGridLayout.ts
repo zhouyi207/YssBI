@@ -1,7 +1,8 @@
-import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types/ui';
+import type { LayoutNode, LayoutTree } from '@/shared/types/ui';
 import { commitSplitPairSizes } from './editorGridSizing';
 import { EDITOR_AREA_ID, PANEL_PART_ID } from './workbenchLayoutDefaults';
-import { isEditorGroupNode } from './layoutTabQueries';
+import { isEditorGroupNode } from './layoutEditorGroupNode';
+import { isEditorGroupPlacementEmpty } from './editorTabStore';
 import {
   createEditorGroupId,
   resolveEditorSplitPlacement,
@@ -176,7 +177,7 @@ export function removeEditorGroupFromTree(
   if (!isEditorGroupNode(group)) {
     return { removed: false, nextActiveGroupId: groupId };
   }
-  if ((group.data?.tabs?.length ?? 0) > 0) {
+  if (!isEditorGroupPlacementEmpty(groupId)) {
     return { removed: false, nextActiveGroupId: groupId };
   }
   if (listEditorGroupIds(nodes).length <= 1) {
@@ -261,8 +262,6 @@ export function reconcileEditorGridAfterGroupRemoved(
 
 export interface SplitEditorGroupPayload {
   component: string;
-  tabs: LayoutTab[];
-  activeTabId?: string;
 }
 
 /** GridWidget.addView equivalent — fork a new editor group at a dock edge. */
@@ -288,8 +287,6 @@ export function splitEditorGroupInTree(
     size: 1,
     data: {
       component: payload.component,
-      tabs: payload.tabs,
-      activeTabId: payload.activeTabId,
     },
   };
 

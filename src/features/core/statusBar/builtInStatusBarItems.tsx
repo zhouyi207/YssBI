@@ -47,7 +47,7 @@ export type BuiltInStatusBarActions = {
   executionTooltip: string;
   themeTooltip: string;
   viewportTooltip: string;
-  renderViewportStatus: (graphPath: string | null) => React.ReactNode;
+  renderViewportStatus: (groupId: string, graphPath: string | null) => React.ReactNode;
 };
 
 export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): StatusBarItemRegistration[] {
@@ -151,7 +151,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       render: (ctx) => (
         <>
           <VscZoomIn size={13} className="text-[var(--accent-color)]" />
-          {actions.renderViewportStatus(ctx.activeTabId)}
+          {actions.renderViewportStatus(ctx.activeEditorGroupId ?? '', ctx.activeTabId)}
         </>
       ),
     },

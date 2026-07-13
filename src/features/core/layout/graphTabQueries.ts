@@ -1,7 +1,5 @@
-import { useLayoutStore } from './layoutStore';
+import { useEditorTabStore } from './editorTabStore';
 
 export function isGraphOpenInAnyTab(graphPath: string): boolean {
-  return Object.values(useLayoutStore.getState().nodes).some((node) =>
-    node.data?.tabs?.some((tab) => tab.id === graphPath),
-  );
+  return useEditorTabStore.getState().isTabOpen(graphPath);
 }

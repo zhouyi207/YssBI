@@ -14,6 +14,7 @@ const ctx: StatusBarRenderContext = {
   activeTitle: "Graph A",
   activeType: "event",
   activeTabId: "graph/a",
+  activeEditorGroupId: "editor",
   selectedCount: 2,
   nodeCount: 5,
   connectionCount: 3,

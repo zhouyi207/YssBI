@@ -1,6 +1,6 @@
 import { useContext, useEffect } from 'react';
 import { GroupContext } from '@/features/core/editor';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
@@ -8,8 +8,8 @@ import { WorksheetEmptyState } from './WorksheetEmptyState';
 
 export function WorksheetEditor() {
   const groupId = useContext(GroupContext);
-  const activeTabId = useLayoutStore(
-    (s) => (groupId ? s.nodes[groupId]?.data?.activeTabId : undefined),
+  const activeTabId = useEditorTabStore((s) =>
+    groupId ? s.placements[groupId]?.activeTabId ?? undefined : undefined,
   );
   const document = useWorksheetStore((s) =>
     activeTabId ? s.documents[activeTabId] ?? null : null,

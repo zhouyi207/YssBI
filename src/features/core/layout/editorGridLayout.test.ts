@@ -8,14 +8,14 @@ import {
   splitEditorGroupInTree,
   writeEditorAreaMaximizeState,
 } from './editorGridLayout';
+import { resetEditorTabStore, seedEditorGroupTabs } from './editorTabTestUtils';
+import { useEditorTabStore } from './editorTabStore';
 
 describe('editorGridLayout tree ops', () => {
   it('splitEditorGroupInTree forks a sibling group to the right', () => {
     const nodes = createInitialWorkbenchNodes();
     const newId = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/foo', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/foo',
     });
     expect(newId).toBeTruthy();
     expect(nodes[EDITOR_AREA_ID]?.children?.length).toBeGreaterThan(1);
@@ -38,6 +38,7 @@ describe('editorGridLayout tree ops', () => {
   });
 
   it('removeEditorGroupFromTree collapses branch when last tab leaves a group', () => {
+    resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
     nodes.sidebar!.pixelSize = 271;
     nodes.panel!.pixelSize = 183;
@@ -45,13 +46,12 @@ describe('editorGridLayout tree ops', () => {
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 320;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/bar',
     });
     expect(created).toBeTruthy();
     nodes[created!].pixelSize = 480;
+    seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
+    useEditorTabStore.getState().removeTab(created!, 'events/bar');
 
-    nodes[created!].data!.tabs = [];
     const { removed, nextActiveGroupId } = removeEditorGroupFromTree(nodes, created!);
     expect(removed).toBe(true);
     expect(nodes[created!]).toBeUndefined();
@@ -66,14 +66,10 @@ describe('editorGridLayout tree ops', () => {
 
   it('preserves parent-axis width without reusing it as perpendicular child height', () => {
     const nodes = createInitialWorkbenchNodes();
-    // This is the group's width in the row parent. The new col branch has no
-    // measured height available, so 640 must not become two 320px heights.
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 640;
 
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/bar',
     });
 
     expect(created).toBeTruthy();
@@ -86,15 +82,15 @@ describe('editorGridLayout tree ops', () => {
   });
 
   it('clears stale maximize/hidden flags when the maximized group is removed', () => {
+    resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 400;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/bar',
     });
     expect(created).toBeTruthy();
     nodes[created!].pixelSize = 400;
+    seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
 
     setEditorGroupMaximizedHidden(nodes, created!, false);
     setEditorGroupMaximizedHidden(nodes, DEFAULT_EDITOR_GROUP_ID, true);
@@ -103,7 +99,7 @@ describe('editorGridLayout tree ops', () => {
       [created!]: 400,
     });
 
-    nodes[created!].data!.tabs = [];
+    useEditorTabStore.getState().removeTab(created!, 'events/bar');
     const { removed } = removeEditorGroupFromTree(nodes, created!);
     expect(removed).toBe(true);
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.groupMaximizedHidden).toBe(false);
@@ -112,18 +108,18 @@ describe('editorGridLayout tree ops', () => {
   });
 
   it('merges pixel sizes when collapsing a vertical split branch to one group', () => {
+    resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/bar',
     });
     expect(created).toBeTruthy();
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
     nodes[created!].pixelSize = 500;
+    seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
+    useEditorTabStore.getState().removeTab(created!, 'events/bar');
 
-    nodes[created!].data!.tabs = [];
     removeEditorGroupFromTree(nodes, created!);
 
     expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);

@@ -1,6 +1,7 @@
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { listEditorGroupTabIds, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 import { isGraphResourceDirty } from '@/features/core/resource';
 import type { LayoutTab } from '@/shared/types/ui';
@@ -20,7 +21,7 @@ export async function switchTab(
   const resolved =
     tab && tab.id === tabId
       ? tab
-      : useLayoutStore.getState().nodes[groupId]?.data?.tabs?.find((item) => item.id === tabId);
+      : useEditorTabStore.getState().resolveTab(tabId);
   if (!resolved) return false;
   return switchEditorTab(groupId, resolved);
 }
@@ -36,8 +37,7 @@ export async function closeTab(
 
 export async function closeOtherTabs(groupId: string, keepTabId: string): Promise<boolean> {
   await activateTabBarGroup(groupId);
-  const tabIds =
-    useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+  const tabIds = listEditorGroupTabIds(groupId);
   for (const tabId of tabIds) {
     if (tabId === keepTabId) continue;
     const closed = await closeEditorTab(tabId, groupId);
@@ -48,8 +48,7 @@ export async function closeOtherTabs(groupId: string, keepTabId: string): Promis
 
 export async function closeAllTabsInGroup(groupId: string): Promise<boolean> {
   await activateTabBarGroup(groupId);
-  const tabIds =
-    useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+  const tabIds = listEditorGroupTabIds(groupId);
   for (const tabId of [...tabIds]) {
     const closed = await closeEditorTab(tabId, groupId);
     if (!closed) return false;
@@ -59,7 +58,7 @@ export async function closeAllTabsInGroup(groupId: string): Promise<boolean> {
 
 export async function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
   await activateTabBarGroup(groupId);
-  const tabs = useLayoutStore.getState().nodes[groupId]?.data?.tabs ?? [];
+  const tabs = useEditorTabStore.getState().resolveGroupTabs(groupId);
   for (const tab of [...tabs]) {
     if (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet') continue;
     if (isGraphResourceDirty(tab.id, tab.type)) continue;
@@ -71,8 +70,7 @@ export async function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
 
 export async function closeEditorGroup(groupId: string): Promise<boolean> {
   await activateTabBarGroup(groupId);
-  const tabIds =
-    useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+  const tabIds = listEditorGroupTabIds(groupId);
   if (tabIds.length === 0) {
     useLayoutStore.getState().removeEditorGroup(groupId);
     return true;

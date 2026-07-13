@@ -2,15 +2,14 @@ import { useCallback, useRef } from 'react';
 import { getGraphByPath } from '@/features/core/dataStore';
 import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
+import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useClipboardStore } from '@/features/core/editor';
 import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
 import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
 import { useHistoryStore, executeCommand } from '@/features/core/history';
-import type { GraphHistory } from '@/features/core/history';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { getViewport } from '@/features/core/viewport';
+import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
 
 
@@ -22,17 +21,15 @@ export function useEditorOperations() {
   const clipboard = useClipboardStore((s) => s.clipboard);
   const setClipboard = useClipboardStore((s) => s.setClipboard);
 
-  const activeEditorNode = useLayoutStore((s: LayoutState) =>
-    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
-  );
-  const activeTabId = activeEditorNode?.data?.activeTabId || null;
-  const selectedNodeIds = activeEditorNode?.data?.params?.selectedNodeIds || [];
+  const { activeTabId, selectedNodeIds, groupId } = useActiveEditorGroup();
 
   const activeTabIdRef = useRef(activeTabId);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const groupIdRef = useRef(groupId);
 
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
+  groupIdRef.current = groupId;
 
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -178,9 +175,10 @@ export function useEditorOperations() {
   const paste = useCallback(async (pos?: { x: number; y: number }) => {
     if (!clipboard || clipboard.entries.length === 0) return;
     const tid = activeTabIdRef.current;
-    if (!tid) return;
+    const gid = groupIdRef.current;
+    if (!tid || !gid) return;
 
-    const vp = getViewport(tid);
+    const vp = getViewport(editorViewportScope(gid, tid));
     const tX = pos ? pos.x : -vp.x / vp.scale + 100;
     const tY = pos ? pos.y : -vp.y / vp.scale + 100;
     const minX = Math.min(...clipboard.entries.map(e => e.position.x));
@@ -244,22 +242,9 @@ export function useEditorOperations() {
     await duplicateNodes(sIds);
   }, [duplicateNodes]);
 
-  const canUndo = useHistoryStore((s) => {
-    if (!activeTabId) return false;
-    const hist: GraphHistory | undefined = s.histories[activeTabId];
-    return !!(hist && hist.undoStack.length > 0);
-  });
-  const canRedo = useHistoryStore((s) => {
-    if (!activeTabId) return false;
-    const hist: GraphHistory | undefined = s.histories[activeTabId];
-    return !!(hist && hist.redoStack.length > 0);
-  });
-
   return {
     undo,
     redo,
-    canUndo,
-    canRedo,
     copy,
     copyNodes,
     cut,

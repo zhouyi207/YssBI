@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useEditorStore } from '@/features/core/editor';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import {
   applyCanvasDetailFocus,
   focusDetail,
@@ -10,6 +11,7 @@ import {
 
 describe('detailFocusCommands', () => {
   beforeEach(() => {
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       nodes: {
@@ -18,15 +20,14 @@ describe('detailFocusCommands', () => {
           id: 'editor',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'g1', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'g1',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
       activeEditorGroupId: 'editor',
     });
+    seedEditorGroupTabs('editor', [
+      { id: 'g1', component: 'GraphEditor', type: 'event' },
+    ]);
     useEditorStore.getState().clearDetailFocus();
   });
 

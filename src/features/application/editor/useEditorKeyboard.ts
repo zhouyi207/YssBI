@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { getEditorGroupActiveTabId, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { getViewport } from '@/features/core/viewport';
+import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
@@ -62,8 +63,8 @@ export function useEditorKeyboard({
     const el = document.getElementById(`layout-node-${gid}`);
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const graphPath = layoutStore.nodes[gid]?.data?.activeTabId ?? null;
-    const currentCanvas = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
+    const graphPath = getEditorGroupActiveTabId(gid);
+    const currentCanvas = graphPath ? getViewport(editorViewportScope(gid, graphPath)) : DEFAULT_VIEWPORT;
     return {
       x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
       y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,
@@ -145,19 +146,17 @@ export function useEditorKeyboard({
         const layoutStore = useLayoutStore.getState();
         const gid = layoutStore.activeEditorGroupId;
         if (gid) {
-          const node = layoutStore.nodes[gid];
-          const activeTabId = node?.data?.activeTabId;
+          const activeTabId = getEditorGroupActiveTabId(gid);
           if (activeTabId) closeTab(activeTabId);
         }
       } else if (isControlKey && e.key === "Tab") {
         e.preventDefault();
         const gid = useLayoutStore.getState().activeEditorGroupId;
         if (gid) {
-          const node = useLayoutStore.getState().nodes[gid];
-          const tabs = node?.data?.tabs || [];
-          const activeTabId = node?.data?.activeTabId;
-          if (tabs.length > 1) {
-            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+          const tabs = useEditorTabStore.getState().resolveGroupTabs(gid);
+          const activeTabId = getEditorGroupActiveTabId(gid);
+          if (tabs.length > 1 && activeTabId) {
+            const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
             const nextIndex = e.shiftKey
               ? (currentIndex - 1 + tabs.length) % tabs.length
               : (currentIndex + 1) % tabs.length;

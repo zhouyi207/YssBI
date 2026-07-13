@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
   createInitialWorkbenchNodes,
   DEFAULT_EDITOR_GROUP_ID,
@@ -19,10 +20,12 @@ vi.mock('./switchEditorTab', () => ({
 describe('editorGroupCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useEditorTabStore.setState({ registry: {}, placements: {} });
     useLayoutStore.setState({
       nodes: createInitialWorkbenchNodes(),
       activeEditorGroupId: DEFAULT_EDITOR_GROUP_ID,
     });
+    useEditorTabStore.getState().ensureGroupPlacement(DEFAULT_EDITOR_GROUP_ID);
   });
 
   it('activates the moved tab session in the target group', () => {
@@ -62,10 +65,10 @@ describe('editorGroupCommands', () => {
     expect(created).toBeTruthy();
     expect(switchEditorTab).toHaveBeenCalledWith(created, { ...tab, pinned: true });
     expect(
-      useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.tabs?.some((t) => t.id === tab.id),
+      useEditorTabStore.getState().getPlacement(DEFAULT_EDITOR_GROUP_ID).tabIds.includes(tab.id),
     ).toBe(true);
     expect(
-      useLayoutStore.getState().nodes[created!]?.data?.tabs?.some((t) => t.id === tab.id),
+      useEditorTabStore.getState().getPlacement(created!).tabIds.includes(tab.id),
     ).toBe(true);
   });
 
@@ -91,10 +94,10 @@ describe('editorGroupCommands', () => {
     );
 
     expect(created).toBeTruthy();
-    const sourceTabs = useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.tabs ?? [];
-    expect(sourceTabs.map((tab) => tab.id)).toEqual([tabA.id]);
+    const sourceTabIds = useEditorTabStore.getState().getPlacement(DEFAULT_EDITOR_GROUP_ID).tabIds;
+    expect(sourceTabIds).toEqual([tabA.id]);
     expect(
-      useLayoutStore.getState().nodes[created!]?.data?.tabs?.map((tab) => tab.id),
+      useEditorTabStore.getState().getPlacement(created!).tabIds,
     ).toEqual([tabB.id]);
   });
 

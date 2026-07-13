@@ -1,6 +1,7 @@
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { isGraphLayoutTab, layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { GraphService } from '@/services/graph/graphService';
 import { logger } from '@/utils/appLogger';
@@ -11,8 +12,10 @@ import { focusDetailOnActiveGraph } from '@/features/core/editor/detail/detailFo
 import { syncVariablesGraphScopeAfterClose } from '@/features/core/editor/detail/variablesGraphScope';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { clearResourceDocumentState, isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
-import { deactivateGraphTab } from './activateGraphTab';
+import { releaseEditorViewport } from '@/features/core/viewport';
+import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { activateCurrentEditorTab } from './switchEditorTab';
+import { deactivateGraphTab } from './activateGraphTab';
 
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
   const layoutStore = useLayoutStore.getState();
@@ -54,10 +57,10 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
     }
   }
 
-  const closingActiveTab =
-    useLayoutStore.getState().nodes[located.nodeId]?.data?.activeTabId === effectivePath;
+  const closingActiveTab = getEditorGroupActiveTabId(located.nodeId) === effectivePath;
 
   useLayoutStore.getState().removeTab(located.nodeId, effectivePath);
+  releaseEditorViewport(editorViewportScope(located.nodeId, effectivePath));
   if (closingActiveTab) {
     deactivateGraphTab(located.nodeId, effectivePath);
   }

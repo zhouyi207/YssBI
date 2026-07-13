@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { useGestureStore } from '@/features/core/gesture';
-import { commitViewport, setViewportLive } from '@/features/core/viewport';
+import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
 import type { Pin } from '@/shared/types/domain';
@@ -34,7 +34,7 @@ export type CanvasPointerLoopDeps = {
   viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
-  persistViewport: (graphPath?: string | null) => void;
+  persistViewport: (scope?: { groupId: string; graphPath: string } | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
   setPendingConnection: (pin: Pin | null) => void;
 };
@@ -80,7 +80,7 @@ function installPointerLoop(): () => void {
       const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
       const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
       if (graphPath) {
-        setViewportLive(graphPath, (prev) => ({
+        setViewportLive(editorViewportScope(layoutGroupId, graphPath), (prev) => ({
           ...prev,
           x: prev.x + dx,
           y: prev.y + dy,
@@ -188,8 +188,10 @@ function installPointerLoop(): () => void {
       } else if (g.moved) {
         const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
         const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-        if (graphPath) commitViewport(graphPath);
-        deps.persistViewport(graphPath);
+        if (graphPath) {
+          commitViewport(editorViewportScope(layoutGroupId, graphPath));
+          deps.persistViewport({ groupId: layoutGroupId, graphPath });
+        }
       }
     } else if (g.type === 'connect') {
       const gid = g.groupId || deps.activeGroupIdRef.current;

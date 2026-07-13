@@ -7,6 +7,7 @@ import {
   setViewportLive,
 } from './viewportSession';
 import { persistGraphViewport } from './persistGraphViewport';
+import type { ViewportScope } from './viewportScope';
 
 const ZOOM_CLAMP = { min: 0.1, max: 5 } as const;
 
@@ -38,7 +39,7 @@ export function applyWheelZoomToViewport(
 /** Ctrl/Meta + wheel zoom bound to the canvas element (not global window). */
 export function attachCanvasWheelZoom(
   canvasEl: HTMLElement,
-  graphPath: string,
+  scope: ViewportScope,
 ): () => void {
   const timers: { commit?: number | null; persist?: number | null } = {};
 
@@ -49,13 +50,13 @@ export function attachCanvasWheelZoom(
     e.stopPropagation();
 
     const rect = canvasEl.getBoundingClientRect();
-    const prev = getViewport(graphPath);
+    const prev = getViewport(scope);
     const next = applyWheelZoomToViewport(prev, e, rect);
     if (prev.scale === next.scale && prev.x === next.x && prev.y === next.y) return;
 
-    setViewportLive(graphPath, next);
-    scheduleViewportCommit(graphPath, timers);
-    scheduleViewportPersist(graphPath, () => persistGraphViewport(graphPath), timers);
+    setViewportLive(scope, next);
+    scheduleViewportCommit(scope, timers);
+    scheduleViewportPersist(scope, () => persistGraphViewport(scope), timers);
   };
 
   canvasEl.addEventListener('wheel', onWheel, { passive: false });

@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { useEditorGroup } from "@/features/application/editor";
+import { useEditorSessionCommandsContext } from "@/features/application/editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const WatermarkView = () => {
   const { t } = useTranslation();
-  const { addEvent, addFunction, importGraph } = useEditorGroup();
+  const { addEvent, addFunction, importGraph } = useEditorSessionCommandsContext();
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-[var(--workbench-bg)] select-none overflow-hidden">

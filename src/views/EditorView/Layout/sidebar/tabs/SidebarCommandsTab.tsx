@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHistoryStore } from '@/features/core/history';
 import type { HistoryEntry } from '@/features/core/history';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import {
   buildCommandsFlatRows,
   useSidebarSectionExpandSnapshot,
@@ -19,10 +19,7 @@ export function SidebarCommandsTab() {
   const sectionExpanded = useSidebarSectionExpandSnapshot('commandsUndo', 'commandsRedo');
   const toggleSection = useSidebarStore((s) => s.toggleSection);
 
-  const activeEditorNode = useLayoutStore((s) =>
-    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null,
-  );
-  const activeTabId = activeEditorNode?.data?.activeTabId ?? null;
+  const { activeTabId } = useActiveEditorGroup();
 
   const undoStack = useHistoryStore((s) =>
     activeTabId ? s.histories[activeTabId]?.undoStack ?? EMPTY_STACK : EMPTY_STACK,

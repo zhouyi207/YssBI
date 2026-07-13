@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyEditorGridMementoWithRepair,
   snapshotEditorGridMemento,
@@ -14,8 +14,12 @@ import {
   EDITOR_AREA_ID,
 } from './workbenchLayoutDefaults';
 import { splitEditorGroupInTree } from './editorGridLayout';
+import { resetEditorTabStore, seedEditorGroupTabs } from './editorTabTestUtils';
 
 describe('editorGridSizing', () => {
+  beforeEach(() => {
+    resetEditorTabStore();
+  });
   it('commitSplitPairSizes stores runtime pixels and normalized flex weights', () => {
     const nodes = createInitialWorkbenchNodes();
     nodes.a = { id: 'a', type: 'component', parentId: EDITOR_AREA_ID, size: 1 };
@@ -38,7 +42,7 @@ describe('editorGridSizing', () => {
       type: 'component',
       parentId: EDITOR_AREA_ID,
       size: 1,
-      data: { component: 'GraphEditor', tabs: [] },
+      data: { component: 'GraphEditor' },
     };
     commitSplitPairSizes(nodes, DEFAULT_EDITOR_GROUP_ID, 'editor_group_2', 400, 600);
 
@@ -57,10 +61,9 @@ describe('editorGridSizing', () => {
     nodes[EDITOR_AREA_ID]!.type = 'row';
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/right', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/right',
     });
     expect(created).toBeTruthy();
+    seedEditorGroupTabs(created!, [{ id: 'events/right', component: 'GraphEditor', type: 'event' }]);
 
     commitSplitPairSizes(nodes, DEFAULT_EDITOR_GROUP_ID, created!, 250, 750);
 
@@ -79,17 +82,15 @@ describe('editorGridSizing', () => {
 
   it('persists nested split ratios from flex-only groups without sash drag', () => {
     const nodes = createInitialWorkbenchNodes();
-    splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+    const rightGroupId = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/right', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/right',
     });
+    seedEditorGroupTabs(rightGroupId!, [{ id: 'events/right', component: 'GraphEditor', type: 'event' }]);
     const branchId = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
       component: 'GraphEditor',
-      tabs: [{ id: 'events/bottom', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'events/bottom',
     });
     expect(branchId).toBeTruthy();
+    seedEditorGroupTabs(branchId!, [{ id: 'events/bottom', component: 'GraphEditor', type: 'event' }]);
 
     const memento = snapshotEditorGridMemento(nodes, DEFAULT_EDITOR_GROUP_ID);
     expect(memento).toBeTruthy();
@@ -109,7 +110,7 @@ describe('editorGridSizing', () => {
       type: 'component',
       parentId: EDITOR_AREA_ID,
       size: 1,
-      data: { component: 'GraphEditor', tabs: [] },
+      data: { component: 'GraphEditor' },
     };
     commitSplitPairSizes(nodes, DEFAULT_EDITOR_GROUP_ID, 'editor_group_2', 200, 800);
 

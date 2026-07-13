@@ -35,17 +35,19 @@ export default function CanvasOverlays({
         functions,
         tabs,
         activeTabId,
+        groupId,
         executeGraph,
         cancelGraphExecution,
         clearGraphArtifacts,
         setCanvas,
         createNode,
-    } = useEditorGroup();
+    } = useEditorGroup({ withCanvasUi: true });
 
     const {
         handleNodePaletteSelect,
     } = useCanvasOverlayHandlers({
         canvasElementRef,
+        groupId,
         activeTabId,
         functions,
         pendingConnection,

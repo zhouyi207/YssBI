@@ -38,21 +38,16 @@ describe('layoutTabModel', () => {
     });
   });
 
-  it('readEditorGroupSnapshot normalizes tabs and params', () => {
+  it('readEditorGroupSnapshot returns stable group identity', () => {
     const node: LayoutNode = {
       id: 'editor-a',
       type: 'component',
       parentId: 'root',
       data: {
         component: 'GraphEditor',
-        tabs: [buildGraphLayoutTab('functions/One.yssbi-function', 'function')],
-        activeTabId: 'functions/One.yssbi-function',
-        params: { selectedNodeIds: ['n1'] },
       },
     };
-    const snapshot = readEditorGroupSnapshot(node);
-    expect(snapshot?.tabs[0].type).toBe('function');
-    expect(snapshot?.selectedNodeIds).toEqual(['n1']);
+    expect(readEditorGroupSnapshot(node)).toEqual({ id: 'editor-a' });
   });
 
   it('isGraphLayoutTab and splitComponentForTab', () => {

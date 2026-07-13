@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { NodeService } from '@/services';
 import type { BatchCreateNodeRequest } from '@/shared/types/dto/batchCreateNode';
 import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { executeCommand } from '@/features/core/history';
 import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { logger } from '@/utils/appLogger';
@@ -14,10 +14,7 @@ import { logger } from '@/utils/appLogger';
  * 事件流：Backend → ProjectListener → NodeEventHandler（直接更新 Store）
  */
 export function useNodeManagement() {
-  const activeEditorNode = useLayoutStore((s: LayoutState) =>
-    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null,
-  );
-  const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const { activeTabId } = useActiveEditorGroup();
 
   const createNode = useCallback(
     async (

@@ -2,7 +2,8 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useProjectIOStore } from '@/features/core/dataStore';
 import { markResourceLoaded } from '@/features/core/resource';
-import { ensureGraphViewport } from '@/features/core/viewport';
+import { ensureEditorViewport } from '@/features/core/viewport';
+import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { unloadGraphDocument } from './graphDocumentUnload';
 import {
@@ -10,12 +11,12 @@ import {
   touchGraphDocument,
 } from './graphDocumentCachePolicy';
 
-function finishGraphEditorActivation(graphPath: string): void {
+function finishGraphEditorActivation(groupId: string, graphPath: string): void {
   const kind = inferGraphResourceKind(graphPath);
   if (kind) {
     markResourceLoaded({ id: graphPath, kind }, true);
   }
-  ensureGraphViewport(graphPath);
+  ensureEditorViewport(editorViewportScope(groupId, graphPath));
 }
 
 /** Session bookkeeping + single loadGraph entry + editor activation. */
@@ -44,7 +45,7 @@ export async function activateGraphTab(
   }
 
   await enforceGraphDocumentCacheLimit();
-  finishGraphEditorActivation(graphPath);
+  finishGraphEditorActivation(groupId, graphPath);
   return true;
 }
 

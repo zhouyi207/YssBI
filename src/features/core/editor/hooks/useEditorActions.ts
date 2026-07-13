@@ -4,7 +4,8 @@
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
 import { useRef, useEffect } from 'react';
-import { getViewport, subscribeToViewport } from '@/features/core/viewport';
+import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
+import { getViewport, subscribeToViewport, editorViewportScope } from '@/features/core/viewport';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
 import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
@@ -18,19 +19,23 @@ export function useEditorActions(active: ActiveEditorGroup) {
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
 
-  const canvasActions = useEditorCanvasActions(activeTabIdRef);
+  const canvasActions = useEditorCanvasActions(activeGroupIdRef, activeTabIdRef);
   const uiActions = useEditorUIActions();
 
-  const viewportRef = useRef(getViewport(active.activeTabId ?? ''));
+  const viewportScope =
+    editorGroupId && active.activeTabId
+      ? editorViewportScope(editorGroupId, active.activeTabId)
+      : null;
+
+  const viewportRef = useRef(viewportScope ? getViewport(viewportScope) : DEFAULT_VIEWPORT);
 
   useEffect(() => {
-    const graphPath = activeTabIdRef.current;
-    if (!graphPath) return;
-    viewportRef.current = getViewport(graphPath);
-    return subscribeToViewport(graphPath, (viewport) => {
+    if (!viewportScope) return;
+    viewportRef.current = getViewport(viewportScope);
+    return subscribeToViewport(viewportScope, (viewport) => {
       viewportRef.current = viewport;
     });
-  }, [active.activeTabId]);
+  }, [viewportScope?.groupId, viewportScope?.graphPath]);
 
   return {
     activeGroupIdRef,

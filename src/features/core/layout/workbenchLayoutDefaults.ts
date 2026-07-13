@@ -48,7 +48,6 @@ export function createInitialWorkbenchNodes(): LayoutTree {
       parentId: EDITOR_AREA_ID,
       data: {
         component: 'GraphEditor',
-        tabs: [],
       },
     },
     panel: {

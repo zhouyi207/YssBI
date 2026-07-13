@@ -1,5 +1,5 @@
 import { GraphService } from "@/services/graph/graphService";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useEditorTabStore } from "@/features/core/layout/editorTabStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { markResourceDirty } from "@/features/core/resource";
@@ -17,13 +17,11 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
     const dirty = collectDirtyGraphTabs();
     if (dirty.length === 0) return true;
 
-    const layout = useLayoutStore.getState();
+    const tabStore = useEditorTabStore.getState();
     for (const tab of dirty) {
         try {
             warnCallFunctionIssuesBeforeSave(tab.graphPath);
-            const layoutTab = Object.values(layout.nodes)
-                .flatMap((node) => node.data?.tabs ?? [])
-                .find((item) => item.id === tab.graphPath);
+            const layoutTab = tabStore.resolveTab(tab.graphPath);
 
             if (layoutTab?.type === 'worksheet') {
                 await useWorksheetStore.getState().saveDocument(tab.graphPath);

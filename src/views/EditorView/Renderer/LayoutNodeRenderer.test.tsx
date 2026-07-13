@@ -53,7 +53,6 @@ describe('LayoutNodeRenderer maximize-hidden groups', () => {
           parentId: 'editor-area',
           data: {
             component: 'GraphEditor',
-            tabs: [],
             groupMaximizedHidden: true,
           },
         },

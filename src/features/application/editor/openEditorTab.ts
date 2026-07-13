@@ -7,6 +7,7 @@ import {
   resolveEditorTargetGroupId,
   useLayoutStore,
 } from '@/features/core/layout';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
   applyTabPinState,
   findPreviewTabInTabs,
@@ -25,7 +26,6 @@ export interface OpenEditorTabOptions {
 
 /**
  * Open or activate a tab in the main editor area.
- * Recovers tabs that were previously attached to fixed chrome nodes (sidebar/detail).
  */
 export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): void {
   const pinned = options?.pinned !== false;
@@ -33,6 +33,7 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
   const editorGroupId = resolveEditorTargetGroupId(options?.targetGroupId);
   const insertIndex = options?.insertIndex;
   const layoutStore = useLayoutStore.getState();
+  const tabStore = useEditorTabStore.getState();
   const existing = getLayoutTabById(tab.id);
 
   if (existing) {
@@ -49,7 +50,7 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
 
     if (needsMove) {
       layoutStore.moveTab(fromNodeId, tab.id, editorGroupId, insertIndex);
-    } else if (layoutStore.nodes[fromNodeId].data?.activeTabId !== tab.id) {
+    } else if (tabStore.getPlacement(fromNodeId).activeTabId !== tab.id) {
       applyEditorTabSelection(fromNodeId, tab.id);
     }
 
@@ -70,15 +71,16 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
 /** At most one preview tab per editor group; replaces the previous preview when opening another. */
 function openPreviewTabInGroup(groupId: string, tab: LayoutTab): void {
   const layoutStore = useLayoutStore.getState();
-  const groupTabs = layoutStore.nodes[groupId]?.data?.tabs;
+  const tabStore = useEditorTabStore.getState();
+  const groupTabs = tabStore.resolveGroupTabs(groupId);
   const previewTab = findPreviewTabInTabs(groupTabs);
 
   if (previewTab && previewTab.id !== tab.id) {
     layoutStore.removeTab(groupId, previewTab.id);
   }
 
-  const tabsAfterReplace = useLayoutStore.getState().nodes[groupId]?.data?.tabs;
-  if (tabsAfterReplace?.some((item) => item.id === tab.id)) {
+  const tabsAfterReplace = useEditorTabStore.getState().resolveGroupTabs(groupId);
+  if (tabsAfterReplace.some((item) => item.id === tab.id)) {
     applyEditorTabSelection(groupId, tab.id);
   } else {
     layoutStore.addTab(groupId, tab);

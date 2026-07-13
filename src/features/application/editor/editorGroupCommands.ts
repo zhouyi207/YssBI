@@ -1,12 +1,13 @@
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
 import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { switchEditorTab } from './switchEditorTab';
 
 async function activateCreatedEditorGroup(groupId: string | null): Promise<string | null> {
   if (!groupId) return null;
-  const node = useLayoutStore.getState().nodes[groupId];
-  const activeTab = node?.data?.tabs?.find((tab) => tab.id === node.data?.activeTabId);
+  const activeTab = getActiveLayoutTab(groupId)?.tab;
   if (activeTab) await switchEditorTab(groupId, activeTab);
   return groupId;
 }
@@ -21,8 +22,7 @@ export function moveTabBetweenGroups(
   const wasInactive = useLayoutStore.getState().activeEditorGroupId !== targetGroupId;
   EditorGroupsService.moveTab(sourceGroupId, tabId, targetGroupId, targetTabIndex);
   if (!wasInactive && sourceGroupId === targetGroupId) return;
-  const targetNode = useLayoutStore.getState().nodes[targetGroupId];
-  const activeTab = targetNode?.data?.tabs?.find((tab) => tab.id === targetNode.data?.activeTabId);
+  const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
   if (activeTab) void switchEditorTab(targetGroupId, activeTab);
 }
 
@@ -37,8 +37,7 @@ export async function splitEditorWithTab(
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): Promise<string | null> {
-  const layoutStore = useLayoutStore.getState();
-  const sourceTabs = layoutStore.nodes[sourceGroupId]?.data?.tabs ?? [];
+  const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
   const tab = sourceTabs.find((t) => t.id === tabId);
   if (!tab) return null;
 
@@ -46,15 +45,17 @@ export async function splitEditorWithTab(
 
   const created = EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
     component: tab.component || 'GraphEditor',
-    tabs: [{ ...tab, pinned: true }],
+    tabs: [{ ...tab, pinned: true as const }],
     activeTabId: tabId,
   });
   if (!created) return null;
 
   if (moveFromSource) {
-    const sourceStillHasTab = useLayoutStore
+    const sourceStillHasTab = useEditorTabStore
       .getState()
-      .nodes[sourceGroupId]?.data?.tabs?.some((item) => item.id === tabId);
+      .getPlacement(sourceGroupId)
+      .tabIds
+      .includes(tabId);
     if (sourceStillHasTab) {
       useLayoutStore.getState().removeTab(sourceGroupId, tabId);
     }

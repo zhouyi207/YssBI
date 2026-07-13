@@ -10,6 +10,7 @@ export interface StatusBarRenderContext {
   activeTitle: string;
   activeType: string | null;
   activeTabId: string | null;
+  activeEditorGroupId: string | null;
   selectedCount: number;
   nodeCount: number;
   connectionCount: number;

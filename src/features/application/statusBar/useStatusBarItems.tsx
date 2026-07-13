@@ -6,10 +6,11 @@ import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
+import { getEditorGroupSelectedNodeIds } from "@/features/core/layout/editorTabStore";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { getViewport, subscribeToViewport } from "@/features/core/viewport";
+import { getViewport, subscribeToViewport, editorViewportScope, type ViewportScope } from "@/features/core/viewport";
 import { LoadStatus } from "@/shared/types/ui";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
@@ -37,25 +38,25 @@ function projectStatusLabel(
   return t("common.idle");
 }
 
-function formatViewportStatus(graphPath: string | null) {
-  if (!graphPath) return "X 0 Y 0 100%";
-  const viewport = getViewport(graphPath);
+function formatViewportStatus(scope: ViewportScope | null) {
+  if (!scope) return "X 0 Y 0 100%";
+  const viewport = getViewport(scope);
   return `X ${Math.round(viewport.x)} Y ${Math.round(viewport.y)} ${Math.round(viewport.scale * 100)}%`;
 }
 
-function ViewportStatus({ graphPath }: { graphPath: string | null }) {
+function ViewportStatus({ scope }: { scope: ViewportScope | null }) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!graphPath) return;
+    if (!scope) return;
     const update = () => {
-      if (ref.current) ref.current.textContent = formatViewportStatus(graphPath);
+      if (ref.current) ref.current.textContent = formatViewportStatus(scope);
     };
     update();
-    return subscribeToViewport(graphPath, update);
-  }, [graphPath]);
+    return subscribeToViewport(scope, update);
+  }, [scope?.groupId, scope?.graphPath]);
 
-  return <span ref={ref}>{formatViewportStatus(graphPath)}</span>;
+  return <span ref={ref}>{formatViewportStatus(scope)}</span>;
 }
 
 export function useStatusBarItems(): StatusBarItemsSnapshot {
@@ -68,9 +69,10 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       const active = getActiveLayoutTab(groupId, state.nodes);
       const activeTabId = active?.activeTabId ?? null;
       const activeTab = active?.tab ?? null;
-      const selectedNodeIds = state.nodes[groupId]?.data?.params?.selectedNodeIds;
+      const selectedNodeIds = getEditorGroupSelectedNodeIds(groupId);
 
       return {
+        activeEditorGroupId: groupId,
         activeTabId,
         activeTitle: activeTab
           ? resolveTabDisplayName(layoutTabResourceRef(activeTab), activeTab.id)
@@ -123,6 +125,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       activeTitle: editor.activeTitle,
       activeType: editor.activeType,
       activeTabId: editor.activeTabId,
+      activeEditorGroupId: editor.activeEditorGroupId,
       selectedCount: editor.selectedCount,
       nodeCount: graphStats.nodeCount,
       connectionCount: graphStats.connectionCount,
@@ -141,7 +144,11 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
         executionTooltip: actions.executionTooltip,
         themeTooltip: actions.themeTooltip,
         viewportTooltip: actions.viewportTooltip,
-        renderViewportStatus: (graphPath) => <ViewportStatus graphPath={graphPath} />,
+        renderViewportStatus: (groupId, graphPath) => (
+          <ViewportStatus
+            scope={graphPath ? editorViewportScope(groupId, graphPath) : null}
+          />
+        ),
       }),
     [
       actions.openLogsPanel,

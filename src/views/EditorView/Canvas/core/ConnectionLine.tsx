@@ -1,6 +1,5 @@
 import { useRef, useEffect } from "react";
-import { useGestureStore } from '@/features/core/gesture';
-import { subscribeToViewport, getViewport } from '@/features/core/viewport';
+import { subscribeToViewport, getViewport, type ViewportScope } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
@@ -8,16 +7,16 @@ import { bindSashAwareResizeObserver } from '@/shared/utils/sashResizeGuard';
 
 import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import { getConnectGesture } from "@/shared/types/ui";
+import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
 
 export const ConnectionLine = ({
-    graphPath,
+    viewportScope,
     getPinWorldPos,
     getCanvasLocalPoint,
     pendingConnection,
     menuPos,
 }: {
-    graphPath: string;
+    viewportScope: ViewportScope | null;
     getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
     getCanvasLocalPoint: (x: number, y: number) => { x: number; y: number };
     pendingConnection?: Pin | null;
@@ -26,7 +25,6 @@ export const ConnectionLine = ({
     const lineCanvasRef = useRef<HTMLCanvasElement>(null);
     const { theme } = useTheme();
 
-    // 用 ref 存储高频变化的值，避免 effect 因依赖变化而反复重建订阅
     const getPinWorldPosRef = useRef(getPinWorldPos);
     const getCanvasLocalPointRef = useRef(getCanvasLocalPoint);
     const themeRef = useRef(theme);
@@ -46,8 +44,13 @@ export const ConnectionLine = ({
 
     useEffect(() => {
         const render = () => {
-            const connectGesture = getConnectGesture(useGestureStore.getState().gesture);
-            const gestureStartPin = connectGesture?.startPin ?? null;
+            const connectPreview = getConnectPreview();
+            const paneGroupId = viewportScope?.groupId;
+            const isPaneConnect =
+              connectPreview.active
+              && connectPreview.startPin
+              && (!connectPreview.groupId || !paneGroupId || connectPreview.groupId === paneGroupId);
+            const gestureStartPin = isPaneConnect ? connectPreview.startPin : null;
             const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
             const canvasEl = lineCanvasRef.current;
@@ -62,17 +65,9 @@ export const ConnectionLine = ({
             let activeStart = null;
             let endWorld: { x: number, y: number } | null = null;
 
-            if (connectGesture && gestureStartPin) {
+            if (isPaneConnect && gestureStartPin) {
                 activeStart = gestureStartPin;
-                // 优先使用世界坐标（多 editor 同步正确），回退到屏幕坐标转换
-                if (connectGesture.worldX != null && connectGesture.worldY != null) {
-                    endWorld = { x: connectGesture.worldX, y: connectGesture.worldY };
-                } else {
-                    endWorld = getCanvasLocalPointRef.current(
-                        connectGesture.currentX,
-                        connectGesture.currentY,
-                    );
-                }
+                endWorld = { x: connectPreview.worldX, y: connectPreview.worldY };
             } else if (hasPendingConnection && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;
                 endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
@@ -80,7 +75,7 @@ export const ConnectionLine = ({
 
             if (!activeStart || !endWorld) return;
 
-            const viewport = getViewport(graphPath);
+            const viewport = viewportScope ? getViewport(viewportScope) : { x: 0, y: 0, scale: 1 };
             const currentTheme = themeRef.current;
 
             ctx.save();
@@ -104,19 +99,16 @@ export const ConnectionLine = ({
         };
 
         renderRef.current = render;
-        let previousGesture = useGestureStore.getState().gesture;
-        const unsubGesture = useGestureStore.subscribe((state) => {
-            if (state.gesture === previousGesture) return;
-            previousGesture = state.gesture;
-            render();
-        });
-        const unsubViewport = graphPath ? subscribeToViewport(graphPath, render) : () => {};
+        const unsubPreview = subscribeConnectPreview(render);
+        const unsubViewport = viewportScope ? subscribeToViewport(viewportScope, render) : () => {};
         render();
 
-        return () => { unsubGesture(); unsubViewport(); };
-    }, [graphPath]);
+        return () => {
+            unsubPreview();
+            unsubViewport();
+        };
+    }, [viewportScope?.groupId, viewportScope?.graphPath]);
 
-    // Handle canvas resizing
     useEffect(() => {
         const canvasEl = lineCanvasRef.current;
         if (!canvasEl) return;

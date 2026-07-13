@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   getViewport,
   subscribeToViewport,
+  editorViewportScope,
 } from '@/features/core/viewport';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { getDragPreview } from '@/features/core/canvas/dragPreview';
@@ -37,9 +38,12 @@ function segmentIntersectsRect(
 
 export function useCanvasViewport(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
+  groupId: string | null,
   graphPath: string | null,
   gestureType: string | null,
 ) {
+  const viewportScope =
+    groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
   const [visibleNodeIds, setVisibleNodes] = useState<Set<string>>(new Set());
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
   const cullingTimerRef = useRef<number | null>(null);
@@ -77,7 +81,7 @@ export function useCanvasViewport(
     if (!el || !graphPath) return;
 
     const rect = el.getBoundingClientRect();
-    const viewport = getViewport(graphPath);
+    const viewport = viewportScope ? getViewport(viewportScope) : { x: 0, y: 0, scale: 1 };
 
     const padding = CULLING_PADDING_FACTOR / viewport.scale;
     const worldViewLeft = -viewport.x / viewport.scale - padding;
@@ -149,9 +153,9 @@ export function useCanvasViewport(
   }, [nodePositionMap, connectionsRef, updateVisibleNodes]);
 
   useEffect(() => {
-    if (!graphPath) return;
-    return subscribeToViewport(graphPath, scheduleCullingUpdate);
-  }, [graphPath, scheduleCullingUpdate]);
+    if (!viewportScope) return;
+    return subscribeToViewport(viewportScope, scheduleCullingUpdate);
+  }, [viewportScope?.groupId, viewportScope?.graphPath, scheduleCullingUpdate]);
 
   useEffect(() => {
     if (!gestureType) updateVisibleNodes();
@@ -200,7 +204,7 @@ export function useCanvasViewport(
     const root = canvasElementRef.current;
     if (!root || !graphPath) return;
 
-    const scale = getViewport(graphPath).scale;
+    const scale = viewportScope ? getViewport(viewportScope).scale : 1;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
 
     visibleNodeIds.forEach((nodeId) => {
@@ -249,14 +253,15 @@ export function useCanvasViewport(
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
       const preview = getDragPreview();
-      const ddx = preview.active && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.x : 0;
-      const ddy = preview.active && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.y : 0;
+      const appliesHere = preview.active && preview.groupId === groupId;
+      const ddx = appliesHere && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.x : 0;
+      const ddy = appliesHere && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.y : 0;
       return {
         x: position.x + offset.x + ddx,
         y: position.y + offset.y + ddy,
       };
     },
-    [pinNodeIdMap, nodePositionMap, pinOffsets],
+    [pinNodeIdMap, nodePositionMap, pinOffsets, groupId],
   );
 
   const getCanvasLocalPoint = useCallback(
@@ -264,13 +269,13 @@ export function useCanvasViewport(
       const root = canvasElementRef.current;
       if (!root || !graphPath) return { x: 0, y: 0 };
       const rect = root.getBoundingClientRect();
-      const viewport = getViewport(graphPath);
+      const viewport = viewportScope ? getViewport(viewportScope) : { x: 0, y: 0, scale: 1 };
       return {
         x: (clientX - rect.left - viewport.x) / viewport.scale,
         y: (clientY - rect.top - viewport.y) / viewport.scale,
       };
     },
-    [canvasElementRef, graphPath],
+    [canvasElementRef, viewportScope],
   );
 
   return {

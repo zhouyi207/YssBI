@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { lookupGraphResourceKind, useResourceStore } from '@/features/core/resource';
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useSidebarStore } from '@/features/core/sidebar';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
@@ -16,14 +16,11 @@ import {
  */
 export function useVariableManagement() {
   const switchSidebarTab = useSidebarTab();
-  const activeEditorNode = useLayoutStore((s: LayoutState) =>
-    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null
-  );
-  const activeTabId = activeEditorNode?.data?.activeTabId || null;
+  const { activeTabId, tabs } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
   const localGraphPath = variablesGraphScopePath ?? activeTabId;
-  const graphTypeFromTab = localGraphPath && activeEditorNode?.data?.tabs
-    ? activeEditorNode.data.tabs.find((t: { id: string; type?: string }) => t.id === localGraphPath)?.type
+  const graphTypeFromTab = localGraphPath
+    ? tabs.find((t) => t.id === localGraphPath)?.type
     : undefined;
   const graphTypeFromResource = useResourceStore((s) =>
     localGraphPath ? lookupGraphResourceKind(s.resources, localGraphPath) : undefined,

@@ -1,11 +1,12 @@
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { patchEditorViewStateViewport } from './editorViewStateMemento';
 import { getViewport } from './viewportSession';
+import type { ViewportScope } from './viewportScope';
 
-/** Persist committed viewport to project-scoped editor view state (not graph files). */
-export function persistGraphViewport(graphPath: string | null | undefined): void {
-  if (!graphPath) return;
+/** Persist the active pane viewport to project-scoped editor view state (per graph path). */
+export function persistGraphViewport(scope: ViewportScope | null | undefined): void {
+  if (!scope?.graphPath) return;
   const projectPath = useProjectIOStore.getState().currentPath;
   if (!projectPath) return;
-  patchEditorViewStateViewport(projectPath, graphPath, getViewport(graphPath));
+  patchEditorViewStateViewport(projectPath, scope.graphPath, getViewport(scope));
 }

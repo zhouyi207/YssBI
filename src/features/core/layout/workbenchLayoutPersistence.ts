@@ -38,6 +38,7 @@ export function mergeWorkbenchLayoutMemento(patch: Partial<WorkbenchLayoutMement
   saveWorkbenchLayoutMemento({
     parts: patch.parts ?? current?.parts ?? {},
     editorGrid: patch.editorGrid !== undefined ? patch.editorGrid : (current?.editorGrid ?? null),
+    editorTabs: patch.editorTabs !== undefined ? patch.editorTabs : (current?.editorTabs ?? null),
   });
 }
 

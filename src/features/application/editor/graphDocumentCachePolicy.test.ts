@@ -13,6 +13,7 @@ import {
 } from './graphDocumentCachePolicy';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 
 describe('graphDocumentCachePolicy', () => {
@@ -50,6 +51,7 @@ describe('graphDocumentCachePolicy', () => {
   });
 
   it('does not evict graphs that remain open in editor tabs when session is unbound', async () => {
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       nodes: {
@@ -63,14 +65,13 @@ describe('graphDocumentCachePolicy', () => {
           id: 'editor',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'open-graph', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'open-graph',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
     });
+    seedEditorGroupTabs('editor', [
+      { id: 'open-graph', component: 'GraphEditor', type: 'event' },
+    ]);
 
     touchGraphDocument('open-graph');
     touchGraphDocument('ancient-graph');

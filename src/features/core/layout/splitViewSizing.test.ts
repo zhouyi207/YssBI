@@ -7,7 +7,7 @@ const flexNode = (id: string): LayoutNode => ({
   type: 'component',
   parentId: 'branch',
   size: 1,
-  data: { component: 'GraphEditor', tabs: [] },
+  data: { component: 'GraphEditor' },
 });
 
 const fixedNode = (id: string, pixelSize: number): LayoutNode => ({

@@ -4,7 +4,7 @@ import {
   measureTabBarMetrics,
   resolveTabGapWidth,
 } from '@/features/core/layout/tabBarInsertIndex';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import type { TabBarReorderPreview } from './tabBarReorderStore';
 
 const TAB_BAR_DROP_SELECTOR = '[data-tabbar-drop]';
@@ -40,7 +40,7 @@ export function findTabBarTargetFromPointer(
 }
 
 function tabIdsForGroup(groupId: string): string[] {
-  return useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
+  return listEditorGroupTabIds(groupId);
 }
 
 /** Build TabBar gap preview for tab reorder or external graph insert. */

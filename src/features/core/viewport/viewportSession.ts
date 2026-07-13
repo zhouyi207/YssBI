@@ -1,64 +1,69 @@
 import type { EditorViewport } from './editorViewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { useViewportStore } from './useViewportStore';
+import type { ViewportScope } from './viewportScope';
+import { viewportScopeKey } from './viewportScope';
 
 function viewportEqual(a: EditorViewport, b: EditorViewport): boolean {
   return a.x === b.x && a.y === b.y && a.scale === b.scale;
 }
 
-function storeViewport(graphPath: string): EditorViewport {
-  return useViewportStore.getState().viewports[graphPath] ?? DEFAULT_VIEWPORT;
+function storeViewport(scope: ViewportScope): EditorViewport {
+  return useViewportStore.getState().viewports[viewportScopeKey(scope)] ?? DEFAULT_VIEWPORT;
 }
 
-const liveByGraph = new Map<string, EditorViewport>();
-const listenersByGraph = new Map<string, Set<(viewport: EditorViewport) => void>>();
+const liveByScope = new Map<string, EditorViewport>();
+const listenersByScope = new Map<string, Set<(viewport: EditorViewport) => void>>();
 
-function notify(graphPath: string, viewport: EditorViewport): void {
-  listenersByGraph.get(graphPath)?.forEach((listener) => listener(viewport));
+function notify(scope: ViewportScope, viewport: EditorViewport): void {
+  listenersByScope.get(viewportScopeKey(scope))?.forEach((listener) => listener(viewport));
 }
 
-/** Authoritative in-memory viewport (live preview ⊃ committed store). */
-export function getViewport(graphPath: string): EditorViewport {
-  return liveByGraph.get(graphPath) ?? storeViewport(graphPath);
+/** Authoritative in-memory viewport for one editor pane (live preview ⊃ committed store). */
+export function getViewport(scope: ViewportScope): EditorViewport {
+  const key = viewportScopeKey(scope);
+  return liveByScope.get(key) ?? storeViewport(scope);
 }
 
 export function setViewportLive(
-  graphPath: string,
+  scope: ViewportScope,
   updater: Partial<EditorViewport> | ((prev: EditorViewport) => EditorViewport),
 ): void {
-  const prev = getViewport(graphPath);
+  const prev = getViewport(scope);
   const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
   if (viewportEqual(prev, next)) return;
-  liveByGraph.set(graphPath, next);
-  notify(graphPath, next);
+  liveByScope.set(viewportScopeKey(scope), next);
+  notify(scope, next);
 }
 
 /** Flush live viewport into zustand (persistence / cross-panel reads). */
-export function commitViewport(graphPath: string): void {
-  const live = liveByGraph.get(graphPath);
+export function commitViewport(scope: ViewportScope): void {
+  const key = viewportScopeKey(scope);
+  const live = liveByScope.get(key);
   if (!live) return;
-  useViewportStore.getState().setViewport(graphPath, live);
+  useViewportStore.getState().setViewport(scope, live);
 }
 
-export function resetLiveViewports(graphPath?: string): void {
-  if (graphPath) liveByGraph.delete(graphPath);
-  else liveByGraph.clear();
+export function resetLiveViewports(scope?: ViewportScope): void {
+  if (scope) liveByScope.delete(viewportScopeKey(scope));
+  else liveByScope.clear();
 }
 
 export function subscribeToViewport(
-  graphPath: string,
+  scope: ViewportScope,
   listener: (viewport: EditorViewport) => void,
 ): () => void {
-  const set = listenersByGraph.get(graphPath) ?? new Set();
+  const key = viewportScopeKey(scope);
+  const set = listenersByScope.get(key) ?? new Set();
   set.add(listener);
-  listenersByGraph.set(graphPath, set);
-  listener(getViewport(graphPath));
+  listenersByScope.set(key, set);
+  listener(getViewport(scope));
 
   const unsubStore = useViewportStore.subscribe((state, prevState) => {
-    const next = state.viewports[graphPath] ?? DEFAULT_VIEWPORT;
-    const prev = prevState.viewports[graphPath] ?? DEFAULT_VIEWPORT;
+    const next = state.viewports[key] ?? DEFAULT_VIEWPORT;
+    const prev = prevState.viewports[key] ?? DEFAULT_VIEWPORT;
     if (viewportEqual(next, prev)) return;
-    liveByGraph.set(graphPath, next);
+    liveByScope.set(key, next);
     listener(next);
   });
 
@@ -69,19 +74,19 @@ export function subscribeToViewport(
 }
 
 export function scheduleViewportCommit(
-  graphPath: string,
+  scope: ViewportScope,
   timers: { commit?: number | null },
   delayMs = 80,
 ): void {
   if (timers.commit != null) window.clearTimeout(timers.commit);
   timers.commit = window.setTimeout(() => {
     timers.commit = null;
-    commitViewport(graphPath);
+    commitViewport(scope);
   }, delayMs);
 }
 
 export function scheduleViewportPersist(
-  graphPath: string,
+  scope: ViewportScope,
   persist: () => void,
   timers: { persist?: number | null },
   delayMs = 300,
@@ -89,7 +94,7 @@ export function scheduleViewportPersist(
   if (timers.persist != null) window.clearTimeout(timers.persist);
   timers.persist = window.setTimeout(() => {
     timers.persist = null;
-    commitViewport(graphPath);
+    commitViewport(scope);
     persist();
   }, delayMs);
 }

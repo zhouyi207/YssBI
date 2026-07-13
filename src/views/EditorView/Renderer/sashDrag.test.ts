@@ -183,7 +183,7 @@ describe('attachSashDrag store commits', () => {
       type: 'component',
       parentId: EDITOR_AREA_ID,
       size: 1,
-      data: { component: 'GraphEditor', tabs: [] },
+      data: { component: 'GraphEditor' },
     };
     useLayoutStore.setState({ nodes });
 

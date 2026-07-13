@@ -15,6 +15,7 @@ vi.mock('@/features/core/dataStore/projectIOStore', () => ({
 }));
 
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
@@ -35,6 +36,7 @@ describe('graphSessionLifecycle', () => {
     vi.clearAllMocks();
     useGraphSessionStore.getState().reset();
     useGraphDataStore.setState({ graphEntities: {} });
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       activeEditorGroupId: 'group-a',
@@ -49,24 +51,22 @@ describe('graphSessionLifecycle', () => {
           id: 'group-a',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'events/A.yssbi-event', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'events/A.yssbi-event',
-          },
+          data: { component: 'GraphEditor' },
         },
         'group-b': {
           id: 'group-b',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'events/B.yssbi-event', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'events/B.yssbi-event',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
     });
+    seedEditorGroupTabs('group-a', [
+      { id: 'events/A.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
+    seedEditorGroupTabs('group-b', [
+      { id: 'events/B.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
   });
 
   it('keeps graph documents when their tab remains open in a suspended group', async () => {

@@ -1,6 +1,7 @@
 import type { SidebarTabId } from './layoutStore';
 import type { WorkbenchPartId } from './workbenchLayoutDefaults';
 import type { EditorGridMemento } from './editorGridMemento';
+import type { EditorTabMemento } from './editorTabStore';
 import type { PanelViewId } from './panelPartModel';
 import { logger } from '@/utils/appLogger';
 
@@ -29,10 +30,11 @@ export interface WorkbenchPartMemento {
   activePanelView?: PanelViewId;
 }
 
-/** Unified workbench memento: chrome parts + editor grid topology. */
+/** Unified workbench memento: chrome parts + editor grid topology + tab placements. */
 export interface WorkbenchLayoutMemento {
   parts: Partial<Record<WorkbenchPartId, WorkbenchPartMemento>>;
   editorGrid?: EditorGridMemento | null;
+  editorTabs?: EditorTabMemento | null;
 }
 
 export function loadWorkbenchLayoutMemento(): WorkbenchLayoutMemento | null {

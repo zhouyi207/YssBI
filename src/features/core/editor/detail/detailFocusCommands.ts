@@ -1,3 +1,4 @@
+import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import {
   getActiveLayoutTab,
@@ -30,7 +31,7 @@ export function focusDetailOnNode(nodeId: string, groupId?: string | null): void
   const gid = resolveEditorGroupId(groupId, layout);
   if (!gid) return;
 
-  const graphPath = layout.nodes[gid]?.data?.activeTabId;
+  const graphPath = getEditorGroupActiveTabId(gid);
   if (!graphPath) return;
 
   focusDetail({ kind: 'node', id: nodeId, graphPath });

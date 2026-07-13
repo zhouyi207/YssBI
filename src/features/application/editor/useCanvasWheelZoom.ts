@@ -1,13 +1,14 @@
 import { useEffect, type RefObject } from 'react';
 import { attachCanvasWheelZoom } from '@/features/core/viewport';
+import type { ViewportScope } from '@/features/core/viewport';
 
 export function useCanvasWheelZoom(
   canvasElementRef: RefObject<HTMLDivElement | null>,
-  graphPath: string | null,
+  viewportScope: ViewportScope | null,
 ) {
   useEffect(() => {
     const canvasEl = canvasElementRef.current;
-    if (!canvasEl || !graphPath) return;
-    return attachCanvasWheelZoom(canvasEl, graphPath);
-  }, [canvasElementRef, graphPath]);
+    if (!canvasEl || !viewportScope) return;
+    return attachCanvasWheelZoom(canvasEl, viewportScope);
+  }, [canvasElementRef, viewportScope?.groupId, viewportScope?.graphPath]);
 }

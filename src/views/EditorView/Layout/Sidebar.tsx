@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useContext, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useEditorGroup } from '@/features/application/editor';
+import { useEditorSessionResources } from '@/features/application/editor';
 import { GroupContext } from '@/features/core/editor';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { ContextMenu } from '@/shared/ui/contextMenu';
@@ -42,7 +42,7 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
     functions,
     events,
     dataframes,
-  } = useEditorGroup();
+  } = useEditorSessionResources();
 
   const {
     contextMenu,

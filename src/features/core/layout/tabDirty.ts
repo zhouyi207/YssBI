@@ -1,9 +1,9 @@
-import type { LayoutTab } from "@/shared/types/ui";
 import { useLayoutStore } from "./layoutStore";
 import { getLayoutTabById } from "./layoutTabQueries";
 import { isGraphResourceDirty, markResourceDirty } from "@/features/core/resource";
 import { layoutTabResourceRef } from "./layoutTabModel";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
+import { listAllOpenEditorTabs } from "./editorTabStore";
 
 export function markGraphTabDirty(graphPath: string): void {
     const located = getLayoutTabById(graphPath);
@@ -31,19 +31,16 @@ export interface DirtyTabSnapshot {
 export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
     const seen = new Set<string>();
     const out: DirtyTabSnapshot[] = [];
-    for (const node of Object.values(useLayoutStore.getState().nodes)) {
-        if (node.type !== "component" || !node.data?.tabs) continue;
-        for (const tab of node.data.tabs as LayoutTab[]) {
-            if (tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
-            if (seen.has(tab.id)) continue;
-            if (!isGraphResourceDirty(tab.id, tab.type)) continue;
-            seen.add(tab.id);
-            out.push({
-              nodeId: node.id,
-              graphPath: tab.id,
-              title: resolveTabDisplayName(layoutTabResourceRef(tab), tab.id),
-            });
-        }
+    for (const { groupId, tab } of listAllOpenEditorTabs()) {
+        if (tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
+        if (seen.has(tab.id)) continue;
+        if (!isGraphResourceDirty(tab.id, tab.type)) continue;
+        seen.add(tab.id);
+        out.push({
+          nodeId: groupId,
+          graphPath: tab.id,
+          title: resolveTabDisplayName(layoutTabResourceRef(tab), tab.id),
+        });
     }
     return out;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { LayoutTree } from '@/shared/types';
 import {
   getActiveLayoutTab,
@@ -7,48 +7,44 @@ import {
   resolveEditorGroupId,
   resolveEditorTargetGroupId,
 } from './layoutTabQueries';
+import { resetEditorTabStore, seedEditorGroupTabs } from './editorTabTestUtils';
 
 const mockNodes: LayoutTree = {
   editorA: {
     id: 'editorA',
     type: 'component',
     parentId: 'root',
-    data: {
-      component: 'GraphEditor',
-      tabs: [
-        { id: 'g1', component: 'GraphEditor', type: 'event' },
-        { id: 'g2', component: 'GraphEditor', type: 'function' },
-      ],
-      activeTabId: 'g1',
-    },
+    data: { component: 'GraphEditor' },
   },
   editorB: {
     id: 'editorB',
     type: 'component',
     parentId: 'root',
-    data: {
-      component: 'GraphEditor',
-      tabs: [{ id: 'g3', component: 'GraphEditor', type: 'event' }],
-      activeTabId: 'g3',
-    },
+    data: { component: 'GraphEditor' },
   },
   panel: {
     id: 'panel',
     type: 'component',
     parentId: 'root',
-    data: {
-      component: 'PanelPart',
-      tabs: [],
-      activeTabId: undefined,
-    },
+    data: { component: 'PanelPart' },
   },
 };
 
+const tabG1 = { id: 'g1', component: 'GraphEditor' as const, type: 'event' as const };
+const tabG2 = { id: 'g2', component: 'GraphEditor' as const, type: 'function' as const };
+const tabG3 = { id: 'g3', component: 'GraphEditor' as const, type: 'event' as const };
+
 describe('layoutTabQueries', () => {
+  beforeEach(() => {
+    resetEditorTabStore();
+    seedEditorGroupTabs('editorA', [tabG1, tabG2], 'g1');
+    seedEditorGroupTabs('editorB', [tabG3], 'g3');
+  });
+
   it('finds a tab globally by id', () => {
     expect(getLayoutTabById('g2', mockNodes)).toEqual({
       nodeId: 'editorA',
-      tab: mockNodes.editorA.data!.tabs![1],
+      tab: tabG2,
     });
     expect(getLayoutTabById('missing', mockNodes)).toBeNull();
   });
@@ -56,7 +52,7 @@ describe('layoutTabQueries', () => {
   it('locates a tab in a specific node', () => {
     expect(locateLayoutTab('g3', 'editorB', mockNodes)).toEqual({
       nodeId: 'editorB',
-      tab: mockNodes.editorB.data!.tabs![0],
+      tab: tabG3,
     });
     expect(locateLayoutTab('g3', 'editorA', mockNodes)).toBeNull();
   });
@@ -68,25 +64,16 @@ describe('layoutTabQueries', () => {
   it('returns active tab for a group', () => {
     expect(getActiveLayoutTab('editorA', mockNodes)).toEqual({
       activeTabId: 'g1',
-      tab: mockNodes.editorA.data!.tabs![0],
+      tab: tabG1,
     });
     expect(getActiveLayoutTab('panel', mockNodes)).toBeNull();
   });
 
   it('returns null when activeTabId points to a missing tab', () => {
-    const broken: LayoutTree = {
-      editor: {
-        id: 'editor',
-        type: 'component',
-        parentId: null,
-        data: {
-          component: 'GraphEditor',
-          tabs: [],
-          activeTabId: 'ghost',
-        },
-      },
-    };
-    expect(getActiveLayoutTab('editor', broken)).toBeNull();
+    resetEditorTabStore();
+    seedEditorGroupTabs('editor', [], 'ghost');
+
+    expect(getActiveLayoutTab('editor', mockNodes)).toBeNull();
   });
 
   it('resolves editor group id with fallbacks', () => {
@@ -106,7 +93,7 @@ describe('layoutTabQueries', () => {
         id: 'sidebar',
         type: 'component',
         parentId: 'root',
-        data: { component: 'Sidebar', isFixed: true, tabs: [], activeTabId: undefined },
+        data: { component: 'Sidebar', isFixed: true },
       },
     };
     expect(

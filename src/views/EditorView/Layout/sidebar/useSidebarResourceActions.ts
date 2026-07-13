@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useEditorGroup } from '@/features/application/editor';
+import { useEditorSessionCommandsContext } from '@/features/application/editor';
 import { updateVariableAction } from '@/features/application/dataManagement/variableActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { renameWorksheetResource, revealProjectResourceInExplorer } from '@/features/application/sidebar/sidebarResourceActions';
@@ -37,7 +37,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     openWorksheet,
     addWorksheet,
     triggerImportData,
-  } = useEditorGroup();
+  } = useEditorSessionCommandsContext();
 
   const renameGraphItem = useCallback((id: string, name: string, type: GraphResourceType) => {
     openInputDialog(t('contextMenu.dialog.renameGraphTitle'), name, async (nextName) => {

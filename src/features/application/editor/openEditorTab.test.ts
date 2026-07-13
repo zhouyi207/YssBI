@@ -1,27 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { openEditorTab } from './openEditorTab';
 
 describe('openEditorTab insertIndex', () => {
   beforeEach(() => {
+    useEditorTabStore.setState({ registry: {}, placements: {} });
     useLayoutStore.setState({
       nodes: {
         default_editor: {
           id: 'default_editor',
           type: 'component',
           parentId: 'center',
-          data: {
-            component: 'GraphEditor',
-            tabs: [
-              { id: 'g1', component: 'GraphEditor', type: 'event', pinned: true },
-              { id: 'g2', component: 'GraphEditor', type: 'event', pinned: true },
-            ],
-            activeTabId: 'g1',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
       activeEditorGroupId: 'default_editor',
     } as Partial<ReturnType<typeof useLayoutStore.getState>>);
+    useEditorTabStore.getState().initGroupPlacement('default_editor', [
+      { id: 'g1', component: 'GraphEditor', type: 'event', pinned: true },
+      { id: 'g2', component: 'GraphEditor', type: 'event', pinned: true },
+    ], 'g1');
   });
 
   it('inserts a new tab at the requested index', () => {
@@ -30,25 +29,26 @@ describe('openEditorTab insertIndex', () => {
       { insertIndex: 1, pinned: true },
     );
 
-    const tabs = useLayoutStore.getState().nodes.default_editor?.data?.tabs ?? [];
-    expect(tabs.map((tab) => tab.id)).toEqual(['g1', 'g3', 'g2']);
-    expect(useLayoutStore.getState().nodes.default_editor?.data?.activeTabId).toBe('g3');
+    const placement = useEditorTabStore.getState().getPlacement('default_editor');
+    expect(placement.tabIds).toEqual(['g1', 'g3', 'g2']);
+    expect(placement.activeTabId).toBe('g3');
   });
 
   it('reorders an existing tab within the same editor group', () => {
-    const moveTab = vi.spyOn(useLayoutStore.getState(), 'moveTab');
-
     openEditorTab(
       { id: 'g2', component: 'GraphEditor', type: 'event', pinned: true },
       { targetGroupId: 'default_editor', insertIndex: 0, pinned: true },
     );
 
-    expect(moveTab).toHaveBeenCalledWith('default_editor', 'g2', 'default_editor', 0);
+    const placement = useEditorTabStore.getState().getPlacement('default_editor');
+    expect(placement.tabIds).toEqual(['g2', 'g1']);
+    expect(placement.activeTabId).toBe('g2');
   });
 });
 
 describe('openEditorTab chrome recovery', () => {
   beforeEach(() => {
+    useEditorTabStore.setState({ registry: {}, placements: {} });
     useLayoutStore.setState({
       nodes: {
         sidebar: {
@@ -66,23 +66,24 @@ describe('openEditorTab chrome recovery', () => {
           id: 'default_editor',
           type: 'component',
           parentId: 'center',
-          data: { component: 'GraphEditor', tabs: [], activeTabId: undefined },
+          data: { component: 'GraphEditor' },
         },
       },
       activeEditorGroupId: null,
     } as Partial<ReturnType<typeof useLayoutStore.getState>>);
+    useEditorTabStore.getState().ensureGroupPlacement('default_editor');
   });
 
   it('moves an existing worksheet tab from sidebar chrome into the editor group', () => {
-    const moveTab = vi.spyOn(useLayoutStore.getState(), 'moveTab');
-
     openEditorTab({
       id: 'ws1',
       component: 'WorksheetEditor',
       type: 'worksheet',
     });
 
-    expect(moveTab).toHaveBeenCalledWith('sidebar', 'ws1', 'default_editor', undefined);
+    const placement = useEditorTabStore.getState().getPlacement('default_editor');
+    expect(placement.tabIds).toEqual(['ws1']);
+    expect(placement.activeTabId).toBe('ws1');
     expect(useLayoutStore.getState().activeEditorGroupId).toBe('default_editor');
   });
 });

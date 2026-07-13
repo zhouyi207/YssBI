@@ -4,21 +4,22 @@ import {
   getViewport,
   subscribeToViewport,
   viewportGridStyle,
+  type ViewportScope,
 } from '@/features/core/viewport';
 import { GRID } from '@/app/appConfig/default';
 
-export const ViewportGrid = ({ graphPath }: { graphPath: string }) => {
+export const ViewportGrid = ({ viewportScope }: { viewportScope: ViewportScope | null }) => {
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!graphPath) return;
-    return subscribeToViewport(graphPath, (viewport) => {
+    if (!viewportScope) return;
+    return subscribeToViewport(viewportScope, (viewport) => {
       const el = gridRef.current;
       if (el) applyViewportGrid(el, viewport, GRID);
     });
-  }, [graphPath]);
+  }, [viewportScope?.groupId, viewportScope?.graphPath]);
 
-  const initial = graphPath ? getViewport(graphPath) : { x: 0, y: 0, scale: 1 };
+  const initial = viewportScope ? getViewport(viewportScope) : { x: 0, y: 0, scale: 1 };
 
   return (
     <div

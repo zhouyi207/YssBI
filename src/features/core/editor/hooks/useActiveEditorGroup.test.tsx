@@ -39,13 +39,13 @@ describe('useActiveEditorGroup', () => {
           id: 'group-a',
           type: 'component',
           parentId: null,
-          data: { component: 'GraphEditor', tabs: [], activeTabId: undefined },
+          data: { component: 'GraphEditor' },
         },
         'group-b': {
           id: 'group-b',
           type: 'component',
           parentId: null,
-          data: { component: 'GraphEditor', tabs: [], activeTabId: undefined },
+          data: { component: 'GraphEditor' },
         },
       },
     });

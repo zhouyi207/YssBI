@@ -1,4 +1,9 @@
-export { EditorSessionProvider, useEditorSession } from './EditorSessionContext';
+export {
+  EditorSessionProvider,
+  useEditorSession,
+  useEditorSessionCommandsContext,
+  useEditorSessionSharedContext,
+} from './EditorSessionContext';
 export type {
   EditorSession,
   EditorGroupSession,
@@ -11,6 +16,7 @@ export {
   useEditorSessionResources,
   useEditorSessionDetailActions,
 } from './useEditorSessionSlices';
+export { useEditorHistoryAvailability } from './useEditorHistoryAvailability';
 export { useEditorOperations } from './useEditorOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';

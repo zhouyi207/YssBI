@@ -3,10 +3,12 @@ import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { useEditorGroup, useCanvasViewport, useCanvasWheelZoom, useCanvasDrop } from "@/features/application/editor";
+import { editorViewportScope } from "@/features/core/viewport";
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
 import { useGestureStore } from "@/features/core/gesture";
 import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
+import { bindConnectPreviewToGestureStore } from "@/features/core/canvas/connectPreview";
 import { getConnectGesture, type EditorGesture } from "@/shared/types/ui";
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
@@ -62,10 +64,20 @@ export default function Canvas({ interactive = true }: CanvasProps) {
 
   useEffect(() => {
     if (!interactive) return;
-    return bindDragPreviewToGestureStore();
+    const unbindDrag = bindDragPreviewToGestureStore();
+    const unbindConnect = bindConnectPreviewToGestureStore();
+    return () => {
+      unbindDrag();
+      unbindConnect();
+    };
   }, [interactive]);
 
-  useNodeDragPreview(canvasElementRef, interactive ? activeTabId : null);
+  const viewportScope = useMemo(
+    () => (groupId && activeTabId ? editorViewportScope(groupId, activeTabId) : null),
+    [groupId, activeTabId],
+  );
+
+  useNodeDragPreview(canvasElementRef, interactive ? groupId : null, interactive ? activeTabId : null);
   useSelectionBoxPreview(selectionBoxRef, canvasElementRef, interactive ? groupId : undefined);
   useExecutionVisualBinder(canvasElementRef, interactive ? activeTabId ?? undefined : undefined);
 
@@ -80,10 +92,11 @@ export default function Canvas({ interactive = true }: CanvasProps) {
 
   const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
+    groupId,
     activeTabId,
     interactive ? gestureType : null,
   );
-  useCanvasWheelZoom(canvasElementRef, interactive ? activeTabId : null);
+  useCanvasWheelZoom(canvasElementRef, viewportScope);
 
   const {
     variableDropMenu,
@@ -146,7 +159,7 @@ export default function Canvas({ interactive = true }: CanvasProps) {
       data-editor-group-id={groupId}
       className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
     >
-      <ViewportGrid graphPath={activeTabId ?? ""} />
+      <ViewportGrid viewportScope={viewportScope} />
 
       <div
         className="absolute inset-0"
@@ -154,14 +167,14 @@ export default function Canvas({ interactive = true }: CanvasProps) {
         onContextMenu={interactive ? handleContextMenu : undefined}
       >
         <ConnectionLine
-          graphPath={activeTabId ?? ""}
+          viewportScope={viewportScope}
           getPinWorldPos={getPinWorldPos}
           getCanvasLocalPoint={getCanvasLocalPoint}
           pendingConnection={interactive ? pendingConnection : null}
           menuPos={interactive ? contextMenu : null}
         />
 
-        <TransformContainer graphPath={activeTabId ?? ""}>
+        <TransformContainer viewportScope={viewportScope}>
           <EdgesOverlay
             graphPath={activeTabId ?? ""}
             getPinWorldPos={getPinWorldPos}

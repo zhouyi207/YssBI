@@ -27,6 +27,13 @@ import {
     writeEditorAreaMaximizeState,
 } from './editorGridLayout';
 import { commitSplitPairSizes } from './editorGridSizing';
+import {
+    isEditorGroupPlacementEmpty,
+    readLegacyEmbeddedTab,
+    removeLegacyEmbeddedTab,
+    reconcileEditorTabPlacements,
+    useEditorTabStore,
+} from './editorTabStore';
 
 export type SidebarTabId = 'graphs' | 'nodes' | 'variables' | 'data' | 'commands' | 'charts';
 
@@ -41,16 +48,6 @@ export function isSidebarTabId(value: string | null | undefined): value is Sideb
         || value === 'commands'
         || value === 'charts'
     );
-}
-
-function clearSelectedNodeIds(data: LayoutNode['data']): LayoutNode['data'] {
-    return {
-        ...data,
-        params: {
-            ...data?.params,
-            selectedNodeIds: [],
-        },
-    };
 }
 
 export interface LayoutState {
@@ -89,12 +86,11 @@ export interface LayoutState {
     /** Reset workbench chrome while preserving the complete editor grid session. */
     resetWorkbenchLayout: () => void;
 
-    // DND Actions
+    // Tab placement (delegates to editorTabStore)
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab, insertIndex?: number) => void;
     setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
-    /** Patch only activeTabId (+ clear selection on change). Avoids full node spread on tab switch. */
     setEditorGroupActiveTab: (nodeId: string, tabId: string | null) => void;
     /** Pixelize both flex siblings after first sash drag between editor groups. */
     commitFlexSplitResize: (beforeId: string, afterId: string, beforeSize: number, afterSize: number) => void;
@@ -102,11 +98,6 @@ export interface LayoutState {
     toggleMaximizeEditorGroup: (groupId: string) => void;
     /** Reset a flex/pixel split between two editor-grid siblings to equal sizes. */
     resetEditorGridSplitEqual: (beforeId: string, afterId: string, beforeSize: number, afterSize: number) => void;
-    /**
-     * Drop every graph (event/function) tab from every editor group, regardless
-     * of dirty state. Use during destructive project transitions (load / clear /
-     * switch) where the previous project's graphs are no longer valid.
-     */
     closeAllGraphTabs: () => void;
 
     // UI State
@@ -131,6 +122,7 @@ function removeEmptyEditorGroupIfNeeded(
 ): void {
     const { removed, nextActiveGroupId } = removeEditorGroupFromTree(state.nodes, groupId);
     if (!removed) return;
+    useEditorTabStore.getState().removeGroupPlacement(groupId);
     if (state.activeEditorGroupId === groupId) {
         state.activeEditorGroupId = preferActiveGroupId ?? nextActiveGroupId;
     }
@@ -168,6 +160,7 @@ export const useLayoutStore = create<LayoutState>()(
 
         addNode: (node) => set((state) => {
             state.nodes[node.id] = node;
+            reconcileEditorTabPlacements(state.nodes);
         }),
 
         updateNode: (id, patches) => set((state) => {
@@ -183,18 +176,19 @@ export const useLayoutStore = create<LayoutState>()(
                 if (payload.pinSourceActiveTab) {
                     const activeTab = getActiveLayoutTab(targetGroupId, state.nodes)?.tab;
                     if (activeTab) {
-                        const targetNode = state.nodes[targetGroupId];
-                        const sourceTab = targetNode?.data?.tabs?.find((t) => t.id === activeTab.id);
-                        if (sourceTab) sourceTab.pinned = true;
+                        useEditorTabStore.getState().setTabPinned(targetGroupId, activeTab.id, true);
                     }
                 }
 
                 createdGroupId = splitEditorGroupInTree(state.nodes, targetGroupId, edge, {
                     component: payload.component,
-                    tabs: payload.tabs,
-                    activeTabId: payload.activeTabId,
                 });
                 if (createdGroupId) {
+                    useEditorTabStore.getState().initGroupPlacement(
+                        createdGroupId,
+                        payload.tabs,
+                        payload.activeTabId,
+                    );
                     state.activeEditorGroupId = createdGroupId;
                 }
             });
@@ -238,9 +232,8 @@ export const useLayoutStore = create<LayoutState>()(
             const editorArea = state.nodes[EDITOR_AREA_ID];
             if (!editorArea?.children) return;
 
-            const defaultEditor = state.nodes[DEFAULT_EDITOR_GROUP_ID];
-            const tabs = defaultEditor?.data?.tabs ?? [];
-            const activeTabId = defaultEditor?.data?.activeTabId;
+            const otherGroupIds = listEditorGroupIds(state.nodes).filter((id) => id !== DEFAULT_EDITOR_GROUP_ID);
+            useEditorTabStore.getState().mergePlacementsIntoGroup(DEFAULT_EDITOR_GROUP_ID, otherGroupIds);
 
             for (const id of collectDescendantIds(state.nodes, EDITOR_AREA_ID, DEFAULT_EDITOR_GROUP_ID)) {
                 delete state.nodes[id];
@@ -251,6 +244,7 @@ export const useLayoutStore = create<LayoutState>()(
             writeEditorAreaMaximizeState(state.nodes, null, null);
             clearEditorGroupMaximizedHidden(state.nodes);
 
+            const defaultEditor = state.nodes[DEFAULT_EDITOR_GROUP_ID];
             if (defaultEditor) {
                 defaultEditor.parentId = EDITOR_AREA_ID;
                 defaultEditor.size = 1;
@@ -258,18 +252,17 @@ export const useLayoutStore = create<LayoutState>()(
                 defaultEditor.data = {
                     ...defaultEditor.data,
                     component: 'GraphEditor',
-                    tabs,
-                    activeTabId,
                 };
             } else {
                 state.nodes[DEFAULT_EDITOR_GROUP_ID] = {
                     id: DEFAULT_EDITOR_GROUP_ID,
                     type: 'component',
                     parentId: EDITOR_AREA_ID,
-                    data: { component: 'GraphEditor', tabs: [] },
+                    data: { component: 'GraphEditor' },
                 };
             }
 
+            reconcileEditorTabPlacements(state.nodes);
             state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
         }),
 
@@ -278,8 +271,11 @@ export const useLayoutStore = create<LayoutState>()(
             set((state) => {
                 const result = removeEditorGroupFromTree(state.nodes, groupId);
                 removed = result.removed;
-                if (removed && state.activeEditorGroupId === groupId) {
-                    state.activeEditorGroupId = result.nextActiveGroupId;
+                if (removed) {
+                    useEditorTabStore.getState().removeGroupPlacement(groupId);
+                    if (state.activeEditorGroupId === groupId) {
+                        state.activeEditorGroupId = result.nextActiveGroupId;
+                    }
                 }
                 ensureValidActiveEditorGroup(state);
             });
@@ -321,200 +317,69 @@ export const useLayoutStore = create<LayoutState>()(
             state.nodes.panel = defaults.panel!;
             state.nodes.detail = defaults.detail!;
             state.zenMode = false;
+            useEditorTabStore.getState().importFromLayoutNodes(state.nodes);
+            useEditorTabStore.getState().stripEmbeddedTabsFromNodes(state.nodes);
+            reconcileEditorTabPlacements(state.nodes);
         }),
 
-        moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => set((state) => {
-            const sourceNode = state.nodes[sourceNodeId];
-            const targetNode = state.nodes[targetNodeId];
-            if (!sourceNode || !targetNode) return;
-
-            const sourceTabs = sourceNode.data?.tabs || [];
-            const tabToMove = sourceTabs.find(t => t.id === tabId);
-            if (!tabToMove) return;
-            tabToMove.pinned = true;
-
-            // 检查目标节点是否已经有这个标签页
-            const targetTabs = targetNode.data?.tabs || [];
-            const existingTabIndex = targetTabs.findIndex(t => t.id === tabId);
-
-            // 如果目标节点已经有这个标签页，只激活它
-            if (existingTabIndex !== -1 && sourceNodeId !== targetNodeId) {
-                // 从源节点移除
-                sourceNode.data!.tabs = sourceTabs.filter(t => t.id !== tabId);
-                if (sourceNode.data!.activeTabId === tabId) {
-                    const closingIndex = sourceTabs.findIndex(t => t.id === tabId);
-                    const nextIndex = Math.max(0, closingIndex - 1);
-                    sourceNode.data!.activeTabId = sourceNode.data!.tabs[nextIndex]?.id;
+        moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => {
+            const tabStore = useEditorTabStore.getState();
+            if (!tabStore.locateTab(tabId, sourceNodeId)) {
+                const legacyTab = readLegacyEmbeddedTab(get().nodes[sourceNodeId], tabId);
+                if (legacyTab) {
+                    tabStore.addTab(targetNodeId, legacyTab, targetTabIndex);
+                    set((state) => {
+                        removeLegacyEmbeddedTab(state.nodes[sourceNodeId], tabId);
+                    });
                 }
-
-                // 清理空的源节点
-                if (sourceNode.data!.tabs.length === 0) {
+            } else {
+                tabStore.moveTab(sourceNodeId, tabId, targetNodeId, targetTabIndex);
+            }
+            set((state) => {
+                const sourceEmpty = isEditorGroupPlacementEmpty(sourceNodeId);
+                if (sourceEmpty) {
                     removeEmptyEditorGroupIfNeeded(state, sourceNodeId, targetNodeId);
                 }
-
-                // 只激活目标节点中已存在的标签页
-                targetNode.data!.activeTabId = tabId;
-                // 确保目标编辑器被激活
                 state.activeEditorGroupId = targetNodeId;
-                return;
-            }
+                ensureValidActiveEditorGroup(state);
+            });
+        },
 
-            // 如果是同一个节点内部移动，只做重新排序
-            if (sourceNodeId === targetNodeId) {
-                const currentIndex = sourceTabs.findIndex(t => t.id === tabId);
-                if (currentIndex === -1) return;
-
-                const newTabs = [...sourceTabs];
-                const [removed] = newTabs.splice(currentIndex, 1);
-
-                if (targetTabIndex !== undefined) {
-                    // 如果目标索引大于当前索引，需要减 1，因为已经移除了一个元素
-                    const adjustedIndex = targetTabIndex > currentIndex ? targetTabIndex - 1 : targetTabIndex;
-                    newTabs.splice(adjustedIndex, 0, removed);
-                } else {
-                    newTabs.push(removed);
+        removeTab: (nodeId, tabId) => {
+            useEditorTabStore.getState().removeTab(nodeId, tabId);
+            set((state) => {
+                if (isEditorGroupPlacementEmpty(nodeId)) {
+                    if (listEditorGroupIds(state.nodes).length > 1) {
+                        removeEmptyEditorGroupIfNeeded(state, nodeId);
+                    }
                 }
+                ensureValidActiveEditorGroup(state);
+            });
+        },
 
-                sourceNode.data!.tabs = newTabs;
-                sourceNode.data!.activeTabId = tabId;
-                return;
-            }
+        addTab: (nodeId, tab, insertIndex) => {
+            useEditorTabStore.getState().addTab(nodeId, tab, insertIndex);
+        },
 
-            // 正常的跨节点移动：从源节点移除
-            const closingIndex = sourceTabs.findIndex(t => t.id === tabId);
-            sourceNode.data!.tabs = sourceTabs.filter(t => t.id !== tabId);
-            if (sourceNode.data!.activeTabId === tabId) {
-                const nextIndex = Math.max(0, closingIndex - 1);
-                sourceNode.data!.activeTabId = sourceNode.data!.tabs[nextIndex]?.id;
-            }
+        setTabPinned: (nodeId, tabId, pinned) => {
+            useEditorTabStore.getState().setTabPinned(nodeId, tabId, pinned);
+        },
 
-            // VS Code 逻辑：如果源节点没有 tabs 了，且不是最后一个编辑器组，移除源节点
-            if (sourceNode.data!.tabs.length === 0) {
-                removeEmptyEditorGroupIfNeeded(state, sourceNodeId, targetNodeId);
-            }
+        setEditorGroupActiveTab: (nodeId, tabId) => {
+            useEditorTabStore.getState().setActiveTab(nodeId, tabId);
+        },
 
-            // 添加到目标节点（此时已确认目标节点没有这个标签页）
-            if (targetTabIndex !== undefined) {
-                targetTabs.splice(targetTabIndex, 0, tabToMove);
-            } else {
-                targetTabs.push(tabToMove);
-            }
-            targetNode.data = {
-                ...targetNode.data,
-                tabs: targetTabs,
-                activeTabId: tabId
-            };
-
-            // 确保目标编辑器被激活
-            state.activeEditorGroupId = targetNodeId;
-            ensureValidActiveEditorGroup(state);
-        }),
-
-        removeTab: (nodeId, tabId) => set((state) => {
-            const node = state.nodes[nodeId];
-            if (!node || !node.data?.tabs) return;
-
-            const currentTabs = node.data.tabs;
-            const closingIndex = currentTabs.findIndex(t => t.id === tabId);
-            if (closingIndex === -1) return;
-
-            const newTabs = currentTabs.filter(t => t.id !== tabId);
-
-            if (newTabs.length === 0) {
-                node.data.tabs = [];
-                node.data.activeTabId = undefined;
-                if (listEditorGroupIds(state.nodes).length > 1) {
-                    removeEmptyEditorGroupIfNeeded(state, nodeId);
+        closeAllGraphTabs: () => {
+            useEditorTabStore.getState().closeAllGraphTabs();
+            set((state) => {
+                for (const groupId of listEditorGroupIds(state.nodes)) {
+                    if (isEditorGroupPlacementEmpty(groupId)) {
+                        removeEmptyEditorGroupIfNeeded(state, groupId);
+                    }
                 }
-            } else {
-                const data = node.data!;
-                // 还有剩余标签，处理激活状态
-                let newActiveTabId = data.activeTabId;
-                if (newActiveTabId === tabId) {
-                    const nextIndex = Math.max(0, closingIndex - 1);
-                    newActiveTabId = newTabs[nextIndex]?.id;
-                }
-                data.tabs = newTabs;
-                if (data.activeTabId !== newActiveTabId) {
-                    node.data = clearSelectedNodeIds(data);
-                }
-                node.data!.activeTabId = newActiveTabId;
-            }
-
-            ensureValidActiveEditorGroup(state);
-        }),
-
-        addTab: (nodeId, tab, insertIndex) => set((state) => {
-            const node = state.nodes[nodeId];
-            if (!node || node.type !== 'component') return;
-
-            const tabs = node.data?.tabs || [];
-            const existingIndex = tabs.findIndex((t) => t.id === tab.id);
-            if (existingIndex !== -1) {
-                if (node.data!.activeTabId !== tab.id) {
-                    node.data = clearSelectedNodeIds(node.data);
-                }
-                node.data!.activeTabId = tab.id;
-
-                if (insertIndex !== undefined && insertIndex !== existingIndex) {
-                    const nextTabs = [...tabs];
-                    const [existing] = nextTabs.splice(existingIndex, 1);
-                    const adjustedIndex = insertIndex > existingIndex ? insertIndex - 1 : insertIndex;
-                    nextTabs.splice(Math.max(0, Math.min(adjustedIndex, nextTabs.length)), 0, existing);
-                    node.data!.tabs = nextTabs;
-                }
-                return;
-            }
-
-            const nextTabs = [...tabs];
-            if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= nextTabs.length) {
-                nextTabs.splice(insertIndex, 0, tab);
-            } else {
-                nextTabs.push(tab);
-            }
-
-            node.data = {
-                ...clearSelectedNodeIds(node.data),
-                tabs: nextTabs,
-                activeTabId: tab.id,
-                component: node.data?.component || 'GraphEditor',
-            };
-        }),
-
-        setTabPinned: (nodeId, tabId, pinned) => set((state) => {
-            const tab = state.nodes[nodeId]?.data?.tabs?.find((item) => item.id === tabId);
-            if (!tab) return;
-            tab.pinned = pinned;
-        }),
-
-        setEditorGroupActiveTab: (nodeId, tabId) => set((state) => {
-            const node = state.nodes[nodeId];
-            if (!node?.data?.tabs) return;
-
-            const nextActiveId = tabId || undefined;
-            if (node.data.activeTabId === nextActiveId) return;
-
-            node.data.activeTabId = nextActiveId;
-            node.data.params = {
-                ...node.data.params,
-                selectedNodeIds: [],
-            };
-        }),
-
-        closeAllGraphTabs: () => set((state) => {
-            for (const node of Object.values(state.nodes)) {
-                if (node.type !== 'component' || !node.data?.tabs) continue;
-                const remaining = node.data.tabs.filter(
-                    (tab) => tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet'
-                );
-                if (remaining.length === node.data.tabs.length) continue;
-                const activeStillPresent = remaining.some((tab) => tab.id === node.data?.activeTabId);
-                node.data.tabs = remaining;
-                node.data.activeTabId = activeStillPresent
-                    ? node.data?.activeTabId
-                    : remaining[remaining.length - 1]?.id;
-            }
-        }),
+                ensureValidActiveEditorGroup(state);
+            });
+        },
 
         isSettingsOpen: false,
         zenMode: false,
@@ -551,3 +416,9 @@ export const useLayoutStore = create<LayoutState>()(
         }),
     }))
 );
+
+// Bootstrap tab placements from initial layout nodes on module load.
+const initialNodes = useLayoutStore.getState().nodes;
+useEditorTabStore.getState().importFromLayoutNodes(initialNodes);
+useEditorTabStore.getState().stripEmbeddedTabsFromNodes(initialNodes);
+reconcileEditorTabPlacements(initialNodes);

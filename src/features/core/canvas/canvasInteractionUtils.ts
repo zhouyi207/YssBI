@@ -1,13 +1,12 @@
 import type { RefObject } from 'react';
 import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getViewport } from '@/features/core/viewport';
+import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
+import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import type { EditorGesture } from '@/shared/types/ui';
 import { queryCanvasElement } from './selectionHitTargets';
 
 export function resolveTabId(groupId: string, activeTabIdRef: RefObject<string | null>): string | null {
-  const layoutNode = useLayoutStore.getState().nodes[groupId];
-  return layoutNode?.data?.activeTabId ?? activeTabIdRef.current ?? null;
+  return getEditorGroupActiveTabId(groupId) ?? activeTabIdRef.current ?? null;
 }
 
 export function getCanvasWorldPoint(
@@ -22,7 +21,9 @@ export function getCanvasWorldPoint(
   }
 
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = graphPath ? getViewport(graphPath) : { x: 0, y: 0, scale: 1 };
+  const viewport = graphPath
+    ? getViewport(editorViewportScope(groupId, graphPath))
+    : { x: 0, y: 0, scale: 1 };
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,

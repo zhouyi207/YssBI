@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useState } from "react";
-import { useEditorGroup } from "@/features/application/editor";
+import { useEditorSessionCommandsContext, useEditorHistoryAvailability } from "@/features/application/editor";
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
@@ -110,13 +110,11 @@ export function Menubar() {
     paste,
     cut,
     deleteSelected,
-    canUndo,
-    canRedo,
-    activeTabId,
     addEvent,
     addFunction,
     addWorksheet,
-  } = useEditorGroup();
+  } = useEditorSessionCommandsContext();
+  const { canUndo, canRedo, activeTabId } = useEditorHistoryAvailability();
 
   const {
     openSettings,

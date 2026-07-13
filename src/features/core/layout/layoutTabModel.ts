@@ -86,11 +86,6 @@ export function splitComponentForTab(tab: LayoutTab | null | undefined): LayoutT
 }
 
 export function readEditorGroupSnapshot(node: LayoutNode): EditorGroupSnapshot | null {
-  if (node.type !== 'component' || !node.data?.tabs) return null;
-  return {
-    id: node.id,
-    tabs: normalizeLayoutTabs(node.data.tabs),
-    activeTabId: node.data.activeTabId ?? null,
-    selectedNodeIds: node.data.params?.selectedNodeIds ?? [],
-  };
+  if (node.type !== 'component' || node.data?.isFixed) return null;
+  return { id: node.id };
 }

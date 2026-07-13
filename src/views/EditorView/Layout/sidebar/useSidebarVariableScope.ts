@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
+import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { lookupGraphResourceKind, useResourceStore } from '@/features/core/resource';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type { GraphResourceType } from '../sidebarContextMenu';
@@ -10,16 +10,13 @@ export function useSidebarVariableScope(): {
   scopePath: string | null;
   graphType: GraphResourceType | undefined;
 } {
-  const activeEditorNode = useLayoutStore((s) =>
-    s.activeEditorGroupId ? s.nodes[s.activeEditorGroupId] : null,
-  );
-  const activeTabId = activeEditorNode?.data?.activeTabId ?? null;
+  const { activeTabId, tabs } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
   const scopePath = variablesGraphScopePath ?? activeTabId;
 
   const graphTypeFromTab =
-    scopePath && activeEditorNode?.data?.tabs
-      ? activeEditorNode.data.tabs.find((tab) => tab.id === scopePath)?.type
+    scopePath
+      ? tabs.find((tab) => tab.id === scopePath)?.type
       : undefined;
 
   const graphTypeFromResource = useResourceStore((s) =>

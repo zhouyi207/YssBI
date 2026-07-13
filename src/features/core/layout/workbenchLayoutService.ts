@@ -10,6 +10,7 @@ import {
   type WorkbenchPartId,
 } from './workbenchLayoutDefaults';
 import { applyEditorGridMementoWithRepair, snapshotEditorGridMemento } from './editorGridMemento';
+import { reconcileEditorTabPlacements, useEditorTabStore } from './editorTabStore';
 import { schedulePartResizeCommit } from './partResizeNotifier';
 import type { PanelViewId } from './panelPartModel';
 import {
@@ -76,6 +77,7 @@ export function snapshotWorkbenchLayoutMemento(): WorkbenchLayoutMemento {
   return {
     parts: snapshotWorkbenchChromeParts(),
     editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+    editorTabs: useEditorTabStore.getState().snapshotMemento(),
   };
 }
 
@@ -96,6 +98,7 @@ export function persistEditorGridDebounced(): void {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+      editorTabs: useEditorTabStore.getState().snapshotMemento(),
     });
   });
 }
@@ -105,6 +108,7 @@ export function persistEditorGridNow(): void {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+      editorTabs: useEditorTabStore.getState().snapshotMemento(),
     });
   });
 }
@@ -160,6 +164,13 @@ export function hydrateEditorGrid(): void {
     state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
     state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
   });
+  if (memento.editorTabs) {
+    useEditorTabStore.getState().applyMemento(memento.editorTabs);
+  } else {
+    useEditorTabStore.getState().importFromLayoutNodes(useLayoutStore.getState().nodes);
+  }
+  useEditorTabStore.getState().stripEmbeddedTabsFromNodes(useLayoutStore.getState().nodes);
+  reconcileEditorTabPlacements(useLayoutStore.getState().nodes);
   setActiveGroup(memento.editorGrid!.activeEditorGroupId);
 }
 

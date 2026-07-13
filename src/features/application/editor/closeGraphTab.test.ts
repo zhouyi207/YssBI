@@ -3,6 +3,7 @@ import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore'
 import { useEditorStore } from '@/features/core/editor';
 import { resolveDetailTarget } from '@/features/core/editor/detail/resolveDetailTarget';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { GraphService } from '@/services/graph/graphService';
 import { closeGraphTab } from './closeGraphTab';
@@ -10,6 +11,7 @@ import { closeGraphTab } from './closeGraphTab';
 describe('closeGraphTab', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useEditorTabStore.setState({ registry: {}, placements: {} });
     useLayoutStore.setState({
       rootId: 'root',
       nodes: {
@@ -23,19 +25,16 @@ describe('closeGraphTab', () => {
           id: 'editor',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [
-              { id: 'g1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', component: 'GraphEditor', type: 'event' },
-            ],
-            activeTabId: 'g1',
-            params: { selectedNodeIds: ['node-from-g1'] },
-          },
+          data: { component: 'GraphEditor' },
         },
       },
       activeEditorGroupId: 'editor',
     });
+    useEditorTabStore.getState().initGroupPlacement('editor', [
+      { id: 'g1', component: 'GraphEditor', type: 'event' },
+      { id: 'g2', component: 'GraphEditor', type: 'event' },
+    ], 'g1');
+    useEditorTabStore.getState().setSelectedNodeIds('editor', ['node-from-g1']);
     useGraphDataStore.getState().hydrateGraphs({});
     useEditorStore.getState().clearDetailFocus();
     useGraphSessionStore.getState().reset();
@@ -50,10 +49,10 @@ describe('closeGraphTab', () => {
 
     const closed = await closeGraphTab('g1', 'editor', true);
 
-    const editor = useLayoutStore.getState().nodes.editor;
+    const placement = useEditorTabStore.getState().getPlacement('editor');
     expect(closed).toBe(true);
-    expect(editor.data?.activeTabId).toBe('g2');
-    expect(editor.data?.params?.selectedNodeIds).toEqual([]);
+    expect(placement.activeTabId).toBe('g2');
+    expect(placement.selectedNodeIds).toEqual([]);
     expect(loadGraph).toHaveBeenCalledWith('g2');
 
     const detailTarget = resolveDetailTarget({

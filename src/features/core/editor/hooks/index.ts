@@ -10,5 +10,6 @@ export { useEditorCanvasActions } from './useEditorCanvasActions';
 export { useEditorUIActions } from './useEditorUIActions';
 export { useEditorActions } from './useEditorActions';
 
+export { useEditorGroupPlacement } from './useEditorGroupPlacement';
 export { useEditorGroupWorkspace } from './useEditorGroupWorkspace';
 export { useEditorGroupTabStrip } from './useEditorGroupTabStrip';

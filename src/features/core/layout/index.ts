@@ -44,12 +44,22 @@ export { useLayoutStore, SIDEBAR_NODE_ID, isSidebarTabId } from './layoutStore';
 export type { LayoutState, SidebarTabId } from './layoutStore';
 export { collectDirtyGraphTabs } from './tabDirty';
 export {
+  useEditorTabStore,
+  getEditorGroupActiveTabId,
+  getEditorGroupSelectedNodeIds,
+  listEditorGroupTabIds,
+  listAllOpenEditorTabs,
+  isEditorGroupPlacementEmpty,
+  reconcileEditorTabPlacements,
+} from './editorTabStore';
+export type { EditorGroupPlacement, EditorTabMemento } from './editorTabStore';
+export { isEditorGroupNode } from './layoutEditorGroupNode';
+export {
   getLayoutTabById,
   locateLayoutTab,
   getActiveLayoutTab,
   resolveEditorGroupId,
   resolveEditorTargetGroupId,
-  isEditorGroupNode,
   updateEditorGroupSelectedNodeIds,
 } from './layoutTabQueries';
 export {

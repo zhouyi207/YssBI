@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { shouldRetainGraphDocument } from './graphDocumentRetention';
 
 describe('graphDocumentRetention', () => {
   beforeEach(() => {
     useGraphSessionStore.getState().reset();
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       nodes: {
@@ -19,14 +21,13 @@ describe('graphDocumentRetention', () => {
           id: 'editor',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'events/open.yssbi-event', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'events/open.yssbi-event',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
     });
+    seedEditorGroupTabs('editor', [
+      { id: 'events/open.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
   });
 
   it('retains focused graph paths', () => {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useEditorStore } from '@/features/core/editor';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import {
   syncVariablesGraphScopeAfterClose,
   syncVariablesGraphScopeFromActiveTab,
@@ -8,6 +9,7 @@ import {
 
 describe('variablesGraphScope', () => {
   beforeEach(() => {
+    resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
       nodes: {
@@ -16,18 +18,15 @@ describe('variablesGraphScope', () => {
           id: 'editor',
           type: 'component',
           parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [
-              { id: 'g1', component: 'GraphEditor', type: 'event' },
-              { id: 'g2', component: 'GraphEditor', type: 'event' },
-            ],
-            activeTabId: 'g2',
-          },
+          data: { component: 'GraphEditor' },
         },
       },
       activeEditorGroupId: 'editor',
     });
+    seedEditorGroupTabs('editor', [
+      { id: 'g1', component: 'GraphEditor', type: 'event' },
+      { id: 'g2', component: 'GraphEditor', type: 'event' },
+    ], 'g2');
     useEditorStore.getState().setVariablesGraphScope('g1');
   });
 
@@ -39,22 +38,10 @@ describe('variablesGraphScope', () => {
   });
 
   it('keeps scope when the last open tab is closed', () => {
-    useLayoutStore.setState({
-      nodes: {
-        root: { id: 'root', type: 'row', parentId: null, children: ['editor'] },
-        editor: {
-          id: 'editor',
-          type: 'component',
-          parentId: 'root',
-          data: {
-            component: 'GraphEditor',
-            tabs: [{ id: 'g1', component: 'GraphEditor', type: 'event' }],
-            activeTabId: 'g1',
-          },
-        },
-      },
-      activeEditorGroupId: 'editor',
-    });
+    resetEditorTabStore();
+    seedEditorGroupTabs('editor', [
+      { id: 'g1', component: 'GraphEditor', type: 'event' },
+    ]);
     useEditorStore.getState().setVariablesGraphScope('g1');
     useLayoutStore.getState().removeTab('editor', 'g1');
 

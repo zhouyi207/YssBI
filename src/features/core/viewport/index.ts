@@ -1,9 +1,16 @@
 export type { EditorViewport } from './editorViewport';
+export type { ViewportScope } from './viewportScope';
+export {
+  editorViewportScope,
+  viewportScopeKey,
+  parseViewportScopeKey,
+} from './viewportScope';
 export {
   useViewportStore,
   remapGraphViewport,
   normalizeEditorViewport,
-  ensureGraphViewport,
+  ensureEditorViewport,
+  releaseEditorViewport,
   releaseGraphViewport,
 } from './useViewportStore';
 export {

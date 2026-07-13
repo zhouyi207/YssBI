@@ -1,9 +1,13 @@
-import { useCallback, useContext, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useCanvasInteraction } from '@/features/core/canvas';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
-import { useEditorSession } from './EditorSessionContext';
+import {
+  useEditorSessionCommandsContext,
+  useEditorSessionSharedContext,
+} from './EditorSessionContext';
+import { useOptionalEditorSessionUi } from './useEditorSessionUi';
+import { useEditorGroupWorkspace } from '@/features/core/editor/hooks/useEditorGroupWorkspace';
 import type { Pin } from '@/shared/types/domain';
 import type { EditorViewport } from '@/features/core/viewport';
 import {
@@ -14,31 +18,37 @@ import {
 } from './editorSessionTypes';
 
 export type UseEditorGroupOptions = {
-  /** Mount the global canvas pointer loop. Only Canvas should pass true. */
+  /** Mount the global canvas pointer loop. Only the active group's Canvas should pass true. */
   withCanvasInteraction?: boolean;
+  /** Subscribe to transient canvas UI (context menu, pending connection). */
+  withCanvasUi?: boolean;
 };
 
 const noopPointer = () => undefined;
 const noopConnectPins = async () => {};
 
 /**
- * Group-scoped editor API backed by a single EditorSessionProvider instance.
+ * Group-scoped editor API: stable commands + shared resources + per-group workspace.
+ * Preview canvases skip canvas UI subscriptions to avoid fan-out on context menu changes.
  */
 export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSession {
-  const session = useEditorSession();
-  const currentGroupId = useContext(GroupContext);
-  const overrideGroupId = currentGroupId || undefined;
+  const commands = useEditorSessionCommandsContext();
+  const shared = useEditorSessionSharedContext();
+  const workspace = useEditorGroupWorkspace();
   const withCanvasInteraction = options?.withCanvasInteraction ?? false;
+  const withCanvasUi = options?.withCanvasUi ?? withCanvasInteraction;
 
-  const { groupId, tabs, activeTabId, selectedNodeIds } = useEditorGroupWorkspace(overrideGroupId);
+  const ui = useOptionalEditorSessionUi(withCanvasUi);
 
   const canvasInteraction = useCanvasInteraction({
-    activeGroupIdRef: session.activeGroupIdRef as React.RefObject<string>,
-    activeTabIdRef: session.activeTabIdRef,
-    viewportRef: session.viewportRef,
-    setSelectedNodeIds: session.setSelectedNodeIds,
+    activeGroupIdRef: commands.activeGroupIdRef as React.RefObject<string>,
+    activeTabIdRef: commands.activeTabIdRef,
+    viewportRef: commands.viewportRef,
+    setSelectedNodeIds: commands.setSelectedNodeIds,
     enabled: withCanvasInteraction,
   });
+
+  const { groupId } = workspace;
 
   const ensureActiveGroup = useCallback(() => {
     if (useLayoutStore.getState().activeEditorGroupId !== groupId) {
@@ -73,19 +83,19 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
   const wrappedSetCanvas = useCallback(
     (updater: EditorViewport | ((prev: EditorViewport) => EditorViewport)) => {
       ensureActiveGroup();
-      session.setCanvas(updater);
+      commands.setCanvas(updater);
     },
-    [ensureActiveGroup, session.setCanvas],
+    [ensureActiveGroup, commands.setCanvas],
   );
 
-  const workspace = useMemo(
+  const workspaceSlice = useMemo(
     (): EditorGroupWorkspaceSlice => ({
-      groupId,
-      tabs,
-      activeTabId,
-      selectedNodeIds,
+      groupId: workspace.groupId,
+      tabs: workspace.tabs,
+      activeTabId: workspace.activeTabId,
+      selectedNodeIds: workspace.selectedNodeIds,
     }),
-    [groupId, tabs, activeTabId, selectedNodeIds],
+    [workspace],
   );
 
   const interaction = useMemo(
@@ -106,8 +116,5 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
     ],
   );
 
-  return useMemo(
-    () => composeEditorGroupSession(session, workspace, interaction),
-    [session, workspace, interaction],
-  );
+  return composeEditorGroupSession(shared, ui, commands, workspaceSlice, interaction);
 }

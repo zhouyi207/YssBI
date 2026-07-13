@@ -1,5 +1,6 @@
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
+import { listAllOpenEditorTabs } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { isResourceDocumentDirty } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -71,9 +72,9 @@ export async function performWorksheetDelete(worksheetId: string): Promise<void>
   await WorksheetService.deleteWorksheet(worksheetId);
   useWorksheetStore.getState().removeDocument(worksheetId);
 
-  for (const node of Object.values(useLayoutStore.getState().nodes)) {
-    if (node.data?.tabs?.some((tab) => tab.id === worksheetId)) {
-      await closeWorksheetTab(worksheetId, node.id, true);
+  for (const { groupId, tab } of listAllOpenEditorTabs()) {
+    if (tab.id === worksheetId) {
+      await closeWorksheetTab(worksheetId, groupId, true);
     }
   }
 }

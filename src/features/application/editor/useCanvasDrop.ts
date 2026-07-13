@@ -147,7 +147,7 @@ export function useCanvasDrop({
 
       if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
 
-      const worldPosition = clientToWorldInCanvas(el, graphPath, dragState.x, dragState.y);
+      const worldPosition = clientToWorldInCanvas(el, groupId, graphPath, dragState.x, dragState.y);
 
       await spawnNodeFromTemplate(
         dragState.template,
@@ -162,7 +162,7 @@ export function useCanvasDrop({
         },
       );
     },
-    [canvasElementRef, graphPath, variables, functions, createNode],
+    [canvasElementRef, groupId, graphPath, variables, functions, createNode],
   );
 
   useEffect(() => {

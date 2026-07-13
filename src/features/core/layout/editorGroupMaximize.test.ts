@@ -23,7 +23,7 @@ describe('toggleMaximizeEditorGroup', () => {
         type: 'component',
         parentId: EDITOR_AREA_ID,
         pixelSize: 400,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
       state.nodes.default_editor!.pixelSize = 400;
     });
@@ -49,7 +49,7 @@ describe('isEditorGridSash', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       },
     })).toBe(true);
     expect(isEditorGridSash(EDITOR_AREA_ID, 'panel', nodes)).toBe(false);

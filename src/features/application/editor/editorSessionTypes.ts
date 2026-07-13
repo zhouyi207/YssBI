@@ -39,6 +39,11 @@ export interface EditorSessionLayoutBindings {
 // ─── Command slices（与各 application hook 1:1）────────────────────────────
 
 export type EditorSessionHistoryActions = ReturnType<typeof useEditorOperations>;
+
+export type EditorSessionHistoryAvailability = {
+  canUndo: boolean;
+  canRedo: boolean;
+};
 export type EditorSessionTabActions = ReturnType<typeof useTabManagement>;
 export type EditorSessionWorksheetActions = ReturnType<typeof useWorksheetManagement> & {
   openWorksheet: ReturnType<typeof useOpenWorksheet>;
@@ -57,6 +62,7 @@ export type EditorSessionNodeActions = Pick<
 export type EditorSession = EditorSessionState &
   EditorSessionLayoutBindings &
   EditorSessionHistoryActions &
+  EditorSessionHistoryAvailability &
   EditorSessionTabActions &
   EditorSessionWorksheetActions &
   EditorSessionProjectActions &
@@ -110,18 +116,44 @@ export interface EditorGroupInteractionSlice {
   ) => void;
 }
 
-/** useEditorGroup 返回值：完整 session + 当前 group 工作区 + 可选 canvas 交互 */
-export type EditorGroupSession = EditorSession &
+/** useEditorGroup 返回值：commands + shared + group workspace + 可选 canvas 交互 */
+export type EditorGroupSession = EditorSessionResourcesSlice & {
+  groups: EditorSession['groups'];
+} & ReturnType<typeof import('./useEditorSessionUi').useEditorSessionUi> &
+  Pick<
+    EditorSession,
+    | keyof EditorSessionLayoutBindings
+    | keyof EditorSessionHistoryActions
+    | keyof EditorSessionTabActions
+    | keyof EditorSessionWorksheetActions
+    | keyof EditorSessionProjectActions
+    | keyof EditorSessionGraphActions
+    | keyof EditorSessionVariableActions
+    | keyof EditorSessionDataframeActions
+    | keyof EditorSessionNodeActions
+  > &
   EditorGroupWorkspaceSlice &
   EditorGroupInteractionSlice;
 
 /** 唯一允许的 session 合并点（useEditorGroup） */
 export function composeEditorGroupSession(
-  session: EditorSession,
+  shared: EditorSessionResourcesSlice & { groups: EditorSession['groups'] },
+  ui: ReturnType<typeof import('./useEditorSessionUi').useEditorSessionUi>,
+  commands: Pick<
+    EditorSession,
+    keyof EditorSessionLayoutBindings | keyof EditorSessionHistoryActions
+  > &
+    EditorSessionTabActions &
+    EditorSessionWorksheetActions &
+    EditorSessionProjectActions &
+    EditorSessionGraphActions &
+    EditorSessionVariableActions &
+    EditorSessionDataframeActions &
+    EditorSessionNodeActions,
   workspace: EditorGroupWorkspaceSlice,
   interaction: EditorGroupInteractionSlice,
 ): EditorGroupSession {
-  return Object.assign({}, session, workspace, interaction);
+  return Object.assign({}, shared, ui, commands, workspace, interaction);
 }
 
 /** useEditorSessionValue 组装时的 layout 字段提取 */

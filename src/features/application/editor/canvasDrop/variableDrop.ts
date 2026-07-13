@@ -1,4 +1,4 @@
-import { getViewport } from '@/features/core/viewport';
+import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { logger } from '@/utils/appLogger';
 import type { EditorVariables } from '@/features/core/editor';
@@ -18,12 +18,13 @@ export interface VariableDropMenu {
 
 export function clientToWorldInCanvas(
   canvasEl: HTMLElement,
+  groupId: string,
   graphPath: string | null,
   clientX: number,
   clientY: number,
 ): { x: number; y: number } {
   const rect = canvasEl.getBoundingClientRect();
-  const viewport = graphPath ? getViewport(graphPath) : DEFAULT_VIEWPORT;
+  const viewport = graphPath ? getViewport(editorViewportScope(groupId, graphPath)) : DEFAULT_VIEWPORT;
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,

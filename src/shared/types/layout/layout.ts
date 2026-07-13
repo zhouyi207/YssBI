@@ -45,12 +45,9 @@ export interface EditorGroupNodeParams {
   selectedNodeIds?: string[];
 }
 
-/** `useEditorGroups` / split 等共用的编辑器组快照 */
+/** Stable editor group identity for shared session context. */
 export interface EditorGroupSnapshot {
   id: string;
-  tabs: LayoutTab[];
-  activeTabId: string | null;
-  selectedNodeIds: string[];
 }
 
 /**
@@ -76,8 +73,6 @@ export interface LayoutNode {
     isFixed?: boolean;
     params?: EditorGroupNodeParams;
     visible?: boolean;
-    tabs?: LayoutTab[];
-    activeTabId?: string;
     currentTab?: string | null;
     /** User explicitly hid detail panel; auto-show should not override. */
     userHidden?: boolean;

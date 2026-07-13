@@ -32,7 +32,7 @@ describe('collapseEditorGroups', () => {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: { component: 'GraphEditor', tabs: [] },
+        data: { component: 'GraphEditor' },
       };
     });
 

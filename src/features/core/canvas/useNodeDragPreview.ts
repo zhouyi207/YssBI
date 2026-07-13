@@ -4,10 +4,11 @@ import { getDragPreview, subscribeDragPreview } from './dragPreview';
 
 /**
  * Applies node drag offset imperatively during pointer drag so React nodes
- * do not re-render every frame.
+ * do not re-render every frame. Scoped to one editor group pane.
  */
 export function useNodeDragPreview(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
+  groupId: string | null,
   graphPath: string | null,
 ): void {
   const lastDraggedRef = useRef<Set<string>>(new Set());
@@ -15,13 +16,14 @@ export function useNodeDragPreview(
 
   useEffect(() => {
     const root = canvasElementRef.current;
-    if (!root || !graphPath) return;
+    if (!root || !graphPath || !groupId) return;
 
     const apply = () => {
       const preview = getDragPreview();
+      const appliesHere = preview.active && preview.groupId === groupId;
       const store = useGraphDataStore.getState();
 
-      if (!preview.active) {
+      if (!appliesHere) {
         for (const nodeId of lastDraggedRef.current) {
           const el = root.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null;
           const pos = store.getGraphNode(graphPath, nodeId)?.position;
@@ -60,5 +62,5 @@ export function useNodeDragPreview(
       unsub();
       cancelAnimationFrame(rafRef.current);
     };
-  }, [canvasElementRef, graphPath]);
+  }, [canvasElementRef, groupId, graphPath]);
 }

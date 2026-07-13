@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { findInternalNodeInGraph } from "@/features/core/dataStore";
-import { getViewport, type EditorViewport } from "@/features/core/viewport";
+import { getViewport, editorViewportScope, type EditorViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
 import { useNodeRegistryStore } from "@/features/core/nodeRegister";
 import { executeCommand } from "@/features/core/history";
@@ -13,6 +13,7 @@ import { isFunctionAvailable, type CreateNodeFn } from "./canvasDrop";
 
 export function useCanvasOverlayHandlers({
   canvasElementRef,
+  groupId,
   activeTabId,
   functions,
   pendingConnection,
@@ -22,6 +23,7 @@ export function useCanvasOverlayHandlers({
   setCanvas,
 }: {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
+  groupId: string;
   activeTabId: string | null;
   functions: EditorFunctions;
   pendingConnection: Pin | null;
@@ -43,6 +45,9 @@ export function useCanvasOverlayHandlers({
         "function_return",
       ];
 
+      const scope = activeTabId ? editorViewportScope(groupId, activeTabId) : null;
+      const currentCanvas = scope ? getViewport(scope) : DEFAULT_VIEWPORT;
+
       if (internalNodeTypes.includes(item.nodeType)) {
         const existingNode = activeTabId
           ? findInternalNodeInGraph(activeTabId, item.nodeType)
@@ -51,7 +56,6 @@ export function useCanvasOverlayHandlers({
           const rect = canvasElementRef.current.getBoundingClientRect();
           const centerX = rect.width / 2;
           const centerY = rect.height / 2;
-          const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
           setCanvas({
             ...currentCanvas,
             x: centerX - existingNode.position.x * currentCanvas.scale,
@@ -64,7 +68,6 @@ export function useCanvasOverlayHandlers({
       }
 
       const rect = canvasElementRef.current.getBoundingClientRect();
-      const currentCanvas = activeTabId ? getViewport(activeTabId) : DEFAULT_VIEWPORT;
       const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
       const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
 
@@ -104,6 +107,7 @@ export function useCanvasOverlayHandlers({
     },
     [
       canvasElementRef,
+      groupId,
       activeTabId,
       functions,
       pendingConnection,

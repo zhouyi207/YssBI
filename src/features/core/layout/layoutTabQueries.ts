@@ -1,6 +1,9 @@
-import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types';
+import type { LayoutTab, LayoutTree } from '@/shared/types';
 import { useLayoutStore } from './layoutStore';
+import { useEditorTabStore } from './editorTabStore';
 import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
+import { isEditorGroupNode } from './layoutEditorGroupNode';
+import { normalizeLayoutTab } from './layoutTabModel';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
 
@@ -12,14 +15,11 @@ function readNodes(nodes?: LayoutTree): LayoutTree {
   return nodes ?? useLayoutStore.getState().nodes;
 }
 
-/** Non-fixed component nodes that host editor tabs (not sidebar / detail / panel). */
-export function isEditorGroupNode(node: LayoutNode | undefined): boolean {
-  return node?.type === 'component' && !node.data?.isFixed;
-}
+export { isEditorGroupNode } from './layoutEditorGroupNode';
 
 /**
  * Resolve the editor group that should receive a new or activated tab.
- * Never returns fixed chrome nodes (sidebar, detail, panel).
+ * Never returns fixed chrome nodes (sidebar / detail / panel).
  */
 export function resolveEditorTargetGroupId(
   explicitGroupId?: string | null,
@@ -45,10 +45,14 @@ export function resolveEditorTargetGroupId(
 }
 
 export function getLayoutTabById(tabId: string, nodes?: LayoutTree): LocatedLayoutTab | null {
+  const located = useEditorTabStore.getState().locateTab(tabId);
+  if (located) return { nodeId: located.groupId, tab: located.tab };
+
   const tree = readNodes(nodes);
   for (const node of Object.values(tree)) {
-    const tab = node.data?.tabs?.find((item) => item.id === tabId);
-    if (tab) return { nodeId: node.id, tab };
+    const legacyTabs = (node.data as { tabs?: LayoutTab[] } | undefined)?.tabs;
+    const legacyTab = legacyTabs?.find((item) => item.id === tabId);
+    if (legacyTab) return { nodeId: node.id, tab: normalizeLayoutTab(legacyTab) };
   }
   return null;
 }
@@ -56,24 +60,20 @@ export function getLayoutTabById(tabId: string, nodes?: LayoutTree): LocatedLayo
 export function locateLayoutTab(
   tabId: string,
   nodeId?: string,
-  nodes?: LayoutTree,
+  _nodes?: LayoutTree,
 ): LocatedLayoutTab | null {
-  const tree = readNodes(nodes);
-  if (nodeId) {
-    const tab = tree[nodeId]?.data?.tabs?.find((t) => t.id === tabId);
-    return tab ? { nodeId, tab } : null;
-  }
-  return getLayoutTabById(tabId, tree);
+  const located = useEditorTabStore.getState().locateTab(tabId, nodeId);
+  return located ? { nodeId: located.groupId, tab: located.tab } : null;
 }
 
 export function getActiveLayoutTab(
   groupId: string,
-  nodes?: LayoutTree,
+  _nodes?: LayoutTree,
 ): { activeTabId: string; tab: LayoutTab } | null {
-  const tree = readNodes(nodes);
-  const activeTabId = tree[groupId]?.data?.activeTabId;
+  const placement = useEditorTabStore.getState().getPlacement(groupId);
+  const activeTabId = placement.activeTabId;
   if (!activeTabId) return null;
-  const tab = tree[groupId]?.data?.tabs?.find((item) => item.id === activeTabId);
+  const tab = useEditorTabStore.getState().resolveTab(activeTabId);
   if (!tab) return null;
   return { activeTabId, tab };
 }
@@ -100,18 +100,8 @@ export function updateEditorGroupSelectedNodeIds(
   const gid = resolveEditorGroupId(targetGroupId);
   if (!gid) return;
 
-  const state = useLayoutStore.getState();
-  const node = state.nodes[gid];
-  if (!node) return;
-
-  const current = node.data?.params?.selectedNodeIds ?? [];
+  const current = useEditorTabStore.getState().getPlacement(gid).selectedNodeIds;
   const next = typeof updater === 'function' ? updater(current) : updater;
   if (areStringArraysEqual(current, next)) return;
-
-  useLayoutStore.getState().updateNode(gid, {
-    data: {
-      ...node.data,
-      params: { ...node.data?.params, selectedNodeIds: next },
-    },
-  });
+  useEditorTabStore.getState().setSelectedNodeIds(gid, next);
 }

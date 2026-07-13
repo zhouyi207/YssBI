@@ -5,12 +5,14 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import type { EditorViewport } from './editorViewport';
 import { resolveInitialGraphViewport } from './resolveInitialGraphViewport';
 import { resetLiveViewports } from './viewportSession';
+import type { ViewportScope } from './viewportScope';
+import { parseViewportScopeKey, viewportScopeKey } from './viewportScope';
 
 interface ViewportStore {
-  /** Committed viewports for this session (live gesture preview stays in viewportSession). */
+  /** Committed pane viewports for this session (live gesture preview stays in viewportSession). */
   viewports: Record<string, EditorViewport>;
   setViewport: (
-    graphPath: string,
+    scope: ViewportScope,
     updater: Partial<EditorViewport> | ((prev: EditorViewport) => EditorViewport),
   ) => void;
   clear: () => void;
@@ -18,9 +20,10 @@ interface ViewportStore {
 
 export const useViewportStore = create<ViewportStore>((set) => ({
   viewports: {},
-  setViewport: (graphPath, updater) =>
+  setViewport: (scope, updater) =>
     set((state) => {
-      const current = state.viewports[graphPath] ?? { ...DEFAULT_VIEWPORT };
+      const key = viewportScopeKey(scope);
+      const current = state.viewports[key] ?? { ...DEFAULT_VIEWPORT };
       const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
 
       if (current.x === next.x && current.y === next.y && current.scale === next.scale) {
@@ -30,7 +33,7 @@ export const useViewportStore = create<ViewportStore>((set) => ({
       return {
         viewports: {
           ...state.viewports,
-          [graphPath]: next,
+          [key]: next,
         },
       };
     }),
@@ -42,14 +45,19 @@ export const useViewportStore = create<ViewportStore>((set) => ({
 
 export function remapGraphViewport(from: string, to: string): void {
   if (from === to) return;
-  resetLiveViewports(from);
   useViewportStore.setState((state) => {
-    const viewport = state.viewports[from];
-    if (!viewport) return state;
     const viewports = { ...state.viewports };
-    delete viewports[from];
-    viewports[to] = viewport;
-    return { viewports };
+    let changed = false;
+    for (const key of Object.keys(viewports)) {
+      const scope = parseViewportScopeKey(key);
+      if (!scope || scope.graphPath !== from) continue;
+      const nextKey = viewportScopeKey({ ...scope, graphPath: to });
+      viewports[nextKey] = viewports[key];
+      delete viewports[key];
+      resetLiveViewports(scope);
+      changed = true;
+    }
+    return changed ? { viewports } : state;
   });
 }
 
@@ -62,19 +70,37 @@ export function normalizeEditorViewport(viewport?: EditorViewport | null): Edito
   };
 }
 
-/** Seed viewport on first open; session edits stay in memory until persisted to editor view state. */
-export function ensureGraphViewport(graphPath: string): void {
-  if (useViewportStore.getState().viewports[graphPath]) return;
-  useViewportStore.getState().setViewport(graphPath, resolveInitialGraphViewport(graphPath));
+/** Seed pane viewport on first open in a group; project memento seeds per graph path. */
+export function ensureEditorViewport(scope: ViewportScope): void {
+  const key = viewportScopeKey(scope);
+  if (useViewportStore.getState().viewports[key]) return;
+  useViewportStore.getState().setViewport(scope, resolveInitialGraphViewport(scope.graphPath));
 }
 
-/** Drop committed + live viewport when a graph document is unloaded from memory. */
-export function releaseGraphViewport(graphPath: string): void {
-  resetLiveViewports(graphPath);
+/** Drop pane viewport when a tab closes in one editor group. */
+export function releaseEditorViewport(scope: ViewportScope): void {
+  resetLiveViewports(scope);
   useViewportStore.setState((state) => {
-    if (!(graphPath in state.viewports)) return state;
+    const key = viewportScopeKey(scope);
+    if (!(key in state.viewports)) return state;
     const viewports = { ...state.viewports };
-    delete viewports[graphPath];
+    delete viewports[key];
     return { viewports };
+  });
+}
+
+/** Drop all pane viewports for a graph when its document leaves memory. */
+export function releaseGraphViewport(graphPath: string): void {
+  useViewportStore.setState((state) => {
+    const viewports = { ...state.viewports };
+    let changed = false;
+    for (const key of Object.keys(viewports)) {
+      const scope = parseViewportScopeKey(key);
+      if (!scope || scope.graphPath !== graphPath) continue;
+      delete viewports[key];
+      resetLiveViewports(scope);
+      changed = true;
+    }
+    return changed ? { viewports } : state;
   });
 }

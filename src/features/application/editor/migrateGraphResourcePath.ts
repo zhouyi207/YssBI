@@ -1,7 +1,7 @@
 import { useGraphDataStore } from '@/features/core/dataStore';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
   buildGraphResourceMeta,
   lookupGraphResource,
@@ -54,17 +54,5 @@ export function migrateGraphResourcePath(
   cascadeGraphPathReferences(from, to);
   migrateDocumentStatePath(from, to, kind);
   useGraphSessionStore.getState().remapFocusedGraphPath(from, to);
-
-  const layoutStore = useLayoutStore.getState();
-  for (const [nodeId, node] of Object.entries(layoutStore.nodes)) {
-    const tabs = node.data?.tabs;
-    if (!tabs?.some((tab) => tab.id === from)) continue;
-    layoutStore.updateNode(nodeId, {
-      data: {
-        ...node.data,
-        activeTabId: node.data?.activeTabId === from ? to : node.data?.activeTabId,
-        tabs: tabs.map((tab) => (tab.id === from ? { ...tab, id: to } : tab)),
-      },
-    });
-  }
+  useEditorTabStore.getState().renameTabId(from, to);
 }
