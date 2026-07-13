@@ -1,11 +1,23 @@
 /**
- * Sidebar UI 状态 Store
- * 管理侧边栏折叠/展开状态，支持 localStorage 持久化
+ * Sidebar UI state — section/group expand with localStorage persistence.
  */
-import { create } from "zustand";
+import { create } from 'zustand';
+import { resolveGroupExpanded } from './flatRows/groupExpandState';
+import {
+  mergeExpandedSections,
+  resolveSectionExpanded,
+  type SidebarSectionKey,
+} from './sidebarSectionState';
 
-const SECTIONS_KEY = "yssbi-sidebar-sections";
-const DATAFRAMES_KEY = "yssbi-sidebar-dataframes";
+export {
+  SIDEBAR_SECTION_DEFAULTS,
+  type SidebarSectionKey,
+} from './sidebarSectionState';
+
+export * from './flatRows';
+
+const SECTIONS_KEY = 'yssbi-sidebar-sections';
+const GROUPS_KEY = 'yssbi-sidebar-groups';
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -28,56 +40,37 @@ function saveToStorage(key: string, value: unknown) {
   }
 }
 
-/** 堆叠列表：同一 group 内仅一个 section 可展开 */
-const SECTION_GROUPS: Record<string, string[]> = {
-  graphs: ["graphsEvent", "graphsFunction"],
-  variables: ["variablesLocal", "variablesGlobal"],
-  data: ["dataData"],
-};
+function loadExpandedSections(): Record<string, boolean> {
+  return mergeExpandedSections(loadFromStorage(SECTIONS_KEY, {}));
+}
 
-const DEFAULT_SECTIONS: Record<string, boolean> = {
-  graphsEvent: true,
-  graphsFunction: false,
-  variablesLocal: true,
-  variablesGlobal: false,
-  dataData: true,
-};
+function loadExpandedGroups(): Record<string, boolean> {
+  return loadFromStorage(GROUPS_KEY, {});
+}
 
 export interface SidebarStore {
   expandedSections: Record<string, boolean>;
-  expandedDataFrames: Record<string, boolean>;
-  toggleSection: (key: string) => void;
-  setSectionExpanded: (key: string, expanded: boolean) => void;
-  toggleDataFrame: (id: string) => void;
-  isSectionExpanded: (key: string, defaultExpanded?: boolean) => boolean;
-  isDataFrameExpanded: (id: string) => boolean;
+  expandedGroups: Record<string, boolean>;
+  toggleSection: (key: SidebarSectionKey) => void;
+  setSectionExpanded: (key: SidebarSectionKey, expanded: boolean) => void;
+  isSectionExpanded: (key: SidebarSectionKey) => boolean;
+  toggleGroup: (groupKey: string) => void;
 }
 
 export const useSidebarStore = create<SidebarStore>((set, get) => ({
-  expandedSections: { ...DEFAULT_SECTIONS, ...loadFromStorage(SECTIONS_KEY, {}) },
-  expandedDataFrames: loadFromStorage(DATAFRAMES_KEY, {}),
+  expandedSections: loadExpandedSections(),
+  expandedGroups: loadExpandedGroups(),
 
-  toggleSection: (key: string) => {
+  toggleSection: (key) => {
     set((state) => {
-      const current = state.expandedSections[key] ?? false;
-      const next = { ...state.expandedSections };
-
-      const group = Object.values(SECTION_GROUPS).find((g) => g.includes(key));
-      if (group) {
-        if (current) {
-          next[key] = false;
-        } else {
-          group.forEach((k) => { next[k] = k === key; });
-        }
-      } else {
-        next[key] = !current;
-      }
+      const current = resolveSectionExpanded(state.expandedSections, key);
+      const next = { ...state.expandedSections, [key]: !current };
       saveToStorage(SECTIONS_KEY, next);
       return { expandedSections: next };
     });
   },
 
-  setSectionExpanded: (key: string, expanded: boolean) => {
+  setSectionExpanded: (key, expanded) => {
     set((state) => {
       const next = { ...state.expandedSections, [key]: expanded };
       saveToStorage(SECTIONS_KEY, next);
@@ -85,17 +78,14 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
     });
   },
 
-  toggleDataFrame: (id: string) => {
+  isSectionExpanded: (key) => resolveSectionExpanded(get().expandedSections, key),
+
+  toggleGroup: (groupKey) => {
     set((state) => {
-      const next = { ...state.expandedDataFrames, [id]: !state.expandedDataFrames[id] };
-      saveToStorage(DATAFRAMES_KEY, next);
-      return { expandedDataFrames: next };
+      const current = resolveGroupExpanded(state.expandedGroups, groupKey);
+      const next = { ...state.expandedGroups, [groupKey]: !current };
+      saveToStorage(GROUPS_KEY, next);
+      return { expandedGroups: next };
     });
   },
-
-  isSectionExpanded: (key: string, defaultExpanded = true) => {
-    return get().expandedSections[key] ?? defaultExpanded;
-  },
-
-  isDataFrameExpanded: (id: string) => get().expandedDataFrames[id] ?? false,
 }));

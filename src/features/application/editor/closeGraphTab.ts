@@ -61,7 +61,7 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
   if (closingActiveTab) {
     deactivateGraphTab(located.nodeId, effectivePath);
   }
-  clearDetailFocusForClosedTab(effectivePath, located.tab.type);
+  clearDetailFocusForClosedTab(effectivePath);
   syncVariablesGraphScopeAfterClose(effectivePath);
   if (!useEditorStore.getState().detailFocus) {
     focusDetailOnActiveGraph(located.nodeId);

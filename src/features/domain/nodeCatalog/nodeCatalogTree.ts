@@ -1,6 +1,6 @@
 import type { NodeCatalogItem } from './types';
 
-export const NODE_CATALOG_ROW_HEIGHT = 30;
+export const NODE_CATALOG_ROW_HEIGHT = 28;
 
 export interface TreeCategory {
   name: string;

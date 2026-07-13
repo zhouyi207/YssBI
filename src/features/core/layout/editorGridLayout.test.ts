@@ -4,7 +4,9 @@ import {
   applyEqualGridSplit,
   removeEditorGroupFromTree,
   resolveEditorGroupMinSize,
+  setEditorGroupMaximizedHidden,
   splitEditorGroupInTree,
+  writeEditorAreaMaximizeState,
 } from './editorGridLayout';
 
 describe('editorGridLayout tree ops', () => {
@@ -81,5 +83,50 @@ describe('editorGridLayout tree ops', () => {
     expect(nodes[branchId!]?.size).toBe(1);
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
     expect(nodes[created!]?.pixelSize).toBeUndefined();
+  });
+
+  it('clears stale maximize/hidden flags when the maximized group is removed', () => {
+    const nodes = createInitialWorkbenchNodes();
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 400;
+    const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+      component: 'GraphEditor',
+      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
+      activeTabId: 'events/bar',
+    });
+    expect(created).toBeTruthy();
+    nodes[created!].pixelSize = 400;
+
+    setEditorGroupMaximizedHidden(nodes, created!, false);
+    setEditorGroupMaximizedHidden(nodes, DEFAULT_EDITOR_GROUP_ID, true);
+    writeEditorAreaMaximizeState(nodes, created!, {
+      [DEFAULT_EDITOR_GROUP_ID]: 400,
+      [created!]: 400,
+    });
+
+    nodes[created!].data!.tabs = [];
+    const { removed } = removeEditorGroupFromTree(nodes, created!);
+    expect(removed).toBe(true);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.groupMaximizedHidden).toBe(false);
+    expect(nodes[EDITOR_AREA_ID]?.data?.maximizedGroupId).toBeUndefined();
+    expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
+  });
+
+  it('merges pixel sizes when collapsing a vertical split branch to one group', () => {
+    const nodes = createInitialWorkbenchNodes();
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
+    const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
+      component: 'GraphEditor',
+      tabs: [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }],
+      activeTabId: 'events/bar',
+    });
+    expect(created).toBeTruthy();
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
+    nodes[created!].pixelSize = 500;
+
+    nodes[created!].data!.tabs = [];
+    removeEditorGroupFromTree(nodes, created!);
+
+    expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(800);
   });
 });

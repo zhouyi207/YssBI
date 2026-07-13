@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { useSidebarStore } from '@/features/core/sidebar';
 import {
   createGraphResource,
   duplicateGraphResource,
@@ -65,6 +66,7 @@ export function useGraphManagement(
       }
 
       switchSidebarTab('graphs');
+      useSidebarStore.getState().setSectionExpanded('graphsEvent', true);
     } catch (error) {
       logger.graph.error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       uiStore.showToast(`创建 Event 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -105,6 +107,7 @@ export function useGraphManagement(
       }
 
       switchSidebarTab('graphs');
+      useSidebarStore.getState().setSectionExpanded('graphsFunction', true);
     } catch (error) {
       logger.graph.error(`Failed to create function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
       uiStore.showToast(`创建 Function 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');

@@ -1,13 +1,6 @@
 import { useEffect } from 'react';
 import { useDndMonitor, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
 import {
-  computeTabGapLeft,
-  computeTabInsertIndex,
-  measureTabBarMetrics,
-  resolveTabGapWidth,
-} from '@/features/core/layout/tabBarInsertIndex';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import {
   CANVAS_DROP_ZONE_ID_PREFIX,
   isCanvasDrop,
   isGraphResourceDragPayload,
@@ -24,9 +17,10 @@ import {
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
 import { clearTabBarDragSession, useTabBarReorderStore } from './tabBarReorderStore';
 import { useEditorDropPreviewStore } from './editorDropPreviewStore';
-
-const TAB_BAR_DROP_SELECTOR = '[data-tabbar-drop]';
-const TAB_STRIP_SELECTOR = '[data-tab-strip]';
+import {
+  buildTabBarInsertPreview,
+  findTabBarTargetFromPointer,
+} from './tabBarInsertPreview';
 
 function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: number; y: number } | null {
   const activator = event.activatorEvent;
@@ -38,28 +32,6 @@ function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: numbe
     x: activator.clientX + delta.x,
     y: activator.clientY + delta.y,
   };
-}
-
-function findTabBarTarget(
-  pointerX: number,
-  pointerY: number,
-): { groupId: string; stripElement: HTMLElement } | null {
-  const dropTargets = document.querySelectorAll<HTMLElement>(TAB_BAR_DROP_SELECTOR);
-  for (const dropElement of dropTargets) {
-    const rect = dropElement.getBoundingClientRect();
-    if (
-      pointerX >= rect.left
-      && pointerX <= rect.right
-      && pointerY >= rect.top
-      && pointerY <= rect.bottom
-    ) {
-      const groupId = dropElement.dataset.tabbarDrop;
-      if (!groupId) continue;
-      const stripElement = dropElement.querySelector<HTMLElement>(TAB_STRIP_SELECTOR) ?? dropElement;
-      return { groupId, stripElement };
-    }
-  }
-  return null;
 }
 
 function findCanvasDropGroupId(
@@ -98,10 +70,6 @@ function findLayoutRegionFromPointer(
   return null;
 }
 
-function tabIdsForGroup(groupId: string): string[] {
-  return useLayoutStore.getState().nodes[groupId]?.data?.tabs?.map((tab) => tab.id) ?? [];
-}
-
 function resolveTabDragTitle(tabId: string, sourceGroupId: string): string {
   const element = document.querySelector(
     `[data-tab-id="${tabId}"][data-tab-group="${sourceGroupId}"]`,
@@ -136,53 +104,39 @@ function updateTabBarPreviewFromDragMove(event: DragMoveEvent | DragStartEvent):
   const pointer = pointerFromDragEvent(event);
   if (!pointer) return;
 
-  const strip = findTabBarTarget(pointer.x, pointer.y);
+  const strip = findTabBarTargetFromPointer(pointer.x, pointer.y);
   if (!strip) {
     useTabBarReorderStore.getState().clearPreview();
     return;
   }
 
-  const tabIds = tabIdsForGroup(strip.groupId);
-  const metrics = measureTabBarMetrics(strip.stripElement, tabIds);
-  if (metrics.length === 0) {
-    useTabBarReorderStore.getState().setPreview({
-      targetGroupId: strip.groupId,
-      sourceGroupId: activeData.sourceNodeId,
+  useTabBarReorderStore.getState().setPreview(
+    buildTabBarInsertPreview(strip.groupId, strip.stripElement, pointer.x, {
       draggedTabId: activeData.tabId,
-      insertIndex: 0,
-      draggedIndex: -1,
-      gapWidth: resolveTabGapWidth(metrics, activeData.tabId),
-      gapLeft: 0,
-    });
+      sourceGroupId: activeData.sourceNodeId,
+    }),
+  );
+}
+
+function updateGraphResourceTabBarPreview(event: DragMoveEvent | DragStartEvent): void {
+  const pointer = pointerFromDragEvent(event);
+  if (!pointer) {
+    useTabBarReorderStore.getState().clearPreview();
     return;
   }
 
-  const sameGroup = activeData.sourceNodeId === strip.groupId;
-  const draggedIndex = sameGroup
-    ? metrics.findIndex((metric) => metric.tabId === activeData.tabId)
-    : -1;
-  const scrollLeft = (
-    strip.stripElement.closest('.overlay-scrollbar-viewport') as HTMLElement | null
-  )?.scrollLeft ?? 0;
-  const insertIndex = computeTabInsertIndex(
-    pointer.x - strip.stripElement.getBoundingClientRect().left + scrollLeft,
-    metrics,
-  );
-  const gapWidth = resolveTabGapWidth(metrics, sameGroup ? activeData.tabId : null);
+  const strip = findTabBarTargetFromPointer(pointer.x, pointer.y);
+  if (!strip) {
+    useTabBarReorderStore.getState().clearPreview();
+    return;
+  }
 
-  useTabBarReorderStore.getState().setPreview({
-    targetGroupId: strip.groupId,
-    sourceGroupId: activeData.sourceNodeId,
-    draggedTabId: activeData.tabId,
-    insertIndex,
-    draggedIndex,
-    gapWidth,
-    gapLeft: computeTabGapLeft(
-      metrics,
-      insertIndex,
-      sameGroup ? activeData.tabId : null,
-    ),
-  });
+  useTabBarReorderStore.getState().setPreview(
+    buildTabBarInsertPreview(strip.groupId, strip.stripElement, pointer.x, {
+      draggedTabId: null,
+      sourceGroupId: null,
+    }),
+  );
 }
 
 function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEvent): void {
@@ -190,7 +144,7 @@ function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEven
   if (!isTabDragData(activeData)) return;
 
   const pointer = pointerFromDragEvent(event);
-  if (pointer && findTabBarTarget(pointer.x, pointer.y)) {
+  if (pointer && findTabBarTargetFromPointer(pointer.x, pointer.y)) {
     useEditorDropPreviewStore.getState().clearPreview();
     return;
   }
@@ -270,13 +224,20 @@ function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
     return;
   }
 
-  useTabBarReorderStore.getState().clearPreview();
-
   if (isGraphResourceDragPayload(activeData)) {
+    const pointer = pointerFromDragEvent(event);
+    if (pointer && findTabBarTargetFromPointer(pointer.x, pointer.y)) {
+      useEditorDropPreviewStore.getState().clearPreview();
+      updateGraphResourceTabBarPreview(event);
+      return;
+    }
+
+    useTabBarReorderStore.getState().clearPreview();
     updateCanvasOpenPreviewFromDragMove(event, activeData);
     return;
   }
 
+  useTabBarReorderStore.getState().clearPreview();
   useEditorDropPreviewStore.getState().clearPreview();
 }
 
@@ -289,7 +250,7 @@ export function EditorDragPreviewMonitorHost(): null {
 }
 
 /**
- * Unified drag preview monitor: tab reorder, tab split, sidebar graph open on canvas.
+ * Unified drag preview monitor: tab reorder, tab split, sidebar graph open on canvas / TabBar.
  */
 export function useEditorDragPreviewMonitor(): void {
   useDndMonitor({

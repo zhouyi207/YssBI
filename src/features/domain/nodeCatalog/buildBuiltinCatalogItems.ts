@@ -1,25 +1,34 @@
 import type { NodeDefinition } from '@/shared/types/domain';
-import { isShellNodeDefinition, nodeDefinitionAllowedInGraphKind } from '@/shared/types/domain';
+import {
+  isCustomNodeDefinition,
+  isShellNodeDefinition,
+  nodeDefinitionAllowedInGraphKind,
+} from '@/shared/types/domain';
 import type { NodeCatalogItem } from './types';
 import { RESOURCE_SPAWNED_NODE_TYPES } from './types';
 
+function definitionToCatalogItem(node: NodeDefinition): NodeCatalogItem {
+  return {
+    nodeType: node.nodeType,
+    title: node.name,
+    category: node.category ?? [],
+  };
+}
+
 /**
- * Builtin registry nodes for the sidebar catalog.
- * Excludes resource-spawned nodes and system-managed shell nodes (Event Begin, etc.);
- * when `graphKind` is provided, also filters by node graph scope.
+ * Builtin registry nodes for the sidebar catalog (excludes user/project custom definitions).
  */
 export function buildBuiltinCatalogItems(
   definitions: NodeDefinition[],
   graphKind?: 'event' | 'function',
 ): NodeCatalogItem[] {
-  return definitions
+  const items = definitions
     .filter((node) => !RESOURCE_SPAWNED_NODE_TYPES.has(node.nodeType))
     .filter((node) => !isShellNodeDefinition(node))
+    .filter((node) => !isCustomNodeDefinition(node))
     .filter((node) => nodeDefinitionAllowedInGraphKind(node, graphKind))
-    .map((node) => ({
-      nodeType: node.nodeType,
-      title: node.name,
-      category: node.category ?? [],
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
+    .map(definitionToCatalogItem);
+
+  items.sort((a, b) => a.title.localeCompare(b.title));
+  return items;
 }

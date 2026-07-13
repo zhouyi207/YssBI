@@ -16,6 +16,8 @@ import { ensureDetailVisible } from './ensureDetailVisible';
 
 export interface OpenEditorTabOptions {
   targetGroupId?: string;
+  /** Insert or move to this index on the target editor group TabBar. */
+  insertIndex?: number;
   focusDetail?: DetailFocus;
   /** `false` opens in the preview slot (VS Code single-click). Default: pinned. */
   pinned?: boolean;
@@ -28,31 +30,34 @@ export interface OpenEditorTabOptions {
 export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): void {
   const pinned = options?.pinned !== false;
   const tabToOpen = applyTabPinState(tab, pinned);
-
-  const layoutStore = useLayoutStore.getState();
   const editorGroupId = resolveEditorTargetGroupId(options?.targetGroupId);
+  const insertIndex = options?.insertIndex;
+  const layoutStore = useLayoutStore.getState();
   const existing = getLayoutTabById(tab.id);
 
   if (existing) {
-    const existingNode = layoutStore.nodes[existing.nodeId];
-    if (isEditorGroupNode(existingNode)) {
-      if (pinned && existing.tab.pinned === false) {
-        layoutStore.setTabPinned(existing.nodeId, tab.id, true);
-      }
-      if (existingNode.data?.activeTabId !== tab.id) {
-        applyEditorTabSelection(existing.nodeId, tab.id);
-      }
-      layoutStore.setActiveGroup(existing.nodeId);
-    } else {
-      layoutStore.moveTab(existing.nodeId, tab.id, editorGroupId);
-      if (pinned) {
-        layoutStore.setTabPinned(editorGroupId, tab.id, true);
-      }
+    const fromNodeId = existing.nodeId;
+
+    if (pinned && existing.tab.pinned === false) {
+      layoutStore.setTabPinned(fromNodeId, tab.id, true);
     }
+
+    const needsMove =
+      insertIndex !== undefined
+      || !isEditorGroupNode(layoutStore.nodes[fromNodeId])
+      || fromNodeId !== editorGroupId;
+
+    if (needsMove) {
+      layoutStore.moveTab(fromNodeId, tab.id, editorGroupId, insertIndex);
+    } else if (layoutStore.nodes[fromNodeId].data?.activeTabId !== tab.id) {
+      applyEditorTabSelection(fromNodeId, tab.id);
+    }
+
+    layoutStore.setActiveGroup(editorGroupId);
   } else if (!pinned) {
     openPreviewTabInGroup(editorGroupId, tabToOpen);
   } else {
-    layoutStore.addTab(editorGroupId, tabToOpen);
+    layoutStore.addTab(editorGroupId, tabToOpen, insertIndex);
     layoutStore.setActiveGroup(editorGroupId);
   }
 

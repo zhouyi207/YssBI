@@ -2,7 +2,7 @@ import { cva } from "class-variance-authority";
 
 /** Editor TabBar shell — VS Code–style muted strip above editor content. */
 export const editorTabBarShellClass =
-  "box-border flex h-[var(--titlebar-height)] min-h-[var(--titlebar-height)] max-h-[var(--titlebar-height)] w-full shrink-0 select-none items-stretch overflow-hidden border-b border-border bg-muted/25";
+  "box-border flex h-[var(--titlebar-height)] min-h-[var(--titlebar-height)] max-h-[var(--titlebar-height)] w-full shrink-0 select-none items-stretch overflow-x-hidden border-b border-border bg-muted/25";
 
 /** Tab strip — grows to fill bar. */
 export const editorTabBarStripClass =
@@ -22,7 +22,7 @@ export const editorTabReorderGapClass =
  * Inactive: slightly recessed muted background; close icon on group hover.
  */
 export const editorTabItemVariants = cva(
-  "group/tab relative inline-flex h-[var(--titlebar-height)] shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-r border-border/60 px-3 text-xs leading-none whitespace-nowrap transition-[transform,colors] duration-150 ease-out focus-visible:outline-none",
+  "group/tab relative inline-flex h-[var(--titlebar-height)] shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-r border-border/60 px-3 text-xs leading-normal whitespace-nowrap transition-[transform,colors] duration-150 ease-out focus-visible:outline-none",
   {
     variants: {
       active: {

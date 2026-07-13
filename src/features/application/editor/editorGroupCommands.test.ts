@@ -44,7 +44,7 @@ describe('editorGroupCommands', () => {
     expect(switchEditorTab).toHaveBeenCalledWith(targetGroupId, { ...tab, pinned: true });
   });
 
-  it('activates the copied graph session after an edge-drop split', async () => {
+  it('copies the only tab when edge-drop splitting a single-tab group', async () => {
     const tab = {
       id: 'events/A.yssbi-event',
       component: 'GraphEditor' as const,
@@ -60,7 +60,42 @@ describe('editorGroupCommands', () => {
     );
 
     expect(created).toBeTruthy();
-    expect(switchEditorTab).toHaveBeenCalledWith(created, tab);
+    expect(switchEditorTab).toHaveBeenCalledWith(created, { ...tab, pinned: true });
+    expect(
+      useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.tabs?.some((t) => t.id === tab.id),
+    ).toBe(true);
+    expect(
+      useLayoutStore.getState().nodes[created!]?.data?.tabs?.some((t) => t.id === tab.id),
+    ).toBe(true);
+  });
+
+  it('moves only the dragged tab when the source group has siblings', async () => {
+    const tabA = {
+      id: 'events/A.yssbi-event',
+      component: 'GraphEditor' as const,
+      type: 'event' as const,
+    };
+    const tabB = {
+      id: 'events/B.yssbi-event',
+      component: 'GraphEditor' as const,
+      type: 'event' as const,
+    };
+    useLayoutStore.getState().addTab(DEFAULT_EDITOR_GROUP_ID, tabA);
+    useLayoutStore.getState().addTab(DEFAULT_EDITOR_GROUP_ID, tabB);
+
+    const created = await splitEditorWithTab(
+      DEFAULT_EDITOR_GROUP_ID,
+      tabB.id,
+      DEFAULT_EDITOR_GROUP_ID,
+      'right',
+    );
+
+    expect(created).toBeTruthy();
+    const sourceTabs = useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.tabs ?? [];
+    expect(sourceTabs.map((tab) => tab.id)).toEqual([tabA.id]);
+    expect(
+      useLayoutStore.getState().nodes[created!]?.data?.tabs?.map((tab) => tab.id),
+    ).toEqual([tabB.id]);
   });
 
   it('returns and activates the created group after a command split', async () => {

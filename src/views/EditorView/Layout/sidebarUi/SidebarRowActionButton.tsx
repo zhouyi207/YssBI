@@ -1,9 +1,7 @@
 import { VscChevronRight } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { sidebarRowActionClass } from "./sidebarStyles";
-
-export const SIDEBAR_ROW_ACTION_ICON_SIZE = 11 as const;
+import { sidebarRowActionClass, SIDEBAR_ROW_ICON_SIZE } from "./sidebarStyles";
 
 export function SidebarRowActionButton({
   isSelected = false,
@@ -26,7 +24,7 @@ export function SidebarRowActionButton({
           onClick={onClick}
           className={sidebarRowActionClass(isSelected)}
         >
-          {icon ?? <VscChevronRight size={SIDEBAR_ROW_ACTION_ICON_SIZE} />}
+          {icon ?? <VscChevronRight size={SIDEBAR_ROW_ICON_SIZE} />}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">{tooltip}</TooltipContent>

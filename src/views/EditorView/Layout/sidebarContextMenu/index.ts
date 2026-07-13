@@ -1,5 +1,5 @@
 export { buildSidebarContextMenuSections } from "./buildSidebarContextMenuSections";
-export { useSidebarContextMenu } from "./useSidebarContextMenu";
+export { useSidebarContextMenu } from "../sidebar/useSidebarContextMenu";
 export type {
   GraphResourceType,
   SidebarContextMenuActions,

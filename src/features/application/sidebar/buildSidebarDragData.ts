@@ -12,9 +12,9 @@ import {
 /**
  * Build drag data for sidebar items (variables, functions, events, data).
  *
- * Event / function graphs use `GRAPH_RESOURCE` — drop on editor canvas opens the graph tab
- * (same preview chip + canvas highlight as tab DnD). Call Function nodes are spawned from
- * the in-graph Node Palette (`buildContextualCatalogItems`), not from the graphs sidebar.
+ * Event / function graphs use `GRAPH_RESOURCE` — drop on editor canvas or TabBar opens
+ * the graph tab (canvas: target group; TabBar: pinned at insert index). Call Function nodes
+ * are spawned from the in-graph Node Palette (`buildContextualCatalogItems`), not from graphs sidebar.
  */
 export function buildSidebarDragData(
   id: string,

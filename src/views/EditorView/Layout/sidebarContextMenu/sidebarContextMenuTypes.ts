@@ -1,13 +1,12 @@
 import type { RevealProjectResourceRequest } from "@/services/project/projectService";
-import type { ContextMenuSection, PositionedContextMenuState } from "@/shared/ui/contextMenu";
-import type { TFunction } from "i18next";
+import type { PositionedContextMenuState } from "@/shared/ui/contextMenu";
 
 export type GraphResourceType = "event" | "function";
 
 export type SidebarContextMenuTarget =
   | { type: "graph"; id: string; name: string; graphType: GraphResourceType }
   | { type: "section"; graphType: GraphResourceType }
-  | { type: "variable"; id: string; name: string }
+  | { type: "variable"; id: string; name: string; isGlobal: boolean }
   | { type: "variableSection"; isGlobal: boolean }
   | { type: "database"; id: string; name: string }
   | { type: "dataSection" }
@@ -20,6 +19,7 @@ export interface SidebarInputDialogState {
   title: string;
   value: string;
   submitLabel?: string;
+  error?: string | null;
   onSubmit: (value: string) => void | Promise<void>;
 }
 
@@ -31,10 +31,12 @@ export interface SidebarContextMenuActions {
   duplicateGraphItem: (id: string) => unknown | Promise<unknown>;
   addVariable: (name: string, dataType: string, isGlobal: boolean) => unknown | Promise<unknown>;
   renameVariableItem: (id: string, name: string) => void;
-  deleteVariable: (id: string) => unknown | Promise<unknown>;
+  deleteVariable: (id: string, name: string) => unknown | Promise<unknown>;
+  promoteVariable: (id: string) => unknown | Promise<unknown>;
+  demoteVariable: (id: string) => unknown | Promise<unknown>;
   openDatabase: (id: string) => void;
   renameDatabaseItem: (id: string, name: string) => void;
-  deleteDatabaseItem: (id: string) => unknown | Promise<unknown>;
+  deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
   importData: () => void;
   openWorksheet: (id: string, name: string) => unknown | Promise<unknown>;
   renameWorksheet: (id: string, name: string) => void;
@@ -42,9 +44,3 @@ export interface SidebarContextMenuActions {
   addWorksheet: () => unknown | Promise<unknown>;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }
-
-export type SidebarContextMenuSectionsBuilder = (
-  contextMenu: SidebarContextMenuState | null,
-  actions: SidebarContextMenuActions,
-  t: TFunction
-) => ContextMenuSection[];

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useRef } from "react";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { openGraphInEditor } from "@/features/application/editor/openGraphInEditor";
+import { handleGraphResourceDrop } from "@/features/application/editor/handleGraphResourceDrop";
 import {
   moveTabBetweenGroups,
   splitEditorWithTab,
@@ -12,14 +12,12 @@ import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import {
   isCanvasDrop,
   isLayoutRegionDrop,
   isTabbarDrop,
-  isGraphResourceDragPayload,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
   isSidebarSpawnDrag,
@@ -82,20 +80,12 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
     const overData = over?.data.current;
     const sidebarResource = getSidebarResourceFromDrag(activeData);
 
-    if (sidebarResource && isCanvasDrop(overData)) {
+    if (sidebarResource) {
       finishSidebarDrag();
-
-      const layoutState = useLayoutStore.getState();
-      const targetGroupId =
-        overData.groupId ||
-        resolveEditorTargetGroupId(undefined, layoutState.nodes, layoutState);
-      void openGraphInEditor(sidebarResource.id, sidebarResource.name, sidebarResource.type, targetGroupId)
-        .catch((error) => uiStore.showToast(formatErrorMessage(error), "error"));
-      return;
-    }
-
-    if (isGraphResourceDragPayload(activeData)) {
-      finishSidebarDrag();
+      if (overData && (isCanvasDrop(overData) || isTabbarDrop(overData))) {
+        void handleGraphResourceDrop(sidebarResource, overData)
+          .catch((error) => uiStore.showToast(formatErrorMessage(error), "error"));
+      }
       return;
     }
 

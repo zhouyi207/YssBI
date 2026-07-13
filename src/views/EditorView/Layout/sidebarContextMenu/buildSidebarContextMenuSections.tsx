@@ -46,15 +46,30 @@ export function buildSidebarContextMenuSections(
   }
 
   if (target.type === "variable") {
+    const scopeItems = target.isGlobal
+      ? [{
+          id: "demote-to-local",
+          label: t("sidebar.demoteToLocal"),
+          icon: <VscEdit size={12} />,
+          onClick: () => void actions.demoteVariable(target.id),
+        }]
+      : [{
+          id: "promote-to-global",
+          label: t("sidebar.promoteToGlobal"),
+          icon: <VscEdit size={12} />,
+          onClick: () => void actions.promoteVariable(target.id),
+        }];
+
     return [
       {
         items: [
           { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameVariableItem(target.id, target.name) },
+          ...scopeItems,
         ],
       },
       {
         items: [
-          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteVariable(target.id) },
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteVariable(target.id, target.name) },
         ],
       },
     ];
@@ -80,13 +95,14 @@ export function buildSidebarContextMenuSections(
       {
         items: [
           { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openDatabase(target.id) },
+          { id: "view-editor", label: t("sidebar.viewInDatabaseEditor"), icon: <VscChevronRight size={12} />, onClick: () => actions.openDatabase(target.id) },
           { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "database", resourceId: target.id }) },
           { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameDatabaseItem(target.id, target.name) },
         ],
       },
       {
         items: [
-          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteDatabaseItem(target.id) },
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteDatabaseItem(target.id, target.name) },
         ],
       },
     ];

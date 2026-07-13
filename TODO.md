@@ -1571,6 +1571,10 @@ Editor Part（占 Workbench 中央 flex 区）
 - [x] **函数元数据三源文档化 / 收敛**：名称 `ResourceStore`、签名 `graphMetaStore`、图体 `GraphDataStore`；`functionResourceView` + `useFunctionCatalog` 单点合并；Detail 经 `session.functions` 不再双订阅；`buildGraphSnapshotFromStores` 导出组装签名；删 `graphMetaStore.graphOrder`；见 `docs/adr/function-metadata-projection.md`。
 - [x] **Function Detail 局部变量区块（不实现）**：局部变量统一由 Sidebar Local 管理；已删除 `GraphLocalVariablesSection` 与 Detail 重复 wiring；`focusDetail` 对 event/function 同步 `variablesGraphScope`。
 
+## 2026.07.14
+
+
+
 ## v1.0 待办
 
 ### 窗口跨窗同步

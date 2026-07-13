@@ -21,6 +21,7 @@ export interface Node {
 
 export type NodeGraphScope = 'any' | 'event' | 'function';
 export type ShellRole = 'event_begin' | 'function_entry' | 'function_return';
+export type NodeDefinitionOrigin = 'system' | 'custom';
 
 export interface NodeMetaData {
     uiStyle: string;
@@ -31,6 +32,8 @@ export interface NodeMetaData {
     graph_scope: NodeGraphScope;
     /** 系统托管壳节点角色；非 null 即为壳节点（不可删 / 复制 / palette 隐藏）。 */
     shell_role: ShellRole | null;
+    /** 定义来源：系统注册表 vs 用户/项目自定义。缺省为 system。 */
+    definition_origin?: NodeDefinitionOrigin;
 }
 
 export interface NodeDocumentation {
@@ -117,6 +120,11 @@ export function nodeDefinitionAllowedInGraphKind(
     const scope = getNodeDefinitionMeta(def)?.graph_scope ?? 'any';
     if (scope === 'any' || !graphKind) return true;
     return scope === graphKind;
+}
+
+/** 用户/项目自定义节点定义（`definition_origin === 'custom'`）。 */
+export function isCustomNodeDefinition(def: NodeDefinition | undefined): boolean {
+    return getNodeDefinitionMeta(def)?.definition_origin === 'custom';
 }
 
 export function pickLocalizedText(

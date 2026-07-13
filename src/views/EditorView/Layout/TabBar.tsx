@@ -283,7 +283,7 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
     data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId },
   });
 
-  const shiftX = !isDragging && reorderPreview && reorderPreview.sourceGroupId === layoutNodeId
+  const shiftX = !isDragging && reorderPreview && reorderPreview.targetGroupId === layoutNodeId
     ? computeTabShiftOffset(
         index,
         reorderPreview.draggedIndex,
@@ -325,12 +325,12 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
         {isPreview ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="max-w-[120px] truncate">{title}</span>
+              <span className="max-w-[120px] truncate leading-normal">{title}</span>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('tabBar.previewHint')}</TooltipContent>
           </Tooltip>
         ) : (
-          <span className="max-w-[120px] truncate">{title}</span>
+          <span className="max-w-[120px] truncate leading-normal">{title}</span>
         )}
         {statusKey && statusIcon ? (
           <Tooltip>

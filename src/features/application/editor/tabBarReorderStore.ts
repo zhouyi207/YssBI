@@ -2,8 +2,10 @@ import { create } from 'zustand';
 
 export interface TabBarReorderPreview {
   targetGroupId: string;
-  sourceGroupId: string;
-  draggedTabId: string;
+  /** Tab reorder source group; null when inserting from sidebar graph drag. */
+  sourceGroupId: string | null;
+  /** Existing tab id when reordering; null for external insert preview. */
+  draggedTabId: string | null;
   insertIndex: number;
   draggedIndex: number;
   gapWidth: number;

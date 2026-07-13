@@ -1,6 +1,11 @@
 import type { SidebarDragPayload } from "@/features/core/dnd";
 import { SidebarDraggableItem } from "./SidebarDraggableItem";
-import { sidebarItemIndent, sidebarItemLabelClass, sidebarItemRowClass } from "./sidebarStyles";
+import {
+  sidebarItemIndent,
+  sidebarItemLabelClass,
+  sidebarItemRowClass,
+  SIDEBAR_ROW_LEADING_SLOT_CLASS,
+} from "./sidebarStyles";
 
 export function SidebarListItem({
   id,
@@ -35,7 +40,7 @@ export function SidebarListItem({
       className={sidebarItemRowClass(isSelected)}
       style={sidebarItemIndent(indentDepth)}
     >
-      <span className="flex shrink-0 items-center justify-center">{icon}</span>
+      <span className={SIDEBAR_ROW_LEADING_SLOT_CLASS}>{icon}</span>
       <span className={sidebarItemLabelClass()}>{label}</span>
       {trailing}
     </SidebarDraggableItem>

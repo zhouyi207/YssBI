@@ -92,7 +92,7 @@ export interface LayoutState {
     // DND Actions
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
-    addTab: (nodeId: string, tab: LayoutTab) => void;
+    addTab: (nodeId: string, tab: LayoutTab, insertIndex?: number) => void;
     setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
     /** Patch only activeTabId (+ clear selection on change). Avoids full node spread on tab switch. */
     setEditorGroupActiveTab: (nodeId: string, tabId: string | null) => void;
@@ -444,26 +444,40 @@ export const useLayoutStore = create<LayoutState>()(
             ensureValidActiveEditorGroup(state);
         }),
 
-        addTab: (nodeId, tab) => set((state) => {
+        addTab: (nodeId, tab, insertIndex) => set((state) => {
             const node = state.nodes[nodeId];
             if (!node || node.type !== 'component') return;
 
             const tabs = node.data?.tabs || [];
-            // 如果标签已存在，则激活它
-            if (tabs.find(t => t.id === tab.id)) {
+            const existingIndex = tabs.findIndex((t) => t.id === tab.id);
+            if (existingIndex !== -1) {
                 if (node.data!.activeTabId !== tab.id) {
                     node.data = clearSelectedNodeIds(node.data);
                 }
                 node.data!.activeTabId = tab.id;
+
+                if (insertIndex !== undefined && insertIndex !== existingIndex) {
+                    const nextTabs = [...tabs];
+                    const [existing] = nextTabs.splice(existingIndex, 1);
+                    const adjustedIndex = insertIndex > existingIndex ? insertIndex - 1 : insertIndex;
+                    nextTabs.splice(Math.max(0, Math.min(adjustedIndex, nextTabs.length)), 0, existing);
+                    node.data!.tabs = nextTabs;
+                }
                 return;
             }
 
-            // 添加新标签
+            const nextTabs = [...tabs];
+            if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= nextTabs.length) {
+                nextTabs.splice(insertIndex, 0, tab);
+            } else {
+                nextTabs.push(tab);
+            }
+
             node.data = {
                 ...clearSelectedNodeIds(node.data),
-                tabs: [...tabs, tab],
+                tabs: nextTabs,
                 activeTabId: tab.id,
-                component: node.data?.component || 'GraphEditor'
+                component: node.data?.component || 'GraphEditor',
             };
         }),
 

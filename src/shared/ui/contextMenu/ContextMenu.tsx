@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
+import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 import { cn } from "@/lib/utils";
 
 export interface ContextMenuPosition {
@@ -34,7 +35,7 @@ interface ContextMenuProps {
 
 /** Project density: tight menu shell (see .cursor/rules/context-menu-density.mdc). */
 const menuShellClass =
-  "fixed z-[200] w-max max-w-[min(13.5rem,calc(100vw-1rem))] overflow-hidden rounded-sm border border-border bg-popover/95 py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 backdrop-blur-md dark:shadow-black/45";
+  "fixed z-[1] w-max max-w-[min(13.5rem,calc(100vw-1rem))] overflow-hidden rounded-sm border border-border bg-popover py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 dark:shadow-black/45";
 
 const menuItemClass =
   "h-7 w-full justify-start gap-1.5 rounded-none px-2 text-[12px] font-normal hover:bg-[var(--interactive-hover)] hover:text-foreground";
@@ -120,6 +121,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         </React.Fragment>
       ))}
     </div>,
-    document.body,
+    getOverlayPortalRoot(),
   );
 };

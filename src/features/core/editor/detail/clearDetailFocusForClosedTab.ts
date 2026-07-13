@@ -1,7 +1,7 @@
 import { useEditorStore } from '../stores/useEditorStore';
 import type { DetailFocus } from './types';
 
-export function clearDetailFocusForClosedTab(tabId: string, _tabType?: string): void {
+export function clearDetailFocusForClosedTab(tabId: string): void {
   const focus = useEditorStore.getState().detailFocus;
   if (!focus) return;
 

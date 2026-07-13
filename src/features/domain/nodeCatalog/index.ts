@@ -1,6 +1,7 @@
 export type { NodeCatalogItem } from './types';
 export { catalogItemKey, RESOURCE_SPAWNED_NODE_TYPES } from './types';
 export { buildBuiltinCatalogItems } from './buildBuiltinCatalogItems';
+export { filterCatalogItems } from './filterCatalogItems';
 export { buildContextualCatalogItems } from './buildContextualCatalogItems';
 export { buildNodeTemplateDragData } from './buildNodeTemplateDragData';
 export {

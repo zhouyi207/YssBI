@@ -1,0 +1,64 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { EditorDataframes } from '@/features/core/editor';
+import {
+  buildDataFlatRows,
+  useSidebarSectionExpandSnapshot,
+  useSidebarStore,
+} from '@/features/core/sidebar';
+import { SidebarTabPanel } from '../sections/SidebarTabPanel';
+import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
+import { noopSidebarHandler } from '../sections/sidebarFlatRowContext';
+
+export function SidebarDataTab({
+  dataframes,
+  onImport,
+  onSectionContextMenu,
+  onDatabaseContextMenu,
+}: {
+  dataframes: EditorDataframes;
+  onImport: () => void;
+  onSectionContextMenu: (e: React.MouseEvent) => void;
+  onDatabaseContextMenu: (e: React.MouseEvent, id: string, name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const sectionExpanded = useSidebarSectionExpandSnapshot('dataData');
+  const toggleSection = useSidebarStore((s) => s.toggleSection);
+
+  const rows = useMemo(
+    () =>
+      buildDataFlatRows({
+        dataframes: dataframes ?? {},
+        expandedSections: sectionExpanded,
+        labels: {
+          data: t('sidebar.sections.data'),
+          noData: t('sidebar.noData'),
+        },
+      }),
+    [dataframes, sectionExpanded, t],
+  );
+
+  const sectionActions = useMemo(
+    () => ({
+      dataData: {
+        onAdd: onImport,
+        addAriaLabel: t('contextMenu.sidebar.importData'),
+        onHeaderContextMenu: onSectionContextMenu,
+        onContentContextMenu: onSectionContextMenu,
+      },
+    }),
+    [onImport, onSectionContextMenu, t],
+  );
+
+  return (
+    <SidebarTabPanel>
+      <SidebarFlatRowPanel
+        rows={rows}
+        sectionActions={sectionActions}
+        onToggleSection={toggleSection}
+        onToggleGroup={noopSidebarHandler}
+        onDatabaseContextMenu={onDatabaseContextMenu}
+      />
+    </SidebarTabPanel>
+  );
+}

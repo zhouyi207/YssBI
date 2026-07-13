@@ -126,6 +126,24 @@ export function equalSplitPairSizes(beforeSize: number, afterSize: number): { be
   return { beforeSize: half, afterSize: total - half };
 }
 
+function mergeRemovedGroupPixelSize(
+  sibling: LayoutNode,
+  removed: LayoutNode,
+): void {
+  if (sibling.pixelSize != null && removed.pixelSize != null) {
+    sibling.pixelSize += removed.pixelSize;
+    return;
+  }
+  if (sibling.pixelSize == null && removed.pixelSize != null) {
+    sibling.pixelSize = removed.pixelSize;
+    return;
+  }
+  if (sibling.pixelSize != null && removed.pixelSize == null) {
+    return;
+  }
+  sibling.pixelSize = undefined;
+}
+
 /** Apply equal split sizes to two grid siblings (sash double-click). */
 export function applyEqualGridSplit(
   nodes: LayoutTree,
@@ -177,11 +195,7 @@ export function removeEditorGroupFromTree(
 
   if (parent.id === EDITOR_AREA_ID) {
     if (sibling) {
-      if (sibling.pixelSize != null && group.pixelSize != null) {
-        sibling.pixelSize += group.pixelSize;
-      } else {
-        sibling.pixelSize = undefined;
-      }
+      mergeRemovedGroupPixelSize(sibling, group);
     }
   } else if (parent.children.length === 1 && parent.parentId) {
     const grandParent = nodes[parent.parentId];
@@ -193,16 +207,12 @@ export function removeEditorGroupFromTree(
         grandParent.children[parentIndex] = singleChildId;
         singleChild.parentId = grandParent.id;
         singleChild.size = parent.size ?? 1;
-        singleChild.pixelSize = parent.pixelSize;
+        mergeRemovedGroupPixelSize(singleChild, group);
         delete nodes[parent.id];
       }
     }
   } else if (sibling) {
-    if (sibling.pixelSize != null && group.pixelSize != null) {
-      sibling.pixelSize += group.pixelSize;
-    } else {
-      sibling.pixelSize = undefined;
-    }
+    mergeRemovedGroupPixelSize(sibling, group);
   } else if (parent.children.length === 0 && parent.parentId) {
     const grandParent = nodes[parent.parentId];
     if (grandParent?.children) {
@@ -212,10 +222,41 @@ export function removeEditorGroupFromTree(
   }
 
   delete nodes[groupId];
+
+  reconcileEditorGridAfterGroupRemoved(nodes, groupId);
+
   return {
     removed: true,
     nextActiveGroupId: sibling && isEditorGroupNode(sibling) ? sibling.id : firstEditorGroupId(nodes),
   };
+}
+
+/**
+ * After removing an editor group, clear stale maximize/hidden flags so the remaining
+ * grid fills the editor area and leaf groups render content (watermark / canvas).
+ */
+export function reconcileEditorGridAfterGroupRemoved(
+  nodes: LayoutTree,
+  removedGroupId: string,
+): void {
+  const maximizedId = readEditorAreaMaximizedGroupId(nodes);
+  const maximizedStale =
+    maximizedId === removedGroupId || (maximizedId != null && !nodes[maximizedId]);
+  const remaining = listEditorGroupIds(nodes);
+
+  if (maximizedStale) {
+    const restored = readEditorAreaRestoredGridSizes(nodes);
+    clearEditorGroupMaximizedHidden(nodes);
+    if (restored) applyEditorGridPixelSizes(nodes, restored);
+    writeEditorAreaMaximizeState(nodes, null, null);
+    return;
+  }
+
+  const orphanedHidden = remaining.some((id) => nodes[id]?.data?.groupMaximizedHidden);
+  if (orphanedHidden) {
+    clearEditorGroupMaximizedHidden(nodes);
+    writeEditorAreaMaximizeState(nodes, null, null);
+  }
 }
 
 export interface SplitEditorGroupPayload {

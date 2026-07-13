@@ -1,31 +1,46 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
+/** Standard sidebar row icon size (list items, section add buttons, command rows). */
+export const SIDEBAR_ROW_ICON_SIZE = 12 as const;
+
+/** Fixed leading column width — chevron or row icon (12px). */
+export const SIDEBAR_ROW_LEADING_SLOT_CLASS =
+  "flex size-3 shrink-0 items-center justify-center" as const;
+
+/** Standard row height (28px) — must match SIDEBAR_FLAT_ROW_HEIGHT. */
+export const SIDEBAR_ROW_HEIGHT_CLASS = "h-7" as const;
+
+/** Fixed trailing slot for group headers (add button or spacer). */
+export const SIDEBAR_ROW_TRAILING_SLOT_CLASS = "size-6 shrink-0" as const;
+
 /** Left indent for sidebar rows (16px base + 16px per depth level). */
 export function sidebarItemIndent(depth = 0): CSSProperties {
   return { paddingLeft: 16 + depth * 16 };
 }
 
-/** Leaf row: data / graph / variable / worksheet items. */
-export function sidebarItemRowClass(isSelected = false) {
+function sidebarItemRowBaseClass(isSelected = false) {
   return cn(
-    "group flex w-full items-center gap-2 py-1.5 pr-2 transition-colors duration-150 ease-out",
+    SIDEBAR_ROW_HEIGHT_CLASS,
+    "group flex w-full items-center gap-2 pr-2 transition-colors duration-150 ease-out",
     isSelected
       ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
       : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70",
   );
 }
 
-/** Collapsible section header row (Event/Data section titles, etc.). */
-export function sidebarCollapsibleHeaderClass(isActive = false) {
-  return cn(
-    sidebarItemRowClass(isActive),
-    "w-full shrink-0 cursor-pointer",
-  );
+/** Leaf row: data / graph / variable / worksheet items. */
+export function sidebarItemRowClass(isSelected = false) {
+  return sidebarItemRowBaseClass(isSelected);
+}
+
+/** Collapsible group row — sections and node categories share this layout. */
+export function sidebarGroupRowClass() {
+  return cn(sidebarItemRowBaseClass(false), "cursor-pointer select-none");
 }
 
 export function sidebarItemLabelClass() {
-  return "min-w-0 flex-1 truncate text-[12px] font-normal tracking-tight";
+  return "min-w-0 flex-1 truncate text-[12px] leading-normal font-normal tracking-tight";
 }
 
 /** Variable type badge / command timestamp — capped so rows don't raise sidebar min-content width. */
@@ -40,36 +55,10 @@ export function sidebarVariableTypeBadgeClass(isSelected = false) {
   );
 }
 
-export function sidebarSectionLabelClass() {
-  return "min-w-0 flex-1 truncate text-[12px] tracking-tight";
-}
-
 export function sidebarRowActionClass(isSelected = false) {
   return cn(
     "shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
     isSelected ? "text-sidebar-foreground" : "text-muted-foreground",
-  );
-}
-
-/** Node catalog category row (matches collapsible section headers). */
-export function nodeCatalogCategoryRowClass() {
-  return cn(sidebarCollapsibleHeaderClass(false), "cursor-pointer select-none");
-}
-
-/** Node catalog leaf row — slightly brighter label, same hover tokens as sidebar items. */
-export function nodeCatalogLeafRowClass(isSelected = false) {
-  return cn(
-    "group flex w-full items-center gap-2 py-1.5 pr-2 transition-colors duration-150 ease-out",
-    isSelected
-      ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
-      : "text-sidebar-foreground/90 hover:bg-[var(--sidebar-hover)] hover:text-sidebar-foreground",
-  );
-}
-
-export function nodeCatalogLeafLabelClass(isSelected = false) {
-  return cn(
-    "min-w-0 flex-1 truncate text-[13px] font-normal leading-snug",
-    isSelected ? "text-sidebar-foreground" : "text-sidebar-foreground/90 group-hover:text-sidebar-foreground",
   );
 }
 

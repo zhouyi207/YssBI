@@ -45,13 +45,12 @@ export function NodePalette({
 
   return (
     <Card
-      className="menu-container fixed z-50 flex w-80 flex-col overflow-hidden shadow-2xl animate-zoom-in"
+      className="menu-container fixed z-50 flex h-[min(24rem,calc(100vh-4rem))] w-80 min-h-48 flex-col overflow-hidden shadow-2xl animate-zoom-in"
       style={{ left: x, top: y }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       <NodeCatalogTreeView
         items={items}
-        variant="popover"
         onLeafClick={onSelect}
         autoFocusSearch
       />

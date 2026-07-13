@@ -1,20 +1,18 @@
-export { SidebarCollapsibleSection } from "./SidebarCollapsibleSection";
 export { SidebarChevron, SIDEBAR_CHEVRON_SIZE } from "./SidebarChevron";
 export { SidebarDraggableItem } from "./SidebarDraggableItem";
-export { SidebarEmptyPlaceholder } from "./SidebarEmptyPlaceholder";
 export { SidebarListItem } from "./SidebarListItem";
-export { SidebarRowActionButton, SIDEBAR_ROW_ACTION_ICON_SIZE } from "./SidebarRowActionButton";
+export { SidebarRowActionButton } from "./SidebarRowActionButton";
 export {
-  sidebarCollapsibleHeaderClass,
+  sidebarGroupRowClass,
   sidebarItemIndent,
   sidebarItemLabelClass,
   sidebarItemRowClass,
   sidebarRowActionClass,
-  sidebarSectionLabelClass,
   sidebarTrailingMetaClass,
   sidebarVariableTypeBadgeClass,
-  nodeCatalogCategoryRowClass,
-  nodeCatalogLeafRowClass,
-  nodeCatalogLeafLabelClass,
+  SIDEBAR_ROW_ICON_SIZE,
+  SIDEBAR_ROW_HEIGHT_CLASS,
+  SIDEBAR_ROW_LEADING_SLOT_CLASS,
+  SIDEBAR_ROW_TRAILING_SLOT_CLASS,
   nodeCatalogSearchShellClass,
 } from "./sidebarStyles";

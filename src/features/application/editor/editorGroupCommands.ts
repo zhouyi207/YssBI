@@ -27,7 +27,9 @@ export function moveTabBetweenGroups(
 }
 
 /**
- * Drag tab to editor canvas edge — VS Code split: copy tab into a new group, keep source.
+ * Drag tab to editor edge split:
+ * - Multiple tabs in source → move dragged tab to the new group.
+ * - Single tab in source → copy (keep source group alive; moving empties it and breaks the grid).
  */
 export async function splitEditorWithTab(
   sourceGroupId: string,
@@ -35,14 +37,29 @@ export async function splitEditorWithTab(
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): Promise<string | null> {
-  const tab = useLayoutStore.getState().nodes[sourceGroupId]?.data?.tabs?.find((t) => t.id === tabId);
+  const layoutStore = useLayoutStore.getState();
+  const sourceTabs = layoutStore.nodes[sourceGroupId]?.data?.tabs ?? [];
+  const tab = sourceTabs.find((t) => t.id === tabId);
   if (!tab) return null;
+
+  const moveFromSource = sourceTabs.length > 1;
 
   const created = EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
     component: tab.component || 'GraphEditor',
-    tabs: [{ ...tab }],
+    tabs: [{ ...tab, pinned: true }],
     activeTabId: tabId,
   });
+  if (!created) return null;
+
+  if (moveFromSource) {
+    const sourceStillHasTab = useLayoutStore
+      .getState()
+      .nodes[sourceGroupId]?.data?.tabs?.some((item) => item.id === tabId);
+    if (sourceStillHasTab) {
+      useLayoutStore.getState().removeTab(sourceGroupId, tabId);
+    }
+  }
+
   return activateCreatedEditorGroup(created);
 }
 

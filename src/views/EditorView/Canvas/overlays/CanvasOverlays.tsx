@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
+import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { ContextMenu } from "@/shared/ui/contextMenu";
@@ -94,7 +95,7 @@ export default function CanvasOverlays({
                         graphPath={activeTabId ?? undefined}
                     />
                 </div>,
-                document.body
+                getOverlayPortalRoot(),
             )}
 
             {/* ================= Variable Drop Menu ================= */}

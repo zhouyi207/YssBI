@@ -7,6 +7,8 @@ import { switchEditorTab } from './switchEditorTab';
 export interface OpenGraphInEditorOptions {
   /** `false` = preview tab (sidebar single-click). Default: pinned. */
   pinned?: boolean;
+  /** Insert or move to this index when dropped onto a TabBar. */
+  insertIndex?: number;
 }
 
 export async function openGraphInEditor(
@@ -20,7 +22,7 @@ export async function openGraphInEditor(
 
   const pinned = options?.pinned !== false;
   const tab = buildGraphLayoutTab(graphPath, type, { pinned });
-  openEditorTab(tab, { targetGroupId, pinned });
+  openEditorTab(tab, { targetGroupId, pinned, insertIndex: options?.insertIndex });
   const groupId = resolveEditorTargetGroupId(targetGroupId);
   const activated = await switchEditorTab(groupId, tab);
   if (!activated) return;

@@ -41,7 +41,7 @@ export async function closeWorksheetTab(
   }
 
   useLayoutStore.getState().removeTab(located.nodeId, worksheetId);
-  clearDetailFocusForClosedTab(worksheetId, 'worksheet');
+  clearDetailFocusForClosedTab(worksheetId);
   return true;
 }
 
