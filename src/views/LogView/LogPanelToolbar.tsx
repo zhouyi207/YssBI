@@ -1,9 +1,10 @@
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import type { LogLevel } from '@/shared/types/ui';
 import {
@@ -12,18 +13,16 @@ import {
 } from './logPresentation';
 import { useLogPanelContext } from './logPanelContext';
 
+const LOG_FILTER_LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error'];
+
 export function LogPanelToolbar() {
   const { t } = useTranslation();
+  const [filterOpen, setFilterOpen] = useState(false);
   const {
     loading,
     filter,
-    isFilterOpen,
-    setIsFilterOpen,
     autoScroll,
     setAutoScroll,
-    filterButtonRef,
-    filterPopoverRef,
-    popoverPosition,
     toggleLevel,
     setSearchText,
     refreshLogs,
@@ -76,60 +75,55 @@ export function LogPanelToolbar() {
         {autoScroll ? <FiChevronDown size={14} /> : <FiChevronUp size={14} />}
       </ToolbarIconButton>
 
-      <div className="relative">
-        <ToolbarIconButton
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          ref={filterButtonRef}
-          onClick={() => setIsFilterOpen(!isFilterOpen)}
-          className={isFilterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
-          tooltip={t('log.filter')}
-        >
-          <FiFilter size={14} />
-        </ToolbarIconButton>
-
-        {isFilterOpen
-          && createPortal(
-            <Card
-              ref={filterPopoverRef}
-              className="fixed z-[200] w-[280px] space-y-3 border-border/60 p-3 shadow-xl"
-              style={{ top: popoverPosition.top, left: popoverPosition.left }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="relative">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-                <Input
-                  type="text"
-                  placeholder={t('log.searchPlaceholder')}
-                  value={filter?.searchText ?? ''}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="h-8 pl-9 text-xs"
-                />
-              </div>
-              <div>
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('log.level')}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(['error', 'warn', 'info', 'debug', 'trace'] as LogLevel[]).map((level) => (
-                    <Button
-                      type="button"
-                      variant={filter?.levels?.has(level) ? 'secondary' : 'outline'}
-                      size="sm"
-                      key={level}
-                      onClick={() => toggleLevel(level)}
-                      className={`h-6 px-2 text-[10px] ${filter?.levels?.has(level) ? `${getLevelBgColor(level)} ${getLevelColor(level)} border-current` : 'text-muted-foreground'}`}
-                    >
-                      {level.toUpperCase()}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </Card>,
-            document.body,
-          )}
-      </div>
+      <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+        <Tooltip>
+          <PopoverTrigger asChild>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={filterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
+                aria-label={t('log.filter')}
+              >
+                <FiFilter size={14} />
+              </Button>
+            </TooltipTrigger>
+          </PopoverTrigger>
+          <TooltipContent side="bottom">{t('log.filter')}</TooltipContent>
+        </Tooltip>
+        <PopoverContent align="end" className="w-[290px] gap-3 p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+            <Input
+              type="text"
+              placeholder={t('log.searchPlaceholder')}
+              value={filter?.searchText ?? ''}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="h-8 pl-9 text-xs"
+            />
+          </div>
+          <div>
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t('log.level')}
+            </div>
+            <div className="flex flex-nowrap gap-1.5">
+              {LOG_FILTER_LEVELS.map((level) => (
+                <Button
+                  type="button"
+                  variant={filter?.levels?.has(level) ? 'secondary' : 'outline'}
+                  size="sm"
+                  key={level}
+                  onClick={() => toggleLevel(level)}
+                  className={`h-6 px-2 text-[10px] ${filter?.levels?.has(level) ? `${getLevelBgColor(level)} ${getLevelColor(level)} border-current` : 'text-muted-foreground'}`}
+                >
+                  {level.toUpperCase()}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <ToolbarIconButton
         type="button"

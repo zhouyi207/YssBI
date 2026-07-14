@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { Fragment, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   VscSplitHorizontal,
@@ -9,9 +9,14 @@ import {
   VscUnlock,
 } from 'react-icons/vsc';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ContextMenu } from '@/shared/ui/contextMenu';
-import type { ContextMenuPosition } from '@/shared/ui/contextMenu';
 import { editorTabBarActionsClass } from './editorTabStyles';
 import {
   closeEditorGroup,
@@ -43,7 +48,6 @@ export const EditorGroupToolbar: React.FC<EditorGroupToolbarProps> = ({ groupId 
   const alwaysShowEditorActions = useSettingsStore((s) => s.editor.alwaysShowEditorActions ?? false);
   const isGroupActive = useLayoutStore((s) => s.activeEditorGroupId === groupId);
   const locked = useEditorTabStore((s) => s.getPlacement(groupId).locked === true);
-  const [overflowMenu, setOverflowMenu] = useState<ContextMenuPosition | null>(null);
 
   const prepared = useMemo(
     () => prepareEditorGroupToolbarActions({
@@ -143,52 +147,53 @@ export const EditorGroupToolbar: React.FC<EditorGroupToolbarProps> = ({ groupId 
     [groupId, t, locked, prepared.secondary],
   );
 
-  const openOverflowMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setOverflowMenu({
-      x: rect.right,
-      y: rect.bottom,
-      placement: 'below-end',
-    });
-  }, []);
-
   const showOverflow = prepared.secondary.length > 0;
 
   return (
-    <>
-      <div className={editorTabBarActionsClass} data-editor-group-actions={groupId}>
-        {prepared.primary.map((actionId) => renderPrimaryAction(actionId))}
+    <div className={editorTabBarActionsClass} data-editor-group-actions={groupId}>
+      {prepared.primary.map((actionId) => renderPrimaryAction(actionId))}
 
-        {showOverflow ? (
+      {showOverflow ? (
+        <DropdownMenu>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="text-muted-foreground"
-                onPointerDown={stopEditorActionPointerDown}
-                onClick={openOverflowMenu}
-                aria-label={t('tabBar.overflow.title')}
-                aria-haspopup="menu"
-                aria-expanded={overflowMenu != null}
-              >
-                <VscEllipsis size={16} />
-              </Button>
-            </TooltipTrigger>
+            <DropdownMenuTrigger asChild>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                  onPointerDown={stopEditorActionPointerDown}
+                  aria-label={t('tabBar.overflow.title')}
+                >
+                  <VscEllipsis size={16} />
+                </Button>
+              </TooltipTrigger>
+            </DropdownMenuTrigger>
             <TooltipContent side="bottom">{t('tabBar.overflow.title')}</TooltipContent>
           </Tooltip>
-        ) : null}
-      </div>
-
-      {overflowMenu ? (
-        <ContextMenu
-          position={overflowMenu}
-          sections={overflowSections}
-          onClose={() => setOverflowMenu(null)}
-        />
+          <DropdownMenuContent align="end" className="min-w-[13.5rem]">
+            {overflowSections.map((section, sectionIndex) => (
+              <Fragment key={section.items.map((item) => item.id).join('-') || `section-${sectionIndex}`}>
+                {sectionIndex > 0 ? <DropdownMenuSeparator /> : null}
+                {section.items.map((item) => (
+                  <DropdownMenuItem
+                    key={item.id}
+                    disabled={item.disabled}
+                    title={item.disabled ? item.title : undefined}
+                    variant={item.danger ? 'destructive' : 'default'}
+                    onSelect={() => item.onClick?.()}
+                    className="text-[12px]"
+                  >
+                    {item.icon}
+                    {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </Fragment>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
-    </>
+    </div>
   );
 };
