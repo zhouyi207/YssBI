@@ -6,14 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
-import type { LogLevel } from '@/shared/types/ui';
+import { LogLevel } from '@/shared/types/ui';
 import {
   getLogLevelBackground,
   getLogLevelColor,
 } from './logPresentation';
 import { useLogPanelContext } from './logPanelContext';
 
-const LOG_FILTER_LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error'];
+const LOG_FILTER_LEVELS: LogLevel[] = [
+  LogLevel.Trace,
+  LogLevel.Debug,
+  LogLevel.Info,
+  LogLevel.Warn,
+  LogLevel.Error,
+];
 
 export function LogPanelToolbar() {
   const { t } = useTranslation();
