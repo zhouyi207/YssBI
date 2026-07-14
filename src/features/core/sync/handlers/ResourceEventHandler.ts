@@ -2,51 +2,22 @@ import { BaseEventHandler } from './BaseEventHandler';
 import type {
   ProjectIndexInvalidatedPayload,
   ResourceChangedPayload,
-  ResourceDeletedPayload,
   GraphResourceMovedPayload,
 } from '../types';
 import {
   getDocumentState,
+  notifyIndexInvalidated,
   normalizeBackendResourceMeta,
   useResourceStore,
 } from '@/features/core/resource';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { migrateGraphResourcePath } from '@/features/application/editor/migrateGraphResourcePath';
-
-let invalidationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let invalidationRefreshPromise: Promise<boolean> | null = null;
-
-function scheduleResourceIndexRefresh(): Promise<boolean> {
-  if (invalidationRefreshPromise) {
-    return invalidationRefreshPromise;
-  }
-
-  invalidationRefreshPromise = new Promise((resolve) => {
-    if (invalidationDebounceTimer) {
-      clearTimeout(invalidationDebounceTimer);
-    }
-
-    invalidationDebounceTimer = setTimeout(() => {
-      invalidationDebounceTimer = null;
-      void useProjectIOStore
-        .getState()
-        .refreshResourceIndex()
-        .then(resolve)
-        .finally(() => {
-          invalidationRefreshPromise = null;
-        });
-    }, 50);
-  });
-
-  return invalidationRefreshPromise;
-}
 
 export class ProjectIndexInvalidatedHandler extends BaseEventHandler<ProjectIndexInvalidatedPayload> {
   eventType = 'ProjectIndexInvalidated';
 
   handle(payload: ProjectIndexInvalidatedPayload): void {
     this.log('Project index invalidated:', payload.source, payload.version);
-    void scheduleResourceIndexRefresh();
+    void notifyIndexInvalidated('watcher');
   }
 }
 
@@ -70,15 +41,6 @@ export class ResourceChangedHandler extends BaseEventHandler<ResourceChangedPayl
   }
 }
 
-export class ResourceDeletedHandler extends BaseEventHandler<ResourceDeletedPayload> {
-  eventType = 'ResourceDeleted';
-
-  handle(payload: ResourceDeletedPayload): void {
-    this.log('Resource deleted:', payload.kind, payload.id);
-    useResourceStore.getState().removeResource({ id: payload.id, kind: payload.kind });
-  }
-}
-
 export class GraphResourceMovedHandler extends BaseEventHandler<GraphResourceMovedPayload> {
   eventType = 'GraphResourceMoved';
 
@@ -86,6 +48,6 @@ export class GraphResourceMovedHandler extends BaseEventHandler<GraphResourceMov
     this.log('Graph resource moved:', payload.from, '->', payload.to);
     if (payload.kind !== 'event' && payload.kind !== 'function') return;
     migrateGraphResourcePath(payload.from, payload.to, payload.kind);
-    void scheduleResourceIndexRefresh();
+    void notifyIndexInvalidated('event');
   }
 }

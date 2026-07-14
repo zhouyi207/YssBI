@@ -11,15 +11,32 @@ vi.mock('./switchEditorTab', () => ({
 }));
 
 import { uiStore } from '@/features/core/ui/UIStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { activateCurrentEditorTab } from './switchEditorTab';
 import { bootstrapEditorGraphSession } from './bootstrapEditorGraphSession';
 
 describe('bootstrapEditorGraphSession', () => {
+  function seedActiveGraphTab(): void {
+    useEditorTabStore.getState().initGroupPlacement('default_editor', [
+      { id: 'events/test.yssbi-event', component: 'GraphEditor', type: 'event' },
+    ]);
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+  });
+
+  it('does not warn when the restored group has no active tab', async () => {
+    const ok = await bootstrapEditorGraphSession('default_editor');
+
+    expect(ok).toBe(true);
+    expect(activateCurrentEditorTab).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it('returns true on first successful activation', async () => {
+    seedActiveGraphTab();
     vi.mocked(activateCurrentEditorTab).mockResolvedValue(true);
 
     const ok = await bootstrapEditorGraphSession('default_editor', {
@@ -33,6 +50,7 @@ describe('bootstrapEditorGraphSession', () => {
   });
 
   it('retries transient failures and surfaces a toast when all attempts fail', async () => {
+    seedActiveGraphTab();
     vi.mocked(activateCurrentEditorTab).mockResolvedValue(false);
 
     const ok = await bootstrapEditorGraphSession('default_editor', {

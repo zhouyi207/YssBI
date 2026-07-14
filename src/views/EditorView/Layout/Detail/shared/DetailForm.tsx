@@ -128,7 +128,7 @@ export function DetailReadonlyField({
         as="div"
         tone={tone}
         className={cn(
-          'flex min-h-8 items-center rounded-md border border-transparent px-3 py-1',
+          'flex min-h-8 min-w-0 items-center justify-start truncate rounded-md border border-transparent px-3 py-1 text-left',
           className,
         )}
       >

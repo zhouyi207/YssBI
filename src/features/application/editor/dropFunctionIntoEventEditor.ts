@@ -1,6 +1,11 @@
 import type { DragEndEvent } from '@dnd-kit/core';
 import type { GraphResourceDragData } from '@/features/core/dnd';
-import { DRAG_TYPES, type GraphResourceDragState, type SidebarDragState } from '@/features/core/dnd';
+import {
+  DRAG_TYPES,
+  resolveDragClientPoint,
+  type GraphResourceDragState,
+  type SidebarDragState,
+} from '@/features/core/dnd';
 import { canDropFunctionIntoEventGraph } from '@/features/application/editor/canvasDrop';
 import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
@@ -13,20 +18,7 @@ export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activat
   x: number;
   y: number;
 } | null {
-  const activator = event.activatorEvent;
-  if (
-    !activator
-    || typeof activator !== 'object'
-    || !('clientX' in activator)
-    || !('clientY' in activator)
-  ) {
-    return null;
-  }
-  const { clientX, clientY } = activator as { clientX: number; clientY: number };
-  return {
-    x: clientX + event.delta.x,
-    y: clientY + event.delta.y,
-  };
+  return resolveDragClientPoint(event);
 }
 
 export function buildFunctionGraphResourceDragState(

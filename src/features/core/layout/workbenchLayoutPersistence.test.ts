@@ -18,7 +18,7 @@ import {
 } from './workbenchLayoutService';
 import { useLayoutStore } from './layoutStore';
 import { useEditorTabStore } from './editorTabStore';
-import { resetEditorTabStore, legacyEmbeddedNodeData } from './editorTabTestUtils';
+import { resetEditorTabStore, seedEditorGroupTabs } from './editorTabTestUtils';
 import { snapshotEditorGridMemento } from './editorGridMemento';
 import { enterZenMode } from './workbenchZenMode';
 import { restoreAdjacentPanelVisibility } from '@/views/EditorView/Renderer/sashResizeLogic';
@@ -229,26 +229,27 @@ describe('workbenchLayoutPersistence decoupling', () => {
         visible: false,
         userHidden: true,
       };
-      state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data = legacyEmbeddedNodeData(
-        state.nodes[DEFAULT_EDITOR_GROUP_ID]!.data!,
-        [{ id: 'events/one', component: 'GraphEditor', type: 'event' }],
-        'events/one',
-        ['node-one'],
-      );
       state.nodes[EDITOR_AREA_ID]!.children = [DEFAULT_EDITOR_GROUP_ID, 'editor_group_2'];
       state.nodes.editor_group_2 = {
         id: 'editor_group_2',
         type: 'component',
         parentId: EDITOR_AREA_ID,
-        data: legacyEmbeddedNodeData(
-          { component: 'GraphEditor' },
-          [{ id: 'events/two', component: 'GraphEditor', type: 'event' }],
-          'events/two',
-          ['node-two'],
-        ),
+        data: { component: 'GraphEditor' },
       };
       state.activeEditorGroupId = 'editor_group_2';
     });
+    seedEditorGroupTabs(
+      DEFAULT_EDITOR_GROUP_ID,
+      [{ id: 'events/one', component: 'GraphEditor', type: 'event' }],
+      'events/one',
+      ['node-one'],
+    );
+    seedEditorGroupTabs(
+      'editor_group_2',
+      [{ id: 'events/two', component: 'GraphEditor', type: 'event' }],
+      'events/two',
+      ['node-two'],
+    );
 
     resetWorkbenchLayout();
 

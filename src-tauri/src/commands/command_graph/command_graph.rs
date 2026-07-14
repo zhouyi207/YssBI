@@ -4,7 +4,7 @@ use crate::event::Event;
 use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use crate::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use crate::graph::{FunctionSignaturePin, GraphKind};
-use crate::project::{GraphDocumentKind, GraphResourcePath, read_project_index};
+use crate::project::{GraphDocumentKind, GraphResourcePath};
 use crate::schema::GraphInstanceDTO;
 use crate::project::ProjectState;
 use tauri::{AppHandle, State};
@@ -13,55 +13,12 @@ fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
     GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
 }
 
-fn existing_graph_names(
-    state: &State<ProjectState>,
-    graph_kind: GraphKind,
-    excluded_path: Option<GraphResourcePath>,
-) -> Result<Vec<String>, String> {
-    let mut names: Vec<String> = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .values()
-        .filter(|graph| {
-            graph.kind == graph_kind && Some(graph.resource_path.clone()) != excluded_path
-        })
-        .map(|graph| graph.name.clone())
-        .collect();
-
-    if let Some(path) = state.get_path() {
-        let index = read_project_index(&path).map_err(|e| e.to_string())?;
-        let expected_kind = GraphDocumentKind::from(&graph_kind);
-        names.extend(
-            index
-                .graphs
-                .into_iter()
-                .filter(|graph| {
-                    graph.graph_type == expected_kind
-                        && excluded_path
-                            .as_ref()
-                            .is_none_or(|path| graph.path != path.as_str())
-                })
-                .map(|graph| graph.name),
-        );
-    }
-
-    names.sort();
-    names.dedup();
-    Ok(names)
-}
-
 #[tauri::command]
 pub fn create_event(
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
-    let graph = state.add_graph_with_existing_names(
-        graph_name,
-        GraphKind::Event,
-        existing_graph_names(&state, GraphKind::Event, None)?,
-    );
+    let graph = state.create_graph(graph_name, GraphKind::Event)?;
     // 每个事件图自动拥有一个系统托管的 Event Begin 壳节点（对齐 UE5 事件图）。
     graph.create_node_with_position(EVENT_BEGIN_NODE_TYPE, 120.0, 120.0, None)?;
     let graph_path = graph.resource_path.clone();
@@ -74,11 +31,7 @@ pub fn create_function(
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
-    let graph = state.add_graph_with_existing_names(
-        graph_name,
-        GraphKind::Function,
-        existing_graph_names(&state, GraphKind::Function, None)?,
-    );
+    let graph = state.create_graph(graph_name, GraphKind::Function)?;
     // 每个函数图自动拥有 Entry / Return 壳节点（对齐 UE5 函数图）。
     graph.create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
     graph.create_node_with_position(FUNCTION_RETURN_NODE_TYPE, 560.0, 160.0, None)?;
@@ -229,10 +182,7 @@ pub fn duplicate_graph(
     graph_path: String,
 ) -> Result<String, String> {
     let graph_path = parse_graph_path(&graph_path)?;
-    let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
-    let document = crate::project::duplicate_project_graph_file(&project_path, &graph_path)
-        .map_err(|e| e.to_string())?;
-    Ok(document.graph.resource_path.as_str().to_string())
+    Ok(state.duplicate_persisted_graph(&graph_path)?.as_str().to_string())
 }
 
 #[derive(serde::Serialize)]

@@ -50,7 +50,7 @@ export function isValidEventType(type: string): boolean {
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted', 'DataFrameSchemaUpdated',
         // Resource
-        'ResourceChanged', 'ResourceDeleted', 'GraphResourceMoved', 'ProjectIndexInvalidated',
+        'ResourceChanged', 'GraphResourceMoved', 'ProjectIndexInvalidated',
         // Node
         'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred', 'RuntimeSourcesInvalidated',
         // Connection

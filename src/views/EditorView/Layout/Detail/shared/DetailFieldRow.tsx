@@ -19,7 +19,7 @@ interface DetailFieldRowProps {
 export function DetailFieldRow({
   label,
   children,
-  labelWidth = 'narrow',
+  labelWidth = 'auto',
   labelClassName,
   valueClassName,
   rowClassName,
@@ -32,7 +32,12 @@ export function DetailFieldRow({
         : detailLabelCellNarrowClass;
 
   return (
-    <div className={cn('grid min-h-10 grid-cols-[auto_minmax(0,1fr)] items-center gap-3', rowClassName)}>
+    <div
+      className={cn(
+        'grid min-h-10 grid-cols-[max-content_minmax(0,1fr)] items-center gap-2',
+        rowClassName,
+      )}
+    >
       <Label className={cn(labelWidthClass, 'shrink-0 justify-start', labelClassName)}>
         {label}
       </Label>

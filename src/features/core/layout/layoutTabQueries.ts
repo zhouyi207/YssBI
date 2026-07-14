@@ -3,7 +3,6 @@ import { useLayoutStore } from './layoutStore';
 import { useEditorTabStore } from './editorTabStore';
 import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
 import { isEditorGroupNode } from './layoutEditorGroupNode';
-import { normalizeLayoutTab } from './layoutTabModel';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
 
@@ -44,16 +43,9 @@ export function resolveEditorTargetGroupId(
   return DEFAULT_EDITOR_GROUP_ID;
 }
 
-export function getLayoutTabById(tabId: string, nodes?: LayoutTree): LocatedLayoutTab | null {
+export function getLayoutTabById(tabId: string): LocatedLayoutTab | null {
   const located = useEditorTabStore.getState().locateTab(tabId);
   if (located) return { nodeId: located.groupId, tab: located.tab };
-
-  const tree = readNodes(nodes);
-  for (const node of Object.values(tree)) {
-    const legacyTabs = (node.data as { tabs?: LayoutTab[] } | undefined)?.tabs;
-    const legacyTab = legacyTabs?.find((item) => item.id === tabId);
-    if (legacyTab) return { nodeId: node.id, tab: normalizeLayoutTab(legacyTab) };
-  }
   return null;
 }
 

@@ -29,8 +29,7 @@ export function moveTabsBetweenGroups(
     return;
   }
   const wasInactive = useLayoutStore.getState().activeEditorGroupId !== targetGroupId;
-  useEditorTabStore.getState().moveTabs(sourceGroupId, tabIds, targetGroupId, targetTabIndex);
-  useLayoutStore.getState().setActiveGroup(targetGroupId);
+  useLayoutStore.getState().moveTabs(sourceGroupId, tabIds, targetGroupId, targetTabIndex);
   if (!wasInactive && sourceGroupId === targetGroupId) return;
   const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
   if (activeTab) void switchEditorTab(targetGroupId, activeTab);

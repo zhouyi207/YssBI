@@ -173,12 +173,9 @@ export function hydrateEditorGrid(): void {
     state.nodes = applyEditorGridMementoWithRepair(state.nodes, memento.editorGrid!);
     state.activeEditorGroupId = memento.editorGrid!.activeEditorGroupId;
   });
-  if (memento.editorTabs) {
-    useEditorTabStore.getState().applyMemento(memento.editorTabs);
-  } else {
-    useEditorTabStore.getState().importFromLayoutNodes(useLayoutStore.getState().nodes);
-  }
-  useEditorTabStore.getState().stripEmbeddedTabsFromNodes(useLayoutStore.getState().nodes);
+  useEditorTabStore.getState().applyMemento(
+    memento.editorTabs ?? { registry: {}, placements: {} },
+  );
   reconcileEditorTabPlacements(useLayoutStore.getState().nodes);
   setActiveGroup(memento.editorGrid!.activeEditorGroupId);
 }

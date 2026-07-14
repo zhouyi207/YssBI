@@ -5,6 +5,8 @@ import {
   isSidebarSpawnDrag,
   isTabDragData,
   parseCanvasDragPayload,
+  readDragModifiers,
+  resolveDragClientPoint,
 } from '@/features/core/dnd';
 import { resolveEditorDropHitAtClientPoint } from '@/features/core/layout/editorDropPreview';
 import {
@@ -17,7 +19,6 @@ import {
   readEditorPartOptions,
 } from '@/features/core/layout/editorPartOptions';
 import { resolveEnableSplittingOnDrag } from '@/features/core/layout/editorDragModifiers';
-import { useModifierKeyStore } from '@/features/core/keyboard';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { clearTabBarDragSession, useTabBarReorderStore } from './tabBarReorderStore';
 import { useEditorDropPreviewStore } from './editorDropPreviewStore';
@@ -35,45 +36,12 @@ import {
   updateSidebarSpawnDropPreviewFromDragMove,
 } from './sidebarSpawnDropPreview';
 
-function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: number; y: number } | null {
-  const activator = event.activatorEvent;
-  if (!(activator instanceof MouseEvent) && !(activator instanceof PointerEvent)) {
-    return null;
-  }
-  const delta = 'delta' in event ? event.delta : { x: 0, y: 0 };
-  return {
-    x: activator.clientX + delta.x,
-    y: activator.clientY + delta.y,
-  };
-}
-
-function dragModifiersFromEvent(event: DragMoveEvent | DragStartEvent): {
-  altKey: boolean;
-  shiftKey: boolean;
-  ctrlKey: boolean;
-} {
-  const activator = event.activatorEvent;
-  const modifierStore = useModifierKeyStore.getState();
-  if (activator instanceof MouseEvent || activator instanceof PointerEvent) {
-    return {
-      altKey: activator.altKey || modifierStore.altKey,
-      shiftKey: activator.shiftKey || modifierStore.shiftKey,
-      ctrlKey: activator.ctrlKey || modifierStore.ctrlKey,
-    };
-  }
-  return {
-    altKey: modifierStore.altKey,
-    shiftKey: modifierStore.shiftKey,
-    ctrlKey: modifierStore.ctrlKey,
-  };
-}
-
 function splitHitOptions(
   event: DragMoveEvent | DragStartEvent,
   isDraggingGroup: boolean,
 ) {
   const partOptions = readEditorPartOptions();
-  const modifiers = dragModifiersFromEvent(event);
+  const modifiers = readDragModifiers(event);
   return {
     preferSplitVertically: preferSplitVerticallyFromDirection(partOptions.openSideBySideDirection),
     enableSplitting: resolveEnableSplittingOnDrag(partOptions.splitOnDragAndDrop, modifiers),
@@ -183,7 +151,7 @@ function updateTabBarPreviewFromDragMove(event: DragMoveEvent | DragStartEvent):
     return;
   }
 
-  const pointer = pointerFromDragEvent(event);
+  const pointer = resolveDragClientPoint(event);
   if (!pointer) return;
 
   updateTabBarInsertPreviewFromPointer(pointer.x, pointer.y, {
@@ -244,7 +212,7 @@ function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEven
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isTabDragData(activeData) && !isEditorGroupDragData(activeData)) return;
 
-  const pointer = pointerFromDragEvent(event);
+  const pointer = resolveDragClientPoint(event);
   if (!pointer) return;
 
   if (findTabBarTargetFromPointer(pointer.x, pointer.y)) {
@@ -257,7 +225,7 @@ function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEven
 
 function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
-  const pointer = pointerFromDragEvent(event);
+  const pointer = resolveDragClientPoint(event);
 
   if (pointer) {
     refreshDropPreviewStaleGuard(pointer.x, pointer.y);

@@ -1,4 +1,5 @@
 import { uiStore } from '@/features/core/ui/UIStore';
+import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { activateCurrentEditorTab } from './switchEditorTab';
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -22,6 +23,7 @@ export async function bootstrapEditorGraphSession(
 ): Promise<boolean> {
   const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = options?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+  if (!getEditorGroupActiveTabId(groupId)) return true;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const loaded = await activateCurrentEditorTab(groupId);

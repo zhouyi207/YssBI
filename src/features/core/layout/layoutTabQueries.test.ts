@@ -42,11 +42,15 @@ describe('layoutTabQueries', () => {
   });
 
   it('finds a tab globally by id', () => {
-    expect(getLayoutTabById('g2', mockNodes)).toEqual({
+    expect(getLayoutTabById('g2')).toEqual({
       nodeId: 'editorA',
       tab: tabG2,
     });
-    expect(getLayoutTabById('missing', mockNodes)).toBeNull();
+    expect(getLayoutTabById('missing')).toBeNull();
+  });
+
+  it('does not read tabs embedded in layout nodes', () => {
+    expect(getLayoutTabById('embedded')).toBeNull();
   });
 
   it('locates a tab in a specific node', () => {

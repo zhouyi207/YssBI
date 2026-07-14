@@ -25,12 +25,6 @@ pub enum EventResource {
         data: ProjectResourceMetaEvent,
     },
     #[serde(rename_all = "camelCase")]
-    ResourceDeleted {
-        id: String,
-        kind: String,
-        source: String,
-    },
-    #[serde(rename_all = "camelCase")]
     ProjectIndexInvalidated { source: String, version: u64 },
     #[serde(rename_all = "camelCase")]
     GraphResourceMoved {

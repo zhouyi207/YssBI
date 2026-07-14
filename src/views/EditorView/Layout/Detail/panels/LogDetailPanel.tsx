@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { LogLevel, LogType } from '@/shared/types/ui';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
+import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailBadge } from '../shared/DetailText';
 import { DetailText } from '../shared/DetailText';
@@ -76,20 +77,16 @@ export function LogDetailPanel({ log }: LogDetailPanelProps) {
             {log.source}
           </DetailReadonlyField>
         )}
-        <DetailFieldRow
-          label={t('detail.fields.message')}
-          labelClassName="align-top"
-          valueClassName="align-top"
-        >
-          <DetailText
-            as="pre"
-            tone="mono"
-            className="min-h-20 rounded-md border border-border bg-muted/20 p-3 whitespace-pre-wrap break-all text-foreground"
-          >
-            {log.message}
-          </DetailText>
-        </DetailFieldRow>
       </DetailForm>
+      <DetailCollapsibleSection title={t('detail.fields.message')} defaultOpen>
+        <DetailText
+          as="pre"
+          tone="mono"
+          className="min-h-20 overflow-x-auto whitespace-pre-wrap break-words px-1 py-2 text-foreground"
+        >
+          {log.message}
+        </DetailText>
+      </DetailCollapsibleSection>
     </DetailPanelShell>
   );
 }

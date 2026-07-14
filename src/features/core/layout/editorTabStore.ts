@@ -1,25 +1,12 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { LayoutNode, LayoutTab, LayoutTree } from '@/shared/types/ui';
+import type { LayoutTab, LayoutTree } from '@/shared/types/ui';
 import {
   applyTabPinState,
   normalizeLayoutTab,
   normalizeLayoutTabs,
 } from './layoutTabModel';
-import { isEditorGroupNode } from './layoutEditorGroupNode';
 import { listEditorGroupIds } from './editorGridLayout';
-import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
-
-/** One-shot import shape from pre-refactor layout nodes (not part of the live node model). */
-interface LegacyEmbeddedNodeData {
-  tabs?: LayoutTab[];
-  activeTabId?: string | null;
-  params?: { selectedNodeIds?: string[] };
-}
-
-function readLegacyNodeData(node: LayoutNode | undefined): LegacyEmbeddedNodeData | undefined {
-  return node?.data as LegacyEmbeddedNodeData | undefined;
-}
 
 /** Per-group tab ordering and volatile editor chrome state. */
 export interface EditorGroupPlacement {
@@ -97,8 +84,6 @@ export interface EditorTabState {
 
   snapshotMemento: () => EditorTabMemento;
   applyMemento: (memento: EditorTabMemento) => void;
-  importFromLayoutNodes: (nodes: LayoutTree) => boolean;
-  stripEmbeddedTabsFromNodes: (nodes: LayoutTree) => void;
 }
 
 const EMPTY_PLACEMENT: EditorGroupPlacement = {
@@ -128,44 +113,6 @@ function pruneRegistry(state: { registry: Record<string, LayoutTab>; placements:
 
 function clearSelection(placement: EditorGroupPlacement): void {
   placement.selectedNodeIds = [];
-}
-
-function readEmbeddedPlacement(node: LayoutNode): EditorGroupPlacement | null {
-  const legacy = readLegacyNodeData(node);
-  const tabs = legacy?.tabs;
-  if (!tabs?.length && legacy?.activeTabId == null && !legacy?.params?.selectedNodeIds?.length) {
-    return null;
-  }
-  const normalized = normalizeLayoutTabs(tabs ?? []);
-  const lastTabId = normalized.length > 0 ? normalized[normalized.length - 1].id : null;
-  return {
-    tabIds: normalized.map((tab) => tab.id),
-    activeTabId: legacy?.activeTabId ?? lastTabId,
-    selectedNodeIds: legacy?.params?.selectedNodeIds ?? [],
-    selectedTabIds: legacy?.activeTabId ? [legacy.activeTabId] : (lastTabId ? [lastTabId] : []),
-  };
-}
-
-export function readLegacyEmbeddedTab(node: LayoutNode | undefined, tabId: string): LayoutTab | null {
-  const legacyTab = readLegacyNodeData(node)?.tabs?.find((item) => item.id === tabId);
-  return legacyTab ? normalizeLayoutTab(legacyTab) : null;
-}
-
-export function removeLegacyEmbeddedTab(node: LayoutNode | undefined, tabId: string): void {
-  if (!node?.data) return;
-  const legacy = readLegacyNodeData(node);
-  if (!legacy?.tabs?.length) return;
-  const nextTabs = legacy.tabs.filter((item) => item.id !== tabId);
-  const legacyData = node.data as LegacyEmbeddedNodeData;
-  if (nextTabs.length > 0) {
-    legacyData.tabs = nextTabs;
-    if (legacyData.activeTabId === tabId) {
-      legacyData.activeTabId = nextTabs[nextTabs.length - 1]?.id ?? null;
-    }
-    return;
-  }
-  delete legacyData.tabs;
-  delete legacyData.activeTabId;
 }
 
 export const useEditorTabStore = create<EditorTabState>()(
@@ -586,46 +533,6 @@ export const useEditorTabStore = create<EditorTabState>()(
       );
     }),
 
-    importFromLayoutNodes: (nodes) => {
-      let changed = false;
-      set((state) => {
-        for (const node of Object.values(nodes)) {
-          if (!isEditorGroupNode(node)) continue;
-          const embedded = readEmbeddedPlacement(node);
-          if (!embedded) {
-            if (!state.placements[node.id]) {
-              state.placements[node.id] = createEmptyPlacement();
-            }
-            continue;
-          }
-          changed = true;
-          for (const tabId of embedded.tabIds) {
-            const tab = readLegacyNodeData(node)?.tabs?.find((item) => item.id === tabId);
-            if (tab) registerTab(state, tab);
-          }
-          state.placements[node.id] = {
-            tabIds: [...embedded.tabIds],
-            activeTabId: embedded.activeTabId,
-            selectedNodeIds: [...embedded.selectedNodeIds],
-            selectedTabIds: [...embedded.selectedTabIds],
-          };
-        }
-        if (!state.placements[DEFAULT_EDITOR_GROUP_ID] && isEditorGroupNode(nodes[DEFAULT_EDITOR_GROUP_ID])) {
-          state.placements[DEFAULT_EDITOR_GROUP_ID] = createEmptyPlacement();
-        }
-      });
-      return changed;
-    },
-
-    stripEmbeddedTabsFromNodes: (nodes) => {
-      for (const node of Object.values(nodes)) {
-        if (!isEditorGroupNode(node) || !node.data) continue;
-        const legacy = node.data as LegacyEmbeddedNodeData;
-        delete legacy.tabs;
-        delete legacy.activeTabId;
-        if (legacy.params) delete legacy.params.selectedNodeIds;
-      }
-    },
   })),
 );
 

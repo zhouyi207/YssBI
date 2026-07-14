@@ -6,3 +6,4 @@ export * from './resourceSelectors';
 export * from './resourceSnapshotReconcile';
 export * from './resourceStore';
 export * from './resourceTypes';
+export * from './resourceIndexCoordinator';

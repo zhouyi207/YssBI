@@ -141,11 +141,20 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: node.title || node.nodeType })}>
       <DetailForm>
-        <DetailReadonlyField label={t('detail.fields.name')} tone="body" className="font-medium">
+        <DetailReadonlyField
+          label={t('detail.fields.name')}
+          tone="body"
+          valueClassName="min-w-0"
+          className="min-w-0 truncate font-medium"
+        >
           {node.title}
         </DetailReadonlyField>
         {node.category?.length > 0 && (
-          <DetailReadonlyField label={t('detail.fields.category')}>
+          <DetailReadonlyField
+            label={t('detail.fields.category')}
+            valueClassName="min-w-0"
+            className="min-w-0 truncate"
+          >
             {node.category.join(' / ')}
           </DetailReadonlyField>
         )}

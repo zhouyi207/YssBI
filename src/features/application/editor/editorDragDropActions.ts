@@ -24,7 +24,6 @@ import {
 import { uiStore } from '@/features/core/ui/UIStore';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useSidebarDragStore, canvasDropHandlerStore } from '@/features/core/sidebarDrag';
-import { useModifierKeyStore } from '@/features/core/keyboard';
 import { isEditorDragCopyOperation } from '@/features/core/layout/editorDragModifiers';
 import { findEditorGroupAtPointer } from '@/features/core/layout/editorDropTarget';
 import type { SidebarDragPayload } from '@/features/core/dnd';
@@ -37,6 +36,8 @@ import {
   isNodeTemplateDragState,
   isTabDragData,
   parseCanvasDragPayload,
+  readDragModifiers,
+  resolveDragClientPoint,
   isSidebarSpawnDrag,
 } from '@/features/core/dnd';
 
@@ -45,20 +46,7 @@ export function readEditorDragModifiers(event: DragEndEvent): {
   ctrlKey: boolean;
   shiftKey: boolean;
 } {
-  const activator = event.activatorEvent;
-  const modifierStore = useModifierKeyStore.getState();
-  if (activator instanceof MouseEvent || activator instanceof PointerEvent) {
-    return {
-      altKey: activator.altKey || modifierStore.altKey,
-      ctrlKey: activator.ctrlKey || modifierStore.ctrlKey,
-      shiftKey: activator.shiftKey || modifierStore.shiftKey,
-    };
-  }
-  return {
-    altKey: modifierStore.altKey,
-    ctrlKey: modifierStore.ctrlKey,
-    shiftKey: modifierStore.shiftKey,
-  };
+  return readDragModifiers(event);
 }
 
 function resolveCanvasDropGroupId(
@@ -70,15 +58,8 @@ function resolveCanvasDropGroupId(
   if (overData && typeof overData === 'object' && overData !== null && 'groupId' in overData) {
     return String((overData as { groupId: string }).groupId);
   }
-  const activator = event.activatorEvent;
-  if (activator instanceof MouseEvent || activator instanceof PointerEvent) {
-    const delta = event.delta;
-    return findEditorGroupAtPointer(
-      activator.clientX + delta.x,
-      activator.clientY + delta.y,
-    );
-  }
-  return null;
+  const pointer = resolveDragClientPoint(event);
+  return pointer ? findEditorGroupAtPointer(pointer.x, pointer.y) : null;
 }
 
 async function executeSidebarSpawnDragEnd(

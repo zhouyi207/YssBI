@@ -3,6 +3,8 @@ import {
   isGraphResourceDragPayload,
   isSidebarSpawnDrag,
   parseCanvasDragPayload,
+  readDragModifiers,
+  resolveDragClientPoint,
   type GraphResourceDragPayload,
 } from '@/features/core/dnd';
 import { isSidebarSpawnDropAllowedAtPointer } from './sidebarSpawnDropPolicy';
@@ -12,7 +14,6 @@ import {
   findEditorGroupAtPointer,
   findTabBarTargetFromPointer,
 } from '@/features/core/layout/editorDropTarget';
-import { useModifierKeyStore } from '@/features/core/keyboard';
 import {
   preferSplitVerticallyFromDirection,
   readEditorPartOptions,
@@ -22,44 +23,11 @@ import { resolveEditorDropHitAtClientPoint } from '@/features/core/layout/editor
 import { resolveSidebarGraphResourceDropPreview } from './resolveSidebarGraphResourceDropPreview';
 import { buildTabBarInsertPreview } from './tabBarInsertPreview';
 
-function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: number; y: number } | null {
-  const activator = event.activatorEvent;
-  if (!(activator instanceof MouseEvent) && !(activator instanceof PointerEvent)) {
-    return null;
-  }
-  const delta = 'delta' in event ? event.delta : { x: 0, y: 0 };
-  return {
-    x: activator.clientX + delta.x,
-    y: activator.clientY + delta.y,
-  };
-}
-
-function dragModifiersFromEvent(event: DragMoveEvent | DragStartEvent): {
-  altKey: boolean;
-  shiftKey: boolean;
-  ctrlKey: boolean;
-} {
-  const activator = event.activatorEvent;
-  const modifierStore = useModifierKeyStore.getState();
-  if (activator instanceof MouseEvent || activator instanceof PointerEvent) {
-    return {
-      altKey: activator.altKey || modifierStore.altKey,
-      shiftKey: activator.shiftKey || modifierStore.shiftKey,
-      ctrlKey: activator.ctrlKey || modifierStore.ctrlKey,
-    };
-  }
-  return {
-    altKey: modifierStore.altKey,
-    shiftKey: modifierStore.shiftKey,
-    ctrlKey: modifierStore.ctrlKey,
-  };
-}
-
 function splitHitOptions(
   event: DragMoveEvent | DragStartEvent,
 ) {
   const partOptions = readEditorPartOptions();
-  const modifiers = dragModifiersFromEvent(event);
+  const modifiers = readDragModifiers(event);
   return {
     preferSplitVertically: preferSplitVerticallyFromDirection(partOptions.openSideBySideDirection),
     enableSplitting: resolveEnableSplittingOnDrag(partOptions.splitOnDragAndDrop, modifiers),
@@ -78,7 +46,7 @@ function updateGraphResourceDropPreviewFromDragMove(
   pointerX: number,
   pointerY: number,
 ): void {
-  const modifiers = dragModifiersFromEvent(event);
+  const modifiers = readDragModifiers(event);
 
   const tabBarTarget = findTabBarTargetFromPointer(pointerX, pointerY);
   if (tabBarTarget) {
@@ -130,7 +98,7 @@ export function updateSidebarSpawnDropPreviewFromDragMove(
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isSidebarSpawnDrag(activeData)) return;
 
-  const pointer = pointerFromDragEvent(event);
+  const pointer = resolveDragClientPoint(event);
   if (!pointer || !isSidebarSpawnDropAllowedAtPointer(pointer.x, pointer.y)) {
     clearSidebarSpawnDropPreviews();
     return;

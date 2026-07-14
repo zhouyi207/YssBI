@@ -47,6 +47,28 @@ describe('editorGroupCommands', () => {
     expect(switchEditorTab).toHaveBeenCalledWith(targetGroupId, { ...tab, pinned: true });
   });
 
+  it('removes an empty source group after moving its last tab', () => {
+    const tab = {
+      id: 'events/A.yssbi-event',
+      component: 'GraphEditor' as const,
+      type: 'event' as const,
+    };
+    useLayoutStore.getState().addTab(DEFAULT_EDITOR_GROUP_ID, tab);
+    const targetGroupId = useLayoutStore.getState().splitEditorGroupAtEdge(
+      DEFAULT_EDITOR_GROUP_ID,
+      'right',
+      { component: 'GraphEditor', tabs: [] },
+    );
+    expect(targetGroupId).toBeTruthy();
+
+    moveTabBetweenGroups(DEFAULT_EDITOR_GROUP_ID, tab.id, targetGroupId!);
+
+    const layout = useLayoutStore.getState();
+    expect(layout.nodes[DEFAULT_EDITOR_GROUP_ID]).toBeUndefined();
+    expect(layout.activeEditorGroupId).toBe(targetGroupId);
+    expect(useEditorTabStore.getState().getPlacement(targetGroupId!).tabIds).toEqual([tab.id]);
+  });
+
   it('copies the only tab when edge-drop splitting a single-tab group', async () => {
     const tab = {
       id: 'events/A.yssbi-event',

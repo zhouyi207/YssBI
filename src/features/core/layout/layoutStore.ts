@@ -28,8 +28,6 @@ import { commitSplitPairSizes, computeEditorGridMementoSizes, commitEditorGridLa
 import { readEditorPartOptions } from './editorPartOptions';
 import {
     isEditorGroupPlacementEmpty,
-    readLegacyEmbeddedTab,
-    removeLegacyEmbeddedTab,
     reconcileEditorTabPlacements,
     useEditorTabStore,
 } from './editorTabStore';
@@ -99,6 +97,7 @@ export interface LayoutState {
 
     // Tab placement (delegates to editorTabStore)
     moveTab: (sourceNodeId: string, tabId: string, targetNodeId: string, targetTabIndex?: number) => void;
+    moveTabs: (sourceNodeId: string, tabIds: string[], targetNodeId: string, targetTabIndex?: number) => void;
     removeTab: (nodeId: string, tabId: string) => void;
     addTab: (nodeId: string, tab: LayoutTab, insertIndex?: number) => void;
     setTabPinned: (nodeId: string, tabId: string, pinned: boolean) => void;
@@ -411,27 +410,29 @@ export const useLayoutStore = create<LayoutState>()(
             state.nodes.panel = defaults.panel!;
             state.nodes.detail = defaults.detail!;
             state.zenMode = false;
-            useEditorTabStore.getState().importFromLayoutNodes(state.nodes);
-            useEditorTabStore.getState().stripEmbeddedTabsFromNodes(state.nodes);
             reconcileEditorTabPlacements(state.nodes);
         }),
 
         moveTab: (sourceNodeId, tabId, targetNodeId, targetTabIndex) => {
             const tabStore = useEditorTabStore.getState();
-            if (!tabStore.locateTab(tabId, sourceNodeId)) {
-                const legacyTab = readLegacyEmbeddedTab(get().nodes[sourceNodeId], tabId);
-                if (legacyTab) {
-                    tabStore.addTab(targetNodeId, legacyTab, targetTabIndex);
-                    set((state) => {
-                        removeLegacyEmbeddedTab(state.nodes[sourceNodeId], tabId);
-                    });
-                }
-            } else {
+            if (tabStore.locateTab(tabId, sourceNodeId)) {
                 tabStore.moveTab(sourceNodeId, tabId, targetNodeId, targetTabIndex);
             }
             set((state) => {
                 const sourceEmpty = isEditorGroupPlacementEmpty(sourceNodeId);
                 if (sourceEmpty) {
+                    removeEmptyEditorGroupIfNeeded(state, sourceNodeId, targetNodeId);
+                }
+                state.activeEditorGroupId = targetNodeId;
+                ensureValidActiveEditorGroup(state);
+            });
+        },
+
+        moveTabs: (sourceNodeId, tabIds, targetNodeId, targetTabIndex) => {
+            if (tabIds.length === 0) return;
+            useEditorTabStore.getState().moveTabs(sourceNodeId, tabIds, targetNodeId, targetTabIndex);
+            set((state) => {
+                if (isEditorGroupPlacementEmpty(sourceNodeId)) {
                     removeEmptyEditorGroupIfNeeded(state, sourceNodeId, targetNodeId);
                 }
                 state.activeEditorGroupId = targetNodeId;
@@ -506,8 +507,6 @@ export const useLayoutStore = create<LayoutState>()(
     }))
 );
 
-// Bootstrap tab placements from initial layout nodes on module load.
+// Initialize empty tab placements for editor groups in the initial layout.
 const initialNodes = useLayoutStore.getState().nodes;
-useEditorTabStore.getState().importFromLayoutNodes(initialNodes);
-useEditorTabStore.getState().stripEmbeddedTabsFromNodes(initialNodes);
 reconcileEditorTabPlacements(initialNodes);

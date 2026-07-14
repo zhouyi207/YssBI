@@ -128,6 +128,34 @@ impl ProjectState {
         self.add_graph_with_existing_names(graph_name, graph_kind, Vec::new())
     }
 
+    /// Create a graph with a name unique across loaded and persisted peers.
+    pub fn create_graph(&self, graph_name: &str, graph_kind: GraphKind) -> Result<GraphInstance, String> {
+        let persisted_names = match self.get_path() {
+            Some(path) => read_project_index(&path)
+                .map_err(|error| error.to_string())?
+                .graphs
+                .into_iter()
+                .filter(|graph| graph.graph_type == GraphDocumentKind::from(&graph_kind))
+                .map(|graph| graph.name)
+                .collect(),
+            None => Vec::new(),
+        };
+        Ok(self.add_graph_with_existing_names(graph_name, graph_kind, persisted_names))
+    }
+
+    /// Duplicate a graph file in the current project and return its allocated resource path.
+    pub fn duplicate_persisted_graph(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Result<GraphResourcePath, String> {
+        let project_path = self
+            .get_path()
+            .ok_or_else(|| "项目尚未加载".to_string())?;
+        crate::project::duplicate_project_graph_file(&project_path, graph_path)
+            .map(|document| document.graph.resource_path)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn remove_graph(&self, graph_path: &GraphResourcePath) -> Option<GraphInstance> {
         let removed = self.project_data.write().unwrap().graphs.remove(graph_path);
         if removed.as_ref().is_some_and(|g| g.kind == GraphKind::Function) {

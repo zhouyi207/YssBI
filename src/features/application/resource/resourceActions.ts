@@ -1,5 +1,6 @@
-import { useGraphDataStore, useGraphMetaStore, useProjectIOStore, useDatabaseStore } from '@/features/core/dataStore';
+import { useDatabaseStore } from '@/features/core/dataStore';
 import {
+  commitAfterCommand,
   graphResourceRef,
   normalizeBackendResourceMeta,
   useResourceStore,
@@ -14,8 +15,8 @@ import { deleteVariableAction, renameVariableAction } from '@/features/applicati
 
 export type { GraphResourceKind };
 
-export async function commitFileFirstResourceIndex(): Promise<void> {
-  await useProjectIOStore.getState().refreshResourceIndex();
+export async function commitFileFirstResourceIndex(): Promise<boolean> {
+  return commitAfterCommand();
 }
 
 export async function renameResource(ref: ResourceRef, nextName: string): Promise<void> {
@@ -72,10 +73,6 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
   if (ref.kind === 'event' || ref.kind === 'function') {
     await closeEditorTab(ref.id, undefined, true);
     await GraphService.removeGraph(ref.id);
-    useGraphDataStore.getState().clearGraph(ref.id);
-    useGraphMetaStore.getState().deleteGraph(ref.id);
-    useResourceStore.getState().removeResource(ref);
-    await commitFileFirstResourceIndex();
     return;
   }
 

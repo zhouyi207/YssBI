@@ -7,8 +7,10 @@ export const DRAG_OVER_OPEN_TAB_MS = 1500;
 
 let hoverTimer: ReturnType<typeof setTimeout> | null = null;
 let hoverKey: string | null = null;
+let hoverSession = 0;
 
 export function clearTabDragHoverOpen(): void {
+  hoverSession += 1;
   if (hoverTimer) {
     clearTimeout(hoverTimer);
     hoverTimer = null;
@@ -34,8 +36,10 @@ export function scheduleTabDragHoverOpen(pointerX: number, pointerY: number): vo
 
   clearTabDragHoverOpen();
   hoverKey = key;
+  const session = hoverSession;
   hoverTimer = setTimeout(() => {
     hoverTimer = null;
+    if (session !== hoverSession) return;
     const tab = useEditorTabStore.getState().resolveTab(hovered.tabId);
     if (!tab) return;
     if (getEditorGroupActiveTabId(hovered.groupId) === hovered.tabId) return;

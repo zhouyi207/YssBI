@@ -51,12 +51,6 @@ export interface ResourceChangedPayload {
     data: BackendProjectResourceMeta;
 }
 
-export interface ResourceDeletedPayload {
-    id: string;
-    kind: ResourceKind;
-    source?: 'command' | 'watcher';
-}
-
 export interface ProjectIndexInvalidatedPayload {
     source: string;
     version: number;
@@ -169,7 +163,7 @@ export type BackendEventType =
     | 'FunctionUpdated' | 'FunctionDeleted'
     | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
     | 'DataFrameCreated' | 'DataFrameDeleted' | 'DataFrameSchemaUpdated'
-    | 'ResourceChanged' | 'ResourceDeleted' | 'GraphResourceMoved' | 'ProjectIndexInvalidated'
+    | 'ResourceChanged' | 'GraphResourceMoved' | 'ProjectIndexInvalidated'
     | 'NodeCreated' | 'NodesBatchCreated' | 'NodeUpdated' | 'NodeDeleted' | 'NodesBatchDeleted'
     | 'NodePositionsUpdated' | 'NodePinsUpdated' | 'PinTypesInferred' | 'RuntimeSourcesInvalidated'
     | 'ConnectionCreated' | 'ConnectionDeleted' | 'ConnectionsBatchDeleted' | 'ConnectionsBatchCreated';
@@ -189,7 +183,6 @@ export interface BackendEventPayloadMap {
     DataFrameDeleted: DataFrameDeletedPayload;
     DataFrameSchemaUpdated: DataFrameSchemaUpdatedPayload;
     ResourceChanged: ResourceChangedPayload;
-    ResourceDeleted: ResourceDeletedPayload;
     GraphResourceMoved: GraphResourceMovedPayload;
     ProjectIndexInvalidated: ProjectIndexInvalidatedPayload;
     NodeCreated: NodeCreatedPayload;
