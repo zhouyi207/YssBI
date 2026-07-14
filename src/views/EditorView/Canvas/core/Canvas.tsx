@@ -19,7 +19,6 @@ import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
 
-const selectGestureType = (state: { gesture: EditorGesture }) => state.gesture?.type ?? null;
 const selectActivePin = (state: { gesture: EditorGesture }) =>
   getConnectGesture(state.gesture)?.startPin ?? null;
 
@@ -56,7 +55,6 @@ export default function Canvas({ interactive = true }: CanvasProps) {
     createNode,
   } = useEditorGroup({ withCanvasPointerLoop: interactive });
 
-  const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);
 
   const canvasElementRef = useRef<HTMLDivElement>(null);
@@ -90,11 +88,10 @@ export default function Canvas({ interactive = true }: CanvasProps) {
     useShallow((s) => (activeTabId ? s.getGraphNodeIds(activeTabId) : EMPTY_NODE_IDS)),
   );
 
-  const { visibleNodeIds, getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
+  const { getPinWorldPos, getCanvasLocalPoint } = useCanvasViewport(
     canvasElementRef,
     groupId,
     activeTabId,
-    interactive ? gestureType : null,
   );
   useCanvasWheelZoom(canvasElementRef, viewportScope);
 
@@ -181,7 +178,6 @@ export default function Canvas({ interactive = true }: CanvasProps) {
             dimmed={isDraggingPin}
           />
           {graphNodeIds.map((nodeId: string) => {
-            if (!visibleNodeIds.has(nodeId)) return null;
             const isSelected = interactive && selectedNodeIdsSet.has(nodeId);
             return (
               <CanvasNode
