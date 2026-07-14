@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
-import { activateEditorGroup } from './switchEditorTab';
+import { activateEditorGroup, focusEditorGroupSync } from './switchEditorTab';
 import { activateGraphTab } from './activateGraphTab';
 
 vi.mock('./activateGraphTab', () => ({
@@ -50,5 +50,12 @@ describe('editor group activation', () => {
 
     expect(useLayoutStore.getState().activeEditorGroupId).toBe('group-b');
     expect(activateGraphTab).toHaveBeenCalledWith('events/B.yssbi-event', 'group-b');
+  });
+
+  it('focusEditorGroupSync updates layout focus before graph hydrate', () => {
+    focusEditorGroupSync('group-b');
+
+    expect(useLayoutStore.getState().activeEditorGroupId).toBe('group-b');
+    expect(activateGraphTab).not.toHaveBeenCalled();
   });
 });

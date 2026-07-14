@@ -70,6 +70,7 @@ export const DEFAULT_EDITOR: EditorSettings = {
     closeEmptyGroups: true,
     splitSizing: 'auto',
     doubleClickTabToToggleEditorGroupSizes: 'maximize',
+    dragToOpenWindow: true,
 };
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {

@@ -84,4 +84,18 @@ describe('workbenchSidebarDropSurface', () => {
     expect(findWorkbenchChromePartAtPointer(20, 20)).toBe('panel');
     expect(isSidebarItemDropAllowedAtPointer(20, 20)).toBe(false);
   });
+
+  it('rejects detail chrome for sidebar item drops', () => {
+    const detail = {
+      closest: (selector: string) => (
+        selector === `[${WORKBENCH_CHROME_PART_ATTR}]` ? detail : null
+      ),
+      getAttribute: () => 'detail',
+    };
+
+    mockElementsFromPoint(() => [detail as unknown as Element]);
+
+    expect(findWorkbenchChromePartAtPointer(30, 30)).toBe('detail');
+    expect(isSidebarItemDropAllowedAtPointer(30, 30)).toBe(false);
+  });
 });

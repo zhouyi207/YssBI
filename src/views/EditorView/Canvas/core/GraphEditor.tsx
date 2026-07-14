@@ -18,10 +18,7 @@ export const GraphEditor = memo(function GraphEditor() {
     const resolvedTabId = tabs.length > 0 ? activeTabId : null;
 
     return (
-        <div
-            className={`flex flex-col w-full h-full overflow-hidden ${isActiveGroup ? '' : 'pointer-events-none'}`}
-            aria-hidden={!isActiveGroup || undefined}
-        >
+        <div className="flex flex-col w-full h-full overflow-hidden">
             <div className="flex-1 relative overflow-hidden">
                 <CanvasDropZone groupId={nodeId ?? DEFAULT_EDITOR_GROUP_ID} interactive={isActiveGroup}>
                     {resolvedTabId ? (

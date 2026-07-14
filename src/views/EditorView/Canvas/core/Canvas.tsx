@@ -54,7 +54,7 @@ export default function Canvas({ interactive = true }: CanvasProps) {
     resetPinValue,
     setSelectedNodeIds,
     createNode,
-  } = useEditorGroup({ withCanvasInteraction: interactive });
+  } = useEditorGroup({ withCanvasPointerLoop: interactive });
 
   const gestureType = useGestureStore(selectGestureType);
   const gesturePinData = useGestureStore(selectActivePin);

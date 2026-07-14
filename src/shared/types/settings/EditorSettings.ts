@@ -19,4 +19,6 @@ export interface EditorSettings {
     /** VS Code `workbench.editor.splitSizing` */
     splitSizing?: EditorSplitSizingMode;
     doubleClickTabToToggleEditorGroupSizes?: DoubleClickTabToToggleEditorGroupSizes;
+    /** VS Code `workbench.editor.dragToOpenWindow` */
+    dragToOpenWindow?: boolean;
 }

@@ -31,7 +31,7 @@ export const LogWindow = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[var(--workbench-bg)] text-foreground overflow-hidden">
+    <div className="flex flex-col h-screen bg-[var(--workbench-bg)] text-foreground overflow-hidden" data-yssbi-workbench>
       {/* 自定义标题栏 - 与主窗口一致 */}
       <WindowChrome
         childWindow

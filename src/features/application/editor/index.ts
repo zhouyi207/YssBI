@@ -23,7 +23,13 @@ export {
   switchEditorTab,
   activateEditorGroup,
   activateCurrentEditorTab,
+  focusEditorGroupSync,
+  hydrateEditorGroup,
 } from './switchEditorTab';
+export {
+  prepareEditorGroupForInteraction,
+  shouldSkipEditorGroupShellActivation,
+} from './editorGroupInteraction';
 export {
   switchTab,
   closeTab,

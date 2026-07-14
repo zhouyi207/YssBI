@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useCanvasInteraction } from '@/features/core/canvas';
-import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { prepareEditorGroupForInteraction } from '@/features/application/editor/editorGroupInteraction';
 import {
   useEditorSessionCommandsContext,
   useEditorSessionSharedContext,
@@ -19,24 +18,23 @@ import {
 
 export type UseEditorGroupOptions = {
   /** Mount the global canvas pointer loop. Only the active group's Canvas should pass true. */
-  withCanvasInteraction?: boolean;
+  withCanvasPointerLoop?: boolean;
   /** Subscribe to transient canvas UI (context menu, pending connection). */
   withCanvasUi?: boolean;
 };
 
-const noopPointer = () => undefined;
 const noopConnectPins = async () => {};
 
 /**
  * Group-scoped editor API: stable commands + shared resources + per-group workspace.
- * Preview canvases skip canvas UI subscriptions to avoid fan-out on context menu changes.
+ * Canvas handlers are always wired so preview groups can activate on first pointerdown.
  */
 export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSession {
   const commands = useEditorSessionCommandsContext();
   const shared = useEditorSessionSharedContext();
   const workspace = useEditorGroupWorkspace();
-  const withCanvasInteraction = options?.withCanvasInteraction ?? false;
-  const withCanvasUi = options?.withCanvasUi ?? withCanvasInteraction;
+  const withCanvasPointerLoop = options?.withCanvasPointerLoop ?? false;
+  const withCanvasUi = options?.withCanvasUi ?? withCanvasPointerLoop;
 
   const ui = useOptionalEditorSessionUi(withCanvasUi);
 
@@ -45,47 +43,45 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
     activeTabIdRef: commands.activeTabIdRef,
     viewportRef: commands.viewportRef,
     setSelectedNodeIds: commands.setSelectedNodeIds,
-    enabled: withCanvasInteraction,
+    enabled: withCanvasPointerLoop,
   });
 
   const { groupId } = workspace;
 
-  const ensureActiveGroup = useCallback(() => {
-    if (useLayoutStore.getState().activeEditorGroupId !== groupId) {
-      void activateEditorGroup(groupId);
-    }
+  const prepareForInteraction = useCallback(() => {
+    prepareEditorGroupForInteraction(groupId);
   }, [groupId]);
 
   const wrappedOnCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      ensureActiveGroup();
+      prepareForInteraction();
       canvasInteraction.onCanvasPointerDown(e, groupId);
     },
-    [ensureActiveGroup, canvasInteraction.onCanvasPointerDown, groupId],
+    [prepareForInteraction, canvasInteraction.onCanvasPointerDown, groupId],
   );
 
   const wrappedOnNodePointerDown = useCallback(
     (nodeId: string, e: React.PointerEvent) => {
-      ensureActiveGroup();
+      prepareForInteraction();
       canvasInteraction.onNodePointerDown(nodeId, e, groupId);
     },
-    [ensureActiveGroup, canvasInteraction.onNodePointerDown, groupId],
+    [prepareForInteraction, canvasInteraction.onNodePointerDown, groupId],
   );
 
   const wrappedOnPinPointerDown = useCallback(
     (pin: Pin, e: React.PointerEvent) => {
-      ensureActiveGroup();
+      prepareForInteraction();
       canvasInteraction.onPinPointerDown(pin, e, groupId);
     },
-    [ensureActiveGroup, canvasInteraction.onPinPointerDown, groupId],
+    [prepareForInteraction, canvasInteraction.onPinPointerDown, groupId],
   );
 
   const wrappedSetCanvas = useCallback(
     (updater: EditorViewport | ((prev: EditorViewport) => EditorViewport)) => {
-      ensureActiveGroup();
+      prepareForInteraction();
       commands.setCanvas(updater);
     },
-    [ensureActiveGroup, commands.setCanvas],
+    [prepareForInteraction, commands.setCanvas],
   );
 
   const workspaceSlice = useMemo(
@@ -100,14 +96,14 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
 
   const interaction = useMemo(
     (): EditorGroupInteractionSlice => ({
-      onCanvasPointerDown: withCanvasInteraction ? wrappedOnCanvasPointerDown : noopPointer,
-      onNodePointerDown: withCanvasInteraction ? wrappedOnNodePointerDown : noopPointer,
-      onPinPointerDown: withCanvasInteraction ? wrappedOnPinPointerDown : noopPointer,
-      connectPins: withCanvasInteraction ? canvasInteraction.connectPins : noopConnectPins,
+      onCanvasPointerDown: wrappedOnCanvasPointerDown,
+      onNodePointerDown: wrappedOnNodePointerDown,
+      onPinPointerDown: wrappedOnPinPointerDown,
+      connectPins: withCanvasPointerLoop ? canvasInteraction.connectPins : noopConnectPins,
       setCanvas: wrappedSetCanvas,
     }),
     [
-      withCanvasInteraction,
+      withCanvasPointerLoop,
       wrappedOnCanvasPointerDown,
       wrappedOnNodePointerDown,
       wrappedOnPinPointerDown,

@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase, VscGraphLine, VscLibrary, VscTerminal } from "react-icons/vsc";
-import { useLayoutStore, type SidebarTabId, isSidebarTabId } from "@/features/core/layout/layoutStore";
+import { useLayoutStore, SIDEBAR_NODE_ID, type SidebarTabId, isSidebarTabId } from "@/features/core/layout/layoutStore";
+import { WORKBENCH_CHROME_PART_ATTR } from "@/features/core/layout/workbenchSidebarDropSurface";
 import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -59,6 +60,7 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   return (
     <div
       ref={activityBarRef}
+      {...{ [WORKBENCH_CHROME_PART_ATTR]: SIDEBAR_NODE_ID }}
       className={`w-12 h-full bg-[var(--sidebar-bg)] flex flex-col items-center py-2 shrink-0 relative ${
         side === 'right' ? 'border-l border-border' : 'border-r border-border'
       }`}

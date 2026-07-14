@@ -15,7 +15,10 @@ import { viewRegistry } from './viewRegistry';
 import { GroupContext } from '@/features/core/editor';
 import { useEditorGroupTabStrip } from '@/features/core/editor/hooks/useEditorGroupTabStrip';
 import { TabBar } from '../Layout/TabBar';
-import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
+import {
+  prepareEditorGroupForInteraction,
+  shouldSkipEditorGroupShellActivation,
+} from '@/features/application/editor/editorGroupInteraction';
 import { useEditorDropPreviewStore } from '@/features/application/editor/editorDropPreviewStore';
 
 /**
@@ -245,12 +248,15 @@ const EditorGroupFocusShell = memo(function EditorGroupFocusShell({
     return (
         <GroupContext.Provider value={nodeId}>
             <div
-                onPointerDown={(e) => {
+                onPointerDownCapture={(e) => {
                     if (e.button !== 0) return;
-                    if ((e.target as HTMLElement).closest(
-                        '[data-tab-id], [data-tab-strip], [data-tabbar-drop], [data-editor-group-actions]',
-                    )) return;
-                    void activateEditorGroup(nodeId);
+                    if (shouldSkipEditorGroupShellActivation(e.target)) return;
+                    prepareEditorGroupForInteraction(nodeId);
+                }}
+                onContextMenuCapture={(e) => {
+                    if (shouldSkipEditorGroupShellActivation(e.target)) return;
+                    e.preventDefault();
+                    prepareEditorGroupForInteraction(nodeId);
                 }}
                 className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isDragTarget ? 'ring-1 ring-inset ring-primary/40' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
                 id={`layout-node-${nodeId}`}

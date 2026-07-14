@@ -15,6 +15,7 @@ export interface EditorPartOptions {
   closeEmptyGroups: boolean;
   splitSizing: EditorSplitSizingMode;
   doubleClickTabToToggleEditorGroupSizes: DoubleClickTabToToggleEditorGroupSizes;
+  dragToOpenWindow: boolean;
 }
 
 export const DEFAULT_EDITOR_PART_OPTIONS: EditorPartOptions = {
@@ -24,6 +25,7 @@ export const DEFAULT_EDITOR_PART_OPTIONS: EditorPartOptions = {
   closeEmptyGroups: true,
   splitSizing: 'auto',
   doubleClickTabToToggleEditorGroupSizes: 'maximize',
+  dragToOpenWindow: true,
 };
 
 export function readEditorPartOptions(): EditorPartOptions {
@@ -37,6 +39,7 @@ export function readEditorPartOptions(): EditorPartOptions {
     doubleClickTabToToggleEditorGroupSizes:
       editor.doubleClickTabToToggleEditorGroupSizes
       ?? DEFAULT_EDITOR_PART_OPTIONS.doubleClickTabToToggleEditorGroupSizes,
+    dragToOpenWindow: editor.dragToOpenWindow ?? DEFAULT_EDITOR_PART_OPTIONS.dragToOpenWindow,
   };
 }
 

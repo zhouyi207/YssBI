@@ -2,20 +2,16 @@ import { useEffect } from 'react';
 import { useDndMonitor, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
 import {
   isEditorGroupDragData,
-  isGraphResourceDragPayload,
   isSidebarSpawnDrag,
   isTabDragData,
   parseCanvasDragPayload,
-  type GraphResourceDragPayload,
 } from '@/features/core/dnd';
 import { resolveEditorDropHitAtClientPoint } from '@/features/core/layout/editorDropPreview';
 import {
-  findCanvasDropGroupId,
   findEditorGroupAtPointer,
   findTabBarTargetFromPointer,
   type TabBarInsertPreviewContext,
 } from '@/features/core/layout/editorDropTarget';
-import { isSidebarItemDropAllowedAtPointer } from '@/features/core/layout/workbenchSidebarDropSurface';
 import {
   preferSplitVerticallyFromDirection,
   readEditorPartOptions,
@@ -32,10 +28,12 @@ import {
   refreshDropPreviewStaleGuard,
 } from './editorDropPreviewStaleGuard';
 import { resolveTabDragTransferIds } from '@/features/core/layout/tabSelection';
-import { canDropFunctionIntoEventGraph } from '@/features/application/editor/canvasDrop';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
+import {
+  updateSidebarSpawnDropPreviewFromDragMove,
+} from './sidebarSpawnDropPreview';
 
 function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: number; y: number } | null {
   const activator = event.activatorEvent;
@@ -81,14 +79,6 @@ function splitHitOptions(
     enableSplitting: resolveEnableSplittingOnDrag(partOptions.splitOnDragAndDrop, modifiers),
     isDraggingGroup,
   };
-}
-
-function readCanvasDropGroupIdFromOver(over: DragMoveEvent['over'] | null): string | null {
-  const overData = over?.data.current;
-  if (overData && typeof overData === 'object' && overData !== null && 'groupId' in overData) {
-    return String((overData as { groupId: string }).groupId);
-  }
-  return null;
 }
 
 function resolveTabDragTitle(tabId: string, sourceGroupId: string): string {
@@ -167,11 +157,6 @@ export function clearEditorDragSession(): void {
   cancelDropPreviewStaleGuard();
   clearTabBarDragSession();
   clearTabDragHoverOpen();
-  useEditorDropPreviewStore.getState().clearPreview();
-}
-
-function clearSidebarSpawnDropPreviews(): void {
-  useTabBarReorderStore.getState().clearPreview();
   useEditorDropPreviewStore.getState().clearPreview();
 }
 
@@ -270,64 +255,6 @@ function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEven
   updateEditorDropPreviewFromPointer(event, pointer.x, pointer.y);
 }
 
-function updateGraphResourceDropPreviewFromDragMove(
-  event: DragMoveEvent | DragStartEvent,
-  activeData: GraphResourceDragPayload,
-): void {
-  const pointer = pointerFromDragEvent(event);
-  if (!pointer) {
-    useEditorDropPreviewStore.getState().clearPreview();
-    return;
-  }
-
-  const modifiers = dragModifiersFromEvent(event);
-
-  if (findTabBarTargetFromPointer(pointer.x, pointer.y)) {
-    useEditorDropPreviewStore.getState().clearPreview();
-    return;
-  }
-
-  const targetGroupId = findEditorGroupAtPointer(pointer.x, pointer.y);
-  if (
-    activeData.sidebarResource.type === 'function'
-    && targetGroupId
-    && canDropFunctionIntoEventGraph(targetGroupId, activeData.sidebarResource, true)
-  ) {
-    const resolved = resolveEditorDropHitAtClientPoint(
-      targetGroupId,
-      pointer.x,
-      pointer.y,
-      splitHitOptions(event, false),
-    );
-    if (resolved) {
-      useEditorDropPreviewStore.getState().setPreview({
-        kind: 'function-into-event',
-        targetGroupId,
-        rect: resolved.rect,
-        shiftHeld: modifiers.shiftKey,
-      });
-      return;
-    }
-  }
-
-  const groupFromCanvas = findCanvasDropGroupId(
-    pointer.x,
-    pointer.y,
-    readCanvasDropGroupIdFromOver('over' in event ? event.over : null),
-  );
-  if (!groupFromCanvas && !findEditorGroupAtPointer(pointer.x, pointer.y)) {
-    useEditorDropPreviewStore.getState().clearPreview();
-    return;
-  }
-
-  updateEditorDropPreviewFromPointer(
-    event,
-    pointer.x,
-    pointer.y,
-    activeData.sidebarResource.name,
-  );
-}
-
 function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
   const pointer = pointerFromDragEvent(event);
@@ -337,10 +264,8 @@ function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
   }
 
   if (isSidebarSpawnDrag(activeData)) {
-    if (!pointer || !isSidebarItemDropAllowedAtPointer(pointer.x, pointer.y)) {
-      clearSidebarSpawnDropPreviews();
-      return;
-    }
+    updateSidebarSpawnDropPreviewFromDragMove(event);
+    return;
   }
 
   if (isTabDragData(activeData) || isEditorGroupDragData(activeData)) {
@@ -351,21 +276,6 @@ function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
     } else {
       clearTabDragHoverOpen();
     }
-    return;
-  }
-
-  if (isGraphResourceDragPayload(activeData)) {
-    if (pointer && findTabBarTargetFromPointer(pointer.x, pointer.y)) {
-      useEditorDropPreviewStore.getState().clearPreview();
-      updateTabBarInsertPreviewFromPointer(pointer.x, pointer.y, {
-        draggedTabId: null,
-        sourceGroupId: null,
-      });
-      return;
-    }
-
-    useTabBarReorderStore.getState().clearPreview();
-    updateGraphResourceDropPreviewFromDragMove(event, activeData);
     return;
   }
 

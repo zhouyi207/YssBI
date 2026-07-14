@@ -293,11 +293,13 @@ export const Pin: React.FC<PinProps> = (props) => {
           data-pin-id={id}
           onContextMenu={handleContextMenu}
           onPointerDown={(e) => {
-            if (onPinPointerDown) {
-              e.stopPropagation();
-              e.preventDefault();
-              onPinPointerDown(e, props);
+            if (contextMenu && e.button === 0) {
+              setContextMenu(null);
             }
+            if (!onPinPointerDown) return;
+            e.stopPropagation();
+            e.preventDefault();
+            onPinPointerDown(e, props);
           }}
         >
       {/* Pin Icon Container - 扩大交互区域 */}

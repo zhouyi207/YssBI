@@ -24,10 +24,6 @@ vi.mock('@/features/core/editor/hooks/useEditorGroupTabStrip', () => ({
   useEditorGroupTabStrip: () => ({ tabs: [], activeTabId: undefined }),
 }));
 
-vi.mock('@dnd-kit/core', () => ({
-  useDroppable: () => ({ setNodeRef: vi.fn() }),
-}));
-
 describe('LayoutNodeRenderer maximize-hidden groups', () => {
   let host: HTMLDivElement;
   let root: Root;

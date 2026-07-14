@@ -42,8 +42,8 @@ export interface LogPanelController {
   handleClose: () => void;
   handleSelectLog: (index: number) => void;
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
-  leadingDragProps: ReturnType<typeof useLogPanelDetach>['leadingDragProps'];
-  dragPreviewPortal: ReturnType<typeof useLogPanelDetach>['dragPreviewPortal'];
+  dragHandleRef: ReturnType<typeof useLogPanelDetach>['dragHandleRef'];
+  dragHandleProps: ReturnType<typeof useLogPanelDetach>['dragHandleProps'];
 }
 
 export function useLogPanelController(variant: LogPanelVariant): LogPanelController {
@@ -66,7 +66,7 @@ export function useLogPanelController(variant: LogPanelVariant): LogPanelControl
   const filterPopoverRef = useRef<HTMLDivElement>(null);
   const loadMoreStateRef = useRef({ hasMore: false, loading, loadMoreLogs });
 
-  const { leadingDragProps, dragPreviewPortal } = useLogPanelDetach(variant);
+  const { dragHandleRef, dragHandleProps } = useLogPanelDetach(variant);
 
   const filteredLogs = useMemo(() => applyLogFilter(logs, filter), [logs, filter]);
   const selectedIndex = selectedLog
@@ -237,7 +237,7 @@ export function useLogPanelController(variant: LogPanelVariant): LogPanelControl
     handleClose,
     handleSelectLog,
     handleScroll,
-    leadingDragProps,
-    dragPreviewPortal,
+    dragHandleRef,
+    dragHandleProps,
   };
 }

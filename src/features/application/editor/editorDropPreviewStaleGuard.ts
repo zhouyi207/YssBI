@@ -3,7 +3,7 @@ import {
   findEditorGroupAtPointer,
   findTabBarTargetFromPointer,
 } from '@/features/core/layout/editorDropTarget';
-import { isSidebarItemDropAllowedAtPointer } from '@/features/core/layout/workbenchSidebarDropSurface';
+import { isSidebarSpawnDropAllowedAtPointer } from '@/features/application/editor/sidebarSpawnDropPolicy';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 
 /** VS Code `onEditorAreaLeave` — clear split overlay after pointer leaves drop targets. */
@@ -13,7 +13,7 @@ let staleTimer: ReturnType<typeof setTimeout> | null = null;
 
 function hasEditorDropTargetAt(clientX: number, clientY: number): boolean {
   if (useSidebarDragStore.getState().activeDrag) {
-    return isSidebarItemDropAllowedAtPointer(clientX, clientY);
+    return isSidebarSpawnDropAllowedAtPointer(clientX, clientY);
   }
 
   return (

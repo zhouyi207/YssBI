@@ -15,11 +15,7 @@ export function LogTypeTabStrip() {
   const setActiveLogTypeTab = useLogStore((s) => s.setActiveLogTypeTab);
 
   return (
-    <div
-      className="flex h-full shrink-0 items-end gap-0"
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
+    <div className="flex h-full shrink-0 items-end gap-0">
       {LOG_TYPE_TAB_ORDER.map((tab) => {
         const active = tab === activeLogTypeTab;
         return (

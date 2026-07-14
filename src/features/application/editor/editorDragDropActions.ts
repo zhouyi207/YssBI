@@ -27,14 +27,15 @@ import { useSidebarDragStore, canvasDropHandlerStore } from '@/features/core/sid
 import { useModifierKeyStore } from '@/features/core/keyboard';
 import { isEditorDragCopyOperation } from '@/features/core/layout/editorDragModifiers';
 import { findEditorGroupAtPointer } from '@/features/core/layout/editorDropTarget';
-import { isSidebarItemDropAllowedAtPointer } from '@/features/core/layout/workbenchSidebarDropSurface';
+import type { SidebarDragPayload } from '@/features/core/dnd';
+import { isSidebarSpawnDropAllowed } from '@/features/application/editor/sidebarSpawnDropPolicy';
 import {
   isTabbarDrop,
   isEditorGroupDragData,
+  isGraphResourceDragPayload,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
   isTabDragData,
-  getSidebarResourceFromDrag,
   parseCanvasDragPayload,
   isSidebarSpawnDrag,
 } from '@/features/core/dnd';
@@ -80,41 +81,32 @@ function resolveCanvasDropGroupId(
   return null;
 }
 
-function isSidebarSpawnDropAllowed(
-  activeData: ReturnType<typeof parseCanvasDragPayload>,
-  pointer: { x: number; y: number } | null,
-): pointer is { x: number; y: number } {
-  if (!isSidebarSpawnDrag(activeData) || !pointer) return false;
-  return isSidebarItemDropAllowedAtPointer(pointer.x, pointer.y);
-}
-
-export async function executeEditorDragEnd(
+async function executeSidebarSpawnDragEnd(
   event: DragEndEvent,
+  activeData: SidebarDragPayload,
   options: { finishSidebarDrag: () => void },
 ): Promise<void> {
-  const { active, over } = event;
-  const activeData = parseCanvasDragPayload(active.data.current);
-  const overData = over?.data.current;
-  const sidebarResource = getSidebarResourceFromDrag(activeData);
+  const overData = event.over?.data.current;
   const preview = useEditorDropPreviewStore.getState().preview;
   const modifiers = readEditorDragModifiers(event);
-  const isCopy = isEditorDragCopyOperation(modifiers);
   const dropPointer = resolveDropPointerFromDragEnd(event);
   const capturedSidebarDrag = useSidebarDragStore.getState().activeDrag;
 
-  if (sidebarResource) {
-    options.finishSidebarDrag();
-    if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
-      clearEditorDragSession();
-      return;
-    }
+  options.finishSidebarDrag();
+  if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
+    clearEditorDragSession();
+    return;
+  }
+
+  if (isGraphResourceDragPayload(activeData)) {
+    const { sidebarResource } = activeData;
     if (isTabbarDrop(overData)) {
       void handleGraphResourceDrop(
         sidebarResource,
         overData.targetNodeId,
         { insertIndex: resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex) },
       ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
-    } else {
+    } else if (preview?.kind === 'function-into-event') {
       const groupId = resolveCanvasDropGroupId(event, preview);
       const dropState = resolveDropIntoEditorDragState(
         sidebarResource,
@@ -128,34 +120,50 @@ export async function executeEditorDragEnd(
           return;
         }
       }
-      if (preview) {
-        void handleGraphResourceDrop(
-          sidebarResource,
-          preview.targetGroupId,
-          preview.kind === 'split' ? { edge: preview.edge } : undefined,
-        ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
-      }
+    } else if (preview?.kind === 'split') {
+      void handleGraphResourceDrop(
+        sidebarResource,
+        preview.targetGroupId,
+        { edge: preview.edge },
+      ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
+    } else if (preview?.kind === 'merge') {
+      void handleGraphResourceDrop(
+        sidebarResource,
+        preview.targetGroupId,
+      ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
     }
     clearEditorDragSession();
     return;
   }
 
   if (isNodeTemplateDragData(activeData)) {
-    const dragState = useSidebarDragStore.getState().activeDrag;
-    options.finishSidebarDrag();
-    if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
-      clearEditorDragSession();
-      return;
-    }
     const groupId = resolveCanvasDropGroupId(event, preview);
-    if (groupId && dragState && isNodeTemplateDragState(dragState)) {
+    if (groupId && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
       void activateEditorGroup(groupId);
       const handler = canvasDropHandlerStore.getHandler(groupId);
       if (handler) {
-        await handler(dragState, modifiers);
+        await handler(capturedSidebarDrag, modifiers);
       }
     }
-    clearEditorDragSession();
+  }
+
+  clearEditorDragSession();
+}
+
+export async function executeEditorDragEnd(
+  event: DragEndEvent,
+  options: { finishSidebarDrag: () => void },
+): Promise<void> {
+  const { active, over } = event;
+  const activeData = parseCanvasDragPayload(active.data.current);
+  const overData = over?.data.current;
+  const preview = useEditorDropPreviewStore.getState().preview;
+  const modifiers = readEditorDragModifiers(event);
+  const isCopy = isEditorDragCopyOperation(modifiers);
+  const dropPointer = resolveDropPointerFromDragEnd(event);
+
+  if (isSidebarSpawnDrag(activeData)) {
+    await executeSidebarSpawnDragEnd(event, activeData, options);
     return;
   }
 

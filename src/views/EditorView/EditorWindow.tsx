@@ -61,7 +61,7 @@ function EditorWindowReady() {
   const activityBarOnRight = activityBar.side === "right";
 
   return (
-    <div className="flex flex-col w-full h-screen">
+    <div className="flex flex-col w-full h-screen" data-yssbi-workbench>
       {!zenMode ? <Menubar /> : null}
       <div className="flex flex-1 overflow-hidden isolate">
         {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}

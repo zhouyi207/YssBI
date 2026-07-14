@@ -9,12 +9,41 @@ import { applyEditorTabSelection } from './editorTabSelection';
 import { ensureDetailVisible } from './ensureDetailVisible';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
 
-async function focusEditorGroup(groupId: string): Promise<void> {
+let editorGroupSessionChain: Promise<void> = Promise.resolve();
+
+function scheduleSuspendPreviousGroup(prevGroupId: string): void {
+  editorGroupSessionChain = editorGroupSessionChain
+    .then(() => suspendEditorGroupGraphSession(prevGroupId))
+    .catch(() => undefined);
+}
+
+/**
+ * VS Code MOUSE_DOWN — update active editor group immediately.
+ * Previous group session suspend runs on a serialized background chain.
+ */
+export function focusEditorGroupSync(groupId: string): boolean {
   const prevGroupId = useLayoutStore.getState().activeEditorGroupId;
-  if (prevGroupId && prevGroupId !== groupId) {
-    await suspendEditorGroupGraphSession(prevGroupId);
-  }
+  if (prevGroupId === groupId) return false;
   useLayoutStore.getState().setActiveGroup(groupId);
+  if (prevGroupId) {
+    scheduleSuspendPreviousGroup(prevGroupId);
+  }
+  return true;
+}
+
+export async function awaitEditorGroupSessionChain(): Promise<void> {
+  await editorGroupSessionChain;
+}
+
+/** Load the group's current tab session after any pending suspend work. */
+export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
+  await editorGroupSessionChain;
+  return activateCurrentEditorTab(groupId);
+}
+
+async function focusEditorGroup(groupId: string): Promise<void> {
+  focusEditorGroupSync(groupId);
+  await editorGroupSessionChain;
 }
 
 /**
@@ -76,6 +105,6 @@ export async function activateCurrentEditorTab(groupId: string): Promise<boolean
 
 /** Activate an editor group and hydrate its current graph-backed session as one application action. */
 export async function activateEditorGroup(groupId: string): Promise<boolean> {
-  await focusEditorGroup(groupId);
-  return activateCurrentEditorTab(groupId);
+  focusEditorGroupSync(groupId);
+  return hydrateEditorGroup(groupId);
 }

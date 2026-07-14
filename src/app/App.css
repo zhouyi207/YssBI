@@ -211,6 +211,24 @@ body.row-resize * {
   cursor: ns-resize !important;
 }
 
+/* VS Code `.monaco-drag-image` — ephemeral HTML5 drag pill for workbench detach */
+.workbench-drag-image {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 12px;
+  position: absolute;
+  z-index: 1000;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  outline: 1px solid hsl(var(--ring));
+  outline-offset: -1px;
+}
+
 body.layout-sash-dragging {
   user-select: none !important;
   -webkit-user-select: none;
