@@ -218,8 +218,8 @@ describe('attachSashDrag store commits', () => {
     sash.dispatchEvent(new MouseEvent('mousedown', { clientX: 100, bubbles: true }));
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, bubbles: true }));
     window.dispatchEvent(new MouseEvent('mouseup', { clientX: 200, bubbles: true }));
-    expect(useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(600);
-    expect(useLayoutStore.getState().nodes.editor_group_2?.pixelSize).toBe(400);
+    expect(useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.6);
+    expect(useLayoutStore.getState().nodes.editor_group_2?.size).toBeCloseTo(0.4);
 
     beforeWidth = 600;
     afterWidth = 400;
@@ -227,7 +227,9 @@ describe('attachSashDrag store commits', () => {
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 250, bubbles: true }));
     window.dispatchEvent(new MouseEvent('mouseup', { clientX: 250, bubbles: true }));
 
-    expect(useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(650);
-    expect(useLayoutStore.getState().nodes.editor_group_2?.pixelSize).toBe(350);
+    expect(useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.65);
+    expect(useLayoutStore.getState().nodes.editor_group_2?.size).toBeCloseTo(0.35);
+    expect(useLayoutStore.getState().nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(useLayoutStore.getState().nodes.editor_group_2?.pixelSize).toBeUndefined();
   });
 });

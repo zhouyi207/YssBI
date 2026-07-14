@@ -100,12 +100,12 @@ Workbench chrome sashes and editor-grid sashes share `splitViewSizing.ts` / `sas
 
 | Operation | Tree (`editorGridLayout`) | Sizing (`editorGridSizing`) |
 |-----------|---------------------------|-----------------------------|
-| `addView` / tab split | `splitEditorGroupInTree` | `applyEditorGridAddViewSizing` → halve target, then `reflowEditorGridLayout` |
-| `removeView` / close empty group | `removeEditorGroupFromTree` | `applyEditorGridRemoveViewSizing` (merge reference or distribute) → `reflowEditorGridLayout` |
-| Sash drag | — | `commitSplitPairSizes` (session pixels; cleared on next reflow) |
-| Chrome/viewport change | — | `reflowEditorGridLayout` |
+| `addView` / tab split | `splitEditorGroupInTree` | `applyEditorGridAddViewSizing` → halve target, then `commitEditorGridLayoutState` |
+| `removeView` / close empty group | `removeEditorGroupFromTree` | `applyEditorGridRemoveViewSizing` (merge reference or distribute) → `commitEditorGridLayoutState` |
+| Sash drag | — | `commitSplitPairSizes` (ratio `size` only) |
+| Chrome/viewport change | — | `commitEditorGridLayoutState` |
 
-`applyEditorGridAddViewSizing` mirrors VS Code `SplitView.addView` auto/split/distribute. **`auto`** checks only **siblings in the same row/col parent** (`areViewsDistributed`: max − min ≤ **2px** on layout sizes; ratio-only groups use scaled proportions). Inserting a view **halves the target allocation** instead of inserting a default `size: 1`.
+`applyEditorGridAddViewSizing` mirrors VS Code `SplitView.addView` auto/split/distribute. **`auto`** checks only **siblings in the same row/col parent** (`areViewsDistributed`: max − min ≤ **2%** on `size` weights). Inserting a view **halves the target allocation** instead of inserting a default `size: 1`.
 
 **`editorGridMemento` persists ratio weights only** — `computeEditorGridMementoSizes` derives weights from the live tree; hydrate restores viewport-independent flex ratios.
 

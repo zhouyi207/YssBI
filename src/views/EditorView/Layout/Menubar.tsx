@@ -5,7 +5,7 @@ import { useEditorSessionCommandsContext, useEditorHistoryAvailability } from "@
 import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
-import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
+import { useActiveProjectPath } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
@@ -133,7 +133,7 @@ export function Menubar() {
     openNewWindow,
   } = useMenubar();
 
-  const currentPath = useProjectIOStore((s) => s.currentPath);
+  const currentPath = useActiveProjectPath();
   const zenMode = useLayoutStore((s) => s.zenMode);
   const saveableEditorTabId = useLayoutStore((s) => {
     const editorGroupId = resolveEditorTargetGroupId(undefined, s.nodes, s);

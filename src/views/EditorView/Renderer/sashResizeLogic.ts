@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { LayoutDirection, LayoutNode } from '@/shared/types/ui';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { EDITOR_AREA_ID, PANEL_PART_ID } from '@/features/core/layout/workbenchLayoutDefaults';
+import { EDITOR_AREA_ID, isWorkbenchChromePartId, PANEL_PART_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import {
   resolveWorkbenchPartMaxSize,
   resolveWorkbenchViewport,
@@ -32,7 +32,7 @@ import { schedulePartResizeCommit } from '@/features/core/layout/partResizeNotif
 import type { WorkbenchPartId } from '@/features/core/layout/workbenchLayoutDefaults';
 import { isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { shouldRestoreWorkbenchPartOnSashDrag } from '@/features/core/layout/workbenchPartVisibility';
-import { reflowEditorGridLayout } from '@/features/core/layout/editorGridSizing';
+import { commitEditorGridLayoutState } from '@/features/core/layout/editorGridSizing';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 export type SashAxis = 'x' | 'y';
@@ -74,7 +74,7 @@ export function layoutNodeFlexStyle(
     return { flex: '1 1 0px', minWidth: 0, minHeight: 0, overflow: 'hidden' };
   }
 
-  if (node.pixelSize != null) {
+  if (node.pixelSize != null && isWorkbenchChromePartId(node.id)) {
     return {
       flex: panelFlexBasis(node.pixelSize),
       minWidth: 0,
@@ -135,10 +135,10 @@ export function resolveSashResizeTarget(
   afterSize: number,
   panelPosition: PanelPosition = 'bottom',
 ): SashResizeTarget | null {
-  if (beforeNode?.pixelSize !== undefined) {
+  if (beforeNode && isWorkbenchChromePartId(beforeNode.id) && beforeNode.pixelSize !== undefined) {
     return panelTarget(beforeNode, beforeSize, 1, panelPosition);
   }
-  if (afterNode?.pixelSize !== undefined) {
+  if (afterNode && isWorkbenchChromePartId(afterNode.id) && afterNode.pixelSize !== undefined) {
     return panelTarget(afterNode, afterSize, -1, panelPosition);
   }
   if (!beforeNode) return null;
@@ -176,7 +176,7 @@ export function restoreAdjacentPanelVisibility(beforeNodeId: string, afterNodeId
 
   if (restored) {
     useLayoutStore.setState((state) => {
-      reflowEditorGridLayout(state.nodes);
+      commitEditorGridLayoutState(state.nodes);
     });
   }
 }

@@ -6,6 +6,7 @@
 import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData } from '@/shared/types';
 import { useProjectIOStore } from './projectIOStore';
+import { reconcileProjectPath } from './projectSession';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import type { GraphData } from '@/shared/types/store/graph';
 
@@ -17,17 +18,24 @@ export function getGraphByPath(graphPath: string): GraphData | null {
 }
 
 /**
- * 初始化时从后端同步项目状态
- * 应该在应用启动时调用一次
+ * 初始化时从后端同步项目状态（可重复调用；与 `loadProject` 合并并发）。
  *
- * - 如果 Project 已 Ready，会触发同步
- * - 如果已经 Ready，直接返回当前数据
+ * - Ready + 有 `currentPath`：轻量返回快照
+ * - Ready + 无 path 但后端有会话：全量 `loadProject` 重灌前端投影
+ * - 其它：全量 `loadProject`
  */
 export async function initProjectSync(): Promise<ProjectData | null> {
-  const { status, loadProject, exportSnapshot } = useProjectIOStore.getState();
+  const { status, currentPath, loadProject, exportSnapshot } = useProjectIOStore.getState();
 
   if (status === LoadStatus.Ready) {
-    return exportSnapshot();
+    if (currentPath) {
+      return exportSnapshot();
+    }
+    const reconciled = await reconcileProjectPath();
+    if (!reconciled) {
+      return exportSnapshot();
+    }
+    return await loadProject();
   }
 
   return await loadProject();

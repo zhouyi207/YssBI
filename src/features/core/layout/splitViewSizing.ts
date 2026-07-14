@@ -7,7 +7,7 @@ export type FlexSplitPair = {
   afterStart: number;
 };
 
-/** True when neither sibling has a fixed pixelSize — first sash drag should pixelize both. */
+/** True for workbench chrome flex pairs without fixed pixelSize (editor grid uses isEditorGridSash). */
 export function isFlexSplitPair(beforeNode: LayoutNode | undefined, afterNode: LayoutNode | undefined): boolean {
   if (!beforeNode || !afterNode) return false;
   if (beforeNode.data?.visible === false || afterNode.data?.visible === false) return false;

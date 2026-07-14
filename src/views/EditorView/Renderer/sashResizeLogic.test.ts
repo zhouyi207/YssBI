@@ -39,10 +39,18 @@ describe('resolveSashResizeTarget', () => {
     expect(target?.deltaSign).toBe(-1);
   });
 
-  it('uses after panel for col log panel sash', () => {
-    const target = resolveSashResizeTarget('col', flex('editor'), fixed('panel', 200, 80), 600, 200);
-    expect(target?.nodeId).toBe('panel');
-    expect(target?.deltaSign).toBe(-1);
+  it('ignores stale pixelSize on editor grid nodes', () => {
+    const editorGroup: LayoutNode = {
+      id: 'default_editor',
+      type: 'component',
+      parentId: 'editor_area',
+      pixelSize: 640,
+      size: 0.5,
+      data: { component: 'GraphEditor' },
+    };
+    const target = resolveSashResizeTarget('row', editorGroup, flex('editor_group_2'), 640, 640);
+    expect(target?.nodeId).toBe('default_editor');
+    expect(target?.deltaSign).toBe(1);
   });
 });
 
@@ -109,6 +117,22 @@ describe('layoutNodeFlexStyle', () => {
       minWidth: 0,
       minHeight: 0,
       overflow: 'hidden',
+    });
+  });
+
+  it('editor grid nodes use ratio flex even when pixelSize is stale', () => {
+    const style = layoutNodeFlexStyle({
+      id: 'default_editor',
+      type: 'component',
+      parentId: 'editor_area',
+      size: 0.35,
+      pixelSize: 640,
+      data: { component: 'GraphEditor' },
+    });
+    expect(style).toMatchObject({
+      flex: '0.35 1 0px',
+      minWidth: 0,
+      minHeight: 0,
     });
   });
 });

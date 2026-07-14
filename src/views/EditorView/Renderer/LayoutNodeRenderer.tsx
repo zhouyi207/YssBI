@@ -129,7 +129,7 @@ const ContainerNodeRenderer = ({
 
 /**
  * 子节点包裹层
- * 独立订阅节点状态，确保尺寸(pixelSize/size)变化时能实时触发重绘
+ * 独立订阅节点状态，确保尺寸(size / chrome pixelSize)变化时能实时触发重绘
  */
 const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDivElement | null) => void }) => {
     const node = useLayoutStore(useShallow((state) => state.nodes[nodeId]));

@@ -75,8 +75,8 @@ describe('editorGridLayout tree ops', () => {
     });
     expect(right).toBeTruthy();
 
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 200;
-    nodes[right!]!.pixelSize = 800;
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.size = 0.2;
+    nodes[right!]!.size = 0.8;
 
     const farRight = splitEditorGroupInTree(nodes, right!, 'right', {
       component: 'GraphEditor',
@@ -89,13 +89,15 @@ describe('editorGridLayout tree ops', () => {
     expect(nodes[farRight!]?.size).toBeGreaterThan(0.1);
   });
 
-  it('applyEqualGridSplit divides pair evenly', () => {
+  it('applyEqualGridSplit divides pair evenly as ratio weights', () => {
     const nodes = createInitialWorkbenchNodes();
-    nodes.a = { id: 'a', type: 'component', parentId: EDITOR_AREA_ID, pixelSize: 300 };
-    nodes.b = { id: 'b', type: 'component', parentId: EDITOR_AREA_ID, pixelSize: 500 };
+    nodes.a = { id: 'a', type: 'component', parentId: EDITOR_AREA_ID, size: 0.375 };
+    nodes.b = { id: 'b', type: 'component', parentId: EDITOR_AREA_ID, size: 0.625 };
     applyEqualGridSplit(nodes, 'a', 'b', 300, 500);
-    expect(nodes.a?.pixelSize).toBe(400);
-    expect(nodes.b?.pixelSize).toBe(400);
+    expect(nodes.a?.size).toBeCloseTo(0.5);
+    expect(nodes.b?.size).toBeCloseTo(0.5);
+    expect(nodes.a?.pixelSize).toBeUndefined();
+    expect(nodes.b?.pixelSize).toBeUndefined();
   });
 
   it('uses axis-aware editor group minimums while honoring node overrides', () => {
@@ -111,12 +113,12 @@ describe('editorGridLayout tree ops', () => {
     nodes.sidebar!.pixelSize = 271;
     nodes.panel!.pixelSize = 183;
     nodes.detail!.pixelSize = 319;
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 320;
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.size = 0.4;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
     });
     expect(created).toBeTruthy();
-    nodes[created!].pixelSize = 480;
+    nodes[created!].size = 0.6;
     seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
     useEditorTabStore.getState().removeTab(created!, 'events/bar');
 
@@ -135,7 +137,7 @@ describe('editorGridLayout tree ops', () => {
 
   it('preserves parent-axis width without reusing it as perpendicular child height', () => {
     const nodes = createInitialWorkbenchNodes();
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 640;
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.size = 1;
 
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
       component: 'GraphEditor',
@@ -155,19 +157,17 @@ describe('editorGridLayout tree ops', () => {
   it('clears stale maximize/hidden flags when the maximized group is removed', () => {
     resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 400;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
     });
     expect(created).toBeTruthy();
-    nodes[created!].pixelSize = 400;
     seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
 
     setEditorGroupMaximizedHidden(nodes, created!, false);
     setEditorGroupMaximizedHidden(nodes, DEFAULT_EDITOR_GROUP_ID, true);
     writeEditorAreaMaximizeState(nodes, created!, {
-      [DEFAULT_EDITOR_GROUP_ID]: 400,
-      [created!]: 400,
+      [DEFAULT_EDITOR_GROUP_ID]: 0.5,
+      [created!]: 0.5,
     });
 
     useEditorTabStore.getState().removeTab(created!, 'events/bar');
@@ -176,18 +176,17 @@ describe('editorGridLayout tree ops', () => {
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.data?.groupMaximizedHidden).toBe(false);
     expect(nodes[EDITOR_AREA_ID]?.data?.maximizedGroupId).toBeUndefined();
     expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBe(1);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
   });
 
   it('reflows a vertical split collapse without cross-axis pixel locks', () => {
     resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
     const created = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'bottom', {
       component: 'GraphEditor',
     });
     expect(created).toBeTruthy();
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
-    nodes[created!].pixelSize = 500;
     seedEditorGroupTabs(created!, [{ id: 'events/bar', component: 'GraphEditor', type: 'event' }]);
     useEditorTabStore.getState().removeTab(created!, 'events/bar');
 
@@ -212,9 +211,9 @@ describe('editorGridLayout tree ops', () => {
     seedEditorGroupTabs(middle!, [{ id: 'events/middle', component: 'GraphEditor', type: 'event' }]);
     seedEditorGroupTabs(farRight!, [{ id: 'events/far', component: 'GraphEditor', type: 'event' }]);
 
-    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 200;
-    nodes[middle!]!.pixelSize = 300;
-    nodes[farRight!]!.pixelSize = 500;
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.size = 0.2;
+    nodes[middle!]!.size = 0.3;
+    nodes[farRight!]!.size = 0.5;
 
     useEditorTabStore.getState().removeTab(middle!, 'events/middle');
     removeEditorGroupFromTree(nodes, middle!);

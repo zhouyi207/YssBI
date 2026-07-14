@@ -1,6 +1,6 @@
 import { useLayoutStore } from './layoutStore';
 import { WORKBENCH_PART_IDS, type WorkbenchPartId } from './workbenchLayoutDefaults';
-import { reflowEditorGridLayout } from './editorGridSizing';
+import { commitEditorGridLayoutState } from './editorGridSizing';
 
 type ZenPartSnapshot = {
   visible: boolean;
@@ -41,7 +41,7 @@ class ZenModeSessionController {
       setPartSnapshot(partId, { visible: false });
     }
     useLayoutStore.setState((state) => {
-      reflowEditorGridLayout(state.nodes);
+      commitEditorGridLayoutState(state.nodes);
       state.zenMode = true;
     });
   }
@@ -58,7 +58,7 @@ class ZenModeSessionController {
       setPartSnapshot(partId, saved[partId]);
     }
     useLayoutStore.setState((state) => {
-      reflowEditorGridLayout(state.nodes);
+      commitEditorGridLayoutState(state.nodes);
     });
   }
 

@@ -2,6 +2,7 @@
 // Application 层：协调 useEditor 与 Core 的 ProjectListener
 
 import { useEffect, useRef } from 'react';
+import { reconcileProjectPath } from '@/features/core/dataStore';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
 import { logger } from '@/utils/appLogger';
@@ -60,5 +61,8 @@ function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').Eve
  * Store 由 Core handlers 更新；graph 创建走 file-first，由 resourceActions 刷新索引。
  */
 export function useProjectSync() {
+  useEffect(() => {
+    void reconcileProjectPath();
+  }, []);
   useProjectSyncCore(undefined);
 }

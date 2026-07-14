@@ -12,21 +12,19 @@ import {
     WORKBENCH_ROOT_ID,
 } from './workbenchLayoutDefaults';
 import {
-    applyEditorGridPixelSizes,
     applyEqualGridSplit,
     clearEditorGroupMaximizedHidden,
     firstEditorGroupId,
     isActiveEditorGroupValid,
     listEditorGroupIds,
     readEditorAreaMaximizedGroupId,
-    readEditorAreaRestoredGridSizes,
     removeEditorGroupFromTree,
+    restoreEditorAreaFromMaximizeSnapshot,
     setEditorGroupMaximizedHidden,
-    snapshotEditorGridPixelSizes,
     splitEditorGroupInTree,
     writeEditorAreaMaximizeState,
 } from './editorGridLayout';
-import { commitSplitPairSizes, normalizeEditorGridSplitWeights } from './editorGridSizing';
+import { commitSplitPairSizes, computeEditorGridMementoSizes, commitEditorGridLayoutState } from './editorGridSizing';
 import { readEditorPartOptions } from './editorPartOptions';
 import {
     isEditorGroupPlacementEmpty,
@@ -361,6 +359,7 @@ export const useLayoutStore = create<LayoutState>()(
 
             reconcileEditorTabPlacements(state.nodes);
             state.activeEditorGroupId = DEFAULT_EDITOR_GROUP_ID;
+            commitEditorGridLayoutState(state.nodes);
         }),
 
         removeEditorGroup: (groupId) => {
@@ -385,16 +384,13 @@ export const useLayoutStore = create<LayoutState>()(
 
             const current = readEditorAreaMaximizedGroupId(state.nodes);
             if (current === groupId) {
-                const restored = readEditorAreaRestoredGridSizes(state.nodes);
-                clearEditorGroupMaximizedHidden(state.nodes);
-                writeEditorAreaMaximizeState(state.nodes, null, null);
-                if (restored) applyEditorGridPixelSizes(state.nodes, restored);
-                normalizeEditorGridSplitWeights(state.nodes);
+                restoreEditorAreaFromMaximizeSnapshot(state.nodes);
+                commitEditorGridLayoutState(state.nodes);
                 return;
             }
 
-            const restoredGridSizes = snapshotEditorGridPixelSizes(state.nodes);
-            writeEditorAreaMaximizeState(state.nodes, groupId, restoredGridSizes);
+            const restoredGridWeights = computeEditorGridMementoSizes(state.nodes);
+            writeEditorAreaMaximizeState(state.nodes, groupId, restoredGridWeights);
 
             for (const id of listEditorGroupIds(state.nodes)) {
                 setEditorGroupMaximizedHidden(state.nodes, id, id !== groupId);

@@ -73,7 +73,7 @@ export { panelFlexBasis } from './splitView';
 export {
   applyEditorGridAddViewSizing,
   areEditorGridSplitChildrenDistributed,
-  reflowEditorGridLayout,
+  commitEditorGridLayoutState,
 } from './editorGridSizing';
 export {
   isWorkbenchPartUserHidden,

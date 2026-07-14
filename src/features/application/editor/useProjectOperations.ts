@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectIOStore } from '@/features/core/dataStore';
+import { resolveActiveProjectPath, useProjectIOStore } from '@/features/core/dataStore';
 import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
@@ -35,10 +35,10 @@ import { logger } from '@/utils/appLogger';
  */
 export function useProjectOperations() {
   const { t } = useTranslation();
-  const currentPath = useProjectIOStore((s) => s.currentPath);
 
   const saveGraphAs = useCallback(async () => {
-    if (!currentPath) {
+    const projectPath = await resolveActiveProjectPath();
+    if (!projectPath) {
       uiStore.showToast("项目尚未加载", "warning", 2000);
       return;
     }
@@ -55,10 +55,11 @@ export function useProjectOperations() {
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast(`另存为失败：${formatErrorMessage(e)}`, "error", 3000);
     }
-  }, [currentPath]);
+  }, []);
 
   const saveGraph = useCallback(async () => {
-    if (!currentPath) {
+    const projectPath = await resolveActiveProjectPath();
+    if (!projectPath) {
       uiStore.showToast("项目尚未加载", "warning", 2000);
       return;
     }
@@ -98,7 +99,7 @@ export function useProjectOperations() {
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast(`保存失败：${formatErrorMessage(e)}`, "error", 2000);
     }
-  }, [currentPath, t]);
+  }, [t]);
 
   const importGraph = useCallback(async () => {
     try {

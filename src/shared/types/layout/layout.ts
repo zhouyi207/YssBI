@@ -85,8 +85,8 @@ export interface LayoutNode {
     groupMaximizedHidden?: boolean;
     /** editor_area: currently maximized editor group id. */
     maximizedGroupId?: string;
-    /** editor_area: pixel sizes snapshot before group maximize. */
-    restoredGridSizes?: Record<string, number>;
+    /** editor_area: split weight snapshot (0–1 per grid node) before group maximize. */
+    restoredGridWeights?: Record<string, number>;
     /** Bottom panel tab views (Logs / Output / …). */
     panelViews?: { id: string; component: string }[];
     activePanelView?: string;

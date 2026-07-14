@@ -6,11 +6,11 @@ import {
 } from './workbenchLayoutDefaults';
 import {
   readEditorAreaMaximizedGroupId,
-  readEditorAreaRestoredGridSizes,
+  readEditorAreaRestoredGridWeights,
   listEditorGroupIds,
   setEditorGroupMaximizedHidden,
 } from './editorGridLayout';
-import { computeEditorGridMementoSizes } from './editorGridSizing';
+import { commitEditorGridLayoutState, computeEditorGridMementoSizes } from './editorGridSizing';
 import { isEditorGroupNode } from './layoutTabQueries';
 
 export interface EditorGridNodeMemento {
@@ -25,7 +25,7 @@ export interface EditorGridNodeMemento {
 export interface EditorGridMemento {
   activeEditorGroupId: string;
   maximizedGroupId?: string | null;
-  restoredGridSizes?: Record<string, number>;
+  restoredGridWeights?: Record<string, number>;
   nodes: EditorGridNodeMemento[];
 }
 
@@ -76,7 +76,7 @@ export function snapshotEditorGridMemento(
   return {
     activeEditorGroupId: activeEditorGroupId ?? DEFAULT_EDITOR_GROUP_ID,
     maximizedGroupId: readEditorAreaMaximizedGroupId(nodes),
-    restoredGridSizes: readEditorAreaRestoredGridSizes(nodes) ?? undefined,
+    restoredGridWeights: readEditorAreaRestoredGridWeights(nodes) ?? undefined,
     nodes: gridNodes,
   };
 }
@@ -164,12 +164,14 @@ export function applyEditorGridMementoWithRepair(
       editorArea.data = {
         ...editorArea.data,
         maximizedGroupId: memento.maximizedGroupId,
-        restoredGridSizes: memento.restoredGridSizes,
+        restoredGridWeights: memento.restoredGridWeights,
       };
       for (const id of listEditorGroupIds(applied)) {
         setEditorGroupMaximizedHidden(applied, id, id !== memento.maximizedGroupId);
       }
     }
   }
-  return repairEditorGridIntegrity(applied);
+  const repaired = repairEditorGridIntegrity(applied);
+  commitEditorGridLayoutState(repaired);
+  return repaired;
 }

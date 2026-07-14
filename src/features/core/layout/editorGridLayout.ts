@@ -2,13 +2,13 @@ import type { LayoutNode, LayoutTree } from '@/shared/types/ui';
 import {
   applyEditorGridAddViewSizing,
   applyEditorGridRemoveViewSizing,
+  commitEditorGridLayoutState,
   commitSplitPairSizes,
   distributeSplitParentRemainingChildren,
-  reflowEditorGridLayout,
   shouldDistributeAfterEditorGridRemove,
 } from './editorGridSizing';
 import { readEditorPartOptions } from './editorPartOptions';
-import { EDITOR_AREA_ID, PANEL_PART_ID } from './workbenchLayoutDefaults';
+import { EDITOR_AREA_ID, isWorkbenchChromePartId, PANEL_PART_ID } from './workbenchLayoutDefaults';
 import { isEditorGroupNode } from './layoutEditorGroupNode';
 import { isEditorGroupPlacementEmpty } from './editorTabStore';
 import {
@@ -65,27 +65,15 @@ export function listEditorGroupIds(nodes: LayoutTree): string[] {
     .map((node) => node.id);
 }
 
-export function snapshotEditorGridPixelSizes(nodes: LayoutTree): Record<string, number> {
-  const sizes: Record<string, number> = {};
-  if (!nodes[EDITOR_AREA_ID]) return sizes;
-
-  const visit = (id: string) => {
-    const node = nodes[id];
-    if (!node) return;
-    if (node.pixelSize != null) sizes[id] = node.pixelSize;
-    node.children?.forEach(visit);
-  };
-  visit(EDITOR_AREA_ID);
-  return sizes;
-}
-
-export function applyEditorGridPixelSizes(
+export function applyEditorGridSplitWeights(
   nodes: LayoutTree,
-  sizes: Record<string, number>,
+  weights: Record<string, number>,
 ): void {
-  for (const [id, pixelSize] of Object.entries(sizes)) {
+  for (const [id, weight] of Object.entries(weights)) {
     const node = nodes[id];
-    if (node) node.pixelSize = pixelSize;
+    if (!node) continue;
+    node.size = weight;
+    node.pixelSize = undefined;
   }
 }
 
@@ -109,8 +97,8 @@ export function readEditorAreaMaximizedGroupId(nodes: LayoutTree): string | null
   return typeof value === 'string' ? value : null;
 }
 
-export function readEditorAreaRestoredGridSizes(nodes: LayoutTree): Record<string, number> | null {
-  const raw = nodes[EDITOR_AREA_ID]?.data?.restoredGridSizes;
+export function readEditorAreaRestoredGridWeights(nodes: LayoutTree): Record<string, number> | null {
+  const raw = nodes[EDITOR_AREA_ID]?.data?.restoredGridWeights;
   if (!raw || typeof raw !== 'object') return null;
   return raw as Record<string, number>;
 }
@@ -118,28 +106,30 @@ export function readEditorAreaRestoredGridSizes(nodes: LayoutTree): Record<strin
 export function writeEditorAreaMaximizeState(
   nodes: LayoutTree,
   maximizedGroupId: string | null,
-  restoredGridSizes: Record<string, number> | null,
+  restoredGridWeights: Record<string, number> | null,
 ): void {
   const editorArea = nodes[EDITOR_AREA_ID];
   if (!editorArea) return;
   editorArea.data = {
     ...editorArea.data,
     maximizedGroupId: maximizedGroupId ?? undefined,
-    restoredGridSizes: restoredGridSizes ?? undefined,
+    restoredGridWeights: restoredGridWeights ?? undefined,
   };
 }
 
-/** Drop stale exit snapshot while a group stays maximized (chrome/viewport changed). */
+/** Drop stale maximize weight snapshot while a group stays maximized (chrome/viewport changed). */
 export function invalidateEditorAreaMaximizeSnapshot(nodes: LayoutTree): void {
   const maximizedId = readEditorAreaMaximizedGroupId(nodes);
   if (!maximizedId) return;
-
-  const maximized = nodes[maximizedId];
-  if (maximized?.pixelSize != null) {
-    maximized.pixelSize = undefined;
-  }
-
   writeEditorAreaMaximizeState(nodes, maximizedId, null);
+}
+
+/** Exit maximize or repair orphaned hidden flags after grid mutations. */
+export function restoreEditorAreaFromMaximizeSnapshot(nodes: LayoutTree): void {
+  const restored = readEditorAreaRestoredGridWeights(nodes);
+  clearEditorGroupMaximizedHidden(nodes);
+  if (restored) applyEditorGridSplitWeights(nodes, restored);
+  writeEditorAreaMaximizeState(nodes, null, null);
 }
 
 export function equalSplitPairSizes(beforeSize: number, afterSize: number): { beforeSize: number; afterSize: number } {
@@ -230,7 +220,7 @@ export function removeEditorGroupFromTree(
   delete nodes[groupId];
 
   reconcileEditorGridAfterGroupRemoved(nodes, groupId);
-  reflowEditorGridLayout(nodes);
+  commitEditorGridLayoutState(nodes);
 
   return {
     removed: true,
@@ -249,20 +239,10 @@ export function reconcileEditorGridAfterGroupRemoved(
   const maximizedId = readEditorAreaMaximizedGroupId(nodes);
   const maximizedStale =
     maximizedId === removedGroupId || (maximizedId != null && !nodes[maximizedId]);
-  const remaining = listEditorGroupIds(nodes);
+  const orphanedHidden = listEditorGroupIds(nodes).some((id) => nodes[id]?.data?.groupMaximizedHidden);
 
-  if (maximizedStale) {
-    const restored = readEditorAreaRestoredGridSizes(nodes);
-    clearEditorGroupMaximizedHidden(nodes);
-    if (restored) applyEditorGridPixelSizes(nodes, restored);
-    writeEditorAreaMaximizeState(nodes, null, null);
-    return;
-  }
-
-  const orphanedHidden = remaining.some((id) => nodes[id]?.data?.groupMaximizedHidden);
-  if (orphanedHidden) {
-    clearEditorGroupMaximizedHidden(nodes);
-    writeEditorAreaMaximizeState(nodes, null, null);
+  if (maximizedStale || orphanedHidden) {
+    restoreEditorAreaFromMaximizeSnapshot(nodes);
   }
 }
 
@@ -329,6 +309,8 @@ export function splitEditorGroupInTree(
 
 export function panelStartSizeFromNode(node: LayoutNode | undefined, domSize: number): number {
   if (!node || node.data?.visible === false) return 0;
-  if (node.pixelSize != null) return node.pixelSize;
+  if (isWorkbenchChromePartId(node.id) && node.pixelSize != null) {
+    return node.pixelSize;
+  }
   return domSize;
 }

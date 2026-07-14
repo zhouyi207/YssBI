@@ -32,3 +32,8 @@ export { findInternalNodeInGraph } from './graphNodeSelectors';
 export { buildGraphSnapshot, type GraphSnapshotAccess } from './projectSnapshot';
 export { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 export { resetClientProjectState } from './projectClientReset';
+export {
+  reconcileProjectPath,
+  resolveActiveProjectPath,
+  useActiveProjectPath,
+} from './projectSession';
