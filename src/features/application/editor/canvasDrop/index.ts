@@ -10,3 +10,7 @@ export {
 } from './variableDrop';
 export { isFunctionAvailable, isVariableAvailable } from './editorResources';
 export { spawnNodeFromTemplate, type SpawnFromTemplateContext } from './spawnFromTemplate';
+export {
+  canDropFunctionIntoEventGraph,
+  dropFunctionCallIntoEventGraph,
+} from './dropFunctionIntoEventGraph';

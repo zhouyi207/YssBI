@@ -9,9 +9,20 @@ export const WatermarkView = () => {
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-[var(--workbench-bg)] select-none overflow-hidden">
-      {/* Simplified Logo */}
-      <div className="mb-8 opacity-20 group">
-        <svg className="w-32 h-32 text-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+      {/* Logo */}
+      <div className="relative mb-8 flex items-center justify-center">
+        <div
+          className="pointer-events-none absolute h-28 w-28 rounded-full bg-[var(--accent-color)] opacity-[0.14] blur-3xl"
+          aria-hidden
+        />
+        <svg
+          className="relative h-32 w-32 text-foreground/25 drop-shadow-[0_0_32px_color-mix(in_srgb,var(--accent-color)_50%,transparent)]"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          aria-hidden
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
         </svg>
@@ -20,17 +31,11 @@ export const WatermarkView = () => {
       <Card className="min-w-[360px] bg-card/60 backdrop-blur-sm">
         <CardContent className="flex flex-col gap-2 p-2">
           <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => addEvent(undefined, { openAfterCreate: true })}>
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              <span>{t("canvas.newEventGraph")}</span>
-            </span>
+            <span>{t("canvas.newEventGraph")}</span>
             <span className="text-[10px] text-muted-foreground italic">{t("canvas.coreLogic")}</span>
           </Button>
           <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => addFunction(undefined, { openAfterCreate: true })}>
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              <span>{t("canvas.newFunction")}</span>
-            </span>
+            <span>{t("canvas.newFunction")}</span>
             <span className="text-[10px] text-muted-foreground italic">{t("canvas.reusableRoutine")}</span>
           </Button>
           <Button type="button" variant="ghost" className="h-auto justify-between gap-12 p-2" onClick={() => importGraph()}>

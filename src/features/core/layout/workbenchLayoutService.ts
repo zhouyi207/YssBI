@@ -155,7 +155,9 @@ export function hydrateWorkbenchChrome(): void {
     if (partId === PANEL_PART_ID) {
       if (saved.maximized != null) nextData.maximized = saved.maximized;
       if (saved.restoredPixelSize != null) nextData.restoredPixelSize = saved.restoredPixelSize;
-      if (saved.activePanelView) nextData.activePanelView = saved.activePanelView;
+      if (saved.activePanelView) {
+        nextData.activePanelView = saved.activePanelView === 'output' ? 'logs' : saved.activePanelView;
+      }
     }
 
     updateNode(partId, { data: nextData });

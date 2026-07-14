@@ -1512,6 +1512,51 @@ mod tests {
     }
 
     #[test]
+    fn persist_loaded_graph_after_add_event_writes_graph_file() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        state.set_path(Some(root.to_string_lossy().to_string()));
+        let graph = state.add_event("Indexed Event");
+        let graph_path = graph.resource_path.clone();
+        state.persist_loaded_graph(&graph_path).unwrap();
+
+        let graph_file = root
+            .join(EVENTS_DIR)
+            .join(format!("Indexed Event.{}", EVENT_EXTENSION));
+        assert!(graph_file.is_file());
+
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+        assert_eq!(index.graphs.len(), 1);
+        assert_eq!(index.graphs[0].path, graph_path.as_str());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn commit_persisted_graph_and_unload_keeps_file_but_drops_memory() {
+        let root = temp_project_dir();
+        let state = ProjectState::new();
+        state.set_path(Some(root.to_string_lossy().to_string()));
+        let graph = state.add_event("File First Event");
+        let graph_path = graph.resource_path.clone();
+        state.commit_persisted_graph_and_unload(&graph_path).unwrap();
+
+        assert!(state.get_graph(&graph_path).is_none());
+
+        let graph_file = root
+            .join(EVENTS_DIR)
+            .join(format!("File First Event.{}", EVENT_EXTENSION));
+        assert!(graph_file.is_file());
+
+        let loaded = state
+            .load_graph_from_current_project(&graph_path)
+            .expect("graph should load from disk");
+        assert_eq!(loaded.graph.name, "File First Event");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn read_project_index_skips_invalid_graph_files() {
         let root = temp_project_dir();
         let state = ProjectState::new();

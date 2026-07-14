@@ -27,6 +27,7 @@ import {
     writeEditorAreaMaximizeState,
 } from './editorGridLayout';
 import { commitSplitPairSizes, normalizeEditorGridSplitWeights } from './editorGridSizing';
+import { readEditorPartOptions } from './editorPartOptions';
 import {
     isEditorGroupPlacementEmpty,
     readLegacyEmbeddedTab,
@@ -81,6 +82,18 @@ export interface LayoutState {
 
     /** Collapse split editor groups back to a single default group. */
     collapseEditorGroups: () => void;
+    /** Merge source editor group tabs into target and remove source from grid. */
+    mergeEditorGroup: (
+        sourceGroupId: string,
+        targetGroupId: string,
+        insertIndex?: number,
+    ) => void;
+    /** Move entire source editor group to a split edge of target (VS Code moveGroup + addGroup). */
+    splitEditorGroupWithGroup: (
+        sourceGroupId: string,
+        targetGroupId: string,
+        edge: EditorSplitEdge,
+    ) => string | null;
     /** Remove an empty editor group through the editor-grid domain boundary. */
     removeEditorGroup: (groupId: string) => boolean;
     /** Reset workbench chrome while preserving the complete editor grid session. */
@@ -104,27 +117,58 @@ export interface LayoutState {
     isDragging: boolean;
     setDragging: (isDragging: boolean) => void;
     activeEditorGroupId: string | null;
+    /** VS Code MRU list for close-empty / focus restoration. */
+    recentEditorGroupIds: string[];
     isSettingsOpen: boolean;
     setActiveGroup: (id: string | null) => void;
     openSettings: () => void;
     closeSettings: () => void;
     setSettingsOpen: (open: boolean) => void;
-    isAltPressed: boolean;
-    setAltPressed: (pressed: boolean) => void;
     /** Session-only zen mode — hides shell chrome + workbench parts without persisting visibility. */
     zenMode: boolean;
 }
 
+const MAX_RECENT_EDITOR_GROUPS = 12;
+
+function touchRecentEditorGroup(
+    state: { recentEditorGroupIds: string[] },
+    groupId: string,
+): void {
+    state.recentEditorGroupIds = [
+        groupId,
+        ...state.recentEditorGroupIds.filter((id) => id !== groupId),
+    ].slice(0, MAX_RECENT_EDITOR_GROUPS);
+}
+
+function preferNextActiveEditorGroupId(
+    state: { nodes: LayoutTree; recentEditorGroupIds: string[] },
+    excludeGroupId?: string,
+): string | null {
+    for (const groupId of state.recentEditorGroupIds) {
+        if (groupId === excludeGroupId) continue;
+        if (isActiveEditorGroupValid(state.nodes, groupId)) return groupId;
+    }
+    return firstEditorGroupId(state.nodes);
+}
+
+function shouldCloseEmptyEditorGroups(): boolean {
+    return readEditorPartOptions().closeEmptyGroups;
+}
+
 function removeEmptyEditorGroupIfNeeded(
-    state: { nodes: LayoutTree; activeEditorGroupId: string | null },
+    state: { nodes: LayoutTree; activeEditorGroupId: string | null; recentEditorGroupIds: string[] },
     groupId: string,
     preferActiveGroupId?: string,
 ): void {
+    if (!shouldCloseEmptyEditorGroups()) return;
     const { removed, nextActiveGroupId } = removeEditorGroupFromTree(state.nodes, groupId);
     if (!removed) return;
     useEditorTabStore.getState().removeGroupPlacement(groupId);
     if (state.activeEditorGroupId === groupId) {
-        state.activeEditorGroupId = preferActiveGroupId ?? nextActiveGroupId;
+        state.activeEditorGroupId =
+            preferActiveGroupId
+            ?? preferNextActiveEditorGroupId(state, groupId)
+            ?? nextActiveGroupId;
     }
 }
 
@@ -155,6 +199,7 @@ export const useLayoutStore = create<LayoutState>()(
         nodes: INITIAL_NODES,
         isDragging: false,
         activeEditorGroupId: DEFAULT_EDITOR_GROUP_ID,
+        recentEditorGroupIds: [DEFAULT_EDITOR_GROUP_ID],
 
         getNode: (id) => get().nodes[id],
 
@@ -190,6 +235,48 @@ export const useLayoutStore = create<LayoutState>()(
                         payload.activeTabId,
                     );
                     state.activeEditorGroupId = createdGroupId;
+                    touchRecentEditorGroup(state, createdGroupId);
+                }
+            });
+            return createdGroupId;
+        },
+
+        mergeEditorGroup: (sourceGroupId, targetGroupId, insertIndex) => {
+            if (sourceGroupId === targetGroupId) return;
+            set((state) => {
+                useEditorTabStore.getState().mergePlacementsIntoGroup(
+                    targetGroupId,
+                    [sourceGroupId],
+                    insertIndex,
+                );
+                const { removed } = removeEditorGroupFromTree(state.nodes, sourceGroupId);
+                if (removed) {
+                    state.activeEditorGroupId = targetGroupId;
+                    touchRecentEditorGroup(state, targetGroupId);
+                    ensureValidActiveEditorGroup(state);
+                }
+            });
+        },
+
+        splitEditorGroupWithGroup: (sourceGroupId, targetGroupId, edge) => {
+            if (sourceGroupId === targetGroupId) return null;
+            let createdGroupId: string | null = null;
+            set((state) => {
+                const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
+                const component =
+                    sourceTabs[0]?.component
+                    ?? state.nodes[sourceGroupId]?.data?.component
+                    ?? 'GraphEditor';
+
+                createdGroupId = splitEditorGroupInTree(state.nodes, targetGroupId, edge, { component });
+                if (!createdGroupId) return;
+
+                useEditorTabStore.getState().mergePlacementsIntoGroup(createdGroupId, [sourceGroupId]);
+                const { removed } = removeEditorGroupFromTree(state.nodes, sourceGroupId);
+                if (removed) {
+                    state.activeEditorGroupId = createdGroupId;
+                    touchRecentEditorGroup(state, createdGroupId);
+                    ensureValidActiveEditorGroup(state);
                 }
             });
             return createdGroupId;
@@ -360,7 +447,7 @@ export const useLayoutStore = create<LayoutState>()(
             useEditorTabStore.getState().removeTab(nodeId, tabId);
             set((state) => {
                 if (isEditorGroupPlacementEmpty(nodeId)) {
-                    if (listEditorGroupIds(state.nodes).length > 1) {
+                    if (listEditorGroupIds(state.nodes).length > 1 && shouldCloseEmptyEditorGroups()) {
                         removeEmptyEditorGroupIfNeeded(state, nodeId);
                     }
                 }
@@ -409,21 +496,16 @@ export const useLayoutStore = create<LayoutState>()(
         }),
 
         setActiveGroup: (id) => set((state) => {
-            const node = id ? state.nodes[id] : null;
+            if (!id) return;
+            const node = state.nodes[id];
             if (node?.type === 'component' && !node.data?.isFixed) {
                 state.activeEditorGroupId = id;
+                touchRecentEditorGroup(state, id);
             }
         }),
 
         commitFlexSplitResize: (beforeId, afterId, beforeSize, afterSize) => set((state) => {
             commitSplitPairSizes(state.nodes, beforeId, afterId, beforeSize, afterSize);
-        }),
-
-        isAltPressed: false,
-        setAltPressed: (pressed) => set((state) => {
-            if (state.isAltPressed !== pressed) {
-                state.isAltPressed = pressed;
-            }
         }),
     }))
 );

@@ -77,6 +77,23 @@ export const SettingsView: React.FC = () => {
         { label: t("settings.options.titleBarNative"), value: "native" },
     ];
 
+    const openSideBySideDirectionOptions = [
+        { label: t("settings.options.openSideBySideRight"), value: "right" },
+        { label: t("settings.options.openSideBySideDown"), value: "down" },
+    ];
+
+    const splitSizingOptions = [
+        { label: t("settings.options.splitSizingAuto"), value: "auto" },
+        { label: t("settings.options.splitSizingDistribute"), value: "distribute" },
+        { label: t("settings.options.splitSizingSplit"), value: "split" },
+    ];
+
+    const doubleClickTabOptions = [
+        { label: t("settings.options.doubleClickTabMaximize"), value: "maximize" },
+        { label: t("settings.options.doubleClickTabExpand"), value: "expand" },
+        { label: t("settings.options.doubleClickTabOff"), value: "off" },
+    ];
+
     const handleResetAll = async () => {
         const confirmed = await uiStore.confirm({
             title: t("settings.confirmResetAllTitle"),
@@ -188,6 +205,60 @@ export const SettingsView: React.FC = () => {
                                     type="number"
                                     value={String(editor.fontSize)}
                                     onChange={(val) => updateEditor({ fontSize: parseInt(val, 10) || 12 })}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-base font-semibold text-foreground mb-4">
+                                {t("settings.sections.editorGroups")}
+                            </h3>
+                            <div className="space-y-6">
+                                <SettingItem
+                                    label={t("settings.labels.openSideBySideDirection")}
+                                    description={t("settings.descriptions.openSideBySideDirection")}
+                                    type="select"
+                                    options={openSideBySideDirectionOptions}
+                                    value={editor.openSideBySideDirection ?? "right"}
+                                    onChange={(val) => updateEditor({ openSideBySideDirection: val as "right" | "down" })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.splitOnDragAndDrop")}
+                                    description={t("settings.descriptions.splitOnDragAndDrop")}
+                                    type="checkbox"
+                                    checked={editor.splitOnDragAndDrop ?? true}
+                                    onChange={(val) => updateEditor({ splitOnDragAndDrop: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.alwaysShowEditorActions")}
+                                    description={t("settings.descriptions.alwaysShowEditorActions")}
+                                    type="checkbox"
+                                    checked={editor.alwaysShowEditorActions ?? false}
+                                    onChange={(val) => updateEditor({ alwaysShowEditorActions: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.closeEmptyGroups")}
+                                    description={t("settings.descriptions.closeEmptyGroups")}
+                                    type="checkbox"
+                                    checked={editor.closeEmptyGroups ?? true}
+                                    onChange={(val) => updateEditor({ closeEmptyGroups: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.splitSizing")}
+                                    description={t("settings.descriptions.splitSizing")}
+                                    type="select"
+                                    options={splitSizingOptions}
+                                    value={editor.splitSizing ?? "auto"}
+                                    onChange={(val) => updateEditor({ splitSizing: val as "auto" | "distribute" | "split" })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.doubleClickTabToToggleEditorGroupSizes")}
+                                    description={t("settings.descriptions.doubleClickTabToToggleEditorGroupSizes")}
+                                    type="select"
+                                    options={doubleClickTabOptions}
+                                    value={editor.doubleClickTabToToggleEditorGroupSizes ?? "maximize"}
+                                    onChange={(val) => updateEditor({
+                                        doubleClickTabToToggleEditorGroupSizes: val as "maximize" | "expand" | "off",
+                                    })}
                                 />
                             </div>
                         </div>

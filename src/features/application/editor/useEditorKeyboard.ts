@@ -80,7 +80,7 @@ export function useEditorKeyboard({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
+      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
 
       if (isAppModalOpen()) {
         return;
@@ -92,12 +92,6 @@ export function useEditorKeyboard({
         return;
       }
 
-      if (e.key === 'Alt') {
-        if (e.repeat) return;
-        useLayoutStore.getState().setAltPressed(true);
-      }
-
-      // Check if we're in an input field
       const isInput =
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA" ||
@@ -196,15 +190,11 @@ export function useEditorKeyboard({
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey });
-      if (e.key === 'Alt') {
-        useLayoutStore.getState().setAltPressed(false);
-      }
+      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
     };
 
     const handleBlur = () => {
       resetModifierKeys();
-      useLayoutStore.getState().setAltPressed(false);
     };
 
     const cleanupKeyDown = addGlobalEventListener(window, 'keydown', handleKeyDown, { capture: true });

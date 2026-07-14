@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogPanelContent } from './LogPanelContent';
+import { LogPanelProvider } from './logPanelContext';
 import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -52,8 +53,10 @@ export const LogWindow = () => {
       </WindowChrome>
 
       {/* 内容区域 */}
-      <div className="flex-1 min-h-0">
-        <LogPanelContent variant="standalone" className="h-full" />
+      <div className="min-h-0 flex-1">
+        <LogPanelProvider variant="standalone">
+          <LogPanelContent className="h-full" />
+        </LogPanelProvider>
       </div>
     </div>
   );

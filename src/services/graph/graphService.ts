@@ -11,7 +11,7 @@ import { logger } from '@/utils/appLogger';
 /**
  * Graph Service - 管理 Event、Function 的创建、删除、更新和查询
  *
- * 创建时即分配 `events/…` / `functions/…` 路径；正文由 EventCreated/FunctionCreated 事件注入并保持 loaded。
+ * 创建时即分配 `events/…` / `functions/…` 路径并写入磁盘；正文在打开 tab 时从文件加载。
  */
 export class GraphService {
     /**
@@ -156,9 +156,10 @@ export class GraphService {
         return result.path;
     }
 
-    static async duplicateGraph(graphPath: string): Promise<Graph> {
-        const graph = await invoke<GraphInstanceDTO>("duplicate_graph", { graphPath });
-        return toFrontendGraph(graph);
+    static async duplicateGraph(graphPath: string): Promise<string> {
+        const newPath = await invoke<string>("duplicate_graph", { graphPath });
+        logger.graph.info(`Graph '${graphPath}' duplicated to '${newPath}'`, 'GraphService');
+        return newPath;
     }
 
     static async renameGraphResource(

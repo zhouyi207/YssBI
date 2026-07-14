@@ -18,20 +18,30 @@ export interface ActiveTabDrag {
   title: string;
 }
 
+export interface ActiveEditorGroupDrag {
+  sourceGroupId: string;
+  title: string;
+  tabCount: number;
+}
+
 interface TabBarReorderState {
   preview: TabBarReorderPreview | null;
   activeTabDrag: ActiveTabDrag | null;
+  activeGroupDrag: ActiveEditorGroupDrag | null;
   setPreview: (preview: TabBarReorderPreview) => void;
   clearPreview: () => void;
   setActiveTabDrag: (drag: ActiveTabDrag | null) => void;
+  setActiveGroupDrag: (drag: ActiveEditorGroupDrag | null) => void;
 }
 
 export const useTabBarReorderStore = create<TabBarReorderState>((set) => ({
   preview: null,
   activeTabDrag: null,
+  activeGroupDrag: null,
   setPreview: (preview) => set({ preview }),
   clearPreview: () => set({ preview: null }),
   setActiveTabDrag: (activeTabDrag) => set({ activeTabDrag }),
+  setActiveGroupDrag: (activeGroupDrag) => set({ activeGroupDrag }),
 }));
 
 /** Drop index for TabBar — prefers live strip preview over droppable fallback. */
@@ -44,4 +54,5 @@ export function resolveTabBarDropIndex(targetGroupId: string, fallback: number):
 export function clearTabBarDragSession(): void {
   useTabBarReorderStore.getState().clearPreview();
   useTabBarReorderStore.getState().setActiveTabDrag(null);
+  useTabBarReorderStore.getState().setActiveGroupDrag(null);
 }

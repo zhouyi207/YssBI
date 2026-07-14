@@ -8,13 +8,14 @@ import {
 
 describe('panelPartModel', () => {
   it('exposes only implemented views in defaults', () => {
-    expect(DEFAULT_PANEL_VIEWS.map((view) => view.id)).toEqual(['logs', 'output']);
+    expect(DEFAULT_PANEL_VIEWS.map((view) => view.id)).toEqual(['logs']);
+    expect(PANEL_VIEW_SPECS.output.implemented).toBe(false);
     expect(PANEL_VIEW_SPECS.terminal.implemented).toBe(false);
   });
 
   it('resolves active panel view component', () => {
     expect(resolvePanelViewComponent(DEFAULT_PANEL_VIEWS, 'logs')).toBe('LogPanel');
-    expect(resolvePanelViewComponent(DEFAULT_PANEL_VIEWS, 'output')).toBe('OutputPanel');
+    expect(resolvePanelViewComponent(DEFAULT_PANEL_VIEWS, 'output')).toBe('LogPanel');
   });
 
   it('falls back to logs when active view is unknown or not yet implemented', () => {

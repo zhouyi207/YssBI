@@ -14,7 +14,8 @@ import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { clearResourceDocumentState, isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
 import { releaseEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
-import { activateCurrentEditorTab } from './switchEditorTab';
+import { prepareActiveGroupBeforeLastTabClose } from '@/features/core/layout/editorGroupFocus';
+import { activateCurrentEditorTab, activateEditorGroup } from './switchEditorTab';
 import { deactivateGraphTab } from './activateGraphTab';
 
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
@@ -58,6 +59,11 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
   }
 
   const closingActiveTab = getEditorGroupActiveTabId(located.nodeId) === effectivePath;
+
+  const nextGroupId = prepareActiveGroupBeforeLastTabClose(located.nodeId);
+  if (nextGroupId) {
+    await activateEditorGroup(nextGroupId);
+  }
 
   useLayoutStore.getState().removeTab(located.nodeId, effectivePath);
   releaseEditorViewport(editorViewportScope(located.nodeId, effectivePath));

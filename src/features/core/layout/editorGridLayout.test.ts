@@ -12,13 +12,81 @@ import { resetEditorTabStore, seedEditorGroupTabs } from './editorTabTestUtils';
 import { useEditorTabStore } from './editorTabStore';
 
 describe('editorGridLayout tree ops', () => {
-  it('splitEditorGroupInTree forks a sibling group to the right', () => {
+  it('splitEditorGroupInTree forks a sibling group to the right with equal halves', () => {
     const nodes = createInitialWorkbenchNodes();
     const newId = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
       component: 'GraphEditor',
     });
     expect(newId).toBeTruthy();
-    expect(nodes[EDITOR_AREA_ID]?.children?.length).toBeGreaterThan(1);
+    expect(nodes[EDITOR_AREA_ID]?.children?.length).toBe(2);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[newId!]?.pixelSize).toBeUndefined();
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.5);
+    expect(nodes[newId!]?.size).toBeCloseTo(0.5);
+  });
+
+  it('splitEditorGroupInTree distributes evenly when adding a third equal sibling', () => {
+    const nodes = createInitialWorkbenchNodes();
+    const right = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(right).toBeTruthy();
+
+    const farRight = splitEditorGroupInTree(nodes, right!, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(farRight).toBeTruthy();
+
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(1 / 3);
+    expect(nodes[right!]?.size).toBeCloseTo(1 / 3);
+    expect(nodes[farRight!]?.size).toBeCloseTo(1 / 3);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[right!]?.pixelSize).toBeUndefined();
+    expect(nodes[farRight!]?.pixelSize).toBeUndefined();
+  });
+
+  it('halves the target group when inserting a third same-axis sibling', () => {
+    const nodes = createInitialWorkbenchNodes();
+    const right = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(right).toBeTruthy();
+
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.size = 0.2;
+    nodes[right!]!.size = 0.8;
+
+    const farRight = splitEditorGroupInTree(nodes, right!, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(farRight).toBeTruthy();
+
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.2);
+    expect(nodes[right!]?.size).toBeCloseTo(0.4);
+    expect(nodes[farRight!]?.size).toBeCloseTo(0.4);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[right!]?.pixelSize).toBeUndefined();
+    expect(nodes[farRight!]?.pixelSize).toBeUndefined();
+  });
+
+  it('does not collapse sash-sized pairs into equal thirds on third insert', () => {
+    const nodes = createInitialWorkbenchNodes();
+    const right = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(right).toBeTruthy();
+
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 200;
+    nodes[right!]!.pixelSize = 800;
+
+    const farRight = splitEditorGroupInTree(nodes, right!, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(farRight).toBeTruthy();
+
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.2);
+    expect(nodes[right!]?.size).toBeCloseTo(0.4);
+    expect(nodes[farRight!]?.size).toBeCloseTo(0.4);
+    expect(nodes[farRight!]?.size).toBeGreaterThan(0.1);
   });
 
   it('applyEqualGridSplit divides pair evenly', () => {
@@ -37,7 +105,7 @@ describe('editorGridLayout tree ops', () => {
     expect(resolveEditorGroupMinSize({ ...node!, minSize: 260 }, 'row')).toBe(260);
   });
 
-  it('removeEditorGroupFromTree collapses branch when last tab leaves a group', () => {
+  it('removeEditorGroupFromTree reflows the survivor to fill the editor area', () => {
     resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
     nodes.sidebar!.pixelSize = 271;
@@ -58,7 +126,8 @@ describe('editorGridLayout tree ops', () => {
     expect(nextActiveGroupId).toBe(DEFAULT_EDITOR_GROUP_ID);
     expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.parentId).toBe(EDITOR_AREA_ID);
-    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(800);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBe(1);
     expect(nodes.sidebar?.pixelSize).toBe(271);
     expect(nodes.panel?.pixelSize).toBe(183);
     expect(nodes.detail?.pixelSize).toBe(319);
@@ -79,6 +148,8 @@ describe('editorGridLayout tree ops', () => {
     expect(nodes[branchId!]?.size).toBe(1);
     expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
     expect(nodes[created!]?.pixelSize).toBeUndefined();
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.5);
+    expect(nodes[created!]?.size).toBeCloseTo(0.5);
   });
 
   it('clears stale maximize/hidden flags when the maximized group is removed', () => {
@@ -107,7 +178,7 @@ describe('editorGridLayout tree ops', () => {
     expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
   });
 
-  it('merges pixel sizes when collapsing a vertical split branch to one group', () => {
+  it('reflows a vertical split collapse without cross-axis pixel locks', () => {
     resetEditorTabStore();
     const nodes = createInitialWorkbenchNodes();
     nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 300;
@@ -123,6 +194,36 @@ describe('editorGridLayout tree ops', () => {
     removeEditorGroupFromTree(nodes, created!);
 
     expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID]);
-    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBe(800);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBe(1);
+  });
+
+  it('renormalizes remaining sash-sized groups after closing one of three', () => {
+    resetEditorTabStore();
+    const nodes = createInitialWorkbenchNodes();
+    const middle = splitEditorGroupInTree(nodes, DEFAULT_EDITOR_GROUP_ID, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(middle).toBeTruthy();
+    const farRight = splitEditorGroupInTree(nodes, middle!, 'right', {
+      component: 'GraphEditor',
+    });
+    expect(farRight).toBeTruthy();
+    seedEditorGroupTabs(middle!, [{ id: 'events/middle', component: 'GraphEditor', type: 'event' }]);
+    seedEditorGroupTabs(farRight!, [{ id: 'events/far', component: 'GraphEditor', type: 'event' }]);
+
+    nodes[DEFAULT_EDITOR_GROUP_ID]!.pixelSize = 200;
+    nodes[middle!]!.pixelSize = 300;
+    nodes[farRight!]!.pixelSize = 500;
+
+    useEditorTabStore.getState().removeTab(middle!, 'events/middle');
+    removeEditorGroupFromTree(nodes, middle!);
+
+    expect(nodes[middle!]).toBeUndefined();
+    expect(nodes[EDITOR_AREA_ID]?.children).toEqual([DEFAULT_EDITOR_GROUP_ID, farRight!]);
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.pixelSize).toBeUndefined();
+    expect(nodes[farRight!]?.pixelSize).toBeUndefined();
+    expect(nodes[DEFAULT_EDITOR_GROUP_ID]?.size).toBeCloseTo(0.5);
+    expect(nodes[farRight!]?.size).toBeCloseTo(0.5);
   });
 });

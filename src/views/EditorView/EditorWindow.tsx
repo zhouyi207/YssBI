@@ -6,7 +6,7 @@ import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
-import { useProjectSyncWithEditor } from "@/features/application/initialization";
+import { useProjectSync } from "@/features/application/initialization";
 import {
   EditorSessionProvider,
   useEditorGroup,
@@ -32,7 +32,7 @@ function EditorWindowReady() {
 
   useWorkbenchLayout();
   useEditorWorkbenchAppearance();
-  useProjectSyncWithEditor();
+  useProjectSync();
 
   const editor = useEditorGroup();
   const { toggleLogPanel, toggleDetail } = useMenubar();

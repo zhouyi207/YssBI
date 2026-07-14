@@ -29,8 +29,8 @@ type OpenGraphFn = (
  * Graph Management Hook
  *
  * 作为编辑器 UI 的 graph 操作门面：
- * - graph resource CRUD 委托给 resourceActions
- * - 创建后自动打开时，经 openGraphInEditor → switchEditorTab 激活正文
+ * - graph resource CRUD 委托给 resourceActions（file-first：创建写盘 + refreshResourceIndex）
+ * - 创建后自动打开时，经 openGraphInEditor → switchEditorTab 从文件加载正文
  * - toast/logger/sidebar 切换等 UI 编排留在这里
  */
 export function useGraphManagement(
@@ -59,7 +59,7 @@ export function useGraphManagement(
     try {
       const id = await createGraphResource('event', baseName);
 
-      logger.graph.info(`Event creation request sent, ID: ${id}`, 'GraphManagement');
+      logger.graph.info(`Event created at path: ${id}`, 'GraphManagement');
 
       if (openAfterCreate) {
         await openCreatedGraph(id, 'event');
@@ -73,11 +73,6 @@ export function useGraphManagement(
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
-
-  const handleEventCreatedFailed = useCallback((name: string, error: string) => {
-    logger.graph.error(`handleEventCreatedFailed: ${name} - ${error}`, 'GraphManagement');
-    uiStore.showToast(`创建 Event 失败: ${error}`, 'error');
-  }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
     try {
@@ -100,7 +95,7 @@ export function useGraphManagement(
     try {
       const id = await createGraphResource('function', baseName);
 
-      logger.graph.info(`Function creation request sent, ID: ${id}`, 'GraphManagement');
+      logger.graph.info(`Function created at path: ${id}`, 'GraphManagement');
 
       if (openAfterCreate) {
         await openCreatedGraph(id, 'function');
@@ -114,11 +109,6 @@ export function useGraphManagement(
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
-
-  const handleFunctionCreatedFailed = useCallback((name: string, error: string) => {
-    logger.graph.error(`handleFunctionCreatedFailed: ${name} - ${error}`, 'GraphManagement');
-    uiStore.showToast(`创建 Function 失败: ${error}`, 'error');
-  }, []);
 
   const deleteFunction = useCallback(async (id: string) => {
     try {
@@ -154,10 +144,8 @@ export function useGraphManagement(
   return {
     addEvent,
     deleteEvent,
-    handleEventCreatedFailed,
     addFunction,
     deleteFunction,
-    handleFunctionCreatedFailed,
     renameGraph: renameGraphItem,
     duplicateGraph: duplicateGraphItem,
     createGraph,

@@ -157,6 +157,16 @@ impl ProjectState {
         self.refresh_call_sites_for_caller(graph_path);
     }
 
+    /// Persist a loaded graph to disk, then drop it from in-memory project state (file-first create).
+    pub fn commit_persisted_graph_and_unload(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Result<(), String> {
+        self.persist_loaded_graph(graph_path)?;
+        self.unload_graph(graph_path);
+        Ok(())
+    }
+
     pub fn get_graph(&self, graph_path: &GraphResourcePath) -> Option<GraphInstance> {
         self.project_data
             .read()

@@ -14,11 +14,11 @@ const nodeRect = {
 } as DOMRect;
 
 describe('computeEditorSplitPreviewRect', () => {
-  it('maps center to right half', () => {
+  it('highlights full area on merge (center)', () => {
     expect(computeEditorSplitPreviewRect(nodeRect, 'center')).toEqual({
       top: 100,
-      left: 400,
-      width: 200,
+      left: 200,
+      width: 400,
       height: 300,
     });
   });

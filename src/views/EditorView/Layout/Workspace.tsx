@@ -1,30 +1,16 @@
 import { forwardRef, useEffect, useRef } from "react";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { handleGraphResourceDrop } from "@/features/application/editor/handleGraphResourceDrop";
-import {
-  moveTabBetweenGroups,
-  splitEditorWithTab,
-} from "@/features/application/editor/editorGroupCommands";
-import { resolveTabBarDropIndex } from "@/features/application/editor/tabBarReorderStore";
+import { executeEditorDragEnd } from "@/features/application/editor/editorDragDropActions";
 import { EditorDragPreviewMonitorHost } from "@/features/application/editor/useEditorDragPreviewMonitor";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { LayoutNodeRenderer } from "../Renderer/LayoutNodeRenderer";
 import { DndContext, useSensor, useSensors, PointerSensor, DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
-import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { useSidebarDragStore, canvasDropHandlerStore } from "@/features/core/sidebarDrag";
+import { useSidebarDragStore } from "@/features/core/sidebarDrag";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import {
-  isCanvasDrop,
-  isLayoutRegionDrop,
-  isTabbarDrop,
-  isNodeTemplateDragData,
-  isNodeTemplateDragState,
   isSidebarSpawnDrag,
-  isTabDragData,
-  getSidebarResourceFromDrag,
   buildSidebarDragState,
   parseCanvasDragPayload,
+  snapTopLeftToCursor,
 } from "@/features/core/dnd";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { EditorDropPreviewOverlay } from "./EditorDropPreviewOverlay";
@@ -67,7 +53,14 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
       const x = activatorEvent?.clientX ?? 0;
       const y = activatorEvent?.clientY ?? 0;
       setActiveDrag(buildSidebarDragState(activeData, x, y));
-      const onMove = (e: PointerEvent) => updatePosition(e.clientX, e.clientY);
+      const onMove = (e: PointerEvent) => {
+        updatePosition(e.clientX, e.clientY);
+        useModifierKeyStore.getState().setModifierKeys({
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          shiftKey: e.shiftKey,
+        });
+      };
       pointerMoveCleanupRef.current?.();
       pointerMoveCleanupRef.current = addGlobalEventListener(document, "pointermove", onMove);
     }
@@ -75,68 +68,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDragging(false);
-    const { active, over } = event;
-    const activeData = parseCanvasDragPayload(active.data.current);
-    const overData = over?.data.current;
-    const sidebarResource = getSidebarResourceFromDrag(activeData);
-
-    if (sidebarResource) {
-      finishSidebarDrag();
-      if (overData && (isCanvasDrop(overData) || isTabbarDrop(overData))) {
-        void handleGraphResourceDrop(sidebarResource, overData)
-          .catch((error) => uiStore.showToast(formatErrorMessage(error), "error"));
-      }
-      return;
-    }
-
-    if (isNodeTemplateDragData(activeData)) {
-      const dragState = useSidebarDragStore.getState().activeDrag;
-      finishSidebarDrag();
-      const groupId = isCanvasDrop(overData) ? overData.groupId : null;
-      if (groupId && dragState && isNodeTemplateDragState(dragState)) {
-        // 将目标 canvas 设为 active group（确保 variable drop menu 等 UI 正确显示）
-        void activateEditorGroup(groupId);
-
-        const handler = canvasDropHandlerStore.getHandler(groupId);
-        if (handler) {
-          const modifierKeys = useModifierKeyStore.getState();
-          handler(dragState, {
-            altKey: modifierKeys.altKey || (event.activatorEvent as PointerEvent)?.altKey || false,
-            ctrlKey: modifierKeys.ctrlKey || (event.activatorEvent as PointerEvent)?.ctrlKey || false,
-          });
-        }
-      }
-      return;
-    }
-
-    if (over && active.id !== over.id) {
-      const dropData = over.data.current;
-      const dropPosition = isLayoutRegionDrop(dropData) ? dropData.dropPosition : 'center';
-      const targetNodeId = isLayoutRegionDrop(dropData) || isTabbarDrop(dropData)
-        ? dropData.targetNodeId
-        : over.id;
-
-      if (isTabDragData(activeData)) {
-        const { sourceNodeId, tabId } = activeData;
-        const isTabbarTarget = isTabbarDrop(dropData);
-
-        if (isTabbarTarget) {
-          moveTabBetweenGroups(
-            sourceNodeId,
-            tabId,
-            targetNodeId as string,
-            resolveTabBarDropIndex(targetNodeId as string, dropData.targetTabIndex),
-          );
-        } else if (isLayoutRegionDrop(dropData)) {
-          void splitEditorWithTab(
-            sourceNodeId,
-            tabId,
-            targetNodeId as string,
-            dropPosition,
-          );
-        }
-      }
-    }
+    void executeEditorDragEnd(event, { finishSidebarDrag });
   };
 
   return (
@@ -152,8 +84,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId: string }>(({ nodeI
           <LayoutNodeRenderer nodeId={nodeId} />
         </div>
 
-        {/* Drag overlay for sidebar items */}
-        <DragOverlay dropAnimation={null}>
+        <DragOverlay dropAnimation={null} modifiers={[snapTopLeftToCursor]}>
           <WorkspaceDragOverlay />
         </DragOverlay>
       </div>

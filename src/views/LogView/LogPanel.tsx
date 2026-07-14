@@ -1,15 +1,11 @@
 import { forwardRef } from 'react';
 import { LogPanelContent } from './LogPanelContent';
 
-export const LogPanel = forwardRef<HTMLDivElement, Record<string, never>>((_, ref) => {
-
-  return (
-    <div ref={ref} className="flex flex-col h-full w-full overflow-hidden">
-      <div className="flex-1 min-h-0">
-        <LogPanelContent variant="embedded" className="h-full" />
-      </div>
-    </div>
-  );
-});
+/** Log list body — `LogPanelProvider` is owned by `PanelPart` (embedded) or `LogWindow` (standalone). */
+export const LogPanel = forwardRef<HTMLDivElement, Record<string, never>>((_, ref) => (
+  <div ref={ref} className="flex h-full w-full flex-col overflow-hidden">
+    <LogPanelContent className="h-full" />
+  </div>
+));
 
 LogPanel.displayName = 'LogPanel';

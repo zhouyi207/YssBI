@@ -22,7 +22,7 @@ export const editorTabReorderGapClass =
  * Inactive: slightly recessed muted background; close icon on group hover.
  */
 export const editorTabItemVariants = cva(
-  "group/tab relative inline-flex h-[var(--titlebar-height)] shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-r border-border/60 px-3 text-xs leading-normal whitespace-nowrap transition-[transform,colors] duration-150 ease-out focus-visible:outline-none",
+  "group/tab relative inline-flex h-[var(--titlebar-height)] shrink-0 cursor-grab active:cursor-grabbing items-center gap-1.5 rounded-none border-r border-border/60 px-3 text-xs leading-normal whitespace-nowrap transition-[transform,colors] duration-150 ease-out focus-visible:outline-none",
   {
     variants: {
       active: {
@@ -37,11 +37,16 @@ export const editorTabItemVariants = cva(
         true: "italic font-normal",
         false: "font-medium",
       },
+      selected: {
+        true: "bg-muted/50 text-foreground",
+        false: "",
+      },
     },
     defaultVariants: {
       active: false,
       dragging: false,
       preview: false,
+      selected: false,
     },
   },
 );

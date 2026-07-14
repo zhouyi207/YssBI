@@ -26,6 +26,10 @@ export interface EditorGroupPlacement {
   tabIds: string[];
   activeTabId: string | null;
   selectedNodeIds: string[];
+  /** VS Code multi-tab selection within the group. */
+  selectedTabIds: string[];
+  /** VS Code locked editor group — tabs cannot leave the group. */
+  locked?: boolean;
 }
 
 export interface EditorTabMemento {
@@ -61,9 +65,34 @@ export interface EditorTabState {
   ) => void;
   setActiveTab: (groupId: string, tabId: string | null) => void;
   setTabPinned: (groupId: string, tabId: string, pinned: boolean) => void;
+  setTabSticky: (groupId: string, tabId: string, sticky: boolean) => void;
+  setSelectedTabIds: (groupId: string, tabIds: string[]) => void;
+  toggleTabInSelection: (groupId: string, tabId: string) => void;
+  setGroupLocked: (groupId: string, locked: boolean) => void;
   setSelectedNodeIds: (groupId: string, selectedNodeIds: string[]) => void;
+  moveTabs: (
+    sourceGroupId: string,
+    tabIds: string[],
+    targetGroupId: string,
+    targetTabIndex?: number,
+  ) => void;
   closeAllGraphTabs: () => void;
-  mergePlacementsIntoGroup: (targetGroupId: string, sourceGroupIds: string[]) => void;
+  mergePlacementsIntoGroup: (
+    targetGroupId: string,
+    sourceGroupIds: string[],
+    insertIndex?: number,
+  ) => void;
+  /** VS Code copy editor — same tab id referenced in another group without removing source. */
+  duplicateTabReference: (
+    targetGroupId: string,
+    tabId: string,
+    insertIndex?: number,
+  ) => void;
+  duplicateGroupTabs: (
+    sourceGroupId: string,
+    targetGroupId: string,
+    insertIndex?: number,
+  ) => void;
   renameTabId: (from: string, to: string) => void;
 
   snapshotMemento: () => EditorTabMemento;
@@ -76,10 +105,11 @@ const EMPTY_PLACEMENT: EditorGroupPlacement = {
   tabIds: [],
   activeTabId: null,
   selectedNodeIds: [],
+  selectedTabIds: [],
 };
 
 function createEmptyPlacement(): EditorGroupPlacement {
-  return { tabIds: [], activeTabId: null, selectedNodeIds: [] };
+  return { tabIds: [], activeTabId: null, selectedNodeIds: [], selectedTabIds: [] };
 }
 
 function registerTab(state: { registry: Record<string, LayoutTab> }, tab: LayoutTab): void {
@@ -112,6 +142,7 @@ function readEmbeddedPlacement(node: LayoutNode): EditorGroupPlacement | null {
     tabIds: normalized.map((tab) => tab.id),
     activeTabId: legacy?.activeTabId ?? lastTabId,
     selectedNodeIds: legacy?.params?.selectedNodeIds ?? [],
+    selectedTabIds: legacy?.activeTabId ? [legacy.activeTabId] : (lastTabId ? [lastTabId] : []),
   };
 }
 
@@ -142,7 +173,14 @@ export const useEditorTabStore = create<EditorTabState>()(
     registry: {},
     placements: {},
 
-    getPlacement: (groupId) => get().placements[groupId] ?? EMPTY_PLACEMENT,
+    getPlacement: (groupId) => {
+      const placement = get().placements[groupId] ?? EMPTY_PLACEMENT;
+      if (placement.selectedTabIds) return placement;
+      return {
+        ...placement,
+        selectedTabIds: placement.activeTabId ? [placement.activeTabId] : [],
+      };
+    },
 
     resolveTab: (tabId) => get().registry[tabId] ?? null,
 
@@ -190,6 +228,9 @@ export const useEditorTabStore = create<EditorTabState>()(
         tabIds: normalized.map((tab) => tab.id),
         activeTabId: activeTabId ?? (normalized.length > 0 ? normalized[normalized.length - 1].id : null),
         selectedNodeIds: [],
+        selectedTabIds: activeTabId
+          ? [activeTabId]
+          : (normalized.length > 0 ? [normalized[normalized.length - 1].id] : []),
       };
     }),
 
@@ -234,6 +275,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (closingIndex === -1) return;
 
       placement.tabIds.splice(closingIndex, 1);
+      placement.selectedTabIds = (placement.selectedTabIds ?? []).filter((id) => id !== tabId);
 
       if (placement.tabIds.length === 0) {
         placement.activeTabId = null;
@@ -257,7 +299,9 @@ export const useEditorTabStore = create<EditorTabState>()(
       const tab = state.registry[tabId];
       if (!tab) return;
 
-      registerTab(state, applyTabPinState(tab, true));
+      if (sourceGroupId !== targetGroupId) {
+        registerTab(state, applyTabPinState(tab, true));
+      }
 
       if (!state.placements[targetGroupId]) {
         state.placements[targetGroupId] = createEmptyPlacement();
@@ -323,6 +367,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (nextActiveId != null && !placement.tabIds.includes(nextActiveId)) return;
 
       placement.activeTabId = nextActiveId;
+      placement.selectedTabIds = nextActiveId ? [nextActiveId] : [];
       clearSelection(placement);
     }),
 
@@ -333,6 +378,47 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (!tab) return;
       state.registry[tabId] = applyTabPinState(tab, pinned);
     }),
+
+    setTabSticky: (groupId, tabId, sticky) => set((state) => {
+      const placement = state.placements[groupId];
+      if (!placement?.tabIds.includes(tabId)) return;
+      const tab = state.registry[tabId];
+      if (!tab) return;
+      state.registry[tabId] = { ...tab, sticky };
+    }),
+
+    setSelectedTabIds: (groupId, tabIds) => set((state) => {
+      const placement = state.placements[groupId];
+      if (!placement) return;
+      placement.selectedTabIds = tabIds.filter((id) => placement.tabIds.includes(id));
+    }),
+
+    toggleTabInSelection: (groupId, tabId) => set((state) => {
+      const placement = state.placements[groupId];
+      if (!placement?.tabIds.includes(tabId)) return;
+      const selected = new Set(placement.selectedTabIds ?? []);
+      if (selected.has(tabId)) selected.delete(tabId);
+      else selected.add(tabId);
+      placement.selectedTabIds = placement.tabIds.filter((id) => selected.has(id));
+      placement.activeTabId = tabId;
+    }),
+
+    setGroupLocked: (groupId, locked) => set((state) => {
+      if (!state.placements[groupId]) {
+        state.placements[groupId] = createEmptyPlacement();
+      }
+      state.placements[groupId].locked = locked;
+    }),
+
+    moveTabs: (sourceGroupId, tabIds, targetGroupId, targetTabIndex) => {
+      const store = get();
+      const sourceOrder = store.getPlacement(sourceGroupId).tabIds;
+      const orderedIds = sourceOrder.filter((id) => tabIds.includes(id));
+      orderedIds.forEach((tabId, offset) => {
+        const insertAt = targetTabIndex !== undefined ? targetTabIndex + offset : undefined;
+        store.moveTab(sourceGroupId, tabId, targetGroupId, insertAt);
+      });
+    },
 
     setSelectedNodeIds: (groupId, selectedNodeIds) => set((state) => {
       if (!state.placements[groupId]) {
@@ -365,27 +451,90 @@ export const useEditorTabStore = create<EditorTabState>()(
       pruneRegistry(state);
     }),
 
-    mergePlacementsIntoGroup: (targetGroupId, sourceGroupIds) => set((state) => {
+    mergePlacementsIntoGroup: (targetGroupId, sourceGroupIds, insertIndex) => set((state) => {
       if (!state.placements[targetGroupId]) {
         state.placements[targetGroupId] = createEmptyPlacement();
       }
       const target = state.placements[targetGroupId];
       const seen = new Set(target.tabIds);
+      const mergedIds: string[] = [];
+      let activeFromSource: string | null = null;
 
       for (const sourceGroupId of sourceGroupIds) {
         if (sourceGroupId === targetGroupId) continue;
         const source = state.placements[sourceGroupId];
         if (!source) continue;
+        if (
+          !activeFromSource
+          && source.activeTabId
+          && source.tabIds.includes(source.activeTabId)
+        ) {
+          activeFromSource = source.activeTabId;
+        }
         for (const tabId of source.tabIds) {
           if (seen.has(tabId)) continue;
           seen.add(tabId);
-          target.tabIds.push(tabId);
+          mergedIds.push(tabId);
         }
         delete state.placements[sourceGroupId];
       }
 
-      if (!target.activeTabId && target.tabIds.length > 0) {
+      if (mergedIds.length === 0) return;
+
+      if (activeFromSource && !mergedIds.includes(activeFromSource)) {
+        activeFromSource = mergedIds[mergedIds.length - 1] ?? null;
+      }
+
+      if (insertIndex !== undefined) {
+        target.tabIds.splice(insertIndex, 0, ...mergedIds);
+      } else {
+        target.tabIds.push(...mergedIds);
+      }
+
+      if (activeFromSource) {
+        target.activeTabId = activeFromSource;
+      } else if (!target.activeTabId && target.tabIds.length > 0) {
         target.activeTabId = target.tabIds[target.tabIds.length - 1] ?? null;
+      }
+    }),
+
+    duplicateTabReference: (targetGroupId, tabId, insertIndex) => set((state) => {
+      const tab = state.registry[tabId];
+      if (!tab) return;
+      registerTab(state, applyTabPinState(tab, true));
+      if (!state.placements[targetGroupId]) {
+        state.placements[targetGroupId] = createEmptyPlacement();
+      }
+      const target = state.placements[targetGroupId];
+      if (!target.tabIds.includes(tabId)) {
+        if (insertIndex !== undefined) {
+          target.tabIds.splice(insertIndex, 0, tabId);
+        } else {
+          target.tabIds.push(tabId);
+        }
+      }
+      target.activeTabId = tabId;
+    }),
+
+    duplicateGroupTabs: (sourceGroupId, targetGroupId, insertIndex) => set((state) => {
+      const source = state.placements[sourceGroupId];
+      if (!source) return;
+      if (!state.placements[targetGroupId]) {
+        state.placements[targetGroupId] = createEmptyPlacement();
+      }
+      const target = state.placements[targetGroupId];
+      let cursor = insertIndex ?? target.tabIds.length;
+      for (const tabId of source.tabIds) {
+        const tab = state.registry[tabId];
+        if (!tab) continue;
+        registerTab(state, applyTabPinState(tab, true));
+        if (target.tabIds.includes(tabId)) {
+          target.activeTabId = tabId;
+          continue;
+        }
+        target.tabIds.splice(cursor, 0, tabId);
+        cursor += 1;
+        target.activeTabId = tabId;
       }
     }),
 
@@ -411,6 +560,8 @@ export const useEditorTabStore = create<EditorTabState>()(
               tabIds: [...placement.tabIds],
               activeTabId: placement.activeTabId,
               selectedNodeIds: [...placement.selectedNodeIds],
+              selectedTabIds: [...(placement.selectedTabIds ?? [])],
+              locked: placement.locked,
             },
           ]),
         ),
@@ -428,6 +579,8 @@ export const useEditorTabStore = create<EditorTabState>()(
             tabIds: [...placement.tabIds],
             activeTabId: placement.activeTabId,
             selectedNodeIds: [...placement.selectedNodeIds],
+            selectedTabIds: [...(placement.selectedTabIds ?? [])],
+            locked: placement.locked,
           },
         ]),
       );
@@ -454,6 +607,7 @@ export const useEditorTabStore = create<EditorTabState>()(
             tabIds: [...embedded.tabIds],
             activeTabId: embedded.activeTabId,
             selectedNodeIds: [...embedded.selectedNodeIds],
+            selectedTabIds: [...embedded.selectedTabIds],
           };
         }
         if (!state.placements[DEFAULT_EDITOR_GROUP_ID] && isEditorGroupNode(nodes[DEFAULT_EDITOR_GROUP_ID])) {

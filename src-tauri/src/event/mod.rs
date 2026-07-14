@@ -50,3 +50,18 @@ pub fn emit_project_event(app_handle: &AppHandle, event: Event) {
         error!("Failed to emit project event: {}", e);
     }
 }
+
+/// Notify the frontend to refresh the on-disk project index snapshot.
+pub fn emit_project_index_invalidated(app_handle: &AppHandle, source: impl Into<String>) {
+    let version = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    emit_project_event(
+        app_handle,
+        Event::Resource(EventResource::ProjectIndexInvalidated {
+            source: source.into(),
+            version,
+        }),
+    );
+}

@@ -9,6 +9,14 @@ import { cn } from "@/lib/utils";
 export interface ContextMenuPosition {
   x: number;
   y: number;
+  /**
+   * `point` (default): menu top-left at (x, y) — cursor / right-click menus.
+   * `below-end`: below anchor, right edges aligned — VS Code editor toolbar overflow.
+   *   x = anchor right, y = anchor bottom.
+   */
+  placement?: 'point' | 'below-end';
+  /** Gap below anchor when `placement` is `below-end`. */
+  gap?: number;
 }
 
 export interface ContextMenuItem {
@@ -42,6 +50,19 @@ const menuItemClass =
 
 const menuItemDangerClass =
   "text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200";
+
+const DEFAULT_BELOW_END_GAP = 2;
+
+export function resolveContextMenuStyle(position: ContextMenuPosition): React.CSSProperties {
+  if (position.placement === 'below-end') {
+    return {
+      left: position.x,
+      top: position.y + (position.gap ?? DEFAULT_BELOW_END_GAP),
+      transform: 'translateX(-100%)',
+    };
+  }
+  return { left: position.x, top: position.y };
+}
 
 /**
  * Programmatic context menu at screen coordinates.
@@ -78,7 +99,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       ref={menuRef}
       role="menu"
       className={menuShellClass}
-      style={{ left: position.x, top: position.y }}
+      style={resolveContextMenuStyle(position)}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >

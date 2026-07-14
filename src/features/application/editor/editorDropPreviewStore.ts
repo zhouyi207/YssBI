@@ -1,19 +1,25 @@
 import { create } from 'zustand';
-import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
+import type { EditorSplitDirection } from '@/features/core/layout/editorSplitHitTest';
 import type { EditorDropPreviewRect } from '@/features/core/layout/editorDropPreview';
 
 export type EditorDropPreview =
   | {
       kind: 'split';
       targetGroupId: string;
-      edge: EditorSplitEdge;
+      edge: EditorSplitDirection;
       rect: EditorDropPreviewRect;
     }
   | {
-      kind: 'canvas-open';
+      kind: 'merge';
       targetGroupId: string;
       rect: EditorDropPreviewRect;
-      resourceName: string;
+      resourceName?: string;
+    }
+  | {
+      kind: 'function-into-event';
+      targetGroupId: string;
+      rect: EditorDropPreviewRect;
+      shiftHeld: boolean;
     };
 
 interface EditorDropPreviewStore {

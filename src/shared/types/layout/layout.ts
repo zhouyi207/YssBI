@@ -38,6 +38,8 @@ export interface LayoutTab {
    * `true` or omitted = pinned / permanent.
    */
   pinned?: boolean;
+  /** VS Code sticky tab — stays at the leading edge of the tab strip. */
+  sticky?: boolean;
 }
 
 /** 编辑器组节点 `data.params`（非 Tab 级字段） */

@@ -2,6 +2,7 @@ export const DRAG_TYPES = {
   NODE_TEMPLATE: "node-template",
   GRAPH_RESOURCE: "graph-resource",
   TAB: "tab",
+  EDITOR_GROUP: "editor-group",
   LEAF: "leaf",
 } as const;
 
@@ -10,7 +11,6 @@ export type DragType = (typeof DRAG_TYPES)[keyof typeof DRAG_TYPES];
 export const DROP_TYPES = {
   CANVAS: "canvas",
   TABBAR: "tabbar",
-  LAYOUT_REGION: "layout-region",
 } as const;
 
 /** Sidebar / palette 拖到画布时写入节点的模板字段 */
@@ -47,6 +47,13 @@ export type TabDragData = {
   type: typeof DRAG_TYPES.TAB;
   tabId: string;
   sourceNodeId: string;
+  /** Multi-select tab drag — all tab ids moved together. */
+  draggedTabIds?: string[];
+};
+
+export type EditorGroupDragData = {
+  type: typeof DRAG_TYPES.EDITOR_GROUP;
+  sourceNodeId: string;
 };
 
 export type LeafDragData = {
@@ -59,6 +66,7 @@ export type CanvasDragPayload =
   | NodeTemplateDragData
   | GraphResourceDragPayload
   | TabDragData
+  | EditorGroupDragData
   | LeafDragData;
 
 /** Sidebar / palette 产生的可落画布 payload */
@@ -75,16 +83,9 @@ export type TabbarDropData = {
   targetTabIndex: number;
 };
 
-export type LayoutRegionDropData = {
-  dropType: typeof DROP_TYPES.LAYOUT_REGION;
-  targetNodeId: string;
-  dropPosition: "center" | "top" | "bottom" | "left" | "right";
-};
-
 export type KnownDropData =
   | CanvasDropData
-  | TabbarDropData
-  | LayoutRegionDropData;
+  | TabbarDropData;
 
 export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
 
@@ -98,10 +99,6 @@ export function isCanvasDrop(data: unknown): data is CanvasDropData {
 
 export function isTabbarDrop(data: unknown): data is TabbarDropData {
   return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.TABBAR;
-}
-
-export function isLayoutRegionDrop(data: unknown): data is LayoutRegionDropData {
-  return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.LAYOUT_REGION;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,6 +128,11 @@ export function isTabDragData(data: unknown): data is TabDragData {
   return typeof data.tabId === "string" && typeof data.sourceNodeId === "string";
 }
 
+export function isEditorGroupDragData(data: unknown): data is EditorGroupDragData {
+  if (!hasDragType(data, DRAG_TYPES.EDITOR_GROUP)) return false;
+  return typeof data.sourceNodeId === "string";
+}
+
 export function isLeafDragData(data: unknown): data is LeafDragData {
   if (!hasDragType(data, DRAG_TYPES.LEAF)) return false;
   const node = data.node;
@@ -141,12 +143,17 @@ export function parseCanvasDragPayload(data: unknown): CanvasDragPayload | null 
   if (isNodeTemplateDragData(data)) return data;
   if (isGraphResourceDragPayload(data)) return data;
   if (isTabDragData(data)) return data;
+  if (isEditorGroupDragData(data)) return data;
   if (isLeafDragData(data)) return data;
   return null;
 }
 
 export function isSidebarSpawnDrag(data: unknown): data is SidebarDragPayload {
   return isNodeTemplateDragData(data) || isGraphResourceDragPayload(data);
+}
+
+export function isGraphResourceDragState(state: SidebarDragState): state is GraphResourceDragState {
+  return state.type === DRAG_TYPES.GRAPH_RESOURCE;
 }
 
 export function getSidebarResourceFromDrag(

@@ -54,7 +54,6 @@ fn existing_graph_names(
 
 #[tauri::command]
 pub fn create_event(
-    app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
@@ -65,20 +64,13 @@ pub fn create_event(
     );
     // 每个事件图自动拥有一个系统托管的 Event Begin 壳节点（对齐 UE5 事件图）。
     graph.create_node_with_position(EVENT_BEGIN_NODE_TYPE, 120.0, 120.0, None)?;
-    let graph_path = graph.resource_path.as_str().to_string();
-    emit_project_event(
-        &app,
-        Event::Event(EventEvent::EventCreated {
-            path: graph_path.clone(),
-            data: (&graph).into(),
-        }),
-    );
-    Ok(graph_path)
+    let graph_path = graph.resource_path.clone();
+    state.commit_persisted_graph_and_unload(&graph_path)?;
+    Ok(graph_path.as_str().to_string())
 }
 
 #[tauri::command]
 pub fn create_function(
-    app: AppHandle,
     state: State<ProjectState>,
     graph_name: &str,
 ) -> Result<String, String> {
@@ -92,15 +84,9 @@ pub fn create_function(
     graph.create_node_with_position(FUNCTION_RETURN_NODE_TYPE, 560.0, 160.0, None)?;
     // 默认签名含 exec 入/出参；投影到 Entry / Return 壳节点 pin。
     let _ = graph.sync_function_shell_pins();
-    let graph_path = graph.resource_path.as_str().to_string();
-    emit_project_event(
-        &app,
-        Event::Function(EventFunction::FunctionCreated {
-            path: graph_path.clone(),
-            data: (&graph).into(),
-        }),
-    );
-    Ok(graph_path)
+    let graph_path = graph.resource_path.clone();
+    state.commit_persisted_graph_and_unload(&graph_path)?;
+    Ok(graph_path.as_str().to_string())
 }
 
 #[tauri::command]
@@ -239,27 +225,14 @@ pub fn save_project_graph(
 
 #[tauri::command]
 pub fn duplicate_graph(
-    app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<GraphInstanceDTO, String> {
+) -> Result<String, String> {
     let graph_path = parse_graph_path(&graph_path)?;
     let project_path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
     let document = crate::project::duplicate_project_graph_file(&project_path, &graph_path)
         .map_err(|e| e.to_string())?;
-    let graph = state.insert_loaded_graph(document.graph.clone(), document.local_variables.clone());
-    let event = match graph.kind {
-        GraphKind::Event => Event::Event(EventEvent::EventCreated {
-            path: graph.resource_path.as_str().to_string(),
-            data: (&graph).into(),
-        }),
-        GraphKind::Function => Event::Function(EventFunction::FunctionCreated {
-            path: graph.resource_path.as_str().to_string(),
-            data: (&graph).into(),
-        }),
-    };
-    emit_project_event(&app, event);
-    Ok((&graph).into())
+    Ok(document.graph.resource_path.as_str().to_string())
 }
 
 #[derive(serde::Serialize)]

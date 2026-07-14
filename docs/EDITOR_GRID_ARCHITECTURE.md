@@ -59,14 +59,55 @@ Editor grid and workbench chrome share one localStorage key scoped by **Tauri wi
 
 **Project switch:** `collapseEditorGroupsForProjectSwitch()` collapses the in-memory grid and immediately persists a single-group `editorGrid` memento so refresh does not restore a stale split layout.
 
-## Editor Grid pair sizing
+## Drag & drop (VS Code `editorDropTarget`)
+
+Tab / sidebar graph / **entire editor group** drag uses **pointer position** inside `data-editor-content`:
+
+- Center dead zone (10% inset) → merge into group
+- Edge bands → directional split via `editorSplitHitTest.ts` (33% zones; 30% when dragging a group)
+- **Alt** (Win/Linux) / **Shift** (macOS) toggles `splitOnDragAndDrop` for the session
+- **Ctrl** (Win/Linux) / **Alt** (macOS) → copy instead of move
+- `openSideBySideDirection` biases split zones via `editorPartOptions.ts`
+- Self-drop guard: same group + single tab hides split overlay
+
+**Group drag:** tab-strip trailing `data-group-drag-fill` filler (VS Code empty `tabsContainer` gap).
+
+**Drop surface:** `readEditorGroupDropBounds` — content below tab bar when tabs exist; full shell when empty (`getOverlayOffsetHeight`).
+
+**Drag hover:** 1500ms over tab opens it (`tabBarDragHoverOpen.ts`, VS Code `DRAG_OVER_OPEN_TAB_THRESHOLD`).
+
+**Close last tab:** `prepareActiveGroupBeforeLastTabClose` pre-activates MRU group before grid removal.
+
+**Pointer resolve:** unified in `editorDropTarget.ts` (removed duplicates from drag monitor + tabBarInsertPreview).
+
+TabBar chrome (VS Code `prepareEditorActions`):
+
+- **Active** group (or `alwaysShowEditorActions`): split + close inline
+- **Inactive** group: `…` overflow menu
+- `pointerdown` on group shell / tab strip activates group before drag
+
+Settings: `openSideBySideDirection`, `splitOnDragAndDrop`, `alwaysShowEditorActions`, `closeEmptyGroups`, `splitSizing` in `EditorSettings`.
+
+Group ops: `mergeEditorGroup`, `splitEditorGroupWithGroup`, copy variants in `editorGroupCommands.ts`; MRU in `recentEditorGroupIds`.
+
 
 Workbench chrome sashes and editor-grid sashes share `splitViewSizing.ts` / `sashResizeLogic.ts`, but commits are separate:
 
 - **Chrome sash:** `resizePart` + `persistWorkbenchLayoutDebounced()`.
-- **Grid sash:** adjacent editor-group pair resize (including after both leaves are pixelized) + `persistEditorGridDebounced()`.
+- **Grid sash:** adjacent editor-group pair resize + `persistEditorGridDebounced()`.
 
-Flex-only grid splits are pixelized on first drag via `commitFlexSplitResize` (runtime `pixelSize` + normalized `size`). **`editorGridMemento` persists ratio weights only** — `computeEditorGridMementoSizes` derives weights from the live tree without mutating session pixels; hydrate restores viewport-independent flex ratios.
+**VS Code–aligned split/close pipeline** (single sizing model under `editorGridSizing.ts`):
+
+| Operation | Tree (`editorGridLayout`) | Sizing (`editorGridSizing`) |
+|-----------|---------------------------|-----------------------------|
+| `addView` / tab split | `splitEditorGroupInTree` | `applyEditorGridAddViewSizing` → halve target, then `reflowEditorGridLayout` |
+| `removeView` / close empty group | `removeEditorGroupFromTree` | `applyEditorGridRemoveViewSizing` (merge reference or distribute) → `reflowEditorGridLayout` |
+| Sash drag | — | `commitSplitPairSizes` (session pixels; cleared on next reflow) |
+| Chrome/viewport change | — | `reflowEditorGridLayout` |
+
+`applyEditorGridAddViewSizing` mirrors VS Code `SplitView.addView` auto/split/distribute. **`auto`** checks only **siblings in the same row/col parent** (`areViewsDistributed`: max − min ≤ **2px** on layout sizes; ratio-only groups use scaled proportions). Inserting a view **halves the target allocation** instead of inserting a default `size: 1`.
+
+**`editorGridMemento` persists ratio weights only** — `computeEditorGridMementoSizes` derives weights from the live tree; hydrate restores viewport-independent flex ratios.
 
 ## Deferred (not grid replacement)
 

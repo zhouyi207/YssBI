@@ -85,11 +85,6 @@ export type EditorSessionDetailActionsSlice = PickEditorSession<
   'updateVariable' | 'updateDataFrame'
 >;
 
-/** ProjectSync 事件回调 */
-export type EditorSessionSyncCallbacksSlice = PickEditorSession<
-  'handleEventCreatedFailed' | 'handleFunctionCreatedFailed'
->;
-
 // ─── EditorGroup 叠加层 ───────────────────────────────────────────────────
 
 export interface EditorGroupWorkspaceSlice {
@@ -194,14 +189,5 @@ export function pickEditorSessionResources(session: EditorSession): EditorSessio
     functions: session.functions,
     variables: session.variables,
     dataframes: session.dataframes,
-  };
-}
-
-export function pickEditorSessionSyncCallbacks(
-  session: EditorSession,
-): EditorSessionSyncCallbacksSlice {
-  return {
-    handleEventCreatedFailed: session.handleEventCreatedFailed,
-    handleFunctionCreatedFailed: session.handleFunctionCreatedFailed,
   };
 }

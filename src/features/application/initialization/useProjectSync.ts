@@ -1,12 +1,9 @@
 // src/features/application/initialization/useProjectSync.ts
 // Application 层：协调 useEditor 与 Core 的 ProjectListener
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
-import { useEditorSession } from '@/features/application/editor';
-import { pickEditorSessionSyncCallbacks } from '@/features/application/editor/editorSessionTypes';
-import type { EventCallbacks } from '@/features/core/sync/types';
 import { logger } from '@/utils/appLogger';
 
 const LISTENER_KEY = 'project-listener';
@@ -15,7 +12,7 @@ const LISTENER_KEY = 'project-listener';
  * 项目同步核心逻辑
  * 仅当 callbacks 存在时才更新监听器回调，避免 DataView 等非编辑器窗口覆盖 Editor 的回调
  */
-function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
+function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').EventCallbacks) {
   const isSetupRef = useRef(false);
   const listenerRef = useRef<ProjectListener | null>(null);
 
@@ -59,26 +56,8 @@ function useProjectSyncCore(callbacks: EventCallbacks | undefined) {
 }
 
 /**
- * 带编辑器回调的项目同步（用于 EditorWindow）
- * Store 已由 Core handlers 更新；callbacks 仅用于失败 toast 等 UI 扩展。
- */
-export function useProjectSyncWithEditor() {
-  const editor = useEditorSession();
-  const { handleEventCreatedFailed, handleFunctionCreatedFailed } =
-    pickEditorSessionSyncCallbacks(editor);
-
-  const callbacks = useMemo<EventCallbacks>(
-    () => ({
-      onEventCreatedFailed: handleEventCreatedFailed,
-      onFunctionCreatedFailed: handleFunctionCreatedFailed,
-    }),
-    [handleEventCreatedFailed, handleFunctionCreatedFailed],
-  );
-  useProjectSyncCore(callbacks);
-}
-
-/**
- * 无回调的项目同步（用于 DatabaseEditorWindow 等非编辑器窗口）
+ * 项目事件同步（EditorWindow / DatabaseEditorWindow 等共用）
+ * Store 由 Core handlers 更新；graph 创建走 file-first，由 resourceActions 刷新索引。
  */
 export function useProjectSync() {
   useProjectSyncCore(undefined);

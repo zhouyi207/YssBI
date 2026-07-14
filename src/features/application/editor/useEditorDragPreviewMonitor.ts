@@ -1,26 +1,41 @@
 import { useEffect } from 'react';
 import { useDndMonitor, type DragMoveEvent, type DragStartEvent } from '@dnd-kit/core';
 import {
-  CANVAS_DROP_ZONE_ID_PREFIX,
-  isCanvasDrop,
+  isEditorGroupDragData,
   isGraphResourceDragPayload,
-  isLayoutRegionDrop,
-  isTabbarDrop,
+  isSidebarSpawnDrag,
   isTabDragData,
   parseCanvasDragPayload,
   type GraphResourceDragPayload,
 } from '@/features/core/dnd';
+import { resolveEditorDropHitAtClientPoint } from '@/features/core/layout/editorDropPreview';
 import {
-  readEditorCanvasDropRect,
-  readEditorSplitPreviewRect,
-} from '@/features/core/layout/editorDropPreview';
-import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
+  findCanvasDropGroupId,
+  findEditorGroupAtPointer,
+  findTabBarTargetFromPointer,
+  type TabBarInsertPreviewContext,
+} from '@/features/core/layout/editorDropTarget';
+import { isSidebarItemDropAllowedAtPointer } from '@/features/core/layout/workbenchSidebarDropSurface';
+import {
+  preferSplitVerticallyFromDirection,
+  readEditorPartOptions,
+} from '@/features/core/layout/editorPartOptions';
+import { resolveEnableSplittingOnDrag } from '@/features/core/layout/editorDragModifiers';
+import { useModifierKeyStore } from '@/features/core/keyboard';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { clearTabBarDragSession, useTabBarReorderStore } from './tabBarReorderStore';
 import { useEditorDropPreviewStore } from './editorDropPreviewStore';
+import { buildTabBarInsertPreview } from './tabBarInsertPreview';
+import { clearTabDragHoverOpen, scheduleTabDragHoverOpen } from './tabBarDragHoverOpen';
 import {
-  buildTabBarInsertPreview,
-  findTabBarTargetFromPointer,
-} from './tabBarInsertPreview';
+  cancelDropPreviewStaleGuard,
+  refreshDropPreviewStaleGuard,
+} from './editorDropPreviewStaleGuard';
+import { resolveTabDragTransferIds } from '@/features/core/layout/tabSelection';
+import { canDropFunctionIntoEventGraph } from '@/features/application/editor/canvasDrop';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
+import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
 
 function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: number; y: number } | null {
   const activator = event.activatorEvent;
@@ -34,43 +49,54 @@ function pointerFromDragEvent(event: DragMoveEvent | DragStartEvent): { x: numbe
   };
 }
 
-function findCanvasDropGroupId(
-  pointerX: number,
-  pointerY: number,
-  over: DragMoveEvent['over'] | null,
-): string | null {
-  const overData = over?.data.current;
-  if (overData && isCanvasDrop(overData)) {
-    return overData.groupId;
+function dragModifiersFromEvent(event: DragMoveEvent | DragStartEvent): {
+  altKey: boolean;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+} {
+  const activator = event.activatorEvent;
+  const modifierStore = useModifierKeyStore.getState();
+  if (activator instanceof MouseEvent || activator instanceof PointerEvent) {
+    return {
+      altKey: activator.altKey || modifierStore.altKey,
+      shiftKey: activator.shiftKey || modifierStore.shiftKey,
+      ctrlKey: activator.ctrlKey || modifierStore.ctrlKey,
+    };
   }
-
-  const elements = document.elementsFromPoint(pointerX, pointerY);
-  for (const element of elements) {
-    if (!(element instanceof HTMLElement)) continue;
-    if (!element.id.startsWith(CANVAS_DROP_ZONE_ID_PREFIX)) continue;
-    return element.id.slice(CANVAS_DROP_ZONE_ID_PREFIX.length);
-  }
-  return null;
+  return {
+    altKey: modifierStore.altKey,
+    shiftKey: modifierStore.shiftKey,
+    ctrlKey: modifierStore.ctrlKey,
+  };
 }
 
-function findLayoutRegionFromPointer(
-  pointerX: number,
-  pointerY: number,
-): { targetGroupId: string; edge: EditorSplitEdge } | null {
-  const elements = document.elementsFromPoint(pointerX, pointerY);
-  for (const element of elements) {
-    if (!(element instanceof HTMLElement)) continue;
-    const match = element.id.match(/^(.+)-(top|bottom|left|right|center)$/);
-    if (!match) continue;
-    return {
-      targetGroupId: match[1],
-      edge: match[2] as EditorSplitEdge,
-    };
+function splitHitOptions(
+  event: DragMoveEvent | DragStartEvent,
+  isDraggingGroup: boolean,
+) {
+  const partOptions = readEditorPartOptions();
+  const modifiers = dragModifiersFromEvent(event);
+  return {
+    preferSplitVertically: preferSplitVerticallyFromDirection(partOptions.openSideBySideDirection),
+    enableSplitting: resolveEnableSplittingOnDrag(partOptions.splitOnDragAndDrop, modifiers),
+    isDraggingGroup,
+  };
+}
+
+function readCanvasDropGroupIdFromOver(over: DragMoveEvent['over'] | null): string | null {
+  const overData = over?.data.current;
+  if (overData && typeof overData === 'object' && overData !== null && 'groupId' in overData) {
+    return String((overData as { groupId: string }).groupId);
   }
   return null;
 }
 
 function resolveTabDragTitle(tabId: string, sourceGroupId: string): string {
+  const tab = useEditorTabStore.getState().resolveTab(tabId);
+  if (tab) {
+    const resourceRef = layoutTabResourceRef(tab);
+    return resolveTabDisplayName(resourceRef, tab.id);
+  }
   const element = document.querySelector(
     `[data-tab-id="${tabId}"][data-tab-group="${sourceGroupId}"]`,
   ) as HTMLElement | null;
@@ -78,25 +104,96 @@ function resolveTabDragTitle(tabId: string, sourceGroupId: string): string {
   return label?.trim() || tabId;
 }
 
+function resolveEditorGroupDragTitle(sourceGroupId: string): string {
+  const activeTab = getActiveLayoutTab(sourceGroupId)?.tab;
+  if (!activeTab) return sourceGroupId;
+  const resourceRef = layoutTabResourceRef(activeTab);
+  return resolveTabDisplayName(resourceRef, activeTab.id);
+}
+
+function shouldSuppressDropPreview(
+  activeData: ReturnType<typeof parseCanvasDragPayload>,
+  targetGroupId: string,
+): boolean {
+  if (!activeData) return false;
+
+  if (isEditorGroupDragData(activeData)) {
+    return activeData.sourceNodeId === targetGroupId;
+  }
+
+  if (isTabDragData(activeData) && activeData.sourceNodeId === targetGroupId) {
+    const tabCount = useEditorTabStore.getState().getPlacement(targetGroupId).tabIds.length;
+    return tabCount < 2;
+  }
+
+  return false;
+}
+
 function beginTabDrag(event: DragStartEvent): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isTabDragData(activeData)) return;
 
+  const transferIds = activeData.draggedTabIds
+    ?? resolveTabDragTransferIds(activeData.sourceNodeId, activeData.tabId);
+  const title = resolveTabDragTitle(activeData.tabId, activeData.sourceNodeId);
+  const dragTitle = transferIds.length > 1
+    ? `${title} (+${transferIds.length - 1})`
+    : title;
+
+  useTabBarReorderStore.getState().setActiveGroupDrag(null);
   useTabBarReorderStore.getState().setActiveTabDrag({
     tabId: activeData.tabId,
     sourceGroupId: activeData.sourceNodeId,
-    title: resolveTabDragTitle(activeData.tabId, activeData.sourceNodeId),
+    title: dragTitle,
+  });
+}
+
+function beginEditorGroupDrag(event: DragStartEvent): void {
+  const activeData = parseCanvasDragPayload(event.active.data.current);
+  if (!isEditorGroupDragData(activeData)) return;
+
+  const tabCount = useEditorTabStore.getState().getPlacement(activeData.sourceNodeId).tabIds.length;
+  const title = resolveEditorGroupDragTitle(activeData.sourceNodeId);
+
+  useTabBarReorderStore.getState().setActiveTabDrag(null);
+  useTabBarReorderStore.getState().setActiveGroupDrag({
+    sourceGroupId: activeData.sourceNodeId,
+    title,
+    tabCount,
   });
 }
 
 export function clearEditorDragSession(): void {
+  cancelDropPreviewStaleGuard();
   clearTabBarDragSession();
+  clearTabDragHoverOpen();
   useEditorDropPreviewStore.getState().clearPreview();
+}
+
+function clearSidebarSpawnDropPreviews(): void {
+  useTabBarReorderStore.getState().clearPreview();
+  useEditorDropPreviewStore.getState().clearPreview();
+}
+
+function updateTabBarInsertPreviewFromPointer(
+  pointerX: number,
+  pointerY: number,
+  context: TabBarInsertPreviewContext,
+): void {
+  const strip = findTabBarTargetFromPointer(pointerX, pointerY);
+  if (!strip) {
+    useTabBarReorderStore.getState().clearPreview();
+    return;
+  }
+
+  useTabBarReorderStore.getState().setPreview(
+    buildTabBarInsertPreview(strip.groupId, strip.stripElement, pointerX, context),
+  );
 }
 
 function updateTabBarPreviewFromDragMove(event: DragMoveEvent | DragStartEvent): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
-  if (!isTabDragData(activeData)) {
+  if (!isTabDragData(activeData) && !isEditorGroupDragData(activeData)) {
     useTabBarReorderStore.getState().clearPreview();
     return;
   }
@@ -104,87 +201,76 @@ function updateTabBarPreviewFromDragMove(event: DragMoveEvent | DragStartEvent):
   const pointer = pointerFromDragEvent(event);
   if (!pointer) return;
 
-  const strip = findTabBarTargetFromPointer(pointer.x, pointer.y);
-  if (!strip) {
-    useTabBarReorderStore.getState().clearPreview();
-    return;
-  }
-
-  useTabBarReorderStore.getState().setPreview(
-    buildTabBarInsertPreview(strip.groupId, strip.stripElement, pointer.x, {
-      draggedTabId: activeData.tabId,
-      sourceGroupId: activeData.sourceNodeId,
-    }),
-  );
+  updateTabBarInsertPreviewFromPointer(pointer.x, pointer.y, {
+    draggedTabId: isTabDragData(activeData) ? activeData.tabId : null,
+    sourceGroupId: activeData?.sourceNodeId ?? null,
+  });
 }
 
-function updateGraphResourceTabBarPreview(event: DragMoveEvent | DragStartEvent): void {
-  const pointer = pointerFromDragEvent(event);
-  if (!pointer) {
-    useTabBarReorderStore.getState().clearPreview();
-    return;
-  }
-
-  const strip = findTabBarTargetFromPointer(pointer.x, pointer.y);
-  if (!strip) {
-    useTabBarReorderStore.getState().clearPreview();
-    return;
-  }
-
-  useTabBarReorderStore.getState().setPreview(
-    buildTabBarInsertPreview(strip.groupId, strip.stripElement, pointer.x, {
-      draggedTabId: null,
-      sourceGroupId: null,
-    }),
-  );
-}
-
-function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEvent): void {
+function updateEditorDropPreviewFromPointer(
+  event: DragMoveEvent | DragStartEvent,
+  pointerX: number,
+  pointerY: number,
+  resourceName?: string,
+): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
-  if (!isTabDragData(activeData)) return;
-
-  const pointer = pointerFromDragEvent(event);
-  if (pointer && findTabBarTargetFromPointer(pointer.x, pointer.y)) {
+  const targetGroupId = findEditorGroupAtPointer(pointerX, pointerY);
+  if (!targetGroupId) {
     useEditorDropPreviewStore.getState().clearPreview();
     return;
   }
 
-  let targetGroupId: string | null = null;
-  let edge: EditorSplitEdge | null = null;
-
-  const over = 'over' in event ? event.over : null;
-  const overData = over?.data.current;
-  if (overData && isLayoutRegionDrop(overData) && !isTabbarDrop(overData)) {
-    targetGroupId = overData.targetNodeId;
-    edge = overData.dropPosition as EditorSplitEdge;
-  } else if (pointer) {
-    const hit = findLayoutRegionFromPointer(pointer.x, pointer.y);
-    if (hit) {
-      targetGroupId = hit.targetGroupId;
-      edge = hit.edge;
-    }
-  }
-
-  if (!targetGroupId || !edge) {
+  if (shouldSuppressDropPreview(activeData, targetGroupId)) {
     useEditorDropPreviewStore.getState().clearPreview();
     return;
   }
 
-  const rect = readEditorSplitPreviewRect(targetGroupId, edge);
-  if (!rect) {
+  const isDraggingGroup = isEditorGroupDragData(activeData);
+  const resolved = resolveEditorDropHitAtClientPoint(
+    targetGroupId,
+    pointerX,
+    pointerY,
+    splitHitOptions(event, isDraggingGroup),
+  );
+  if (!resolved) {
     useEditorDropPreviewStore.getState().clearPreview();
+    return;
+  }
+
+  if (resolved.hit.mode === 'split') {
+    useEditorDropPreviewStore.getState().setPreview({
+      kind: 'split',
+      targetGroupId,
+      edge: resolved.hit.edge,
+      rect: resolved.rect,
+    });
     return;
   }
 
   useEditorDropPreviewStore.getState().setPreview({
-    kind: 'split',
+    kind: 'merge',
     targetGroupId,
-    edge,
-    rect,
+    rect: resolved.rect,
+    resourceName,
   });
 }
 
-function updateCanvasOpenPreviewFromDragMove(
+function updateSplitDropPreviewFromDragMove(event: DragMoveEvent | DragStartEvent): void {
+  const activeData = parseCanvasDragPayload(event.active.data.current);
+  if (!isTabDragData(activeData) && !isEditorGroupDragData(activeData)) return;
+
+  const pointer = pointerFromDragEvent(event);
+  if (!pointer) return;
+
+  if (findTabBarTargetFromPointer(pointer.x, pointer.y)) {
+    useEditorDropPreviewStore.getState().clearPreview();
+    return;
+  }
+
+  updateEditorDropPreviewFromPointer(event, pointer.x, pointer.y);
+}
+
+function updateGraphResourceDropPreviewFromDragMove(
   event: DragMoveEvent | DragStartEvent,
   activeData: GraphResourceDragPayload,
 ): void {
@@ -194,50 +280,97 @@ function updateCanvasOpenPreviewFromDragMove(
     return;
   }
 
-  const over = 'over' in event ? event.over : null;
-  const groupId = findCanvasDropGroupId(pointer.x, pointer.y, over);
-  if (!groupId) {
+  const modifiers = dragModifiersFromEvent(event);
+
+  if (findTabBarTargetFromPointer(pointer.x, pointer.y)) {
     useEditorDropPreviewStore.getState().clearPreview();
     return;
   }
 
-  const rect = readEditorCanvasDropRect(groupId);
-  if (!rect) {
+  const targetGroupId = findEditorGroupAtPointer(pointer.x, pointer.y);
+  if (
+    activeData.sidebarResource.type === 'function'
+    && targetGroupId
+    && canDropFunctionIntoEventGraph(targetGroupId, activeData.sidebarResource, true)
+  ) {
+    const resolved = resolveEditorDropHitAtClientPoint(
+      targetGroupId,
+      pointer.x,
+      pointer.y,
+      splitHitOptions(event, false),
+    );
+    if (resolved) {
+      useEditorDropPreviewStore.getState().setPreview({
+        kind: 'function-into-event',
+        targetGroupId,
+        rect: resolved.rect,
+        shiftHeld: modifiers.shiftKey,
+      });
+      return;
+    }
+  }
+
+  const groupFromCanvas = findCanvasDropGroupId(
+    pointer.x,
+    pointer.y,
+    readCanvasDropGroupIdFromOver('over' in event ? event.over : null),
+  );
+  if (!groupFromCanvas && !findEditorGroupAtPointer(pointer.x, pointer.y)) {
     useEditorDropPreviewStore.getState().clearPreview();
     return;
   }
 
-  useEditorDropPreviewStore.getState().setPreview({
-    kind: 'canvas-open',
-    targetGroupId: groupId,
-    rect,
-    resourceName: activeData.sidebarResource.name,
-  });
+  updateEditorDropPreviewFromPointer(
+    event,
+    pointer.x,
+    pointer.y,
+    activeData.sidebarResource.name,
+  );
 }
 
 function handleDragMove(event: DragMoveEvent | DragStartEvent): void {
   const activeData = parseCanvasDragPayload(event.active.data.current);
+  const pointer = pointerFromDragEvent(event);
 
-  if (isTabDragData(activeData)) {
+  if (pointer) {
+    refreshDropPreviewStaleGuard(pointer.x, pointer.y);
+  }
+
+  if (isSidebarSpawnDrag(activeData)) {
+    if (!pointer || !isSidebarItemDropAllowedAtPointer(pointer.x, pointer.y)) {
+      clearSidebarSpawnDropPreviews();
+      return;
+    }
+  }
+
+  if (isTabDragData(activeData) || isEditorGroupDragData(activeData)) {
     updateTabBarPreviewFromDragMove(event);
     updateSplitDropPreviewFromDragMove(event);
+    if (pointer && isTabDragData(activeData)) {
+      scheduleTabDragHoverOpen(pointer.x, pointer.y);
+    } else {
+      clearTabDragHoverOpen();
+    }
     return;
   }
 
   if (isGraphResourceDragPayload(activeData)) {
-    const pointer = pointerFromDragEvent(event);
     if (pointer && findTabBarTargetFromPointer(pointer.x, pointer.y)) {
       useEditorDropPreviewStore.getState().clearPreview();
-      updateGraphResourceTabBarPreview(event);
+      updateTabBarInsertPreviewFromPointer(pointer.x, pointer.y, {
+        draggedTabId: null,
+        sourceGroupId: null,
+      });
       return;
     }
 
     useTabBarReorderStore.getState().clearPreview();
-    updateCanvasOpenPreviewFromDragMove(event, activeData);
+    updateGraphResourceDropPreviewFromDragMove(event, activeData);
     return;
   }
 
   useTabBarReorderStore.getState().clearPreview();
+  clearTabDragHoverOpen();
   useEditorDropPreviewStore.getState().clearPreview();
 }
 
@@ -250,7 +383,7 @@ export function EditorDragPreviewMonitorHost(): null {
 }
 
 /**
- * Unified drag preview monitor: tab reorder, tab split, sidebar graph open on canvas / TabBar.
+ * Unified drag preview monitor: tab/group reorder, VS Code-style split zones, sidebar graph open/split.
  */
 export function useEditorDragPreviewMonitor(): void {
   useDndMonitor({
@@ -258,8 +391,11 @@ export function useEditorDragPreviewMonitor(): void {
       const activeData = parseCanvasDragPayload(event.active.data.current);
       if (isTabDragData(activeData)) {
         beginTabDrag(event);
+      } else if (isEditorGroupDragData(activeData)) {
+        beginEditorGroupDrag(event);
       } else {
         useTabBarReorderStore.getState().setActiveTabDrag(null);
+        useTabBarReorderStore.getState().setActiveGroupDrag(null);
         useTabBarReorderStore.getState().clearPreview();
       }
       handleDragMove(event);

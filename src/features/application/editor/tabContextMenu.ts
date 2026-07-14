@@ -3,6 +3,7 @@ import type { ContextMenuSection } from '@/shared/ui/contextMenu';
 import { isGraphResourceDirty } from '@/features/core/resource';
 
 import { isPreviewLayoutTab, layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
+import { isStickyLayoutTab } from '@/features/core/layout/tabBarOrder';
 
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 
@@ -21,6 +22,8 @@ import {
   closeTab,
 
   pinTab,
+
+  setTabSticky,
 
 } from './tabCommands';
 
@@ -93,6 +96,34 @@ export function buildTabContextMenuSections(
           label: t('tabBar.contextMenu.keepOpen'),
 
           onClick: () => pinTab(groupId, tab.id),
+
+        },
+
+      ],
+
+    });
+
+  }
+
+
+
+  if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
+
+    sections.push({
+
+      items: [
+
+        {
+
+          id: 'toggle-sticky',
+
+          label: isStickyLayoutTab(tab)
+
+            ? t('tabBar.contextMenu.unstickTab')
+
+            : t('tabBar.contextMenu.stickTab'),
+
+          onClick: () => void setTabSticky(groupId, tab.id, !tab.sticky),
 
         },
 

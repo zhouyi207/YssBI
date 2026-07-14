@@ -2,7 +2,13 @@ import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { listEditorGroupTabIds, useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { listEditorGroupIds } from '@/features/core/layout/editorGridLayout';
 import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
+import { isEditorGroupLocked } from '@/features/core/layout/editorGroupLock';
+import {
+  preferSplitVerticallyFromDirection,
+  readEditorPartOptions,
+} from '@/features/core/layout/editorPartOptions';
 import { isGraphResourceDirty } from '@/features/core/resource';
 import type { LayoutTab } from '@/shared/types/ui';
 import { closeEditorTab } from './closeEditorTab';
@@ -72,7 +78,11 @@ export async function closeEditorGroup(groupId: string): Promise<boolean> {
   await activateTabBarGroup(groupId);
   const tabIds = listEditorGroupTabIds(groupId);
   if (tabIds.length === 0) {
-    useLayoutStore.getState().removeEditorGroup(groupId);
+    const options = readEditorPartOptions();
+    const groupCount = listEditorGroupIds(useLayoutStore.getState().nodes).length;
+    if (options.closeEmptyGroups && groupCount > 1) {
+      useLayoutStore.getState().removeEditorGroup(groupId);
+    }
     return true;
   }
   for (const tabId of [...tabIds]) {
@@ -88,13 +98,28 @@ export async function splitEditorGroup(groupId: string, direction: 'row' | 'col'
 }
 
 export async function splitEditorGroupFromPointer(groupId: string, altPressed: boolean): Promise<void> {
-  await splitEditorGroup(groupId, altPressed ? 'col' : 'row');
+  const preferVertical = preferSplitVerticallyFromDirection(readEditorPartOptions().openSideBySideDirection);
+  if (altPressed) {
+    await splitEditorAtEdge(groupId, preferVertical ? 'bottom' : 'right');
+    return;
+  }
+  await splitEditorAtEdge(groupId, preferVertical ? 'right' : 'bottom');
 }
 
 /** Pin a preview tab so it is no longer replaced by sidebar preview opens. */
 export async function pinTab(groupId: string, tabId: string): Promise<void> {
   await activateTabBarGroup(groupId);
   useLayoutStore.getState().setTabPinned(groupId, tabId, true);
+}
+
+export async function setTabSticky(groupId: string, tabId: string, sticky: boolean): Promise<void> {
+  await activateTabBarGroup(groupId);
+  useEditorTabStore.getState().setTabSticky(groupId, tabId, sticky);
+}
+
+export function toggleEditorGroupLocked(groupId: string): void {
+  const locked = isEditorGroupLocked(groupId);
+  useEditorTabStore.getState().setGroupLocked(groupId, !locked);
 }
 
 export async function toggleMaximizeEditorGroup(groupId: string): Promise<void> {

@@ -63,7 +63,7 @@ fn spawn_project_watcher_thread(
                     match read_project_index(&metadata_path) {
                         Ok(_) => {
                             version = version.saturating_add(1);
-                            emit_project_index_invalidated(&app, version);
+                            emit_project_index_invalidated_from_watcher(&app, version);
                         }
                         Err(error) => warn!("Failed to refresh watched project index: {}", error),
                     }
@@ -75,7 +75,7 @@ fn spawn_project_watcher_thread(
     });
 }
 
-fn emit_project_index_invalidated(app: &AppHandle, version: u64) {
+fn emit_project_index_invalidated_from_watcher(app: &AppHandle, version: u64) {
     emit_project_event(
         app,
         ProjectEvent::Resource(EventResource::ProjectIndexInvalidated {

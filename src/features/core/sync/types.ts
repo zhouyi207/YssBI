@@ -32,11 +32,6 @@ export interface ProjectSavedPayload {
     path: string;
 }
 
-export interface GraphCreatedPayload {
-    path: string;
-    data: Graph;
-}
-
 export interface GraphUpdatedPayload {
     path: string;
     data: Partial<Graph> & {
@@ -47,11 +42,6 @@ export interface GraphUpdatedPayload {
 
 export interface GraphDeletedPayload {
     path: string;
-}
-
-export interface GraphCreatedFailedPayload {
-    name: string;
-    error: string;
 }
 
 export interface ResourceChangedPayload {
@@ -175,8 +165,8 @@ export interface RuntimeSourcesInvalidatedPayload {
 
 export type BackendEventType =
     | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectSaved'
-    | 'EventCreated' | 'EventUpdated' | 'EventDeleted' | 'EventCreatedFailed'
-    | 'FunctionCreated' | 'FunctionUpdated' | 'FunctionDeleted' | 'FunctionCreatedFailed'
+    | 'EventUpdated' | 'EventDeleted'
+    | 'FunctionUpdated' | 'FunctionDeleted'
     | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
     | 'DataFrameCreated' | 'DataFrameDeleted' | 'DataFrameSchemaUpdated'
     | 'ResourceChanged' | 'ResourceDeleted' | 'GraphResourceMoved' | 'ProjectIndexInvalidated'
@@ -188,14 +178,10 @@ export interface BackendEventPayloadMap {
     ProjectLoaded: ProjectLoadedPayload;
     ProjectCleared: void;
     ProjectSaved: ProjectSavedPayload;
-    EventCreated: GraphCreatedPayload;
     EventUpdated: GraphUpdatedPayload;
     EventDeleted: GraphDeletedPayload;
-    EventCreatedFailed: GraphCreatedFailedPayload;
-    FunctionCreated: GraphCreatedPayload;
     FunctionUpdated: GraphUpdatedPayload;
     FunctionDeleted: GraphDeletedPayload;
-    FunctionCreatedFailed: GraphCreatedFailedPayload;
     VariableCreated: VariableCreatedPayload;
     VariableUpdated: VariableUpdatedPayload;
     VariableDeleted: VariableDeletedPayload;
@@ -260,13 +246,7 @@ export interface EventCallbacks {
     onProjectCleared?: () => void;
     onProjectSaved?: (path: string) => void;
     
-    // Graph callbacks
-    onEventCreated?: (id: string, data: Graph) => void;
-    onFunctionCreated?: (id: string, data: Graph) => void;
-    
-    // Graph error callbacks
-    onEventCreatedFailed?: (name: string, error: string) => void;
-    onFunctionCreatedFailed?: (name: string, error: string) => void;
+    // Graph callbacks — creation is file-first; index refresh is owned by resourceActions.
     
     // Variable callbacks
     onVariableCreated?: (id: string, data: Variable) => void;

@@ -1,0 +1,115 @@
+import type { DragEndEvent } from '@dnd-kit/core';
+import type { GraphResourceDragData } from '@/features/core/dnd';
+import { DRAG_TYPES, type GraphResourceDragState, type SidebarDragState } from '@/features/core/dnd';
+import { canDropFunctionIntoEventGraph } from '@/features/application/editor/canvasDrop';
+import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
+import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
+import { useSidebarDragStore } from '@/features/core/sidebarDrag';
+import { resolveTabDisplayName } from '@/features/application/editor/resolveTabDisplayName';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import type { LayoutTab } from '@/shared/types/ui';
+
+export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activatorEvent' | 'delta'>): {
+  x: number;
+  y: number;
+} | null {
+  const activator = event.activatorEvent;
+  if (
+    !activator
+    || typeof activator !== 'object'
+    || !('clientX' in activator)
+    || !('clientY' in activator)
+  ) {
+    return null;
+  }
+  const { clientX, clientY } = activator as { clientX: number; clientY: number };
+  return {
+    x: clientX + event.delta.x,
+    y: clientY + event.delta.y,
+  };
+}
+
+export function buildFunctionGraphResourceDragState(
+  functionPath: string,
+  name: string,
+  clientX: number,
+  clientY: number,
+): GraphResourceDragState {
+  return {
+    type: DRAG_TYPES.GRAPH_RESOURCE,
+    sidebarResource: { id: functionPath, name, type: 'function' },
+    x: clientX,
+    y: clientY,
+  };
+}
+
+export function resolveFunctionDragState(
+  resource: GraphResourceDragData,
+  clientX: number,
+  clientY: number,
+): GraphResourceDragState {
+  return buildFunctionGraphResourceDragState(resource.id, resource.name, clientX, clientY);
+}
+
+export function resolveFunctionDragStateFromTab(
+  tab: LayoutTab,
+  clientX: number,
+  clientY: number,
+): GraphResourceDragState | null {
+  if (tab.type !== 'function') return null;
+  const name = resolveTabDisplayName({ kind: 'function', id: tab.id }, tab.id);
+  return buildFunctionGraphResourceDragState(tab.id, name, clientX, clientY);
+}
+
+export async function tryDropFunctionIntoEventCanvas(
+  groupId: string,
+  dragState: SidebarDragState,
+  modifiers: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean },
+): Promise<boolean> {
+  if (!modifiers.shiftKey) return false;
+  if (dragState.type !== DRAG_TYPES.GRAPH_RESOURCE) return false;
+  if (!canDropFunctionIntoEventGraph(groupId, dragState.sidebarResource, true)) return false;
+
+  const handler = canvasDropHandlerStore.getHandler(groupId);
+  if (!handler) return false;
+
+  void activateEditorGroup(groupId);
+  const handled = await handler(dragState, modifiers);
+  return handled === true;
+}
+
+export function readSidebarDragPointer(): { x: number; y: number } | null {
+  const dragState = useSidebarDragStore.getState().activeDrag;
+  if (!dragState) return null;
+  return { x: dragState.x, y: dragState.y };
+}
+
+export function resolveDropIntoEditorDragState(
+  resource: GraphResourceDragData,
+  pointer?: { x: number; y: number } | null,
+  capturedDrag?: SidebarDragState | null,
+): SidebarDragState | null {
+  const activeDrag = capturedDrag ?? useSidebarDragStore.getState().activeDrag;
+  if (activeDrag?.type === DRAG_TYPES.GRAPH_RESOURCE) {
+    if (pointer) {
+      return { ...activeDrag, x: pointer.x, y: pointer.y };
+    }
+    return activeDrag;
+  }
+  const resolvedPointer = pointer ?? readSidebarDragPointer();
+  if (!resolvedPointer) return null;
+  return resolveFunctionDragState(resource, resolvedPointer.x, resolvedPointer.y);
+}
+
+export function resolveDropIntoEditorDragStateFromTab(
+  tab: LayoutTab,
+  pointer?: { x: number; y: number } | null,
+): SidebarDragState | null {
+  const resolvedPointer = pointer ?? readSidebarDragPointer();
+  if (!resolvedPointer) return null;
+  return resolveFunctionDragStateFromTab(tab, resolvedPointer.x, resolvedPointer.y);
+}
+
+export function resolveFunctionTabForDrop(tabId: string): LayoutTab | null {
+  return useEditorTabStore.getState().resolveTab(tabId);
+}

@@ -1,5 +1,6 @@
 import type { EditorSplitEdge } from './editorSplitLayout';
-import { resolveEditorSplitPlacement } from './editorSplitLayout';
+import { resolveEditorSplitHit, type EditorSplitHit } from './editorSplitHitTest';
+import { readEditorGroupDropBounds } from './editorDropTarget';
 
 export interface EditorDropPreviewRect {
   top: number;
@@ -8,19 +9,12 @@ export interface EditorDropPreviewRect {
   height: number;
 }
 
-function editorContentElement(targetGroupId: string): Element | null {
-  return document.querySelector(`[data-editor-content="${targetGroupId}"]`)
-    ?? document.getElementById(`layout-node-${targetGroupId}`);
-}
-
 /** Half-editor highlight region for split drop preview (viewport coordinates). */
 export function computeEditorSplitPreviewRect(
   nodeRect: DOMRect,
   edge: EditorSplitEdge,
 ): EditorDropPreviewRect {
-  const resolved = edge === 'center' ? 'right' : edge;
-
-  if (resolved === 'left') {
+  if (edge === 'left') {
     return {
       top: nodeRect.top,
       left: nodeRect.left,
@@ -29,7 +23,7 @@ export function computeEditorSplitPreviewRect(
     };
   }
 
-  if (resolved === 'right') {
+  if (edge === 'right') {
     return {
       top: nodeRect.top,
       left: nodeRect.left + nodeRect.width / 2,
@@ -38,7 +32,7 @@ export function computeEditorSplitPreviewRect(
     };
   }
 
-  if (resolved === 'top') {
+  if (edge === 'top') {
     return {
       top: nodeRect.top,
       left: nodeRect.left,
@@ -47,11 +41,53 @@ export function computeEditorSplitPreviewRect(
     };
   }
 
+  if (edge === 'bottom') {
+    return {
+      top: nodeRect.top + nodeRect.height / 2,
+      left: nodeRect.left,
+      width: nodeRect.width,
+      height: nodeRect.height / 2,
+    };
+  }
+
   return {
-    top: nodeRect.top + nodeRect.height / 2,
+    top: nodeRect.top,
     left: nodeRect.left,
     width: nodeRect.width,
-    height: nodeRect.height / 2,
+    height: nodeRect.height,
+  };
+}
+
+export function readEditorGroupContentRect(targetGroupId: string): DOMRect | null {
+  return readEditorGroupDropBounds(targetGroupId);
+}
+
+export function resolveEditorDropHitAtClientPoint(
+  targetGroupId: string,
+  clientX: number,
+  clientY: number,
+  options?: Parameters<typeof resolveEditorSplitHit>[3],
+): { hit: EditorSplitHit; rect: EditorDropPreviewRect } | null {
+  const bounds = readEditorGroupDropBounds(targetGroupId);
+  if (!bounds) return null;
+
+  const offsetX = clientX - bounds.left;
+  const offsetY = clientY - bounds.top;
+  if (offsetX < 0 || offsetY < 0 || offsetX > bounds.width || offsetY > bounds.height) {
+    return null;
+  }
+
+  const hit = resolveEditorSplitHit(
+    { width: bounds.width, height: bounds.height },
+    offsetX,
+    offsetY,
+    options,
+  );
+
+  const edge = hit.mode === 'split' ? hit.edge : 'center';
+  return {
+    hit,
+    rect: computeEditorSplitPreviewRect(bounds, edge),
   };
 }
 
@@ -59,25 +95,7 @@ export function readEditorSplitPreviewRect(
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): EditorDropPreviewRect | null {
-  const element = editorContentElement(targetGroupId);
-  if (!element) return null;
-  return computeEditorSplitPreviewRect(element.getBoundingClientRect(), edge);
-}
-
-/** Full canvas / watermark drop target for sidebar graph open. */
-export function readEditorCanvasDropRect(targetGroupId: string): EditorDropPreviewRect | null {
-  const element = editorContentElement(targetGroupId);
-  if (!element) return null;
-  const rect = element.getBoundingClientRect();
-  return {
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height,
-  };
-}
-
-/** For tests / docs — edge resolves to placement used by layout store. */
-export function editorSplitPreviewPlacement(edge: EditorSplitEdge) {
-  return resolveEditorSplitPlacement(edge);
+  const bounds = readEditorGroupDropBounds(targetGroupId);
+  if (!bounds) return null;
+  return computeEditorSplitPreviewRect(bounds, edge);
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
+import { type LogTypeTabId, typesForLogTypeTab } from './logTypeTabs';
 
 /**
  * logStore - 日志「冷」控制状态
@@ -10,12 +11,13 @@ import { LogMessage, LogFilter, LogLevel, LogType } from '@/shared/types/ui';
  */
 export interface LogStore {
   filter: LogFilter;
+  activeLogTypeTab: LogTypeTabId;
   selectedLog: LogMessage | null;
 
   setSelectedLog: (log: LogMessage | null) => void;
   setFilter: (filter: Partial<LogFilter>) => void;
+  setActiveLogTypeTab: (tab: LogTypeTabId) => void;
   toggleLevel: (level: LogLevel) => void;
-  toggleType: (type: LogType) => void;
   setSearchText: (text: string) => void;
 }
 
@@ -27,12 +29,18 @@ const initialFilter: LogFilter = {
 
 export const useLogStore = create<LogStore>((set) => ({
   filter: initialFilter,
+  activeLogTypeTab: 'all',
   selectedLog: null,
 
   setSelectedLog: (log) => set({ selectedLog: log }),
 
   setFilter: (newFilter) => set((state) => ({
     filter: { ...state.filter, ...newFilter },
+  })),
+
+  setActiveLogTypeTab: (tab) => set((state) => ({
+    activeLogTypeTab: tab,
+    filter: { ...state.filter, types: typesForLogTypeTab(tab) },
   })),
 
   toggleLevel: (level) => set((state) => {
@@ -44,18 +52,6 @@ export const useLogStore = create<LogStore>((set) => ({
     }
     return {
       filter: { ...state.filter, levels: newLevels },
-    };
-  }),
-
-  toggleType: (type) => set((state) => {
-    const newTypes = new Set(state.filter.types);
-    if (newTypes.has(type)) {
-      newTypes.delete(type);
-    } else {
-      newTypes.add(type);
-    }
-    return {
-      filter: { ...state.filter, types: newTypes },
     };
   }),
 

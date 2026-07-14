@@ -43,8 +43,8 @@ export function isValidEventType(type: string): boolean {
         // Project
         'ProjectLoaded', 'ProjectCleared', 'ProjectSaved',
         // Graph
-        'EventCreated', 'EventUpdated', 'EventDeleted', 'EventCreatedFailed',
-        'FunctionCreated', 'FunctionUpdated', 'FunctionDeleted', 'FunctionCreatedFailed',
+        'EventUpdated', 'EventDeleted',
+        'FunctionUpdated', 'FunctionDeleted',
         // Variable
         'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame

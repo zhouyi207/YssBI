@@ -1,18 +1,18 @@
 /**
  * Store for registering the Canvas drop handler per group.
- * Workspace calls this when a sidebar node template is dropped on the canvas.
+ * Workspace calls this when a sidebar item is dropped on the canvas.
  */
 import { createStore } from "zustand/vanilla";
-import type { NodeTemplateDragState } from "@/features/core/dnd";
+import type { SidebarDragState } from "@/features/core/dnd";
 
-type DropHandler = (
-  dragState: NodeTemplateDragState,
-  event: { altKey: boolean; ctrlKey: boolean },
-) => void | Promise<void>;
+export type CanvasDropHandler = (
+  dragState: SidebarDragState,
+  event: { altKey: boolean; ctrlKey: boolean; shiftKey: boolean },
+) => void | Promise<boolean>;
 
 interface CanvasDropHandlerState {
-  handlers: Record<string, DropHandler | undefined>;
-  setHandler: (groupId: string, handler: DropHandler | null) => void;
+  handlers: Record<string, CanvasDropHandler | undefined>;
+  setHandler: (groupId: string, handler: CanvasDropHandler | null) => void;
 }
 
 const dropHandlerStore = createStore<CanvasDropHandlerState>((set) => ({
@@ -30,10 +30,10 @@ const dropHandlerStore = createStore<CanvasDropHandlerState>((set) => ({
 }));
 
 export const canvasDropHandlerStore = {
-  setHandler: (groupId: string, h: DropHandler | null) => {
+  setHandler: (groupId: string, h: CanvasDropHandler | null) => {
     dropHandlerStore.getState().setHandler(groupId, h);
   },
-  getHandler: (groupId: string): DropHandler | null =>
+  getHandler: (groupId: string): CanvasDropHandler | null =>
     dropHandlerStore.getState().handlers[groupId] ?? null,
   subscribe: dropHandlerStore.subscribe,
 };

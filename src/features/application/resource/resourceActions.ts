@@ -14,7 +14,7 @@ import { deleteVariableAction, renameVariableAction } from '@/features/applicati
 
 export type { GraphResourceKind };
 
-async function refreshResourceIndex(): Promise<void> {
+export async function commitFileFirstResourceIndex(): Promise<void> {
   await useProjectIOStore.getState().refreshResourceIndex();
 }
 
@@ -55,14 +55,17 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
 
 export async function createGraphResource(kind: GraphResourceKind, name?: string): Promise<string> {
   const graphName = name?.trim() || (kind === 'event' ? DEFAULT_EVENT_NAME : DEFAULT_FUNCTION_NAME);
-  return kind === 'event'
-    ? GraphService.createEvent(graphName)
-    : GraphService.createFunction(graphName);
+  const path = kind === 'event'
+    ? await GraphService.createEvent(graphName)
+    : await GraphService.createFunction(graphName);
+  await commitFileFirstResourceIndex();
+  return path;
 }
 
-export async function duplicateGraphResource(graphPath: string): Promise<void> {
-  await GraphService.duplicateGraph(graphPath);
-  await refreshResourceIndex();
+export async function duplicateGraphResource(graphPath: string): Promise<string> {
+  const newPath = await GraphService.duplicateGraph(graphPath);
+  await commitFileFirstResourceIndex();
+  return newPath;
 }
 
 export async function deleteResource(ref: ResourceRef): Promise<void> {
@@ -72,7 +75,7 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
     useGraphDataStore.getState().clearGraph(ref.id);
     useGraphMetaStore.getState().deleteGraph(ref.id);
     useResourceStore.getState().removeResource(ref);
-    await refreshResourceIndex();
+    await commitFileFirstResourceIndex();
     return;
   }
 

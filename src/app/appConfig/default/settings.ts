@@ -64,6 +64,12 @@ export const DEFAULT_EDITOR: EditorSettings = {
     autoSave: true,
     snapToGrid: true,
     fontSize: 12,
+    openSideBySideDirection: 'right',
+    splitOnDragAndDrop: true,
+    alwaysShowEditorActions: false,
+    closeEmptyGroups: true,
+    splitSizing: 'auto',
+    doubleClickTabToToggleEditorGroupSizes: 'maximize',
 };
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {

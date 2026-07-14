@@ -7,10 +7,17 @@ import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegist
 import { uiStore } from "@/features/core/ui/UIStore";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
-import type { NodeTemplateDragState } from '@/features/core/dnd';
-import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
 import {
+  isGraphResourceDragState,
+  isNodeTemplateDragState,
+  type SidebarDragState,
+} from '@/features/core/dnd';
+import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import {
+  canDropFunctionIntoEventGraph,
   clientToWorldInCanvas,
+  dropFunctionCallIntoEventGraph,
   isPointInsideCanvas,
   spawnNodeFromTemplate,
   spawnVariableFromMenu,
@@ -140,12 +147,30 @@ export function useCanvasDrop({
     [spawnFromVariableMenu],
   );
 
-  const handleDropTemplate = useCallback(
-    async (dragState: NodeTemplateDragState, event: MouseEvent | PointerEvent) => {
+  const handleSidebarCanvasDrop = useCallback(
+    async (dragState: SidebarDragState, event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
       const el = canvasElementRef.current;
-      if (!el) return;
+      if (!el) return false;
 
-      if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return;
+      if (isGraphResourceDragState(dragState)) {
+        const resource = dragState.sidebarResource;
+        if (!canDropFunctionIntoEventGraph(groupId, resource, event.shiftKey)) return false;
+        const activeTab = getActiveLayoutTab(groupId)?.tab;
+        if (!activeTab || (activeTab.type !== 'event' && activeTab.type !== 'function')) return false;
+        return dropFunctionCallIntoEventGraph(
+          el,
+          groupId,
+          activeTab.id,
+          resource.id,
+          dragState.x,
+          dragState.y,
+          functions,
+          createNode,
+        );
+      }
+
+      if (!isNodeTemplateDragState(dragState)) return false;
+      if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return false;
 
       const worldPosition = clientToWorldInCanvas(el, groupId, graphPath, dragState.x, dragState.y);
 
@@ -161,6 +186,7 @@ export function useCanvasDrop({
           onVariableMenu: setVariableDropMenu,
         },
       );
+      return true;
     },
     [canvasElementRef, groupId, graphPath, variables, functions, createNode],
   );
@@ -168,10 +194,10 @@ export function useCanvasDrop({
   useEffect(() => {
     if (!enabled) return;
     canvasDropHandlerStore.setHandler(groupId, (dragState, event) =>
-      handleDropTemplate(dragState, event as MouseEvent),
+      handleSidebarCanvasDrop(dragState, event as MouseEvent),
     );
     return () => canvasDropHandlerStore.setHandler(groupId, null);
-  }, [enabled, groupId, handleDropTemplate]);
+  }, [enabled, groupId, handleSidebarCanvasDrop]);
 
   return {
     variableDropMenu,

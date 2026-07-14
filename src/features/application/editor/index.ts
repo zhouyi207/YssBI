@@ -10,7 +10,6 @@ export type {
   PickEditorSession,
   EditorSessionResourcesSlice,
   EditorSessionDetailActionsSlice,
-  EditorSessionSyncCallbacksSlice,
 } from './editorSessionTypes';
 export {
   useEditorSessionResources,

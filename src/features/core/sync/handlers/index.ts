@@ -16,14 +16,10 @@ import {
     ProjectSavedHandler,
 } from './ProjectEventHandler';
 import {
-    EventCreatedHandler,
     EventUpdatedHandler,
     EventDeletedHandler,
-    EventCreatedFailedHandler,
-    FunctionCreatedHandler,
     FunctionUpdatedHandler,
     FunctionDeletedHandler,
-    FunctionCreatedFailedHandler,
 } from './GraphEventHandler';
 import {
     VariableCreatedHandler,
@@ -69,16 +65,12 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new ProjectSavedHandler() as EventHandler<unknown>,
         
         // Event
-        new EventCreatedHandler() as EventHandler<unknown>,
         new EventUpdatedHandler() as EventHandler<unknown>,
         new EventDeletedHandler() as EventHandler<unknown>,
-        new EventCreatedFailedHandler() as EventHandler<unknown>,
         
         // Function
-        new FunctionCreatedHandler() as EventHandler<unknown>,
         new FunctionUpdatedHandler() as EventHandler<unknown>,
         new FunctionDeletedHandler() as EventHandler<unknown>,
-        new FunctionCreatedFailedHandler() as EventHandler<unknown>,
         
         // Variable
         new VariableCreatedHandler() as EventHandler<unknown>,

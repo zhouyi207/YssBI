@@ -1,6 +1,6 @@
-/** Shared shell for editor drop previews (split half / canvas open). */
+/** VS Code editordroptarget-style overlay — dashed outline, soft fill. */
 export const editorDropPreviewShellClass =
-  'pointer-events-none fixed z-[120] box-border rounded-sm border-2 border-primary bg-primary/15 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.35)] transition-[top,left,width,height,opacity] duration-100 ease-out';
+  'pointer-events-none fixed z-[120] box-border rounded-sm border-2 border-dashed border-primary/80 bg-primary/12 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)] transition-[top,left,width,height,opacity] duration-75 ease-out';
 
 export const editorDropPreviewLabelClass =
   'rounded-md border border-primary/40 bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-md';

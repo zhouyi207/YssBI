@@ -1,25 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleGraphResourceDrop } from './handleGraphResourceDrop';
 import { openGraphInEditor } from './openGraphInEditor';
-import { DROP_TYPES } from '@/features/core/dnd';
+import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 
 vi.mock('./openGraphInEditor', () => ({
   openGraphInEditor: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('./switchEditorTab', () => ({
+  switchEditorTab: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@/features/core/layout/editorGroupsService', () => ({
+  EditorGroupsService: {
+    splitGroupAtEdge: vi.fn(),
+  },
+}));
+
 describe('handleGraphResourceDrop', () => {
   beforeEach(() => {
     vi.mocked(openGraphInEditor).mockClear();
+    vi.mocked(EditorGroupsService.splitGroupAtEdge).mockReset();
   });
 
   const resource = { id: 'evt-1', name: 'Main', type: 'event' as const };
 
   it('opens pinned graph at TabBar insert index', async () => {
-    await handleGraphResourceDrop(resource, {
-      dropType: DROP_TYPES.TABBAR,
-      targetNodeId: 'editor-a',
-      targetTabIndex: 2,
-    });
+    await handleGraphResourceDrop(resource, 'editor-a', { insertIndex: 2 });
 
     expect(openGraphInEditor).toHaveBeenCalledWith('evt-1', 'Main', 'event', 'editor-a', {
       pinned: true,
@@ -27,13 +34,24 @@ describe('handleGraphResourceDrop', () => {
     });
   });
 
-  it('opens pinned graph on canvas drop', async () => {
-    await handleGraphResourceDrop(resource, {
-      dropType: DROP_TYPES.CANVAS,
-      groupId: 'editor-b',
-    });
+  it('opens pinned graph on merge drop', async () => {
+    await handleGraphResourceDrop(resource, 'editor-b');
 
     expect(openGraphInEditor).toHaveBeenCalledWith('evt-1', 'Main', 'event', 'editor-b', {
+      pinned: true,
+    });
+  });
+
+  it('splits editor group when dropping on a split zone', async () => {
+    vi.mocked(EditorGroupsService.splitGroupAtEdge).mockReturnValue('editor-new');
+
+    await handleGraphResourceDrop(resource, 'editor-b', { edge: 'right' });
+
+    expect(EditorGroupsService.splitGroupAtEdge).toHaveBeenCalledWith('editor-b', 'right', {
+      component: 'GraphEditor',
+      tabs: [],
+    });
+    expect(openGraphInEditor).toHaveBeenCalledWith('evt-1', 'Main', 'event', 'editor-new', {
       pinned: true,
     });
   });

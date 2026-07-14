@@ -1,7 +1,10 @@
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import React, { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscSplitHorizontal, VscSplitVertical, VscChromeClose, VscWarning, VscSync, VscError } from "react-icons/vsc";
+import { VscWarning, VscSync, VscError } from "react-icons/vsc";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { orderTabsForTabBar } from "@/features/core/layout/tabBarOrder";
+import { resolveTabDragTransferIds } from "@/features/core/layout/tabSelection";
+import { useEditorTabStore } from "@/features/core/layout/editorTabStore";
 import { computeTabShiftOffset } from "@/features/core/layout/tabBarInsertIndex";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
@@ -13,19 +16,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import type { ContextMenuPosition } from "@/shared/ui/contextMenu";
 import {
-  editorTabBarActionsClass,
   editorTabBarShellClass,
   editorTabBarStripClass,
   editorTabCloseButtonClass,
   editorTabItemVariants,
   editorTabReorderGapClass,
 } from "./editorTabStyles";
+import { EditorGroupToolbar } from "./EditorGroupToolbar";
 import { DROP_TYPES, DRAG_TYPES } from "@/features/core/dnd";
 import {
-  closeEditorGroup,
   closeTab,
   pinTab,
-  splitEditorGroupFromPointer,
   switchTab,
   toggleMaximizeEditorGroup,
 } from "@/features/application/editor/tabCommands";
@@ -33,6 +34,12 @@ import { useTabBarReorderStore, type TabBarReorderPreview } from "@/features/app
 import { buildTabContextMenuSections } from "@/features/application/editor/tabContextMenu";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { isPreviewLayoutTab } from "@/features/core/layout/layoutTabModel";
+import { activateEditorGroup } from "@/features/application/editor/switchEditorTab";
+import {
+  bindEditorGroupStripPointerDown,
+  bindTabDragPointerDown,
+} from "@/features/application/editor/tabBarDragHandlers";
+import { readEditorPartOptions } from "@/features/core/layout/editorPartOptions";
 import { useSidebarTab } from "@/features/application/editor/useSidebarTab";
 import { resourceKey, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 
@@ -43,12 +50,11 @@ interface TabBarProps {
 }
 
 export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeTabId }) => {
-  const { t } = useTranslation();
   const switchSidebarTab = useSidebarTab();
-  const { isAltPressed, isDragging } = useLayoutStore(useShallow((s) => ({
-    isAltPressed: s.isAltPressed,
+  const { isDragging } = useLayoutStore(useShallow((s) => ({
     isDragging: s.isDragging,
   })));
+  const displayTabs = useMemo(() => orderTabsForTabBar(tabs), [tabs]);
   const reorderPreview = useTabBarReorderStore((state) => state.preview);
   const showReorderPreview = reorderPreview?.targetGroupId === layoutNodeId;
 
@@ -58,6 +64,21 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     data: { dropType: DROP_TYPES.TABBAR, targetNodeId: layoutNodeId, targetTabIndex: tabs.length },
   });
 
+  const {
+    listeners: groupDragListeners,
+    setNodeRef: setGroupDragRef,
+  } = useDraggable({
+    id: `editor-group-drag-${layoutNodeId}`,
+    data: { type: DRAG_TYPES.EDITOR_GROUP, sourceNodeId: layoutNodeId },
+  });
+
+  const handleGroupStripPointerDown = useCallback(
+    bindEditorGroupStripPointerDown(groupDragListeners, () => {
+      void activateEditorGroup(layoutNodeId);
+    }),
+    [groupDragListeners, layoutNodeId],
+  );
+
   const handleTabStripClick = useCallback((e: React.MouseEvent) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>('[data-tab-id]');
     if (!target) return;
@@ -66,6 +87,12 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     if (!tabId) return;
     const tab = tabs.find((item) => item.id === tabId);
     if (!tab) return;
+    if (e.ctrlKey || e.metaKey) {
+      useEditorTabStore.getState().toggleTabInSelection(layoutNodeId, tabId);
+      void activateEditorGroup(layoutNodeId);
+      return;
+    }
+    useEditorTabStore.getState().setSelectedTabIds(layoutNodeId, [tabId]);
     void switchTab(layoutNodeId, tab.id, tab);
   }, [layoutNodeId, tabs]);
 
@@ -79,16 +106,6 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
     e.stopPropagation();
     void closeTab(layoutNodeId, tabId);
   }, [layoutNodeId]);
-
-  const handleSplit = (e: Pick<PointerEvent, 'altKey' | 'stopPropagation'>) => {
-    e.stopPropagation();
-    void splitEditorGroupFromPointer(layoutNodeId, e.altKey || isAltPressed);
-  };
-
-  const handleCloseGroup = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await closeEditorGroup(layoutNodeId);
-  };
 
   const revealInSidebar = useCallback((tab: LayoutTab) => {
     if (tab.type === 'event' || tab.type === 'function') {
@@ -148,7 +165,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
             onClick={handleTabStripClick}
             onAuxClick={handleTabStripAuxClick}
           >
-            {tabs.map((tab, index) => (
+            {displayTabs.map((tab, index) => (
               <TabItem
                 key={tab.id}
                 tab={tab}
@@ -169,51 +186,18 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
                 }}
               />
             ) : null}
+            <div
+              ref={setGroupDragRef}
+              data-group-drag-fill={layoutNodeId}
+              className="min-w-8 flex-1 self-stretch"
+              onPointerDown={handleGroupStripPointerDown}
+              aria-hidden="true"
+            />
           </div>
         </OverlayScrollbar>
       </div>
 
-      <div className={editorTabBarActionsClass}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onPointerDown={(e) => {
-                if (e.button !== 0) return;
-                handleSplit(e);
-              }}
-              onMouseEnter={(e) => {
-                if (e.altKey !== isAltPressed) {
-                  useLayoutStore.getState().setAltPressed(e.altKey);
-                }
-              }}
-              className="text-muted-foreground"
-            >
-              {isAltPressed ? <VscSplitVertical size={15} /> : <VscSplitHorizontal size={15} />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {isAltPressed ? t("tabBar.splitDownAlt") : t("tabBar.splitRight")}
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleCloseGroup}
-              className="text-muted-foreground hover:text-red-400"
-            >
-              <VscChromeClose size={15} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("tabBar.closeGroup")}</TooltipContent>
-        </Tooltip>
-      </div>
+      <EditorGroupToolbar groupId={layoutNodeId} />
     </div>
   );
 };
@@ -259,6 +243,10 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
   const title = resourceTitle ?? baseTitle;
 
   const isPreview = isPreviewLayoutTab(tab);
+  const isTabSelected = useEditorTabStore(
+    (s) => s.getPlacement(layoutNodeId).selectedTabIds.includes(tab.id),
+  );
+  const draggedTabIds = resolveTabDragTransferIds(layoutNodeId, tab.id);
 
   const statusKey = documentState?.missing
     ? 'missing'
@@ -280,8 +268,20 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `tab-${layoutNodeId}-${tab.id}`,
-    data: { type: DRAG_TYPES.TAB, tabId: tab.id, sourceNodeId: layoutNodeId },
+    data: {
+      type: DRAG_TYPES.TAB,
+      tabId: tab.id,
+      sourceNodeId: layoutNodeId,
+      draggedTabIds: draggedTabIds.length > 1 ? draggedTabIds : undefined,
+    },
   });
+
+  const handleTabPointerDown = useCallback(
+    bindTabDragPointerDown(listeners, () => {
+      void activateEditorGroup(layoutNodeId);
+    }),
+    [listeners, layoutNodeId],
+  );
 
   const shiftX = !isDragging && reorderPreview && reorderPreview.targetGroupId === layoutNodeId
     ? computeTabShiftOffset(
@@ -303,16 +303,18 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
         ref={setNodeRef}
         style={style}
         {...attributes}
-        {...listeners}
+        onPointerDown={handleTabPointerDown}
         data-tab-id={tab.id}
         data-tab-group={layoutNodeId}
         data-tab-title={title}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          if (isPreview) {
+          if (isPreview || tab.pinned === false) {
             void pinTab(layoutNodeId, tab.id);
             return;
           }
+          const dblClickMode = readEditorPartOptions().doubleClickTabToToggleEditorGroupSizes;
+          if (dblClickMode === 'off') return;
           void toggleMaximizeEditorGroup(layoutNodeId);
         }}
         onContextMenu={(e) => {
@@ -320,7 +322,12 @@ const TabItem: React.FC<TabItemProps> = React.memo(({
           e.stopPropagation();
           setMenuPosition({ x: e.clientX, y: e.clientY });
         }}
-        className={editorTabItemVariants({ active: isActive, dragging: isDragging, preview: isPreview })}
+        className={editorTabItemVariants({
+          active: isActive,
+          dragging: isDragging,
+          preview: isPreview,
+          selected: isTabSelected && !isActive,
+        })}
       >
         {isPreview ? (
           <Tooltip>

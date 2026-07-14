@@ -71,6 +71,8 @@ export {
 } from './editorGridLayout';
 export { panelFlexBasis } from './splitView';
 export {
+  applyEditorGridAddViewSizing,
+  areEditorGridSplitChildrenDistributed,
   reflowEditorGridLayout,
 } from './editorGridSizing';
 export {
@@ -102,3 +104,38 @@ export {
 } from './layoutTabModel';
 export type { LayoutTabInput } from './layoutTabModel';
 export type { LocatedLayoutTab, LayoutGroupContext } from './layoutTabQueries';
+export {
+  readEditorPartOptions,
+  preferSplitVerticallyFromDirection,
+  DEFAULT_EDITOR_PART_OPTIONS,
+} from './editorPartOptions';
+export type { EditorPartOptions, OpenSideBySideDirection, EditorSplitSizingMode } from './editorPartOptions';
+export {
+  resolveEditorSplitHit,
+  resolveEditorSplitHitFromClientPoint,
+} from './editorSplitHitTest';
+export type { EditorSplitHit, EditorSplitHitTestOptions } from './editorSplitHitTest';
+export {
+  isEditorDragCopyOperation,
+  isEditorDragToggleSplitOperation,
+  resolveEnableSplittingOnDrag,
+} from './editorDragModifiers';
+export {
+  readEditorGroupDropBounds,
+  findTabBarTargetFromPointer,
+  findTabUnderPointer,
+  findEditorGroupAtPointer,
+  findCanvasDropGroupId,
+} from './editorDropTarget';
+export type { TabBarInsertPreviewContext } from './editorDropTarget';
+export {
+  findWorkbenchChromePartAtPointer,
+  isPointerOverWorkbenchEditorSurface,
+  isSidebarItemDropAllowedAtPointer,
+  resolveWorkbenchDropSurfaceFlags,
+  WORKBENCH_CHROME_PART_ATTR,
+  WORKBENCH_EDITOR_SURFACE_ATTR,
+  WORKBENCH_CHROME_PART_IDS,
+} from './workbenchSidebarDropSurface';
+export type { WorkbenchChromePartId } from './workbenchSidebarDropSurface';
+export { getNextActiveEditorGroupId, prepareActiveGroupBeforeLastTabClose } from './editorGroupFocus';

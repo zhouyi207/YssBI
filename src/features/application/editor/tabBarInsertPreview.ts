@@ -4,40 +4,15 @@ import {
   measureTabBarMetrics,
   resolveTabGapWidth,
 } from '@/features/core/layout/tabBarInsertIndex';
+import {
+  findTabBarTargetFromPointer,
+  type TabBarInsertPreviewContext,
+} from '@/features/core/layout/editorDropTarget';
 import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import type { TabBarReorderPreview } from './tabBarReorderStore';
 
-const TAB_BAR_DROP_SELECTOR = '[data-tabbar-drop]';
-const TAB_STRIP_SELECTOR = '[data-tab-strip]';
-
-export interface TabBarInsertPreviewContext {
-  /** Existing tab being reordered; null for external insert (e.g. sidebar graph). */
-  draggedTabId: string | null;
-  /** Source editor group for tab reorder; null for external insert. */
-  sourceGroupId: string | null;
-}
-
-export function findTabBarTargetFromPointer(
-  pointerX: number,
-  pointerY: number,
-): { groupId: string; stripElement: HTMLElement } | null {
-  const dropTargets = document.querySelectorAll<HTMLElement>(TAB_BAR_DROP_SELECTOR);
-  for (const dropElement of dropTargets) {
-    const rect = dropElement.getBoundingClientRect();
-    if (
-      pointerX >= rect.left
-      && pointerX <= rect.right
-      && pointerY >= rect.top
-      && pointerY <= rect.bottom
-    ) {
-      const groupId = dropElement.dataset.tabbarDrop;
-      if (!groupId) continue;
-      const stripElement = dropElement.querySelector<HTMLElement>(TAB_STRIP_SELECTOR) ?? dropElement;
-      return { groupId, stripElement };
-    }
-  }
-  return null;
-}
+export { findTabBarTargetFromPointer };
+export type { TabBarInsertPreviewContext };
 
 function tabIdsForGroup(groupId: string): string[] {
   return listEditorGroupTabIds(groupId);

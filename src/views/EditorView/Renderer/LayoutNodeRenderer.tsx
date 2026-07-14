@@ -4,16 +4,19 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { inferPanelPosition } from '@/features/core/layout/panelPartLayout';
 import { readEditorAreaMaximizedGroupId } from '@/features/core/layout/editorGridLayout';
-import { useSidebarDragStore } from '@/features/core/sidebarDrag';
+import {
+  resolveWorkbenchDropSurfaceFlags,
+  WORKBENCH_CHROME_PART_ATTR,
+  WORKBENCH_EDITOR_SURFACE_ATTR,
+} from '@/features/core/layout/workbenchSidebarDropSurface';
 import { Sash } from './Sash';
 import { layoutNodeFlexStyle } from './sashResizeLogic';
 import { viewRegistry } from './viewRegistry';
-import { useDroppable } from '@dnd-kit/core';
 import { GroupContext } from '@/features/core/editor';
 import { useEditorGroupTabStrip } from '@/features/core/editor/hooks/useEditorGroupTabStrip';
 import { TabBar } from '../Layout/TabBar';
-import { DROP_TYPES } from '@/features/core/dnd';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
+import { useEditorDropPreviewStore } from '@/features/application/editor/editorDropPreviewStore';
 
 /**
  * 布局引擎核心渲染器
@@ -127,9 +130,14 @@ const ContainerNodeRenderer = ({
  */
 const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDivElement | null) => void }) => {
     const node = useLayoutStore(useShallow((state) => state.nodes[nodeId]));
+    const nodes = useLayoutStore((state) => state.nodes);
     const panelMaximized = useLayoutStore((s) => s.nodes.panel?.data?.maximized === true);
     const panelPosition = useLayoutStore((s) => inferPanelPosition(s.nodes));
     const maximizedEditorGroupId = useLayoutStore((s) => readEditorAreaMaximizedGroupId(s.nodes));
+    const dropSurfaceFlags = useMemo(
+        () => resolveWorkbenchDropSurfaceFlags(nodeId, nodes),
+        [nodeId, nodes],
+    );
     const style = useMemo(
         () => layoutNodeFlexStyle(node, { panelMaximized, panelPosition, maximizedEditorGroupId }),
         [node, panelMaximized, panelPosition, maximizedEditorGroupId],
@@ -146,6 +154,12 @@ const ChildWrapper = ({ nodeId, setRef }: { nodeId: string, setRef: (el: HTMLDiv
             ref={setRef}
             className="layout-split-view relative min-h-0 min-w-0"
             style={style}
+            {...(dropSurfaceFlags.chromePart
+              ? { [WORKBENCH_CHROME_PART_ATTR]: dropSurfaceFlags.chromePart }
+              : {})}
+            {...(dropSurfaceFlags.editorSurface
+              ? { [WORKBENCH_EDITOR_SURFACE_ATTR]: '' }
+              : {})}
         >
             {maximizedHidden ? (
                 <div
@@ -202,15 +216,13 @@ const LeafNodeRenderer = ({ nodeId }: { nodeId: string }) => {
                 </div>
             ) : null}
 
-            <div className="flex-1 relative min-h-0" data-editor-content={nodeId}>
+            <EditorGroupContent nodeId={nodeId}>
                 {ActiveComponent ? (
                     <ActiveComponent />
                 ) : (
                     <div className="p-4 italic text-muted-foreground">No content</div>
                 )}
-
-                {!isFixed && <DropZoneOverlay nodeId={nodeId} />}
-            </div>
+            </EditorGroupContent>
         </EditorGroupFocusShell>
     );
 };
@@ -228,12 +240,19 @@ const EditorGroupFocusShell = memo(function EditorGroupFocusShell({
     children: React.ReactNode;
 }) {
     const isActive = useLayoutStore((s) => s.activeEditorGroupId === nodeId);
+    const isDragTarget = useEditorDropPreviewStore((s) => s.preview?.targetGroupId === nodeId);
 
     return (
         <GroupContext.Provider value={nodeId}>
             <div
-                onClick={() => void activateEditorGroup(nodeId)}
-                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
+                onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    if ((e.target as HTMLElement).closest(
+                        '[data-tab-id], [data-tab-strip], [data-tabbar-drop], [data-editor-group-actions]',
+                    )) return;
+                    void activateEditorGroup(nodeId);
+                }}
+                className={`w-full h-full relative flex flex-col overflow-hidden bg-[var(--workbench-bg)] transition-shadow duration-200 ${isFixed ? 'z-20' : ''} ${isDragTarget ? 'ring-1 ring-inset ring-primary/40' : ''} ${isActive && (hasTabs || !isFixed) ? 'z-10 ring-1 ring-inset ring-[var(--accent-color)]/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]' : ''}`}
                 id={`layout-node-${nodeId}`}
             >
                 {children}
@@ -255,41 +274,15 @@ const EditorGroupTabStrip = ({ layoutNodeId }: { layoutNodeId: string }) => {
     );
 };
 
-/**
- * 拖拽停靠区域覆盖层 (DND Drop Zones)
- * 仅在拖拽布局节点或 Tab 时显示。
- * Sidebar 拖拽由 CanvasDropZone / sidebar folder drop target 单独处理。
- */
-const DropZoneOverlay = ({ nodeId }: { nodeId: string }) => {
-    const isDragging = useLayoutStore(s => s.isDragging);
-    const isSidebarDrag = useSidebarDragStore(s => !!s.activeDrag);
-    if (!isDragging || isSidebarDrag) return null;
-
-    return (
-        <div className="absolute inset-0 pointer-events-none z-10 flex flex-col">
-            <DroppableZone nodeId={nodeId} zone="top" className="h-[20%] w-full pointer-events-auto" />
-            <div className="flex-1 flex">
-                <DroppableZone nodeId={nodeId} zone="left" className="h-full w-[20%] pointer-events-auto" />
-                <DroppableZone nodeId={nodeId} zone="center" className="flex-1 h-full pointer-events-auto" />
-                <DroppableZone nodeId={nodeId} zone="right" className="h-full w-[20%] pointer-events-auto" />
-            </div>
-            <DroppableZone nodeId={nodeId} zone="bottom" className="h-[20%] w-full pointer-events-auto" />
-        </div>
-    );
-};
-
-const DroppableZone = ({ nodeId, zone, className }: { nodeId: string, zone: string, className: string }) => {
-    const { setNodeRef } = useDroppable({
-        id: `${nodeId}-${zone}`,
-        data: { dropType: DROP_TYPES.LAYOUT_REGION, dropPosition: zone, targetNodeId: nodeId }
-    });
-
+/** Editor body — VS Code drop overlay uses pointer hit-test on `data-editor-content`. */
+const EditorGroupContent = ({ nodeId, children }: { nodeId: string; children: React.ReactNode }) => {
     return (
         <div
-            id={`${nodeId}-${zone}`}
-            ref={setNodeRef}
-            className={className}
-        />
+            data-editor-content={nodeId}
+            className="relative flex min-h-0 flex-1 flex-col"
+        >
+            {children}
+        </div>
     );
 };
 

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { commitFileFirstResourceIndex } from '@/features/application/resource/resourceActions';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useSidebarTab } from './useSidebarTab';
@@ -20,6 +21,7 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
           databaseId,
         );
         useWorksheetStore.getState().upsertDocument(document);
+        await commitFileFirstResourceIndex();
         switchSidebarTab('charts');
         await openWorksheet(document.id, document.name);
         uiStore.showToast(t('worksheet.created'), 'success', 2000);

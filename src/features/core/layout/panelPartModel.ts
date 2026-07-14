@@ -16,7 +16,7 @@ export interface PanelViewSpec {
 
 export const PANEL_VIEW_SPECS: Record<PanelViewId, PanelViewSpec> = {
   logs: { component: 'LogPanel', labelKey: 'panel.logs', implemented: true },
-  output: { component: 'OutputPanel', labelKey: 'panel.output', implemented: true },
+  output: { component: 'OutputPanel', labelKey: 'panel.output', implemented: false },
   terminal: { component: 'TerminalPanel', labelKey: 'panel.terminal', implemented: false },
 };
 

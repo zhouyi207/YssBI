@@ -1,5 +1,13 @@
 import type { LayoutNode, LayoutTree } from '@/shared/types/ui';
-import { commitSplitPairSizes } from './editorGridSizing';
+import {
+  applyEditorGridAddViewSizing,
+  applyEditorGridRemoveViewSizing,
+  commitSplitPairSizes,
+  distributeSplitParentRemainingChildren,
+  reflowEditorGridLayout,
+  shouldDistributeAfterEditorGridRemove,
+} from './editorGridSizing';
+import { readEditorPartOptions } from './editorPartOptions';
 import { EDITOR_AREA_ID, PANEL_PART_ID } from './workbenchLayoutDefaults';
 import { isEditorGroupNode } from './layoutEditorGroupNode';
 import { isEditorGroupPlacementEmpty } from './editorTabStore';
@@ -140,24 +148,6 @@ export function equalSplitPairSizes(beforeSize: number, afterSize: number): { be
   return { beforeSize: half, afterSize: total - half };
 }
 
-function mergeRemovedGroupPixelSize(
-  sibling: LayoutNode,
-  removed: LayoutNode,
-): void {
-  if (sibling.pixelSize != null && removed.pixelSize != null) {
-    sibling.pixelSize += removed.pixelSize;
-    return;
-  }
-  if (sibling.pixelSize == null && removed.pixelSize != null) {
-    sibling.pixelSize = removed.pixelSize;
-    return;
-  }
-  if (sibling.pixelSize != null && removed.pixelSize == null) {
-    return;
-  }
-  sibling.pixelSize = undefined;
-}
-
 /** Apply equal split sizes to two grid siblings (sash double-click). */
 export function applyEqualGridSplit(
   nodes: LayoutTree,
@@ -205,13 +195,17 @@ export function removeEditorGroupFromTree(
   const removedIndex = parent.children.indexOf(groupId);
   const siblingId = parent.children[removedIndex - 1] ?? parent.children[removedIndex + 1] ?? null;
   const sibling = siblingId ? nodes[siblingId] : undefined;
+  const { splitSizing } = readEditorPartOptions();
+  const shouldDistributeOnRemove = shouldDistributeAfterEditorGridRemove(nodes, parent, splitSizing);
+
+  applyEditorGridRemoveViewSizing(nodes, parent.id, groupId, splitSizing);
   parent.children.splice(removedIndex, 1);
 
-  if (parent.id === EDITOR_AREA_ID) {
-    if (sibling) {
-      mergeRemovedGroupPixelSize(sibling, group);
-    }
-  } else if (parent.children.length === 1 && parent.parentId) {
+  if (shouldDistributeOnRemove && parent.children.length >= 2) {
+    distributeSplitParentRemainingChildren(nodes, parent.id);
+  }
+
+  if (parent.children.length === 1 && parent.parentId && parent.id !== EDITOR_AREA_ID) {
     const grandParent = nodes[parent.parentId];
     if (grandParent?.children) {
       const singleChildId = parent.children[0];
@@ -220,13 +214,11 @@ export function removeEditorGroupFromTree(
         const parentIndex = grandParent.children.indexOf(parent.id);
         grandParent.children[parentIndex] = singleChildId;
         singleChild.parentId = grandParent.id;
-        singleChild.size = parent.size ?? 1;
-        mergeRemovedGroupPixelSize(singleChild, group);
+        singleChild.size = parent.size ?? singleChild.size ?? 1;
+        singleChild.pixelSize = undefined;
         delete nodes[parent.id];
       }
     }
-  } else if (sibling) {
-    mergeRemovedGroupPixelSize(sibling, group);
   } else if (parent.children.length === 0 && parent.parentId) {
     const grandParent = nodes[parent.parentId];
     if (grandParent?.children) {
@@ -238,6 +230,7 @@ export function removeEditorGroupFromTree(
   delete nodes[groupId];
 
   reconcileEditorGridAfterGroupRemoved(nodes, groupId);
+  reflowEditorGridLayout(nodes);
 
   return {
     removed: true,
@@ -303,11 +296,14 @@ export function splitEditorGroupInTree(
     },
   };
 
+  const { splitSizing } = readEditorPartOptions();
+
   if (parentNode.type === direction) {
     const targetIndex = parentNode.children?.indexOf(targetGroupId) ?? 0;
     const insertIndex = isAfter ? targetIndex + 1 : targetIndex;
     parentNode.children?.splice(insertIndex, 0, newNodeId);
     nodes[newNodeId] = newNode;
+    applyEditorGridAddViewSizing(nodes, parentNode.id, targetGroupId, newNodeId, 'same-axis', splitSizing);
     return newNodeId;
   }
 
@@ -324,12 +320,10 @@ export function splitEditorGroupInTree(
   parentNode.children![targetIndex] = branchId;
 
   targetNode.parentId = branchId;
-  targetNode.size = 1;
-  targetNode.pixelSize = undefined;
-
   newNode.parentId = branchId;
   nodes[newNodeId] = newNode;
   nodes[branchId] = branch;
+  applyEditorGridAddViewSizing(nodes, branchId, targetGroupId, newNodeId, 'perpendicular', splitSizing);
   return newNodeId;
 }
 

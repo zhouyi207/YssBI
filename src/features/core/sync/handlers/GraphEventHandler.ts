@@ -1,23 +1,18 @@
 // src/features/core/sync/handlers/GraphEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { GraphCreatedPayload, GraphUpdatedPayload, GraphDeletedPayload, GraphCreatedFailedPayload, EventCallbacks } from '../types';
+import { GraphUpdatedPayload, GraphDeletedPayload } from '../types';
 import { syncFunctionSignatureFromGraph } from '@/features/application/graphDocument/functionSignatureSync';
 import { shouldSuppressGraphRefreshEcho } from '@/features/application/graphDocument/graphRefreshEchoGuard';
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import {
-  buildGraphResourceMeta,
   lookupGraphResource,
-  markResourceLoaded,
   useResourceStore,
 } from '@/features/core/resource';
-import type { Graph } from '@/shared/types/domain';
 import type { ProjectResourceMeta } from '@/features/core/resource';
 import type { GraphDataLike } from '@/shared/types/store/graph';
 import { graphUpdatedPayloadToGraphDataLike } from '@/shared/types/dto/graphModel';
-
-type GraphWithMeta = Graph & { entryNodeId?: string };
 
 function getGraphResourceMeta(graphPath: string, kind: 'event' | 'function') {
   return lookupGraphResource(useResourceStore.getState().resources, graphPath, kind);
@@ -38,26 +33,6 @@ function buildGraphUpdateData(
 }
 
 // ==================== Event Handlers ====================
-
-export class EventCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
-    eventType = 'EventCreated';
-    
-    handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Event created:', payload.path);
-        
-        const g = payload.data as GraphWithMeta;
-        useResourceStore.getState().upsertResource(
-            buildGraphResourceMeta('event', payload.path, g.name),
-        );
-        useGraphDataStore.getState().addGraphFromData(
-            payload.path,
-            graphUpdatedPayloadToGraphDataLike(payload.path, 'event', g.name, g),
-        );
-        markResourceLoaded({ id: payload.path, kind: 'event' }, true);
-        
-        callbacks?.onEventCreated?.(payload.path, payload.data);
-    }
-}
 
 export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
     eventType = 'EventUpdated';
@@ -94,38 +69,7 @@ export class EventDeletedHandler extends BaseEventHandler<GraphDeletedPayload> {
     }
 }
 
-export class EventCreatedFailedHandler extends BaseEventHandler<GraphCreatedFailedPayload> {
-    eventType = 'EventCreatedFailed';
-    
-    handle(payload: GraphCreatedFailedPayload, callbacks?: EventCallbacks): void {
-        this.error('Event creation failed:', payload.name, payload.error);
-        
-        callbacks?.onEventCreatedFailed?.(payload.name, payload.error);
-    }
-}
-
 // ==================== Function Handlers ====================
-
-export class FunctionCreatedHandler extends BaseEventHandler<GraphCreatedPayload> {
-    eventType = 'FunctionCreated';
-    
-    handle(payload: GraphCreatedPayload, callbacks?: EventCallbacks): void {
-        this.log('Function created:', payload.path);
-        
-        const g = payload.data as GraphWithMeta;
-        useResourceStore.getState().upsertResource(
-            buildGraphResourceMeta('function', payload.path, g.name),
-        );
-        useGraphDataStore.getState().addGraphFromData(
-            payload.path,
-            graphUpdatedPayloadToGraphDataLike(payload.path, 'function', g.name, g),
-        );
-        markResourceLoaded({ id: payload.path, kind: 'function' }, true);
-        syncFunctionSignatureFromGraph(g);
-        
-        callbacks?.onFunctionCreated?.(payload.path, payload.data);
-    }
-}
 
 export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
     eventType = 'FunctionUpdated';
@@ -169,15 +113,5 @@ export class FunctionDeletedHandler extends BaseEventHandler<GraphDeletedPayload
         useGraphDataStore.getState().clearGraph(payload.path);
         useGraphMetaStore.getState().deleteGraph(payload.path);
         useResourceStore.getState().removeResource({ id: payload.path, kind: 'function' });
-    }
-}
-
-export class FunctionCreatedFailedHandler extends BaseEventHandler<GraphCreatedFailedPayload> {
-    eventType = 'FunctionCreatedFailed';
-    
-    handle(payload: GraphCreatedFailedPayload, callbacks?: EventCallbacks): void {
-        this.error('Function creation failed:', payload.name, payload.error);
-        
-        callbacks?.onFunctionCreatedFailed?.(payload.name, payload.error);
     }
 }
