@@ -235,14 +235,14 @@
 ## 六、补充说明
 
 本报告聚焦于“架构可维护性”，不代表当前统计计算结果错误。  
-建议采用“先结构、后能力扩展”的策略，避免在当前组织形态下继续叠加新模型，导致技术债进一步指数增长。
+建议采用“先结构、后能力扩展”的策略，避免在当前组织形态下继续叠加新模型，导致技术债进一步指数增长。本文件是迁移提案，不代表目标目录已经存在；实施时应同步迁移调用方并删除旧入口。
 
 ---
 
 ## 七、建议迁移映射表（旧路径 -> 新路径）
 
 > 说明：这是“目标结构提案”，用于拆分重构任务。  
-> 原则：先建立新路径并做 re-export 兼容，再逐步迁移调用方，最后删除旧入口。
+> 原则：迁移调用方与模块路径同步完成，验证通过后直接删除旧入口；不新增 deprecated re-export 或兼容别名，避免双份实现长期并存。
 
 ### 7.1 顶层模块重命名与收敛
 
@@ -258,7 +258,7 @@
 | 旧路径 | 建议新路径 | 迁移要点 |
 |---|---|---|
 | `src-tauri/sci/src/panel/align.rs` | `src-tauri/sci/src/panel_data/align.rs` | 保留函数签名，先做 `pub use` 过渡 |
-| `src-tauri/sci/src/panel/mod.rs` | `src-tauri/sci/src/panel_data/mod.rs` | 旧 `panel/mod.rs` 只保留 deprecated re-export |
+| `src-tauri/sci/src/panel/mod.rs` | `src-tauri/sci/src/panel_data/mod.rs` | 完成调用方迁移后删除旧 `panel/mod.rs` |
 | `src-tauri/sci/src/regression/panel/mod.rs` | `src-tauri/sci/src/panel_model/mod.rs` | 统一估计器语义命名（FE/FD/RE/LSDV） |
 | `src-tauri/sci/src/regression/panel/fe.rs` | `src-tauri/sci/src/panel_model/fe/{types.rs, fit.rs, stats.rs}` | 先机械拆分，无行为改动 |
 | `src-tauri/sci/src/regression/panel/fd.rs` | `src-tauri/sci/src/panel_model/fd/{types.rs, fit.rs}` | 与 FE/RE 保持一致粒度 |
@@ -272,7 +272,7 @@
 | `src-tauri/sci/src/diagnostics/resident.rs` | `src-tauri/sci/src/diagnostics/residual/normality.rs` | Omnibus/JB 保留，修正命名 |
 | `src-tauri/sci/src/ts/serial_correlation.rs` | `src-tauri/sci/src/diagnostics/residual/serial.rs` | DW/BG/LB 统一放入 residual serial |
 | `src-tauri/sci/src/regression/diagnostics.rs` | `src-tauri/sci/src/diagnostics/regression/{heteroskedasticity.rs, reset.rs, vif.rs, leverage.rs}` | 按检验类型拆文件 |
-| `durbin_waston` | `durbin_watson` | 提供 deprecated alias，分两阶段清理 |
+| `durbin_waston` | `durbin_watson` | 迁移调用方后删除拼写错误的旧函数，不保留 alias |
 
 ### 7.4 线性模型域拆分
 
@@ -315,11 +315,11 @@
 
 ## 八、建议迁移顺序（可拆任务）
 
-1. 建新目录骨架 + 保持旧入口 re-export（不改行为）
+1. 建新目录骨架并同步迁移调用方（不改行为）
 2. 先迁移 `panel` 命名冲突与 diagnostics 统一入口
 3. 拆分 `iv2sls.rs`、`re.rs`、`diagnostics.rs` 三个高风险神文件
 4. 清理 `tools/typing.rs` 中泄漏实现
-5. 收口 `lib.rs` 导出白名单，移除 deprecated 入口
+5. 收口 `lib.rs` 导出白名单，删除旧入口与重复导出
 
 > 推荐策略：每次 PR 只做一类动作（仅迁移/仅拆分/仅 API 收口），避免“结构重构 + 行为改动”混合提交。
 

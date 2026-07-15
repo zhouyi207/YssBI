@@ -43,6 +43,21 @@ pub struct GraphInstanceDTO {
     pub function_outputs: Vec<FunctionSignaturePin>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphValidationWarningDTO {
+    pub code: String,
+    pub from_pin_id: String,
+    pub to_pin_id: String,
+    pub message: String,
+}
+
+impl From<&crate::graph::GraphValidationWarning> for GraphValidationWarningDTO {
+    fn from(value: &crate::graph::GraphValidationWarning) -> Self {
+        Self { code: value.code.to_string(), from_pin_id: value.from_pin_id.to_string(), to_pin_id: value.to_pin_id.to_string(), message: value.message.clone() }
+    }
+}
+
 impl From<&GraphInstance> for GraphInstanceDTO {
     fn from(value: &GraphInstance) -> Self {
         let data_state = value.data_state.read().unwrap();

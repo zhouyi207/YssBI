@@ -446,7 +446,7 @@ if (eventPayload && 'type' in eventPayload) {
 - **关闭/保存图**：单图 `save_project_graph` / `unload_project_graph`；
   关 tab 与关窗口都走应用内三态确认（Save All / Don't Save / Cancel）。
 
-> 完整规范见 `.cursor/rules/project-graph-lifecycle.mdc`。
+> 项目级生命周期规则见根目录 `AGENTS.md` 的 “Graph lifecycle and synchronization” 章节。
 
 ## 科学计算相关
 

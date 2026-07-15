@@ -14,15 +14,20 @@ pub use type_var_id::*;
 pub use type_var_inference::*;
 pub use type_var_key::*;
 
-use crate::graph::{DataType, GraphInstance, PinId};
+use crate::graph::{DataType, GraphInstance, GraphValidationWarning, PinId};
+
+pub struct TypeInferenceReport {
+    pub resolved: Vec<(PinId, DataType)>,
+    pub warnings: Vec<GraphValidationWarning>,
+}
 
 /// 执行全量类型推断，返回所有被解析的 (PinId, DataType)
-pub fn infer_graph(graph_instance: &GraphInstance) -> Result<Vec<(PinId, DataType)>, String> {
+pub fn infer_graph(graph_instance: &GraphInstance) -> Result<TypeInferenceReport, String> {
     let mut session = TypeInferenceSession::new(graph_instance);
     session.register_all();
-    session.infer_all()?;
+    let warnings = session.infer_all()?;
     let resolved = session.commit_to_graph()?;
-    Ok(resolved)
+    Ok(TypeInferenceReport { resolved, warnings })
 }
 
 #[cfg(test)]
@@ -86,10 +91,16 @@ mod tests {
             ds.connections.connect(f64_out, sqrt_good_in);
         }
 
-        let resolved = infer_graph(&graph).expect("infer must be Ok despite one incompatible edge");
+        let report = infer_graph(&graph).expect("infer must be Ok despite one incompatible edge");
+
+        assert_eq!(report.warnings.len(), 1, "the dirty edge must be surfaced");
+        let warning = &report.warnings[0];
+        assert_eq!(warning.code, "incompatible_connection");
+        assert_eq!(warning.from_pin_id, string_out);
+        assert_eq!(warning.to_pin_id, sqrt_bad_in);
 
         // 正常边对应的输入 pin 仍被细化为 Float64，未被脏边毒化。
-        let good_type = resolved
+        let good_type = report.resolved
             .iter()
             .find(|(pid, _)| *pid == sqrt_good_in)
             .map(|(_, dt)| dt.clone());

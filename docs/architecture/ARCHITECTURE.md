@@ -22,7 +22,7 @@ flowchart TD
   graph --> nodes["Node Registry and Node Definitions"]
   nodes --> sci["yss-sci Numerical Library"]
   database --> sci
-  graph --> windows["WindowDataStore"]
+  graph --> windows["ResultSourceStore"]
   windows -->|"get_window_data"| frontend
   tauri -->|"events and Channel"| frontend
 ```
@@ -134,7 +134,7 @@ EditorWindow
          └─ LogPanel
 ```
 
-布局树由 `src/features/core/layout/layoutStore.ts` 管理，使用 Zustand + Immer 表示 VS Code 风格的区域树。`viewRegistry.tsx` 将字符串 view id 映射到实际 React 组件，使布局节点和渲染组件解耦。
+布局树由 `src/features/core/layout/layoutStore.ts` 管理，使用 Zustand + Immer 表示 VS Code 风格的区域树；Tab 顺序、激活态和选择态由独立的 `editorTabStore.ts` 管理。`viewRegistry.tsx` 将字符串 view id 映射到实际 React 组件，使布局节点和渲染组件解耦。
 
 `Workspace` 负责布局渲染、拖拽上下文和视图渲染。图编辑器、侧边栏、详情面板和日志面板都作为布局节点出现，而不是通过页面级条件渲染硬切换。
 
@@ -165,7 +165,7 @@ components/ui and shared/ui → reusable UI
 
 - 项目/数据：`features/core/dataStore/`
 - 布局：`features/core/layout/layoutStore.ts`
-- 编辑器 core 状态：`features/core/editor/`（layout tab、detail focus、clipboard 等）
+- 编辑器 core 状态：`features/core/editor/`（detail focus、clipboard 等）；Tab 运行态位于 `features/core/layout/editorTabStore.ts`
 - 编辑器 application 编排：`features/application/editor/`（`EditorSessionProvider`、`useEditorSession`、`useEditorGroup`）
 - Schema / Node Registry：`features/core/schema`、`features/core/nodeRegister`
 - 历史：`features/core/history`
@@ -213,7 +213,7 @@ src-tauri/src/main.rs
 `lib.rs` 负责：
 
 - 注册 Tauri plugins：log、fs、dialog、opener。
-- 注册全局 managed state：`ProjectState`、`WindowDataStore`。
+- 注册全局 managed state：`ProjectState`、`ResultSourceStore`。
 - 初始化日志管理器。
 - 通过 `tauri::generate_handler!` 集中注册所有命令。
 
@@ -227,7 +227,7 @@ src-tauri/src/
 ├─ project/        # 项目文档、项目状态、项目 store、执行入口
 ├─ database/       # 数据源 engine、lazy/load 状态、DataFrame 编辑
 ├─ graph/          # 图、节点、pin、连接、registry、类型推断
-├─ execution/      # GraphRuntime、Executor、ExecutionEvent、WindowDataStore
+├─ execution/      # GraphRuntime、Executor、ExecutionEvent、ResultSourceStore
 ├─ schema/         # 前后端 DTO/schema
 ├─ variable/       # 变量模型和作用域
 ├─ editor/         # 设置文件读写
@@ -389,7 +389,7 @@ execute_project command
 - `GraphRuntime`
 - logs
 - `EventEmitter`
-- `WindowDataStore`
+- `ResultSourceStore`
 
 执行时它会：
 
@@ -550,7 +550,7 @@ ts/vec/
 
 ### 12.1 前端
 
-当前 package scripts 只包含 Vite dev/build/preview/tauri，没有独立前端单测脚本。前端质量主要依赖 TypeScript 编译、运行时验证和手动交互测试。
+前端 package scripts 提供 `pnpm test`（Vitest）、`pnpm build`、`pnpm dev`、`pnpm preview` 和 `pnpm tauri`。质量验证应优先运行受影响的 Vitest 测试，再运行 TypeScript/build 检查。
 
 ### 12.2 主 Rust crate
 
@@ -614,7 +614,7 @@ flowchart TD
   executor --> node["NodeDefinition processor/evaluator"]
   node --> sci["yss-sci or backend services"]
   node --> payload["Window payload"]
-  payload --> store["WindowDataStore"]
+  payload --> store["ResultSourceStore"]
   executor -->|"OpenWindow event with dataKey"| frontend
   frontend -->|"get_window_data"| store
 ```
@@ -679,7 +679,7 @@ App mount
 
 ### 15.1 前端状态与事件复杂度
 
-`docs/ARCHITECTURE_ISSUES.md` 已详细记录多个问题：
+历史架构问题记录已并入本目录的专题文档，不再维护独立的 `ARCHITECTURE_ISSUES.md`。
 
 - Zustand store 不带 selector 会导致过度重渲染。
 - 全局事件监听器较多，捕获阶段监听器可能影响 React 事件链。
@@ -705,7 +705,7 @@ CSV、Parquet、Excel 和部分 SQL 连接信息以路径/连接字符串形式�
 
 ### 15.4 ResultSourceStore 生命周期
 
-执行器与 DataView 将可检视 payload 写入 `ResultSourceStore`（`execution/window_data_store.rs`）。两类 owner：**RuntimePin**（画布 pin 上次 run 结果）与 **Window**（弹窗独占）。拓扑破坏时按 pin 失效；Run 结束保留；窗口 unmount 时仅释放 `SourceOwner::Window`。详见 [`runtime-source-lifecycle.md`](./runtime-source-lifecycle.md)。
+执行器与 DataView 将可检视 payload 写入 `ResultSourceStore`（`execution/result_source_store.rs`）。两类 owner：**RuntimePin**（画布 pin 上次 run 结果）与 **Window**（弹窗独占）。拓扑破坏时按 pin 失效；Run 结束保留；窗口 unmount 时仅释放 `SourceOwner::Window`。详见 [`runtime-source-lifecycle.md`](../features/runtime-source-lifecycle.md)。
 
 ### 15.5 `sci` API 收敛仍未完成
 

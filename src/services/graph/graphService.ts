@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
 import type { FunctionSignaturePatch } from "@/shared/types";
-import type { GraphInstanceDTO, FunctionCallSiteDTO } from "@/shared/types/dto";
+import type { GraphInstanceDTO, FunctionCallSiteDTO, GraphValidationWarningDTO } from "@/shared/types/dto";
 import { markResourceLoaded } from "@/features/core/resource";
 import type { BackendProjectResourceMeta } from "@/features/core/resource";
 import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
@@ -103,11 +103,11 @@ export class GraphService {
         }
     }
 
-    static async resolveGraphDynamicPins(graphPath: string): Promise<Graph> {
+    static async resolveGraphDynamicPins(graphPath: string): Promise<{ graph: Graph; inferenceWarnings: GraphValidationWarningDTO[] }> {
         try {
-            const graph = await invoke<GraphInstanceDTO>("resolve_graph_dynamic_pins", { graphPath });
+            const result = await invoke<{ graph: GraphInstanceDTO; inferenceWarnings: GraphValidationWarningDTO[] }>("resolve_graph_dynamic_pins", { graphPath });
             logger.graph.info(`Graph '${graphPath}' dynamic pins materialized`, 'GraphService');
-            return toFrontendGraph(graph);
+            return { graph: toFrontendGraph(result.graph), inferenceWarnings: result.inferenceWarnings ?? [] };
         } catch (error) {
             logger.graph.error(`Error resolving graph dynamic pins: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;

@@ -86,6 +86,7 @@ export interface PinData {
   dataType?: DataType;
   optional?: boolean;
   ui?: PinUI;
+  validationWarning?: string;
 }
 
 /** UI 运行时 Pin 视图，连接状态从 pinConnections 派生。 */

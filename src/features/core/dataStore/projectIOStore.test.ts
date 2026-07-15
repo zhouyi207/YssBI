@@ -205,7 +205,10 @@ describe('useProjectIOStore snapshot paths', () => {
       variables: {},
     });
     vi.mocked(toFrontendGraph).mockReturnValue(graphDataToDomainGraph(graphData));
-    vi.mocked(GraphService.resolveGraphDynamicPins).mockResolvedValue(graphDataToDomainGraph(graphData));
+    vi.mocked(GraphService.resolveGraphDynamicPins).mockResolvedValue({
+      graph: graphDataToDomainGraph(graphData),
+      inferenceWarnings: [],
+    });
 
     const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
 

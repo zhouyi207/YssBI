@@ -43,4 +43,6 @@ export interface Pin {
     dataType?: DataType;
     optional?: boolean;
     ui?: PinUI;
+    /** Runtime-only graph validation diagnostic; never persisted in graph snapshots. */
+    validationWarning?: string;
 }

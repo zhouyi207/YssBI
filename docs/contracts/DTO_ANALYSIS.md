@@ -129,6 +129,6 @@ import { connectionItemToConnectionData, connectionDataToItem } from '@/shared/u
 
 ### 4.3 注意事项
 
-1. **NodeCreated 事件**：当前仅添加节点到 Store，pins 需由后续 Graph 同步或后端扩展 NodeCreated payload 包含 pins
+1. **NodeCreated 事件**：当前 payload 已同时包含 `data` 与 `pins`；`NodeCreatedHandler` 应一次性写入节点及其 pins，无需再等待后续 Graph 同步或扩展 payload
 2. **Connection 双格式**：addGraphFromData 已兼容 `{ from_pin, to_pin }` 与 `{ id, from, to }`
 3. **Pin direction**：后端 Rust enum 可能序列化为 "Input"/"Output"，前端使用 "input"|"output"，必要时做大小写转换

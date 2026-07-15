@@ -344,7 +344,7 @@ InfoView 组件（假定 payload 已窄化；标量仍经 formatStat）
 | 单点分发 | `shared/types/report/parseReportPayload.ts` |
 | 报告渲染入口 | `features/core/resultSource/components/ReportView.tsx`（或 `ReportSourceView`） |
 | 数值展示防御 | `views/InfoView/shared/formatStat.ts` — 见 §2.9 |
-| DTO 映射补充 | [DTO_TYPE_MAPPING.md §十六](./DTO_TYPE_MAPPING.md#十六info-报告-payload-ipc-边界) |
+| DTO 映射补充 | [DTO_TYPE_MAPPING.md §十六](../contracts/DTO_TYPE_MAPPING.md#十六info-报告-payload-ipc-边界) |
 
 ### 2.14 Graph store hydrate
 
@@ -370,7 +370,7 @@ buildGraphBucket → GraphEntityBucket
 - `runtimePinRefsToIds` 为 pin 引用窄化单点（hydrate 与 `replaceGraphNodes` 共用）。
 - 测试夹具优先 `makeTestGraph()`（`@/tests/helpers/graphFixtures`）。
 
-约定详见 [docs/adr/graph-store-hydrate.md](./adr/graph-store-hydrate.md)、[DTO_TYPE_MAPPING.md §十七](./DTO_TYPE_MAPPING.md#十七graph-store-hydrate)。
+约定详见 [DTO_TYPE_MAPPING.md §十七](../contracts/DTO_TYPE_MAPPING.md#十七graph-store-hydrate) 与当前 `src/shared/types/dto/graphModel.ts` 实现。
 
 ### 2.5 状态管理（Zustand）
 
@@ -608,7 +608,7 @@ RuntimeState（执行态快照） ─ 持有 ID + 当前状态 + 运行时值，
 
 - DTO 定义在 `schema/` 中，使用 `#[serde(rename_all = "camelCase")]`。
 - JSON 键统一 camelCase，与前端一致。
-- 类型映射详见 [DTO_TYPE_MAPPING.md](./DTO_TYPE_MAPPING.md)。
+- 类型映射详见 [DTO_TYPE_MAPPING.md](../contracts/DTO_TYPE_MAPPING.md)。
 
 ### 3.5 规则层级
 
@@ -787,7 +787,6 @@ NodeData（store）              ← 扁平字段 + paramsKind，便于 UI 读�
 
 ## 4. 参考文档
 
-- [DTO_TYPE_MAPPING.md](./DTO_TYPE_MAPPING.md) - 前后端类型映射（NodeInstanceParams / GraphUndoPatch §十二–十四；Info 报告 IPC §十六）
-- [ARCHITECTURE_ISSUES.md](./ARCHITECTURE_ISSUES.md) - 架构问题与优化路线
-- [runtime-source-lifecycle.md](./runtime-source-lifecycle.md) - RuntimePin / Window 结果 source 生命周期与前后端投影规则
-- [features/application/editor/README.md](../src/features/application/editor/README.md) - EditorSession Provider / slice hook 挂载说明（与 §2.12 对照）
+- [DTO_TYPE_MAPPING.md](../contracts/DTO_TYPE_MAPPING.md) - 前后端类型映射（NodeInstanceParams / GraphUndoPatch §十二–十四；Info 报告 IPC §十六）
+- [runtime-source-lifecycle.md](../features/runtime-source-lifecycle.md) - RuntimePin / Window 结果 source 生命周期与前后端投影规则
+- [Editor application README](../../src/features/application/editor/README.md) - EditorSession Provider / slice hook 挂载说明（与 §2.12 对照）

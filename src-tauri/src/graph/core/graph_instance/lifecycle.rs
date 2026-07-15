@@ -128,23 +128,16 @@ impl GraphInstance {
             GraphRecompileScope::None => GraphRecompileResult::default(),
             GraphRecompileScope::RuntimePrepare => {
                 self.propagate_schemas();
-                GraphRecompileResult {
-                    inferred: self.infer_types_with_warn(),
-                    ..Default::default()
-                }
+                self.infer_only_result()
             }
-            GraphRecompileScope::InferOnly => GraphRecompileResult {
-                inferred: self.infer_types_with_warn(),
-                ..Default::default()
-            },
+            GraphRecompileScope::InferOnly => self.infer_only_result(),
             GraphRecompileScope::Full => {
                 self.propagate_schemas();
                 let change_sets =
                     self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Interactive);
-                GraphRecompileResult {
-                    change_sets,
-                    inferred: self.infer_types_with_warn(),
-                }
+                let mut result = self.infer_only_result();
+                result.change_sets = change_sets;
+                result
             }
             GraphRecompileScope::FromSeeds(seeds) => {
                 if seeds.is_empty() {
@@ -156,10 +149,9 @@ impl GraphInstance {
                 self.propagate_schemas();
                 let change_sets =
                     self.resolve_all_dynamic_pins_with_mode(PinResolveMode::Materialize);
-                GraphRecompileResult {
-                    change_sets,
-                    inferred: self.infer_types_with_warn(),
-                }
+                let mut result = self.infer_only_result();
+                result.change_sets = change_sets;
+                result
             }
             GraphRecompileScope::TopologyEffects { seeds, mode } => {
                 self.recompile_seeded(&seeds, mode)
@@ -167,10 +159,17 @@ impl GraphInstance {
         }
     }
 
-    fn infer_types_with_warn(&self) -> Vec<(PinId, DataType)> {
+    fn infer_only_result(&self) -> GraphRecompileResult {
         self.infer_types()
-            .map_err(|e| crate::log::log_sys::warn!("graph type inference failed: {}", e))
-            .unwrap_or_default()
+            .map(|report| GraphRecompileResult {
+                inferred: report.resolved,
+                inference_warnings: report.warnings,
+                ..Default::default()
+            })
+            .unwrap_or_else(|e| {
+                crate::log::log_sys::warn!("graph type inference failed: {}", e);
+                GraphRecompileResult::default()
+            })
     }
 
     fn collect_downstream_resolve_nodes(&self, seeds: &[NodeId]) -> Vec<NodeId> {
@@ -200,10 +199,9 @@ impl GraphInstance {
                 change_sets.push(cs);
             }
         }
-        GraphRecompileResult {
-            change_sets,
-            inferred: self.infer_types_with_warn(),
-        }
+        let mut result = self.infer_only_result();
+        result.change_sets = change_sets;
+        result
     }
 
     /// 全图重编译：schema 传播 + 动态 pin 解析 + 类型推断。

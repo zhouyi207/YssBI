@@ -74,6 +74,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     onValueChange,
     onRemovePin,
     forceShowInput,
+    validationWarning,
   } = props;
 
   const { t } = useTranslation();
@@ -191,7 +192,9 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const pinTooltip = `${name} (${visualSpec.label})`;
+  const pinTooltip = validationWarning
+    ? `${name} (${visualSpec.label}) — ${validationWarning}`
+    : `${name} (${visualSpec.label})`;
 
   const pulseStrokeProps = shouldPulse
     ? {
@@ -291,6 +294,7 @@ export const Pin: React.FC<PinProps> = (props) => {
       `}
           style={dragStyle}
           data-pin-id={id}
+          data-validation-warning={validationWarning ? 'true' : undefined}
           onContextMenu={handleContextMenu}
           onPointerDown={(e) => {
             if (contextMenu && e.button === 0) {
@@ -308,6 +312,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           relative w-6 h-6 flex items-center justify-center cursor-crosshair shrink-0 z-20 pin-circle rounded-full
           ${direction === "input" ? "mr-1" : "ml-1"}
           ${contextMenu ? "ring-2 ring-[var(--accent-color)]/60" : ""}
+          ${validationWarning ? "ring-2 ring-amber-500/80" : ""}
         `}
         onClick={(e) => {
           e.stopPropagation();

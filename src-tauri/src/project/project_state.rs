@@ -283,17 +283,18 @@ impl ProjectState {
     pub fn resolve_graph_dynamic_pins(
         &self,
         graph_path: &GraphResourcePath,
-    ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>), String> {
+    ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>, Vec<crate::graph::GraphValidationWarning>), String> {
         let mut shell_sets = self.sync_function_shell_pins_in_graph(graph_path);
         let mut call_sets = self.sync_all_call_nodes_in_graph(graph_path);
 
         let graph = self
             .get_graph(graph_path)
             .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
-        let (mut change_sets, inferred) = graph.materialize_dynamic_pins();
+        let result = graph.recompile(crate::graph::GraphRecompileScope::Materialize);
+        let mut change_sets = result.change_sets;
         change_sets.append(&mut shell_sets);
         change_sets.append(&mut call_sets);
-        Ok((graph, change_sets, inferred))
+        Ok((graph, change_sets, result.inferred, result.inference_warnings))
     }
 
     /// Single entry point for placing a graph into `project_data.graphs`.

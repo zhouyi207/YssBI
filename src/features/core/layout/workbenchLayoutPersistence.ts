@@ -6,7 +6,7 @@ import {
 
 export const WORKBENCH_LAYOUT_PERSIST_DEBOUNCE_MS = 250;
 
-export type WorkbenchLayoutPersistSlice = 'parts' | 'editorGrid';
+export type WorkbenchLayoutPersistSlice = 'parts' | 'editorGrid' | 'editorTabs';
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const pendingWrites: Partial<Record<WorkbenchLayoutPersistSlice, () => void>> = {};
@@ -20,16 +20,20 @@ function runPendingWrites(): void {
   clearPersistTimer();
   const partsWrite = pendingWrites.parts;
   const editorGridWrite = pendingWrites.editorGrid;
+  const editorTabsWrite = pendingWrites.editorTabs;
   delete pendingWrites.parts;
   delete pendingWrites.editorGrid;
+  delete pendingWrites.editorTabs;
   partsWrite?.();
   editorGridWrite?.();
+  editorTabsWrite?.();
 }
 
 function clearPendingWrites(): void {
   clearPersistTimer();
   delete pendingWrites.parts;
   delete pendingWrites.editorGrid;
+  delete pendingWrites.editorTabs;
 }
 
 /** Merge a partial memento patch into localStorage (preserves unspecified fields). */

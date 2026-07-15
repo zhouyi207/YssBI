@@ -74,6 +74,7 @@ export function pinDataToDomainPin(pin: PinData): Pin {
     dataType: pin.dataType,
     optional: pin.optional,
     ui: pin.ui,
+    validationWarning: pin.validationWarning,
   };
 }
 
@@ -89,6 +90,7 @@ export function domainPinToPinData(pin: Pin): PinData {
     dataType: pin.dataType,
     optional: pin.optional,
     ui: pin.ui,
+    validationWarning: pin.validationWarning,
   });
 }
 

@@ -31,6 +31,15 @@ pub enum GraphRecompileScope {
 pub struct GraphRecompileResult {
     pub change_sets: Vec<PinChangeSet>,
     pub inferred: Vec<(PinId, DataType)>,
+    pub inference_warnings: Vec<GraphValidationWarning>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GraphValidationWarning {
+    pub code: &'static str,
+    pub from_pin_id: PinId,
+    pub to_pin_id: PinId,
+    pub message: String,
 }
 
 /// 动态 pin 解析模式

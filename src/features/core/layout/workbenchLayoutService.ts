@@ -102,7 +102,6 @@ export function persistEditorGridDebounced(): void {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
-      editorTabs: useEditorTabStore.getState().snapshotMemento(),
     });
   });
 }
@@ -112,6 +111,22 @@ export function persistEditorGridNow(): void {
     const state = useLayoutStore.getState();
     mergeWorkbenchLayoutMemento({
       editorGrid: snapshotEditorGridMemento(state.nodes, state.activeEditorGroupId),
+    });
+  });
+}
+
+/** Persist runtime tab order/activation independently from the layout topology. */
+export function persistEditorTabsDebounced(): void {
+  scheduleWorkbenchLayoutPersist('editorTabs', () => {
+    mergeWorkbenchLayoutMemento({
+      editorTabs: useEditorTabStore.getState().snapshotMemento(),
+    });
+  });
+}
+
+export function persistEditorTabsNow(): void {
+  flushWorkbenchLayoutPersist('editorTabs', () => {
+    mergeWorkbenchLayoutMemento({
       editorTabs: useEditorTabStore.getState().snapshotMemento(),
     });
   });

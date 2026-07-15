@@ -291,7 +291,16 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         const { graph, variables } = await ProjectService.loadProjectGraph(graphPath);
         let frontendGraph;
         try {
-          frontendGraph = await GraphService.resolveGraphDynamicPins(graphPath);
+          const resolved = await GraphService.resolveGraphDynamicPins(graphPath);
+          const warningsByPin = new Map<string, string>();
+          for (const warning of resolved.inferenceWarnings) {
+            warningsByPin.set(warning.fromPinId, warning.message);
+            warningsByPin.set(warning.toPinId, warning.message);
+          }
+          frontendGraph = {
+            ...resolved.graph,
+            pins: resolved.graph.pins.map((pin) => ({ ...pin, validationWarning: warningsByPin.get(pin.id) })),
+          };
         } catch (resolveErr) {
           logger.sys.warn(
             'Dynamic pin materialize failed, using loaded graph: ' +

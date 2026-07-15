@@ -9,6 +9,8 @@ export {
   persistWorkbenchLayoutDebounced,
   persistEditorGridDebounced,
   persistEditorGridNow,
+  persistEditorTabsDebounced,
+  persistEditorTabsNow,
   persistWorkbenchLayoutNow,
   collapseEditorGroupsForProjectSwitch,
   applyPanelPosition,

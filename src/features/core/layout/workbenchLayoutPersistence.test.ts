@@ -9,6 +9,7 @@ import { mergeWorkbenchLayoutMemento } from './workbenchLayoutPersistence';
 import {
   collapseEditorGroupsForProjectSwitch,
   persistEditorGridDebounced,
+  persistEditorTabsDebounced,
   persistWorkbenchLayoutNow,
   persistWorkbenchLayoutDebounced,
   hydrateWorkbenchChrome,
@@ -59,6 +60,23 @@ describe('workbenchLayoutPersistence decoupling', () => {
     const memento = loadWorkbenchLayoutMemento();
     expect(memento?.parts?.sidebar?.pixelSize).toBe(300);
     expect(memento?.editorGrid?.nodes?.some((n) => n.id === 'editor_group_2')).toBe(true);
+  });
+
+  it('persists editor tab order and activation independently from editorGrid', () => {
+    seedEditorGroupTabs(DEFAULT_EDITOR_GROUP_ID, [
+      { id: 'events/a', type: 'event', component: 'GraphEditor' },
+      { id: 'events/b', type: 'event', component: 'GraphEditor' },
+    ]);
+    useEditorTabStore.getState().setActiveTab(DEFAULT_EDITOR_GROUP_ID, 'events/a');
+    persistEditorTabsDebounced();
+    vi.advanceTimersByTime(300);
+
+    const memento = loadWorkbenchLayoutMemento();
+    expect(memento?.editorTabs?.placements[DEFAULT_EDITOR_GROUP_ID]).toMatchObject({
+      tabIds: ['events/a', 'events/b'],
+      activeTabId: 'events/a',
+    });
+    expect(memento?.editorGrid).toBeNull();
   });
 
   it('persistWorkbenchLayoutDebounced merges only parts and preserves editorGrid', () => {

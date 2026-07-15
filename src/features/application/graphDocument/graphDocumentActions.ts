@@ -75,7 +75,7 @@ export async function applyCallerGraphUpdates(
 
   await Promise.all(
     fallbackPaths.map(async (callerGraphPath) => {
-      const graph = await GraphService.resolveGraphDynamicPins(callerGraphPath);
+      const { graph } = await GraphService.resolveGraphDynamicPins(callerGraphPath);
       useGraphDataStore.getState().addGraphFromData(callerGraphPath, graph);
     }),
   );

@@ -1,0 +1,39 @@
+# Version History
+
+Version files are historical implementation records extracted from `TODO.md`.
+They explain what changed during a release line; they are not the current
+architecture contract.
+
+## Canonical source order
+
+When historical notes conflict with current behavior, use this order:
+
+1. `AGENTS.md` — project rules for agents and contributors.
+2. `docs/architecture/` — current architecture and design decisions.
+3. `docs/contracts/` — current IPC and DTO contracts.
+4. `docs/features/` — current feature-specific behavior.
+5. `docs/version/` — historical implementation timeline only.
+
+## Files
+
+| File | Version | Period | Meaning |
+|---|---|---|---|
+| `v0_1.md` | v0.1 | 2026-06-23 onward | Data, editor, type-system, and UI convergence history |
+| `v0_2.md` | v0.2 | 2026-07-01 onward | Resource lifecycle, graph architecture, execution, and workbench convergence history |
+
+## Status vocabulary
+
+- `[x]` / `completed`: implemented and recorded as historical fact.
+- `[ ]` / `planned`: proposal or open item at the time; verify against code and
+  `TODO.md` before treating it as a current task.
+- `deferred` / `暂缓`: intentionally postponed.
+- `superseded` / `已 supersede`: replaced by a later design or implementation.
+- `historical`: context only; current behavior is defined by the canonical
+  documents above.
+
+## Retrieval guidance
+
+Index each section with its version, date heading, and feature heading. A
+version entry may describe an intermediate implementation and may mention paths
+that later moved; resolve paths against current canonical documents before
+citing it as present-day behavior.

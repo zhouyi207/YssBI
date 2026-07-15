@@ -9,6 +9,8 @@ import { setWorkbenchLayoutWindowScope } from '@/features/core/layout/workbenchL
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
 import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { persistEditorTabsDebounced } from '@/features/core/layout/workbenchLayoutService';
 
 /** Hydrate persisted workbench chrome + editor grid from localStorage on mount. */
 export function useWorkbenchLayout(): void {
@@ -21,6 +23,13 @@ export function useWorkbenchLayout(): void {
     if (activeEditorGroupId) {
       void bootstrapEditorGraphSession(activeEditorGroupId);
     }
-    return subscribeWorkbenchViewportResize();
+    const unsubscribeTabs = useEditorTabStore.subscribe(() => {
+      persistEditorTabsDebounced();
+    });
+    const unsubscribeViewport = subscribeWorkbenchViewportResize();
+    return () => {
+      unsubscribeTabs();
+      unsubscribeViewport();
+    };
   }, []);
 }

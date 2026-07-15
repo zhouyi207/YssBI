@@ -1,6 +1,6 @@
 use super::{TypeInferenceContext, TypeVarKey};
 use crate::graph::pin::PinDataTypeInference;
-use crate::graph::{DataType, GraphInstance, PinId, TypeVarId};
+use crate::graph::{DataType, GraphInstance, GraphValidationWarning, PinId, TypeVarId};
 use std::collections::HashMap;
 
 /// 一次推断会话
@@ -66,7 +66,8 @@ impl<'g> TypeInferenceSession<'g> {
     /// 单条连接 unify 失败（历史脏边/类型冲突）只记 warn 并跳过，不再 `?` 传播
     /// 而毒化整图——其余连接照常推断与传播。并查集 + 绑定合并对一致图与边序
     /// 无关，故无需排序。`commit` 仍保持严格（绑定冲突属真错）。
-    pub fn infer_all(&mut self) -> Result<(), String> {
+    pub fn infer_all(&mut self) -> Result<Vec<GraphValidationWarning>, String> {
+        let mut warnings = Vec::new();
         let connections = self
             .graph
             .data_state
@@ -79,6 +80,12 @@ impl<'g> TypeInferenceSession<'g> {
                 .ctx
                 .infer_connection(connection.from_pin, connection.to_pin)
             {
+                warnings.push(GraphValidationWarning {
+                    code: "incompatible_connection",
+                    from_pin_id: connection.from_pin,
+                    to_pin_id: connection.to_pin,
+                    message: e.clone(),
+                });
                 crate::log::log_sys::warn!(
                     "type inference skipped an incompatible connection {:?} -> {:?}: {}",
                     connection.from_pin,
@@ -91,7 +98,7 @@ impl<'g> TypeInferenceSession<'g> {
         // - Input 由上游连接确定
         // - Output 由下游连接确定
         // - 二者均可为不同类型（如 Input=Float, Output=Int），由 convert_to_type 在运行时执行转换
-        Ok(())
+        Ok(warnings)
     }
 
     /// 提交结果：把临时绑定写回 TypeVarDefinition.bound

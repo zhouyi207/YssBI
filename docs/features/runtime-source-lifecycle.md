@@ -1,6 +1,6 @@
 # Runtime Source 生命周期
 
-本文档定义 `ResultSourceStore` 中 inspectable 结果（Database Editor / pin 结果 / 弹窗）的创建、保留与失效规则。与 [`DESIGN_RULE.md`](DESIGN_RULE.md) 的 CQRS 原则一致：**backend 为真源，前端 `pinResults` 为投影**。
+本文档定义 `ResultSourceStore` 中 inspectable 结果（Database Editor / pin 结果 / 弹窗）的创建、保留与失效规则。与 [`DESIGN_RULE.md`](../architecture/DESIGN_RULE.md) 的 CQRS 原则一致：**backend 为真源，前端 `pinResults` 为投影**。
 
 ## 1. 两类 Owner
 

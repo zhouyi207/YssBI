@@ -237,7 +237,7 @@ EditorViewport          →    （无 IPC / 无 DTO）   →    EditorViewport�
 2. **Connection 命名**：JSON 统一使用 camelCase `fromPin`/`toPin`；Store 的 ConnectionData 使用 `from`/`to` 并派生 `id`。
 3. **Pin direction**：后端序列化为 `"input"`/`"output"`，与前端 PinDirection 一致。
 4. **Node 命名**：Domain/Store 使用 snake_case（node_type, ui_style），DTO 使用 camelCase（nodeType, uiStyle）；转换时需注意字段映射。
-5. **节点 params 与 Layout params**：`NodeInstanceParams`（tagged union）与 `EditorGroupNodeParams`（布局选中态）是两套类型，详见 [DESIGN_RULE.md §3.8](./DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)。
+5. **节点 params 与 Layout params**：`NodeInstanceParams`（tagged union）与 `EditorGroupNodeParams`（布局选中态）是两套类型，详见 [DESIGN_RULE.md §3.8](../architecture/DESIGN_RULE.md#38-节点实例参数与结构性-undo-dto)。
 6. **NodePosition ≠ EditorViewport**：前者是图文档（IPC + 磁盘）；后者是编辑器 UI 状态（仅前端）。勿在 DTO 映射表为 Graph 增加 `canvas` 行。
 
 ---
@@ -359,7 +359,7 @@ delete / disconnect / paste redo
 | `formatNullableNum` | 可空字段 + 自定义 fallback |
 | `formatPercent` | 0–1 比例 → 百分比字符串 |
 
-约定详见 [DESIGN_RULE.md §2.9](./DESIGN_RULE.md#29-infoview-统计数值展示)。
+约定详见 [DESIGN_RULE.md §2.9](../architecture/DESIGN_RULE.md#29-infoview-统计数值展示)。
 
 ---
 
@@ -375,9 +375,9 @@ delete / disconnect / paste redo
 | 共享字段 | `parseCommon` | 系数、`serialTests`、`correlogram` |
 | 类型真源 | `shared/types/report/*.ts` | 视图直引；禁止 InfoView 层 types shim |
 
-**扩展**：新增 `ReportKind` 时同步 Rust struct、`parseReportPayload` 分支、`ReportView` 渲染分支与 `report.test.ts`。展示层数值仍须 [§2.9](./DESIGN_RULE.md#29-infoview-统计数值展示) / §十五 二次防御。
+**扩展**：新增 `ReportKind` 时同步 Rust struct、`parseReportPayload` 分支、`ReportView` 渲染分支与 `report.test.ts`。展示层数值仍须 [§2.9](../architecture/DESIGN_RULE.md#29-infoview-统计数值展示) / §十五 二次防御。
 
-约定详见 [DESIGN_RULE.md §2.13](./DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)。
+约定详见 [DESIGN_RULE.md §2.13](../architecture/DESIGN_RULE.md#213-info-报告-ipc-边界与类型分层)。
 
 ---
 
@@ -395,4 +395,4 @@ delete / disconnect / paste redo
 | 视口（独立） | `features/core/viewport/*` | `EditorViewport`；与 hydrate 边界无交叉 |
 | 测试夹具 | `makeTestGraph()` | hydrate-safe `GraphDataLike` |
 
-约定详见 [DESIGN_RULE.md §2.14](./DESIGN_RULE.md#214-graph-store-hydrate)、[adr/graph-store-hydrate.md](./adr/graph-store-hydrate.md)。
+约定详见 [DESIGN_RULE.md §2.14](../architecture/DESIGN_RULE.md#214-graph-store-hydrate) 及当前实现 `src/features/core/sync/graphStoreHydrate.ts`；历史 ADR 已不再作为维护入口。

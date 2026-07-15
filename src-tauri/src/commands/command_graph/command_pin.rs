@@ -4,7 +4,7 @@ use crate::graph::{NodeId, PinId};
 use crate::log::log_app;
 use crate::project::emit_pin_change_events;
 use crate::project::{GraphResourcePath, ProjectState};
-use crate::schema::{GraphInstanceDTO, PinInstanceDTO};
+use crate::schema::{GraphInstanceDTO, GraphValidationWarningDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
@@ -238,12 +238,19 @@ pub fn remove_repeatable_pin(
 /// 打开图 Tab 时物化 schema 派生 pin（DESIGN_RULE §3.7）
 ///
 /// 返回完整 Graph DTO；前端以 DTO 为准灌入 store，不在此 emit pin 事件（避免与 addGraphFromData 竞态）。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedGraphDTO {
+    pub graph: GraphInstanceDTO,
+    pub inference_warnings: Vec<GraphValidationWarningDTO>,
+}
+
 #[tauri::command]
 pub fn resolve_graph_dynamic_pins(
     _app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<GraphInstanceDTO, String> {
+) -> Result<ResolvedGraphDTO, String> {
     let graph_path = parse_graph_path(&graph_path)?;
     if state.get_graph(&graph_path).is_none() {
         state.load_graph_from_current_project(&graph_path)?;
@@ -251,7 +258,7 @@ pub fn resolve_graph_dynamic_pins(
 
     log_app::info!("[command.resolve_graph_dynamic_pins] graph={}", graph_path);
 
-    let (graph, _change_sets, _inferred) = state.resolve_graph_dynamic_pins(&graph_path)?;
+    let (graph, _change_sets, _inferred, warnings) = state.resolve_graph_dynamic_pins(&graph_path)?;
 
-    Ok((&graph).into())
+    Ok(ResolvedGraphDTO { graph: (&graph).into(), inference_warnings: warnings.iter().map(GraphValidationWarningDTO::from).collect() })
 }

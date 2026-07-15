@@ -9,7 +9,7 @@ impl GraphInstance {
     /// 2. 注册所有 Pin 的类型
     /// 3. 根据连接关系推断类型
     /// 4. 将推断结果写回 GraphDataState
-    pub fn infer_types(&self) -> Result<Vec<(PinId, DataType)>, String> {
+    pub fn infer_types(&self) -> Result<crate::graph::TypeInferenceReport, String> {
         crate::graph::infer::infer_graph(self)
     }
 }
