@@ -163,7 +163,7 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
       ariaLabel: () => actions.themeTooltip,
       tooltip: () => actions.themeTooltip,
       onClick: () => actions.cycleColorTheme(),
-      render: (ctx) => ctx.themeMode,
+      render: (ctx) => ctx.colorTheme,
     },
   ];
 }

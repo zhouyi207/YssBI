@@ -115,7 +115,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const executionStatus = useExecutionStore((state) =>
     editor.activeTabId ? state.graphs[editor.activeTabId]?.status ?? "idle" : "idle",
   );
-  const themeMode = useSettingsStore((state) => state.theme.mode);
+  const colorTheme = useSettingsStore((state) => state.appearance.colorTheme);
 
   const ctx = useMemo<StatusBarRenderContext>(
     () => ({
@@ -130,9 +130,9 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       nodeCount: graphStats.nodeCount,
       connectionCount: graphStats.connectionCount,
       executionStatus,
-      themeMode,
+      colorTheme,
     }),
-    [t, project, editor, graphStats, executionStatus, themeMode],
+    [t, project, editor, graphStats, executionStatus, colorTheme],
   );
 
   const builtIn = useMemo(

@@ -15,7 +15,7 @@ export interface StatusBarRenderContext {
   nodeCount: number;
   connectionCount: number;
   executionStatus: string;
-  themeMode: string;
+  colorTheme: string;
 }
 
 export interface StatusBarItemViewModel {

@@ -19,7 +19,7 @@ const ctx: StatusBarRenderContext = {
   nodeCount: 5,
   connectionCount: 3,
   executionStatus: "idle",
-  themeMode: "dark",
+  colorTheme: "Dark Modern (Default)",
 };
 
 const noopActions = {

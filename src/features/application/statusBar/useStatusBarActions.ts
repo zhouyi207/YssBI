@@ -7,12 +7,12 @@ import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layou
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
+import { getNextColorThemePreset } from '@/features/application/settings/colorThemePresets';
 
 /** Bottom bar command handlers — keeps BottomBar presentational. */
 export function useStatusBarActions() {
   const { t } = useTranslation();
   const updateTheme = useSettingsStore((s) => s.updateTheme);
-  const saveDebounced = useSettingsStore((s) => s.saveDebounced);
   const colorTheme = useSettingsStore((s) => s.appearance.colorTheme);
 
   const openLogsPanel = useCallback(() => {
@@ -32,13 +32,10 @@ export function useStatusBarActions() {
   }, []);
 
   const cycleColorTheme = useCallback(() => {
-    const order = ['Dark Modern (Default)', 'OLED Black', 'Light Modern'] as const;
-    const idx = order.indexOf(colorTheme as (typeof order)[number]);
-    const next = order[(idx + 1) % order.length];
+    const next = getNextColorThemePreset(colorTheme);
     useSettingsStore.getState().updateAppearance({ colorTheme: next });
     syncColorThemePreset(next, updateTheme);
-    saveDebounced();
-  }, [colorTheme, updateTheme, saveDebounced]);
+  }, [colorTheme, updateTheme]);
 
   return {
     openLogsPanel,
