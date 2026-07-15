@@ -19,9 +19,43 @@ function TooltipProvider({
 }
 
 function Tooltip({
+  open: controlledOpen,
+  defaultOpen = false,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
+  const [windowDragging, setWindowDragging] = React.useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : uncontrolledOpen;
+
+  React.useEffect(() => {
+    const dragStart = () => {
+      setWindowDragging(true);
+      if (!controlled) setUncontrolledOpen(false);
+      onOpenChange?.(false);
+    };
+    const dragEnd = () => setWindowDragging(false);
+    window.addEventListener('yssbi-window-drag-start', dragStart);
+    window.addEventListener('yssbi-window-drag-end', dragEnd);
+    return () => {
+      window.removeEventListener('yssbi-window-drag-start', dragStart);
+      window.removeEventListener('yssbi-window-drag-end', dragEnd);
+    };
+  }, [controlled, onOpenChange]);
+
+  return (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      {...props}
+      open={open}
+      disableHoverableContent={windowDragging}
+      onOpenChange={(nextOpen) => {
+        if (!controlled && !windowDragging) setUncontrolledOpen(nextOpen);
+        if (!windowDragging) onOpenChange?.(nextOpen);
+      }}
+    />
+  )
 }
 
 function TooltipTrigger({

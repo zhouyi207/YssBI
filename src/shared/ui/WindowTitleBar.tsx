@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import { useEffect, type ComponentProps, type MouseEventHandler } from 'react';
 import { cn } from '@/lib/utils';
 
 export type WindowTitleBarProps = ComponentProps<'div'> & {
@@ -16,11 +16,34 @@ export function WindowTitleBar({
   className,
   childWindow = false,
   elevated = false,
+  onMouseDownCapture,
   ...props
 }: WindowTitleBarProps) {
+  useEffect(() => {
+    const endDrag = () => window.dispatchEvent(new Event('yssbi-window-drag-end'));
+    window.addEventListener('mouseup', endDrag, true);
+    window.addEventListener('pointerup', endDrag, true);
+    window.addEventListener('blur', endDrag);
+    return () => {
+      window.removeEventListener('mouseup', endDrag, true);
+      window.removeEventListener('pointerup', endDrag, true);
+      window.removeEventListener('blur', endDrag);
+    };
+  }, []);
+
+  const handleMouseDownCapture: MouseEventHandler<HTMLDivElement> = (event) => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && activeElement !== event.currentTarget) {
+      activeElement.blur();
+    }
+    window.dispatchEvent(new Event('yssbi-window-drag-start'));
+    onMouseDownCapture?.(event);
+  };
+
   return (
     <div
       data-tauri-drag-region
+      onMouseDownCapture={handleMouseDownCapture}
       className={cn(
         'flex h-10 shrink-0 items-stretch border-b border-border bg-[var(--workbench-bg)] shadow-xl select-none',
         childWindow && 'z-50',
