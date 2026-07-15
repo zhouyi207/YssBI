@@ -261,6 +261,7 @@ src/app/appConfig/appLinks.ts
 - [x] 主题切换记录上次浅色/深色主题，顶部与 bottom 入口共享 `appearance.colorTheme`，切换时恢复对应模式的最近主题并删除重复保存逻辑。
 - [x] 修复 Tooltip 在 Tauri 窗口拖动期间残留：标题栏拖动前清除焦点，拖动期间关闭并禁止 Tooltip 重新打开，释放或窗口失焦后恢复。
 - [x] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
+- [x] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs`
 
 ## v1.0 待办
 
@@ -304,12 +305,10 @@ src/app/appConfig/appLinks.ts
 - [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
 - [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
-- [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs`
 - [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
 - [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
 - [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。
 - [ ] **`RwLock` poison 策略文档化**：`project_data` / `function_signatures` / `graph.data_state` 普遍 `read().unwrap()`，中毒即 panic IPC 线程；明确运维策略（重启项目会话）或关键 command 改返回 `LockPoisoned` 而非 panic。
-- [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
 
 ### 口语化表达
 
@@ -326,6 +325,7 @@ src/app/appConfig/appLinks.ts
 - [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
 - [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 - [ ] 节点样式问题
+- [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
 - [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `npx tsc --noEmit`（`noUnusedLocals` 已开，需防止类型债再次累积）。
 - [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
@@ -333,7 +333,7 @@ src/app/appConfig/appLinks.ts
 - [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
 - [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 - [ ] sidebar 内容中的 scrollbar 以及日志及其他组件内容的拖动逻辑有问题
-
+- [ ] 剩余唯一标记是 Rust 执行上下文中的 get_bound_type TODO。它依赖尚未提供类型绑定状态的 GraphRuntime，当前直接返回 None 是明确的未实现能力，不适合通过猜测补丁，否则可能引入错误类型推断。
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：

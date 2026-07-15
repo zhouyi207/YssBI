@@ -7,6 +7,7 @@ import {
   type NodeSpawnParams,
 } from '@/shared/types/dto/batchCreateNode';
 import { EMPTY_GRAPH_UNDO_PATCH, type GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
+import type { CreateNodeResult } from '@/shared/types/dto/graphCommands';
 
 export type { GraphUndoPatch, NodeSubgraphDTO, ConnectionRebuildDTO } from '@/shared/types/dto/graphUndoPatch';
 export type {
@@ -15,11 +16,6 @@ export type {
   BatchCreateNodeIpcItem,
   NodeInstanceParamsDTO,
 } from '@/shared/types/dto/batchCreateNode';
-
-export interface CreateNodeResult {
-    nodeId: string;
-    pinIds: string[];
-}
 
 export interface BatchCreateWithConnectionsEntry extends BatchCreateNodeRequest {
     x: number;
@@ -34,14 +30,6 @@ export interface BatchCreateWithConnectionsEntry extends BatchCreateNodeRequest 
 
 export class NodeService {
    // ==================== Nodes 操作 ====================
-
-    static async getNodes(graphPath: string): Promise<unknown[]> {
-        return await invoke<unknown[]>("get_nodes", { graphPath });
-    }
-
-    static async setNodes(graphPath: string, nodes: unknown[]): Promise<void> {
-        await invoke("set_nodes", { graphPath, nodes });
-    }
 
     /**
      * 创建单个节点（后端生成和验证）

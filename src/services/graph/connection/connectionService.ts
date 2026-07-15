@@ -1,26 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
+import type { ConnectPinsResult, DisconnectPinResult, GraphConnectionQueryItem } from '@/shared/types/dto/graphCommands';
+import type { ConnectionItemDTO } from '@/shared/types/dto/graph';
 
-export interface AutoDisconnected {
-    fromPin: string;
-    toPin: string;
-}
-
-export interface ConnectPinsResult {
-    fromPin: string;
-    toPin: string;
-    autoDisconnected: AutoDisconnected[];
-}
-
-export interface RemovedConnection {
-    fromPin: string;
-    toPin: string;
-}
-
-export interface DisconnectPinResult {
-    removedConnections: RemovedConnection[];
-    undoPatch: GraphUndoPatch;
-}
 
 /** 连接服务 — 封装所有连接相关的后端调用 */
 export class ConnectionService {
@@ -36,8 +17,9 @@ export class ConnectionService {
         await invoke("delete_connection", { graphPath, connectionId });
     }
 
-    static async getConnections(graphPath: string): Promise<unknown[]> {
-        return await invoke<unknown[]>("get_connections", { graphPath });
+    static async getConnections(graphPath: string): Promise<ConnectionItemDTO[]> {
+        const result = await invoke<GraphConnectionQueryItem[]>("get_connections", { graphPath });
+        return result.map(({ from, to }) => ({ fromPin: from, toPin: to }));
     }
 
     static async deleteConnectionsForPin(graphPath: string, pinId: string): Promise<string[]> {

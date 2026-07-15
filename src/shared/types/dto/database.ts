@@ -12,6 +12,15 @@ export interface ColumnInfo {
 export type DatabaseCellValue = string | number | boolean | null;
 export type DatabaseRow = DatabaseCellValue[];
 
+/** `load_database` / `get_database_meta` IPC response. */
+export interface LoadDatabaseResult {
+  id: string;
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  columns: ColumnInfo[];
+}
+
 export type DatabaseEngineSqlDTO =
   | { sqlite: { autoCreate?: boolean } }
   | { postgres: { ssl?: boolean } }

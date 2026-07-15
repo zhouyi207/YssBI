@@ -6,7 +6,7 @@ import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
-import type { LoadDatabaseResult } from '@/services/database/databaseService';
+import type { LoadDatabaseResult } from '@/shared/types/dto/database';
 import { databaseRecordFromLoad } from '@/shared/types/dto/database';
 import type { DatabaseRecord, LoadDatabaseEngineSpec } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';

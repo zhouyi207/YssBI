@@ -6,7 +6,10 @@
  */
 
 export * from './database';
+export * from './project';
 export * from './graph';
+export * from './graphCommands';
+export * from './graphCommands';
 export * from './graphModel';
 export * from './api';
 export * from './converters';

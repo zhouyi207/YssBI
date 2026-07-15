@@ -90,20 +90,6 @@ export interface GraphValidationWarningDTO {
   message: string;
 }
 
-export interface GraphValidationWarningDTO {
-  code: string;
-  fromPinId: string;
-  toPinId: string;
-  message: string;
-}
-
-export interface GraphValidationWarningDTO {
-  code: string;
-  fromPinId: string;
-  toPinId: string;
-  message: string;
-}
-
 export interface FunctionCallSiteDTO {
   callerGraphPath: string;
   nodeIds: string[];

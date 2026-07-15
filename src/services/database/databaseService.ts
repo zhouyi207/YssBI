@@ -5,18 +5,9 @@ import type {
     DatasetOverview,
     EditState,
 } from "@/shared/types/domain/dataframe";
-import type { ColumnInfo, DatabaseRow, LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
+import type { DatabaseRow, LoadDatabaseEngineSpec, LoadDatabaseResult } from "@/shared/types/dto/database";
 
 export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
-
-/** 加载结果（与后端 LoadDatabaseResult 对应） */
-export interface LoadDatabaseResult {
-    id: string;
-    name: string;
-    rowCount: number;
-    columnCount: number;
-    columns: ColumnInfo[];
-}
 
 /** 分页行数据（含稳定 rowIds） */
 export interface DatabaseRowsResult {

@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { LogDetailPanel } from './LogDetailPanel';
+import { LogLevel, LogType } from '@/shared/types/ui';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -26,14 +27,15 @@ describe('LogDetailPanel', () => {
     const panel = LogDetailPanel({
       log: {
         timestamp: '2026-07-14 17:28:00',
-        level: 'error',
-        log_type: 'application',
+        level: LogLevel.Error,
+        log_type: LogType.Application,
         message: 'First line\nSecond line',
       },
     });
 
     const messageSection = findByType(panel, DetailCollapsibleSection);
-    expect(messageSection?.props.title).toBe('detail.fields.message');
-    expect(messageSection?.props.defaultOpen).toBe(true);
+    const props = messageSection?.props as { title?: string; defaultOpen?: boolean } | undefined;
+    expect(props?.title).toBe('detail.fields.message');
+    expect(props?.defaultOpen).toBe(true);
   });
 });

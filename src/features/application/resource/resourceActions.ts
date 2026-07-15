@@ -1,4 +1,4 @@
-import { useDatabaseStore } from '@/features/core/dataStore';
+import { useDatabaseStore, useGraphMetaStore } from '@/features/core/dataStore';
 import {
   commitAfterCommand,
   graphResourceRef,

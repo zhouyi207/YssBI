@@ -4,6 +4,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import { Graph, ProjectData } from "@/shared/types/domain";
 import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
+import type { CleanupInvalidProjectsResult, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   graphDataToDomainGraph,
   graphInstanceDtoToGraphData,
@@ -12,30 +13,6 @@ import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 import { bindExecutionEventChannel } from "./executionChannelDrain";
-
-export interface ProjectRecordRow {
-    id: string;
-    name: string;
-    path: string;
-    createdAt: string;
-    lastOpenedAt: string | null;
-    isFavorite: boolean;
-}
-
-export interface ProjectPathValidation {
-    ok: boolean;
-    message?: string | null;
-}
-
-export interface ScanProjectsResult {
-    discovered: number;
-    newlyRegistered: number;
-    projects: ProjectRecordRow[];
-}
-
-export interface CleanupInvalidProjectsResult {
-    removed: number;
-}
 
 export type ProjectScanProgressEvent =
     | { kind: "scanning" }

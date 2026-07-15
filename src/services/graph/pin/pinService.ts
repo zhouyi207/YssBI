@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { DataValueBackend } from "@/shared/types/dto/dataValue";
 import { logger } from '@/utils/appLogger';
+import type { AddRepeatablePinResult, RemoveRepeatablePinResult } from '@/shared/types/dto/graphCommands';
 
 /** Pin 服务 - 封装所有 Pin 相关的后端调用 */
 export class PinService {
@@ -34,21 +35,6 @@ export class PinService {
         logger.graph.debug('Pin value cleared successfully', 'PinService');
     }
 
-    static async getPinValue(
-        graphPath: string,
-        nodeId: string,
-        pinId: string
-    ): Promise<unknown> {
-        logger.graph.trace(`Getting pin value: graphPath=${graphPath}, nodeId=${nodeId}, pinId=${pinId}`, 'PinService');
-        const value = await invoke("get_pin_value", {
-            graphPath,
-            nodeId,
-            pinId
-        });
-        logger.graph.debug(`Got pin value for pinId=${pinId}`, 'PinService');
-        return value;
-    }
-
     static async addRepeatablePin(
         graphPath: string,
         nodeId: string,
@@ -78,16 +64,4 @@ export class PinService {
         logger.graph.debug(`Repeatable pin removed: pinId=${pinId}`, 'PinService');
         return result;
     }
-}
-
-export interface AddRepeatablePinResult {
-    pinId: string;
-    pin: import("@/shared/types").PinData;
-}
-
-export interface RemoveRepeatablePinResult {
-    removedPinId: string;
-    slotIndex: number;
-    pinIndex: number;
-    removedConnections: [string, string][];
 }

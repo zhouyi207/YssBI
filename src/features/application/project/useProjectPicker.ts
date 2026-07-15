@@ -12,8 +12,8 @@ import {
 import {
   ProjectService,
   isPickerTaskCancelledError,
-  type ProjectRecordRow,
 } from "@/services/project/projectService";
+import type { ProjectRecordRow } from "@/shared/types/dto/project";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 import { uiStore } from "@/features/core/ui/UIStore";
