@@ -31,6 +31,22 @@ export function getNextColorThemePreset(colorTheme: string): ColorThemePresetId 
   return COLOR_THEME_PRESET_IDS[(index + 1) % COLOR_THEME_PRESET_IDS.length];
 }
 
+export function getColorThemeForMode(mode: 'light' | 'dark'): ColorThemePresetId {
+  return mode === 'light' ? 'Light Modern' : 'Dark Modern (Default)';
+}
+
+export function getRememberedColorTheme(
+  mode: 'light' | 'dark',
+  rememberedLight: string,
+  rememberedDark: string,
+): string {
+  return (mode === 'light' ? rememberedLight : rememberedDark) || getColorThemeForMode(mode);
+}
+
+export function getThemeModeForPreset(colorTheme: string): 'light' | 'dark' {
+  return colorTheme === 'Light Modern' ? 'light' : 'dark';
+}
+
 export const COLOR_THEME_PRESETS: Record<ColorThemePresetId, Partial<ThemeSettings>> = {
   'Dark Modern (Default)': pickThemeBase(DEFAULT_DARK_THEME),
   'OLED Black': {

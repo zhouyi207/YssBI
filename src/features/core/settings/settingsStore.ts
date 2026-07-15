@@ -135,7 +135,6 @@ interface SettingsStore {
 
     // 保存方法
     save: () => Promise<void>;
-    saveDebounced: () => void;
 
     // 恢复默认方法
     resetThemeToDefaults: () => Promise<void>;
@@ -220,7 +219,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         save: saveImmediately,
 
         // 防抖保存
-        saveDebounced: scheduleSave,
 
         resetThemeToDefaults: async () => {
             set({ theme: DEFAULT_THEME });

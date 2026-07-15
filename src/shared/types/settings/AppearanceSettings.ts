@@ -5,6 +5,8 @@ export type TitleBarStyle = "custom" | "native";
 
 export interface AppearanceSettings {
     colorTheme: string;
+    lastLightColorTheme: string;
+    lastDarkColorTheme: string;
     language: AppLanguage;
     activityBarPosition: string;
     panelPosition: string;

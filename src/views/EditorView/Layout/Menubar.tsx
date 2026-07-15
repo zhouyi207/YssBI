@@ -9,7 +9,7 @@ import { useActiveProjectPath } from "@/features/core/dataStore";
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
-import { APP_LINKS, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/app/appConfig/default";
+import { APP_LINKS } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import type { ThemeSettings } from "@/shared/types/settings";
+import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
 import { cn } from "@/lib/utils";
 import { useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
@@ -78,23 +78,6 @@ const MenuButton = ({ label, items }: MenuButtonProps) => {
     </DropdownMenu>
   );
 };
-
-const THEME_BASE_KEYS = [
-  "mode",
-  "workbenchBackground",
-  "sidebarBackground",
-  "gridLines",
-  "nodeBase",
-  "connectionLines",
-  "selectionRegion",
-  "execColor",
-  "objectColor",
-  "anyColor",
-] satisfies Array<keyof ThemeSettings>;
-
-function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
-  return Object.fromEntries(THEME_BASE_KEYS.map((key) => [key, theme[key]])) as Partial<ThemeSettings>;
-}
 
 export function Menubar() {
   const { t } = useTranslation();
@@ -154,13 +137,15 @@ export function Menubar() {
   const canSaveProjectAs = Boolean(currentPath);
 
   const themeMode = useSettingsStore((s) => s.theme.mode ?? "dark");
-  const updateTheme = useSettingsStore((s) => s.updateTheme);
-  const saveDebounced = useSettingsStore((s) => s.saveDebounced);
+  const appearance = useSettingsStore((s) => s.appearance);
+  const updateAppearance = useSettingsStore((s) => s.updateAppearance);
   const isLightTheme = themeMode === "light";
   const isMaximized = useWindowMaximized("Menubar");
   const toggleThemeMode = () => {
-    updateTheme(pickThemeBase(isLightTheme ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME));
-    saveDebounced();
+    const nextMode = isLightTheme ? "dark" : "light";
+    updateAppearance({
+      colorTheme: getRememberedColorTheme(nextMode, appearance.lastLightColorTheme, appearance.lastDarkColorTheme),
+    });
   };
 
   const fileItems: MenuItem[] = [

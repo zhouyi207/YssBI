@@ -76,6 +76,8 @@ export const DEFAULT_EDITOR: EditorSettings = {
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
     colorTheme: "Dark Modern (Default)",
+    lastLightColorTheme: "Light Modern",
+    lastDarkColorTheme: "Dark Modern (Default)",
     language: "zh-CN",
     activityBarPosition: "Left",
     panelPosition: "Bottom",

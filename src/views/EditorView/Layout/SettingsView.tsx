@@ -20,7 +20,6 @@ export const SettingsView: React.FC = () => {
     const updateEditor = useSettingsStore((s) => s.updateEditor);
     const updateAppearance = useSettingsStore((s) => s.updateAppearance);
     const updateProject = useSettingsStore((s) => s.updateProject);
-    const saveDebounced = useSettingsStore((s) => s.saveDebounced);
     const resetAllToDefaults = useSettingsStore((s) => s.resetAllToDefaults);
     const resetThemeToDefaults = useSettingsStore((s) => s.resetThemeToDefaults);
     const resetEditorToDefaults = useSettingsStore((s) => s.resetEditorToDefaults);
@@ -331,7 +330,6 @@ export const SettingsView: React.FC = () => {
                                         const language = val as AppLanguage;
                                         updateAppearance({ language });
                                         void i18n.changeLanguage(language);
-                                        saveDebounced();
                                     }}
                                 />
                                 <SettingItem
@@ -350,7 +348,6 @@ export const SettingsView: React.FC = () => {
                                     value={appearance.panelPosition}
                                     onChange={(val) => {
                                         updateAppearance({ panelPosition: val });
-                                        saveDebounced();
                                     }}
                                 />
                                 <SettingItem
@@ -361,7 +358,6 @@ export const SettingsView: React.FC = () => {
                                     value={appearance.titleBarStyle}
                                     onChange={(val) => {
                                         updateAppearance({ titleBarStyle: val as "custom" | "native" });
-                                        saveDebounced();
                                     }}
                                 />
                                 <SettingItem

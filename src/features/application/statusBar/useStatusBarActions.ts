@@ -7,13 +7,23 @@ import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layou
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
-import { getNextColorThemePreset } from '@/features/application/settings/colorThemePresets';
+import { getNextColorThemePreset, getThemeModeForPreset } from '@/features/application/settings/colorThemePresets';
 
 /** Bottom bar command handlers — keeps BottomBar presentational. */
 export function useStatusBarActions() {
   const { t } = useTranslation();
   const updateTheme = useSettingsStore((s) => s.updateTheme);
-  const colorTheme = useSettingsStore((s) => s.appearance.colorTheme);
+  const appearance = useSettingsStore((s) => s.appearance);
+  const colorTheme = appearance.colorTheme;
+
+  const selectColorTheme = useCallback((next: string) => {
+    const mode = getThemeModeForPreset(next);
+    useSettingsStore.getState().updateAppearance({
+      colorTheme: next,
+      ...(mode === 'light' ? { lastLightColorTheme: next } : { lastDarkColorTheme: next }),
+    });
+    syncColorThemePreset(next, updateTheme);
+  }, [updateTheme]);
 
   const openLogsPanel = useCallback(() => {
     const panel = useLayoutStore.getState().nodes.panel;
@@ -33,9 +43,8 @@ export function useStatusBarActions() {
 
   const cycleColorTheme = useCallback(() => {
     const next = getNextColorThemePreset(colorTheme);
-    useSettingsStore.getState().updateAppearance({ colorTheme: next });
-    syncColorThemePreset(next, updateTheme);
-  }, [colorTheme, updateTheme]);
+    selectColorTheme(next);
+  }, [colorTheme, selectColorTheme]);
 
   return {
     openLogsPanel,

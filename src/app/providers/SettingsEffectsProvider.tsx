@@ -5,6 +5,7 @@ import {
   applySmoothScrollSetting,
   syncColorThemePreset,
 } from "@/features/application/settings/appearanceRuntime";
+import { getThemeModeForPreset } from "@/features/application/settings/colorThemePresets";
 
 import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
 
@@ -15,6 +16,7 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
     const smoothScroll = useSettingsStore((s) => s.appearance.smoothScroll);
     const isLoading = useSettingsStore((s) => s.isLoading);
     const updateTheme = useSettingsStore((s) => s.updateTheme);
+    const updateAppearance = useSettingsStore((s) => s.updateAppearance);
     const load = useSettingsStore((s) => s.load);
 
     useWindowDecorationEffect();
@@ -43,8 +45,16 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
 
     useEffect(() => {
         if (isLoading) return;
+        const mode = getThemeModeForPreset(colorTheme);
+        const state = useSettingsStore.getState();
+        const remembered = mode === "light" ? state.appearance.lastLightColorTheme : state.appearance.lastDarkColorTheme;
+        if (remembered !== colorTheme) {
+            updateAppearance(mode === "light"
+                ? { lastLightColorTheme: colorTheme }
+                : { lastDarkColorTheme: colorTheme });
+        }
         syncColorThemePreset(colorTheme, updateTheme);
-    }, [colorTheme, updateTheme, isLoading]);
+    }, [colorTheme, updateAppearance, updateTheme, isLoading]);
 
     useEffect(() => {
         applySmoothScrollSetting(smoothScroll);

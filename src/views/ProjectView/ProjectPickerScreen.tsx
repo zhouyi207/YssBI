@@ -19,7 +19,7 @@ import {
   VscWarning,
 } from "react-icons/vsc";
 import { i18n, type AppLanguage } from "@/app/i18n";
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME, APP_LINKS } from "@/app/appConfig/default";
+import { APP_LINKS } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -54,7 +54,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
-import type { ThemeSettings } from "@/shared/types/settings";
+import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
 import { NewProjectModal } from "./NewProjectModal";
 import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
 import { buildProjectPickerContextMenuSections } from "./projectPickerContextMenu";
@@ -63,23 +63,6 @@ import type { ProjectPickerContextMenuTarget } from "./projectPickerContextMenu"
 type SortMode = "lastOpened" | "name";
 
 const APP_CARD_OUTER_CLASS = "border-border bg-card ring-1 ring-border";
-const THEME_BASE_KEYS = [
-  "mode",
-  "workbenchBackground",
-  "sidebarBackground",
-  "gridLines",
-  "nodeBase",
-  "connectionLines",
-  "selectionRegion",
-  "execColor",
-  "objectColor",
-  "anyColor",
-] satisfies Array<keyof ThemeSettings>;
-
-function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
-  return Object.fromEntries(THEME_BASE_KEYS.map((key) => [key, theme[key]])) as Partial<ThemeSettings>;
-}
-
 function sortAndFilter(items: ManagedProject[], query: string, mode: SortMode): ManagedProject[] {
   const q = query.trim().toLowerCase();
   const list = q
@@ -157,13 +140,15 @@ function TitleBar({
   const { t } = useTranslation();
   const currentPath = useProjectIOStore((state) => state.currentPath);
   const themeMode = useSettingsStore((state) => state.theme.mode ?? "dark");
-  const updateTheme = useSettingsStore((state) => state.updateTheme);
-  const saveDebounced = useSettingsStore((state) => state.saveDebounced);
+  const appearance = useSettingsStore((state) => state.appearance);
+  const updateAppearance = useSettingsStore((state) => state.updateAppearance);
   const isLightTheme = themeMode === "light";
   const isMaximized = useWindowMaximized("ProjectPicker");
   const toggleThemeMode = () => {
-    updateTheme(pickThemeBase(isLightTheme ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME));
-    saveDebounced();
+    const nextMode = isLightTheme ? "dark" : "light";
+    updateAppearance({
+      colorTheme: getRememberedColorTheme(nextMode, appearance.lastLightColorTheme, appearance.lastDarkColorTheme),
+    });
   };
 
   return (
@@ -300,7 +285,6 @@ function ProjectSettingsDialog({
   const { t } = useTranslation();
   const language = useSettingsStore((state) => state.appearance.language);
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
-  const saveDebounced = useSettingsStore((state) => state.saveDebounced);
 
   const languageOptions = [
     { label: t("language.zhCN"), value: "zh-CN" },
@@ -311,7 +295,6 @@ function ProjectSettingsDialog({
     const nextLanguage = value as AppLanguage;
     updateAppearance({ language: nextLanguage });
     void i18n.changeLanguage(nextLanguage);
-    saveDebounced();
   };
 
   return (
