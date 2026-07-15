@@ -2,6 +2,7 @@ use crate::execution::ExecutionEvent;
 use crate::project::{ExecutionCancelRegistry, GraphResourcePath, ProjectState, execute_project_data};
 use serde_json::Value;
 use tauri::{State, ipc::Channel};
+use crate::error::AppError;
 
 /// 执行指定的 Event 图。
 /// 若传入 graph_path 则只执行该图，否则执行所有 Event 图。
@@ -12,7 +13,7 @@ pub async fn execute_project(
     cancel_registry: State<'_, ExecutionCancelRegistry>,
     on_event: Channel<ExecutionEvent>,
     graph_path: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let source_store = source_store.inner().clone();
     let cancel = cancel_registry.begin();
 
@@ -40,5 +41,5 @@ pub async fn execute_project(
     .map_err(|e| e.to_string())?;
 
     cancel_registry.end(&cancel);
-    result
+    Ok(result?)
 }

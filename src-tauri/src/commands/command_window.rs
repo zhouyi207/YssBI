@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tauri::State;
 
 use crate::window_state::{WindowKind, WindowState, WindowStateStore};
+use crate::error::AppError;
 
 /// 返回所有窗口种类的几何状态（含未保存过时的默认值）。
 #[tauri::command]
@@ -27,6 +28,6 @@ pub fn save_window_state(
     store: State<WindowStateStore>,
     kind: WindowKind,
     value: WindowState,
-) -> Result<(), String> {
-    store.set(kind, value)
+) -> Result<(), AppError> {
+    store.set(kind, value).map_err(AppError::from)
 }

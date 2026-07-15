@@ -16,6 +16,7 @@ use crate::schema::{GraphUndoPatch, NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
+use crate::error::AppError;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +39,7 @@ pub struct CreateNodeResult {
 fn node_create_dto_from_graph(
     graph: &GraphInstance,
     node_id: NodeId,
-) -> Result<(NodeInstanceDTO, Vec<PinInstanceDTO>, Vec<String>), String> {
+) -> Result<(NodeInstanceDTO, Vec<PinInstanceDTO>, Vec<String>), AppError> {
     let node_instance = graph
         .get_node_instance(node_id)
         .ok_or_else(|| format!("Node '{}' not found", node_id))?;
@@ -63,7 +64,7 @@ fn node_create_dto_from_graph(
 fn preload_call_projection_signatures(
     state: &ProjectState,
     entries: impl IntoIterator<Item = (impl AsRef<str>, Option<NodeInstanceParams>)>,
-) -> Result<HashMap<GraphResourcePath, FunctionSignatureEntry>, String> {
+) -> Result<HashMap<GraphResourcePath, FunctionSignatureEntry>, AppError> {
     let mut targets = HashMap::new();
     for (node_type, params) in entries {
         let node_type = node_type.as_ref();
@@ -108,7 +109,7 @@ pub fn create_node(
     x: Option<f32>,
     y: Option<f32>,
     params: Option<NodeInstanceParams>,
-) -> Result<CreateNodeResult, String> {
+) -> Result<CreateNodeResult, AppError> {
     log_app::info!(
         "create_node called: graph_path={}, node_type={}, x={:?}, y={:?}",
         graph_path,
@@ -184,7 +185,7 @@ pub fn batch_create_nodes(
     state: State<ProjectState>,
     graph_path: GraphResourcePath,
     requests: Vec<BatchCreateNodeRequest>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     log_app::info!(
         "batch_create_nodes called: graph_path={}, count={}",
         graph_path,
@@ -269,7 +270,7 @@ pub fn delete_node(
     source_store: State<ResultSourceStore>,
     graph_path: GraphResourcePath,
     node_id: NodeId,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let (deleted_pin_ids, removed_node_type) = state.with_graph_mut(&graph_path, |mut ctx| {
         if ctx.graph_ref().is_shell_node(node_id) {
             return Err("System-managed shell node cannot be deleted".to_string());
@@ -317,7 +318,7 @@ pub fn batch_delete_nodes(
     source_store: State<ResultSourceStore>,
     graph_path: GraphResourcePath,
     node_ids: Vec<NodeId>,
-) -> Result<GraphUndoPatch, String> {
+) -> Result<GraphUndoPatch, AppError> {
     log_app::info!(
         "batch_delete_nodes called: graph_path={}, count={}",
         graph_path,
@@ -383,7 +384,7 @@ pub fn apply_graph_patch(
     state: State<ProjectState>,
     graph_path: GraphResourcePath,
     patch: GraphUndoPatch,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     log_app::info!(
         "[apply_graph_patch] graph={}, nodes={}, neighbors={}, connections={}",
         graph_path,
@@ -437,7 +438,7 @@ pub fn update_node_positions(
     state: State<ProjectState>,
     graph_path: GraphResourcePath,
     updates: Vec<NodePositionUpdate>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let updates_tuple: Vec<(NodeId, f32, f32)> =
         updates.iter().map(|u| (u.node_id, u.x, u.y)).collect();
 
@@ -471,7 +472,7 @@ pub fn create_node_with_id(
     x: Option<f32>,
     y: Option<f32>,
     params: Option<NodeInstanceParams>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
     let pids: Vec<PinId> = pin_ids
@@ -592,7 +593,7 @@ pub fn batch_create_with_connections(
     graph_path: GraphResourcePath,
     entries: Vec<BatchNodeEntry>,
     connections: Vec<BatchConnectionEntry>,
-) -> Result<BatchCreateWithConnectionsResult, String> {
+) -> Result<BatchCreateWithConnectionsResult, AppError> {
     log_app::info!(
         "[batch_create_with_connections] graph={}, entries={}, connections={}",
         graph_path,
@@ -810,7 +811,7 @@ pub fn update_call_function_target(
     graph_path: String,
     node_id: NodeId,
     function_path: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let graph_path = GraphResourcePath::new(&graph_path).map_err(|e| e.to_string())?;
     let function_path = GraphResourcePath::new(&function_path).map_err(|e| e.to_string())?;
 

@@ -7,10 +7,11 @@ use crate::project::{GraphResourcePath, ProjectState};
 use crate::schema::{GraphInstanceDTO, GraphValidationWarningDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};
+use crate::error::AppError;
 use uuid::Uuid;
 
-fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
-    GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
+fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
+    GraphResourcePath::new(graph_path).map_err(AppError::from)
 }
 
 /// 检查 DataValue 的类型是否与 Pin 期望的 DataType 兼容
@@ -50,12 +51,12 @@ pub fn update_pin_user_value(
     graph_path: String,
     pin_id: String,
     value: DataValue,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let pin_uuid =
         PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
-    state.with_graph_mut(&graph_path, |mut ctx| {
+    Ok(state.with_graph_mut(&graph_path, |mut ctx| {
         let pin = ctx
             .graph_ref()
             .get_pin_instance_by_pin_id(pin_uuid)
@@ -85,7 +86,7 @@ pub fn update_pin_user_value(
 
         ctx.graph().set_pin_user_value_by_pin_id(pin_uuid, value)?;
         Ok(())
-    })
+    })?)
 }
 
 /// 清除 Pin 的用户输入值（恢复为 None，使用默认值或连接值）
@@ -96,7 +97,7 @@ pub fn clear_pin_user_value(
     state: State<ProjectState>,
     graph_path: String,
     pin_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
@@ -106,10 +107,10 @@ pub fn clear_pin_user_value(
         pin_id
     );
 
-    state.with_graph_mut(&graph_path, |mut ctx| {
+    Ok(state.with_graph_mut(&graph_path, |mut ctx| {
         ctx.graph().clear_pin_user_value_by_pin_id(pin)?;
         Ok(())
-    })
+    })?)
 }
 
 // ==================== Repeatable Pin 管理 ====================
@@ -140,7 +141,7 @@ pub fn add_repeatable_pin(
     graph_path: String,
     node_id: String,
     slot_index: usize,
-) -> Result<AddRepeatablePinResult, String> {
+) -> Result<AddRepeatablePinResult, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
@@ -187,7 +188,7 @@ pub fn remove_repeatable_pin(
     graph_path: String,
     node_id: String,
     pin_id: String,
-) -> Result<RemoveRepeatablePinResult, String> {
+) -> Result<RemoveRepeatablePinResult, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
@@ -250,7 +251,7 @@ pub fn resolve_graph_dynamic_pins(
     _app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<ResolvedGraphDTO, String> {
+) -> Result<ResolvedGraphDTO, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     if state.get_graph(&graph_path).is_none() {
         state.load_graph_from_current_project(&graph_path)?;

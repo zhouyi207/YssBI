@@ -1,4 +1,5 @@
 use crate::application::database_schema::enriched_database_dtos;
+use crate::error::AppError;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
@@ -91,17 +92,17 @@ pub fn get_project_path(state: State<ProjectState>) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn get_project_index(state: State<ProjectState>) -> Result<ProjectIndex, String> {
+pub fn get_project_index(state: State<ProjectState>) -> Result<ProjectIndex, AppError> {
     let path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
     state.apply_global_variables_from_disk(&path)?;
-    crate::project::read_project_index(&path).map_err(|e| e.to_string())
+    Ok(crate::project::read_project_index(&path).map_err(AppError::from)?)
 }
 
 #[tauri::command]
 pub fn load_project_graph(
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<LoadedProjectGraphDTO, String> {
+) -> Result<LoadedProjectGraphDTO, AppError> {
     let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
     let document = state.load_graph_from_current_project(&graph_path)?;
     Ok(LoadedProjectGraphDTO {
@@ -120,11 +121,11 @@ pub fn get_project_resource_path(
     state: State<ProjectState>,
     kind: String,
     resource_id: String,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)?;
     let path = resolve_reveal_path(&state, request).map_err(|e| e.to_string())?;
     if !path.exists() {
-        return Err(format!("File not found: {}", path.display()));
+        return Err(AppError::new("resource_not_found", format!("File not found: {}", path.display())));
     }
     Ok(format_path_for_user_path(&path))
 }

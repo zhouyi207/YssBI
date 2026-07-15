@@ -3,6 +3,7 @@
 //! 用于 OLS/WLS/GLS summary 的残差自相关诊断，参考 Stata ac / pac。
 
 use serde::{Deserialize, Serialize};
+use crate::error::AppError;
 use yss_sci::ts::acf_pacf::{acf, pacf};
 
 #[derive(Debug, Deserialize)]
@@ -24,10 +25,10 @@ pub struct AcfPacfResponse {
 }
 
 #[tauri::command]
-pub fn compute_acf_pacf(req: AcfPacfRequest) -> Result<AcfPacfResponse, String> {
+pub fn compute_acf_pacf(req: AcfPacfRequest) -> Result<AcfPacfResponse, AppError> {
     let n = req.residuals.len();
     if n < 4 {
-        return Err("ACF/PACF: 至少需要 4 个观测值".to_string());
+        return Err(AppError::new("insufficient_observations", "ACF/PACF: 至少需要 4 个观测值"));
     }
     let max_lag = req.max_lag.min(n / 2 - 1).min(40).max(1);
 

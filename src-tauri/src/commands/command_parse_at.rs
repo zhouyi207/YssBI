@@ -2,6 +2,7 @@
 
 use crate::application::hypothesis::parse_at_values as resolve_at_values;
 use serde::{Deserialize, Serialize};
+use crate::error::AppError;
 
 #[derive(Debug, Deserialize)]
 pub struct ParseAtRequest {
@@ -15,7 +16,7 @@ pub struct ParseAtResponse {
 }
 
 #[tauri::command]
-pub fn parse_at_values(req: ParseAtRequest) -> Result<ParseAtResponse, String> {
+pub fn parse_at_values(req: ParseAtRequest) -> Result<ParseAtResponse, AppError> {
     let values = resolve_at_values(&req.at_spec, &req.param_names)
         .map_err(|e| e.replace("解析假设失败", "解析 at() 失败"))?;
     Ok(ParseAtResponse { values })

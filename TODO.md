@@ -239,7 +239,28 @@ src/app/appConfig/appLinks.ts
 - [x] 每次进入项目都会弹出多个 toast 当前编辑器图未能加载，请重新点击标签页或画布
 - [x] detail 组件中的第一个气泡中列与列的间隙太大了
 - [x] 日志 item 的 detail 信息中，我们需要将消息单独提取出来，做成类似于节点文档的那种形式
+
+## 2026.07.15
+
 - [x] **Executor 模块路径确认**：执行器已拆为 `execution/engine/executor/mod.rs` + `wire_events`/`data_inputs`；确认无残留 `executor.rs` 双份实现或 dead re-export，防止合并回潮。
+- [x] 从 `4dd85f8` 起完成版本 0.2.6 → 0.2.7 的版本文件同步，并更新 Cargo lock、前端 package、Tauri 配置与应用链接。
+- [x] 重构编辑器 Tab 与会话管理：引入独立 `editorTabStore`、编辑器会话命令/生命周期、图文档缓存与打开 Tab reconcile，统一关闭、激活、保存和拖放路径。
+- [x] 完善侧边栏与 Tab 交互：扁平化 sidebar rows、分组展开状态、节点目录搜索/树视图、资源重命名、拖放预览和 Tab 插入预览，删除旧 Sidebar 虚拟列表与重复 UI 分支。
+- [x] 增强编辑器与侧边栏拖放：统一 DnD contract、拖动预览、函数/图资源投放、编辑器分组拆分、跨窗口拖放策略和拖动到新窗口能力，并补充相关测试。
+- [x] 将编辑器网格尺寸模型重构为 ratio weights，统一 split、maximize、sash resize、memento 和 layout persistence 的计算与恢复逻辑。
+- [x] 增加 workbench layout reflow 与 maximize snapshot invalidation，处理面板可见性、Zen mode、编辑器分组恢复及 resize 后的布局重排。
+- [x] 移除 Canvas viewport 中无效的 culling padding factor 和未使用 gesture 类型，简化视口更新与渲染参数传递。
+- [x] 新增 OverlayScrollbar 拖动实现、指标计算、拖动状态管理与虚拟滚动测试，统一滚动条 thumb/viewport 同步逻辑。
+- [x] 重构日志面板：使用虚拟列表、滚动/视口计算、日志类型 Tab、Popover 过滤器、详情行和面板工具栏，删除旧的单体日志列表与重复控制器逻辑。
+- [x] 统一日志级别常量和类型安全，移除字符串字面量造成的 LogLevel/LogType 漂移。
+- [x] 增强资源与图编辑器生命周期：后端资源事件精简、resource index coordinator、图资源拖放与加载同步、函数图和事件图状态恢复，并补充回归测试。
+- [x] 动态 Pin 解析增加类型推断校验警告：后端返回 inference warnings，前端同步 GraphValidationWarning、Pin 类型状态和打开图时的警告展示。
+- [x] 清理并重组项目文档：移除 Cursor 规则与旧 archive/ADR 入口，新增 `AGENTS.md`、文档分类目录、版本历史索引和 RAG 检索说明。
+- [x] 更新默认深色主题为 Codex 风格中性深灰配色，统一主题预设循环、状态栏主题显示与主题颜色契约测试。
+- [x] 更新项目 demo 图片资源，替换为改进后的视觉示例。
+- [x] 主题切换记录上次浅色/深色主题，顶部与 bottom 入口共享 `appearance.colorTheme`，切换时恢复对应模式的最近主题并删除重复保存逻辑。
+- [x] 修复 Tooltip 在 Tauri 窗口拖动期间残留：标题栏拖动前清除焦点，拖动期间关闭并禁止 Tooltip 重新打开，释放或窗口失焦后恢复。
+- [x] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
 
 ## v1.0 待办
 
@@ -277,14 +298,13 @@ src/app/appConfig/appLinks.ts
 
 - [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
 - [ ] **`yss-sci` clippy warning 分期清理（~90+）**：冗余 field name、identity `filter_map`、`too_many_arguments`、索引 loop 等；按模块（`database/`、`regression/`、`ts/`）分批 `-D warnings`，避免一次性大爆炸。
-- [ ] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
 - [ ] **`NodeExecutionContext::get_bound_type` 实现**：`node_execution_context.rs` 仍 TODO 恒返回 `None`，运行时 type var 绑定不可查；在 `GraphRuntime` 暴露 bound 查询，供泛型 pin / 节点求值与连接校验闭环。
 - [ ] **执行期 Graph 锁粒度优化**：`node_execution_context` + `executor/data_inputs` 对 `Arc<Mutex<GraphInstance>>` 高频 `lock().unwrap()`；引入 scoped read guard 或执行帧级缓存，缩短临界区，降低 lock poison 一次拖垮整次执行的概率。
 - [ ] **`with_graph_mut` 死锁规则回归测**：`project_state_graph_mut.rs` 文档禁止闭包内再调 `get_graph`/`load_graph`（`RwLock` 不可重入），但无测试；补 integration test 或 code-review checklist，覆盖 `sync_all_call_nodes_in_graph` / `update_function_signature` 等高频路径。
 - [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
 - [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
-- [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs` 或 CI 校验「样例 JSON ↔ TypeScript」契约（与前端 `DatabaseRecord` 强类型化项联动）。
+- [ ] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs`
 - [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
 - [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
 - [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。

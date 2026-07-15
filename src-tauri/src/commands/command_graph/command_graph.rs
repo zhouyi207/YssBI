@@ -1,4 +1,5 @@
 use crate::event::emit_project_event;
+use crate::error::AppError;
 use crate::event::{EventEvent, EventFunction, EventResource};
 use crate::event::Event;
 use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
@@ -9,15 +10,15 @@ use crate::schema::GraphInstanceDTO;
 use crate::project::ProjectState;
 use tauri::{AppHandle, State};
 
-fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
-    GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
+fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
+    GraphResourcePath::new(graph_path).map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn create_event(
     state: State<ProjectState>,
     graph_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let graph = state.create_graph(graph_name, GraphKind::Event)?;
     // 每个事件图自动拥有一个系统托管的 Event Begin 壳节点（对齐 UE5 事件图）。
     graph.create_node_with_position(EVENT_BEGIN_NODE_TYPE, 120.0, 120.0, None)?;
@@ -30,7 +31,7 @@ pub fn create_event(
 pub fn create_function(
     state: State<ProjectState>,
     graph_name: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let graph = state.create_graph(graph_name, GraphKind::Function)?;
     // 每个函数图自动拥有 Entry / Return 壳节点（对齐 UE5 函数图）。
     graph.create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
@@ -47,7 +48,7 @@ pub fn remove_graph(
     app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let loaded_graph = state.remove_graph(&graph_path);
     let removed_kind = if let Some(path) = state.get_path() {
@@ -89,7 +90,7 @@ pub fn update_function_signature(
     function_path: String,
     inputs: Option<Vec<FunctionSignaturePin>>,
     outputs: Option<Vec<FunctionSignaturePin>>,
-) -> Result<UpdateFunctionSignatureResult, String> {
+) -> Result<UpdateFunctionSignatureResult, AppError> {
     let function_path = parse_graph_path(&function_path)?;
     let (graph, _change_sets) = state.update_function_signature(&function_path, inputs, outputs)?;
     let dto: GraphInstanceDTO = (&graph).into();
@@ -120,7 +121,7 @@ pub fn get_graph(
     _app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<GraphInstanceDTO, String> {
+) -> Result<GraphInstanceDTO, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let graph = match state.get_graph(&graph_path) {
         Some(graph) => graph,
@@ -130,7 +131,7 @@ pub fn get_graph(
 }
 
 #[tauri::command]
-pub fn unload_project_graph(state: State<ProjectState>, graph_path: String) -> Result<(), String> {
+pub fn unload_project_graph(state: State<ProjectState>, graph_path: String) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     state.unload_graph(&graph_path);
     Ok(())
@@ -147,7 +148,7 @@ pub fn save_project_graph(
     app: AppHandle,
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<SaveProjectGraphResult, String> {
+) -> Result<SaveProjectGraphResult, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let kind = graph_path.kind().map_err(|e| e.to_string())?;
     let moved_to = state
@@ -180,7 +181,7 @@ pub fn save_project_graph(
 pub fn duplicate_graph(
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     Ok(state.duplicate_persisted_graph(&graph_path)?.as_str().to_string())
 }
@@ -197,7 +198,7 @@ pub struct FunctionCallSiteDTO {
 pub fn get_function_call_sites(
     state: State<ProjectState>,
     function_path: String,
-) -> Result<Vec<FunctionCallSiteDTO>, String> {
+) -> Result<Vec<FunctionCallSiteDTO>, AppError> {
     let function_path = parse_graph_path(&function_path)?;
     let sites = state.get_function_call_sites(&function_path);
     Ok(sites
@@ -214,7 +215,7 @@ pub fn get_function_call_sites(
 pub fn purge_function_call_sites(
     state: State<ProjectState>,
     function_path: String,
-) -> Result<Vec<GraphInstanceDTO>, String> {
+) -> Result<Vec<GraphInstanceDTO>, AppError> {
     let function_path = parse_graph_path(&function_path)?;
     let updated = state.purge_call_nodes_for_function(&function_path)?;
     Ok(updated.iter().map(|(_, g)| g.into()).collect())

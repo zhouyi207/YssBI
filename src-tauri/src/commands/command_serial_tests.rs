@@ -3,6 +3,7 @@
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
 use serde::{Deserialize, Serialize};
+use crate::error::AppError;
 use yss_sci::ts::serial_correlation::{breusch_godfrey, durbin_watson, ljung_box_q};
 
 #[derive(Debug, Deserialize)]
@@ -50,10 +51,10 @@ pub struct SerialTestsResponse {
 }
 
 #[tauri::command]
-pub fn compute_serial_tests(req: SerialTestsRequest) -> Result<SerialTestsResponse, String> {
+pub fn compute_serial_tests(req: SerialTestsRequest) -> Result<SerialTestsResponse, AppError> {
     let n = req.residuals.len();
     if n < 4 {
-        return Err("序列相关检验: 至少需要 4 个观测值".to_string());
+        return Err(AppError::new("insufficient_observations", "序列相关检验: 至少需要 4 个观测值"));
     }
     let lags = req.lags.min(n / 2 - 1).min(40).max(1);
 

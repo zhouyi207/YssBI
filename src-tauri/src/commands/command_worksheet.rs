@@ -1,4 +1,5 @@
 use crate::database::DatabaseInstance;
+use crate::error::AppError;
 use crate::project::ProjectState;
 use crate::project::{
     WorksheetDocument, delete_worksheet_from_file, ensure_worksheets_dir, existing_worksheet_names,
@@ -27,26 +28,26 @@ pub struct PlotColumnPairPayload {
     y_format: String,
 }
 
-fn series_to_plot_f64(s: &Series) -> Result<Series, String> {
+fn series_to_plot_f64(s: &Series) -> Result<Series, AppError> {
     let dt = s.dtype();
     let casted = if matches!(dt, PDataType::Date) {
         s.cast(&PDataType::Int32)
-            .map_err(|e| format!("Date->Int32: {}", e))?
+            .map_err(AppError::internal)?
             .cast(&PDataType::Float64)
-            .map_err(|e| format!("Int32->Float64: {}", e))?
+            .map_err(AppError::internal)?
     } else if matches!(dt, PDataType::Datetime(_, _)) {
         s.cast(&PDataType::Int64)
-            .map_err(|e| format!("Datetime->Int64: {}", e))?
+            .map_err(AppError::internal)?
             .cast(&PDataType::Float64)
-            .map_err(|e| format!("Int64->Float64: {}", e))?
+            .map_err(AppError::internal)?
     } else if matches!(dt, PDataType::Time) {
         s.cast(&PDataType::Int64)
-            .map_err(|e| format!("Time->Int64: {}", e))?
+            .map_err(AppError::internal)?
             .cast(&PDataType::Float64)
-            .map_err(|e| format!("Int64->Float64: {}", e))?
+            .map_err(AppError::internal)?
     } else {
         s.cast(&PDataType::Float64)
-            .map_err(|e| format!("cast to Float64: {}", e))?
+            .map_err(AppError::internal)?
     };
     Ok(casted)
 }
@@ -80,23 +81,23 @@ fn compute_plot_column_pair(
     x_col: &str,
     y_col: &str,
     max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, String> {
+) -> Result<PlotColumnPairPayload, AppError> {
     let x_series = db
         .load_column_series(x_col)
-        .map_err(|e| format!("Failed to load column '{x_col}': {e}"))?;
+        .map_err(AppError::internal)?;
     let y_series = db
         .load_column_series(y_col)
-        .map_err(|e| format!("Failed to load column '{y_col}': {e}"))?;
+        .map_err(AppError::internal)?;
 
-    let x_cast = series_to_plot_f64(&x_series).map_err(|e| format!("X column: {e}"))?;
-    let y_cast = series_to_plot_f64(&y_series).map_err(|e| format!("Y column: {e}"))?;
+    let x_cast = series_to_plot_f64(&x_series)?;
+    let y_cast = series_to_plot_f64(&y_series)?;
 
     let x_f64 = x_cast
         .f64()
-        .map_err(|e| format!("X is not plottable: {e}"))?;
+        .map_err(AppError::internal)?;
     let y_f64 = y_cast
         .f64()
-        .map_err(|e| format!("Y is not plottable: {e}"))?;
+        .map_err(AppError::internal)?;
 
     let mut data: Vec<PlotPoint> = x_f64
         .into_iter()
@@ -108,9 +109,7 @@ fn compute_plot_column_pair(
         .collect();
 
     if data.is_empty() {
-        return Err(
-            "No valid (x, y) pairs after filtering nulls and non-finite values".to_string(),
-        );
+        return Err(AppError::new("plot_data_empty", "No valid (x, y) pairs after filtering nulls and non-finite values"));
     }
 
     let max_points = max_points.unwrap_or(DEFAULT_MAX_PLOT_POINTS);
@@ -160,14 +159,14 @@ pub fn create_worksheet(
     state: State<ProjectState>,
     name: Option<String>,
     database_id: Option<String>,
-) -> Result<WorksheetDocument, String> {
+) -> Result<WorksheetDocument, AppError> {
     let path = state
         .get_path()
-        .ok_or_else(|| "No project is open".to_string())?;
+        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
     let root = project_root_from_path(&path);
-    ensure_worksheets_dir(root.as_path()).map_err(|e| e.to_string())?;
+    ensure_worksheets_dir(root.as_path()).map_err(AppError::from)?;
 
-    let existing = existing_worksheet_names(root.as_path(), None).map_err(|e| e.to_string())?;
+    let existing = existing_worksheet_names(root.as_path(), None).map_err(AppError::from)?;
     let requested = name.unwrap_or_else(|| "New Worksheet".to_string());
     let unique_name = unique_worksheet_name(&existing, &requested);
 
@@ -180,7 +179,7 @@ pub fn create_worksheet(
     });
 
     let document = WorksheetDocument::new(unique_name, default_db.unwrap_or_default());
-    save_worksheet_to_file(root.as_path(), &document).map_err(|e| e.to_string())?;
+    save_worksheet_to_file(root.as_path(), &document).map_err(AppError::from)?;
     Ok(document)
 }
 
@@ -188,33 +187,33 @@ pub fn create_worksheet(
 pub fn load_worksheet(
     state: State<ProjectState>,
     worksheet_id: String,
-) -> Result<WorksheetDocument, String> {
+) -> Result<WorksheetDocument, AppError> {
     let path = state
         .get_path()
-        .ok_or_else(|| "No project is open".to_string())?;
+        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
     let root = project_root_from_path(&path);
-    load_worksheet_from_file(root.as_path(), &worksheet_id).map_err(|e| e.to_string())
+    load_worksheet_from_file(root.as_path(), &worksheet_id).map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn save_worksheet(
     state: State<ProjectState>,
     document: WorksheetDocument,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let path = state
         .get_path()
-        .ok_or_else(|| "No project is open".to_string())?;
+        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
     let root = project_root_from_path(&path);
-    save_worksheet_to_file(root.as_path(), &document).map_err(|e| e.to_string())
+    save_worksheet_to_file(root.as_path(), &document).map_err(AppError::from)
 }
 
 #[tauri::command]
-pub fn delete_worksheet(state: State<ProjectState>, worksheet_id: String) -> Result<(), String> {
+pub fn delete_worksheet(state: State<ProjectState>, worksheet_id: String) -> Result<(), AppError> {
     let path = state
         .get_path()
-        .ok_or_else(|| "No project is open".to_string())?;
+        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
     let root = project_root_from_path(&path);
-    delete_worksheet_from_file(root.as_path(), &worksheet_id).map_err(|e| e.to_string())
+    delete_worksheet_from_file(root.as_path(), &worksheet_id).map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -224,8 +223,8 @@ pub fn get_plot_column_pair(
     x_col: String,
     y_col: String,
     max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, String> {
+) -> Result<PlotColumnPairPayload, AppError> {
     state.with_database_mut(&database_id, |db| {
-        compute_plot_column_pair(db, &x_col, &y_col, max_points)
-    })
+        compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
+    }).map_err(AppError::from)
 }

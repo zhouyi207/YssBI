@@ -1,11 +1,12 @@
 use tauri::State;
+use crate::error::AppError;
 
 /// 读取 source descriptor。
 #[tauri::command]
 pub fn get_result_source_descriptor(
     state: State<crate::execution::ResultSourceStore>,
     source_id: String,
-) -> Result<Option<crate::execution::SourceDescriptor>, String> {
+) -> Result<Option<crate::execution::SourceDescriptor>, AppError> {
     Ok(state.get_descriptor(&source_id))
 }
 
@@ -15,7 +16,7 @@ pub fn get_pin_result_descriptor(
     state: State<crate::execution::ResultSourceStore>,
     graph_path: String,
     pin_id: String,
-) -> Result<Option<crate::execution::SourceDescriptor>, String> {
+) -> Result<Option<crate::execution::SourceDescriptor>, AppError> {
     Ok(state.get_pin_descriptor(&graph_path, &pin_id))
 }
 
@@ -24,8 +25,8 @@ pub fn get_pin_result_descriptor(
 pub fn get_result_source_value(
     state: State<crate::execution::ResultSourceStore>,
     source_id: String,
-) -> Result<Option<crate::execution::SourceValue>, String> {
-    state.get_value(&source_id)
+) -> Result<Option<crate::execution::SourceValue>, AppError> {
+    Ok(state.get_value(&source_id)?)
 }
 
 /// 分页拉取 source 中的 DataFrame / DataSeries 数据。
@@ -35,8 +36,8 @@ pub fn get_result_source_page(
     source_id: String,
     offset: usize,
     limit: usize,
-) -> Result<crate::execution::SourcePage, String> {
-    state.get_page(&source_id, offset, limit)
+) -> Result<crate::execution::SourcePage, AppError> {
+    Ok(state.get_page(&source_id, offset, limit)?)
 }
 
 /// Release a window-owned result source when its view window unmounts.
@@ -44,7 +45,7 @@ pub fn get_result_source_page(
 pub fn release_result_source(
     state: State<'_, crate::execution::ResultSourceStore>,
     source_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     state.release_window_source(&source_id)?;
     Ok(())
 }

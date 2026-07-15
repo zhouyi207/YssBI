@@ -1,4 +1,5 @@
 use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
+use crate::error::AppError;
 use crate::project::ProjectState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -52,7 +53,7 @@ fn graph_resource_meta(
     graph_path: &crate::project::GraphResourcePath,
     name: String,
     kind: crate::graph::GraphKind,
-) -> Result<ProjectResourceMetaDTO, String> {
+) -> Result<ProjectResourceMetaDTO, AppError> {
     Ok(ProjectResourceMetaDTO {
         id: graph_path.as_str().to_string(),
         kind: graph_kind_to_resource_kind(&kind).to_string(),
@@ -72,8 +73,8 @@ pub fn rename_graph_resource(
     state: State<ProjectState>,
     graph_path: String,
     new_name: String,
-) -> Result<ProjectResourceMetaDTO, String> {
-    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+) -> Result<ProjectResourceMetaDTO, AppError> {
+    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(AppError::from)?;
     let (final_name, kind, moved_to) = state.rename_graph(&graph_path, &new_name)?;
 
     let effective_path = moved_to.as_ref().unwrap_or(&graph_path);

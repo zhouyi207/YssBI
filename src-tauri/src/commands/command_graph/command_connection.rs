@@ -6,10 +6,11 @@ use crate::project::{GraphResourcePath, ProjectState, emit_graph_pin_mutation_sy
 use crate::schema::GraphUndoPatch;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
+use crate::error::AppError;
 use uuid::Uuid;
 
-fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, String> {
-    GraphResourcePath::new(graph_path).map_err(|e| e.to_string())
+fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
+    GraphResourcePath::new(graph_path).map_err(AppError::from)
 }
 
 // ==================== 结果 DTO ====================
@@ -60,7 +61,7 @@ pub fn connect_pins(
     graph_path: String,
     pin_a: String,
     pin_b: String,
-) -> Result<ConnectPinsResult, String> {
+) -> Result<ConnectPinsResult, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let id_a = PinId::from(Uuid::parse_str(&pin_a).map_err(|e| format!("Invalid pin_a: {}", e))?);
     let id_b = PinId::from(Uuid::parse_str(&pin_b).map_err(|e| format!("Invalid pin_b: {}", e))?);
@@ -133,7 +134,7 @@ pub fn disconnect_pin(
     source_store: State<ResultSourceStore>,
     graph_path: String,
     pin_id: String,
-) -> Result<DisconnectPinResult, String> {
+) -> Result<DisconnectPinResult, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
@@ -194,16 +195,16 @@ pub fn delete_connection(
     source_store: State<ResultSourceStore>,
     graph_path: String,
     connection_id: String,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
 
     // connectionId 格式："{from_pin_uuid}->{to_pin_uuid}"
     let parts: Vec<&str> = connection_id.split("->").collect();
     if parts.len() != 2 {
-        return Err(format!(
+        return Err(AppError::new("invalid_connection_id", format!(
             "Invalid connection_id format: '{}', expected 'from->to'",
             connection_id
-        ));
+        )));
     }
     let from_pin = PinId::from(
         Uuid::parse_str(parts[0])
@@ -262,7 +263,7 @@ pub struct ConnectionDTO {
 pub fn get_connections(
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<Vec<ConnectionDTO>, String> {
+) -> Result<Vec<ConnectionDTO>, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
 
     let graph = state
@@ -296,7 +297,7 @@ pub fn delete_connections_for_pin(
     source_store: State<ResultSourceStore>,
     graph_path: String,
     pin_id: String,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
 
@@ -350,7 +351,7 @@ pub fn delete_connections_for_node(
     source_store: State<ResultSourceStore>,
     graph_path: String,
     node_id: String,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     let nid =
         NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);

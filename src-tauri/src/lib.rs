@@ -6,6 +6,7 @@ pub mod application;
 pub mod ast;
 pub mod commands;
 pub mod database;
+pub mod error;
 pub mod event;
 pub mod execution;
 pub mod frontend;

@@ -1,4 +1,5 @@
 use crate::event::{Event, EventProject, emit_project_event};
+use crate::error::AppError;
 use crate::execution::ResultSourceStore;
 use crate::frontend::FrontendError;
 use crate::log::LogLevel;
@@ -70,7 +71,7 @@ pub async fn save_project_as(
     watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
     path: String,
-) -> Result<ProjectRecord, String> {
+) -> Result<ProjectRecord, AppError> {
     log_app!(
         LogLevel::Info,
         "[command.save_project_as] Saving project copy to: {}",
@@ -102,10 +103,10 @@ pub async fn create_project(
     registry: State<'_, ProjectRegistry>,
     name: String,
     path: String,
-) -> Result<ProjectRecord, String> {
+) -> Result<ProjectRecord, AppError> {
     let validation = validate_new_project_path_impl(&path);
     if !validation.ok {
-        return Err(validation.message.unwrap_or_else(|| "项目路径无效".into()));
+        return Err(AppError::new("invalid_project_path", validation.message.unwrap_or_else(|| "项目路径无效".into())));
     }
 
     let project_root = std::path::PathBuf::from(path.trim());
@@ -127,10 +128,11 @@ pub async fn create_project(
             project_file_path.to_string_lossy().as_ref(),
         )
         .await
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
-pub fn flush_project(app: AppHandle, state: State<ProjectState>) -> Result<(), String> {
+pub fn flush_project(app: AppHandle, state: State<ProjectState>) -> Result<(), AppError> {
     let path = state.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
     log_app!(LogLevel::Info, "[command.flush_project] Flushing project");
 
@@ -146,7 +148,7 @@ pub fn new_project(
     app: AppHandle,
     state: State<ProjectState>,
     source_store: State<ResultSourceStore>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     log_app!(LogLevel::Info, "[command.new_project] Creating new project");
 
     state.clear();
