@@ -277,6 +277,10 @@ src/app/appConfig/appLinks.ts
 - [x] 清理批量创建连线重复逻辑：抽出 pin 映射、user value 恢复和 `ConnectionRestoreState`，避免创建阶段与重编译后动态 pin 补映射逻辑重复。
 - [x] 清理执行期 data input 重复逻辑：抽出可拉取 data node 判断和 ready 后 data flow 发射 helper，保持逐边取数 / 流动行为不变。
 - [x] 本地验证通过：`pnpm run typecheck`、`pnpm test`、`cargo check --manifest-path src-tauri/Cargo.toml`、`cargo test --manifest-path src-tauri/Cargo.toml`、`git --no-pager diff --check`。
+- [ ] 删除掉 `atomic_enum`、`crossbeam`、`dashmap` 这些 crates，因为目前没有什么作用
+
+
+
 
 ## v1.0 待办
 

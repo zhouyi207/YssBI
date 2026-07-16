@@ -28,6 +28,7 @@ import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import { AboutModal } from "./AboutModal";
+import { JuliaMenuButton } from "./JuliaMenuButton";
 
 interface MenuItem {
   label: string;
@@ -279,6 +280,7 @@ export function Menubar() {
         <MenuButton id="view" label={t("menubar.view")} items={viewItems} />
         <MenuButton id="window" label={t("menubar.window")} items={windowItems} />
         <MenuButton id="tools" label={t("menubar.tools")} items={toolItems} />
+        <JuliaMenuButton />
         <MenuButton id="help" label={t("menubar.help")} items={helpItems} />
       </div>
     </WindowMenuBar>

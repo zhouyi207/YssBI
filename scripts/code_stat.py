@@ -4,7 +4,7 @@ from collections import defaultdict
 
 CODE_EXTENSIONS = {
     ".py", ".rs", ".js", ".ts", ".jsx", ".tsx",
-    ".java", ".cpp", ".c", ".h",
+    ".java", ".cpp", ".hpp", ".c", ".h",
     ".go", ".cs", ".swift",
 }
 
@@ -17,7 +17,7 @@ IGNORE_DIRS = {
 def is_comment(line: str, ext: str) -> bool:
     if ext == ".py":
         return line.startswith("#")
-    if ext in {".rs", ".js", ".ts", ".java", ".c", ".cpp", ".go", ".cs"}:
+    if ext in {".rs", ".js", ".ts", ".java", ".c", ".cpp", ".hpp", ".go", ".cs"}:
         return line.startswith("//")
     return False
 

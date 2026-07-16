@@ -173,6 +173,7 @@ export const zhCN = {
     window: "窗口",
     view: "视图",
     tools: "工具",
+    extensions: "扩展",
     help: "帮助",
     newEventGraph: "新建 Event",
     newFunction: "新建 Function",
@@ -211,6 +212,29 @@ export const zhCN = {
     showSecondarySideBar: "显示辅助侧栏",
     hidePanel: "隐藏面板",
     showPanel: "显示面板",
+  },
+  julia: {
+    menu: {
+      title: "Julia 计算引擎",
+      install: "安装最新版 Julia…",
+      refresh: "刷新状态",
+      managedRuntime: "系统 Julia",
+    },
+    status: {
+      notInstalled: "未安装",
+      installing: "正在安装…",
+      ready: "已就绪 · Julia {{version}}",
+      invalid: "Runtime 无效或不可启动",
+    },
+    install: {
+      title: "安装 Julia Runtime",
+      message: "Julia 为 YssBI 提供可选的高级科学计算能力。YssBI 会使用系统中的 Julia；如未安装，将安装最新版 Julia。",
+      confirm: "安装最新版",
+      preparing: "正在安装 Julia",
+      preparingDetail: "正在检查系统 Julia…",
+      success: "Julia {{version}} 已准备就绪",
+      failed: "Julia 安装未完成",
+    },
   },
   aboutModal: {
     title: "关于 {{appName}}",

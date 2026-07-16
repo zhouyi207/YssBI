@@ -11,6 +11,7 @@ pub mod event;
 pub mod execution;
 pub mod frontend;
 pub mod graph;
+pub mod julia;
 pub mod log;
 pub mod project;
 pub mod schema;
@@ -210,6 +211,9 @@ pub fn run() {
             compute_serial_tests,
             // ==================== Panel DID（结果页） ====================
             compute_panel_did_fake_group_ri,
+            // ==================== Julia runtime ====================
+            get_julia_runtime_status,
+            install_julia_runtime,
             // ==================== 日志 ====================
             frontend_log,
             get_logs,

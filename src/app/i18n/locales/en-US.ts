@@ -173,6 +173,7 @@ export const enUS = {
     window: "Window",
     view: "View",
     tools: "Tools",
+    extensions: "Extensions",
     help: "Help",
     newEventGraph: "New Event Graph",
     newFunction: "New Function",
@@ -211,6 +212,29 @@ export const enUS = {
     showSecondarySideBar: "Show Secondary Side Bar",
     hidePanel: "Hide Panel",
     showPanel: "Show Panel",
+  },
+  julia: {
+    menu: {
+      title: "Julia compute engine",
+      install: "Install latest Julia…",
+      refresh: "Refresh status",
+      managedRuntime: "System Julia",
+    },
+    status: {
+      notInstalled: "Not installed",
+      installing: "Installing…",
+      ready: "Ready · Julia {{version}}",
+      invalid: "Runtime is invalid or cannot start",
+    },
+    install: {
+      title: "Install Julia Runtime",
+      message: "Julia provides optional advanced scientific computing for YssBI. YssBI uses the system Julia and installs the latest Julia release when it is missing.",
+      confirm: "Install latest",
+      preparing: "Installing Julia",
+      preparingDetail: "Checking the system Julia installation…",
+      success: "Julia {{version}} is ready",
+      failed: "Julia installation did not complete",
+    },
   },
   aboutModal: {
     title: "About {{appName}}",

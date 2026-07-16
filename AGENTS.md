@@ -79,11 +79,22 @@ the architecture changes.
 - Save/close flows use the application confirmation modal and keep sub-windows
   read-only with respect to project state.
 
-## Verification and delivery
+## Local development and verification
 
+- Run project commands from the repository root through `pnpm` scripts. Rust
+  scripts explicitly target `src-tauri/Cargo.toml`; `.cargo/config.toml` keeps
+  all Cargo artifacts in the root `target/` directory. Do not create a second
+  `src-tauri/target/` through ad-hoc Cargo invocations.
+- The canonical workflow and command matrix are documented in
+  `docs/development/LOCAL_WORKFLOW.md`. Do not add CI as a substitute for these
+  local checks unless the task explicitly requests it.
 - Add or update a focused regression test before changing behavior, then run it
   and the relevant broader test suite.
-- Run `cargo check` for Rust changes, the relevant `pnpm exec vitest` tests for
-  frontend changes, and `git diff --check` before reporting completion.
+- For Rust changes, run `pnpm rust:check`, the focused tests, and the relevant
+  `pnpm rust:test` / `pnpm rust:test:sci` suite. For frontend changes, run
+  `pnpm typecheck` and the relevant `pnpm test` coverage. Run `git diff --check`
+  before reporting completion.
+- Use `pnpm verify` before delivery when changes span both frontend and Rust;
+  it is a local verification command and does not build a release installer.
 - Do not claim success without fresh command output. Preserve unrelated user
   changes in the working tree.
