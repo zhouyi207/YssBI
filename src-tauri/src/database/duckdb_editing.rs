@@ -5,8 +5,10 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use super::{DuckDbColumnMeta, duckdb_table_sql, read_table_meta, sql_escape_literal};
-use yss_sci::api::database::{EditOperation, EditState};
+use super::{
+    DuckDbColumnMeta, EditOperation, EditState, duckdb_table_sql, read_table_meta,
+    sql_escape_literal,
+};
 
 /// DuckDB `rowid` 伪列（SQL 关键字，不加引号）。
 pub const DUCKDB_ROWID_SQL: &str = "rowid";

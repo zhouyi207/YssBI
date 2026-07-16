@@ -3,16 +3,6 @@
 //! Existing module paths remain available for compatibility. New app code should
 //! prefer these curated re-exports over reaching into implementation modules.
 
-pub mod database {
-    pub use crate::database::{
-        EditHistory, EditOperation, EditState, anyvalue_to_json, apply_operation,
-        capture_column_data, capture_row_data, cast_column, compute_all_column_distributions,
-        compute_all_column_stats, compute_column_distribution, compute_column_stats,
-        compute_dataset_overview, dtype_from_string, dtype_to_string, export_dataframe,
-        reverse_operation,
-    };
-}
-
 pub mod regression {
     pub use crate::regression::covariance::CovParams;
     pub use crate::regression::diagnostics;

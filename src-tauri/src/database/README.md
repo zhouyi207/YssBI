@@ -5,6 +5,16 @@
 - **写**：Polars `DataFrame` → Arrow RecordBatch → DuckDB Appender（`appender-arrow`）
 - **读**：DuckDB `query_arrow` → Arrow → Polars `DataFrame`
 
+## 职责边界
+
+`src-tauri/src/database/` 是数据资产与编辑语义的唯一归属：
+
+- `edit_operation.rs`：编辑历史、撤销/重做、Polars/JSON 值与类型转换；
+- `column_stats.rs`、`column_distribution.rs`、`dataset_overview.rs`：内存 DataFrame 的数据概览；
+- `export.rs`：CSV 与 Parquet 导出。
+
+`yss-sci` 只承载可独立测试的数值、统计/计量与时间序列计算，不包含项目数据、编辑状态或导出逻辑。
+
 ## Categorical / ENUM 类型映射
 
 DataView 中将列 cast 为 **Categorical** 后保存，会写入 DuckDB **ENUM** 类型（内部类型名 `_yssbi_enum_{table}_{column}`）。重开项目时 schema 与数据恢复为 Polars Categorical，不再降级为 String。

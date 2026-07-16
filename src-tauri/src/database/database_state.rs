@@ -1,8 +1,6 @@
+use super::{DuckDbColumnMeta, EditHistory};
 use polars::prelude::*;
 use std::sync::Arc;
-use yss_sci::api::database::EditHistory;
-
-use super::DuckDbColumnMeta;
 
 /// 数据库实例的生命周期状态。
 ///

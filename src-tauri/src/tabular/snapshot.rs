@@ -1,12 +1,11 @@
 //! 列式 tabular 快照：`{ "col_a": [1,2], "col_b": [3,4] }`
 
-use crate::database::polars_dtype_to_data_type;
+use crate::database::{json_to_anyvalue, polars_dtype_to_data_type};
 use crate::graph::node::{ColumnSchema, DataSchema};
 use polars::prelude::{AnyValue, Column, DataFrame, DataType as PDataType, PlSmallStr, Series};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use yss_sci::database::json_to_anyvalue;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TabularSnapshot {

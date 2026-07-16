@@ -305,9 +305,7 @@ pub fn export_database(
         .map_err(AppError::internal)?;
 
     let mut df = view.dataframe;
-    Ok(yss_sci::api::database::export_dataframe(
-        &mut df, &path, &format,
-    )?)
+    Ok(crate::database::export_dataframe(&mut df, &path, &format)?)
 }
 
 #[tauri::command]

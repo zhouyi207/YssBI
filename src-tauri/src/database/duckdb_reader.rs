@@ -1016,7 +1016,7 @@ mod tests {
 
     #[test]
     fn ingest_categorical_enum_roundtrip() {
-        use yss_sci::database::cast_column;
+        use crate::database::cast_column;
 
         let mut df = df!(
             "city" => &["北京", "上海", "北京"],
@@ -1330,7 +1330,7 @@ mod tests {
 
         // --- C) Polars Categorical → Arrow Dictionary → ENUM（已知失败：须先 cast 为 Utf8，见路径 A） ---
         {
-            use yss_sci::database::cast_column;
+            use crate::database::cast_column;
 
             let mut df = df!(
                 "gender" => &["M", "F", "M"],

@@ -1,3 +1,4 @@
+use crate::database::dtype_from_string;
 use crate::graph::infer::{TypeConstraint, TypeVarDefinition, TypeVarKey};
 use crate::graph::node::NodeDefinition;
 use crate::graph::pin::{DataRole, PinDataTypeDefinition, PinDefinition, PinRole, PinSlot};
@@ -7,7 +8,6 @@ use crate::graph::value::{DataSeriesValue, DataType, DataValue};
 use num_traits::{One, Zero};
 use polars::prelude::{DataType as PDataType, Series};
 use std::sync::Arc;
-use yss_sci::api::database::dtype_from_string;
 
 pub fn register(registry: &NodeRegistry) {
     register_convert(registry);

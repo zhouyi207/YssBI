@@ -90,10 +90,12 @@ the architecture changes.
   local checks unless the task explicitly requests it.
 - Add or update a focused regression test before changing behavior, then run it
   and the relevant broader test suite.
-- For Rust changes, run `pnpm rust:check`, the focused tests, and the relevant
-  `pnpm rust:test` / `pnpm rust:test:sci` suite. For frontend changes, run
-  `pnpm typecheck` and the relevant `pnpm test` coverage. Run `git diff --check`
-  before reporting completion.
+- For Rust changes, run `pnpm rust:check` and focused tests for the touched
+  area. Do not run full `cargo test` / full `pnpm rust:test` by default because
+  it is slow; only run broader Rust suites when the change is cross-cutting,
+  explicitly requested, or the focused checks cannot cover the risk. For
+  frontend changes, run `pnpm typecheck` and the relevant `pnpm test` coverage.
+  Run `git diff --check` before reporting completion.
 - Use `pnpm verify` before delivery when changes span both frontend and Rust;
   it is a local verification command and does not build a release installer.
 - Do not claim success without fresh command output. Preserve unrelated user

@@ -2,11 +2,10 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use super::{DuckDbColumnMeta, duckdb_table_sql};
-use yss_sci::database::{
+use super::{
     CategoryCount, ColumnDistribution, ColumnStats, DataCompleteness, DatasetOverview,
-    HistogramBin, NumericColumnStats, NumericDistribution, SchemaOverview, SizeShape,
-    StringColumnStats, StringDistribution,
+    DuckDbColumnMeta, HistogramBin, NumericColumnStats, NumericDistribution, SchemaOverview,
+    SizeShape, StringColumnStats, StringDistribution, duckdb_table_sql,
 };
 
 const DEFAULT_BINS: usize = 20;

@@ -9,13 +9,13 @@ use crate::database::{
     drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
     ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
 };
+use crate::database::{EditHistory, EditState};
 use crate::project::{
     ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,
 };
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use serde::Serialize;
 use uuid::Uuid;
-use yss_sci::api::database::{EditHistory, EditState};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

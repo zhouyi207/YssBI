@@ -1,8 +1,8 @@
+use crate::database::anyvalue_to_json;
 use polars::prelude::{DataFrame, Series};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use yss_sci::api::database::anyvalue_to_json;
 
 use crate::execution::Presentation;
 use crate::graph::PinId;
