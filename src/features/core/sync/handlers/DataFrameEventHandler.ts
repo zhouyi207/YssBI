@@ -39,7 +39,7 @@ export class DataFrameDeletedHandler extends BaseEventHandler<DataFrameDeletedPa
 }
 
 /**
- * DuckDB 数据集 schema 更新（遗留事件；正常路径在 get_project_data 中同步返回 schema）。
+ * DuckDB 数据集 schema 更新（低频事件；项目加载时由 get_project_databases_variables 返回 schema）。
  */
 export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSchemaUpdatedPayload> {
     eventType = 'DataFrameSchemaUpdated';

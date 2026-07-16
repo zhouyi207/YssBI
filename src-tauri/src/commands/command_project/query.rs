@@ -3,33 +3,13 @@ use crate::error::AppError;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::project::{
-    ProjectIndex, ProjectState, RevealProjectResourceRequest, collect_invalid_graph_references,
-    format_path_for_user_path, normalize_existing_path, resolve_reveal_path,
+    ProjectIndex, ProjectState, RevealProjectResourceRequest, format_path_for_user_path,
+    normalize_existing_path, resolve_reveal_path,
 };
-use crate::schema::{
-    DatabasesVariablesDTO, GraphInstanceDTO, GraphsWithValidationDTO, ProjectDataDTO,
-    VariableInstanceDTO,
-};
+use crate::schema::{DatabasesVariablesDTO, GraphInstanceDTO, VariableInstanceDTO};
 use tauri::State;
 
 use super::types::LoadedProjectGraphDTO;
-
-/// 获取当前项目数据（含 database schema，从 project_store 补充）
-#[tauri::command]
-pub fn get_project_data(state: State<ProjectState>) -> ProjectDataDTO {
-    let data = state.get_data();
-
-    log_app!(
-        LogLevel::Info,
-        "[command.get_project_data] ProjectData: {}",
-        data.info()
-    );
-
-    let mut dto = ProjectDataDTO::from(&data);
-    let store = state.project_store.read().unwrap();
-    dto.databases = enriched_database_dtos(&data.databases, &store);
-    dto
-}
 
 /// 分阶段加载第一步：获取 databases + variables（含 schema）
 #[tauri::command]
@@ -52,28 +32,6 @@ pub fn get_project_databases_variables(state: State<ProjectState>) -> DatabasesV
     DatabasesVariablesDTO {
         databases,
         variables,
-    }
-}
-
-/// 分阶段加载第二步：获取 graphs，并根据已加载的 databases/variables 校验引用
-#[tauri::command]
-pub fn get_project_graphs(state: State<ProjectState>) -> GraphsWithValidationDTO {
-    let data = state.get_data();
-
-    log_app!(
-        LogLevel::Info,
-        "[command.get_project_graphs] Loading graphs with reference validation"
-    );
-
-    let graphs = data
-        .graphs
-        .iter()
-        .map(|(graph_path, graph)| (graph_path.as_str().to_string(), GraphInstanceDTO::from(graph)))
-        .collect();
-
-    GraphsWithValidationDTO {
-        graphs,
-        invalid_references: collect_invalid_graph_references(&data),
     }
 }
 
@@ -103,7 +61,8 @@ pub fn load_project_graph(
     state: State<ProjectState>,
     graph_path: String,
 ) -> Result<LoadedProjectGraphDTO, AppError> {
-    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
+    let graph_path =
+        crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
     let document = state.load_graph_from_current_project(&graph_path)?;
     Ok(LoadedProjectGraphDTO {
         graph: GraphInstanceDTO::from(&document.graph),
@@ -125,7 +84,10 @@ pub fn get_project_resource_path(
     let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)?;
     let path = resolve_reveal_path(&state, request).map_err(|e| e.to_string())?;
     if !path.exists() {
-        return Err(AppError::new("resource_not_found", format!("File not found: {}", path.display())));
+        return Err(AppError::new(
+            "resource_not_found",
+            format!("File not found: {}", path.display()),
+        ));
     }
     Ok(format_path_for_user_path(&path))
 }

@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    graph::{
-        FunctionSignaturePin, GraphDataState, GraphInstance, GraphKind, NodeId,
-        PinId,
-    },
+    graph::{FunctionSignaturePin, GraphDataState, GraphInstance, GraphKind, NodeId, PinId},
     schema::{ConnectionDTO, NodeInstanceDTO, PinInstanceDTO},
 };
 use serde::{Deserialize, Serialize};
@@ -54,7 +51,12 @@ pub struct GraphValidationWarningDTO {
 
 impl From<&crate::graph::GraphValidationWarning> for GraphValidationWarningDTO {
     fn from(value: &crate::graph::GraphValidationWarning) -> Self {
-        Self { code: value.code.to_string(), from_pin_id: value.from_pin_id.to_string(), to_pin_id: value.to_pin_id.to_string(), message: value.message.clone() }
+        Self {
+            code: value.code.to_string(),
+            from_pin_id: value.from_pin_id.to_string(),
+            to_pin_id: value.to_pin_id.to_string(),
+            message: value.message.clone(),
+        }
     }
 }
 

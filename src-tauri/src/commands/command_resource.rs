@@ -1,5 +1,5 @@
-use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
 use crate::error::AppError;
+use crate::event::{Event, EventResource, ProjectResourceMetaEvent, emit_project_event};
 use crate::project::ProjectState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -41,11 +41,11 @@ fn graph_kind_to_resource_kind(kind: &crate::graph::GraphKind) -> &'static str {
     }
 }
 
-fn graph_uri(kind: &crate::graph::GraphKind, graph_path: &crate::project::GraphResourcePath) -> String {
-    crate::project::to_graph_resource_uri(
-        crate::project::GraphDocumentKind::from(kind),
-        graph_path,
-    )
+fn graph_uri(
+    kind: &crate::graph::GraphKind,
+    graph_path: &crate::project::GraphResourcePath,
+) -> String {
+    crate::project::to_graph_resource_uri(crate::project::GraphDocumentKind::from(kind), graph_path)
 }
 
 fn graph_resource_meta(

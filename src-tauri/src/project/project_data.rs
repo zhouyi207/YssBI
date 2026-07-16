@@ -2,9 +2,9 @@ use super::ProjectError;
 use super::ProjectMetadata;
 use crate::database::DatabaseDecl;
 use crate::graph::GraphInstance;
+use crate::project::GraphResourcePath;
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
-use crate::project::GraphResourcePath;
 use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

@@ -46,8 +46,7 @@ fn series_to_plot_f64(s: &Series) -> Result<Series, AppError> {
             .cast(&PDataType::Float64)
             .map_err(AppError::internal)?
     } else {
-        s.cast(&PDataType::Float64)
-            .map_err(AppError::internal)?
+        s.cast(&PDataType::Float64).map_err(AppError::internal)?
     };
     Ok(casted)
 }
@@ -82,22 +81,14 @@ fn compute_plot_column_pair(
     y_col: &str,
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, AppError> {
-    let x_series = db
-        .load_column_series(x_col)
-        .map_err(AppError::internal)?;
-    let y_series = db
-        .load_column_series(y_col)
-        .map_err(AppError::internal)?;
+    let x_series = db.load_column_series(x_col).map_err(AppError::internal)?;
+    let y_series = db.load_column_series(y_col).map_err(AppError::internal)?;
 
     let x_cast = series_to_plot_f64(&x_series)?;
     let y_cast = series_to_plot_f64(&y_series)?;
 
-    let x_f64 = x_cast
-        .f64()
-        .map_err(AppError::internal)?;
-    let y_f64 = y_cast
-        .f64()
-        .map_err(AppError::internal)?;
+    let x_f64 = x_cast.f64().map_err(AppError::internal)?;
+    let y_f64 = y_cast.f64().map_err(AppError::internal)?;
 
     let mut data: Vec<PlotPoint> = x_f64
         .into_iter()
@@ -109,7 +100,10 @@ fn compute_plot_column_pair(
         .collect();
 
     if data.is_empty() {
-        return Err(AppError::new("plot_data_empty", "No valid (x, y) pairs after filtering nulls and non-finite values"));
+        return Err(AppError::new(
+            "plot_data_empty",
+            "No valid (x, y) pairs after filtering nulls and non-finite values",
+        ));
     }
 
     let max_points = max_points.unwrap_or(DEFAULT_MAX_PLOT_POINTS);
@@ -224,7 +218,9 @@ pub fn get_plot_column_pair(
     y_col: String,
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, AppError> {
-    state.with_database_mut(&database_id, |db| {
-        compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
-    }).map_err(AppError::from)
+    state
+        .with_database_mut(&database_id, |db| {
+            compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
+        })
+        .map_err(AppError::from)
 }

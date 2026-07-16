@@ -20,17 +20,3 @@ export interface RemoveRepeatablePinResult {
   pinIndex: number;
   removedConnections: [string, string][];
 }
-
-/** Item returned by the graph connection query command. */
-export interface GraphConnectionQueryItem {
-  id: string;
-  from: string;
-  to: string;
-}
-
-/** Item returned by the graph connection query command. */
-export interface GraphConnectionQueryItem {
-  id: string;
-  from: string;
-  to: string;
-}

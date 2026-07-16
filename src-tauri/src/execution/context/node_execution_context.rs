@@ -1,10 +1,10 @@
 use super::NodeExecutionContextTrait;
 use crate::execution::{
-    Executor, ExecutionEvent, NoopEmitter, PlotChart, Presentation, ReportKind, ResultSourceRecord,
+    ExecutionEvent, Executor, NoopEmitter, PlotChart, Presentation, ReportKind, ResultSourceRecord,
     ResultSourceStore,
 };
 use crate::graph::core::GraphRuntime;
-use crate::graph::infer::TypeVarId;
+
 use crate::graph::node::{NodeId, NodeInstanceParams};
 use crate::graph::pin::{DataRole, ExecRole, PinId, PinRole};
 use crate::graph::value::{DataType, DataValue};
@@ -231,11 +231,6 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             .is_some()
     }
 
-    fn get_bound_type(&self, _type_var_id: TypeVarId) -> Option<DataType> {
-        // TODO: 需要在 GraphRuntime 中实现 get_bound_type
-        None
-    }
-
     fn get_pin_type_by_role(&self, role: &PinRole) -> Result<DataType, String> {
         let graph = self.graph.lock().unwrap();
         let pin = graph
@@ -336,7 +331,12 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
         .ok_or_else(|| "Call Function: subGraphPath 未设置".to_string())?;
 
         let function_path = crate::project::GraphResourcePath::new(sub_graph_path.clone())
-            .map_err(|e| format!("Call Function: 无效 subGraphPath '{}': {}", sub_graph_path, e))?;
+            .map_err(|e| {
+                format!(
+                    "Call Function: 无效 subGraphPath '{}': {}",
+                    sub_graph_path, e
+                )
+            })?;
 
         // 取项目引用 + 目标函数图（来自执行快照 bundle，与编辑器 live 图隔离）
         let (project_data, project_store, function_graph) = {
@@ -433,7 +433,8 @@ impl NodeExecutionContextTrait for NodeExecutionContext {
             let role = PinRole::Data(DataRole::Custom(sig_id));
             let has_pin = {
                 let rt = self.graph.lock().unwrap();
-                rt.get_pin_instance_by_pin_role(call_node_id, &role).is_some()
+                rt.get_pin_instance_by_pin_role(call_node_id, &role)
+                    .is_some()
             };
             if has_pin {
                 self.emit_output_by_role(&role, value)?;

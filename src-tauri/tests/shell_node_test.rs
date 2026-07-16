@@ -4,9 +4,7 @@ mod common;
 
 use common::function_signature_pin as sig;
 use std::sync::Arc;
-use yssbi_lib::graph::{
-    GraphKind, core::GraphInstance, pin::PinRole, register::NodeRegistry,
-};
+use yssbi_lib::graph::{GraphKind, core::GraphInstance, pin::PinRole, register::NodeRegistry};
 
 const EVENT_BEGIN: &str = "Event:Event Begin";
 const FUNCTION_ENTRY: &str = "Functions:Function Entry";
@@ -89,7 +87,11 @@ fn function_entry_projects_inputs_as_output_pins() {
     );
 
     let data_pins: Vec<_> = all_pins.iter().filter(|p| p.is_data()).collect();
-    assert_eq!(data_pins.len(), 2, "two inputs should project to two data pins");
+    assert_eq!(
+        data_pins.len(),
+        2,
+        "two inputs should project to two data pins"
+    );
     for pin in &data_pins {
         assert!(
             matches!(
@@ -99,7 +101,10 @@ fn function_entry_projects_inputs_as_output_pins() {
             "entry pins project inputs as OUTPUT pins"
         );
     }
-    let names: Vec<&str> = data_pins.iter().map(|p| p.definition.name.as_str()).collect();
+    let names: Vec<&str> = data_pins
+        .iter()
+        .map(|p| p.definition.name.as_str())
+        .collect();
     assert!(names.contains(&"count") && names.contains(&"label"));
 }
 

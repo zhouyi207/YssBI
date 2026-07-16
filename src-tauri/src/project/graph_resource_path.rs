@@ -6,8 +6,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
 use super::project_error::ProjectError;
+use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
 
 /// 规范化相对路径，例如 `events/MyEvent.yssbi-event`。
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,7 +124,10 @@ pub fn to_graph_resource_uri(kind: GraphDocumentKind, path: &GraphResourcePath) 
         GraphDocumentKind::Event => "event",
         GraphDocumentKind::Function => "function",
     };
-    format!("yssbi://graph/{kind_str}/{}", path.encode_for_resource_key())
+    format!(
+        "yssbi://graph/{kind_str}/{}",
+        path.encode_for_resource_key()
+    )
 }
 
 #[cfg(test)]

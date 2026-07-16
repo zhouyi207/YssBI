@@ -1,5 +1,5 @@
 use crate::execution::{PlotChart, Presentation, ReportKind, ResultSourceRecord};
-use crate::graph::infer::TypeVarId;
+
 use crate::graph::node::NodeInstanceParams;
 use crate::graph::pin::{ExecRole, PinRole};
 use crate::graph::value::{DataType, DataValue};
@@ -33,12 +33,6 @@ pub trait NodeExecutionContextTrait {
 
     /// 检查输入是否已连接
     fn is_input_connected(&self, role: &PinRole) -> bool;
-
-    /// 获取类型变量的绑定类型
-    ///
-    /// 用于在运行时获取类型推断的结果
-    /// 返回 None 表示类型变量未绑定
-    fn get_bound_type(&self, type_var_id: TypeVarId) -> Option<DataType>;
 
     /// 通过角色获取 Pin 的推断类型
     ///

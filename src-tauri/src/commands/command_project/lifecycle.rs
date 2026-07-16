@@ -1,5 +1,5 @@
-use crate::event::{Event, EventProject, emit_project_event};
 use crate::error::AppError;
+use crate::event::{Event, EventProject, emit_project_event};
 use crate::execution::ResultSourceStore;
 use crate::frontend::FrontendError;
 use crate::log::LogLevel;
@@ -106,7 +106,10 @@ pub async fn create_project(
 ) -> Result<ProjectRecord, AppError> {
     let validation = validate_new_project_path_impl(&path);
     if !validation.ok {
-        return Err(AppError::new("invalid_project_path", validation.message.unwrap_or_else(|| "项目路径无效".into())));
+        return Err(AppError::new(
+            "invalid_project_path",
+            validation.message.unwrap_or_else(|| "项目路径无效".into()),
+        ));
     }
 
     let project_root = std::path::PathBuf::from(path.trim());

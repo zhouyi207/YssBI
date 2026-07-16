@@ -1,7 +1,7 @@
+use crate::project::ProjectError;
 use serde::Serialize;
 use serde_json::Value;
 use std::fmt;
-use crate::project::ProjectError;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct AppError {
@@ -13,17 +13,27 @@ pub struct AppError {
 
 impl AppError {
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { code: code.into(), message: message.into(), details: None }
+        Self {
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
     }
-    pub fn internal(error: impl fmt::Display) -> Self { Self::new("internal_error", error.to_string()) }
+    pub fn internal(error: impl fmt::Display) -> Self {
+        Self::new("internal_error", error.to_string())
+    }
 }
 
 impl From<String> for AppError {
-    fn from(message: String) -> Self { Self::internal(message) }
+    fn from(message: String) -> Self {
+        Self::internal(message)
+    }
 }
 
 impl From<AppError> for String {
-    fn from(error: AppError) -> Self { error.message }
+    fn from(error: AppError) -> Self {
+        error.message
+    }
 }
 
 impl From<ProjectError> for AppError {

@@ -14,7 +14,7 @@ impl<'g> TypeInferenceSession<'g> {
     pub fn new(graph: &'g GraphInstance) -> Self {
         Self {
             graph,
-            ctx: TypeInferenceContext::new(),
+            ctx: TypeInferenceContext::new(graph.type_system_snapshot()),
         }
     }
 

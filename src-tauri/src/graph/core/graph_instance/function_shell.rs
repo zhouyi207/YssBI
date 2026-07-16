@@ -9,8 +9,8 @@
 //!   无 exec 入参时按数据拉取求值；有 exec 入参时走控制流子程序。
 
 use super::*;
-use crate::graph::pin::{ExecRole, PinOrder};
 use crate::graph::ShellRole;
+use crate::graph::pin::{ExecRole, PinOrder};
 
 /// 单个投影 pin 的目标规格。
 struct DesiredShellPin {

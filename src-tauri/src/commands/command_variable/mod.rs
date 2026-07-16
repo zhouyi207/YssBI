@@ -1,5 +1,5 @@
-use crate::event::{Event, EventNode, EventVariable, emit_project_event};
 use crate::error::AppError;
+use crate::event::{Event, EventNode, EventVariable, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
 use crate::project::ProjectState;
 use crate::schema::VariableInstanceDTO;
@@ -8,7 +8,10 @@ use tauri::{AppHandle, State};
 
 fn ensure_variable_data_type(data_type: &DataType) -> Result<(), AppError> {
     if matches!(data_type, DataType::Any) {
-        return Err(AppError::new("invalid_variable_type", "Variable data type cannot be Any"));
+        return Err(AppError::new(
+            "invalid_variable_type",
+            "Variable data type cannot be Any",
+        ));
     }
     Ok(())
 }
@@ -49,9 +52,12 @@ pub fn get_variable(
     state: State<ProjectState>,
     variable_id: VariableId,
 ) -> Result<VariableInstanceDTO, AppError> {
-    let variable = state
-        .get_variable(&variable_id)
-        .ok_or_else(|| AppError::new("variable_not_found", format!("Variable '{}' not found", variable_id)))?;
+    let variable = state.get_variable(&variable_id).ok_or_else(|| {
+        AppError::new(
+            "variable_not_found",
+            format!("Variable '{}' not found", variable_id),
+        )
+    })?;
     Ok((&variable).into())
 }
 
@@ -75,7 +81,12 @@ pub fn update_variable(
 
     let updated = state
         .update_variable(&variable_id, name, data_type, data_value, description, tags)
-        .ok_or_else(|| AppError::new("variable_not_found", format!("Variable '{}' not found", variable_id)))?;
+        .ok_or_else(|| {
+            AppError::new(
+                "variable_not_found",
+                format!("Variable '{}' not found", variable_id),
+            )
+        })?;
     let persist_global = matches!(updated.scope, VariableScope::Global);
 
     emit_project_event(
@@ -110,9 +121,12 @@ pub fn delete_variable(
     state: State<ProjectState>,
     variable_id: VariableId,
 ) -> Result<(), AppError> {
-    let variable = state
-        .remove_variable(&variable_id)
-        .ok_or_else(|| AppError::new("variable_not_found", format!("Variable '{}' not found", variable_id)))?;
+    let variable = state.remove_variable(&variable_id).ok_or_else(|| {
+        AppError::new(
+            "variable_not_found",
+            format!("Variable '{}' not found", variable_id),
+        )
+    })?;
     if matches!(variable.scope, VariableScope::Global) {
         state.persist_current_project()?;
     }

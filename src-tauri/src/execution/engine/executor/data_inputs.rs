@@ -8,12 +8,12 @@
 
 use super::super::event_emitter::EventEmitter;
 use super::super::execution_event::ExecutionEvent;
-use super::wire_events::{emit_data_flow, emit_data_pull};
 use super::Executor;
+use super::wire_events::{emit_data_flow, emit_data_pull};
 use crate::execution::NodeExecutionContext;
+use crate::graph::PinId;
 use crate::graph::node::NodeId;
 use crate::graph::pin::PinInstance;
-use crate::graph::PinId;
 use std::time::Instant;
 
 struct WiredDataInput {
@@ -56,8 +56,7 @@ impl<E: EventEmitter> Executor<E> {
         let is_pullable = {
             let graph = self.graph.lock().unwrap();
             let definition = graph.get_node_definition_by_node_id(edge.upstream_node);
-            definition.data_evaluator.is_some()
-                && !graph.node_has_exec_pins(edge.upstream_node)
+            definition.data_evaluator.is_some() && !graph.node_has_exec_pins(edge.upstream_node)
         };
 
         if is_pullable {

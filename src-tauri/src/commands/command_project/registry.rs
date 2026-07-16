@@ -1,5 +1,5 @@
-use crate::event::{Event, EventProject, emit_project_event};
 use crate::error::AppError;
+use crate::event::{Event, EventProject, emit_project_event};
 use crate::project::{
     CleanupInvalidProjectsResult, ProjectPickerTaskCancelRegistry, ProjectRecord, ProjectRegistry,
     ScanProjectsResult,
@@ -53,7 +53,10 @@ pub async fn register_project(
     name: String,
     path: String,
 ) -> Result<ProjectRecord, AppError> {
-    registry.register_project(&name, &path).await.map_err(AppError::internal)
+    registry
+        .register_project(&name, &path)
+        .await
+        .map_err(AppError::internal)
 }
 
 #[tauri::command]
@@ -61,7 +64,10 @@ pub async fn remove_registered_project(
     registry: State<'_, ProjectRegistry>,
     id: String,
 ) -> Result<(), AppError> {
-    registry.remove_project(&id).await.map_err(AppError::internal)
+    registry
+        .remove_project(&id)
+        .await
+        .map_err(AppError::internal)
 }
 
 #[tauri::command]
@@ -85,7 +91,10 @@ pub async fn delete_registered_project_files(
         .is_some_and(|loaded| paths_refer_to_same_project(&loaded, &record.path));
 
     delete_project_directory(&record.path).map_err(AppError::from)?;
-    registry.remove_project(&id).await.map_err(AppError::internal)?;
+    registry
+        .remove_project(&id)
+        .await
+        .map_err(AppError::internal)?;
 
     if deleting_active {
         state.clear();
@@ -101,7 +110,10 @@ pub async fn toggle_registered_project_favorite(
     registry: State<'_, ProjectRegistry>,
     id: String,
 ) -> Result<bool, AppError> {
-    registry.toggle_favorite(&id).await.map_err(AppError::internal)
+    registry
+        .toggle_favorite(&id)
+        .await
+        .map_err(AppError::internal)
 }
 
 #[tauri::command]

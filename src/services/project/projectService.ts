@@ -2,8 +2,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
-import { Graph, ProjectData } from "@/shared/types/domain";
-import type { GraphInstanceDTO, ProjectDataDTO } from "@/shared/types/dto";
+import type { Graph } from "@/shared/types/domain";
+import type { GraphInstanceDTO } from "@/shared/types/dto";
 import type { CleanupInvalidProjectsResult, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   graphDataToDomainGraph,
@@ -92,13 +92,7 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
 /**
  * 将后端 Graph Map 转换为前端 Record
  */
-function convertGraphMap(map: Record<string, GraphInstanceDTO>): Record<string, Graph> {
-    const result: Record<string, Graph> = {};
-    for (const [id, data] of Object.entries(map)) {
-        result[id] = toFrontendGraph(data);
-    }
-    return result;
-}
+
 
 // ==================== 项目状态管理 API ====================
 
@@ -110,33 +104,7 @@ export type RevealProjectResourceRequest = {
 export class ProjectService {
     // ==================== 项目级操作 ====================
 
-    /**
-     * 获取当前项目状态 - 使用新的 ProjectData 结构
-     */
-    static async getProjectState(): Promise<ProjectData> {
-        logger.app.debug('Invoking get_project_data...', 'ProjectService');
-        const data = await invoke<ProjectDataDTO>("get_project_data");
-        logger.app.trace(`Raw backend data: ${JSON.stringify(data)}`, 'ProjectService');
-        
-        // 新格式：直接使用 variables, graphs, databases
-        const result: ProjectData = {
-            variables: data.variables || {},
-            graphs: convertGraphMap(data.graphs || {}),
-            databases: data.databases || {},
-            metadata: data.metadata || { exportTime: "", appVersion: "" },
-        };
-        
-        logger.app.debug(`Converted data: variables=${Object.keys(result.variables).length}, graphs=${Object.keys(result.graphs).length}, databases=${Object.keys(result.databases).length}`, 'ProjectService');
-        
-        return result;
-    }
 
-    /**
-     * 获取当前项目数据（getProjectState 的别名，用于兼容）
-     */
-    static async getProjectData(): Promise<ProjectData> {
-        return ProjectService.getProjectState();
-    }
 
     /**
      * 分阶段加载第一步：获取 databases + variables（含 schema）
@@ -151,22 +119,6 @@ export class ProjectService {
         return { databases: data.databases || {}, variables: data.variables || {} };
     }
 
-    /**
-     * 分阶段加载第二步：获取 graphs，含引用校验结果
-     */
-    static async getProjectGraphs(): Promise<{
-        graphs: Record<string, GraphInstanceDTO>;
-        invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
-    }> {
-        const data = await invoke<{
-            graphs: Record<string, GraphInstanceDTO>;
-            invalidReferences: Record<string, Array<{ nodeId: string; variableId?: string; dataframeId?: string; subgraphPath?: string }>>;
-        }>("get_project_graphs");
-        return {
-            graphs: data.graphs || {},
-            invalidReferences: data.invalidReferences || {},
-        };
-    }
 
     /**
      * 获取当前项目路径

@@ -5,7 +5,7 @@ use crate::graph::TypeVarId;
 use crate::graph::infer::{TypeVarInference, TypeVarKey};
 use crate::graph::pin::PinDataTypeInference;
 use crate::graph::pin::PinId;
-use crate::graph::value::DataType;
+use crate::graph::value::{DataType, TypeSystemSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -27,16 +27,20 @@ pub struct TypeInferenceContext {
     /// 同一节点内的 TypeVarKey → TypeVarId 映射，按 TypeVarId 索引
     /// 用于 ConvertibleTo/ConvertibleFrom 约束在推断时解析兄弟 TypeVar
     pub type_var_siblings: HashMap<TypeVarId, HashMap<TypeVarKey, TypeVarId>>,
+
+    /// 当前图的类型系统快照，是 DataType 接受性规则的唯一上下文来源。
+    pub type_system: TypeSystemSnapshot,
 }
 
 impl TypeInferenceContext {
-    pub fn new() -> Self {
+    pub fn new(type_system: TypeSystemSnapshot) -> Self {
         Self {
             type_vars: HashMap::new(),
             pin_types: HashMap::new(),
             bindings: HashMap::new(),
             var_alias: HashMap::new(),
             type_var_siblings: HashMap::new(),
+            type_system,
         }
     }
 
@@ -127,20 +131,20 @@ impl TypeInferenceContext {
         if let (PinDataTypeInference::Concrete(from_dt), PinDataTypeInference::Concrete(to_dt)) =
             (&a, &b)
         {
-            if let Some(refined) = Self::refine_inner_any(to_dt, from_dt) {
+            if let Some(refined) = self.refine_inner_any(to_dt, from_dt) {
                 self.pin_types
                     .insert(to, PinDataTypeInference::Concrete(refined));
             }
-            if let Some(refined) = Self::refine_inner_any(from_dt, to_dt) {
+            if let Some(refined) = self.refine_inner_any(from_dt, to_dt) {
                 self.pin_types
                     .insert(from, PinDataTypeInference::Concrete(refined));
             }
             // 顶层 OneOf 细化：当 target 为 OneOf 且 source 匹配其中一个成员时，细化为 source（如 Add 的 A 连接 Float64 后显示 Float64）
-            if let Some(refined) = Self::refine_oneof(to_dt, from_dt) {
+            if let Some(refined) = self.refine_oneof(to_dt, from_dt) {
                 self.pin_types
                     .insert(to, PinDataTypeInference::Concrete(refined));
             }
-            if let Some(refined) = Self::refine_oneof(from_dt, to_dt) {
+            if let Some(refined) = self.refine_oneof(from_dt, to_dt) {
                 self.pin_types
                     .insert(from, PinDataTypeInference::Concrete(refined));
             }
@@ -151,7 +155,7 @@ impl TypeInferenceContext {
 
     /// 当 target 容器内部为 Any 而 source 有具体类型时，返回细化后的类型
     /// 当 target 容器内部为 OneOf 且 source 匹配其中一个成员时，细化为该成员
-    fn refine_inner_any(target: &DataType, source: &DataType) -> Option<DataType> {
+    fn refine_inner_any(&self, target: &DataType, source: &DataType) -> Option<DataType> {
         match (target, source) {
             (DataType::DataSeries(t_inner), DataType::DataSeries(s_inner))
                 if **t_inner == DataType::Any && **s_inner != DataType::Any =>
@@ -169,7 +173,10 @@ impl TypeInferenceContext {
                     && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
             {
                 if let DataType::OneOf(members) = t_inner.as_ref() {
-                    if members.iter().any(|m| m.can_accept(s_inner)) {
+                    if members
+                        .iter()
+                        .any(|m| self.type_system.can_accept(m, s_inner))
+                    {
                         Some(DataType::DataSeries(s_inner.clone()))
                     } else {
                         None
@@ -183,7 +190,10 @@ impl TypeInferenceContext {
                     && !matches!(s_inner.as_ref(), DataType::OneOf(_)) =>
             {
                 if let DataType::OneOf(members) = t_inner.as_ref() {
-                    if members.iter().any(|m| m.can_accept(s_inner)) {
+                    if members
+                        .iter()
+                        .any(|m| self.type_system.can_accept(m, s_inner))
+                    {
                         Some(DataType::Array(s_inner.clone()))
                     } else {
                         None
@@ -198,12 +208,15 @@ impl TypeInferenceContext {
 
     /// 顶层 OneOf 细化：当 target 为 OneOf 且 source 为具体类型且匹配其中一个成员时，返回 source
     /// 用于 +-/* 等运算节点：连接 Float64 后 pin 显示 Float64 而非 OneOf(Float64|DataSeries|...)
-    fn refine_oneof(target: &DataType, source: &DataType) -> Option<DataType> {
+    fn refine_oneof(&self, target: &DataType, source: &DataType) -> Option<DataType> {
         match (target, source) {
             (DataType::OneOf(members), _)
                 if !matches!(source, DataType::OneOf(_) | DataType::Any) =>
             {
-                if members.iter().any(|m| m.can_accept(source)) {
+                if members
+                    .iter()
+                    .any(|m| self.type_system.can_accept(m, source))
+                {
                     Some(source.clone())
                 } else {
                     None
@@ -393,27 +406,9 @@ impl TypeInferenceContext {
         }
     }
 
-    /// 值类型兼容性（递归处理容器类型和 OneOf）
+    /// 值类型兼容性：统一委托给类型系统快照。
     fn is_value_type_compatible(&self, from: &DataType, to: &DataType) -> bool {
-        if from == to {
-            return true;
-        }
-        if matches!(to, DataType::Any) || matches!(from, DataType::Any) {
-            return true;
-        }
-        match (from, to) {
-            (_, DataType::OneOf(targets)) => targets
-                .iter()
-                .any(|t| self.is_value_type_compatible(from, t)),
-            (DataType::OneOf(sources), _) => {
-                sources.iter().any(|s| self.is_value_type_compatible(s, to))
-            }
-            (DataType::Array(a), DataType::Array(b)) => self.is_value_type_compatible(a, b),
-            (DataType::DataSeries(a), DataType::DataSeries(b)) => {
-                self.is_value_type_compatible(a, b)
-            }
-            _ => false,
-        }
+        self.type_system.can_accept(to, from)
     }
 
     /// 为指定 TypeVarId 构建 TypeVarKey → 已绑定类型 的解析器

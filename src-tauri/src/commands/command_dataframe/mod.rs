@@ -1,5 +1,5 @@
-use crate::project::ProjectState;
 use crate::error::AppError;
+use crate::project::ProjectState;
 use crate::schema::DatabaseEngineDTO;
 use tauri::State;
 
@@ -30,9 +30,10 @@ pub async fn load_database(
     engine: DatabaseEngineDTO,
 ) -> Result<serde_json::Value, AppError> {
     let state = state.inner().clone();
-    let result =
-        run_on_blocking_pool(move || Ok(crate::application::database::load_database(&state, engine)?))
-            .await?;
+    let result = run_on_blocking_pool(move || {
+        Ok(crate::application::database::load_database(&state, engine)?)
+    })
+    .await?;
     serde_json::to_value(result).map_err(AppError::internal)
 }
 
@@ -60,9 +61,17 @@ pub async fn list_sql_tables(
             "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
                 charset: "utf8mb4".to_string(),
             },
-            _ => return Err(AppError::new("unsupported_sql_engine", format!("Unsupported SQL engine: {}", engine))),
+            _ => {
+                return Err(AppError::new(
+                    "unsupported_sql_engine",
+                    format!("Unsupported SQL engine: {}", engine),
+                ));
+            }
         };
-        Ok(crate::database::sql_reader::list_tables(&engine_enum, &connection_string)?)
+        Ok(crate::database::sql_reader::list_tables(
+            &engine_enum,
+            &connection_string,
+        )?)
     })
     .await
 }
@@ -92,8 +101,16 @@ pub async fn delete_database(state: State<'_, ProjectState>, id: String) -> Resu
 }
 
 #[tauri::command]
-pub fn rename_database(state: State<ProjectState>, id: String, name: String) -> Result<(), AppError> {
-    Ok(crate::application::database::rename_database(state.inner(), &id, &name)?)
+pub fn rename_database(
+    state: State<ProjectState>,
+    id: String,
+    name: String,
+) -> Result<(), AppError> {
+    Ok(crate::application::database::rename_database(
+        state.inner(),
+        &id,
+        &name,
+    )?)
 }
 
 #[tauri::command]
@@ -121,8 +138,7 @@ pub fn get_column_stats(
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let stats = state.with_database_mut(&id, |db| {
-        db.compute_column_stats()
-            .map_err(|e| e.to_string())
+        db.compute_column_stats().map_err(|e| e.to_string())
     })?;
 
     serde_json::to_value(stats).map_err(AppError::internal)
@@ -134,8 +150,7 @@ pub fn get_column_distribution(
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let dists = state.with_database_mut(&id, |db| {
-        db.compute_column_distributions()
-            .map_err(|e| e.to_string())
+        db.compute_column_distributions().map_err(|e| e.to_string())
     })?;
 
     serde_json::to_value(dists).map_err(AppError::internal)
@@ -147,8 +162,7 @@ pub fn get_dataset_overview(
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let overview = state.with_database_mut(&id, |db| {
-        db.compute_dataset_overview()
-            .map_err(|e| e.to_string())
+        db.compute_dataset_overview().map_err(|e| e.to_string())
     })?;
 
     serde_json::to_value(overview).map_err(AppError::internal)
@@ -273,11 +287,16 @@ pub fn export_database(
         .map_err(AppError::internal)?;
 
     let mut df = view.dataframe;
-    Ok(yss_sci::api::database::export_dataframe(&mut df, &path, &format)?)
+    Ok(yss_sci::api::database::export_dataframe(
+        &mut df, &path, &format,
+    )?)
 }
 
 #[tauri::command]
-pub fn get_edit_state(state: State<ProjectState>, id: String) -> Result<serde_json::Value, AppError> {
+pub fn get_edit_state(
+    state: State<ProjectState>,
+    id: String,
+) -> Result<serde_json::Value, AppError> {
     let edit_state = state.with_database_mut(&id, |db| Ok(db.edit_state()))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }

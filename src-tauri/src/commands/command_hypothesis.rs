@@ -70,5 +70,7 @@ impl From<HypothesisTestOutput> for HypothesisTestResponse {
 /// Tauri 命令：假设检验
 #[tauri::command]
 pub fn hypothesis_test(req: HypothesisTestRequest) -> Result<HypothesisTestResponse, AppError> {
-    run_hypothesis_test(req.into()).map(Into::into).map_err(AppError::from)
+    run_hypothesis_test(req.into())
+        .map(Into::into)
+        .map_err(AppError::from)
 }

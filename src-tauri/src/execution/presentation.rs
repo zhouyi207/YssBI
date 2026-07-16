@@ -77,24 +77,6 @@ impl ReportKind {
             Self::VecRankSummary => "VECRANK Summary",
         }
     }
-
-    pub fn from_legacy_key(key: &str) -> Self {
-        match key {
-            "var_summary" => Self::VarSummary,
-            "var_soc" => Self::VarSoc,
-            "panel_summary" => Self::PanelSummary,
-            "panel_did" => Self::PanelDid,
-            "df_adf_summary" => Self::DfAdfSummary,
-            "df_adf_summary_list" => Self::DfAdfSummaryList,
-            "vec_summary" => Self::VecSummary,
-            "vec_rank_summary" => Self::VecRankSummary,
-            "binary_summary" => Self::BinarySummary,
-            "iv_2sls_summary" => Self::Iv2slsSummary,
-            "iv_liml_summary" => Self::IvLimlSummary,
-            "prais_summary" => Self::PraisSummary,
-            _ => Self::OlsSummary,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

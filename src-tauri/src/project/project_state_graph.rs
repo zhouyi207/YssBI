@@ -1,14 +1,14 @@
 use super::ProjectState;
 use super::project_state_graph_mut::GraphMutContext;
 use super::unique_name;
+use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use crate::graph::{
     FunctionSignaturePin, GraphInstance, GraphKind, GraphRecompileScope, NodeInstanceParams,
     PinChangeSet,
 };
-use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use crate::project::{
-    FunctionSignatureEntry, FunctionSignatureTable, GraphDocumentKind, GraphResourcePath,
-    ExecutionGraphBundle, ProjectData, call_site_pairs_from_graph,
+    ExecutionGraphBundle, FunctionSignatureEntry, FunctionSignatureTable, GraphDocumentKind,
+    GraphResourcePath, ProjectData, call_site_pairs_from_graph,
     read_function_signature_header_from_project, read_graph_call_sites_from_project,
     read_project_index,
 };
@@ -36,7 +36,8 @@ impl ProjectState {
             .trim()
             .chars()
             .map(|ch| {
-                if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+                if ch.is_control()
+                    || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
                 {
                     '_'
                 } else {
@@ -129,7 +130,11 @@ impl ProjectState {
     }
 
     /// Create a graph with a name unique across loaded and persisted peers.
-    pub fn create_graph(&self, graph_name: &str, graph_kind: GraphKind) -> Result<GraphInstance, String> {
+    pub fn create_graph(
+        &self,
+        graph_name: &str,
+        graph_kind: GraphKind,
+    ) -> Result<GraphInstance, String> {
         let persisted_names = match self.get_path() {
             Some(path) => read_project_index(&path)
                 .map_err(|error| error.to_string())?
@@ -148,9 +153,7 @@ impl ProjectState {
         &self,
         graph_path: &GraphResourcePath,
     ) -> Result<GraphResourcePath, String> {
-        let project_path = self
-            .get_path()
-            .ok_or_else(|| "项目尚未加载".to_string())?;
+        let project_path = self.get_path().ok_or_else(|| "项目尚未加载".to_string())?;
         crate::project::duplicate_project_graph_file(&project_path, graph_path)
             .map(|document| document.graph.resource_path)
             .map_err(|error| error.to_string())
@@ -158,8 +161,14 @@ impl ProjectState {
 
     pub fn remove_graph(&self, graph_path: &GraphResourcePath) -> Option<GraphInstance> {
         let removed = self.project_data.write().unwrap().graphs.remove(graph_path);
-        if removed.as_ref().is_some_and(|g| g.kind == GraphKind::Function) {
-            self.function_signatures().write().unwrap().remove(graph_path);
+        if removed
+            .as_ref()
+            .is_some_and(|g| g.kind == GraphKind::Function)
+        {
+            self.function_signatures()
+                .write()
+                .unwrap()
+                .remove(graph_path);
             self.function_call_sites()
                 .write()
                 .unwrap()
@@ -255,7 +264,9 @@ impl ProjectState {
         if node_type != CALL_FUNCTION_NODE_TYPE {
             return None;
         }
-        params.and_then(|p| p.sub_graph_path()).and_then(|s| GraphResourcePath::new(s).ok())
+        params
+            .and_then(|p| p.sub_graph_path())
+            .and_then(|s| GraphResourcePath::new(s).ok())
     }
 
     /// 从项目索引重建函数签名表，并用已加载函数图覆盖（内存为最新）。
@@ -357,14 +368,11 @@ impl ProjectState {
         call_node_id: crate::graph::NodeId,
         target_function_path: &GraphResourcePath,
     ) {
-        self.function_call_sites()
-            .write()
-            .unwrap()
-            .register(
-                caller_graph_path.as_str().to_string(),
-                call_node_id,
-                target_function_path.as_str().to_string(),
-            );
+        self.function_call_sites().write().unwrap().register(
+            caller_graph_path.as_str().to_string(),
+            call_node_id,
+            target_function_path.as_str().to_string(),
+        );
     }
 
     /// 节点创建后登记 Call 调用点（非 Call 节点为 no-op）。
@@ -402,14 +410,11 @@ impl ProjectState {
         function_path: &GraphResourcePath,
         entry: &FunctionSignatureEntry,
     ) {
-        self.function_signatures()
-            .write()
-            .unwrap()
-            .upsert(
-                function_path.clone(),
-                entry.inputs.clone(),
-                entry.outputs.clone(),
-            );
+        self.function_signatures().write().unwrap().upsert(
+            function_path.clone(),
+            entry.inputs.clone(),
+            entry.outputs.clone(),
+        );
     }
 
     /// 解析函数签名：已加载图 > 签名表 > 图文件头（不加载整图）。
@@ -436,7 +441,10 @@ impl ProjectState {
             return Ok(entry);
         }
         let Some(path) = self.get_path() else {
-            return Err(format!("Function signature for '{}' not found", function_path));
+            return Err(format!(
+                "Function signature for '{}' not found",
+                function_path
+            ));
         };
         let entry = read_function_signature_header_from_project(&path, function_path)
             .map_err(|e| e.to_string())?
@@ -496,8 +504,14 @@ impl ProjectState {
         caller_graph_path: &GraphResourcePath,
         call_node_id: crate::graph::NodeId,
         new_function_path: &GraphResourcePath,
-    ) -> Result<(GraphInstance, PinChangeSet, Vec<(crate::graph::PinId, crate::graph::DataType)>), String>
-    {
+    ) -> Result<
+        (
+            GraphInstance,
+            PinChangeSet,
+            Vec<(crate::graph::PinId, crate::graph::DataType)>,
+        ),
+        String,
+    > {
         if self.get_graph(caller_graph_path).is_none() {
             self.load_graph_from_current_project(caller_graph_path)?;
         }
@@ -505,7 +519,12 @@ impl ProjectState {
         let node = self
             .get_graph(caller_graph_path)
             .and_then(|g| g.get_node_instance(call_node_id))
-            .ok_or_else(|| format!("Node '{}' not found in graph '{}'", call_node_id, caller_graph_path))?;
+            .ok_or_else(|| {
+                format!(
+                    "Node '{}' not found in graph '{}'",
+                    call_node_id, caller_graph_path
+                )
+            })?;
 
         if node.definition.node_type != CALL_FUNCTION_NODE_TYPE {
             return Err(format!(
@@ -756,7 +775,9 @@ impl ProjectState {
                     .map_err(|e| e.to_string())?
                     .graphs
                     .into_iter()
-                    .filter(|item| item.graph_type == expected_kind && item.path != graph_path.as_str())
+                    .filter(|item| {
+                        item.graph_type == expected_kind && item.path != graph_path.as_str()
+                    })
                     .map(|item| item.name),
             );
         }
@@ -764,7 +785,6 @@ impl ProjectState {
         existing.dedup();
         Ok(existing)
     }
-
 
     /// BFS over Call Function targets starting from event entry graph(s).
     fn collect_execution_dependency_paths(
@@ -808,16 +828,14 @@ impl ProjectState {
     ) -> Result<ExecutionGraphBundle, String> {
         let dependency_paths = self.collect_execution_dependency_paths(target_graph_path)?;
 
-        let live = self
-            .project_data
-            .read()
-            .map_err(|e| e.to_string())?;
+        let live = self.project_data.read().map_err(|e| e.to_string())?;
 
         let mut snapshot_graphs = HashMap::new();
         for path in &dependency_paths {
-            let graph = live.graphs.get(path).ok_or_else(|| {
-                format!("graph '{}' not loaded for execution snapshot", path)
-            })?;
+            let graph = live
+                .graphs
+                .get(path)
+                .ok_or_else(|| format!("graph '{}' not loaded for execution snapshot", path))?;
             snapshot_graphs.insert(path.clone(), graph.snapshot_for_execution());
         }
 
@@ -838,10 +856,7 @@ impl ProjectState {
         &self,
         target_graph_path: Option<GraphResourcePath>,
     ) -> Result<Vec<GraphResourcePath>, String> {
-        let data = self
-            .project_data
-            .read()
-            .map_err(|e| e.to_string())?;
+        let data = self.project_data.read().map_err(|e| e.to_string())?;
         Ok(data
             .graphs
             .iter()
@@ -855,7 +870,10 @@ impl ProjectState {
             .collect())
     }
 
-    fn ensure_graph_loaded_for_execution(&self, graph_path: &GraphResourcePath) -> Result<(), String> {
+    fn ensure_graph_loaded_for_execution(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Result<(), String> {
         if self.get_graph(graph_path).is_some() {
             return Ok(());
         }
@@ -892,12 +910,14 @@ impl ProjectState {
             for variable in data.variables.values_mut() {
                 match &mut variable.scope {
                     VariableScope::Event { event_path }
-                        if crate::project::normalize_graph_resource_path(event_path) == from_norm =>
+                        if crate::project::normalize_graph_resource_path(event_path)
+                            == from_norm =>
                     {
                         *event_path = to_norm.clone();
                     }
                     VariableScope::Function { function_path }
-                        if crate::project::normalize_graph_resource_path(function_path) == from_norm =>
+                        if crate::project::normalize_graph_resource_path(function_path)
+                            == from_norm =>
                     {
                         *function_path = to_norm.clone();
                     }
@@ -908,9 +928,11 @@ impl ProjectState {
             for graph in data.graphs.values_mut() {
                 let mut data_state = graph.data_state.write().unwrap();
                 for node in data_state.nodes.values_mut() {
-                    if let NodeInstanceParams::SubGraph { sub_graph_path } = &mut node.instance_params
+                    if let NodeInstanceParams::SubGraph { sub_graph_path } =
+                        &mut node.instance_params
                     {
-                        if crate::project::normalize_graph_resource_path(sub_graph_path) == from_norm
+                        if crate::project::normalize_graph_resource_path(sub_graph_path)
+                            == from_norm
                         {
                             *sub_graph_path = to_norm.clone();
                         }
@@ -1004,7 +1026,10 @@ mod tests {
             .get_graph(&other.resource_path)
             .expect("other function should exist");
         assert_eq!(other_graph.function_inputs, default_function_exec_inputs());
-        assert_eq!(other_graph.function_outputs, default_function_exec_outputs());
+        assert_eq!(
+            other_graph.function_outputs,
+            default_function_exec_outputs()
+        );
     }
 
     #[test]
@@ -1027,13 +1052,11 @@ mod tests {
 
     #[test]
     fn rename_graph_cascades_sub_graph_path_references() {
-        use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
         use crate::graph::NodeInstanceParams;
+        use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-rename-cascade-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("yssbi-rename-cascade-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let state = ProjectState::new();
         state.set_path(Some(root.to_string_lossy().to_string()));
@@ -1065,7 +1088,11 @@ mod tests {
         let updated = caller_graph
             .get_all_nodes()
             .into_iter()
-            .find_map(|node| node.instance_params.sub_graph_path().map(|path| path.to_string()))
+            .find_map(|node| {
+                node.instance_params
+                    .sub_graph_path()
+                    .map(|path| path.to_string())
+            })
             .expect("call node should exist");
         assert_eq!(updated, new_path.as_str());
 
@@ -1103,10 +1130,7 @@ mod tests {
     fn new_graph_first_save_writes_to_allocated_path() {
         use crate::project::EVENTS_DIR;
 
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-first-save-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root = std::env::temp_dir().join(format!("yssbi-first-save-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let state = ProjectState::new();
         state.set_path(Some(root.to_string_lossy().to_string()));
@@ -1135,10 +1159,8 @@ mod tests {
     fn save_project_to_directory_writes_all_loaded_graphs() {
         use crate::project::save_project_to_file;
 
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-save-all-graphs-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("yssbi-save-all-graphs-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let state = ProjectState::new();
         let draft = state.add_event("Draft");
@@ -1173,14 +1195,17 @@ mod tests {
 
         assert!(event.data_state.read().unwrap().nodes.is_empty());
         assert_eq!(snapshot.data_state.read().unwrap().nodes.len(), before);
-        assert!(!std::sync::Arc::ptr_eq(&event.data_state, &snapshot.data_state));
+        assert!(!std::sync::Arc::ptr_eq(
+            &event.data_state,
+            &snapshot.data_state
+        ));
         let _ = node;
     }
 
     #[test]
     fn prepare_execution_bundle_snapshots_call_targets() {
-        use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
         use crate::graph::NodeInstanceParams;
+        use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 
         let state = ProjectState::new();
         let function = state.add_function("Helper");
@@ -1206,10 +1231,7 @@ mod tests {
         assert!(frozen.graphs.contains_key(&event.resource_path));
         assert!(frozen.graphs.contains_key(&func_path));
         assert!(!std::sync::Arc::ptr_eq(
-            &state
-                .get_graph(&func_path)
-                .expect("live fn")
-                .data_state,
+            &state.get_graph(&func_path).expect("live fn").data_state,
             &frozen.graphs.get(&func_path).expect("frozen fn").data_state,
         ));
         let _ = call;

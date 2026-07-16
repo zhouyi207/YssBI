@@ -1,6 +1,6 @@
+use crate::graph::NodeId;
 use crate::graph::pin::{PinId, PinInstance};
 use crate::graph::value::DataType;
-use crate::graph::NodeId;
 use serde::{Deserialize, Serialize};
 
 /// Post-mutation graph compile scope — single entry for schema propagation,

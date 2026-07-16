@@ -64,7 +64,10 @@ pub fn emit_inferred_types(
     }
     let pin_types: Vec<InferredPinType> = inferred
         .into_iter()
-        .map(|(pin_id, dt)| InferredPinType { pin_id, data_type: dt })
+        .map(|(pin_id, dt)| InferredPinType {
+            pin_id,
+            data_type: dt,
+        })
         .collect();
     emit_project_event(
         app,

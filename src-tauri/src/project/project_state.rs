@@ -9,9 +9,9 @@ use crate::graph::value::DataType;
 use crate::graph::{GraphInstance, GraphKind, GraphRecompileScope, PinChangeSet, PinId};
 use crate::log::log_sys;
 use crate::project::{
-    GraphDocument, GraphResourcePath, ProjectData, ProjectStore, cascade_graph_path_references_on_disk,
-    load_project_graph_from_file, project_root_from_path, save_project_graph_to_file,
-    save_project_to_file,
+    GraphDocument, GraphResourcePath, ProjectData, ProjectStore,
+    cascade_graph_path_references_on_disk, load_project_graph_from_file, project_root_from_path,
+    save_project_graph_to_file, save_project_to_file,
 };
 use crate::tabular::is_variable_handle;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -283,7 +283,15 @@ impl ProjectState {
     pub fn resolve_graph_dynamic_pins(
         &self,
         graph_path: &GraphResourcePath,
-    ) -> Result<(GraphInstance, Vec<PinChangeSet>, Vec<(PinId, DataType)>, Vec<crate::graph::GraphValidationWarning>), String> {
+    ) -> Result<
+        (
+            GraphInstance,
+            Vec<PinChangeSet>,
+            Vec<(PinId, DataType)>,
+            Vec<crate::graph::GraphValidationWarning>,
+        ),
+        String,
+    > {
         let mut shell_sets = self.sync_function_shell_pins_in_graph(graph_path);
         let mut call_sets = self.sync_all_call_nodes_in_graph(graph_path);
 
@@ -294,7 +302,12 @@ impl ProjectState {
         let mut change_sets = result.change_sets;
         change_sets.append(&mut shell_sets);
         change_sets.append(&mut call_sets);
-        Ok((graph, change_sets, result.inferred, result.inference_warnings))
+        Ok((
+            graph,
+            change_sets,
+            result.inferred,
+            result.inference_warnings,
+        ))
     }
 
     /// Single entry point for placing a graph into `project_data.graphs`.

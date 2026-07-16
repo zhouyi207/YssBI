@@ -98,9 +98,7 @@ pub fn run() {
             get_node_definitions,
             get_editor_schema_command,
             // ==================== 项目管理 ====================
-            get_project_data,
             get_project_databases_variables,
-            get_project_graphs,
             get_project_path,
             get_project_resource_path,
             get_project_index,
@@ -164,9 +162,6 @@ pub fn run() {
             connect_pins,
             disconnect_pin,
             delete_connection,
-            get_connections,
-            delete_connections_for_pin,
-            delete_connections_for_node,
             // ==================== Pin ====================
             update_pin_user_value,
             clear_pin_user_value,

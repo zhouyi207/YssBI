@@ -7,7 +7,7 @@ fn default_true() -> bool {
     true
 }
 
-/// 列信息（供 get_project_data 返回 schema 用）
+/// 列信息（供项目加载和数据库 schema 同步返回）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnInfoDTO {

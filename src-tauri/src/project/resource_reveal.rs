@@ -62,7 +62,9 @@ pub fn absolute_path_for_graph(root: &Path, graph_path: &str) -> Result<PathBuf,
     let graph_path = GraphResourcePath::new(graph_path)?;
     super::find_graph_document_path(root, &graph_path)?
         .map(|(path, _, _)| path)
-        .ok_or_else(|| ProjectError::InvalidProjectFormat(format!("Graph '{graph_path}' not found")))
+        .ok_or_else(|| {
+            ProjectError::InvalidProjectFormat(format!("Graph '{graph_path}' not found"))
+        })
 }
 
 pub fn absolute_path_for_database(
@@ -98,4 +100,3 @@ pub fn absolute_path_for_database(
 
     Ok(path)
 }
-

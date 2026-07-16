@@ -100,7 +100,8 @@ mod tests {
         assert_eq!(warning.to_pin_id, sqrt_bad_in);
 
         // 正常边对应的输入 pin 仍被细化为 Float64，未被脏边毒化。
-        let good_type = report.resolved
+        let good_type = report
+            .resolved
             .iter()
             .find(|(pid, _)| *pid == sqrt_good_in)
             .map(|(_, dt)| dt.clone());

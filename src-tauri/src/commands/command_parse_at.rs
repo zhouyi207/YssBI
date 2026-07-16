@@ -1,8 +1,8 @@
 //! 解析 margins at() 规格（薄包装，复用假设检验 AST 管线）
 
 use crate::application::hypothesis::parse_at_values as resolve_at_values;
-use serde::{Deserialize, Serialize};
 use crate::error::AppError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct ParseAtRequest {

@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "payload")]
 pub enum EventEvent {
     #[serde(rename_all = "camelCase")]
-    EventUpdated { path: String, data: GraphInstanceDTO },
+    EventUpdated {
+        path: String,
+        data: GraphInstanceDTO,
+    },
     #[serde(rename_all = "camelCase")]
     EventDeleted { path: String },
 }

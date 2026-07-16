@@ -26,6 +26,3 @@ export interface ProjectData {
     databases: Record<string, DatabaseDecl>;  // 数据库集合（ID -> DatabaseDecl）
     metadata: ProjectMetadata;            // 元数据
 }
-
-// Backward-compat: these are frontend state types, re-exported from `shared/types/state`.
-export type { ProjectState, ProjectEventPayload, UseProjectSyncOptions } from "../state/project";

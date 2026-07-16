@@ -1,12 +1,12 @@
+use crate::error::AppError;
 use crate::event::{Event, EventConnection, emit_project_event};
 use crate::execution::ResultSourceStore;
-use crate::graph::{NodeId, PinId};
+use crate::graph::PinId;
 use crate::log::log_app;
 use crate::project::{GraphResourcePath, ProjectState, emit_graph_pin_mutation_sync};
 use crate::schema::GraphUndoPatch;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, State};
-use crate::error::AppError;
 use uuid::Uuid;
 
 fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
@@ -201,10 +201,13 @@ pub fn delete_connection(
     // connectionId 格式："{from_pin_uuid}->{to_pin_uuid}"
     let parts: Vec<&str> = connection_id.split("->").collect();
     if parts.len() != 2 {
-        return Err(AppError::new("invalid_connection_id", format!(
-            "Invalid connection_id format: '{}', expected 'from->to'",
-            connection_id
-        )));
+        return Err(AppError::new(
+            "invalid_connection_id",
+            format!(
+                "Invalid connection_id format: '{}', expected 'from->to'",
+                connection_id
+            ),
+        ));
     }
     let from_pin = PinId::from(
         Uuid::parse_str(parts[0])
@@ -245,162 +248,4 @@ pub fn delete_connection(
         &[],
     );
     Ok(())
-}
-
-/// 连接 DTO（用于序列化返回给前端）
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectionDTO {
-    id: String,
-    from: String,
-    to: String,
-}
-
-/// 获取子图的所有连接
-///
-/// 前端 ConnectionService.getConnections(graphPath)
-#[tauri::command]
-pub fn get_connections(
-    state: State<ProjectState>,
-    graph_path: String,
-) -> Result<Vec<ConnectionDTO>, AppError> {
-    let graph_path = parse_graph_path(&graph_path)?;
-
-    let graph = state
-        .get_graph(&graph_path)
-        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
-
-    let connections: Vec<ConnectionDTO> = graph
-        .all_connections()
-        .into_iter()
-        .map(|c| {
-            let from_str = c.from_pin.to_string();
-            let to_str = c.to_pin.to_string();
-            ConnectionDTO {
-                id: format!("{}->{}", from_str, to_str),
-                from: from_str,
-                to: to_str,
-            }
-        })
-        .collect();
-
-    Ok(connections)
-}
-
-/// 断开 Pin 的所有连接（与 disconnect_pin 功能相同，兼容旧接口）
-///
-/// 前端 ConnectionService.deleteConnectionsForPin(graphPath, pinId)
-#[tauri::command]
-pub fn delete_connections_for_pin(
-    app: AppHandle,
-    state: State<ProjectState>,
-    source_store: State<ResultSourceStore>,
-    graph_path: String,
-    pin_id: String,
-) -> Result<Vec<String>, AppError> {
-    let graph_path = parse_graph_path(&graph_path)?;
-    let pin = PinId::from(Uuid::parse_str(&pin_id).map_err(|e| format!("Invalid pin_id: {}", e))?);
-
-    log_app::info!(
-        "[command.delete_connections_for_pin] graph={}, pin={}",
-        graph_path,
-        pin_id
-    );
-
-    let graph = state
-        .get_graph(&graph_path)
-        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
-
-    let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin);
-
-    let removed_ids: Vec<String> = removed_connections
-        .iter()
-        .map(|(from, to)| format!("{}->{}", from, to))
-        .collect();
-
-    if !removed_connections.is_empty() {
-        emit_project_event(
-            &app,
-            Event::Connection(EventConnection::ConnectionsBatchDeleted {
-                graph_path: graph_path.as_str().to_string(),
-                removed_connections,
-            }),
-        );
-    }
-
-    emit_graph_pin_mutation_sync(
-        &app,
-        &source_store,
-        &graph_path,
-        &graph,
-        &change_sets,
-        inferred,
-        &[],
-    );
-
-    Ok(removed_ids)
-}
-
-/// 删除节点的所有连接
-///
-/// 前端 ConnectionService.deleteConnectionsForNode(graphPath, nodeId)
-#[tauri::command]
-pub fn delete_connections_for_node(
-    app: AppHandle,
-    state: State<ProjectState>,
-    source_store: State<ResultSourceStore>,
-    graph_path: String,
-    node_id: String,
-) -> Result<Vec<String>, AppError> {
-    let graph_path = parse_graph_path(&graph_path)?;
-    let nid =
-        NodeId::from(Uuid::parse_str(&node_id).map_err(|e| format!("Invalid node_id: {}", e))?);
-
-    log_app::info!(
-        "[command.delete_connections_for_node] graph={}, node={}",
-        graph_path,
-        node_id
-    );
-
-    let graph = state
-        .get_graph(&graph_path)
-        .ok_or_else(|| format!("Graph '{}' not found", graph_path))?;
-
-    let pin_instances = graph.get_pin_instances_by_node_id(nid);
-    let mut all_removed_connections = Vec::new();
-    let mut removed_ids = Vec::new();
-
-    let mut all_inferred = Vec::new();
-    let mut all_change_sets = Vec::new();
-    for pin in &pin_instances {
-        let (removed_connections, _, change_sets, inferred) = graph.disconnect_pin(pin.id);
-        for (from, to) in &removed_connections {
-            removed_ids.push(format!("{}->{}", from, to));
-        }
-        all_removed_connections.extend(removed_connections);
-        all_inferred.extend(inferred);
-        all_change_sets.extend(change_sets);
-    }
-
-    if !all_removed_connections.is_empty() {
-        emit_project_event(
-            &app,
-            Event::Connection(EventConnection::ConnectionsBatchDeleted {
-                graph_path: graph_path.as_str().to_string(),
-                removed_connections: all_removed_connections,
-            }),
-        );
-    }
-
-    emit_graph_pin_mutation_sync(
-        &app,
-        &source_store,
-        &graph_path,
-        &graph,
-        &all_change_sets,
-        all_inferred,
-        &[],
-    );
-
-    Ok(removed_ids)
 }

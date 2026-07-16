@@ -22,6 +22,12 @@ pub struct TypeSystemSnapshot {
 }
 
 impl TypeSystemSnapshot {
+    pub fn empty() -> Self {
+        Self {
+            struct_types: BTreeMap::new(),
+        }
+    }
+
     pub fn can_accept(&self, target: &DataType, source: &DataType) -> bool {
         if target == source {
             return true;

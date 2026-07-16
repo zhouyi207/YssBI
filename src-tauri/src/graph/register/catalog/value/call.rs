@@ -7,8 +7,8 @@
 
 use crate::execution::ExecutionEffect;
 use crate::graph::node::NodeDefinition;
-use crate::graph::register::catalog::docs;
 use crate::graph::register::NodeRegistry;
+use crate::graph::register::catalog::docs;
 use std::sync::Arc;
 
 /// Call Function 节点的规范 node_type。

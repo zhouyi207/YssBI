@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use super::function_signature_table::FunctionSignatureEntry;
 use super::{
-    GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectData, ProjectError, ProjectWorksheetIndexEntry, ensure_worksheets_dir,
-    flatten_worksheet_layout, read_worksheet_index_entries, scan_graph_resource_index,
+    GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE, ProjectData, ProjectError,
+    ProjectWorksheetIndexEntry, ensure_worksheets_dir, flatten_worksheet_layout,
+    read_worksheet_index_entries, scan_graph_resource_index,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::graph::NodeInstanceParams;
@@ -187,7 +187,9 @@ fn write_loaded_graph_document(
 
 fn remap_variable_scope_path(scope: &mut VariableScope, from: &str, to: &str) -> bool {
     match scope {
-        VariableScope::Event { event_path } if super::graph_resource_index::normalize_resource_path(event_path) == from => {
+        VariableScope::Event { event_path }
+            if super::graph_resource_index::normalize_resource_path(event_path) == from =>
+        {
             *event_path = to.to_string();
             true
         }
@@ -248,7 +250,8 @@ pub fn cascade_graph_path_references_on_disk(
             let mut data_state = document.graph.data_state.write().unwrap();
             for node in data_state.nodes.values_mut() {
                 if let NodeInstanceParams::SubGraph { sub_graph_path } = &mut node.instance_params {
-                    if super::graph_resource_index::normalize_resource_path(sub_graph_path) == from {
+                    if super::graph_resource_index::normalize_resource_path(sub_graph_path) == from
+                    {
                         *sub_graph_path = to.clone();
                         changed = true;
                     }
@@ -379,7 +382,9 @@ pub struct GraphCallSiteStub {
 }
 
 /// 从图文件读取 Call Function 节点 stub（跳过 pins / connections / localVariables 物化）。
-pub fn read_graph_call_sites_from_file(path: &Path) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
+pub fn read_graph_call_sites_from_file(
+    path: &Path,
+) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
     let scan: GraphCallSiteScanDocument = read_json(path)?;
     Ok(scan
         .graph
@@ -419,7 +424,8 @@ pub fn load_project_graph_from_file(
     let root = project_root_from_path(path);
     let graph_resources = load_graph_resource_index(root.as_path())?;
     if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
-        let document = read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
+        let document =
+            read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
         return Ok(bind_graph_document_scope_by_path(
             document,
             resource.kind,
@@ -453,8 +459,8 @@ pub fn duplicate_project_graph_file(
     let root = project_root_from_path(path);
     let (source_path, kind, mut document) = find_graph_document_path(root.as_path(), graph_path)?
         .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_path))
-        })?;
+        ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_path))
+    })?;
     let source_dir = source_path.parent().unwrap_or_else(|| root.as_path());
     let graph_resources = load_graph_resource_index(root.as_path())?;
     let names: Vec<String> = read_graph_index_entries(
@@ -753,10 +759,7 @@ fn read_graph_index_entries(
         };
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.graph.name);
         let (function_inputs, function_outputs) = if expected_kind == GraphDocumentKind::Function {
-            (
-                header.graph.function_inputs,
-                header.graph.function_outputs,
-            )
+            (header.graph.function_inputs, header.graph.function_outputs)
         } else {
             (Vec::new(), Vec::new())
         };
@@ -1317,7 +1320,7 @@ mod tests {
             root.to_string_lossy().as_ref(),
             &GraphResourcePath::new(entry.path.clone()).unwrap(),
         )
-            .expect("path-derived id should load renamed graph");
+        .expect("path-derived id should load renamed graph");
         assert_eq!(loaded.graph.resource_path.as_str(), entry.path);
         assert_eq!(loaded.graph.name, "Path Identity Copy");
 
@@ -1356,9 +1359,7 @@ mod tests {
         let root = temp_project_dir();
         let state = ProjectState::new();
         let event = state.add_event("RoundTrip");
-        let graph = state
-            .get_graph(&event.resource_path)
-            .expect("event graph");
+        let graph = state.get_graph(&event.resource_path).expect("event graph");
 
         // 两个带可重复 Operands（动态 pin）的 Add 节点
         let node_a = graph.create_node("Math:Operators:Add (+)").expect("node a");
@@ -1539,7 +1540,9 @@ mod tests {
         state.set_path(Some(root.to_string_lossy().to_string()));
         let graph = state.add_event("File First Event");
         let graph_path = graph.resource_path.clone();
-        state.commit_persisted_graph_and_unload(&graph_path).unwrap();
+        state
+            .commit_persisted_graph_and_unload(&graph_path)
+            .unwrap();
 
         assert!(state.get_graph(&graph_path).is_none());
 
@@ -1634,10 +1637,8 @@ mod tests {
             .find(|graph| graph.name == "Indexed Function")
             .map(|graph| graph.path.clone())
             .expect("function resource id");
-        assert!(
-            index.variables.iter().any(|v| v.name == "Event Local"
-                && v.owner_graph_path.as_deref() == Some(&event_resource_id))
-        );
+        assert!(index.variables.iter().any(|v| v.name == "Event Local"
+            && v.owner_graph_path.as_deref() == Some(&event_resource_id)));
         assert!(index.variables.iter().any(|v| {
             v.name == "Function Local"
                 && v.owner_graph_path.as_deref() == Some(&function_resource_id)
@@ -1706,8 +1707,11 @@ mod tests {
         let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
 
         assert_eq!(index.graphs.len(), 2);
-        let ids: std::collections::HashSet<_> =
-            index.graphs.iter().map(|graph| graph.path.clone()).collect();
+        let ids: std::collections::HashSet<_> = index
+            .graphs
+            .iter()
+            .map(|graph| graph.path.clone())
+            .collect();
         assert_eq!(ids.len(), 2);
         let original_entry = index
             .graphs
@@ -1731,8 +1735,14 @@ mod tests {
             GraphDocumentKind::Event,
         )
         .unwrap();
-        assert_ne!(original_doc.graph.resource_path, copied_doc.graph.resource_path);
-        assert_eq!(original_doc.graph.resource_path.as_str(), original_entry.path);
+        assert_ne!(
+            original_doc.graph.resource_path,
+            copied_doc.graph.resource_path
+        );
+        assert_eq!(
+            original_doc.graph.resource_path.as_str(),
+            original_entry.path
+        );
         assert_eq!(copied_doc.graph.resource_path.as_str(), copied_entry.path);
 
         assert_eq!(original_doc.local_variables.len(), 1);

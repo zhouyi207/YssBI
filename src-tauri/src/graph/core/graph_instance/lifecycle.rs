@@ -2,11 +2,7 @@ use super::*;
 
 /// 创建和清理
 impl GraphInstance {
-    pub fn new(
-        name: impl Into<String>,
-        kind: GraphKind,
-        registry: Arc<NodeRegistry>,
-    ) -> Self {
+    pub fn new(name: impl Into<String>, kind: GraphKind, registry: Arc<NodeRegistry>) -> Self {
         let (dir, extension) = match kind {
             GraphKind::Event => (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION),
             GraphKind::Function => (
@@ -51,6 +47,10 @@ impl GraphInstance {
 
     pub fn clear(&self) {
         *self.data_state.write().unwrap() = GraphDataState::default();
+    }
+
+    pub fn type_system_snapshot(&self) -> crate::graph::value::TypeSystemSnapshot {
+        self.registry.type_system_snapshot()
     }
 
     /// 设置节点注册表（用于反序列化后恢复）

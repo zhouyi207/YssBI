@@ -33,5 +33,5 @@ export * from './project';
 export * from './database';
 export * from './dataframe';
 export * from './schema';
-export * from './nodeRegister';
+
 export * from './worksheet';

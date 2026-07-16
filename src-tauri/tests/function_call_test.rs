@@ -10,12 +10,12 @@ use yssbi_lib::graph::core::{
 };
 use yssbi_lib::graph::node::NodeInstanceParams;
 use yssbi_lib::graph::pin::{DataRole, ExecRole, PinRole};
-use yssbi_lib::graph::value::DataValue;
-use yssbi_lib::graph::value::DataType;
-use yssbi_lib::graph::{NodeId, PinId};
 use yssbi_lib::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use yssbi_lib::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use yssbi_lib::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
+use yssbi_lib::graph::value::DataType;
+use yssbi_lib::graph::value::DataValue;
+use yssbi_lib::graph::{NodeId, PinId};
 use yssbi_lib::project::{GraphResourcePath, ProjectState};
 
 fn exec_in_role() -> PinRole {
@@ -81,14 +81,24 @@ fn build_identity_function(
         .get_graph(&func.resource_path)
         .expect("function loaded");
 
-    let entry_a = pin_by_role(&func_graph, entry, &PinRole::Data(DataRole::Custom("a".into())));
-    let ret_r = pin_by_role(&func_graph, ret, &PinRole::Data(DataRole::Custom("r".into())));
+    let entry_a = pin_by_role(
+        &func_graph,
+        entry,
+        &PinRole::Data(DataRole::Custom("a".into())),
+    );
+    let ret_r = pin_by_role(
+        &func_graph,
+        ret,
+        &PinRole::Data(DataRole::Custom("r".into())),
+    );
     func_graph.connect(entry_a, ret_r).expect("connect data");
 
     if with_exec {
         let entry_exec = pin_by_role(&func_graph, entry, &exec_in_role());
         let ret_exec = pin_by_role(&func_graph, ret, &exec_out_role());
-        func_graph.connect(entry_exec, ret_exec).expect("connect exec");
+        func_graph
+            .connect(entry_exec, ret_exec)
+            .expect("connect exec");
     }
 
     func.resource_path.clone()
@@ -118,21 +128,25 @@ fn exec_call_passes_value_through_control_flow() {
         .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
 
     assert!(has_role(&event_graph, call, &exec_in_role()));
     assert!(has_role(&event_graph, call, &exec_out_role()));
 
-    let call_a = pin_by_role(&event_graph, call, &PinRole::Data(DataRole::Custom("a".into())));
+    let call_a = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("a".into())),
+    );
     event_graph
         .set_pin_user_value_by_pin_id(call_a, DataValue::Int64(42))
         .expect("set call input");
 
     let begin_out = pin_by_role(&event_graph, begin, &PinRole::Exec(ExecRole::ExecOut));
     let call_in = pin_by_role(&event_graph, call, &exec_in_role());
-    event_graph.connect(begin_out, call_in).expect("begin -> call");
+    event_graph
+        .connect(begin_out, call_in)
+        .expect("begin -> call");
 
     let runtime = Arc::new(Mutex::new(GraphRuntime::new(
         Arc::new(event_graph.clone()),
@@ -142,7 +156,11 @@ fn exec_call_passes_value_through_control_flow() {
     let mut executor = Executor::new(runtime.clone(), NoopEmitter, ResultSourceStore::new());
     executor.start(begin).expect("execute");
 
-    let call_r = pin_by_role(&event_graph, call, &PinRole::Data(DataRole::Custom("r".into())));
+    let call_r = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("r".into())),
+    );
     let value = runtime
         .lock()
         .unwrap()
@@ -178,25 +196,35 @@ fn data_only_call_has_no_exec_pins_and_is_pulled() {
         .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
 
     assert!(!has_role(&event_graph, call, &exec_in_role()));
     assert!(!has_role(&event_graph, call, &exec_out_role()));
 
-    let call_a = pin_by_role(&event_graph, call, &PinRole::Data(DataRole::Custom("a".into())));
+    let call_a = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("a".into())),
+    );
     event_graph
         .set_pin_user_value_by_pin_id(call_a, DataValue::String("hi".to_string()))
         .expect("set call input");
 
     let begin_out = pin_by_role(&event_graph, begin, &PinRole::Exec(ExecRole::ExecOut));
     let print_in = pin_by_role(&event_graph, print, &PinRole::Exec(ExecRole::ExecIn));
-    event_graph.connect(begin_out, print_in).expect("begin -> print");
+    event_graph
+        .connect(begin_out, print_in)
+        .expect("begin -> print");
 
-    let call_r = pin_by_role(&event_graph, call, &PinRole::Data(DataRole::Custom("r".into())));
+    let call_r = pin_by_role(
+        &event_graph,
+        call,
+        &PinRole::Data(DataRole::Custom("r".into())),
+    );
     let print_msg = pin_by_role(&event_graph, print, &PinRole::Data(DataRole::Inputs(0)));
-    event_graph.connect(call_r, print_msg).expect("call -> print msg");
+    event_graph
+        .connect(call_r, print_msg)
+        .expect("call -> print msg");
 
     let runtime = Arc::new(Mutex::new(GraphRuntime::new(
         Arc::new(event_graph.clone()),
@@ -258,8 +286,14 @@ fn call_node_input_output_directions_match_signature() {
         pin_direction(&g, call, &PinRole::Data(DataRole::Custom("r".into()))),
         PinDirection::Output,
     );
-    assert_eq!(pin_direction(&g, call, &exec_in_role()), PinDirection::Input);
-    assert_eq!(pin_direction(&g, call, &exec_out_role()), PinDirection::Output);
+    assert_eq!(
+        pin_direction(&g, call, &exec_in_role()),
+        PinDirection::Input
+    );
+    assert_eq!(
+        pin_direction(&g, call, &exec_out_role()),
+        PinDirection::Output
+    );
 }
 
 #[test]
@@ -282,9 +316,7 @@ fn removing_exec_from_signature_updates_call_pins() {
         .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(has_role(&event_graph, call, &exec_out_role()));
 
     state
@@ -298,9 +330,7 @@ fn removing_exec_from_signature_updates_call_pins() {
         assert_eq!(gid, event.resource_path);
     }
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -328,9 +358,7 @@ fn project_call_node_pins_after_create_with_id_path() {
         )
         .expect("create call raw");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert_eq!(event_graph.get_pin_instances_by_node_id(call).len(), 0);
 
     state
@@ -345,9 +373,7 @@ fn project_call_node_pins_after_create_with_id_path() {
         .expect("project pins")
         .expect("should project");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(has_role(
         &event_graph,
         call,
@@ -381,9 +407,7 @@ fn data_only_function_signature_change_syncs_call_data_pins() {
         .sync_call_node(&event.resource_path, call, &func_id)
         .expect("sync call pins");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -409,9 +433,7 @@ fn data_only_function_signature_change_syncs_call_data_pins() {
         assert!(!sets.is_empty());
     }
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(!has_role(&event_graph, call, &exec_out_role()));
     assert!(has_role(
         &event_graph,
@@ -456,12 +478,7 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
         .with_graph_mut(&event.resource_path, |mut ctx| {
             let call = ctx
                 .graph()
-                .create_node_with_position(
-                    CALL_FUNCTION_NODE_TYPE,
-                    0.0,
-                    0.0,
-                    Some(params.clone()),
-                )
+                .create_node_with_position(CALL_FUNCTION_NODE_TYPE, 0.0, 0.0, Some(params.clone()))
                 .expect("create call");
             ctx.graph().sync_call_function_pins_from_signature(
                 call,
@@ -473,9 +490,7 @@ fn resolve_call_projection_signature_then_sync_inside_graph_mut() {
         })
         .expect("graph mut");
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     assert!(has_role(&event_graph, call, &exec_in_role()));
     assert!(has_role(
         &event_graph,
@@ -533,9 +548,7 @@ fn call_site_index_tracks_create_and_delete_without_full_graph_scan() {
 fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
     let state = ProjectState::new();
     let func_id = state.add_function("F").resource_path;
-    let signature = state
-        .get_function_signature(&func_id)
-        .expect("signature");
+    let signature = state.get_function_signature(&func_id).expect("signature");
 
     let event = state.add_event("Main");
     let call = event
@@ -561,9 +574,7 @@ fn sync_call_with_predetermined_pin_ids_uses_client_ids() {
         Some(&[exec_in_id, exec_out_id]),
     );
 
-    let event_graph = state
-        .get_graph(&event.resource_path)
-        .expect("event loaded");
+    let event_graph = state.get_graph(&event.resource_path).expect("event loaded");
     let pin_ids: Vec<PinId> = event_graph
         .get_pin_instances_by_node_id(call)
         .into_iter()
@@ -579,10 +590,18 @@ fn resolve_graph_dynamic_pins_reconciles_function_shell_pins() {
 
     state
         .with_graph_mut(&func_path, |ctx| {
-            ctx.graph_ref()
-                .create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
-            ctx.graph_ref()
-                .create_node_with_position(FUNCTION_RETURN_NODE_TYPE, 560.0, 160.0, None)?;
+            ctx.graph_ref().create_node_with_position(
+                FUNCTION_ENTRY_NODE_TYPE,
+                120.0,
+                160.0,
+                None,
+            )?;
+            ctx.graph_ref().create_node_with_position(
+                FUNCTION_RETURN_NODE_TYPE,
+                560.0,
+                160.0,
+                None,
+            )?;
             let _ = ctx.graph_ref().sync_function_shell_pins();
             Ok(())
         })
@@ -592,20 +611,29 @@ fn resolve_graph_dynamic_pins_reconciles_function_shell_pins() {
 
     state
         .with_graph_mut(&func_path, |mut ctx| {
-            ctx.graph().function_inputs.push(sig("extra", "extra", "float"));
+            ctx.graph()
+                .function_inputs
+                .push(sig("extra", "extra", "float"));
             Ok(())
         })
         .expect("drift signature");
 
     let drifted = entry_data_pin_count(&state, &func_path);
-    assert_eq!(drifted, before, "shell pins should stay stale until tab open reconcile");
+    assert_eq!(
+        drifted, before,
+        "shell pins should stay stale until tab open reconcile"
+    );
 
     state
         .resolve_graph_dynamic_pins(&func_path)
         .expect("resolve dynamic pins");
 
     let after = entry_data_pin_count(&state, &func_path);
-    assert_eq!(after, before + 1, "tab open should project new signature input to Entry shell");
+    assert_eq!(
+        after,
+        before + 1,
+        "tab open should project new signature input to Entry shell"
+    );
 }
 
 #[test]

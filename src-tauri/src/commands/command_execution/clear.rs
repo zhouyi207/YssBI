@@ -1,6 +1,6 @@
+use crate::error::AppError;
 use crate::execution::ResultSourceStore;
 use tauri::State;
-use crate::error::AppError;
 
 /// Clear runtime pin result sources for one graph (manual "clear run artifacts").
 /// Does not remove immutable `window_*` snapshots.

@@ -10,7 +10,7 @@ export class ProjectLoadedHandler extends BaseEventHandler<ProjectLoadedPayload>
     handle(payload: ProjectLoadedPayload, callbacks?: EventCallbacks): void {
         this.log('Project loaded:', payload.path);
         
-        // 前端只传路径，后端负责加载；收到事件后从后端状态同步，不使用 payload.data（格式与 get_project_data 不一致）
+        // 前端只传路径，后端负责加载；收到事件后从后端按当前分阶段加载流程同步状态。
         useProjectIOStore.getState().loadProject().then((data) => {
             if (data) callbacks?.onProjectLoaded?.(data, payload.path);
         });

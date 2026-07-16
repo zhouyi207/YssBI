@@ -1,6 +1,6 @@
+use crate::error::AppError;
 use crate::log::log_manager::{count_logs_in_file, get_log_manager, read_logs_from_file};
 use crate::log::{LogLevel, LogMessage, LogType};
-use crate::error::AppError;
 
 /// 前端日志入口：前端所有日志通过此命令发送到 Rust LogManager，
 /// 统一写入文件 + 终端 + emit("log-message") 返回给前端 LogWindow。
@@ -32,7 +32,11 @@ pub fn get_logs(offset: Option<usize>, limit: Option<usize>) -> Result<Vec<LogMe
         .get_log_file_path()
         .ok_or_else(|| "No log file available".to_string())?;
 
-    Ok(read_logs_from_file(&file_path, offset.unwrap_or(0), limit.unwrap_or(100))?)
+    Ok(read_logs_from_file(
+        &file_path,
+        offset.unwrap_or(0),
+        limit.unwrap_or(100),
+    )?)
 }
 
 /// 获取当前日志文件路径

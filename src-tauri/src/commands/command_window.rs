@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use tauri::State;
 
-use crate::window_state::{WindowKind, WindowState, WindowStateStore};
 use crate::error::AppError;
+use crate::window_state::{WindowKind, WindowState, WindowStateStore};
 
 /// 返回所有窗口种类的几何状态（含未保存过时的默认值）。
 #[tauri::command]

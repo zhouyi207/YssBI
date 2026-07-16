@@ -3,9 +3,7 @@ use std::path::Path;
 
 use super::graph_resource_path::{GraphResourcePath, normalize_graph_resource_path};
 use super::project_error::ProjectError;
-use super::{
-    EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind,
-};
+use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScannedGraphEntry {
@@ -109,4 +107,3 @@ fn relative_slash_path(root: &Path, path: &Path) -> Result<String, ProjectError>
         .map(|relative| relative.to_string_lossy().replace('\\', "/"))
         .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))
 }
-

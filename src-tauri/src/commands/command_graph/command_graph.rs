@@ -1,13 +1,13 @@
-use crate::event::emit_project_event;
 use crate::error::AppError;
-use crate::event::{EventEvent, EventFunction, EventResource};
 use crate::event::Event;
+use crate::event::emit_project_event;
+use crate::event::{EventEvent, EventFunction, EventResource};
 use crate::graph::register::event::EVENT_BEGIN_NODE_TYPE;
 use crate::graph::register::function::{FUNCTION_ENTRY_NODE_TYPE, FUNCTION_RETURN_NODE_TYPE};
 use crate::graph::{FunctionSignaturePin, GraphKind};
+use crate::project::ProjectState;
 use crate::project::{GraphDocumentKind, GraphResourcePath};
 use crate::schema::GraphInstanceDTO;
-use crate::project::ProjectState;
 use tauri::{AppHandle, State};
 
 fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
@@ -15,10 +15,7 @@ fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
 }
 
 #[tauri::command]
-pub fn create_event(
-    state: State<ProjectState>,
-    graph_name: &str,
-) -> Result<String, AppError> {
+pub fn create_event(state: State<ProjectState>, graph_name: &str) -> Result<String, AppError> {
     let graph = state.create_graph(graph_name, GraphKind::Event)?;
     // 每个事件图自动拥有一个系统托管的 Event Begin 壳节点（对齐 UE5 事件图）。
     graph.create_node_with_position(EVENT_BEGIN_NODE_TYPE, 120.0, 120.0, None)?;
@@ -28,10 +25,7 @@ pub fn create_event(
 }
 
 #[tauri::command]
-pub fn create_function(
-    state: State<ProjectState>,
-    graph_name: &str,
-) -> Result<String, AppError> {
+pub fn create_function(state: State<ProjectState>, graph_name: &str) -> Result<String, AppError> {
     let graph = state.create_graph(graph_name, GraphKind::Function)?;
     // 每个函数图自动拥有 Entry / Return 壳节点（对齐 UE5 函数图）。
     graph.create_node_with_position(FUNCTION_ENTRY_NODE_TYPE, 120.0, 160.0, None)?;
@@ -131,7 +125,10 @@ pub fn get_graph(
 }
 
 #[tauri::command]
-pub fn unload_project_graph(state: State<ProjectState>, graph_path: String) -> Result<(), AppError> {
+pub fn unload_project_graph(
+    state: State<ProjectState>,
+    graph_path: String,
+) -> Result<(), AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
     state.unload_graph(&graph_path);
     Ok(())
@@ -178,12 +175,12 @@ pub fn save_project_graph(
 }
 
 #[tauri::command]
-pub fn duplicate_graph(
-    state: State<ProjectState>,
-    graph_path: String,
-) -> Result<String, AppError> {
+pub fn duplicate_graph(state: State<ProjectState>, graph_path: String) -> Result<String, AppError> {
     let graph_path = parse_graph_path(&graph_path)?;
-    Ok(state.duplicate_persisted_graph(&graph_path)?.as_str().to_string())
+    Ok(state
+        .duplicate_persisted_graph(&graph_path)?
+        .as_str()
+        .to_string())
 }
 
 #[derive(serde::Serialize)]

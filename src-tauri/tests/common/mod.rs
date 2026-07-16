@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 use yssbi_lib::execution::{
     EventEmitter, ExecutionEvent, Executor, NoopEmitter, ResultSourceStore,
 };
+use yssbi_lib::graph::FunctionSignaturePin;
 use yssbi_lib::graph::core::GraphRuntime;
 use yssbi_lib::graph::value::DataType;
-use yssbi_lib::graph::FunctionSignaturePin;
 
 /// 测试夹具：从简短类型名构建结构化 `FunctionSignaturePin`（`exec` / `int` / `float` 等）。
 pub fn function_signature_pin(id: &str, name: &str, pin_type: &str) -> FunctionSignaturePin {

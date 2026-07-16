@@ -1,13 +1,14 @@
+use crate::error::AppError;
 use crate::event::{Event, EventConnection, EventNode, emit_project_event};
 use crate::execution::ResultSourceStore;
+use crate::graph::core::GraphInstance;
+use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
 use crate::graph::{
     DataType, DataValue, GraphRecompileScope, NodeId, NodeInstanceParams, PinChangeSet,
     PinDirection, PinId,
 };
-use crate::graph::register::value::call::CALL_FUNCTION_NODE_TYPE;
-use crate::graph::core::GraphInstance;
-use crate::project::FunctionSignatureEntry;
 use crate::log::log_app;
+use crate::project::FunctionSignatureEntry;
 use crate::project::{
     GraphResourcePath, ProjectState, emit_graph_pin_mutation_sync, emit_inferred_types,
     emit_pin_change_events, emit_runtime_source_invalidation,
@@ -16,7 +17,6 @@ use crate::schema::{GraphUndoPatch, NodeInstanceDTO, PinInstanceDTO};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
-use crate::error::AppError;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -122,27 +122,28 @@ pub fn create_node(
     let signature = state.resolve_call_projection_signature(node_type, params.as_ref())?;
     let params_for_index = params.clone();
 
-    let (node_id, node_dto, pins_dto, pin_id_strings) = state.with_graph_mut(&graph_path, |mut ctx| {
-        let node_id = ctx.graph().create_node_with_position(
-            node_type,
-            x.unwrap_or(0.0),
-            y.unwrap_or(0.0),
-            params,
-        )?;
-        ctx.sync_runtime_symbols();
-        if let Some(ref sig) = signature {
-            ctx.graph().sync_call_function_pins_from_signature(
-                node_id,
-                &sig.inputs,
-                &sig.outputs,
-                None,
-            );
-            ctx.recompile(GraphRecompileScope::InferOnly);
-        }
-        let (node_dto, pins_dto, pin_id_strings) =
-            node_create_dto_from_graph(ctx.graph_ref(), node_id)?;
-        Ok((node_id, node_dto, pins_dto, pin_id_strings))
-    })?;
+    let (node_id, node_dto, pins_dto, pin_id_strings) =
+        state.with_graph_mut(&graph_path, |mut ctx| {
+            let node_id = ctx.graph().create_node_with_position(
+                node_type,
+                x.unwrap_or(0.0),
+                y.unwrap_or(0.0),
+                params,
+            )?;
+            ctx.sync_runtime_symbols();
+            if let Some(ref sig) = signature {
+                ctx.graph().sync_call_function_pins_from_signature(
+                    node_id,
+                    &sig.inputs,
+                    &sig.outputs,
+                    None,
+                );
+                ctx.recompile(GraphRecompileScope::InferOnly);
+            }
+            let (node_dto, pins_dto, pin_id_strings) =
+                node_create_dto_from_graph(ctx.graph_ref(), node_id)?;
+            Ok((node_id, node_dto, pins_dto, pin_id_strings))
+        })?;
 
     emit_project_event(
         &app,
@@ -327,40 +328,40 @@ pub fn batch_delete_nodes(
 
     let (snapshot, deleted_pin_ids, node_ids, removed_node_types) =
         state.with_graph_mut(&graph_path, |mut ctx| {
-        // 壳节点（Event Begin / Function Entry/Return）不可删除，静默跳过。
-        let node_ids: Vec<NodeId> = node_ids
-            .into_iter()
-            .filter(|&nid| !ctx.graph_ref().is_shell_node(nid))
-            .collect();
+            // 壳节点（Event Begin / Function Entry/Return）不可删除，静默跳过。
+            let node_ids: Vec<NodeId> = node_ids
+                .into_iter()
+                .filter(|&nid| !ctx.graph_ref().is_shell_node(nid))
+                .collect();
 
-        let removed_node_types: Vec<(NodeId, String)> = node_ids
-            .iter()
-            .filter_map(|&nid| {
-                ctx.graph_ref()
-                    .get_node_instance(nid)
-                    .map(|node| (nid, node.definition.node_type.clone()))
-            })
-            .collect();
+            let removed_node_types: Vec<(NodeId, String)> = node_ids
+                .iter()
+                .filter_map(|&nid| {
+                    ctx.graph_ref()
+                        .get_node_instance(nid)
+                        .map(|node| (nid, node.definition.node_type.clone()))
+                })
+                .collect();
 
-        let snapshot = ctx.graph().capture_subgraph_for_delete(&node_ids);
+            let snapshot = ctx.graph().capture_subgraph_for_delete(&node_ids);
 
-        let mut deleted_pin_ids = Vec::new();
-        for &nid in &node_ids {
-            deleted_pin_ids.extend(
-                ctx.graph()
-                    .get_pin_instances_by_node_id(nid)
-                    .into_iter()
-                    .map(|pin| pin.id),
-            );
-        }
+            let mut deleted_pin_ids = Vec::new();
+            for &nid in &node_ids {
+                deleted_pin_ids.extend(
+                    ctx.graph()
+                        .get_pin_instances_by_node_id(nid)
+                        .into_iter()
+                        .map(|pin| pin.id),
+                );
+            }
 
-        for &nid in &node_ids {
-            ctx.graph().remove_node_raw(nid)?;
-        }
+            for &nid in &node_ids {
+                ctx.graph().remove_node_raw(nid)?;
+            }
 
-        ctx.recompile(GraphRecompileScope::InferOnly);
-        Ok((snapshot, deleted_pin_ids, node_ids, removed_node_types))
-    })?;
+            ctx.recompile(GraphRecompileScope::InferOnly);
+            Ok((snapshot, deleted_pin_ids, node_ids, removed_node_types))
+        })?;
 
     index_call_sites_after_delete(&state, graph_path.clone(), removed_node_types);
 
@@ -494,7 +495,8 @@ pub fn create_node_with_id(
 
     let projection_params = params.clone();
 
-    let signature = state.resolve_call_projection_signature(&node_type, projection_params.as_ref())?;
+    let signature =
+        state.resolve_call_projection_signature(&node_type, projection_params.as_ref())?;
 
     let is_call_function = node_type == CALL_FUNCTION_NODE_TYPE;
     let call_projection_pin_ids = if is_call_function && !pids.is_empty() {

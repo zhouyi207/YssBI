@@ -1,5 +1,6 @@
+use crate::error::AppError;
 use crate::graph::pin::PinDataTypeDefinition;
-use crate::graph::value::{DataType, DataValue};
+use crate::graph::value::DataValue;
 use crate::graph::{NodeId, PinId};
 use crate::log::log_app;
 use crate::project::emit_pin_change_events;
@@ -7,38 +8,10 @@ use crate::project::{GraphResourcePath, ProjectState};
 use crate::schema::{GraphInstanceDTO, GraphValidationWarningDTO, PinInstanceDTO};
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use crate::error::AppError;
 use uuid::Uuid;
 
 fn parse_graph_path(graph_path: &str) -> Result<GraphResourcePath, AppError> {
     GraphResourcePath::new(graph_path).map_err(AppError::from)
-}
-
-/// 检查 DataValue 的类型是否与 Pin 期望的 DataType 兼容
-fn is_type_compatible(value_type: Option<DataType>, expected: &DataType) -> bool {
-    if matches!(expected, DataType::Any) {
-        return true;
-    }
-    let Some(vt) = value_type else {
-        return false;
-    };
-    match expected {
-        DataType::Array(inner) => {
-            if let DataType::Array(v_inner) = vt {
-                is_type_compatible(Some(*v_inner), inner)
-            } else {
-                false
-            }
-        }
-        DataType::DataSeries(inner) => {
-            if let DataType::DataSeries(v_inner) = vt {
-                is_type_compatible(Some(*v_inner), inner)
-            } else {
-                false
-            }
-        }
-        _ => vt == *expected,
-    }
 }
 
 /// 更新 Pin 的用户输入值
@@ -69,7 +42,12 @@ pub fn update_pin_user_value(
 
         if let Some(ref expected) = expected_type {
             let value_type = value.value_type();
-            if !is_type_compatible(value_type.clone(), expected) {
+            let is_compatible = value_type.as_ref().is_some_and(|actual| {
+                ctx.graph_ref()
+                    .type_system_snapshot()
+                    .can_accept(expected, actual)
+            });
+            if !is_compatible {
                 return Err(format!(
                     "Type mismatch: pin expects {:?}, got {:?}",
                     expected, value_type
@@ -259,7 +237,14 @@ pub fn resolve_graph_dynamic_pins(
 
     log_app::info!("[command.resolve_graph_dynamic_pins] graph={}", graph_path);
 
-    let (graph, _change_sets, _inferred, warnings) = state.resolve_graph_dynamic_pins(&graph_path)?;
+    let (graph, _change_sets, _inferred, warnings) =
+        state.resolve_graph_dynamic_pins(&graph_path)?;
 
-    Ok(ResolvedGraphDTO { graph: (&graph).into(), inference_warnings: warnings.iter().map(GraphValidationWarningDTO::from).collect() })
+    Ok(ResolvedGraphDTO {
+        graph: (&graph).into(),
+        inference_warnings: warnings
+            .iter()
+            .map(GraphValidationWarningDTO::from)
+            .collect(),
+    })
 }

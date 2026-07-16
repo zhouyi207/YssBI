@@ -1,4 +1,4 @@
-use super::DataValue;
+use super::{DataValue, TypeSystemSnapshot};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -385,28 +385,12 @@ impl DataType {
         }
     }
 
-    /// 检查 from 类型的值是否可以赋给本类型
+    /// 检查 from 类型的值是否可以赋给本类型。
+    ///
+    /// 结构体继承关系需要注册表上下文；调用方有上下文时应优先使用
+    /// `TypeSystemSnapshot::can_accept`。此方法仅使用空类型系统，保留给
+    /// 不依赖 Struct 继承的纯 DataType 判断。
     pub fn can_accept(&self, from: &DataType) -> bool {
-        if from == self {
-            return true;
-        }
-        if matches!(self, DataType::Any) || matches!(from, DataType::Any) {
-            return true;
-        }
-        match (from, self) {
-            // OneOf 在目标端：from 匹配任一成员即可
-            (_, DataType::OneOf(targets)) => targets.iter().any(|t| t.can_accept(from)),
-            // OneOf 在源端：任一成员能被目标接受即可（宽松策略，配合右键收窄使用）
-            (DataType::OneOf(sources), _) => sources.iter().any(|s| self.can_accept(s)),
-            // 容器类型：内层递归（自然支持 DataSeries<OneOf(...)>）
-            (DataType::Array(from_inner), DataType::Array(to_inner)) => {
-                to_inner.can_accept(from_inner)
-            }
-            (DataType::DataSeries(from_inner), DataType::DataSeries(to_inner)) => {
-                to_inner.can_accept(from_inner)
-            }
-            (DataType::Struct(from_key), DataType::Struct(to_key)) => from_key == to_key,
-            _ => false,
-        }
+        TypeSystemSnapshot::empty().can_accept(self, from)
     }
 }

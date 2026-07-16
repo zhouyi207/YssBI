@@ -263,6 +263,15 @@ src/app/appConfig/appLinks.ts
 - [x] **Command 层结构化 `AppError`**：`project/` 有 `ProjectError`，但绝大多数 `#[tauri::command]` 仍 `Result<_, String>`（graph/dataframe/hypothesis/worksheet 等）；统一 `{ code, message, details? }` 可序列化错误，与前端 `formatErrorMessage` / toast code 对齐，替代散落 `format!` 字符串。
 - [x] **前后端 DTO 同步流水线**：Rust 侧 `DatabaseDecl`/`DatabaseEngine`、`GraphInstanceDTO`、`SerialTestsResponse` 已 typed，前端 `DatabaseRecord = Record<string, unknown>` 与手写 `types.ts` 易漂移；评估 `typeshare` / `ts-rs`
 
+## 2026.07.16
+
+- [x] 统一后端类型兼容规则：将连接校验、类型推断、OneOf 细化和 Pin 手工赋值校验收敛到 `TypeSystemSnapshot::can_accept`，支持容器递归、`OneOf` 与 Struct 继承，避免 `DataType::can_accept`、推断层和命令层规则漂移。
+- [x] 移除无效运行时类型绑定接口：删除 `NodeExecutionContextTrait::get_bound_type` 及永远返回 `None` 的实现，保留推断层真实绑定查询能力。
+- [x] 清理连接相关旧 IPC 与前端包装：删除 `get_connections`、`delete_connections_for_pin`、`delete_connections_for_node` 及对应 `ConnectionService` 方法，保留当前 `connect_pins`、`disconnect_pin`、`delete_connection` 路径。
+- [x] 清理项目加载旧 API 与 DTO：删除 `get_project_data`、`get_project_graphs`、旧 `ProjectService` 包装、只服务旧路径的 DTO 和无调用的项目引用校验模块，保留当前分阶段加载与按需 `load_project_graph` 路径。
+- [x] 删除 deprecated/兼容残留：移除 `ReportKind::from_legacy_key`、domain 层 re-export 前端 state 类型、重复/无效 DTO 导出，并更新相关 barrel export。
+- [x] 修正注释漂移：更新 DataFrame schema 同步、ProjectLoaded 事件和 Layout Tab memento 规范化说明，明确 Layout 兼容逻辑只位于本地布局恢复边界。
+
 ## v1.0 待办
 
 ### 窗口跨窗同步
@@ -303,7 +312,6 @@ src/app/appConfig/appLinks.ts
 - [ ] **执行期 Graph 锁粒度优化**：`node_execution_context` + `executor/data_inputs` 对 `Arc<Mutex<GraphInstance>>` 高频 `lock().unwrap()`；引入 scoped read guard 或执行帧级缓存，缩短临界区，降低 lock poison 一次拖垮整次执行的概率。
 - [ ] **`with_graph_mut` 死锁规则回归测**：`project_state_graph_mut.rs` 文档禁止闭包内再调 `get_graph`/`load_graph`（`RwLock` 不可重入），但无测试；补 integration test 或 code-review checklist，覆盖 `sync_all_call_nodes_in_graph` / `update_function_signature` 等高频路径。
 - [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
-- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
 - [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
 - [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
@@ -334,6 +342,7 @@ src/app/appConfig/appLinks.ts
 - [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 - [ ] sidebar 内容中的 scrollbar 以及日志及其他组件内容的拖动逻辑有问题
 - [ ] 剩余唯一标记是 Rust 执行上下文中的 get_bound_type TODO。它依赖尚未提供类型绑定状态的 GraphRuntime，当前直接返回 None 是明确的未实现能力，不适合通过猜测补丁，否则可能引入错误类型推断。
+- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：

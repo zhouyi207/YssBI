@@ -16,14 +16,14 @@ export function layoutTabResourceRef(tab: LayoutTab): ResourceRef | null {
   return resourceRefFromLayoutTab(tab);
 }
 
-/** hydrate 入站：历史 Tab 可能缺 type / component，或携带已废弃的 title 快照 */
+/** hydrate 入站：本地 memento 可能来自旧会话，缺 type / component，或携带已废弃的 title 快照。 */
 export type LayoutTabInput = Omit<LayoutTab, 'type' | 'component'> & {
   title?: string;
   type?: LayoutTabType;
   component?: LayoutTabComponent | string;
 };
 
-/** 从持久化/旧数据规范化 Tab（补全缺失的 type / component，剥离 title） */
+/** 从持久化 memento 规范化 Tab；仅用于本地布局恢复边界。 */
 export function normalizeLayoutTab(tab: LayoutTabInput): LayoutTab {
   const { title: _title, ...rest } = tab;
   const type: LayoutTabType =

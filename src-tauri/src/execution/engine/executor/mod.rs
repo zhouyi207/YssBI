@@ -10,12 +10,12 @@
 //! 透明节点（`TriggerOutput`）把子帧挂到自己收到的 `join_target`（接力棒下传，
 //! 保持同一作用域）；只有 waiter（Sequence / Loop）才新建作用域。
 
+use self::wire_events::emit_exec_spawn;
 use super::event_emitter::EventEmitter;
 use super::execution_effect::ExecutionEffect;
 use super::execution_event::ExecutionEvent;
 use super::execution_frame::{ExecutionFrame, FrameId, FrameState, WaitKind};
 use super::execution_stack::ExecutionStack;
-use self::wire_events::emit_exec_spawn;
 
 mod data_inputs;
 mod wire_events;
@@ -232,8 +232,7 @@ impl<E: EventEmitter> Executor<E> {
         };
 
         // 在执行节点之前，先满足全部 data input 依赖（取数 → 流动）
-        self.satisfy_data_inputs(node_id)
-            .map_err(|e| (e, 0u64))?;
+        self.satisfy_data_inputs(node_id).map_err(|e| (e, 0u64))?;
 
         // 创建执行上下文
         let mut ctx = NodeExecutionContext::with_result_sources(
