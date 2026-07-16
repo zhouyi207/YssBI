@@ -416,6 +416,15 @@ export const zhCN = {
       noMatches: "未找到匹配项",
     },
   },
+  nodeDocumentationModal: {
+    title: "节点文档",
+    description: "按名称、分类、说明或文档内容搜索节点；再次点击当前节点可收起文档。",
+    searchPlaceholder: "搜索节点文档…",
+    noMatches: "未找到匹配的节点文档",
+    noDocumentation: "此节点暂无详细文档。",
+
+    close: "关闭节点文档",
+  },
   editorDropPreview: {
     openResource: "打开 {{name}}",
     mergeIntoGroup: "移动到该分组",

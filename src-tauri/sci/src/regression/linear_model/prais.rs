@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn test_prais_basic() {
         let n = 30;
-        let mut y: Vec<f64> = (0..n)
+        let y: Vec<f64> = (0..n)
             .map(|i| 10.0 + 0.5 * i as f64 + (i as f64 * 0.3).sin())
             .collect();
         let x: Vec<f64> = (0..n).map(|i| i as f64 * 1.2 + 2.0).collect();

@@ -17,7 +17,8 @@ pub async fn execute_project(
     graph_path: Option<String>,
 ) -> Result<Value, AppError> {
     let source_store = source_store.inner().clone();
-    let cancel = cancel_registry.begin();
+    let cancel_lease = cancel_registry.lease();
+    let cancel = cancel_lease.token();
 
     let target_graph_path: Option<GraphResourcePath> = graph_path
         .as_deref()
@@ -44,6 +45,5 @@ pub async fn execute_project(
     .await
     .map_err(|e| e.to_string())?;
 
-    cancel_registry.end(&cancel);
     Ok(result?)
 }

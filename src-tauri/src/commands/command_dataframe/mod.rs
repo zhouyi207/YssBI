@@ -133,37 +133,55 @@ pub fn get_database_rows(
 }
 
 #[tauri::command]
-pub fn get_column_stats(
-    state: State<ProjectState>,
+pub async fn get_column_stats(
+    state: State<'_, ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let stats = state.with_database_mut(&id, |db| {
-        db.compute_column_stats().map_err(|e| e.to_string())
-    })?;
+    let state = state.inner().clone();
+    let stats = run_on_blocking_pool(move || {
+        state
+            .with_database_mut(&id, |db| {
+                db.compute_column_stats().map_err(|e| e.to_string())
+            })
+            .map_err(AppError::from)
+    })
+    .await?;
 
     serde_json::to_value(stats).map_err(AppError::internal)
 }
 
 #[tauri::command]
-pub fn get_column_distribution(
-    state: State<ProjectState>,
+pub async fn get_column_distribution(
+    state: State<'_, ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let dists = state.with_database_mut(&id, |db| {
-        db.compute_column_distributions().map_err(|e| e.to_string())
-    })?;
+    let state = state.inner().clone();
+    let dists = run_on_blocking_pool(move || {
+        state
+            .with_database_mut(&id, |db| {
+                db.compute_column_distributions().map_err(|e| e.to_string())
+            })
+            .map_err(AppError::from)
+    })
+    .await?;
 
     serde_json::to_value(dists).map_err(AppError::internal)
 }
 
 #[tauri::command]
-pub fn get_dataset_overview(
-    state: State<ProjectState>,
+pub async fn get_dataset_overview(
+    state: State<'_, ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let overview = state.with_database_mut(&id, |db| {
-        db.compute_dataset_overview().map_err(|e| e.to_string())
-    })?;
+    let state = state.inner().clone();
+    let overview = run_on_blocking_pool(move || {
+        state
+            .with_database_mut(&id, |db| {
+                db.compute_dataset_overview().map_err(|e| e.to_string())
+            })
+            .map_err(AppError::from)
+    })
+    .await?;
 
     serde_json::to_value(overview).map_err(AppError::internal)
 }

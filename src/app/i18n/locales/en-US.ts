@@ -416,6 +416,15 @@ export const enUS = {
       noMatches: "No matches found",
     },
   },
+  nodeDocumentationModal: {
+    title: "Node Documentation",
+    description: "Search nodes by name, category, description, or documentation content; click the active node again to close the preview.",
+    searchPlaceholder: "Search node documentation...",
+    noMatches: "No matching node documentation",
+    noDocumentation: "This node has no detailed documentation yet.",
+
+    close: "Close node documentation",
+  },
   editorDropPreview: {
     openResource: "Open {{name}}",
     mergeIntoGroup: "Move to this group",

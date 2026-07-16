@@ -22,12 +22,15 @@ import { useEditorWindowGeometryPersistence } from "@/features/application/windo
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 import { ZenModeHintOverlay } from "./Layout/ZenModeHintOverlay";
+import { NodeDocumentationModal } from "./Layout/NodeDocumentationModal";
 
 function EditorWindowReady() {
   const rootId = useLayoutStore((s) => s.rootId);
   const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
+  const isNodeDocumentationOpen = useLayoutStore((s) => s.isNodeDocumentationOpen);
   const zenMode = useLayoutStore((s) => s.zenMode);
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
+  const setNodeDocumentationOpen = useLayoutStore((s) => s.setNodeDocumentationOpen);
   const activityBar = useActivityBarLayout(zenMode);
 
   useWorkbenchLayout();
@@ -70,6 +73,7 @@ function EditorWindowReady() {
       </div>
       {!zenMode ? <BottomBar /> : null}
       <ZenModeHintOverlay />
+      <NodeDocumentationModal open={isNodeDocumentationOpen} onOpenChange={setNodeDocumentationOpen} />
       <Dialog open={isSettingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0">
           <SettingsView />

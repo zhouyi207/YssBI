@@ -92,6 +92,12 @@ export function useEditorKeyboard({
         return;
       }
 
+      if (e.key === 'F1') {
+        e.preventDefault();
+        useLayoutStore.getState().setNodeDocumentationOpen(true);
+        return;
+      }
+
       const isInput =
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA" ||

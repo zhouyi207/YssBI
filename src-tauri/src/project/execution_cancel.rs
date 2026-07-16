@@ -16,6 +16,12 @@ pub struct ExecutionCancelRegistry {
     active: Mutex<Option<Arc<AtomicBool>>>,
 }
 
+/// Registers one execution cancellation token for the lifetime of an operation.
+pub struct ExecutionCancelLease<'a> {
+    registry: &'a ExecutionCancelRegistry,
+    flag: Arc<AtomicBool>,
+}
+
 impl ExecutionCancelRegistry {
     pub fn new() -> Self {
         Self {
@@ -27,6 +33,14 @@ impl ExecutionCancelRegistry {
         let flag = Arc::new(AtomicBool::new(false));
         *self.active.lock().expect("execution cancel registry lock") = Some(flag.clone());
         flag
+    }
+
+    /// Register a cancellation token that is automatically cleared when dropped.
+    pub fn lease(&self) -> ExecutionCancelLease<'_> {
+        ExecutionCancelLease {
+            registry: self,
+            flag: self.begin(),
+        }
     }
 
     pub fn cancel_active(&self) {
@@ -51,8 +65,51 @@ impl ExecutionCancelRegistry {
     }
 }
 
+impl ExecutionCancelLease<'_> {
+    pub fn token(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.flag)
+    }
+}
+
+impl Drop for ExecutionCancelLease<'_> {
+    fn drop(&mut self) {
+        self.registry.end(&self.flag);
+    }
+}
+
 impl Default for ExecutionCancelRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lease_clears_active_token_when_operation_returns_early() {
+        let registry = ExecutionCancelRegistry::new();
+        let token = {
+            let lease = registry.lease();
+            lease.token()
+        };
+
+        registry.cancel_active();
+
+        assert!(!is_execution_cancelled(&token));
+    }
+
+    #[test]
+    fn older_lease_does_not_clear_newer_active_token() {
+        let registry = ExecutionCancelRegistry::new();
+        let first = registry.lease();
+        let second = registry.lease();
+        let second_token = second.token();
+
+        drop(first);
+        registry.cancel_active();
+
+        assert!(is_execution_cancelled(&second_token));
     }
 }

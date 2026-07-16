@@ -117,10 +117,12 @@ export interface LayoutState {
     /** VS Code MRU list for close-empty / focus restoration. */
     recentEditorGroupIds: string[];
     isSettingsOpen: boolean;
+    isNodeDocumentationOpen: boolean;
     setActiveGroup: (id: string | null) => void;
     openSettings: () => void;
     closeSettings: () => void;
     setSettingsOpen: (open: boolean) => void;
+    setNodeDocumentationOpen: (open: boolean) => void;
     /** Session-only zen mode — hides shell chrome + workbench parts without persisting visibility. */
     zenMode: boolean;
 }
@@ -477,6 +479,7 @@ export const useLayoutStore = create<LayoutState>()(
         },
 
         isSettingsOpen: false,
+        isNodeDocumentationOpen: false,
         zenMode: false,
         openSettings: () => set((state) => {
             state.isSettingsOpen = true;
@@ -486,6 +489,9 @@ export const useLayoutStore = create<LayoutState>()(
         }),
         setSettingsOpen: (open) => set((state) => {
             state.isSettingsOpen = open;
+        }),
+        setNodeDocumentationOpen: (open) => set((state) => {
+            state.isNodeDocumentationOpen = open;
         }),
 
         setDragging: (isDragging) => set((state) => {

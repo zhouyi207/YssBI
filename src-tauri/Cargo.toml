@@ -8,13 +8,20 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
+resolver = "3"
 members = [".", "sci"]
 
 [workspace.dependencies]
+chrono = "0.4.41"
+faer = "0.24.0"
 ndarray = { version = "0.17.2", features = ["serde"] }
-polars = { version = "0.53.0", features = ["lazy", "parquet", "csv", "json", "dtype-full", "timezones"] }
+num-traits = "0.2.19"
+polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
 polars-arrow = { version = "0.53.0", default-features = false }
-ndarray-stats = "0.7.0"
+polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+statrs = "0.17"
 
 
 [lib]
@@ -29,42 +36,31 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 yss-sci = { path = "./sci" }
-
-
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
 tauri = { version = "2.11", features = [] }
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-dialog = "2.7"
 tauri-plugin-fs = "2.5"
 tauri-plugin-log = "2"
 
+
+serde.workspace = true
+serde_json.workspace = true
 ndarray.workspace = true
-ndarray-stats.workspace = true
 polars.workspace = true
 polars-arrow.workspace = true
-polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
+polars-dtype.workspace = true
+statrs.workspace = true
+chrono.workspace = true
+num-traits.workspace = true
+faer.workspace = true
+
 
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
-chrono = "0.4.41"
-crossbeam = "0.8.4"
 thiserror = "2.0.18"
-dashmap = "6.1.0"
-atomic_enum = "0.3.0"
-num-traits = "0.2"
 regex = "1"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres", "mysql"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
 calamine = "0.26"
-statrs = "0.17"
 rand = "0.8"
-faer = "0.24.0"
-duckdb = { version = "1.10504.0", features = ["bundled", "appender-arrow"] }
+duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
 trash = "5.2"
 notify = "8.2.0"
-
-# [profile.release]
-# opt-level = "z"      # 优化体积而非速度
-# lto = true           # Link-Time Optimization
-# strip = true         # 去除调试符号
-# codegen-units = 1    # 更好的优化

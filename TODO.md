@@ -271,6 +271,12 @@ src/app/appConfig/appLinks.ts
 - [x] 清理项目加载旧 API 与 DTO：删除 `get_project_data`、`get_project_graphs`、旧 `ProjectService` 包装、只服务旧路径的 DTO 和无调用的项目引用校验模块，保留当前分阶段加载与按需 `load_project_graph` 路径。
 - [x] 删除 deprecated/兼容残留：移除 `ReportKind::from_legacy_key`、domain 层 re-export 前端 state 类型、重复/无效 DTO 导出，并更新相关 barrel export。
 - [x] 修正注释漂移：更新 DataFrame schema 同步、ProjectLoaded 事件和 Layout Tab memento 规范化说明，明确 Layout 兼容逻辑只位于本地布局恢复边界。
+- [x] 统一前端包管理器为 pnpm：删除 `package-lock.json`，生成 `pnpm-lock.yaml`，保持 `packageManager` 与锁文件一致。
+- [x] 补充本地前端类型验证入口：在 `package.json` 增加 `typecheck` 脚本，使用 `tsc --noEmit` 做本地验证，不接入 CI。
+- [x] 收敛 Graph Node command 结构：将 `batch_create_with_connections`、批量创建 DTO、pin remap 和连接恢复逻辑从 `command_node.rs` 拆到 `command_node_batch.rs`，保留 IPC 命令名不变。
+- [x] 清理批量创建连线重复逻辑：抽出 pin 映射、user value 恢复和 `ConnectionRestoreState`，避免创建阶段与重编译后动态 pin 补映射逻辑重复。
+- [x] 清理执行期 data input 重复逻辑：抽出可拉取 data node 判断和 ready 后 data flow 发射 helper，保持逐边取数 / 流动行为不变。
+- [x] 本地验证通过：`pnpm run typecheck`、`pnpm test`、`cargo check --manifest-path src-tauri/Cargo.toml`、`cargo test --manifest-path src-tauri/Cargo.toml`、`git --no-pager diff --check`。
 
 ## v1.0 待办
 

@@ -53,17 +53,10 @@ impl<E: EventEmitter> Executor<E> {
     fn satisfy_data_input_edge(&mut self, edge: WiredDataInput) -> Result<(), String> {
         emit_data_pull(&self.emitter, edge.upstream_pin, edge.input_pin);
 
-        let is_pullable = {
-            let graph = self.graph.lock().unwrap();
-            let definition = graph.get_node_definition_by_node_id(edge.upstream_node);
-            definition.data_evaluator.is_some() && !graph.node_has_exec_pins(edge.upstream_node)
-        };
-
-        if is_pullable {
+        if self.is_pullable_data_node(edge.upstream_node) {
             self.satisfy_data_inputs(edge.upstream_node)?;
 
-            if self.pin_has_executed_value(edge.upstream_pin) {
-                emit_data_flow(&self.emitter, edge.upstream_pin, edge.input_pin);
+            if self.emit_data_flow_if_ready(&edge) {
                 return Ok(());
             }
 
@@ -72,11 +65,22 @@ impl<E: EventEmitter> Executor<E> {
             return Ok(());
         }
 
-        if self.pin_has_executed_value(edge.upstream_pin) {
-            emit_data_flow(&self.emitter, edge.upstream_pin, edge.input_pin);
-        }
-
+        self.emit_data_flow_if_ready(&edge);
         Ok(())
+    }
+
+    fn is_pullable_data_node(&self, node_id: NodeId) -> bool {
+        let graph = self.graph.lock().unwrap();
+        let definition = graph.get_node_definition_by_node_id(node_id);
+        definition.data_evaluator.is_some() && !graph.node_has_exec_pins(node_id)
+    }
+
+    fn emit_data_flow_if_ready(&self, edge: &WiredDataInput) -> bool {
+        if !self.pin_has_executed_value(edge.upstream_pin) {
+            return false;
+        }
+        emit_data_flow(&self.emitter, edge.upstream_pin, edge.input_pin);
+        true
     }
 
     fn pin_has_executed_value(&self, pin_id: PinId) -> bool {

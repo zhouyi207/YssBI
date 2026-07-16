@@ -1,6 +1,9 @@
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::mpsc;
+use std::path::Path;
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
+    mpsc::{Receiver, SyncSender, sync_channel},
+};
 use std::thread;
 use std::time::Duration;
 
@@ -13,12 +16,14 @@ use crate::project::read_project_index;
 
 pub struct ProjectWatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
+    generation: Arc<AtomicU64>,
 }
 
 impl ProjectWatcherState {
     pub fn new() -> Self {
         Self {
             watcher: Mutex::new(None),
+            generation: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -26,40 +31,72 @@ impl ProjectWatcherState {
         self.stop();
 
         let root = crate::project::project_root_from_path(metadata_path);
-        let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let active_generation = Arc::clone(&self.generation);
+        // A burst only needs one invalidation. Filter before enqueueing so an
+        // unrelated path cannot occupy the sole pending signal.
+        let (tx, rx) = coalescing_channel();
+        let callback_root = root.clone();
         let mut watcher = notify::recommended_watcher(move |result| {
-            let _ = tx.send(result);
+            enqueue_relevant_change(&tx, callback_root.as_path(), result);
         })
         .map_err(|e| e.to_string())?;
         watcher
             .watch(root.as_path(), RecursiveMode::Recursive)
             .map_err(|e| e.to_string())?;
 
-        spawn_project_watcher_thread(app, metadata_path.to_string(), root, rx);
+        spawn_project_watcher_thread(
+            app,
+            metadata_path.to_string(),
+            rx,
+            active_generation,
+            generation,
+        );
         *self.watcher.lock().unwrap() = Some(watcher);
         Ok(())
     }
 
     pub fn stop(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
         *self.watcher.lock().unwrap() = None;
+    }
+}
+
+fn coalescing_channel() -> (SyncSender<()>, Receiver<()>) {
+    sync_channel(1)
+}
+
+fn enqueue_relevant_change(tx: &SyncSender<()>, root: &Path, result: notify::Result<Event>) {
+    match result {
+        Ok(event) if is_relevant_project_event(root, &event) => {
+            let _ = tx.try_send(());
+        }
+        Ok(_) => {}
+        Err(error) => {
+            warn!("Project watcher error: {}", error);
+            // A watcher error may hide a relevant change, so conservatively
+            // invalidate the index instead of silently losing synchronization.
+            let _ = tx.try_send(());
+        }
     }
 }
 
 fn spawn_project_watcher_thread(
     app: AppHandle,
     metadata_path: String,
-    root: PathBuf,
-    rx: mpsc::Receiver<notify::Result<Event>>,
+    rx: Receiver<()>,
+    active_generation: Arc<AtomicU64>,
+    generation: u64,
 ) {
     thread::spawn(move || {
         let mut version = 0u64;
         loop {
             match rx.recv() {
-                Ok(Ok(event)) => {
-                    if !is_relevant_project_event(root.as_path(), &event) {
-                        continue;
-                    }
+                Ok(()) => {
                     while rx.recv_timeout(Duration::from_millis(250)).is_ok() {}
+                    if active_generation.load(Ordering::Acquire) != generation {
+                        break;
+                    }
                     match read_project_index(&metadata_path) {
                         Ok(_) => {
                             version = version.saturating_add(1);
@@ -68,7 +105,6 @@ fn spawn_project_watcher_thread(
                         Err(error) => warn!("Failed to refresh watched project index: {}", error),
                     }
                 }
-                Ok(Err(error)) => warn!("Project watcher error: {}", error),
                 Err(_) => break,
             }
         }
@@ -102,6 +138,7 @@ fn is_relevant_project_event(root: &Path, event: &Event) -> bool {
 mod tests {
     use super::*;
     use notify::EventKind;
+    use std::path::PathBuf;
 
     fn path_event(root: &Path, relative: &str) -> Event {
         Event {
@@ -109,6 +146,33 @@ mod tests {
             paths: vec![root.join(relative)],
             attrs: notify::event::EventAttributes::default(),
         }
+    }
+
+    #[test]
+    fn coalescing_channel_keeps_only_one_pending_signal() {
+        let (tx, rx) = coalescing_channel();
+
+        tx.try_send(()).expect("first signal fits");
+        assert!(tx.try_send(()).is_err());
+        rx.recv().expect("first signal is retained");
+        tx.try_send(()).expect("channel accepts a later signal");
+        rx.recv().expect("later signal is retained");
+    }
+
+    #[test]
+    fn unrelated_event_does_not_block_a_relevant_invalidation() {
+        let root = PathBuf::from(r"C:\project");
+        let (tx, rx) = coalescing_channel();
+
+        enqueue_relevant_change(&tx, root.as_path(), Ok(path_event(&root, "README.md")));
+        enqueue_relevant_change(
+            &tx,
+            root.as_path(),
+            Ok(path_event(&root, "events/foo.yssbi-event")),
+        );
+
+        rx.recv().expect("relevant event is retained");
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

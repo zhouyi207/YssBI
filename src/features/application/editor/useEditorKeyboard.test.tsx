@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditorKeyboard } from './useEditorKeyboard';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
 const noop = () => {};
 
@@ -46,6 +47,17 @@ describe('useEditorKeyboard', () => {
     });
     host.remove();
     vi.restoreAllMocks();
+  });
+
+  it('opens node documentation with F1', () => {
+    useLayoutStore.setState({ isNodeDocumentationOpen: false });
+    const event = new KeyboardEvent('keydown', { key: 'F1', bubbles: true, cancelable: true });
+    const preventDefault = vi.spyOn(event, 'preventDefault');
+
+    window.dispatchEvent(event);
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(useLayoutStore.getState().isNodeDocumentationOpen).toBe(true);
   });
 
   it('does not preventDefault on Alt so native menu access still works', () => {
