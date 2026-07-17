@@ -2,12 +2,15 @@
 
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
-use yss_sci::stats::{Alternative as SciAlternative, t_test, wald_test};
 
 use crate::ast::{
     Alternative, HypothesisExpr, HypothesisSpec, LinearConstraintKind, ParamRegistry, TestMethod,
     collect_param_order, linear_expand, parse_hypothesis_with_registry, reorder_r_to_ols_columns,
 };
+use crate::sci::api::stats::hypothesis::{
+    Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
+};
+use crate::sci::engine::SciContext;
 
 pub struct HypothesisTestInput {
     pub betas: Vec<f64>,
@@ -114,14 +117,18 @@ pub fn run_hypothesis_test(input: HypothesisTestInput) -> Result<HypothesisTestO
     match resolved.test_method {
         TestMethod::TTest => {
             let result = t_test(
-                &betas,
-                &cov_beta,
-                &resolved.r_ols,
-                &resolved.r_vec,
-                input.df_residual,
-                sci_alt,
-                input.hypothesis,
-            )?;
+                &SciContext::rust(),
+                LinearHypothesisTestInput {
+                    betas: &betas,
+                    cov_beta: &cov_beta,
+                    r: &resolved.r_ols,
+                    r_vec: &resolved.r_vec,
+                    df_residual: input.df_residual,
+                    alternative: sci_alt,
+                    constraint_desc: input.hypothesis,
+                },
+            )
+            .map_err(|error| error.to_string())?;
             Ok(HypothesisTestOutput {
                 test_type: "t".to_string(),
                 h0_form,
@@ -136,14 +143,18 @@ pub fn run_hypothesis_test(input: HypothesisTestInput) -> Result<HypothesisTestO
         }
         TestMethod::Wald => {
             let result = wald_test(
-                &betas,
-                &cov_beta,
-                &resolved.r_ols,
-                &resolved.r_vec,
-                input.df_residual,
-                sci_alt,
-                input.hypothesis,
-            )?;
+                &SciContext::rust(),
+                LinearHypothesisTestInput {
+                    betas: &betas,
+                    cov_beta: &cov_beta,
+                    r: &resolved.r_ols,
+                    r_vec: &resolved.r_vec,
+                    df_residual: input.df_residual,
+                    alternative: sci_alt,
+                    constraint_desc: input.hypothesis,
+                },
+            )
+            .map_err(|error| error.to_string())?;
             Ok(HypothesisTestOutput {
                 test_type: "wald".to_string(),
                 h0_form,

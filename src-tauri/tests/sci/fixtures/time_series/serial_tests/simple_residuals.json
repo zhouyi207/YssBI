@@ -1,0 +1,26 @@
+{
+  "name": "simple_residuals",
+  "input": {
+    "residuals": [1.0, -0.5, 0.25, -0.125, 0.0625, -0.03125, 0.015625, -0.0078125],
+    "lags": 3,
+    "exog": null,
+    "bg_nomiss0": true
+  },
+  "expected": {
+    "q": {
+      "stat": 4.012760707023762,
+      "p_value": 0.26008949691814,
+      "lags": 3
+    },
+    "dw": {
+      "d": 2.2498970016021973
+    }
+  },
+  "tolerance": {
+    "absolute": 1e-9
+  },
+  "goldenSource": {
+    "tool": "scipy + legacy yss-sci formula",
+    "notes": "Computed with the current Durbin-Watson and Ljung-Box equations used by yss_sci::ts::serial_correlation. BG is skipped because exog is null."
+  }
+}

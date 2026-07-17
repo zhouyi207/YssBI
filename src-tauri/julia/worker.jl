@@ -53,9 +53,11 @@ function require_string(value, name::String)
 end
 
 include(joinpath(@__DIR__, "ops", "acf_pacf.jl"))
+include(joinpath(@__DIR__, "ops", "serial_tests.jl"))
 
 const OPERATIONS = Dict{String, Function}(
     "acf_pacf" => run_acf_pacf,
+    "serial_tests" => run_serial_tests,
 )
 
 function run_operation(operation::String, params, task_id::String)
@@ -80,8 +82,9 @@ function process_run(request, request_id, params)
             request_id !== nothing && send_error(request_id, "invalid_parameters", error.msg;
                 data = Dict("taskId" => task_id))
         else
-            println(stderr, "Julia worker task $task_id failed: ", sprint(showerror, error))
-            request_id !== nothing && send_error(request_id, "internal_error", "Task failed";
+            detail = sprint(showerror, error)
+            println(stderr, "Julia worker task $task_id failed: ", detail)
+            request_id !== nothing && send_error(request_id, "internal_error", "Task failed: $detail";
                 data = Dict("taskId" => task_id))
         end
     finally

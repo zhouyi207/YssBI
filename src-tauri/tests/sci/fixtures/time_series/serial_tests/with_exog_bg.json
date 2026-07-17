@@ -1,0 +1,42 @@
+{
+  "name": "with_exog_bg",
+  "input": {
+    "residuals": [0.42, -0.21, 0.35, -0.08, 0.18, -0.31, 0.27, -0.12, 0.09, -0.04],
+    "lags": 2,
+    "exog": [
+      [1.0, 1.0],
+      [1.0, 2.0],
+      [1.0, 3.0],
+      [1.0, 4.0],
+      [1.0, 5.0],
+      [1.0, 6.0],
+      [1.0, 7.0],
+      [1.0, 8.0],
+      [1.0, 9.0],
+      [1.0, 10.0]
+    ],
+    "bg_nomiss0": true
+  },
+  "expected": {
+    "bg": {
+      "stat": 8.339282832385756,
+      "p_value": 0.015457802047736058,
+      "lags": 2
+    },
+    "q": {
+      "stat": 13.292851958525869,
+      "p_value": 0.001298655241835922,
+      "lags": 2
+    },
+    "dw": {
+      "d": 3.0485301791615935
+    }
+  },
+  "tolerance": {
+    "absolute": 1e-9
+  },
+  "goldenSource": {
+    "tool": "scipy + legacy yss-sci formula",
+    "notes": "Computed with the current Durbin-Watson, Ljung-Box, and Breusch-Godfrey equations used by yss_sci::ts::serial_correlation."
+  }
+}

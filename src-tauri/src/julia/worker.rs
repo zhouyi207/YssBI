@@ -23,6 +23,7 @@ const WORKER_PROJECT: &str = include_str!("../../julia/Project.toml");
 const WORKER_MANIFEST: &str = include_str!("../../julia/Manifest.toml");
 const WORKER_SCRIPT: &str = include_str!("../../julia/worker.jl");
 const WORKER_ACF_PACF_OP: &str = include_str!("../../julia/ops/acf_pacf.jl");
+const WORKER_SERIAL_TESTS_OP: &str = include_str!("../../julia/ops/serial_tests.jl");
 
 #[derive(Debug, Clone)]
 pub struct JuliaWorkerTask {
@@ -373,6 +374,7 @@ fn inspect_worker_environment(worker_dir: &Path) -> (JuliaWorkerEnvironmentState
         worker_dir.join("Manifest.toml"),
         worker_dir.join("worker.jl"),
         worker_dir.join("ops").join("acf_pacf.jl"),
+        worker_dir.join("ops").join("serial_tests.jl"),
     ];
     if required_files.iter().any(|path| !path.is_file()) {
         return (
@@ -425,6 +427,7 @@ fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(&ops_dir)
         .map_err(|error| format!("Failed to create Julia worker ops directory: {error}"))?;
     write_asset(&ops_dir.join("acf_pacf.jl"), WORKER_ACF_PACF_OP)?;
+    write_asset(&ops_dir.join("serial_tests.jl"), WORKER_SERIAL_TESTS_OP)?;
     Ok(worker_dir)
 }
 
