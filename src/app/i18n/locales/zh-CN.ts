@@ -213,6 +213,11 @@ export const zhCN = {
     hidePanel: "隐藏面板",
     showPanel: "显示面板",
   },
+  bayes: {
+    title: "贝叶斯参数估计",
+    openWindow: "打开贝叶斯参数估计",
+    failedOpenWindow: "无法打开贝叶斯参数估计窗口",
+  },
   julia: {
     menu: {
       title: "Julia 计算引擎",

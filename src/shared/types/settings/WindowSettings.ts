@@ -4,7 +4,7 @@
  */
 
 /** 受持久化管理的窗口种类。 */
-export type WindowKind = "main" | "databaseEditor" | "sourceInspector" | "logs" | "plot" | "info";
+export type WindowKind = "main" | "databaseEditor" | "sourceInspector" | "logs" | "plot" | "info" | "bayes";
 
 export const WINDOW_KINDS: readonly WindowKind[] = [
     "main",
@@ -13,6 +13,7 @@ export const WINDOW_KINDS: readonly WindowKind[] = [
     "logs",
     "plot",
     "info",
+    "bayes",
 ] as const;
 
 /** 单个窗口的几何状态。 */

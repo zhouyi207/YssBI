@@ -19,6 +19,7 @@
 
 // ==================== Common Types ====================
 export type { PinValue, JsonValue } from './common';
+export * from './bayes';
 
 // ==================== Domain Types ====================
 // 领域模型 - 与后端数据结构一致

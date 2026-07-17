@@ -14,6 +14,7 @@ const SourceInspectorWindow = React.lazy(() => import("@/views/SourceInspector/S
 const LogWindow = React.lazy(() => import("@/views/LogView/LogWindow").then(m => ({ default: m.LogWindow })));
 const InfoWindow = React.lazy(() => import("@/views/InfoView/InfoWindow").then(m => ({ default: m.InfoWindow })));
 const EditorWindow = React.lazy(() => import("@/views/EditorView/EditorWindow").then(m => ({ default: m.EditorWindow })));
+const BayesView = React.lazy(() => import("@/views/BayesView/BayesView").then(m => ({ default: m.BayesView })));
 const ProjectPickerScreen = React.lazy(() => import("@/views/ProjectView/ProjectPickerScreen").then(m => ({ default: m.ProjectPickerScreen })));
 
 function AppRouter() {
@@ -28,6 +29,7 @@ function AppRouter() {
         <Route path="/inspect" element={<SourceInspectorWindow />} />
         <Route path="/logs" element={<LogWindow />} />
         <Route path="/info" element={<InfoWindow />} />
+        <Route path="/bayes" element={<BayesView />} />
         <Route path="*" element={<ProjectPickerScreen />} />
       </Routes>
     </Suspense>

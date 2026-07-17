@@ -213,6 +213,11 @@ export const enUS = {
     hidePanel: "Hide Panel",
     showPanel: "Show Panel",
   },
+  bayes: {
+    title: "Bayesian Parameter Estimation",
+    openWindow: "Open Bayesian Parameter Estimation",
+    failedOpenWindow: "Unable to open Bayesian Parameter Estimation window",
+  },
   julia: {
     menu: {
       title: "Julia compute engine",

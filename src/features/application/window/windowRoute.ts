@@ -9,6 +9,8 @@ export function windowKindForRoute(route: string): WindowKind {
       return 'sourceInspector';
     case '/info':
       return 'info';
+    case '/bayes':
+      return 'bayes';
     default:
       return 'info';
   }

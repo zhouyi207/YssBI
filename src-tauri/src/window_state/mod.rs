@@ -26,6 +26,7 @@ pub enum WindowKind {
     Logs,
     Plot,
     Info,
+    Bayes,
 }
 
 impl WindowKind {
@@ -36,6 +37,7 @@ impl WindowKind {
         WindowKind::Logs,
         WindowKind::Plot,
         WindowKind::Info,
+        WindowKind::Bayes,
     ];
 
     /// 用于 HashMap key 的小驼峰字符串。
@@ -47,6 +49,7 @@ impl WindowKind {
             WindowKind::Logs => "logs",
             WindowKind::Plot => "plot",
             WindowKind::Info => "info",
+            WindowKind::Bayes => "bayes",
         }
     }
 }
@@ -81,7 +84,7 @@ impl WindowState {
                     is_maximized: false,
                 }
             }
-            WindowKind::Plot | WindowKind::Info => WindowState {
+            WindowKind::Plot | WindowKind::Info | WindowKind::Bayes => WindowState {
                 width: 960,
                 height: 800,
                 x: None,
@@ -108,6 +111,8 @@ struct PersistedWindowStates {
     plot: Option<WindowState>,
     #[serde(default)]
     info: Option<WindowState>,
+    #[serde(default)]
+    bayes: Option<WindowState>,
 }
 
 impl PersistedWindowStates {
@@ -119,6 +124,7 @@ impl PersistedWindowStates {
             WindowKind::Logs => self.logs.as_ref(),
             WindowKind::Plot => self.plot.as_ref(),
             WindowKind::Info => self.info.as_ref(),
+            WindowKind::Bayes => self.bayes.as_ref(),
         }
     }
 
@@ -130,6 +136,7 @@ impl PersistedWindowStates {
             WindowKind::Logs => self.logs = Some(value),
             WindowKind::Plot => self.plot = Some(value),
             WindowKind::Info => self.info = Some(value),
+            WindowKind::Bayes => self.bayes = Some(value),
         }
     }
 }

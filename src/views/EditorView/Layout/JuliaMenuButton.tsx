@@ -16,7 +16,7 @@ import {
 } from "@/services/julia/juliaRuntimeService";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 
-export function JuliaMenuButton() {
+export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<JuliaRuntimeStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -77,6 +77,11 @@ export function JuliaMenuButton() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[220px] py-0">
+        <DropdownMenuLabel>{t("menubar.extensions")}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={onOpenBayes}>
+          {t("bayes.openWindow")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-0" />
         <DropdownMenuLabel>{t("julia.menu.title")}</DropdownMenuLabel>
         <DropdownMenuItem disabled className="text-xs">
           {statusLabel}

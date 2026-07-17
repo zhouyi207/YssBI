@@ -1,3 +1,4 @@
+pub mod command_bayes;
 pub mod command_dataframe;
 pub mod command_execution;
 pub mod command_graph;
@@ -15,6 +16,7 @@ pub mod command_variable;
 pub mod command_window;
 pub mod command_worksheet;
 
+pub use command_bayes::*;
 pub use command_dataframe::*;
 pub use command_execution::*;
 pub use command_graph::*;

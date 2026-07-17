@@ -25,6 +25,7 @@ export {
 } from "./openPresentationWindow";
 export type { PresentationWindowPayload } from "./openPresentationWindow";
 export { openDatabaseEditorWindow } from "./openDatabaseEditor";
+export { openBayesWindow } from "./openBayesWindow";
 export { openLogsWindow } from "./openLogsWindow";
 export type { OpenLogsWindowOptions } from "./openLogsWindow";
 export {

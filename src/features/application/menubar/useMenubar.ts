@@ -14,6 +14,7 @@ import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGr
 import { splitEditorAtEdge } from "@/features/application/editor/editorGroupCommands";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import {
+  openBayesWindow,
   openDatabaseEditorWindow,
   openLogsWindow,
   openSecondaryEditorWindow,
@@ -125,6 +126,10 @@ export function useMenubar() {
     void openLogsWindow();
   }, []);
 
+  const handleOpenBayes = useCallback(() => {
+    void openBayesWindow();
+  }, []);
+
   const handleResetLayout = useCallback(() => {
     const panelPosition = normalizePanelPosition(
       useSettingsStore.getState().appearance.panelPosition,
@@ -150,6 +155,7 @@ export function useMenubar() {
     handleSplitDown,
     handleDatabaseEditor,
     handleOpenLogs,
+    handleOpenBayes,
     toggleDetail: toggleDetailVisibility,
     toggleLogPanel: togglePanelVisibility,
     toggleSidebar: toggleSidebarVisibility,

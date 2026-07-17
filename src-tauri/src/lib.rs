@@ -213,6 +213,13 @@ pub fn run() {
             compute_serial_tests,
             // ==================== Panel DID（结果页） ====================
             compute_panel_did_fake_group_ri,
+            // ==================== Bayesian inference ====================
+            parse_bayes_expression,
+            validate_bayes_model,
+            submit_bayes_inference,
+            get_bayes_inference_status,
+            cancel_bayes_inference,
+            read_bayes_inference_result,
             // ==================== Julia runtime ====================
             get_julia_runtime_status,
             install_julia_runtime,

@@ -3,6 +3,7 @@ export { DatabaseService } from "./database/databaseService";
 export { WorksheetService } from "./worksheet/worksheetService";
 export * from "./schema";
 export * from "./stats";
+export * from "./bayes";
 export * from "./window";
 export * from "./log";
 export { NodeService } from "./graph/node/nodeService";
