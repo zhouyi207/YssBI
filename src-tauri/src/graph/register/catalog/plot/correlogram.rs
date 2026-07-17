@@ -8,10 +8,11 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
+use crate::sci::api::time_series::acf_pacf::{AcfPacfInput, compute_acf_pacf};
+use crate::sci::engine::SciContext;
 use serde::Serialize;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 use std::sync::Arc;
-use yss_sci::ts::acf_pacf;
 
 #[derive(Serialize)]
 struct CorrelogramPlotData {
@@ -97,9 +98,16 @@ pub fn register(registry: &NodeRegistry) {
                 return Err("Correlogram: need at least 4 observations".to_string());
             }
 
-            let max_lag = user_lags.min(n / 2);
-            let acf_vals = acf_pacf::acf(&values, max_lag);
-            let pacf_vals = acf_pacf::pacf(&values, max_lag);
+            let acf_pacf = compute_acf_pacf(
+                &SciContext::rust(),
+                AcfPacfInput {
+                    residuals: values,
+                    max_lag: user_lags,
+                },
+            )
+            .map_err(|e| format!("Correlogram: {}", e))?;
+            let acf_vals = acf_pacf.acf;
+            let pacf_vals = acf_pacf.pacf;
             let ci_half_width = 1.96 / (n as f64).sqrt();
 
             // acf_vals[0] = 1.0 (lag 0), skip it; acf_vals[1..] = lag 1..=max_lag

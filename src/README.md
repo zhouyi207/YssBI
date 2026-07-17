@@ -14,3 +14,4 @@
     2. 前端接受 emit event 更新项目状态
 
 
+Rust 保留宿主、数据层和必要 fallback；科学计算能力逐步迁移到 Julia，并通过 Rust/Julia golden fixture 测试验证后切换默认引擎。

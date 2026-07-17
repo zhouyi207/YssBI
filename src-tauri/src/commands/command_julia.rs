@@ -1,4 +1,4 @@
-//! Tauri commands for the system Julia installation.
+//! Tauri commands for the system Julia runtime.
 
 use tauri::async_runtime;
 

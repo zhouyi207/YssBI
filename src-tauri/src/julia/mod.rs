@@ -9,6 +9,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+pub mod worker;
+
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -85,6 +87,10 @@ fn inspect_system_julia() -> RuntimeProbe {
             message,
         },
     }
+}
+
+pub fn system_julia_executable() -> Result<PathBuf, String> {
+    find_system_julia().ok_or_else(|| "Julia was not found on the system PATH.".to_string())
 }
 
 fn find_system_julia() -> Option<PathBuf> {

@@ -352,7 +352,8 @@ src/app/appConfig/appLinks.ts
 - [ ] 函数图层中 **递归 Call 编辑器提示**：`CallDepthGuard`（64）仅 runtime 报错；编辑器内对自递归/深链 Call 做静态提示（非阻断），与超限单测（见 Rust 复盘）配套。
 - [ ] sidebar 内容中的 scrollbar 以及日志及其他组件内容的拖动逻辑有问题
 - [ ] 剩余唯一标记是 Rust 执行上下文中的 get_bound_type TODO。它依赖尚未提供类型绑定状态的 GraphRuntime，当前直接返回 None 是明确的未实现能力，不适合通过猜测补丁，否则可能引入错误类型推断。
-- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
+- [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_sci::compute_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
+- [ ] **Julia 第二个迁移目标选择**：ACF/PACF 已经有 `src/sci` API、Julia worker 和 Rust/Julia golden fixture 测试；下一步不要直接上 VEC/RE MLE/DID。优先在「serial tests / Ljung-Box / DW」和「描述性统计」里选一个做第二个 PoC：输入输出简单、能复用 Arrow IPC、容易与 golden result 对齐。简化 OLS 可以排第三步，先只做 `y: Float64` + `x: Float64 matrix` + `hasIntercept`，暂不碰公式、分类变量、robust/cluster/HAC。
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
@@ -502,7 +503,7 @@ PinInstance 新增字段:
 
 | 领域 | 说明 |
 |------|------|
-| ACF/PACF IPC 与 Plot DTO 对齐 | `command_acf_pacf` 与 `correlogram.rs` 字段统一（见 TODO §1547） |
+| ACF/PACF IPC 与 Plot DTO 对齐 | `command_sci::compute_acf_pacf` 与 `correlogram.rs` 字段统一（见 TODO §1547） |
 | Plot 网格线绘制 | 各 XY 图内联 d3 grid，暂不强制抽取 |
 | `normalizeVariables` | `projectIOStore` 本地 helper，边界清晰，暂保留 |
 | `loadGraph` 双 IPC | 动态 pin 物化所需，属有意设计 |

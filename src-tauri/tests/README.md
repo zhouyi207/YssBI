@@ -41,6 +41,13 @@ cargo test -- --nocapture --test-threads=1
 - `--nocapture`: 显示所有 println! 输出
 - `--test-threads=1`: 单线程运行测试，避免输出混乱
 
+## 目录约定
+
+- `common/`：集成测试共享 helper、mock、emitter、executor builder；不放测试数据。
+- `data/`：跨领域复用的原始测试数据集，例如 `iris.csv`。
+- `sci/fixtures/`：科学计算 golden fixture，包含 input、expected output、tolerance 与 golden source。
+- `*.rs`：Cargo 自动识别的 integration test crate；文件名用领域路径命名，例如 `sci_api_time_series_acf_pacf_golden_test.rs`。
+
 ## 测试用例说明
 
 ### 1. test_complex_node_graph

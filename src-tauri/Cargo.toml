@@ -16,7 +16,7 @@ chrono = "0.4.41"
 faer = "0.24.0"
 ndarray = { version = "0.17.2", features = ["serde"] }
 num-traits = "0.2.19"
-polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
+polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "ipc", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
 polars-arrow = { version = "0.53.0", default-features = false }
 polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 serde = { version = "1", features = ["derive"] }

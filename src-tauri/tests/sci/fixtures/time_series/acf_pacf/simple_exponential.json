@@ -1,0 +1,28 @@
+{
+  "name": "simple_exponential",
+  "input": {
+    "residuals": [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0],
+    "maxLag": 3
+  },
+  "expected": {
+    "n": 8,
+    "acf": [
+      1.0,
+      0.42937873057821113,
+      0.11048207044242948,
+      -0.07910306647833416
+    ],
+    "pacf": [
+      0.42937873057821113,
+      -0.09058478725779236,
+      -0.11365939074552207
+    ]
+  },
+  "tolerance": {
+    "absolute": 1e-9
+  },
+  "goldenSource": {
+    "tool": "manual",
+    "notes": "Computed from YssBI's sample ACF definition and Durbin-Levinson PACF recursion."
+  }
+}

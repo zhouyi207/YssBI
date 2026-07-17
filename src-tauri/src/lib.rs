@@ -15,6 +15,7 @@ pub mod julia;
 pub mod log;
 pub mod project;
 pub mod schema;
+pub mod sci;
 pub mod tabular;
 pub mod variable;
 pub mod window_state;
@@ -65,6 +66,7 @@ pub fn run() {
         .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(project::ExecutionCancelRegistry::new())
+        .manage(julia::worker::JuliaWorkerManager::new())
         .setup(|app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
