@@ -1,0 +1,51 @@
+{
+  "name": "missing dataset",
+  "draft": {
+    "formulaText": "y \\sim \\operatorname{Normal}\\left(a * x + b, \\sigma\\right)",
+    "responseSymbol": "y",
+    "symbols": [
+      { "name": "y", "role": "dependent", "inferredRole": "dependent", "userEdited": true },
+      { "name": "x", "role": "independent", "inferredRole": "independent", "userEdited": true },
+      { "name": "a", "role": "parameter", "inferredRole": "parameter", "userEdited": true },
+      { "name": "b", "role": "parameter", "inferredRole": "parameter", "userEdited": true }
+    ],
+    "dataset": null,
+    "responseBinding": { "column": "y", "symbol": "y" },
+    "dataBindings": { "x": "x" },
+    "boundPredictor": {
+      "type": "binary",
+      "op": "add",
+      "left": {
+        "type": "binary",
+        "op": "mul",
+        "left": { "type": "parameter", "name": "a" },
+        "right": { "type": "data_variable", "name": "x" }
+      },
+      "right": { "type": "parameter", "name": "b" }
+    },
+    "likelihood": {
+      "type": "normal",
+      "mean": { "source": "predictor" },
+      "sigma": { "parameter": "sigma" }
+    },
+    "parameters": [
+      { "name": "a", "constraint": { "type": "real" }, "prior": { "distribution": "normal", "args": [0.0, 10.0] } },
+      { "name": "b", "constraint": { "type": "real" }, "prior": { "distribution": "normal", "args": [0.0, 10.0] } },
+      { "name": "sigma", "constraint": { "type": "positive" }, "prior": { "distribution": "exponential", "args": [1.0] } }
+    ],
+    "sampler": {
+      "algorithm": "nuts",
+      "chains": 2,
+      "samples": 30,
+      "warmup": 15,
+      "seed": 1234,
+      "targetAccept": 0.8,
+      "maxTreeDepth": 10,
+      "saveSamples": true
+    }
+  },
+  "expected": {
+    "ok": false,
+    "errorCodes": ["DATASET_REQUIRED"]
+  }
+}

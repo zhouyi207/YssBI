@@ -24,6 +24,11 @@ const WORKER_MANIFEST: &str = include_str!("../../julia/Manifest.toml");
 const WORKER_SCRIPT: &str = include_str!("../../julia/worker.jl");
 const WORKER_ACF_PACF_OP: &str = include_str!("../../julia/ops/acf_pacf.jl");
 const WORKER_SERIAL_TESTS_OP: &str = include_str!("../../julia/ops/serial_tests.jl");
+const WORKER_BAYES_FIT_OP: &str = include_str!("../../julia/ops/bayes_fit.jl");
+const WORKER_BAYES_EXPRESSION_OP: &str = include_str!("../../julia/ops/bayes/expression.jl");
+const WORKER_BAYES_TURING_LINEAR_OP: &str = include_str!("../../julia/ops/bayes/turing_linear.jl");
+const WORKER_BAYES_TURING_GENERIC_NORMAL_OP: &str =
+    include_str!("../../julia/ops/bayes/turing_generic_normal.jl");
 
 #[derive(Debug, Clone)]
 pub struct JuliaWorkerTask {
@@ -76,6 +81,7 @@ pub struct JuliaWorkerManager {
 struct JuliaWorkerInner {
     worker: Mutex<Option<Arc<WorkerProcess>>>,
     request_gate: Mutex<()>,
+    active_task_id: Mutex<Option<String>>,
 }
 
 impl JuliaWorkerManager {
@@ -84,6 +90,7 @@ impl JuliaWorkerManager {
             inner: Arc::new(JuliaWorkerInner {
                 worker: Mutex::new(None),
                 request_gate: Mutex::new(()),
+                active_task_id: Mutex::new(None),
             }),
         }
     }
@@ -148,20 +155,24 @@ impl JuliaWorkerManager {
         let result = (|| {
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
-            worker.send(json!({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": "run",
-                "params": {
-                    "taskId": task_id,
-                    "operation": task.operation,
-                    "inputPath": input_path,
-                    "outputPath": output_path,
-                    "metadataPath": metadata_path,
-                    "parameters": task.parameters
-                }
-            }))?;
-            worker.await_response(&request_id, &task_id)?;
+            self.set_active_task(Some(task_id.clone()))?;
+            let response = worker
+                .send(json!({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "run",
+                    "params": {
+                        "taskId": task_id,
+                        "operation": task.operation,
+                        "inputPath": input_path,
+                        "outputPath": output_path,
+                        "metadataPath": metadata_path,
+                        "parameters": task.parameters
+                    }
+                }))
+                .and_then(|()| worker.await_response(&request_id, &task_id));
+            self.clear_active_task(&task_id);
+            response?;
             Ok(JuliaWorkerTaskOutput {
                 task_id: task_id.clone(),
                 output_path,
@@ -175,7 +186,15 @@ impl JuliaWorkerManager {
         result
     }
 
-    pub fn cancel(&self, task_id: &str) -> Result<(), String> {
+    pub fn cancel(&self, task_id: &str) -> Result<bool, String> {
+        let active_task_id = self
+            .inner
+            .active_task_id
+            .lock()
+            .map_err(|_| "Julia worker active task state is unavailable.".to_string())?;
+        if active_task_id.as_deref() != Some(task_id) {
+            return Ok(false);
+        }
         let worker = self
             .inner
             .worker
@@ -183,12 +202,67 @@ impl JuliaWorkerManager {
             .map_err(|_| "Julia worker state is unavailable.".to_string())?
             .clone();
         match worker {
-            Some(worker) => worker.send(json!({
-                "jsonrpc": "2.0",
-                "method": "cancel",
-                "params": { "taskId": task_id }
-            })),
-            None => Ok(()),
+            Some(worker) => {
+                worker.send(json!({
+                    "jsonrpc": "2.0",
+                    "method": "cancel",
+                    "params": { "taskId": task_id }
+                }))?;
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    pub fn restart_task(&self, task_id: &str) -> Result<bool, String> {
+        let mut active_task_id = self
+            .inner
+            .active_task_id
+            .lock()
+            .map_err(|_| "Julia worker active task state is unavailable.".to_string())?;
+        if active_task_id.as_deref() != Some(task_id) {
+            return Ok(false);
+        }
+        let worker = self
+            .inner
+            .worker
+            .lock()
+            .map_err(|_| "Julia worker state is unavailable.".to_string())?
+            .take();
+        *active_task_id = None;
+        if let Some(worker) = worker {
+            worker.terminate();
+        }
+        Ok(true)
+    }
+
+    pub fn restart(&self) -> Result<(), String> {
+        let worker = self
+            .inner
+            .worker
+            .lock()
+            .map_err(|_| "Julia worker state is unavailable.".to_string())?
+            .take();
+        if let Some(worker) = worker {
+            worker.terminate();
+        }
+        Ok(())
+    }
+
+    fn set_active_task(&self, task_id: Option<String>) -> Result<(), String> {
+        *self
+            .inner
+            .active_task_id
+            .lock()
+            .map_err(|_| "Julia worker active task state is unavailable.".to_string())? = task_id;
+        Ok(())
+    }
+
+    fn clear_active_task(&self, task_id: &str) {
+        if let Ok(mut active_task_id) = self.inner.active_task_id.lock()
+            && active_task_id.as_deref() == Some(task_id)
+        {
+            *active_task_id = None;
         }
     }
 
@@ -344,6 +418,13 @@ impl WorkerProcess {
         }
     }
 
+    fn terminate(&self) {
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
     fn worker_failure(&self, fallback: &str) -> String {
         let detail = self
             .stderr
@@ -361,10 +442,7 @@ impl WorkerProcess {
 
 impl Drop for WorkerProcess {
     fn drop(&mut self) {
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        self.terminate();
     }
 }
 
@@ -375,6 +453,16 @@ fn inspect_worker_environment(worker_dir: &Path) -> (JuliaWorkerEnvironmentState
         worker_dir.join("worker.jl"),
         worker_dir.join("ops").join("acf_pacf.jl"),
         worker_dir.join("ops").join("serial_tests.jl"),
+        worker_dir.join("ops").join("bayes_fit.jl"),
+        worker_dir.join("ops").join("bayes").join("expression.jl"),
+        worker_dir
+            .join("ops")
+            .join("bayes")
+            .join("turing_linear.jl"),
+        worker_dir
+            .join("ops")
+            .join("bayes")
+            .join("turing_generic_normal.jl"),
     ];
     if required_files.iter().any(|path| !path.is_file()) {
         return (
@@ -428,6 +516,23 @@ fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, String> {
         .map_err(|error| format!("Failed to create Julia worker ops directory: {error}"))?;
     write_asset(&ops_dir.join("acf_pacf.jl"), WORKER_ACF_PACF_OP)?;
     write_asset(&ops_dir.join("serial_tests.jl"), WORKER_SERIAL_TESTS_OP)?;
+    write_asset(&ops_dir.join("bayes_fit.jl"), WORKER_BAYES_FIT_OP)?;
+    let bayes_ops_dir = ops_dir.join("bayes");
+    fs::create_dir_all(&bayes_ops_dir).map_err(|error| {
+        format!("Failed to create Julia Bayesian worker ops directory: {error}")
+    })?;
+    write_asset(
+        &bayes_ops_dir.join("expression.jl"),
+        WORKER_BAYES_EXPRESSION_OP,
+    )?;
+    write_asset(
+        &bayes_ops_dir.join("turing_linear.jl"),
+        WORKER_BAYES_TURING_LINEAR_OP,
+    )?;
+    write_asset(
+        &bayes_ops_dir.join("turing_generic_normal.jl"),
+        WORKER_BAYES_TURING_GENERIC_NORMAL_OP,
+    )?;
     Ok(worker_dir)
 }
 
@@ -476,7 +581,7 @@ fn worker_error(error: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::worker_error;
+    use super::{JuliaWorkerManager, worker_error};
     use serde_json::json;
 
     #[test]
@@ -484,6 +589,26 @@ mod tests {
         assert_eq!(
             worker_error(&json!({ "code": "invalid_parameters", "message": "bad column" })),
             "invalid_parameters: bad column"
+        );
+    }
+
+    #[test]
+    fn cancellation_and_restart_ignore_non_active_task() {
+        let manager = JuliaWorkerManager::new();
+        manager
+            .set_active_task(Some("active-task".to_string()))
+            .expect("set active task");
+
+        assert!(!manager.cancel("other-task").expect("cancel task"));
+        assert!(!manager.restart_task("other-task").expect("restart task"));
+        assert_eq!(
+            manager
+                .inner
+                .active_task_id
+                .lock()
+                .expect("active task lock")
+                .as_deref(),
+            Some("active-task")
         );
     }
 }

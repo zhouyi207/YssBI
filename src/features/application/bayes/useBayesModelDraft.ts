@@ -9,6 +9,7 @@ import type {
   RawExpressionDTO,
   SymbolDraftDTO,
 } from '@/shared/types/bayes';
+import { parseBayesExpression } from '@/services/bayes';
 import {
   bindRawExpression,
   collectRawSymbols,
@@ -16,6 +17,7 @@ import {
   createEmptyBayesDraft,
   createSymbolDrafts,
   hashBayesDraft,
+  likelihoodParameterNames,
   mergeInferredParameters,
   parseRawExpression,
   symbolNamesByRole,
@@ -35,30 +37,21 @@ const EXAMPLE_RAW_EXPRESSION: RawExpressionDTO = {
 
 export function createMockBayesDraft(): BayesModelDraftDTO {
   const base = createEmptyBayesDraft();
-  const dataset = {
-    sourceType: 'table' as const,
-    sourceId: 'mock-linear-demo',
-    columns: [
-      { name: 'time_seconds', dtype: 'number' as const, nullable: false },
-      { name: 'response_value', dtype: 'number' as const, nullable: false },
-      { name: 'group', dtype: 'string' as const, nullable: false },
-    ],
-  };
   const rawPredictor = EXAMPLE_RAW_EXPRESSION;
   const symbolNames = ['y', ...collectRawSymbols(rawPredictor)];
-  const symbols = createSymbolDrafts(symbolNames, [], dataset.columns.map(column => column.name));
+  const symbols = createSymbolDrafts(symbolNames, [], []);
   const boundPredictor = bindRawExpression(rawPredictor, symbols);
   const merged = mergeInferredParameters([], symbolNamesByRole(symbols, 'parameter'), base.likelihood);
 
   return {
     ...base,
-    formulaText: 'y = a \\cdot x + b',
+    formulaText: 'y \\sim \\operatorname{Normal}\\left(a \\cdot x + b, \\sigma\\right)',
     responseSymbol: 'y',
     rawPredictor,
     symbols,
-    dataset,
-    responseBinding: { symbol: 'y', column: 'response_value' },
-    dataBindings: { x: 'time_seconds' },
+    dataset: null,
+    responseBinding: null,
+    dataBindings: {},
     boundPredictor,
     parameters: merged.parameters,
   };
@@ -75,27 +68,23 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createMock
     setDraft(current => ({ ...current, formulaText }));
   };
 
-  const updateModelEquation = (responseSymbol: string, formulaText: string, likelihood: LikelihoodSpecDTO, predictorText?: string) => {
-    setDraft(current => {
-      const rawPredictor = predictorText ? parseRawExpression(predictorText).expression : current.rawPredictor;
-      return rebuildDraft(ensureDependentSymbol({
-        ...current,
-        responseSymbol,
-        formulaText,
-        rawPredictor,
-        likelihood,
-      }, responseSymbol));
-    });
+  const updateModelEquation = async (responseSymbol: string, formulaText: string, likelihood: LikelihoodSpecDTO, predictorText?: string) => {
+    const rawPredictor = predictorText
+      ? await parseBayesExpression({ formula: `${responseSymbol} = ${predictorText}` })
+        .then(response => response.formula.rawPredictor ?? parseRawExpression(predictorText).expression)
+        .catch(() => parseRawExpression(predictorText).expression)
+      : null;
+    setDraft(current => rebuildDraft(ensureDependentSymbol({
+      ...current,
+      responseSymbol,
+      formulaText,
+      rawPredictor: rawPredictor ?? current.rawPredictor,
+      likelihood,
+    }, responseSymbol)));
   };
 
   const updateFormula = (formulaText: string, rawPredictor: RawExpressionDTO | null, responseSymbol?: string) => {
     setDraft(current => rebuildDraft({ ...current, formulaText, rawPredictor, responseSymbol }));
-  };
-
-  const updateSymbolName = (oldName: string, newName: string) => {
-    const name = newName.trim();
-    if (!name || name === oldName) return;
-    setDraft(current => rebuildDraft(renameSymbol(current, oldName, name)));
   };
 
   const updateSymbolRole = (name: string, role: BayesSymbolRoleDTO) => {
@@ -121,7 +110,30 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createMock
   };
 
   const updateDataset = (dataset: BayesModelDraftDTO['dataset']) => {
-    setDraft(current => rebuildDraft({ ...current, dataset }));
+    setDraft(current => rebuildDraft(applyDatasetDefaults({ ...current, dataset })));
+  };
+
+  const updateSymbolConfiguration = (configuration: {
+    name: string;
+    dataset: BayesModelDraftDTO['dataset'];
+    role: BayesSymbolRoleDTO;
+    column: string;
+    constraint: ParameterSpecDTO['constraint'];
+    prior: PriorSpecDTO;
+  }) => {
+    setDraft(current => {
+      let next = applyDatasetDefaults({ ...current, dataset: configuration.dataset });
+      next = applySymbolRole(next, configuration.name, configuration.role);
+      next = applySymbolDataBinding(next, configuration.name, configuration.column);
+      next = rebuildDraft(next);
+      if (configuration.role !== 'parameter') return next;
+      return {
+        ...next,
+        parameters: next.parameters.map(parameter => parameter.name === configuration.name
+          ? { ...parameter, constraint: configuration.constraint, prior: configuration.prior }
+          : parameter),
+      };
+    });
   };
 
   const deleteSymbol = (name: string) => {
@@ -150,10 +162,16 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createMock
   };
 
   const rebuildDraft = (next: BayesModelDraftDTO, deletedNames: Set<string> = deletedSymbolNames): BayesModelDraftDTO => {
-    const rawSymbols = collectRawSymbols(next.rawPredictor).filter(name => !deletedNames.has(name));
+    const rawSymbols = [...collectRawSymbols(next.rawPredictor), ...likelihoodParameterNames(next.likelihood)]
+      .filter((name, index, names) => names.indexOf(name) === index)
+      .filter(name => !deletedNames.has(name));
     const datasetColumns = next.dataset?.columns.map(column => column.name) ?? [];
+    const likelihoodParameters = new Set(likelihoodParameterNames(next.likelihood));
     const symbols = createSymbolDrafts(rawSymbols, next.symbols, datasetColumns)
-      .filter(symbol => !deletedNames.has(symbol.name));
+      .filter(symbol => !deletedNames.has(symbol.name))
+      .map(symbol => likelihoodParameters.has(symbol.name)
+        ? { ...symbol, role: 'parameter' as const, inferredRole: 'parameter' as const }
+        : symbol);
     const boundPredictor = bindRawExpression(next.rawPredictor, symbols);
     const merged = mergeInferredParameters(next.parameters, symbolNamesByRole(symbols, 'parameter'), next.likelihood);
     setUnusedParameterNames(merged.unusedParameterNames);
@@ -175,12 +193,12 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createMock
     updateFormulaText,
     updateModelEquation,
     updateFormula,
-    updateSymbolName,
     updateSymbolRole,
     updateSymbolDataBinding,
     updateSymbolPrior,
     updateSymbolConstraint,
     updateDataset,
+    updateSymbolConfiguration,
     deleteSymbol,
     updateSymbols,
     updateLikelihood,
@@ -209,28 +227,7 @@ function ensureDependentSymbol(draft: BayesModelDraftDTO, name: string): BayesMo
   };
 }
 
-function renameSymbol(draft: BayesModelDraftDTO, oldName: string, newName: string): BayesModelDraftDTO {
-  const dataBindings = { ...draft.dataBindings };
-  if (Object.prototype.hasOwnProperty.call(dataBindings, oldName)) {
-    dataBindings[newName] = dataBindings[oldName];
-    delete dataBindings[oldName];
-  }
 
-  return {
-    ...draft,
-    responseSymbol: draft.responseSymbol === oldName ? newName : draft.responseSymbol,
-    responseBinding: draft.responseBinding?.symbol === oldName
-      ? { ...draft.responseBinding, symbol: newName }
-      : draft.responseBinding,
-    dataBindings,
-    symbols: draft.symbols.map(symbol => symbol.name === oldName
-      ? { ...symbol, name: newName, userEdited: true }
-      : symbol),
-    parameters: draft.parameters.map(parameter => parameter.name === oldName
-      ? { ...parameter, name: newName }
-      : parameter),
-  };
-}
 
 function applySymbolRole(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): BayesModelDraftDTO {
   const symbols = draft.symbols.map(symbol => {
@@ -285,6 +282,45 @@ function applySymbolDataBinding(draft: BayesModelDraftDTO, name: string, column:
   }
 
   return draft;
+}
+
+function applyDatasetDefaults(draft: BayesModelDraftDTO): BayesModelDraftDTO {
+  const dataset = draft.dataset;
+  if (!dataset) return { ...draft, responseBinding: null, dataBindings: {} };
+
+  const dependentSymbol = draft.symbols.find(symbol => symbol.role === 'dependent')?.name ?? draft.responseSymbol;
+  const responseColumn = dependentSymbol
+    ? preferredColumn(dataset, dependentSymbol, ['number', 'integer', 'boolean'])
+    : null;
+  const responseBinding = dependentSymbol && responseColumn
+    ? { symbol: dependentSymbol, column: responseColumn }
+    : draft.responseBinding;
+
+  const dataBindings = { ...draft.dataBindings };
+  for (const symbol of draft.symbols.filter(symbol => symbol.role === 'independent')) {
+    if (dataBindings[symbol.name] && dataset.columns.some(column => column.name === dataBindings[symbol.name])) {
+      continue;
+    }
+    const column = preferredColumn(dataset, symbol.name, ['number', 'integer']);
+    if (column) dataBindings[symbol.name] = column;
+  }
+
+  return {
+    ...draft,
+    responseBinding,
+    dataBindings,
+  };
+}
+
+function preferredColumn(
+  dataset: NonNullable<BayesModelDraftDTO['dataset']>,
+  symbolName: string,
+  allowedTypes: readonly string[],
+): string | null {
+  const exact = dataset.columns.find(column => column.name === symbolName && allowedTypes.includes(column.dtype));
+  if (exact) return exact.name;
+  const compatible = dataset.columns.find(column => allowedTypes.includes(column.dtype));
+  return compatible?.name ?? dataset.columns[0]?.name ?? null;
 }
 
 function removeSymbol(draft: BayesModelDraftDTO, name: string): BayesModelDraftDTO {

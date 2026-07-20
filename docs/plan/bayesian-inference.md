@@ -145,50 +145,68 @@ interface BayesModelDraftDTO {
 
 定义跨前端、Rust、Julia 后端都稳定的贝叶斯模型协议。它是系统的核心，不绑定 Turing.jl。
 
-建议 Rust 目录：
+F1 已落地的 Rust 目录：
 
 ```text
 src-tauri/src/sci/api/bayes/
-  mod.rs
-  model_spec.rs
-  expression.rs
-  prior.rs
-  likelihood.rs
-  inference_config.rs
-  result.rs
+  mod.rs          # public API exports and focused tests
+  draft.rs        # frontend BayesModelDraft IPC DTO
+  model.rs        # validated BayesModelSpec and stable model DTOs
+  convert.rs      # draft validation and draft -> spec conversion
+  validation.rs   # ValidationReport / ValidationIssue
+  result.rs       # task, result, summary, diagnostics DTOs
 ```
+
+Tauri IPC 薄封装位于：
+
+```text
+src-tauri/src/commands/command_bayes.rs
+```
+
+命令层只做参数接收、调用 `sci::api::bayes`、映射 AppError，不持有贝叶斯建模规则。
 
 ### 核心对象
 
 ```text
 DatasetRef
-ModelSpec
+ResponseSpec
+BayesModelDraft
+BayesModelSpec
 Expression
 LikelihoodSpec
 ParameterSpec
 PriorSpec
 InferenceConfig
+ValidationReport
+BayesInferenceTask
 InferenceResult
 ```
 
 ### `ModelSpec`
 
 ```rust
-pub struct ModelSpec {
-    pub response: String,
+pub struct BayesModelSpec {
+    pub dataset: DatasetRef,
+    pub response: ResponseSpec,
     pub predictor: Expression,
+    pub data_variables: BTreeMap<String, String>,
     pub likelihood: LikelihoodSpec,
     pub parameters: Vec<ParameterSpec>,
     pub sampler: InferenceConfig,
+    pub display_formula: String,
 }
 ```
 
 含义：
 
-- `response` 是观测变量，例如 `y`；
+- `dataset` 是后端数据源引用，不把整张表塞入模型配置；
+- `response` 是观测变量符号及其绑定列，例如 `y -> response`；
 - `predictor` 是预测方程 AST，例如 `a * x + b`；
+- `data_variables` 保存模型自变量符号到数据列的映射，例如 `x -> time`；
 - `likelihood` 是观测分布，例如 `Normal(mu, sigma)`；
-- `parameters` 是未知参数定义，例如 `a`, `b`, `sigma`。
+- `parameters` 是未知参数定义，例如 `a`, `b`, `sigma`；
+- `sampler` 是采样配置；
+- `display_formula` 仅用于展示/审计，不作为可执行代码。
 
 ### `Expression`
 
@@ -196,9 +214,10 @@ pub struct ModelSpec {
 
 ```rust
 pub enum Expression {
-    Number(f64),
-    Column(String),
-    Parameter(String),
+    Number { value: f64 },
+    DataVariable { name: String },
+    Column { name: String },
+    Parameter { name: String },
     Unary {
         op: UnaryOp,
         arg: Box<Expression>,
@@ -240,6 +259,24 @@ exp log sqrt abs sin cos min max
 环境变量访问
 ```
 
+### Draft → Spec 转换
+
+前端提交的是 `BayesModelDraft`，不是直接提交 `BayesModelSpec`。Rust 通过：
+
+```rust
+validate_draft(&draft) -> ValidationReport
+draft_to_model_spec(draft) -> Result<BayesModelSpec, ValidationReport>
+```
+
+转换时必须确认：
+
+- dataset 存在且有 source id；
+- 恰好一个 dependent symbol；
+- response binding 存在并指向 dataset column；
+- independent symbols 都绑定到 dataset column；
+- predictor 已经是 `Expression`，并且其中数据符号和参数都已配置；
+- sampler 的 chains/samples/target_accept 等基础取值合法。
+
 ### `ParameterSpec`
 
 ```rust
@@ -253,15 +290,26 @@ pub struct ParameterSpec {
 第一版约束：
 
 ```text
-real        无约束
-positive    大于 0
-unit        0 到 1
+real                         (-∞, ∞)
+positive                     (0, ∞)
+unit                         (0, 1)
+bounded(lower, upper, ...)   用户指定上下界，可配置开闭区间
+```
+
+`bounded` 是一等约束对象，而不是 UI 附加字段：
+
+```rust
+Bounded {
+    lower: f64,
+    upper: f64,
+    include_lower: bool,
+    include_upper: bool,
+}
 ```
 
 后续再扩展：
 
 ```text
-bounded(lower, upper)
 integer
 simplex
 ordered
@@ -293,7 +341,7 @@ HalfNormal
 
 ### `LikelihoodSpec`
 
-数学方程和观测分布必须分离。
+数学方程和观测分布在结构化协议中必须分离；UI 可以把它们组合为一条 LaTeX 观测模型展示。
 
 示例：
 
@@ -310,11 +358,33 @@ BernoulliLogit
 PoissonLog
 ```
 
-建议 MVP 先只实现：
+当前 Julia backend 已真实执行：
 
 ```text
 Normal
+BernoulliLogit
+PoissonLog
 ```
+
+其中 `Normal` 支持固定线性 fast path 和安全 AST 通用非线性路径；`BernoulliLogit` / `PoissonLog` 走安全 AST 通用 Turing 路径。
+
+### F1 当前边界
+
+已经完成：
+
+- Rust `BayesModelDraft` / `BayesModelSpec` / `Expression` / `PriorSpec` / `LikelihoodSpec` / `InferenceConfig` DTO；
+- `validate_draft` 和 `draft_to_model_spec`；
+- command 层的 `validate_bayes_model`、`submit_bayes_inference` 等结构化入口；
+- 参数约束支持 `real`、`positive`、`unit`、`bounded`；
+- prior args 取值域校验和 constraint/prior 基础兼容性 warning；
+- focused Rust tests 覆盖有效 draft 转 spec、缺少 dataset、非法 bounds / prior args 的校验。
+
+尚未完成：
+
+- 真实 Julia/Turing MCMC 执行；
+- Rust 侧完整文本表达式 parser，当前前端先负责 predictor → RawExpressionDTO/Expression；
+- result source 可枚举 registry；
+- 更完整的分布定义域与截断/变换策略验证。
 
 ---
 
@@ -329,11 +399,12 @@ Normal
 Rust 负责：
 
 - 文本表达式解析；
+- LaTeX 常见操作符归一化，例如 `\\cdot`、`\\times`、`\\sigma`；
+- `response = predictor` 和 `response ~ Distribution(predictor, ...)` 的基础拆分；
 - AST 构建；
 - 函数白名单校验；
-- 列名和参数名解析；
-- 禁止未知符号；
-- 表达式复杂度限制；
+- symbol collection；
+- 表达式节点数和深度限制；
 - 生成 Julia 可解释的 JSON AST。
 
 ### Julia 职责
@@ -351,6 +422,53 @@ evaluate_expression(ast, env)
 ```
 
 不要第一版就生成 Julia 源码并 `eval`。
+
+### F2 已落地实现
+
+Rust 实现位于：
+
+```text
+src-tauri/src/sci/api/bayes/expression.rs
+```
+
+提供：
+
+```rust
+parse_model_expression(input) -> ParsedExpression
+parse_predictor_expression(input) -> RawExpression
+collect_raw_symbols(expression, symbols)
+```
+
+当前支持：
+
+```text
+数字
+符号
++ - * / ^
+括号
+exp log sqrt abs sin cos min max
+常见 LaTeX token: \\cdot, \\times, \\sigma, \\sim, \\left, \\right
+```
+
+当前限制：
+
+```text
+MAX_EXPRESSION_NODES = 256
+MAX_EXPRESSION_DEPTH = 32
+```
+
+`parse_bayes_expression` command 已接入该 parser，并返回：
+
+```ts
+{
+  formulaText: string,
+  responseSymbol?: string,
+  rawPredictor: RawExpressionDTO,
+  symbols: string[]
+}
+```
+
+前端 Formula 保存时优先调用后端 parser；如果后端不可用，开发阶段 fallback 到前端 parser。
 
 ### 约定
 
@@ -388,48 +506,63 @@ Julia module
 
 在任务提交到 Julia 之前，Rust 先完成尽可能多的验证，减少运行时失败，并给用户明确反馈。
 
-建议目录：
+F3 已落地目录：
 
 ```text
-src-tauri/src/sci/api/bayes/validation.rs
+src-tauri/src/sci/api/bayes/
+  validation.rs   # ValidationReport / ValidationIssue 数据结构
+  validators.rs   # 分层 draft validators
+  convert.rs      # 只保留 draft -> spec 转换
 ```
+
+`validate_draft` 已从 `convert.rs` 中拆出，避免转换模块变成 god module。
 
 ### 验证内容
 
-#### 数据验证
+#### 已实现的数据验证
 
-- 响应变量存在；
-- predictor 中引用的列存在；
-- 所有参与 MCMC 的列是数值型；
-- 缺失值策略明确；
-- 行数大于最低要求；
-- 数据量过大时给出提示或抽样建议。
+- dataset 必须存在；
+- dataset source id 必须存在；
+- 必须且只能有一个 dependent symbol；
+- response binding 必须存在；
+- response column 必须存在于 dataset columns；
+- independent symbols 必须绑定数据列；
+- independent binding column 必须存在于 dataset columns。
 
-#### 参数验证
+#### 已实现的表达式验证
 
-- 参数名合法；
-- 参数名不与列名冲突；
-- 参数名不重复；
-- predictor 中的未知符号必须属于列名或参数名；
-- likelihood 中使用的参数必须存在；
-- 先验分布参数数量正确；
-- 先验参数满足取值域。
+- predictor 必须存在；
+- predictor 中的 data variables 必须已配置为 independent symbols；
+- predictor 中的 parameters 必须存在于 `ParameterSpec`；
+- expression number 必须 finite；
+- function arity 校验：
+  - `exp/log/sqrt/abs/sin/cos`: 1 个参数；
+  - `min/max`: 至少 2 个参数。
 
-#### 模型验证
+#### 已实现的 likelihood 验证
 
-- likelihood 和 response 类型匹配；
-- `Normal` 的 `sigma` 必须 positive；
-- `BernoulliLogit` 的 response 应为 0/1；
-- `PoissonLog` 的 response 应为非负整数；
-- 表达式深度和节点数不超过限制。
+- `Normal` response 必须是 number/integer；
+- `Normal` predictor columns 必须是 number/integer；
+- `Normal` sigma parameter 必须存在；
+- `Normal` sigma parameter 非 positive-compatible constraint 时给 warning；
+- `BernoulliLogit` response 必须是 boolean/integer/number；
+- `PoissonLog` response 必须是 integer/number；
+- submit 时会在 Rust 应用层扫描已物化的窄列数据，提前拦截 Bernoulli 非 0/1、Poisson 负数/小数、Normal/自变量缺失或非有限值，不把明显非法输入交给 Julia。
 
-#### 采样配置验证
+#### 已实现的参数验证
+
+- parameter name 不能为空；
+- parameter name 不能重复；
+- `bounded` lower/upper 必须 finite 且 lower < upper；
+- prior args 基础取值域校验；
+- constraint 与 prior support 基础兼容性 warning。
+
+#### 已实现的采样配置验证
 
 - chains >= 1；
 - samples > 0；
-- warmup >= 0；
-- target_accept 在合理范围内；
-- seed 可选但必须为有效整数。
+- target_accept 在 0 到 1 之间；
+- max_tree_depth 如果设置，必须 > 0。
 
 ### 输出
 
@@ -445,6 +578,27 @@ pub struct ValidationReport {
 
 不要只返回字符串。
 
+### F3 当前边界
+
+已经完成：
+
+- `validate_draft` 分层 validators；
+- dataset/binding validation；
+- expression semantic validation；
+- likelihood/response dtype validation；
+- parameter bounds/prior validation；
+- sampler validation；
+- `validate_bayes_input_table` 运行前数据扫描，覆盖 response 与 predictor columns 的缺列、类型和值域错误；
+- focused Rust tests 覆盖 response dtype 和 function arity。
+
+尚未完成：
+
+- 缺失值策略；
+- 行数和数据量检查；
+- Poisson 非负整列扫描；
+- 参数名与列名冲突策略；
+- 更严格的 distribution support / truncation / transform validation。
+
 ---
 
 ## 5. Rust Bayesian Application Framework
@@ -453,12 +607,18 @@ pub struct ValidationReport {
 
 把贝叶斯推断纳入应用层工作流，保持 Tauri command 轻薄，避免前端直接接触后端实现细节。
 
-建议目录：
+F4 已落地目录：
 
 ```text
-src-tauri/src/features/application/bayes/   // 如果后续建立应用层 feature
-src-tauri/src/commands/command_bayes.rs
-src-tauri/src/sci/api/bayes/
+src-tauri/src/application/bayes.rs          # BayesInferenceService / task registry / result store
+src-tauri/src/commands/command_bayes.rs     # thin Tauri commands
+src-tauri/src/sci/api/bayes/                # model spec / validation / result DTOs
+```
+
+服务在 Tauri setup 中注册为 managed state：
+
+```rust
+.manage(application::bayes::BayesInferenceService::new())
 ```
 
 ### Tauri command 约定
@@ -480,13 +640,7 @@ Tauri command 只做：
 
 ### 推荐命令
 
-MVP 可以先同步：
-
-```text
-fit_bayes_model
-```
-
-但正式功能应使用任务式接口：
+正式功能使用任务式接口：
 
 ```text
 submit_bayes_inference
@@ -497,6 +651,53 @@ read_bayes_inference_result
 
 返回给前端的是 YssBI 任务状态，不是 Julia worker 状态。
 
+### F4 已实现服务
+
+```rust
+BayesInferenceService::submit(draft) -> BayesInferenceTask
+BayesInferenceService::status(task_id) -> BayesInferenceTask
+BayesInferenceService::cancel(task_id)
+BayesInferenceService::result(task_id) -> InferenceResult
+```
+
+当前实现使用内存：
+
+```rust
+HashMap<TaskId, BayesInferenceTask>
+HashMap<TaskId, InferenceResult>
+```
+
+提交任务时：
+
+```text
+BayesModelDraft
+  → validate_draft
+  → draft_to_model_spec
+  → BayesBackend::fit
+  → stored task/result
+```
+
+这保证 command / frontend / task API 已经稳定。后续接 Julia/Turing 时只替换 `BayesBackend` 实现，不需要改 command API。
+
+### F4 当前边界
+
+已经完成：
+
+- `BayesInferenceService`；
+- task registry；
+- result store；
+- command 薄封装；
+- Tauri managed state 注册；
+- focused Rust tests 覆盖 submit、invalid draft、unknown task、backend 调用、backend 失败。
+
+尚未完成：
+
+- 异步队列和后台执行；
+- 真实 Julia/Turing backend；
+- 结果落盘 / result source 集成；
+- 应用重启后的任务恢复；
+- 进度事件推送。
+
 ---
 
 ## 6. Scientific Backend Framework
@@ -505,43 +706,60 @@ read_bayes_inference_result
 
 为贝叶斯推断提供可替换后端。第一版实现 Julia/Turing，未来可扩展 Stan、Rust MCMC 或远程推断。
 
-建议目录：
+F5 已落地目录：
+
+```text
+src-tauri/src/sci/backends/bayes/mod.rs
+```
+
+该模块定义贝叶斯后端统一接口和当前 placeholder backend。后续 Julia/Turing backend 可以放在：
 
 ```text
 src-tauri/src/sci/backends/julia/bayes/
   mod.rs
   fit.rs
   io.rs
-
-src-tauri/src/sci/backends/rust/bayes/
-  mod.rs
-  validate.rs
 ```
 
-### Engine 约定
+并实现同一个 `BayesBackend` trait。
 
-沿用现有 `SciContext` / `SciEngine`：
+### Backend trait
+
+F5 当前不复用 `SciEnginePolicy` 做贝叶斯选择，而是先建立更直接的后端接口：
+
+```rust
+pub trait BayesBackend: Send + Sync {
+    fn fit(&self, spec: &BayesModelSpec) -> Result<InferenceResult, BayesBackendError>;
+}
+```
+
+应用层只依赖 trait：
 
 ```text
-Rust
-Julia
-JuliaWithRustFallback
+BayesInferenceService
+  → Arc<dyn BayesBackend>
+  → InferenceResult
 ```
 
-但贝叶斯 MCMC 第一版通常只有 Julia 后端。此时：
+这样 command 与前端不会感知 Julia/Turing/worker 细节。
 
-- `SciEngine::Julia` 执行 Turing；
-- `SciEngine::Rust` 可只做 validation 或返回 unsupported；
-- `JuliaWithRustFallback` 不应静默换成不等价的 Rust 算法，除非 Rust backend 明确实现同一模型。
+### 已实现 backend
+
+```rust
+PlaceholderBayesBackend
+```
+
+它返回 `InferenceResult::engine_not_implemented()`，用于稳定任务/结果链路。`BayesInferenceService::new()` 默认注入该 backend；测试可以通过 `BayesInferenceService::with_backend(...)` 注入 mock backend。
+
+backend 失败时，service 会记录一个 `failed` task，并把 backend error 映射到 `TaskError`。
 
 ### 后端输入输出
 
 后端输入：
 
 ```text
-ModelSpec JSON
-InferenceConfig JSON
-Data Arrow
+BayesModelSpec
+Data Arrow/Parquet 或后端可解析 DatasetRef
 ```
 
 后端输出：
@@ -563,6 +781,27 @@ logs text
 src-tauri/src/sci/backends/julia/bayes/fit.rs
 ```
 
+### F5 当前边界
+
+已经完成：
+
+- `BayesBackend` trait；
+- `BayesBackendError`；
+- `PlaceholderBayesBackend`；
+- `JuliaBayesBackend` skeleton，复用通用 `JuliaWorkerManager::run_task` 调用 `bayes_fit` op；
+- `BayesInferenceService` 通过 `Arc<dyn BayesBackend>` 调用 backend；
+- backend success 存储 result；
+- backend failure 存储 failed task；
+- focused Rust tests 覆盖 placeholder backend、backend 注入、backend failure、Julia skeleton result 解析。
+
+尚未完成：
+
+- result source / query source 数据物化；
+- 更完整的运行前数据扫描报告聚合，目前遇到首个错误即返回；
+- Turing MCMC 实现；
+- backend progress/cancel 协议；
+- backend result source / samples 文件输出。
+
 ---
 
 ## 7. Julia Bayesian Engine Framework
@@ -570,6 +809,127 @@ src-tauri/src/sci/backends/julia/bayes/fit.rs
 ### 目标
 
 在 Julia worker 中实现贝叶斯推断 op。第一阶段复用当前 worker，而不是新建独立 sidecar。
+
+F6.1 已先落地最小 skeleton：
+
+```text
+BayesBackend trait
+  → JuliaBayesBackend
+  → JuliaWorkerManager::run_task(operation = "bayes_fit")
+  → src-tauri/julia/ops/bayes_fit.jl
+  → metadata.json(InferenceResult)
+```
+
+这个版本只证明 Rust → Julia → 标准结果 DTO 的链路可达，不运行 Turing，也不产生真实后验样本。
+
+F6.2 已补充最小数据链路：
+
+```text
+submit_bayes_inference
+  → BayesInferenceService::submit_from_project
+  → validate draft / draft_to_model_spec
+  → ProjectState.with_database_mut(...load_columns)
+  → BayesBackendRequest { spec, input_table }
+  → JuliaBayesBackend writes input.arrow
+  → bayes_fit.jl reads Arrow.Table(inputPath)
+```
+
+Rust 只物化模型需要的窄列集合：response column + independent variable binding columns；不整表加载，不让前端或 Julia 直接访问项目数据库。
+
+F6.3 已将应用默认 backend 切换为 Julia backend：
+
+```text
+tauri setup
+  → create shared JuliaWorkerManager
+  → manage JuliaWorkerManager
+  → manage BayesInferenceService::with_backend(JuliaBayesBackend)
+```
+
+贝叶斯任务现在默认走 Julia worker；如果系统 Julia 不可用或 worker 失败，错误会被封装为 backend failed task 返回给前端。
+
+F6.4 已补充 Julia 侧安全表达式解释层：
+
+```text
+src-tauri/julia/ops/bayes/expression.jl
+  → prior default values
+  → numeric Arrow column access
+  → Expression AST evaluator
+  → predictor preview smoke evaluation
+```
+
+它只解释 Rust 已验证过的结构化 AST，不解析或执行用户 Julia 源码。当前用于在进入 Turing 前验证 Julia 可以读取数据列、识别参数默认值并计算 predictor。
+
+F6.5/F6.6/F6.10 已补充 Turing 执行路径：
+
+```text
+src-tauri/julia/Project.toml
+  → Turing
+  → Distributions
+  → MCMCChains
+  → StatsBase
+
+src-tauri/julia/ops/bayes/turing_linear.jl
+  → fixed Normal linear model y ~ Normal(a * x + b, sigma)
+
+src-tauri/julia/ops/bayes/turing_generic_normal.jl
+  → generic safe-AST regression model
+  → Normal / BernoulliLogit / PoissonLog likelihoods
+  → NUTS sampling
+  → chain summary to InferenceResult.summaries
+```
+
+当前已支持：
+
+- `Normal` likelihood：固定 `a * x + b` fast path + 通用安全 AST 非线性路径；
+- `BernoulliLogit` likelihood：响应列运行时校验为 boolean 或 0/1；
+- `PoissonLog` likelihood：响应列运行时校验为非负整数计数；
+- prior 映射：`Normal`、`LogNormal`、`Uniform`、`Beta`、`Gamma`、`Exponential`、`StudentT`、`Cauchy`、`HalfNormal`；
+- 输出 summary；
+- 当 `sampler.saveSamples = true` 时，将 posterior draws 写入 Arrow 长表：`parameter`, `chain`, `draw`, `value`；
+- `InferenceResult.samples` 返回 samples Arrow 路径；
+- posterior predictive 写入 Arrow 并通过 result artifact manifest 暴露；
+- `rhat` / `essBulk` / `essTail` 已从 `MCMCChains.summarystats` 转换到 `InferenceResult.summaries`；
+- R-hat 偏高和 ESS 偏低会生成参数级 diagnostic warning。
+
+F6.8 已补充 Rust → Julia/Turing 的环境变量门控集成测试：
+
+```text
+src-tauri/tests/sci_api_bayes_julia_integration_test.rs
+```
+
+默认测试只编译并跳过；设置下面环境变量后才会准备 Julia worker 并运行 Turing PoC：
+
+```sh
+YSSBI_RUN_JULIA_BAYES_TESTS=1 cargo test --manifest-path src-tauri/Cargo.toml julia_bayes_fixed_linear_poc_runs_when_enabled --test sci_api_bayes_julia_integration_test
+```
+
+测试覆盖：
+
+- `JuliaWorkerManager::prepare`；
+- `JuliaBayesBackend::fit`；
+- Arrow input 写入；
+- `bayes_fit` / Turing fixed linear 与通用 safe-AST regression；
+- `Normal`、`BernoulliLogit`、`PoissonLog` fixture；
+- 参数 summary；
+- `rhat` / `essBulk` / `essTail`；
+- `saveSamples = true` 时返回 samples ref。
+
+F6.9 已补充 Julia Bayes backend 错误分类。worker 原始错误会保留在 `TaskError.detail`，同时映射为稳定用户可读错误码：
+
+```text
+JULIA_BAYES_RUNTIME_UNAVAILABLE
+JULIA_BAYES_PACKAGE_UNAVAILABLE
+JULIA_BAYES_MODEL_UNSUPPORTED
+JULIA_BAYES_INVALID_DATA
+JULIA_BAYES_SAMPLING_FAILED
+JULIA_BAYES_BACKEND_FAILED
+```
+
+当前 samples 生命周期策略：
+
+- 无 samples 的任务完成后清理 worker task 目录；
+- 有 samples 的任务保留 task 目录，`InferenceResult.samples.samplesPath` 指向 Arrow draws 文件；
+- F7 结果页接入 samples 可视化前，需要补一个后端 samples paging command，前端不应直接读取 worker 临时文件。
 
 建议目录：
 
@@ -608,6 +968,29 @@ Arrow
 
 ### Julia op 输入
 
+F6.1/F6.2 当前沿用通用 worker envelope，`BayesModelSpec` 直接放在 `parameters.model` 中，数据表走 `inputPath` Arrow IPC：
+
+```json
+{
+  "operation": "bayes_fit",
+  "inputPath": "input.arrow",
+  "outputPath": "output.arrow",
+  "metadataPath": "metadata.json",
+  "parameters": {
+    "model": {
+      "dataset": { "sourceType": "table", "sourceId": "..." },
+      "response": { "symbol": "y", "column": "..." },
+      "predictor": { "type": "binary", "op": "add" },
+      "likelihood": { "type": "normal" },
+      "parameters": [],
+      "sampler": { "algorithm": "nuts" }
+    }
+  }
+}
+```
+
+后续真实 MCMC 版本如模型配置变大，可以把 `parameters.model` 改成文件化输入：
+
 ```json
 {
   "operation": "bayes_fit",
@@ -641,18 +1024,53 @@ logPath
 
 ### Julia op 输出
 
+F6.1/F6.2 skeleton 的 `metadata.json` 直接写标准 `InferenceResult`，并用 warning 暴露 Julia 是否收到输入表：
+
+```json
+{
+  "summaries": [],
+  "diagnostics": {
+    "chains": 4,
+    "drawsPerChain": 2000,
+    "warmup": 1000,
+    "divergences": 0,
+    "maxTreedepthHits": 0,
+    "warnings": [
+      {
+        "code": "JULIA_BAYES_ENGINE_READY",
+        "message": "Julia Bayesian engine op is reachable; Turing sampling is not implemented yet.",
+        "parameter": null
+      },
+      {
+        "code": "JULIA_BAYES_INPUT_READY",
+        "message": "Julia received 100 rows and 2 columns: y, x.",
+        "parameter": null
+      },
+      {
+        "code": "JULIA_BAYES_PREDICTOR_READY",
+        "message": "Predictor AST evaluated successfully for preview values: 1.0, 2.0, 3.0.",
+        "parameter": null
+      },
+      {
+        "code": "JULIA_BAYES_TURING_LINEAR_POC",
+        "message": "Fixed Normal linear regression was sampled with Turing.jl.",
+        "parameter": null
+      }
+    ]
+  },
+  "samples": null,
+  "logPath": null
+}
+```
+
+worker RPC response 仍只返回 task/file paths：
+
 ```json
 {
   "taskId": "...",
   "operation": "bayes_fit",
-  "summaryPath": "...",
-  "samplesPath": "...",
-  "metadataPath": "...",
-  "diagnostics": {
-    "chains": 4,
-    "drawsPerChain": 2000,
-    "divergences": 0
-  }
+  "outputPath": "...",
+  "metadataPath": "..."
 }
 ```
 
@@ -814,7 +1232,7 @@ pub struct InferenceDiagnostics {
 ```text
 summary.json       小体积摘要
 samples.arrow      完整后验样本
-metadata.json      任务元数据
+metadata.json      任务元数据和完整 InferenceResult
 run.log            运行日志
 ppc.arrow          后验预测，可选
 ```
@@ -822,6 +1240,168 @@ ppc.arrow          后验预测，可选
 完整样本不要通过 JSON 返回给前端。
 
 前端图表按需读取下采样或聚合后的数据。
+
+### F9.1 artifact manifest
+
+已落地稳定的结果产物清单，避免前端或上层应用依赖 Julia/Turing 内部对象：
+
+```rust
+pub struct ResultArtifactManifest {
+    pub task_id: String,
+    pub summary_path: Option<String>,
+    pub metadata_path: Option<String>,
+    pub samples_path: Option<String>,
+    pub posterior_predictive_path: Option<String>,
+    pub log_path: Option<String>,
+    pub artifacts: Vec<ResultArtifact>,
+}
+```
+
+`InferenceResult` 中通过 `artifactManifest` 暴露该清单。前端只展示清单和通过 command/service 读取分页或聚合数据，不直接读取 artifact 文件。
+
+Julia Bayesian backend 现在写出：
+
+```text
+summary.json       summaries + diagnostics
+metadata.json      完整 InferenceResult + artifactManifest
+output.arrow       posterior samples，当前 worker output 路径
+posterior_predictive.arrow  posterior predictive data，可选
+```
+
+清理任务时，Rust application service 会优先使用 `artifactManifest.artifacts` 识别需要清理的 artifact 目录。
+
+### F7.1 samples paging boundary
+
+已落地后端 samples 分页读取边界：
+
+```text
+read_bayes_posterior_samples(taskId, offset, limit, parameter?)
+  → BayesInferenceService::sample_page
+  → InferenceResult.samples.samplesPath
+  → read Arrow IPC
+  → PosteriorSamplePage
+```
+
+DTO：
+
+```rust
+pub struct PosteriorSampleRow {
+    pub parameter: String,
+    pub chain: usize,
+    pub draw: usize,
+    pub value: f64,
+}
+
+pub struct PosteriorSamplePage {
+    pub rows: Vec<PosteriorSampleRow>,
+    pub offset: usize,
+    pub limit: usize,
+    pub total: usize,
+}
+```
+
+前端 service：
+
+```text
+src/services/bayes/bayesInferenceService.ts
+  readBayesPosteriorSamples(taskId, offset, limit, parameter?)
+```
+
+约定：前端只能通过 command/service 分页读取 posterior samples，不直接读取 worker task 目录或 Arrow 文件路径。
+
+### F7.2 plot aggregation data boundary
+
+Plot 聚合不在后端生成图片，也不绑定前端图表库。后端只返回可视化数据 DTO，前端用丰富组件渲染。
+
+已落地 command/service：
+
+```text
+read_bayes_trace_plot_data(taskId, parameter?, maxPointsPerChain?)
+read_bayes_density_plot_data(taskId, parameter?, bins?)
+```
+
+Trace DTO：
+
+```rust
+pub struct TracePlotData {
+    pub series: Vec<TraceSeries>,
+    pub max_points_per_chain: usize,
+    pub stride: usize,
+}
+
+pub struct TraceSeries {
+    pub parameter: String,
+    pub chain: usize,
+    pub points: Vec<TracePoint>,
+}
+```
+
+Density DTO：
+
+```rust
+pub struct DensityPlotData {
+    pub series: Vec<DensitySeries>,
+    pub bins: usize,
+}
+
+pub struct DensitySeries {
+    pub parameter: String,
+    pub points: Vec<DensityPoint>,
+}
+```
+
+当前 density 先使用 histogram density 聚合；后续如果 UI 需要更平滑曲线，可以在不改变前端调用方式的前提下替换为 KDE。
+
+### F7.3 frontend plot rendering
+
+已在 Results tab 中接入数据驱动的前端渲染：
+
+```text
+PosteriorTracePreview
+  → readBayesTracePlotData
+  → SVG line preview
+
+PosteriorDensityPreview
+  → readBayesDensityPlotData
+  → SVG density preview
+```
+
+当前 SVG preview 是轻量首版，用于验证数据边界和交互流程。后续可以替换为 D3/Recharts/Canvas/WebGL 等更丰富组件，只要继续消费 `TracePlotDataDTO` / `DensityPlotDataDTO`，不需要改后端协议。
+
+### F7.4 posterior predictive data boundary
+
+已落地 posterior predictive check 的核心数据边界：
+
+```text
+Turing fixed linear PoC
+  → posterior_predictive.arrow
+  → InferenceResult.posteriorPredictive
+  → read_bayes_posterior_predictive(taskId, offset, limit)
+  → PosteriorPredictivePage
+```
+
+PPC DTO：
+
+```rust
+pub struct PosteriorPredictiveRow {
+    pub observation: usize,
+    pub observed: f64,
+    pub mean: f64,
+    pub q025: f64,
+    pub q975: f64,
+}
+```
+
+当前 Rust/TS service 已可读取 PPC 分页数据，前端暂不做复杂展示，后续可以用该 DTO 渲染 observed vs predictive interval 图。
+
+### F7.5 diagnostics and samples interaction
+
+已增强 Results tab 交互：
+
+- `DiagnosticsContent` 展示全局 warning 和参数级 warning；
+- posterior samples preview 支持参数过滤；
+- posterior samples preview 支持上一页 / 下一页分页；
+- 分页仍通过 `readBayesPosteriorSamples` command/service，不直接读取 samples 文件。
 
 ---
 
@@ -873,6 +1453,38 @@ PARAMETER_CORRELATION_HIGH
 ⚠ 发现 divergence，结果可能不可靠
 ```
 
+### F10.1 已落地诊断数据边界
+
+当前已落地：
+
+- `ParameterSummary.rhat`；
+- `ParameterSummary.essBulk`；
+- `ParameterSummary.essTail`；
+- `InferenceDiagnostics.divergences`；
+- `InferenceDiagnostics.maxTreedepthHits`；
+- `read_bayes_trace_plot_data`；
+- `read_bayes_density_plot_data`；
+- `read_bayes_autocorrelation_data`；
+- `read_bayes_posterior_predictive`。
+
+Autocorrelation 由 Rust application service 从 posterior samples Arrow 聚合，返回数据 DTO 而不是图片：
+
+```rust
+pub struct AutocorrelationPlotData {
+    pub series: Vec<AutocorrelationSeries>,
+    pub max_lag: usize,
+}
+```
+
+前端 Results tab 已增加 Autocorrelation 数据预览，仍通过 service 调用后端 command，不直接读取 samples 文件。
+
+Julia Bayesian backend 的 R-hat / ESS warning code 已使用稳定命名：
+
+```text
+RHAT_TOO_HIGH
+ESS_TOO_LOW
+```
+
 不要只显示：
 
 ```text
@@ -914,7 +1526,7 @@ inference_config.json
 
 ### 输出数据
 
-Julia 输出：
+Julia 输出:
 
 ```text
 summary.json
@@ -924,6 +1536,35 @@ run.log
 ```
 
 Rust 读取 summary/metadata，保存 result ref；前端通过后端命令读取图表所需数据。
+
+### F11.1 已落地数据交换清单
+
+已新增 `BayesDataExchangeManifest`，用于描述一次 Bayesian inference 的数据交换快照：
+
+```rust
+pub struct BayesDataExchangeManifest {
+    pub version: u32,
+    pub task_id: String,
+    pub input_table_path: String,
+    pub model_spec_path: String,
+    pub inference_config_path: String,
+    pub output_path: String,
+    pub metadata_path: String,
+    pub input_rows: usize,
+    pub input_columns: Vec<BayesExchangeColumn>,
+}
+```
+
+Rust Julia backend 现在会在每个 worker task 目录中写出：
+
+```text
+input.arrow
+model_spec.json
+inference_config.json
+exchange_manifest.json
+```
+
+Julia Bayesian op 优先读取 `exchange_manifest.json`，再从 `model_spec.json` 读取模型规范；如果 manifest 不存在，则回退到旧的 inline `parameters.model`，保持 PoC 和旧测试兼容。
 
 ### 约定
 
@@ -939,7 +1580,9 @@ Rust 读取 summary/metadata，保存 result ref；前端通过后端命令读�
 
 ### 目标
 
-短期复用当前 Julia runtime/worker；长期支持可选 Bayesian Engine 插件化。
+复用当前 Julia runtime/worker，保持系统 Julia 检测、安装和 worker 环境准备清晰可靠。
+
+当前产品取舍：**不做 Bayesian Engine 插件化**。计算能力默认基于 Julia，后续重点是 runtime 检测、依赖准备、版本诊断和 worker 稳定性，而不是把 Bayesian Engine 拆成可选插件。
 
 ### MVP
 
@@ -954,13 +1597,7 @@ src-tauri/julia/ops/bayes_fit.jl
 
 ### 后续
 
-当 Turing 功能稳定后，再考虑：
-
-```text
-PackageCompiler create_app
-Bayesian Engine sidecar
-可选插件安装
-```
+后续只在确有分发需求时再评估 PackageCompiler 或 sidecar 打包；不是当前架构主线。
 
 原因：
 
@@ -1031,6 +1668,53 @@ YSSBI_RUN_JULIA_BAYES_TESTS=1
 - 固定 seed 下摘要结果落在容差范围；
 - 输出文件存在且 schema 正确；
 - 错误模型能返回结构化错误。
+
+### F13.1 已落地 fixture-driven tests
+
+已新增默认运行的 fixture golden tests：
+
+```text
+src-tauri/tests/sci/fixtures/bayes/linear_normal/simple.json
+src-tauri/tests/sci/fixtures/bayes/invalid/*.json
+src-tauri/tests/sci_api_bayes_linear_normal_golden_test.rs
+src-tauri/tests/sci_api_bayes_validation_golden_test.rs
+```
+
+`simple.json` 包含：
+
+- 输入数据列；
+- `BayesModelSpec`；
+- golden 参数列表；
+- posterior mean 容差；
+- R-hat 阈值；
+- samples / posterior predictive artifact 期望。
+
+默认测试验证：
+
+- fixture 能稳定反序列化为 `BayesModelSpec`；
+- likelihood / prior / constraint / sampler 协议稳定；
+- fixture 可 materialize 为 Polars `DataFrame`；
+- `BayesDataExchangeManifest` camelCase schema 稳定；
+- invalid draft fixtures 返回预期 validation error code；
+- validation error code 使用稳定的机器可读 `SCREAMING_SNAKE_CASE`；
+- validation issue 包含 path 和 message。
+
+当前 invalid fixtures 覆盖：
+
+```text
+missing_dataset.json      DATASET_REQUIRED
+missing_sigma.json        LIKELIHOOD_SIGMA_PARAMETER_REQUIRED
+unbound_predictor.json    DATA_BINDING_REQUIRED
+invalid_prior_args.json   PARAMETER_PRIOR_ARGS_INVALID
+```
+
+Julia env-gated integration test 也改为读取同一个 valid fixture，避免 Rust fixture 与 Julia fixture 分叉：
+
+```text
+src-tauri/tests/sci_api_bayes_julia_integration_test.rs
+```
+
+开启 `YSSBI_RUN_JULIA_BAYES_TESTS=1` 时，测试会基于 fixture 检查 summary schema、artifact 存在性、posterior mean 容差和 R-hat 阈值。
 
 ### 约定
 

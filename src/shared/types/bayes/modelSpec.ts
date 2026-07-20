@@ -34,7 +34,7 @@ export interface ResponseBindingDTO {
 export interface FormulaDraftDTO {
   formulaText: string;
   responseSymbol?: string;
-  rawPredictor: RawExpressionDTO;
+  rawPredictor: RawExpressionDTO | null;
 }
 
 export interface BayesModelDraftDTO {

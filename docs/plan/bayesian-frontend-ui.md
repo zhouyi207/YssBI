@@ -25,8 +25,8 @@ Model tab
   → 编辑完整观测模型：response ~ Distribution(predictor, noise)
   → 安全解析 predictor 为 RawExpressionDTO
   → 用户确认符号角色：dependent / independent / parameter
-  → 为 dependent / independent symbols 绑定数据列
-  → 为 parameter symbols 设置 constraint、prior distribution、prior args
+  → 打开 Symbol Config Dialog 为 dependent / independent symbols 绑定数据列
+  → 在同一个 Symbol Config Dialog 中为 parameter symbols 设置 constraint、bounds、prior distribution、prior args
   → 设置 sampler
   → validate / run
 Results tab
@@ -87,10 +87,27 @@ src/views/BayesView/
 当前前端实现已经把原先单独的 Data Binding、Parameters、Likelihood、Validation、Run 面板收敛到更紧凑的结构：
 
 - Formula 负责完整观测模型编辑，并同步 `formulaText`、`responseSymbol`、`likelihood`、`rawPredictor`、`boundPredictor`；
-- Symbols 负责数据源选择、符号角色、数据列绑定、参数约束、prior distribution 和 prior args；
+- Symbols 负责符号角色、数据列绑定和参数摘要展示；主 Symbols 面板不放 data source selector，数据源和数据列绑定统一在 Symbol Config Dialog 内完成；
 - Sampler 负责可编辑采样参数；
 - Validate / Run 是页面右上角操作，不作为独立步骤；
 - Results tab 展示 Result Summary 和 Diagnostics。
+
+Phase 4.2 已补充前端与后端能力对齐：
+
+- Formula 的 likelihood selector 与后端实际能力一致：`Normal`、`BernoulliLogit`、`PoissonLog`；
+- Formula 根据 likelihood 展示响应列约束提示：连续数值、boolean/0-1、非负整数计数；
+- Normal 的 `sigma` 作为 likelihood 参数自动进入 Symbols/Parameters 配置，BernoulliLogit / PoissonLog 不要求 `sigma`；
+- Symbol Config Dialog 对 dependent / independent symbols 同时提供 data source 和 data column；column 下拉跟随选中的 data source 更新，并显示列类型和当前 likelihood/role 的明显不匹配提示；
+- Parameter Config Dialog 根据 constraint 对 prior distribution 做推荐排序，constraint 改变时会自动切到兼容默认 prior；
+- Run/Validate 区域展示 validation issue 与后端 submit/runtime 错误，后端 `details.column` / `details.row` 会格式化给用户。
+
+Phase 4.3 已补充结果与诊断可解释性：
+
+- `features/domain/bayes/diagnostics.ts` 聚合 `InferenceResultDTO` 为 `good` / `warning` / `bad` / `unknown` 总诊断状态；
+- Result Summary 表按参数显示 `OK`、`Check R-hat`、`Low ESS`、`Unknown` 状态；
+- Diagnostics 面板将后端 warning code 字典化，解释 `RHAT_TOO_HIGH`、`ESS_TOO_LOW` 和 Julia backend 执行提示；
+- Diagnostics 面板给出下一步建议，例如增加 samples / warmup、检查 prior、标准化 predictor、查看 trace/autocorrelation；
+- 图表和 posterior samples 缺少 samples artifact 时显示可操作原因：需要启用 `saveSamples` 后重新运行。
 
 约定：
 
@@ -175,7 +192,7 @@ interface BayesModelDraftDTO {
 }
 ```
 
-其中 `formulaText` 用于展示完整观测模型；Formula 保存时必须从分布参数中的 predictor 输入解析出 `rawPredictor`，再结合 Symbols 中的角色生成 `boundPredictor`。提交推断前必须完成符号角色确认、数据源选择、数据列绑定、参数约束和 prior args 配置。
+其中 `formulaText` 用于展示完整观测模型；Formula 保存时必须从分布参数中的 predictor 输入解析出 `rawPredictor`，再结合 Symbols 中的角色生成 `boundPredictor`。提交推断前必须完成符号角色确认、数据源选择、数据列绑定、参数约束和 prior args 配置。数据源选择不作为独立步骤暴露在主面板中，而是在配置任意 dependent / independent symbol 时显式选择。
 
 ### 4.2 Dataset selection
 
@@ -193,7 +210,7 @@ export interface BayesColumnMetaDTO {
 }
 ```
 
-第一版只允许数值列进入模型。分类变量、分组变量、日期变量后续再扩展。
+第一版 predictor 只允许数值列进入模型。response 列按 likelihood 收窄：`Normal` 要求数值列，`BernoulliLogit` 要求 boolean 或 0/1，`PoissonLog` 要求非负整数计数。前端先显示类型提示，最终以 Rust submit 前的数据扫描为准。
 
 ### 4.3 Draft state 生命周期
 
@@ -205,7 +222,7 @@ create draft
   → classify symbols as dependent / independent / parameter
   → select dataset
   → bind dependent / independent symbols to dataset columns
-  → edit parameter constraints, prior distribution, prior args
+  → edit parameter constraints, bounds, prior distribution, prior args through dialog
   → build boundPredictor
   → edit sampler
   → validate draft through service

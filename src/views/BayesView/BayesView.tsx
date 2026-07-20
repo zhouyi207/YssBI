@@ -1,10 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
-import { useDatabaseStore } from '@/features/core/dataStore';
+
+import type { BayesDatasetSelectionDTO, BayesInferenceTaskDTO, ValidationReportDTO } from '@/shared/types/bayes';
 import { useBayesInferenceTask, useBayesModelDraft, useBayesValidation } from '@/features/application/bayes';
+import type { BayesInferenceError } from '@/features/application/bayes';
+import { useProjectSync } from '@/features/application/initialization';
+import { initProjectSync, useDatabaseStore } from '@/features/core/dataStore';
+import { DatabaseService } from '@/services/database/databaseService';
 import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -12,34 +17,75 @@ import { WindowMenuBar } from '@/shared/ui/WindowChrome';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  FormulaStep,
-  ResultOverview,
-  SamplerStep,
-  SymbolRoleStep,
-} from './components/BayesPanels';
+import { FormulaStep, SamplerStep, SymbolRoleStep } from './components/BayesPanels';
+import { ResultOverview } from './components/BayesResultPanels';
 
 export function BayesView() {
   const { t } = useTranslation();
   const isMaximized = useWindowMaximized('BayesView');
 
   usePersistedWindow('bayes');
+  useProjectSync();
 
   useEffect(() => {
-    void getCurrentWindow().show().catch((error) => logger.app.error(String(error), 'BayesView'));
+    let cancelled = false;
+    (async () => {
+      try {
+        await initProjectSync();
+        if (cancelled) return;
+        await getCurrentWindow().show();
+      } catch (error) {
+        logger.app.error(String(error), 'BayesView');
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const databases = useDatabaseStore(state => state.databases);
-  const datasets = Object.values(databases).map(database => ({
-    sourceType: 'table' as const,
-    sourceId: database.id,
-    columns: (database.columns ?? []).map(column => ({
-      name: column.name,
-      dtype: bayesColumnDType(column.type),
-      nullable: true,
+  const updateDatabase = useDatabaseStore(state => state.updateDatabase);
+  const datasets = useMemo(
+    () => Object.values(databases).map(database => ({
+      sourceType: 'table' as const,
+      sourceId: database.id,
+      columns: (database.columns ?? []).map(column => ({
+        name: column.name,
+        dtype: bayesColumnDType(column.type),
+        nullable: true,
+      })),
     })),
-  }));
+    [databases],
+  );
   const modelDraft = useBayesModelDraft();
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const database of Object.values(databases)) {
+      if ((database.columns?.length ?? 0) > 0) continue;
+      const id = database.id;
+      void DatabaseService.getDatabaseMeta(id)
+        .then((meta) => {
+          if (cancelled) return;
+          updateDatabase(id, {
+            name: meta.name,
+            columns: meta.columns,
+            rowCount: meta.rowCount,
+            columnCount: meta.columnCount,
+          });
+        })
+        .catch((error) => logger.data.warn('getDatabaseMeta failed: ' + String(error), 'BayesView'));
+    }
+    return () => { cancelled = true; };
+  }, [databases, updateDatabase]);
+
+  useEffect(() => {
+    const currentDatasetId = modelDraft.draft.dataset?.sourceId;
+    const currentDataset = datasets.find(dataset => dataset.sourceId === currentDatasetId);
+    const nextDataset = currentDataset ?? datasets[0] ?? null;
+    if (!nextDataset) return;
+    if (!currentDataset || !sameBayesDataset(currentDataset, modelDraft.draft.dataset)) {
+      modelDraft.updateDataset(nextDataset);
+    }
+  }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
   const inference = useBayesInferenceTask();
   const canRun = validation.report?.ok === true && !validation.stale;
@@ -76,7 +122,7 @@ export function BayesView() {
             validationOk={validation.report?.ok === true && !validation.stale}
             validationStale={validation.stale}
             validationLoading={validation.loading}
-            taskStatus={inference.task?.status ?? null}
+            task={inference.task}
             canRun={canRun}
             onValidate={validation.validate}
             onRun={run}
@@ -87,22 +133,19 @@ export function BayesView() {
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
+                <BayesIssueBanner error={inference.error} validation={validation.report} />
                 <FormulaStep draft={modelDraft.draft} onModelEquationChange={modelDraft.updateModelEquation} />
                 <SymbolRoleStep
                   draft={modelDraft.draft}
                   datasets={datasets}
-                  onDatasetChange={modelDraft.updateDataset}
-                  onSymbolNameChange={modelDraft.updateSymbolName}
-                  onSymbolRoleChange={modelDraft.updateSymbolRole}
-                  onSymbolDataBindingChange={modelDraft.updateSymbolDataBinding}
-                  onSymbolPriorChange={modelDraft.updateSymbolPrior}
-                  onSymbolConstraintChange={modelDraft.updateSymbolConstraint}
+                  onSymbolConfigurationChange={modelDraft.updateSymbolConfiguration}
                   onDeleteSymbol={modelDraft.deleteSymbol}
                 />
                 <SamplerStep draft={modelDraft.draft} onSamplerChange={modelDraft.updateSampler} />
               </section>
             </TabsContent>
             <TabsContent value="results">
+              <BayesIssueBanner error={inference.error} validation={validation.report} />
               <ResultOverview result={inference.result} />
             </TabsContent>
           </main>
@@ -122,11 +165,46 @@ function bayesColumnDType(type: string): 'number' | 'integer' | 'boolean' | 'str
   return 'unknown';
 }
 
+function sameBayesDataset(left: BayesDatasetSelectionDTO, right: BayesDatasetSelectionDTO | null): boolean {
+  if (!right) return false;
+  if (left.sourceId !== right.sourceId || left.sourceType !== right.sourceType) return false;
+  if (left.columns.length !== right.columns.length) return false;
+  return left.columns.every((column, index) => {
+    const other = right.columns[index];
+    return other && column.name === other.name && column.dtype === other.dtype && column.nullable === other.nullable;
+  });
+}
+
+function BayesIssueBanner({ error, validation }: { error: BayesInferenceError | null; validation: ValidationReportDTO | null }) {
+  const issues = validation ? [...validation.errors, ...validation.warnings].slice(0, 4) : [];
+  if (!error && issues.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3 text-sm">
+      {error ? (
+        <p className="text-destructive">
+          <span className="font-mono">[{error.code}]</span> {error.message}
+          {error.detail ? ` (${error.detail})` : ''}
+          {error.column ? ` (column: ${error.column})` : ''}
+          {typeof error.row === 'number' ? ` (row: ${error.row + 1})` : ''}
+        </p>
+      ) : null}
+      {issues.map(issue => (
+        <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
+          <span className="font-mono">[{issue.code}]</span> {issue.message}{issue.path ? ` (${issue.path})` : ''}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+
+
 function BayesActionBar({
   validationOk,
   validationStale,
   validationLoading,
-  taskStatus,
+  task,
   canRun,
   onValidate,
   onRun,
@@ -135,19 +213,21 @@ function BayesActionBar({
   validationOk: boolean;
   validationStale: boolean;
   validationLoading: boolean;
-  taskStatus: string | null;
+  task: BayesInferenceTaskDTO | null;
   canRun: boolean;
   onValidate: () => void | Promise<unknown>;
   onRun: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
-  const running = taskStatus === 'running';
+  const taskStatus = task?.status ?? null;
+  const running = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
+  const taskLabel = task?.progress?.stage ?? taskStatus;
   return (
     <div className="flex shrink-0 items-center gap-2">
       <Badge variant={validationOk ? 'default' : validationStale ? 'warning' : 'secondary'}>
         {validationLoading ? 'validating' : validationOk ? 'valid' : validationStale ? 'stale' : 'not validated'}
       </Badge>
-      {taskStatus && <Badge variant={running ? 'warning' : 'secondary'}>{taskStatus}</Badge>}
+      {taskLabel && <Badge variant={running ? 'warning' : 'secondary'}>{taskLabel}</Badge>}
       <Button size="sm" variant="outline" onClick={onValidate} disabled={validationLoading || running}>
         {validationLoading ? 'Validating...' : 'Validate'}
       </Button>

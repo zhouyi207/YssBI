@@ -1,5 +1,6 @@
 export * from './expressionAst';
 export * from './expressionSymbols';
+export * from './diagnostics';
 export * from './draft';
 export * from './likelihoodDefaults';
 export * from './parameterInference';

@@ -27,6 +27,9 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let julia_worker = julia::worker::JuliaWorkerManager::new();
+    let bayes_worker = julia_worker.clone();
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -66,14 +69,20 @@ pub fn run() {
         .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(project::ExecutionCancelRegistry::new())
-        .manage(julia::worker::JuliaWorkerManager::new())
-        .setup(|app| {
+        .manage(julia_worker)
+        .setup(move |app| {
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
             let app_dir = app.path().app_data_dir()?;
             let project_registry =
-                tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir))?;
+                tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir.clone()))?;
             app.manage(project_registry);
+            app.manage(application::bayes::BayesInferenceService::with_backend(
+                std::sync::Arc::new(sci::backends::julia::bayes::JuliaBayesBackend::new(
+                    app_dir,
+                    bayes_worker.clone(),
+                )),
+            ));
 
             // 加载并应用主窗口几何状态：先 set_size/set_position/maximize，
             // 再 show()。tauri.conf.json 中主窗口需配置为 `visible: false`，
@@ -220,6 +229,12 @@ pub fn run() {
             get_bayes_inference_status,
             cancel_bayes_inference,
             read_bayes_inference_result,
+            clear_bayes_inference_task,
+            read_bayes_posterior_samples,
+            read_bayes_trace_plot_data,
+            read_bayes_density_plot_data,
+            read_bayes_autocorrelation_data,
+            read_bayes_posterior_predictive,
             // ==================== Julia runtime ====================
             get_julia_runtime_status,
             install_julia_runtime,

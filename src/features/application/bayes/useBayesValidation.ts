@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { BayesModelDraftDTO, ValidationReportDTO } from '@/shared/types/bayes';
-import { hashBayesDraft, validateBayesDraftLocally } from '@/features/domain/bayes';
+import { validateBayesDraftLocally } from '@/features/domain/bayes';
 import { validateBayesModel } from '@/services/bayes';
 
 export function useBayesValidation(draft: BayesModelDraftDTO, draftHash: string) {
@@ -10,20 +10,20 @@ export function useBayesValidation(draft: BayesModelDraftDTO, draftHash: string)
 
   const stale = report !== null && validatedHash !== draftHash;
 
-  const validate = async () => {
+  const validate = useCallback(async () => {
     setLoading(true);
     try {
       const nextReport = await validateBayesModel(draft).catch(() => validateBayesDraftLocally(draft));
       setReport(nextReport);
-      setValidatedHash(hashBayesDraft(draft));
+      setValidatedHash(draftHash);
       return nextReport;
     } finally {
       setLoading(false);
     }
-  };
+  }, [draft, draftHash]);
 
   return useMemo(
     () => ({ report, stale, loading, validate }),
-    [report, stale, loading],
+    [report, stale, loading, validate],
   );
 }

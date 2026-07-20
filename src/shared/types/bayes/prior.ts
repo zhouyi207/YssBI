@@ -1,4 +1,8 @@
-export type ParameterConstraintDTO = { type: 'real' } | { type: 'positive' } | { type: 'unit' };
+export type ParameterConstraintDTO =
+  | { type: 'real' }
+  | { type: 'positive' }
+  | { type: 'unit' }
+  | { type: 'bounded'; lower: number; upper: number; includeLower: boolean; includeUpper: boolean };
 
 export type PriorSpecDTO =
   | { distribution: 'normal'; args: [number, number] }

@@ -9,6 +9,8 @@ export function defaultPriorForConstraint(constraint: ParameterConstraintDTO, na
       return { distribution: 'exponential', args: [1] };
     case 'unit':
       return { distribution: 'beta', args: [2, 2] };
+    case 'bounded':
+      return { distribution: 'uniform', args: [constraint.lower, constraint.upper] };
     case 'real':
     default:
       return { distribution: 'normal', args: [0, 10] };

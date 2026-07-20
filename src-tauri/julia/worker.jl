@@ -54,10 +54,12 @@ end
 
 include(joinpath(@__DIR__, "ops", "acf_pacf.jl"))
 include(joinpath(@__DIR__, "ops", "serial_tests.jl"))
+include(joinpath(@__DIR__, "ops", "bayes_fit.jl"))
 
 const OPERATIONS = Dict{String, Function}(
     "acf_pacf" => run_acf_pacf,
     "serial_tests" => run_serial_tests,
+    "bayes_fit" => run_bayes_fit,
 )
 
 function run_operation(operation::String, params, task_id::String)

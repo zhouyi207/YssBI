@@ -1,0 +1,70 @@
+{
+  "name": "simple bernoulli logit",
+  "data": {
+    "columns": [
+      { "name": "x", "values": [-3.0, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 3.0] },
+      { "name": "y", "values": [0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0] }
+    ]
+  },
+  "modelSpec": {
+    "dataset": {
+      "sourceType": "table",
+      "sourceId": "fixture-bernoulli-logit"
+    },
+    "response": {
+      "symbol": "y",
+      "column": "y"
+    },
+    "predictor": {
+      "type": "binary",
+      "op": "add",
+      "left": {
+        "type": "binary",
+        "op": "mul",
+        "left": { "type": "parameter", "name": "a" },
+        "right": { "type": "data_variable", "name": "x" }
+      },
+      "right": { "type": "parameter", "name": "b" }
+    },
+    "dataVariables": {
+      "x": "x"
+    },
+    "likelihood": {
+      "type": "bernoulli_logit",
+      "logit": { "source": "predictor" }
+    },
+    "parameters": [
+      {
+        "name": "a",
+        "constraint": { "type": "real" },
+        "prior": { "distribution": "normal", "args": [0.0, 5.0] }
+      },
+      {
+        "name": "b",
+        "constraint": { "type": "real" },
+        "prior": { "distribution": "normal", "args": [0.0, 5.0] }
+      }
+    ],
+    "sampler": {
+      "algorithm": "nuts",
+      "chains": 2,
+      "samples": 40,
+      "warmup": 20,
+      "seed": 2468,
+      "targetAccept": 0.85,
+      "maxTreeDepth": 10,
+      "saveSamples": true
+    },
+    "displayFormula": "y ~ BernoulliLogit(a * x + b)"
+  },
+  "golden": {
+    "parameters": ["a", "b"],
+    "posteriorMean": {
+      "a": { "expected": 1.0, "tolerance": 8.0 },
+      "b": { "expected": 0.0, "tolerance": 6.0 }
+    },
+    "maxRhat": 4.0,
+    "requiresSamples": true,
+    "requiresPosteriorPredictive": true
+  }
+}
