@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { computeKDE } from '@/shared/stats/regressionReportUtils';
 import type { RegressionResultData } from '@/shared/types/report';
 
 export function useRegressionReport(data: RegressionResultData) {
@@ -10,10 +9,7 @@ export function useRegressionReport(data: RegressionResultData) {
     [coefficients],
   );
 
-  const leverageKdeData = useMemo(
-    () => (diag.leverage && diag.leverage.length > 0 ? computeKDE(diag.leverage, 256, 0) : []),
-    [diag.leverage],
-  );
+  const leverageKdeData = diag.leverage_kde ?? [];
 
   const hasResidualSeries = Boolean(
     diag.fitted_values && diag.residuals && diag.fitted_values.length > 0,

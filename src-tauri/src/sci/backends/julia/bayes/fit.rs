@@ -1,10 +1,11 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use polars::prelude::{Column, DataFrame, IpcWriter, SerWriter};
 use serde_json::json;
 
-use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerTask};
+use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerProgressCallback, JuliaWorkerTask};
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesDataExchangeManifest,
     BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
@@ -35,6 +36,15 @@ impl BayesBackend for JuliaBayesBackend {
         let progress = request.progress.clone();
         report_stage(&progress, "materializing_data");
         let progress_for_input = progress.clone();
+        let worker_progress = progress.clone().map(|callback| {
+            Arc::new(move |update: crate::julia::worker::JuliaWorkerProgress| {
+                callback(TaskProgress {
+                    stage: update.stage,
+                    completed: update.completed,
+                    total: update.total,
+                });
+            }) as JuliaWorkerProgressCallback
+        });
         let output = self
             .worker
             .run_task(
@@ -46,9 +56,10 @@ impl BayesBackend for JuliaBayesBackend {
                 },
                 |input_path| {
                     write_exchange_files(input_path, input_table, &task_id, &exchange_spec)?;
-                    report_stage(&progress_for_input, "sampling");
+                    report_stage(&progress_for_input, "loading_model");
                     Ok(())
                 },
+                worker_progress,
             )
             .map_err(map_worker_error)?;
 

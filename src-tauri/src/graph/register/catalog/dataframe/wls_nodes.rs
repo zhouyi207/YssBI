@@ -742,6 +742,9 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
         ss_residual_for_ic,
     );
 
+    let leverage = diagnostics::leverage(&exog_use).unwrap_or_default();
+    let leverage_kde = super::info_nodes::build_leverage_kde(&leverage);
+
     let ols_result = OLSResult {
         title: "WLS Regression Results".to_string(),
         endog_name,
@@ -790,7 +793,8 @@ fn run_wls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<WLSFitR
             normality_tests,
             fitted_values,
             residuals,
-            leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
+            leverage,
+            leverage_kde,
             residual_scatter,
             exog: Some(
                 (0..n)

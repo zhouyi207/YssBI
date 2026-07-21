@@ -91,7 +91,7 @@ export interface DensitySeriesDTO {
 
 export interface DensityPlotDataDTO {
   series: DensitySeriesDTO[];
-  bins: number;
+  gridPoints: number;
 }
 
 export interface AutocorrelationPointDTO {

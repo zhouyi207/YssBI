@@ -462,6 +462,7 @@ fn run_probit_regression(
             fitted_values,
             residuals,
             leverage: vec![],
+            leverage_kde: vec![],
             residual_scatter: None,
             exog: Some(exog_vec),
             timing: None,

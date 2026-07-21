@@ -29,6 +29,19 @@ end
 
 
 
+function send_progress(task_id::String, stage::String; completed = nothing, total = nothing)
+    send_message(Dict(
+        "jsonrpc" => "2.0",
+        "method" => "progress",
+        "params" => Dict(
+            "taskId" => task_id,
+            "stage" => stage,
+            "completed" => completed,
+            "total" => total,
+        ),
+    ))
+end
+
 function send_error(request_id, code::String, message::String; data = nothing)
     error = Dict{String, Any}("code" => code, "message" => message)
     data !== nothing && (error["data"] = data)
@@ -74,6 +87,7 @@ function process_run(request, request_id, params)
     operation = field(params, "operation", field(request, "operation"))
 
     try
+        send_progress(task_id, "loading_model")
         result = run_operation(String(operation), params, task_id)
         request_id !== nothing && send_message(Dict("jsonrpc" => "2.0", "id" => request_id, "result" => result))
     catch error

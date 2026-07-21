@@ -223,10 +223,10 @@ impl BayesInferenceService {
         &self,
         task_id: &str,
         parameter: Option<&str>,
-        bins: usize,
+        grid_points: usize,
     ) -> Result<DensityPlotData, AppError> {
         let dataframe = self.samples_dataframe(task_id)?;
-        density_plot_data_from_dataframe(&dataframe, parameter, bins.clamp(8, 256))
+        density_plot_data_from_dataframe(&dataframe, parameter, grid_points.clamp(8, 256))
     }
 
     pub fn autocorrelation_plot_data(
@@ -600,7 +600,7 @@ fn trace_plot_data_from_dataframe(
 fn density_plot_data_from_dataframe(
     dataframe: &DataFrame,
     parameter: Option<&str>,
-    bins: usize,
+    grid_points: usize,
 ) -> Result<DensityPlotData, AppError> {
     let rows = sample_rows_from_dataframe(dataframe, parameter)?;
     let mut grouped: BTreeMap<String, Vec<f64>> = BTreeMap::new();
@@ -612,11 +612,20 @@ fn density_plot_data_from_dataframe(
         .into_iter()
         .map(|(parameter, values)| DensitySeries {
             parameter,
-            points: histogram_density(values, bins),
+            points: crate::sci::kde::gaussian_kde_grid(&values, grid_points)
+                .into_iter()
+                .map(|point| DensityPoint {
+                    x: point.x,
+                    density: point.density,
+                })
+                .collect(),
         })
         .collect();
 
-    Ok(DensityPlotData { series, bins })
+    Ok(DensityPlotData {
+        series,
+        grid_points,
+    })
 }
 
 fn autocorrelation_plot_data_from_dataframe(
@@ -684,37 +693,6 @@ fn autocorrelation_points(values: &[f64], max_lag: usize) -> Vec<Autocorrelation
                 lag,
                 autocorrelation: covariance / variance,
             }
-        })
-        .collect()
-}
-
-fn histogram_density(mut values: Vec<f64>, bins: usize) -> Vec<DensityPoint> {
-    values.retain(|value| value.is_finite());
-    if values.is_empty() {
-        return Vec::new();
-    }
-    let min = values.iter().copied().fold(f64::INFINITY, f64::min);
-    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    if (max - min).abs() <= f64::EPSILON {
-        return vec![DensityPoint {
-            x: min,
-            density: 1.0,
-        }];
-    }
-
-    let width = (max - min) / bins as f64;
-    let mut counts = vec![0usize; bins];
-    for value in &values {
-        let index = (((*value - min) / width).floor() as usize).min(bins - 1);
-        counts[index] += 1;
-    }
-    let total = values.len() as f64;
-    counts
-        .into_iter()
-        .enumerate()
-        .map(|(index, count)| DensityPoint {
-            x: min + (index as f64 + 0.5) * width,
-            density: count as f64 / (total * width),
         })
         .collect()
 }
@@ -1120,9 +1098,16 @@ mod tests {
 
         let density =
             density_plot_data_from_dataframe(&dataframe, Some("b"), 8).expect("density data");
+        assert_eq!(density.grid_points, 8);
         assert_eq!(density.series.len(), 1);
         assert_eq!(density.series[0].parameter, "b");
-        assert!(!density.series[0].points.is_empty());
+        assert_eq!(density.series[0].points.len(), 8);
+        assert!(
+            density.series[0]
+                .points
+                .iter()
+                .all(|point| point.density.is_finite() && point.density >= 0.0)
+        );
 
         let autocorrelation =
             autocorrelation_plot_data_from_dataframe(&dataframe, Some("a"), 2).expect("acf data");

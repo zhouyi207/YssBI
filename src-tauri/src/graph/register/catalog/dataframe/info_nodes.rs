@@ -208,6 +208,25 @@ pub struct ResidualScatterData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeverageKdePoint {
+    pub x: f64,
+    pub y: f64,
+}
+
+pub(super) fn build_leverage_kde(leverage: &[f64]) -> Vec<LeverageKdePoint> {
+    if leverage.iter().filter(|value| value.is_finite()).count() < 2 {
+        return Vec::new();
+    }
+    crate::sci::kde::gaussian_kde_grid_with_min_x(leverage, 256, Some(0.0))
+        .into_iter()
+        .map(|point| LeverageKdePoint {
+            x: point.x,
+            y: point.density,
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticInfo {
     pub cond_no: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -227,6 +246,8 @@ pub struct DiagnosticInfo {
     /// Leverage（帽子矩阵对角元，Stata predict lev, leverage）
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub leverage: Vec<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub leverage_kde: Vec<LeverageKdePoint>,
     /// 残差 vs 残差滞后 1 散点图数据（e 与 e_lag1）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub residual_scatter: Option<ResidualScatterData>,

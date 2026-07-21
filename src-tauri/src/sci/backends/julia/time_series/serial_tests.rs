@@ -52,6 +52,7 @@ fn compute_with_worker(
                 }),
             },
             |input_path| write_input(input_path, &residuals, exog.as_deref()),
+            None,
         )
         .map_err(SciError::julia_task_failed)?;
 

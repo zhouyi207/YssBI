@@ -152,9 +152,14 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
     seed !== nothing && Random.seed!(UInt(seed))
 
     model_instance = yssbi_linear_normal_model(x, y, a_prior, b_prior, sigma_prior)
-    chain = with_logger(NullLogger()) do
-        sample(model_instance, bayes_nuts_sampler(warmup, target_accept, max_tree_depth), MCMCSerial(), draws, chains; progress = false)
-    end
+    chain = bayes_sample_with_progress(
+        model_instance,
+        bayes_nuts_sampler(warmup, target_accept, max_tree_depth),
+        draws,
+        warmup,
+        chains,
+        task_id,
+    )
     model_parameter_names = [parts.slope, parts.intercept, sigma_parameter]
     summaries = bayes_chain_summaries(chain, ["a", "b", "sigma"], model_parameter_names)
     artifacts = Any[]

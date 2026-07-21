@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { KdePoint } from '@/shared/stats/regressionReportUtils';
+import type { KDEPoint } from '@/shared/charts';
 import {
   StatCard,
   Chi2TestCards,
@@ -230,7 +230,7 @@ export function ResidualDiagnosticsSection({
   labels = {},
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: KdePoint[];
+  leverageKdeData: KDEPoint[];
   labels?: ResidualDiagnosticsLabels;
 }) {
   const {
@@ -256,7 +256,7 @@ export function ResidualDiagnosticsSection({
 
   return (
     <>
-      {diag.leverage && diag.leverage.length > 0 ? (
+      {leverageKdeData.length > 0 ? (
         <div className="mb-4">
           <ReportSubheading title={leverageTitle} />
           <ReportLazyBoundary variant="chart">
@@ -326,7 +326,7 @@ export function OlsStyleDiagnosticsSection({
   residualLabels,
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: KdePoint[];
+  leverageKdeData: KDEPoint[];
   residualLabels?: ResidualDiagnosticsLabels;
 }) {
   return (

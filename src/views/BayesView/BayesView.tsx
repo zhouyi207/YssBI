@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormulaStep, SamplerStep, SymbolRoleStep, type BayesDatasetOption } from './components/BayesPanels';
 import { ResultOverview } from './components/BayesResultPanels';
+import { BayesProgressStatus } from './components/BayesProgressStatus';
 
 export function BayesView() {
   const { t } = useTranslation();
@@ -225,7 +226,8 @@ function BayesActionBar({
   const taskStatus = task?.status ?? null;
   const running = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-3">
+      {running && task ? <BayesProgressStatus task={task} /> : null}
       <Button size="sm" onClick={onRun} disabled={running || validationLoading}>
         {running ? 'Running...' : 'Run'}
       </Button>
@@ -235,5 +237,7 @@ function BayesActionBar({
     </div>
   );
 }
+
+
 
 export default BayesView;

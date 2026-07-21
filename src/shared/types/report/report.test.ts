@@ -125,6 +125,32 @@ describe('parseRegressionResultData', () => {
     expect(parseRegressionResultData(MINIMAL_REGRESSION)?.title).toBe('OLS');
   });
 
+  it('parses backend leverage KDE points', () => {
+    const parsed = parseRegressionResultData({
+      ...MINIMAL_REGRESSION,
+      diagnostic_info: {
+        cond_no: 10,
+        leverage: [0.1, 0.2],
+        leverage_kde: [{ x: 0, y: 1.25 }],
+      },
+    });
+
+    expect(parsed?.diagnostic_info.leverage_kde).toEqual([{ x: 0, y: 1.25 }]);
+  });
+
+  it.each([
+    [{ x: Number.NaN, y: 1 }],
+    [{ x: 0, y: Number.POSITIVE_INFINITY }],
+    [{ x: 0, y: 'bad' }],
+  ])('rejects malformed leverage KDE points: %j', leverage_kde => {
+    expect(
+      parseRegressionResultData({
+        ...MINIMAL_REGRESSION,
+        diagnostic_info: { cond_no: 10, leverage_kde },
+      }),
+    ).toBeNull();
+  });
+
   it('rejects missing cond_no', () => {
     expect(
       parseRegressionResultData({ ...MINIMAL_REGRESSION, diagnostic_info: {} }),

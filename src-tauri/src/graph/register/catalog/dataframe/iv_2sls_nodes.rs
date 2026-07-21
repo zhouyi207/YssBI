@@ -619,6 +619,7 @@ fn run_iv_2sls_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<OLS
             fitted_values: vec![],
             residuals: vec![],
             leverage: vec![],
+            leverage_kde: vec![],
             residual_scatter: None,
             exog: None,
             timing: None,

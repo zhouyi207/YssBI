@@ -72,9 +72,14 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     seed !== nothing && Random.seed!(UInt(seed))
 
     model_instance = yssbi_generic_regression_model(table, data_variables, predictor, y, likelihood_type, parameter_names, priors, sigma_index, task_id)
-    chain = with_logger(NullLogger()) do
-        sample(model_instance, bayes_nuts_sampler(warmup, target_accept, max_tree_depth), MCMCSerial(), draws, chains; progress = false)
-    end
+    chain = bayes_sample_with_progress(
+        model_instance,
+        bayes_nuts_sampler(warmup, target_accept, max_tree_depth),
+        draws,
+        warmup,
+        chains,
+        task_id,
+    )
 
     chain_names = ["theta[$index]" for index in eachindex(parameter_names)]
     summaries = bayes_chain_summaries(chain, chain_names, parameter_names)

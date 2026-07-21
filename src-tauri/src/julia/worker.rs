@@ -17,7 +17,7 @@ use super::{JuliaRuntimeState, get_runtime_status, system_julia_executable};
 
 const WORKER_DIR: &str = "julia-worker";
 const TASK_DIR: &str = "tasks";
-const RESPONSE_TIMEOUT: Duration = Duration::from_secs(60);
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
 const STDERR_BUFFER_LINES: usize = 100;
 const WORKER_PROJECT: &str = include_str!("../../julia/Project.toml");
 const WORKER_MANIFEST: &str = include_str!("../../julia/Manifest.toml");
@@ -43,6 +43,17 @@ pub struct JuliaWorkerTaskOutput {
     pub output_path: PathBuf,
     pub metadata_path: PathBuf,
 }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JuliaWorkerProgress {
+    pub task_id: String,
+    pub stage: String,
+    pub completed: Option<usize>,
+    pub total: Option<usize>,
+}
+
+pub type JuliaWorkerProgressCallback = Arc<dyn Fn(JuliaWorkerProgress) + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -138,6 +149,7 @@ impl JuliaWorkerManager {
         app_data_dir: &Path,
         task: JuliaWorkerTask,
         write_input: impl FnOnce(&Path) -> Result<(), String>,
+        progress: Option<JuliaWorkerProgressCallback>,
     ) -> Result<JuliaWorkerTaskOutput, String> {
         let _request_guard = self
             .inner
@@ -170,7 +182,7 @@ impl JuliaWorkerManager {
                         "parameters": task.parameters
                     }
                 }))
-                .and_then(|()| worker.await_response(&request_id, &task_id));
+                .and_then(|()| worker.await_response(&request_id, &task_id, progress.as_ref()));
             self.clear_active_task(&task_id);
             response?;
             Ok(JuliaWorkerTaskOutput {
@@ -391,7 +403,12 @@ impl WorkerProcess {
             .map_err(|error| format!("Failed to flush Julia request: {error}"))
     }
 
-    fn await_response(&self, request_id: &str, task_id: &str) -> Result<(), String> {
+    fn await_response(
+        &self,
+        request_id: &str,
+        task_id: &str,
+        progress: Option<&JuliaWorkerProgressCallback>,
+    ) -> Result<(), String> {
         let receiver = self
             .messages
             .lock()
@@ -401,6 +418,14 @@ impl WorkerProcess {
                 .recv_timeout(RESPONSE_TIMEOUT)
                 .map_err(|_| self.worker_failure("Julia worker did not return a response."))?;
             if message.get("method").and_then(Value::as_str) == Some("progress") {
+                if let Some(progress) = progress
+                    && let Some(params) = message.get("params")
+                    && let Ok(update) =
+                        serde_json::from_value::<JuliaWorkerProgress>(params.clone())
+                    && update.task_id == task_id
+                {
+                    progress(update);
+                }
                 continue;
             }
             if message.get("id").and_then(Value::as_str) != Some(request_id) {

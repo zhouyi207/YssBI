@@ -37,6 +37,7 @@ fn compute_with_worker(
                 parameters: json!({ "column": "value", "maxLag": max_lag }),
             },
             |input_path| write_input(input_path, &values),
+            None,
         )
         .map_err(SciError::julia_task_failed)?;
 

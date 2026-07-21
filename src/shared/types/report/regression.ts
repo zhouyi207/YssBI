@@ -3,6 +3,7 @@
  * 对齐 Rust `info_nodes.rs` 中 `RegressionResult` / `DiagnosticInfo` 等结构。
  */
 
+import type { PlotPointDTO } from '@/shared/types/dto/plotPayload';
 import type {
   Iv2slsEndogenousTest,
   Iv2slsFirstStageResult,
@@ -178,6 +179,7 @@ export interface DiagnosticInfo {
   fitted_values?: number[];
   residuals?: number[];
   leverage?: number[];
+  leverage_kde?: PlotPointDTO[];
   residual_scatter?: ResidualScatterData;
   exog?: number[][];
   timing?: DiagnosticTiming;

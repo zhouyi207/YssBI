@@ -457,6 +457,7 @@ fn run_logit_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Logit
             fitted_values,
             residuals,
             leverage: vec![],
+            leverage_kde: vec![],
             residual_scatter: None,
             exog: Some(exog_vec),
             timing: None,

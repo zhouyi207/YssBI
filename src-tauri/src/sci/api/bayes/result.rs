@@ -134,7 +134,7 @@ pub struct DensitySeries {
 #[serde(rename_all = "camelCase")]
 pub struct DensityPlotData {
     pub series: Vec<DensitySeries>,
-    pub bins: usize,
+    pub grid_points: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -176,6 +176,30 @@ pub struct PosteriorPredictivePage {
     pub offset: usize,
     pub limit: usize,
     pub total: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DensityPlotData;
+
+    #[test]
+    fn density_plot_data_uses_grid_points_json_contract() {
+        let value = serde_json::to_value(DensityPlotData {
+            series: Vec::new(),
+            grid_points: 64,
+        })
+        .expect("serialize density plot data");
+
+        assert_eq!(value["gridPoints"], 64);
+        assert!(value.get("bins").is_none());
+        assert!(
+            serde_json::from_value::<DensityPlotData>(serde_json::json!({
+                "series": [],
+                "bins": 64
+            }))
+            .is_err()
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

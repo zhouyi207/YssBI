@@ -113,9 +113,9 @@ pub fn read_bayes_density_plot_data(
     service: State<'_, BayesInferenceService>,
     task_id: String,
     parameter: Option<String>,
-    bins: Option<usize>,
+    grid_points: Option<usize>,
 ) -> Result<DensityPlotData, AppError> {
-    service.density_plot_data(&task_id, parameter.as_deref(), bins.unwrap_or(64))
+    service.density_plot_data(&task_id, parameter.as_deref(), grid_points.unwrap_or(256))
 }
 
 #[tauri::command]

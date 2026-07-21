@@ -59,12 +59,12 @@ export async function readBayesTracePlotData(
 export async function readBayesDensityPlotData(
   taskId: string,
   parameter?: string,
-  bins = 64,
+  gridPoints = 256,
 ): Promise<DensityPlotDataDTO> {
   return invoke<DensityPlotDataDTO>('read_bayes_density_plot_data', {
     taskId,
     parameter: parameter ?? null,
-    bins,
+    gridPoints,
   });
 }
 

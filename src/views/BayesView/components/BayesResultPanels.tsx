@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import type { AutocorrelationPlotDataDTO, DensityPlotDataDTO, InferenceResultDTO, PosteriorPredictivePageDTO, PosteriorSamplePageDTO, TracePlotDataDTO } from '@/shared/types/bayes';
+import type { InferenceResultDTO, PosteriorPredictivePageDTO, PosteriorSamplePageDTO } from '@/shared/types/bayes';
+import { KDEChart, MultiLineChart } from '@/shared/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -153,7 +154,7 @@ function ArtifactBadge({ label, artifact }: { label: string; artifact?: Inferenc
 }
 
 const loadTracePlot = (taskId: string, parameter: string) => readBayesTracePlotData(taskId, parameter, 500);
-const loadDensityPlot = (taskId: string, parameter: string) => readBayesDensityPlotData(taskId, parameter, 64);
+const loadDensityPlot = (taskId: string, parameter: string) => readBayesDensityPlotData(taskId, parameter, 256);
 const loadAutocorrelationPlot = (taskId: string, parameter: string) => readBayesAutocorrelationData(taskId, parameter, 50);
 
 function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }) {
@@ -168,7 +169,19 @@ function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }
       error={error}
       onParameterChange={setSelectedParameter}
     >
-      {data && <TraceSvg data={data} />}
+      {data && (
+        data.series.some(item => item.points.length > 0) ? (
+          <MultiLineChart
+            series={data.series.map(item => ({
+              id: `${item.parameter}-${item.chain}`,
+              label: `chain ${item.chain}`,
+              points: item.points.map(point => ({ x: point.draw, y: point.value })),
+            }))}
+            xLabel={`draw, stride ${data.stride}`}
+            yLabel="value"
+          />
+        ) : <p className="text-sm text-muted-foreground">没有 trace 数据。</p>
+      )}
     </PosteriorPlotFrame>
   );
 }
@@ -185,7 +198,17 @@ function PosteriorDensityPreview({ result }: { result: InferenceResultDTO | null
       error={error}
       onParameterChange={setSelectedParameter}
     >
-      {data && <DensitySvg data={data} />}
+      {data && (
+        data.series.some(item => item.points.length > 0) ? (
+          <KDEChart
+            data={data.series.flatMap(item => item.points.map(point => ({ x: point.x, y: point.density })))}
+            xLabel={parameter ?? 'value'}
+            yLabel="Density"
+            height={224}
+            className="rounded-md border border-border bg-muted/10"
+          />
+        ) : <p className="text-sm text-muted-foreground">没有 density 数据。</p>
+      )}
     </PosteriorPlotFrame>
   );
 }
@@ -202,7 +225,20 @@ function AutocorrelationPreview({ result }: { result: InferenceResultDTO | null 
       error={error}
       onParameterChange={setSelectedParameter}
     >
-      {data && <AutocorrelationSvg data={data} />}
+      {data && (
+        data.series.some(item => item.points.length > 0) ? (
+          <MultiLineChart
+            series={data.series.map(item => ({
+              id: `${item.parameter}-${item.chain}`,
+              label: `chain ${item.chain}`,
+              points: item.points.map(point => ({ x: point.lag, y: point.autocorrelation })),
+            }))}
+            xLabel={`lag, max ${data.maxLag}`}
+            yLabel="autocorrelation"
+            yDomain={[-1, 1]}
+          />
+        ) : <p className="text-sm text-muted-foreground">没有 autocorrelation 数据。</p>
+      )}
     </PosteriorPlotFrame>
   );
 }
@@ -246,112 +282,7 @@ function PosteriorPlotFrame({
   );
 }
 
-function TraceSvg({ data }: { data: TracePlotDataDTO }) {
-  const series = data.series.filter(item => item.points.length > 0);
-  if (series.length === 0) return <p className="text-sm text-muted-foreground">没有 trace 数据。</p>;
-  const allPoints = series.flatMap(item => item.points);
-  const xRange = extent(allPoints.map(point => point.draw));
-  const yRange = extent(allPoints.map(point => point.value));
-  const paths = series.map((item, index) => ({
-    key: `${item.parameter}-${item.chain}`,
-    color: chartColor(index),
-    path: pointsToPath(item.points.map(point => ({ x: point.draw, y: point.value })), xRange, yRange),
-    label: `chain ${item.chain}`,
-  }));
 
-  return <LineChartSvg paths={paths} xLabel={`draw, stride ${data.stride}`} yLabel="value" />;
-}
-
-function DensitySvg({ data }: { data: DensityPlotDataDTO }) {
-  const series = data.series.filter(item => item.points.length > 0);
-  if (series.length === 0) return <p className="text-sm text-muted-foreground">没有 density 数据。</p>;
-  const allPoints = series.flatMap(item => item.points);
-  const xRange = extent(allPoints.map(point => point.x));
-  const yRange = extent([0, ...allPoints.map(point => point.density)]);
-  const paths = series.map((item, index) => ({
-    key: item.parameter,
-    color: chartColor(index),
-    path: pointsToPath(item.points.map(point => ({ x: point.x, y: point.density })), xRange, yRange),
-    label: item.parameter,
-  }));
-
-  return <LineChartSvg paths={paths} xLabel={`value, bins ${data.bins}`} yLabel="density" />;
-}
-
-function AutocorrelationSvg({ data }: { data: AutocorrelationPlotDataDTO }) {
-  const series = data.series.filter(item => item.points.length > 0);
-  if (series.length === 0) return <p className="text-sm text-muted-foreground">没有 autocorrelation 数据。</p>;
-  const allPoints = series.flatMap(item => item.points);
-  const xRange = extent(allPoints.map(point => point.lag));
-  const yRange = extent([-1, 1, ...allPoints.map(point => point.autocorrelation)]);
-  const paths = series.map((item, index) => ({
-    key: `${item.parameter}-${item.chain}`,
-    color: chartColor(index),
-    path: pointsToPath(item.points.map(point => ({ x: point.lag, y: point.autocorrelation })), xRange, yRange),
-    label: `chain ${item.chain}`,
-  }));
-
-  return <LineChartSvg paths={paths} xLabel={`lag, max ${data.maxLag}`} yLabel="autocorrelation" />;
-}
-
-function LineChartSvg({
-  paths,
-  xLabel,
-  yLabel,
-}: {
-  paths: Array<{ key: string; color: string; path: string; label: string }>;
-  xLabel: string;
-  yLabel: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <svg viewBox="0 0 640 220" className="h-56 w-full rounded-md border border-border bg-muted/10" role="img" aria-label={`${yLabel} by ${xLabel}`}>
-        <line x1="44" y1="16" x2="44" y2="184" stroke="currentColor" strokeOpacity="0.25" />
-        <line x1="44" y1="184" x2="624" y2="184" stroke="currentColor" strokeOpacity="0.25" />
-        {paths.map(path => (
-          <path key={path.key} d={path.path} fill="none" stroke={path.color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-        ))}
-        <text x="44" y="207" className="fill-muted-foreground text-[10px]">{xLabel}</text>
-        <text x="8" y="18" className="fill-muted-foreground text-[10px]">{yLabel}</text>
-      </svg>
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {paths.map(path => (
-          <span key={path.key} className="inline-flex items-center gap-1">
-            <span className="size-2 rounded-full" style={{ backgroundColor: path.color }} />
-            {path.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-type ChartPoint = { x: number; y: number };
-type Range = [number, number];
-
-function pointsToPath(points: ChartPoint[], xRange: Range, yRange: Range): string {
-  return points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${scale(point.x, xRange, [44, 624]).toFixed(2)} ${scale(point.y, yRange, [184, 16]).toFixed(2)}`)
-    .join(' ');
-}
-
-function extent(values: number[]): Range {
-  const finite = values.filter(Number.isFinite);
-  if (finite.length === 0) return [0, 1];
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  return min === max ? [min - 1, max + 1] : [min, max];
-}
-
-function scale(value: number, input: Range, output: Range): number {
-  const [inputMin, inputMax] = input;
-  const [outputMin, outputMax] = output;
-  return outputMin + ((value - inputMin) / (inputMax - inputMin)) * (outputMax - outputMin);
-}
-
-function chartColor(index: number): string {
-  return ['var(--chart-1, #3b82f6)', 'var(--chart-2, #ef4444)', 'var(--chart-3, #22c55e)', 'var(--chart-4, #f59e0b)'][index % 4];
-}
 
 function PosteriorSamplesPreview({ result }: { result: InferenceResultDTO | null }) {
   const pageSize = 20;

@@ -421,6 +421,9 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
         _ => "Prais-Winsten",
     };
 
+    let leverage = diagnostics::leverage(&exog_use).unwrap_or_default();
+    let leverage_kde = super::info_nodes::build_leverage_kde(&leverage);
+
     let ols_result = OLSResult {
         title: format!("{} AR(1) Regression Results", method),
         endog_name,
@@ -464,7 +467,8 @@ fn run_prais_regression(ctx: &mut dyn NodeExecutionContextTrait) -> Result<Prais
             normality_tests: None,
             fitted_values: fitted_values.clone(),
             residuals: residuals.clone(),
-            leverage: diagnostics::leverage(&exog_use).unwrap_or_default(),
+            leverage,
+            leverage_kde,
             residual_scatter: None,
             exog: Some(
                 (0..n)

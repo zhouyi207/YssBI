@@ -5,6 +5,7 @@
 import { assignPresentKeys, isFiniteNumber, isRecord, isString, optionalFiniteNumber, optionalString } from './guards';
 import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from './iv';
 import { parseCoefficientList, parseModelBasicInfo } from './parseCommon';
+import type { PlotPointDTO } from '@/shared/types/dto/plotPayload';
 import type { DiagnosticInfo, RegressionResultData } from './regression';
 
 const DIAGNOSTIC_OPTIONAL_KEYS = [
@@ -35,6 +36,17 @@ const DIAGNOSTIC_OPTIONAL_KEYS = [
 
 const REGRESSION_OPTIONAL_KEYS = ['betas', 'cov_beta'] as const satisfies readonly (keyof RegressionResultData)[];
 
+function parseKdePoints(raw: unknown): PlotPointDTO[] | undefined | null {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) return null;
+  const points: PlotPointDTO[] = [];
+  for (const item of raw) {
+    if (!isRecord(item) || !isFiniteNumber(item.x) || !isFiniteNumber(item.y)) return null;
+    points.push({ x: item.x, y: item.y });
+  }
+  return points;
+}
+
 function parseIvFirstStageList(raw: unknown): Iv2slsFirstStageResult[] | undefined | null {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) return null;
@@ -50,11 +62,13 @@ function parseIvFirstStageList(raw: unknown): Iv2slsFirstStageResult[] | undefin
 export function parseDiagnosticInfo(raw: unknown): DiagnosticInfo | null {
   if (!isRecord(raw) || !isFiniteNumber(raw.cond_no)) return null;
   const iv2sls_first_stage = parseIvFirstStageList(raw.iv2sls_first_stage);
-  if (iv2sls_first_stage === null) return null;
+  const leverage_kde = parseKdePoints(raw.leverage_kde);
+  if (iv2sls_first_stage === null || leverage_kde === null) return null;
   return assignPresentKeys(
     {
       cond_no: raw.cond_no,
       iv2sls_first_stage,
+      leverage_kde,
     },
     raw,
     DIAGNOSTIC_OPTIONAL_KEYS,

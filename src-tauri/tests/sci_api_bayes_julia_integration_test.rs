@@ -1,12 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use polars::prelude::{Column, DataFrame};
 use serde::Deserialize;
 use uuid::Uuid;
 use yssbi_lib::julia::worker::JuliaWorkerManager;
 use yssbi_lib::sci::api::bayes::{
-    BayesBackend, BayesBackendRequest, BayesModelSpec, ResultArtifactKind,
+    BayesBackend, BayesBackendRequest, BayesModelSpec, ResultArtifactKind, TaskProgress,
 };
 use yssbi_lib::sci::backends::julia::bayes::JuliaBayesBackend;
 
@@ -104,13 +105,39 @@ fn run_julia_fixture_when_enabled(
     worker.prepare(&app_data_dir).expect("prepare Julia worker");
 
     let backend = JuliaBayesBackend::new(&app_data_dir, worker);
+    let expected_total = fixture.model_spec.sampler.chains
+        * (fixture.model_spec.sampler.warmup + fixture.model_spec.sampler.samples);
+    let progress_updates = Arc::new(Mutex::new(Vec::<TaskProgress>::new()));
+    let progress_target = progress_updates.clone();
     let result = backend
-        .fit(BayesBackendRequest::new(
+        .fit(BayesBackendRequest::with_progress(
             task_id,
             fixture.model_spec.clone(),
             Some(fixture_input_table(&fixture)),
+            Some(Arc::new(move |progress| {
+                progress_target.lock().unwrap().push(progress);
+            })),
         ))
         .expect("Julia Bayesian backend result");
+
+    let progress_updates = progress_updates.lock().unwrap();
+    assert!(
+        progress_updates
+            .iter()
+            .any(|progress| progress.stage == "warmup")
+    );
+    assert!(
+        progress_updates
+            .iter()
+            .any(|progress| progress.stage == "sampling")
+    );
+    let final_sampling_progress = progress_updates
+        .iter()
+        .rev()
+        .find(|progress| progress.completed.is_some())
+        .expect("numeric Julia sampling progress");
+    assert_eq!(final_sampling_progress.completed, Some(expected_total));
+    assert_eq!(final_sampling_progress.total, Some(expected_total));
 
     assert_eq!(result.summaries.len(), fixture.golden.parameters.len());
     for parameter in &fixture.golden.parameters {

@@ -8,6 +8,7 @@ use crate::graph::pin::{
 use crate::graph::register::NodeRegistry;
 use crate::graph::register::catalog::docs;
 use crate::graph::value::{DataType, DataValue};
+use crate::sci::kde::gaussian_kde_grid;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -22,38 +23,6 @@ struct KdePlotData {
 struct KdePoint {
     x: f64,
     y: f64,
-}
-
-/// 高斯核 K(u) = (1/sqrt(2*pi)) * exp(-u^2/2)
-#[inline]
-fn gaussian_kernel(u: f64) -> f64 {
-    const INV_SQRT_2PI: f64 = 0.3989422804014327;
-    INV_SQRT_2PI * (-0.5 * u * u).exp()
-}
-
-/// Silverman 带宽: h = 1.06 * sigma * n^(-1/5)
-fn silverman_bandwidth(values: &[f64]) -> f64 {
-    let n = values.len() as f64;
-    if n < 2.0 {
-        return 1.0;
-    }
-    let mean = values.iter().sum::<f64>() / n;
-    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
-    let sigma = variance.sqrt();
-    if sigma <= 0.0 || !sigma.is_finite() {
-        return 1.0;
-    }
-    1.06 * sigma * n.powf(-0.2)
-}
-
-/// 在 x 处计算 KDE: f(x) = (1/(n*h)) * sum K((x - xi)/h)
-fn kde_at(x: f64, values: &[f64], h: f64) -> f64 {
-    if values.is_empty() || h <= 0.0 {
-        return 0.0;
-    }
-    let n = values.len() as f64;
-    let sum: f64 = values.iter().map(|&xi| gaussian_kernel((x - xi) / h)).sum();
-    sum / (n * h)
 }
 
 pub fn register(registry: &NodeRegistry) {
@@ -95,21 +64,12 @@ pub fn register(registry: &NodeRegistry) {
                 return Err("KDE: need at least 2 valid values".to_string());
             }
 
-            let h = silverman_bandwidth(&values);
-            let min_val = values.iter().cloned().fold(f64::INFINITY, f64::min);
-            let max_val = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let range = max_val - min_val;
-            let pad = (range * 0.15).max(h * 2.0).max(0.1);
-            let x_min = min_val - pad;
-            let x_max = max_val + pad;
-
             const GRID_POINTS: usize = 256;
-            let data: Vec<KdePoint> = (0..=GRID_POINTS)
-                .map(|i| {
-                    let t = i as f64 / GRID_POINTS as f64;
-                    let x = x_min + t * (x_max - x_min);
-                    let y = kde_at(x, &values, h);
-                    KdePoint { x, y }
+            let data = gaussian_kde_grid(&values, GRID_POINTS)
+                .into_iter()
+                .map(|point| KdePoint {
+                    x: point.x,
+                    y: point.density,
                 })
                 .collect();
 

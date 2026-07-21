@@ -116,12 +116,43 @@ function bayes_attach_artifact_manifest!(result, task_id::String, summary_path::
     return result
 end
 
+function bayes_sample_with_progress(model_instance, sampler, draws::Int, warmup::Int, chains::Int, task_id::String)
+    iterations_per_chain = warmup + draws
+    total = chains * iterations_per_chain
+    report_interval = max(1, total ÷ 200)
+
+    callback = function (rng, model, sampler_state, transition, state, iteration; chain_number = 1, kwargs...)
+        check_cancelled(task_id)
+        completed = (Int(chain_number) - 1) * iterations_per_chain + Int(iteration)
+        if completed == 1 || completed == total || completed % report_interval == 0 || iteration == warmup || iteration == warmup + 1
+            stage = iteration <= warmup ? "warmup" : "sampling"
+            send_progress(task_id, stage; completed = completed, total = total)
+        end
+        return nothing
+    end
+
+    chain_with_warmup = with_logger(NullLogger()) do
+        sample(
+            model_instance,
+            sampler,
+            MCMCSerial(),
+            iterations_per_chain,
+            chains;
+            discard_adapt = false,
+            progress = false,
+            callback = callback,
+        )
+    end
+    return chain_with_warmup[(warmup + 1):iterations_per_chain, :, :]
+end
+
 function bayes_try_turing_linear_fit(model, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
     if !isdefined(Main, :bayes_run_fixed_linear_turing)
         include(joinpath(@__DIR__, "bayes", "turing_linear.jl"))
     end
+    runner = Base.invokelatest(getfield, Main, :bayes_run_fixed_linear_turing)
     return Base.invokelatest(
-        bayes_run_fixed_linear_turing,
+        runner,
         model,
         table,
         input_rows,
@@ -135,8 +166,9 @@ function bayes_try_turing_generic_normal_fit(model, table, input_rows::Int, task
     if !isdefined(Main, :bayes_try_generic_normal_turing)
         include(joinpath(@__DIR__, "bayes", "turing_generic_normal.jl"))
     end
+    runner = Base.invokelatest(getfield, Main, :bayes_try_generic_normal_turing)
     return Base.invokelatest(
-        bayes_try_generic_normal_turing,
+        runner,
         model,
         table,
         input_rows,
