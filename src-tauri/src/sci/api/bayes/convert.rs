@@ -14,11 +14,7 @@ pub fn draft_to_model_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, Val
     let data_variables = filter_data_bindings(&draft);
     let dataset = draft.dataset.expect("validated dataset");
     let response_binding = draft.response_binding.expect("validated response binding");
-    let response_symbol = response_binding
-        .symbol
-        .clone()
-        .or(draft.response_symbol.clone())
-        .unwrap_or_else(|| "y".to_string());
+    let response = draft.bound_response.expect("validated response expression");
     let predictor = draft.bound_predictor.expect("validated predictor");
 
     Ok(BayesModelSpec {
@@ -27,8 +23,8 @@ pub fn draft_to_model_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, Val
             source_id: dataset.source_id,
         },
         response: ResponseSpec {
-            symbol: response_symbol,
-            column: response_binding.column,
+            expression: response,
+            data_variables: BTreeMap::from([(response_binding.symbol, response_binding.column)]),
         },
         predictor,
         data_variables,

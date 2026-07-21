@@ -2,43 +2,123 @@
   "name": "invalid prior args",
   "draft": {
     "formulaText": "y \\sim \\operatorname{Normal}\\left(a * x + b, \\sigma\\right)",
-    "responseSymbol": "y",
     "symbols": [
-      { "name": "y", "role": "dependent", "inferredRole": "dependent", "userEdited": true },
-      { "name": "x", "role": "independent", "inferredRole": "independent", "userEdited": true },
-      { "name": "a", "role": "parameter", "inferredRole": "parameter", "userEdited": true },
-      { "name": "b", "role": "parameter", "inferredRole": "parameter", "userEdited": true }
+      {
+        "name": "y",
+        "role": "dependent",
+        "inferredRole": "dependent",
+        "userEdited": true
+      },
+      {
+        "name": "x",
+        "role": "independent",
+        "inferredRole": "independent",
+        "userEdited": true
+      },
+      {
+        "name": "a",
+        "role": "parameter",
+        "inferredRole": "parameter",
+        "userEdited": true
+      },
+      {
+        "name": "b",
+        "role": "parameter",
+        "inferredRole": "parameter",
+        "userEdited": true
+      }
     ],
     "dataset": {
       "sourceType": "table",
       "sourceId": "fixture-invalid",
       "columns": [
-        { "name": "x", "dtype": "number", "nullable": false },
-        { "name": "y", "dtype": "number", "nullable": false }
+        {
+          "name": "x",
+          "dtype": "number",
+          "nullable": false
+        },
+        {
+          "name": "y",
+          "dtype": "number",
+          "nullable": false
+        }
       ]
     },
-    "responseBinding": { "column": "y", "symbol": "y" },
-    "dataBindings": { "x": "x" },
+    "responseBinding": {
+      "column": "y",
+      "symbol": "y"
+    },
+    "dataBindings": {
+      "x": "x"
+    },
     "boundPredictor": {
       "type": "binary",
       "op": "add",
       "left": {
         "type": "binary",
         "op": "mul",
-        "left": { "type": "parameter", "name": "a" },
-        "right": { "type": "data_variable", "name": "x" }
+        "left": {
+          "type": "parameter",
+          "name": "a"
+        },
+        "right": {
+          "type": "data_variable",
+          "name": "x"
+        }
       },
-      "right": { "type": "parameter", "name": "b" }
+      "right": {
+        "type": "parameter",
+        "name": "b"
+      }
     },
     "likelihood": {
       "type": "normal",
-      "mean": { "source": "predictor" },
-      "sigma": { "parameter": "sigma" }
+      "mean": {
+        "source": "predictor"
+      },
+      "sigma": {
+        "parameter": "sigma"
+      }
     },
     "parameters": [
-      { "name": "a", "constraint": { "type": "real" }, "prior": { "distribution": "normal", "args": [0.0, -1.0] } },
-      { "name": "b", "constraint": { "type": "real" }, "prior": { "distribution": "normal", "args": [0.0, 10.0] } },
-      { "name": "sigma", "constraint": { "type": "positive" }, "prior": { "distribution": "exponential", "args": [1.0] } }
+      {
+        "name": "a",
+        "constraint": {
+          "type": "real"
+        },
+        "prior": {
+          "distribution": "normal",
+          "args": [
+            0.0,
+            -1.0
+          ]
+        }
+      },
+      {
+        "name": "b",
+        "constraint": {
+          "type": "real"
+        },
+        "prior": {
+          "distribution": "normal",
+          "args": [
+            0.0,
+            10.0
+          ]
+        }
+      },
+      {
+        "name": "sigma",
+        "constraint": {
+          "type": "positive"
+        },
+        "prior": {
+          "distribution": "exponential",
+          "args": [
+            1.0
+          ]
+        }
+      }
     ],
     "sampler": {
       "algorithm": "nuts",
@@ -49,10 +129,20 @@
       "targetAccept": 0.8,
       "maxTreeDepth": 10,
       "saveSamples": true
+    },
+    "rawResponse": {
+      "type": "symbol",
+      "name": "y"
+    },
+    "boundResponse": {
+      "type": "data_variable",
+      "name": "y"
     }
   },
   "expected": {
     "ok": false,
-    "errorCodes": ["PARAMETER_PRIOR_ARGS_INVALID"]
+    "errorCodes": [
+      "PARAMETER_PRIOR_ARGS_INVALID"
+    ]
   }
 }

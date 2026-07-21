@@ -6,7 +6,7 @@ import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 
 import type { BayesDatasetSelectionDTO, BayesInferenceTaskDTO, ValidationReportDTO } from '@/shared/types/bayes';
 import { useBayesInferenceTask, useBayesModelDraft, useBayesValidation } from '@/features/application/bayes';
-import type { BayesInferenceError } from '@/features/application/bayes';
+import type { BayesInferenceError, FormulaParseError } from '@/features/application/bayes';
 import { useProjectSync } from '@/features/application/initialization';
 import { initProjectSync, useDatabaseStore } from '@/features/core/dataStore';
 import { DatabaseService } from '@/services/database/databaseService';
@@ -88,13 +88,8 @@ export function BayesView() {
   }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
   const inference = useBayesInferenceTask();
-  const canRun = validation.report?.ok === true && !validation.stale;
-
   const run = async () => {
-    let report = validation.report;
-    if (!report || validation.stale) {
-      report = await validation.validate();
-    }
+    const report = await validation.validate();
     if (!report.ok) return;
     await inference.run(modelDraft.draft);
   };
@@ -103,7 +98,7 @@ export function BayesView() {
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground" data-yssbi-workbench>
       <WindowMenuBar windowActions={<WindowChromeControls isMaximized={isMaximized} />}>
         <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
-          <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
+          <div className="flex size-5 items-center justify-center rounded bg-(--accent-color)">
             <span className="text-white font-black text-xs">B</span>
           </div>
           <div className="text-foreground font-bold text-sm tracking-tight">
@@ -123,8 +118,6 @@ export function BayesView() {
             validationStale={validation.stale}
             validationLoading={validation.loading}
             task={inference.task}
-            canRun={canRun}
-            onValidate={validation.validate}
             onRun={run}
             onCancel={inference.cancel}
           />
@@ -133,7 +126,7 @@ export function BayesView() {
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
-                <BayesIssueBanner error={inference.error} validation={validation.report} />
+                <BayesIssueBanner error={inference.error} formulaError={modelDraft.formulaError} validation={validation.report} />
                 <FormulaStep draft={modelDraft.draft} onModelEquationChange={modelDraft.updateModelEquation} />
                 <SymbolRoleStep
                   draft={modelDraft.draft}
@@ -175,9 +168,17 @@ function sameBayesDataset(left: BayesDatasetSelectionDTO, right: BayesDatasetSel
   });
 }
 
-function BayesIssueBanner({ error, validation }: { error: BayesInferenceError | null; validation: ValidationReportDTO | null }) {
+function BayesIssueBanner({
+  error,
+  formulaError,
+  validation,
+}: {
+  error: BayesInferenceError | null;
+  formulaError?: FormulaParseError | null;
+  validation: ValidationReportDTO | null;
+}) {
   const issues = validation ? [...validation.errors, ...validation.warnings].slice(0, 4) : [];
-  if (!error && issues.length === 0) return null;
+  if (!error && !formulaError && issues.length === 0) return null;
 
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3 text-sm">
@@ -189,6 +190,12 @@ function BayesIssueBanner({ error, validation }: { error: BayesInferenceError | 
           {typeof error.row === 'number' ? ` (row: ${error.row + 1})` : ''}
         </p>
       ) : null}
+      {formulaError ? (
+        <p className="text-destructive">
+          <span className="font-mono">[{formulaError.code}]</span> {formulaError.message}
+          {formulaError.detail ? ` (${formulaError.detail})` : ''}
+        </p>
+      ) : null}
       {issues.map(issue => (
         <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
           <span className="font-mono">[{issue.code}]</span> {issue.message}{issue.path ? ` (${issue.path})` : ''}
@@ -198,15 +205,11 @@ function BayesIssueBanner({ error, validation }: { error: BayesInferenceError | 
   );
 }
 
-
-
 function BayesActionBar({
   validationOk,
   validationStale,
   validationLoading,
   task,
-  canRun,
-  onValidate,
   onRun,
   onCancel,
 }: {
@@ -214,8 +217,6 @@ function BayesActionBar({
   validationStale: boolean;
   validationLoading: boolean;
   task: BayesInferenceTaskDTO | null;
-  canRun: boolean;
-  onValidate: () => void | Promise<unknown>;
   onRun: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
@@ -228,10 +229,7 @@ function BayesActionBar({
         {validationLoading ? 'validating' : validationOk ? 'valid' : validationStale ? 'stale' : 'not validated'}
       </Badge>
       {taskLabel && <Badge variant={running ? 'warning' : 'secondary'}>{taskLabel}</Badge>}
-      <Button size="sm" variant="outline" onClick={onValidate} disabled={validationLoading || running}>
-        {validationLoading ? 'Validating...' : 'Validate'}
-      </Button>
-      <Button size="sm" onClick={onRun} disabled={running || (!canRun && validationLoading)}>
+      <Button size="sm" onClick={onRun} disabled={running || validationLoading}>
         {running ? 'Running...' : 'Run'}
       </Button>
       <Button size="sm" variant="outline" onClick={onCancel} disabled={!running}>

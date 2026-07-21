@@ -5,8 +5,8 @@ use crate::application::bayes::BayesInferenceService;
 use crate::error::AppError;
 use crate::project::ProjectState;
 use crate::sci::api::bayes::{
-    AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, DensityPlotData, InferenceResult,
-    ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage, TracePlotData,
+    AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, ColumnMeta, DensityPlotData,
+    InferenceResult, ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage, TracePlotData,
     parse_model_expression, validate_draft,
 };
 
@@ -14,11 +14,24 @@ use crate::sci::api::bayes::{
 #[serde(rename_all = "camelCase")]
 pub struct ParseExpressionRequest {
     pub formula: String,
+    #[serde(default)]
+    pub columns: Vec<ColumnMeta>,
+    #[serde(default)]
+    pub symbols: Vec<String>,
 }
 
 #[tauri::command]
 pub fn parse_bayes_expression(input: ParseExpressionRequest) -> Result<ParsedExpression, AppError> {
-    parse_model_expression(&input.formula)
+    let mut known_symbols = input.symbols;
+    known_symbols.extend(input.columns.into_iter().map(|column| column.name));
+    known_symbols.sort();
+    known_symbols.dedup();
+    let options = if input.formula.contains('\\') {
+        crate::math::ParseOptions::latex(&known_symbols)
+    } else {
+        crate::math::ParseOptions::plain(&known_symbols)
+    };
+    parse_model_expression(&input.formula, options)
         .map_err(|error| AppError::new("bayes_expression_parse_failed", error.to_string()))
 }
 
@@ -123,4 +136,52 @@ pub fn read_bayes_posterior_predictive(
     limit: usize,
 ) -> Result<PosteriorPredictivePage, AppError> {
     service.posterior_predictive_page(&task_id, offset, limit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_request_accepts_optional_context() {
+        let request: ParseExpressionRequest =
+            serde_json::from_value(serde_json::json!({ "formula": "y = ax" })).unwrap();
+        assert!(request.columns.is_empty());
+        assert!(request.symbols.is_empty());
+    }
+
+    #[test]
+    fn parse_request_combines_column_and_symbol_context() {
+        let request: ParseExpressionRequest = serde_json::from_value(serde_json::json!({
+            "formula": "y \\sim \\operatorname{Normal}(ax, \\sigma)",
+            "columns": [{ "name": "x", "dtype": "number", "nullable": false }],
+            "symbols": ["y", "a", "sigma"]
+        }))
+        .unwrap();
+        let parsed = parse_bayes_expression(request).unwrap();
+        assert_eq!(parsed.symbols, ["a", "sigma", "x", "y"]);
+        assert!(matches!(
+            parsed.formula.raw_predictor,
+            crate::sci::api::bayes::RawExpression::Binary {
+                op: crate::sci::api::bayes::BinaryOp::Mul,
+                ..
+            }
+        ));
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!({
+                "formula": {
+                    "formulaText": "y \\sim \\operatorname{Normal}(ax, \\sigma)",
+                    "rawResponse": { "type": "symbol", "name": "y" },
+                    "rawPredictor": {
+                        "type": "binary",
+                        "op": "mul",
+                        "left": { "type": "symbol", "name": "a" },
+                        "right": { "type": "symbol", "name": "x" }
+                    }
+                },
+                "symbols": ["a", "sigma", "x", "y"]
+            })
+        );
+    }
 }

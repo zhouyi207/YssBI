@@ -30,7 +30,8 @@ mod tests {
         BayesModelDraft {
             formula_text: "y \\sim \\operatorname{Normal}\\left(a * x + b, \\sigma\\right)"
                 .to_string(),
-            response_symbol: Some("y".to_string()),
+            raw_response: RawExpression::Symbol { name: "y".into() },
+            bound_response: Some(Expression::DataVariable { name: "y".into() }),
             symbols: vec![
                 SymbolDraft {
                     name: "y".to_string(),
@@ -74,8 +75,8 @@ mod tests {
                 ],
             }),
             response_binding: Some(ResponseBinding {
+                symbol: "y".to_string(),
                 column: "response".to_string(),
-                symbol: Some("y".to_string()),
             }),
             data_bindings: BTreeMap::from([("x".to_string(), "time".to_string())]),
             bound_predictor: Some(Expression::Binary {
@@ -134,8 +135,10 @@ mod tests {
     #[test]
     fn converts_valid_draft_to_model_spec() {
         let spec = draft_to_model_spec(valid_draft()).expect("valid draft");
-        assert_eq!(spec.response.symbol, "y");
-        assert_eq!(spec.response.column, "response");
+        assert_eq!(
+            spec.response.data_variables.get("y"),
+            Some(&"response".to_string())
+        );
         assert_eq!(spec.data_variables.get("x"), Some(&"time".to_string()));
         assert_eq!(spec.parameter_names().len(), 3);
     }
@@ -156,11 +159,17 @@ mod tests {
 
     #[test]
     fn parses_safe_expression_to_raw_ast() {
-        let parsed = parse_model_expression("y = a * x + b").expect("parsed expression");
-        assert_eq!(parsed.response_symbol.as_deref(), Some("y"));
+        let known = vec!["y".into(), "a".into(), "x".into(), "b".into()];
+        let parsed =
+            parse_model_expression("y = a * x + b", crate::math::ParseOptions::plain(&known))
+                .expect("parsed expression");
+        assert_eq!(
+            parsed.formula.raw_response,
+            RawExpression::Symbol { name: "y".into() }
+        );
         assert_eq!(parsed.symbols, vec!["a", "b", "x", "y"]);
         assert!(matches!(
-            parsed.raw_predictor,
+            parsed.formula.raw_predictor,
             RawExpression::Binary {
                 op: BinaryOp::Add,
                 ..
@@ -170,9 +179,10 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_expression_function() {
-        let error =
-            parse_model_expression("y = eval(x)").expect_err("unsupported function rejected");
-        assert!(error.to_string().contains("Unsupported function"));
+        let known = vec!["y".into(), "x".into()];
+        let error = parse_model_expression("y = eval(x)", crate::math::ParseOptions::plain(&known))
+            .expect_err("unsupported function rejected");
+        assert!(error.to_string().contains("不支持函数"));
     }
 
     #[test]
@@ -195,7 +205,7 @@ mod tests {
     fn validates_expression_function_arity() {
         let mut draft = valid_draft();
         draft.bound_predictor = Some(Expression::Call {
-            function: MathFunction::Log,
+            function: MathFunction::Ln,
             args: vec![
                 Expression::DataVariable {
                     name: "x".to_string(),
@@ -212,6 +222,23 @@ mod tests {
                 .errors
                 .iter()
                 .any(|issue| issue.code == "EXPRESSION_FUNCTION_ARITY_INVALID")
+        );
+    }
+
+    #[test]
+    fn rejects_multiple_response_data_symbols() {
+        let mut draft = valid_draft();
+        draft.bound_response = Some(Expression::Binary {
+            op: BinaryOp::Add,
+            left: Box::new(Expression::DataVariable { name: "y".into() }),
+            right: Box::new(Expression::DataVariable { name: "x".into() }),
+        });
+        let report = validate_draft(&draft);
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|issue| { issue.code == "RESPONSE_DATA_SYMBOL_COUNT_INVALID" })
         );
     }
 

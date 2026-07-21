@@ -54,8 +54,10 @@ fn linear_normal_fixture_defines_stable_model_protocol() {
 
     let spec = &fixture.model_spec;
     assert_eq!(spec.dataset.source_type, DatasetSourceType::Table);
-    assert_eq!(spec.response.symbol, "y");
-    assert_eq!(spec.response.column, "y");
+    assert_eq!(
+        spec.response.data_variables.get("y").map(String::as_str),
+        Some("y")
+    );
     assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
     assert_eq!(spec.parameters.len(), 3);
     assert_eq!(spec.sampler.chains, 2);
@@ -106,7 +108,10 @@ fn nonlinear_normal_fixture_defines_generic_expression_protocol() {
     assert_eq!(fixture.name, "exponential decay normal");
 
     let spec = &fixture.model_spec;
-    assert_eq!(spec.response.symbol, "y");
+    assert_eq!(
+        spec.response.data_variables.get("y").map(String::as_str),
+        Some("y")
+    );
     assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
     assert_eq!(spec.parameters.len(), 4);
     assert_eq!(fixture.golden.parameters, ["a", "b", "c", "sigma"]);

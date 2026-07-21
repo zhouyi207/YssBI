@@ -27,19 +27,19 @@ export interface SymbolDraftDTO {
 }
 
 export interface ResponseBindingDTO {
+  symbol: string;
   column: string;
-  symbol?: string;
 }
 
 export interface FormulaDraftDTO {
   formulaText: string;
-  responseSymbol?: string;
-  rawPredictor: RawExpressionDTO | null;
+  rawResponse: RawExpressionDTO;
+  rawPredictor: RawExpressionDTO;
 }
 
 export interface BayesModelDraftDTO {
   formulaText: string;
-  responseSymbol?: string;
+  rawResponse: RawExpressionDTO;
   rawPredictor: RawExpressionDTO | null;
   symbols: SymbolDraftDTO[];
 
@@ -47,24 +47,19 @@ export interface BayesModelDraftDTO {
   responseBinding: ResponseBindingDTO | null;
   dataBindings: Record<string, string>;
 
+  boundResponse: ExpressionDTO | null;
   boundPredictor: ExpressionDTO | null;
   likelihood: LikelihoodSpecDTO;
   parameters: ParameterSpecDTO[];
   sampler: InferenceConfigDTO;
 }
 
-export interface BayesModelSpecDTO {
-  responseColumn: string;
-  responseSymbol?: string;
-  predictor: ExpressionDTO;
-  dataVariables: Record<string, string>;
-  likelihood: LikelihoodSpecDTO;
-  parameters: ParameterSpecDTO[];
-}
+
 
 export interface ParseExpressionRequestDTO {
   formula: string;
   columns?: BayesColumnMetaDTO[];
+  symbols?: string[];
 }
 
 export interface ParseExpressionResponseDTO {

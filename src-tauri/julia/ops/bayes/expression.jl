@@ -50,8 +50,9 @@ function bayes_eval_function(name::String, args)
     if name == "exp"
         length(args) == 1 || throw(ArgumentError("exp expects one argument"))
         return exp(args[1])
-    elseif name == "log"
-        length(args) == 1 || throw(ArgumentError("log expects one argument"))
+    elseif name == "ln"
+        length(args) == 1 || throw(ArgumentError("ln expects one argument"))
+        args[1] > 0 || throw(DomainError(args[1], "ln argument must be greater than zero"))
         return log(args[1])
     elseif name == "sqrt"
         length(args) == 1 || throw(ArgumentError("sqrt expects one argument"))
@@ -119,6 +120,61 @@ function bayes_evaluate_expression(expr, table, data_variables, parameters, row_
     end
 
     throw(ArgumentError("unsupported expression node `$node_type`"))
+end
+
+function bayes_response_vector(table, response, likelihood_type::String, task_id::String)
+    expression = field(response, "expression", nothing)
+    expression === nothing && throw(ArgumentError("response.expression is required"))
+    data_variables = field(response, "dataVariables", nothing)
+    data_variables === nothing && throw(ArgumentError("response.dataVariables is required"))
+
+    if likelihood_type != "normal"
+        field(expression, "type", "") == "data_variable" || throw(ArgumentError("$likelihood_type requires an identity response expression"))
+    end
+
+    row_count = isempty(propertynames(table)) ? 0 : length(getproperty(table, first(propertynames(table))))
+    if likelihood_type == "normal"
+        values = Vector{Float64}(undef, row_count)
+        parameters = Dict{String, Float64}()
+        for row_index in 1:row_count
+            value = bayes_evaluate_expression(expression, table, data_variables, parameters, row_index, task_id)
+            isfinite(value) || throw(ArgumentError("response expression returned a non-finite value at row $row_index"))
+            values[row_index] = Float64(value)
+        end
+        return values
+    end
+
+    symbol = require_string(field(expression, "name"), "response.expression.name")
+    column_name = require_string(field(data_variables, symbol), "response.dataVariables.$symbol")
+    column_symbol = Symbol(column_name)
+    hasproperty(table, column_symbol) || throw(ArgumentError("column `$column_name` was not found"))
+    column = getproperty(table, column_symbol)
+    values = Vector{Int}(undef, length(column))
+    for index in eachindex(column)
+        check_cancelled(task_id)
+        value = column[index]
+        if likelihood_type == "bernoulli_logit"
+            if value isa Bool
+                values[index] = value ? 1 : 0
+            elseif value isa Real && !(value isa Bool) && isfinite(Float64(value)) && Float64(value) in (0.0, 1.0)
+                values[index] = Int(Float64(value))
+            else
+                throw(ArgumentError("BernoulliLogit response column `$column_name` must contain boolean or 0/1 values"))
+            end
+        elseif likelihood_type == "poisson_log"
+            value isa Real && !(value isa Bool) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
+            numeric = Float64(value)
+            isfinite(numeric) && numeric >= 0.0 && numeric == floor(numeric) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
+            values[index] = Int(numeric)
+        else
+            throw(ArgumentError("unsupported response likelihood `$likelihood_type`"))
+        end
+    end
+    return values
+end
+
+function bayes_response_is_transformed(response)
+    return field(field(response, "expression", nothing), "type", "") != "data_variable"
 end
 
 function bayes_predictor_preview(model, table, input_rows::Int, task_id::String)

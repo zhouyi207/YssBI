@@ -1,13 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use super::model::{DatasetSourceType, Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
+use super::{
+    expression::RawExpression,
+    model::{DatasetSourceType, Expression, InferenceConfig, LikelihoodSpec, ParameterSpec},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BayesModelDraft {
     pub formula_text: String,
-    pub response_symbol: Option<String>,
+    pub raw_response: RawExpression,
+    pub bound_response: Option<Expression>,
     pub symbols: Vec<SymbolDraft>,
     pub dataset: Option<DatasetSelection>,
     pub response_binding: Option<ResponseBinding>,
@@ -51,8 +55,8 @@ pub enum ColumnDType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseBinding {
+    pub symbol: String,
     pub column: String,
-    pub symbol: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -111,8 +111,10 @@ mod tests {
                 source_id: "demo".to_string(),
             },
             response: ResponseSpec {
-                symbol: "y".to_string(),
-                column: "response".to_string(),
+                expression: Expression::DataVariable {
+                    name: "y".to_string(),
+                },
+                data_variables: BTreeMap::from([("y".to_string(), "response".to_string())]),
             },
             predictor: Expression::Parameter {
                 name: "a".to_string(),

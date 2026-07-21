@@ -5,6 +5,5 @@ export * from './draft';
 export * from './likelihoodDefaults';
 export * from './parameterInference';
 export * from './priorDefaults';
-export * from './safeExpressionParser';
 export * from './samplerDefaults';
 export * from './validationFormatting';

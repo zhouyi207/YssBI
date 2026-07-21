@@ -29,11 +29,11 @@ pub enum DatasetSourceType {
     ResultSource,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseSpec {
-    pub symbol: String,
-    pub column: String,
+    pub expression: Expression,
+    pub data_variables: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -86,7 +86,7 @@ pub enum BinaryOp {
 #[serde(rename_all = "snake_case")]
 pub enum MathFunction {
     Exp,
-    Log,
+    Ln,
     Sqrt,
     Abs,
     Sin,

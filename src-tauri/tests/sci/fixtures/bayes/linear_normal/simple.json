@@ -2,8 +2,28 @@
   "name": "simple linear normal",
   "data": {
     "columns": [
-      { "name": "x", "values": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] },
-      { "name": "y", "values": [3.1, 5.0, 7.2, 8.9, 11.1, 13.0] }
+      {
+        "name": "x",
+        "values": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0
+        ]
+      },
+      {
+        "name": "y",
+        "values": [
+          3.1,
+          5.0,
+          7.2,
+          8.9,
+          11.1,
+          13.0
+        ]
+      }
     ]
   },
   "modelSpec": {
@@ -12,8 +32,13 @@
       "sourceId": "fixture-linear-normal"
     },
     "response": {
-      "symbol": "y",
-      "column": "y"
+      "expression": {
+        "type": "data_variable",
+        "name": "y"
+      },
+      "dataVariables": {
+        "y": "y"
+      }
     },
     "predictor": {
       "type": "binary",
@@ -21,34 +46,70 @@
       "left": {
         "type": "binary",
         "op": "mul",
-        "left": { "type": "parameter", "name": "a" },
-        "right": { "type": "data_variable", "name": "x" }
+        "left": {
+          "type": "parameter",
+          "name": "a"
+        },
+        "right": {
+          "type": "data_variable",
+          "name": "x"
+        }
       },
-      "right": { "type": "parameter", "name": "b" }
+      "right": {
+        "type": "parameter",
+        "name": "b"
+      }
     },
     "dataVariables": {
       "x": "x"
     },
     "likelihood": {
       "type": "normal",
-      "mean": { "source": "predictor" },
-      "sigma": { "parameter": "sigma" }
+      "mean": {
+        "source": "predictor"
+      },
+      "sigma": {
+        "parameter": "sigma"
+      }
     },
     "parameters": [
       {
         "name": "a",
-        "constraint": { "type": "real" },
-        "prior": { "distribution": "normal", "args": [0.0, 10.0] }
+        "constraint": {
+          "type": "real"
+        },
+        "prior": {
+          "distribution": "normal",
+          "args": [
+            0.0,
+            10.0
+          ]
+        }
       },
       {
         "name": "b",
-        "constraint": { "type": "real" },
-        "prior": { "distribution": "normal", "args": [0.0, 10.0] }
+        "constraint": {
+          "type": "real"
+        },
+        "prior": {
+          "distribution": "normal",
+          "args": [
+            0.0,
+            10.0
+          ]
+        }
       },
       {
         "name": "sigma",
-        "constraint": { "type": "positive" },
-        "prior": { "distribution": "exponential", "args": [1.0] }
+        "constraint": {
+          "type": "positive"
+        },
+        "prior": {
+          "distribution": "exponential",
+          "args": [
+            1.0
+          ]
+        }
       }
     ],
     "sampler": {
@@ -64,11 +125,24 @@
     "displayFormula": "y ~ Normal(a * x + b, sigma)"
   },
   "golden": {
-    "parameters": ["a", "b", "sigma"],
+    "parameters": [
+      "a",
+      "b",
+      "sigma"
+    ],
     "posteriorMean": {
-      "a": { "expected": 2.0, "tolerance": 1.0 },
-      "b": { "expected": 1.0, "tolerance": 2.0 },
-      "sigma": { "expected": 0.5, "tolerance": 2.0 }
+      "a": {
+        "expected": 2.0,
+        "tolerance": 1.0
+      },
+      "b": {
+        "expected": 1.0,
+        "tolerance": 2.0
+      },
+      "sigma": {
+        "expected": 0.5,
+        "tolerance": 2.0
+      }
     },
     "maxRhat": 3.0,
     "requiresSamples": true,

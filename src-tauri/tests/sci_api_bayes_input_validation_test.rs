@@ -1,6 +1,8 @@
 use polars::prelude::{Column, DataFrame};
 use serde::Deserialize;
-use yssbi_lib::sci::api::bayes::{BayesModelSpec, validate_bayes_input_table};
+use yssbi_lib::sci::api::bayes::{
+    BayesModelSpec, Expression, MathFunction, validate_bayes_input_table,
+};
 
 const SIMPLE_LINEAR_NORMAL: &str = include_str!("sci/fixtures/bayes/linear_normal/simple.json");
 const SIMPLE_BERNOULLI_LOGIT: &str = include_str!("sci/fixtures/bayes/bernoulli_logit/simple.json");
@@ -46,6 +48,29 @@ fn normal_response_rejects_non_finite_values() {
 
     let error = validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid input");
     assert_eq!(error.code, "BAYES_INPUT_RESPONSE_NON_FINITE");
+    assert_eq!(error.column.as_deref(), Some("y"));
+    assert_eq!(error.row, Some(1));
+}
+
+#[test]
+fn transformed_normal_response_rejects_ln_domain_errors() {
+    let mut fixture = fixture(SIMPLE_LINEAR_NORMAL);
+    fixture.model_spec.response.expression = Expression::Call {
+        function: MathFunction::Ln,
+        args: vec![Expression::DataVariable { name: "y".into() }],
+    };
+    let table = DataFrame::new(
+        3,
+        vec![
+            Column::new("x".into(), &[1.0, 2.0, 3.0]),
+            Column::new("y".into(), &[3.0, 0.0, 7.0]),
+        ],
+    )
+    .expect("test dataframe");
+
+    let error =
+        validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid ln domain");
+    assert_eq!(error.code, "BAYES_INPUT_RESPONSE_LN_DOMAIN");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));
 }

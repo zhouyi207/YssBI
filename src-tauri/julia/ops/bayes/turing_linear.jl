@@ -130,12 +130,12 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
     data_variables = field(model, "dataVariables", nothing)
     data_variables === nothing && throw(ArgumentError("model dataVariables are required"))
     x_column = require_string(field(data_variables, parts.variable), "dataVariables.$(parts.variable)")
-    y_column = require_string(field(field(model, "response"), "column"), "response.column")
+    response = field(model, "response")
     sigma_parameter = bayes_normal_sigma_parameter(model)
     sigma_parameter === nothing && return nothing
 
     x = bayes_numeric_vector(table, x_column, task_id)
-    y = bayes_numeric_vector(table, y_column, task_id)
+    y = bayes_response_vector(table, response, "normal", task_id)
     length(x) == length(y) || throw(ArgumentError("response and predictor columns must have the same length"))
 
     a_prior = bayes_distribution_from_prior(field(bayes_parameter_spec(model, parts.slope), "prior"), "slope")
@@ -182,6 +182,13 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
             "parameter" => nothing,
         ),
     ]
+    if bayes_response_is_transformed(response)
+        push!(warnings, Dict(
+            "code" => "JULIA_BAYES_RESPONSE_MODEL_SCALE",
+            "message" => "Posterior predictive observed values and draws are reported on the transformed model scale; no inverse transform was applied.",
+            "parameter" => nothing,
+        ))
+    end
     append!(warnings, bayes_diagnostic_warnings(summaries, draws * chains))
 
     return Dict(

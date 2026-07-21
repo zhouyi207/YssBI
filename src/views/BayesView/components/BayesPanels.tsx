@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -10,24 +9,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { defaultPriorForConstraint, formatExpression, formatPrior } from '@/features/domain/bayes';
-
+import { defaultPriorForConstraint, formatExpression, formatPrior, formatRawExpressionLatex } from '@/features/domain/bayes';
 
 export function FormulaStep({
   draft,
   onModelEquationChange,
 }: {
   draft: BayesModelDraftDTO;
-  onModelEquationChange: (responseSymbol: string, formulaText: string, likelihood: LikelihoodSpecDTO, predictorText?: string) => void | Promise<void>;
+  onModelEquationChange: (formulaText: string, likelihood: LikelihoodSpecDTO) => void | Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
-  const [responseSymbol, setResponseSymbol] = useState(currentResponseSymbol(draft));
+  const [responseExpression, setResponseExpression] = useState(currentResponseExpression(draft));
   const [distribution, setDistribution] = useState<LikelihoodDistribution>(likelihoodDistribution(draft.likelihood));
   const [distributionArgs, setDistributionArgs] = useState<string[]>(() => initialDistributionArgs(draft));
 
   useEffect(() => {
     if (!editing) {
-      setResponseSymbol(currentResponseSymbol(draft));
+      setResponseExpression(currentResponseExpression(draft));
       setDistribution(likelihoodDistribution(draft.likelihood));
       setDistributionArgs(initialDistributionArgs(draft));
     }
@@ -39,14 +37,14 @@ export function FormulaStep({
   };
 
   const commit = async () => {
-    const nextResponse = responseSymbol.trim() || 'y';
+    const nextResponse = responseExpression.trim() || 'y';
     const nextFormulaText = composeLikelihoodLatex(nextResponse, distribution, distributionArgs);
-    await onModelEquationChange(nextResponse, nextFormulaText, likelihoodFromFormulaParts(distribution, distributionArgs, draft.likelihood), distributionArgs[0]);
+    await onModelEquationChange(nextFormulaText, likelihoodFromFormulaParts(distribution, distributionArgs, draft.likelihood));
     setEditing(false);
   };
 
   const cancel = () => {
-    setResponseSymbol(currentResponseSymbol(draft));
+    setResponseExpression(currentResponseExpression(draft));
     setDistribution(likelihoodDistribution(draft.likelihood));
     setDistributionArgs(initialDistributionArgs(draft));
     setEditing(false);
@@ -58,7 +56,7 @@ export function FormulaStep({
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="bayes-response-symbol">Model equation</Label>
+            <Label htmlFor="bayes-response-expression">Model equation</Label>
             <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={editing}>
               编辑
             </Button>
@@ -67,13 +65,13 @@ export function FormulaStep({
             <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
               <div className="grid gap-3 md:grid-cols-[120px_180px_minmax(0,1fr)]">
                 <div className="space-y-1.5">
-                  <Label htmlFor="bayes-response-symbol" className="text-xs text-muted-foreground">因变量</Label>
+                  <Label htmlFor="bayes-response-expression" className="text-xs text-muted-foreground">响应表达式</Label>
                   <Input
-                    id="bayes-response-symbol"
-                    value={responseSymbol}
+                    id="bayes-response-expression"
+                    value={responseExpression}
                     autoFocus
                     className="h-8 font-mono"
-                    onChange={(event) => setResponseSymbol(event.target.value)}
+                    onChange={(event) => setResponseExpression(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Escape') {
                         event.preventDefault();
@@ -113,8 +111,8 @@ export function FormulaStep({
                   ))}
                 </div>
               </div>
-              <LatexFormulaPreview formulaText={composeLikelihoodLatex(responseSymbol || 'y', distribution, distributionArgs)} />
-              <p className="text-xs text-muted-foreground">{likelihoodInputHint(distribution)}</p>
+              <LatexFormulaPreview formulaText={composeLikelihoodLatex(responseExpression || 'y', distribution, distributionArgs)} />
+              <RecognizedSymbols symbols={draft.symbols.map(symbol => symbol.name)} />
               <div className="flex justify-end gap-2">
                 <Button size="sm" variant="outline" onClick={cancel}>取消</Button>
                 <Button size="sm" onClick={commit}>保存</Button>
@@ -123,7 +121,7 @@ export function FormulaStep({
           ) : (
             <div className="space-y-2">
               <LatexFormulaPreview formulaText={draft.formulaText} />
-              <p className="text-xs text-muted-foreground">{likelihoodInputHint(likelihoodDistribution(draft.likelihood))}</p>
+              <RecognizedSymbols symbols={draft.symbols.map(symbol => symbol.name)} />
             </div>
           )}
         </div>
@@ -134,8 +132,8 @@ export function FormulaStep({
 
 type LikelihoodDistribution = LikelihoodSpecDTO['type'];
 
-function currentResponseSymbol(draft: BayesModelDraftDTO): string {
-  return draft.responseSymbol ?? draft.responseBinding?.symbol ?? 'y';
+export function currentResponseExpression(draft: BayesModelDraftDTO): string {
+  return formatRawExpressionLatex(draft.rawResponse) || 'y';
 }
 
 function likelihoodDistribution(likelihood: LikelihoodSpecDTO): LikelihoodDistribution {
@@ -170,10 +168,10 @@ function distributionArgLabels(distribution: LikelihoodDistribution): string[] {
   }
 }
 
-function composeLikelihoodLatex(responseSymbol: string, distribution: LikelihoodDistribution, args: string[]): string {
-  const response = responseSymbol.trim() || 'y';
+export function composeLikelihoodLatex(responseExpression: string, distribution: LikelihoodDistribution, args: string[]): string {
+  const response = responseExpression.trim() || 'y';
   const safeArgs = distributionArgLabels(distribution).map((_, index) => args[index]?.trim() || '\\cdots');
-  return `${latexSymbol(response)} \\sim \\operatorname{${distributionLatexName(distribution)}}\\left(${safeArgs.join(', ')}\\right)`;
+  return `${response} \\sim \\operatorname{${distributionLatexName(distribution)}}\\left(${safeArgs.join(', ')}\\right)`;
 }
 
 function likelihoodFromFormulaParts(
@@ -206,16 +204,7 @@ function likelihoodFromDistribution(distribution: LikelihoodDistribution): Likel
   }
 }
 
-function likelihoodInputHint(distribution: LikelihoodDistribution): string {
-  switch (distribution) {
-    case 'normal':
-      return 'Normal 用于连续数值响应；需要 sigma 参数，sigma 应使用 positive 约束。';
-    case 'bernoulli_logit':
-      return 'BernoulliLogit 用于二分类响应；响应列必须是 boolean 或 0/1，不需要 sigma。';
-    case 'poisson_log':
-      return 'PoissonLog 用于计数响应；响应列必须是非负整数，不需要 sigma。';
-  }
-}
+
 
 function distributionLatexName(distribution: LikelihoodDistribution): string {
   switch (distribution) {
@@ -512,7 +501,7 @@ function SymbolConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-w-[680px]">
+      <DialogContent className="max-w-170">
         <DialogHeader className="border-b border-border bg-muted/20">
           <DialogTitle>Symbol configuration{symbol ? ` · ${symbol}` : ''}</DialogTitle>
         </DialogHeader>
@@ -940,6 +929,22 @@ function ReadOnlyField({ label, value, mono = false }: { label: string; value: s
 }
 
 
+
+function RecognizedSymbols({ symbols }: { symbols: string[] }) {
+  const uniqueSymbols = Array.from(new Set(symbols)).sort();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <span>识别的 symbols:</span>
+      {uniqueSymbols.length > 0
+        ? uniqueSymbols.map(symbol => (
+          <span key={symbol} className="rounded border border-border bg-muted/30 px-1.5 py-0.5 text-foreground">
+            <LatexInline formulaText={latexSymbol(symbol)} />
+          </span>
+        ))
+        : <span>无</span>}
+    </div>
+  );
+}
 
 function LatexFormulaPreview({ formulaText }: { formulaText: string }) {
   const html = useMemo(() => renderLatex(formulaText, true), [formulaText]);

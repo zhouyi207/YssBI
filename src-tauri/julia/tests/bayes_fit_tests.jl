@@ -1,7 +1,49 @@
+using JSON3
 using Test
 
 include(joinpath(@__DIR__, "..", "ops", "bayes_fit.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes", "turing_linear.jl"))
+
+if !isdefined(Main, :check_cancelled)
+    check_cancelled(::String) = nothing
+end
+if !isdefined(Main, :field)
+    field(value, name::String, default = nothing) = haskey(value, name) ? value[name] : default
+end
+if !isdefined(Main, :require_string)
+    require_string(value, name::String) = value isa AbstractString ? String(value) : throw(ArgumentError("`$name` must be a string"))
+end
+
+@testset "Transformed response uses safe ln evaluator" begin
+    response = JSON3.read("""
+        {
+          "expression": {
+            "type": "call",
+            "function": "ln",
+            "args": [{"type": "data_variable", "name": "y"}]
+          },
+          "dataVariables": {"y": "response"}
+        }
+    """)
+    table = (response = [1.0, exp(1.0), exp(2.0)],)
+    @test bayes_response_vector(table, response, "normal", "task") ≈ [0.0, 1.0, 2.0]
+
+    legacy = JSON3.read("""
+        {
+          "type": "call",
+          "function": "log",
+          "args": [{"type": "number", "value": 1.0}]
+        }
+    """)
+    @test_throws ArgumentError bayes_evaluate_expression(
+        legacy,
+        NamedTuple(),
+        JSON3.read("{}"),
+        Dict{String, Float64}(),
+        1,
+        "task",
+    )
+end
 
 @testset "Bayesian capability and failure boundaries" begin
     unsupported = UnsupportedBayesCapability("test model")

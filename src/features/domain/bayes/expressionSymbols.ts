@@ -21,7 +21,7 @@ export function createSymbolDrafts(
 ): SymbolDraftDTO[] {
   const existingByName = new Map(existing.map(symbol => [symbol.name, symbol]));
   const columnNames = new Set(datasetColumnNames);
-  return Array.from(new Set([...symbolNames, ...existing.map(symbol => symbol.name)]))
+  return Array.from(new Set(symbolNames))
     .sort()
     .map(name => {
       const previous = existingByName.get(name);
@@ -48,6 +48,22 @@ export function bindRawExpression(
   if (!expression) return null;
   const roles = new Map(symbols.map(symbol => [symbol.name, symbol.role]));
   return bindExpressionNode(expression, roles);
+}
+
+export function bindResponseExpression(expression: RawExpressionDTO): ExpressionDTO {
+  const responseNames = collectRawSymbols(expression);
+  if (responseNames.length !== 1) {
+    throw new Error(`Response expression must contain exactly one symbol, received ${responseNames.length}`);
+  }
+  return bindExpressionNode(expression, new Map([[responseNames[0], 'dependent']]));
+}
+
+export function responseBaseNameFromRaw(expression: RawExpressionDTO): string {
+  const symbols = collectRawSymbols(expression);
+  if (symbols.length !== 1) {
+    throw new Error(`Response expression must contain exactly one symbol, received ${symbols.length}`);
+  }
+  return symbols[0];
 }
 
 export function symbolNamesByRole(symbols: readonly SymbolDraftDTO[], role: BayesSymbolRoleDTO): string[] {

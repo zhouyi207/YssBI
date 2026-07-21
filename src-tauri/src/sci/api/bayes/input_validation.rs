@@ -1,6 +1,8 @@
 use polars::prelude::{AnyValue, DataFrame};
 
-use super::model::{BayesModelSpec, LikelihoodSpec};
+use std::collections::BTreeMap;
+
+use super::model::{BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BayesInputValidationError {
@@ -58,18 +60,193 @@ fn validate_response_column(
     spec: &BayesModelSpec,
     table: &DataFrame,
 ) -> Result<(), BayesInputValidationError> {
-    let column_name = spec.response.column.as_str();
-    match &spec.likelihood {
-        LikelihoodSpec::Normal { .. } => validate_finite_numeric_column(
+    for column_name in spec.response.data_variables.values() {
+        validate_finite_numeric_column(
             table,
             column_name,
             "BAYES_INPUT_RESPONSE_NON_FINITE",
             "BAYES_INPUT_COLUMN_NOT_NUMERIC",
             "response",
-        ),
+        )?;
+    }
+    let column_name = sole_response_column(spec)?;
+    match &spec.likelihood {
+        LikelihoodSpec::Normal { .. } => validate_response_expression(spec, table),
         LikelihoodSpec::BernoulliLogit { .. } => validate_bernoulli_response(table, column_name),
         LikelihoodSpec::PoissonLog { .. } => validate_poisson_response(table, column_name),
     }
+}
+
+fn sole_response_column(spec: &BayesModelSpec) -> Result<&str, BayesInputValidationError> {
+    if spec.response.data_variables.len() != 1 {
+        return Err(BayesInputValidationError::new(
+            "BAYES_INPUT_RESPONSE_BINDING_INVALID",
+            "Bayesian response must bind exactly one data variable.",
+            None,
+            None,
+        ));
+    }
+    Ok(spec
+        .response
+        .data_variables
+        .values()
+        .next()
+        .expect("one binding"))
+}
+
+fn validate_response_expression(
+    spec: &BayesModelSpec,
+    table: &DataFrame,
+) -> Result<(), BayesInputValidationError> {
+    let column = sole_response_column(spec)?.to_string();
+    for row in 0..table.height() {
+        evaluate_response(
+            &spec.response.expression,
+            table,
+            &spec.response.data_variables,
+            row,
+            &column,
+        )?;
+    }
+    Ok(())
+}
+
+fn evaluate_response(
+    expression: &Expression,
+    table: &DataFrame,
+    bindings: &BTreeMap<String, String>,
+    row: usize,
+    response_column: &str,
+) -> Result<f64, BayesInputValidationError> {
+    let value = match expression {
+        Expression::Number { value } => *value,
+        Expression::DataVariable { name } => {
+            let column_name = bindings.get(name).ok_or_else(|| {
+                BayesInputValidationError::new(
+                    "BAYES_INPUT_RESPONSE_BINDING_INVALID",
+                    format!("Response data variable `{name}` is not bound to a column."),
+                    Some(response_column.to_string()),
+                    Some(row),
+                )
+            })?;
+            let value = table
+                .column(column_name)
+                .map_err(|_| missing_column(column_name))?
+                .get(row)
+                .map_err(|_| missing_column(column_name))?;
+            numeric_value(value).ok_or_else(|| {
+                BayesInputValidationError::new(
+                    "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+                    format!(
+                        "Bayesian response column `{column_name}` must contain numeric values."
+                    ),
+                    Some(column_name.clone()),
+                    Some(row),
+                )
+            })?
+        }
+        Expression::Column { name } => {
+            let value = table
+                .column(name)
+                .map_err(|_| missing_column(name))?
+                .get(row)
+                .map_err(|_| missing_column(name))?;
+            numeric_value(value).ok_or_else(|| {
+                BayesInputValidationError::new(
+                    "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+                    format!("Bayesian response column `{name}` must contain numeric values."),
+                    Some(name.clone()),
+                    Some(row),
+                )
+            })?
+        }
+        Expression::Parameter { .. } => {
+            return Err(response_eval_error(
+                "BAYES_INPUT_RESPONSE_PARAMETER_FORBIDDEN",
+                "Response expressions cannot contain parameters.",
+                response_column,
+                row,
+            ));
+        }
+        Expression::Unary {
+            op: UnaryOp::Neg,
+            arg,
+        } => -evaluate_response(arg, table, bindings, row, response_column)?,
+        Expression::Binary { op, left, right } => {
+            let left = evaluate_response(left, table, bindings, row, response_column)?;
+            let right = evaluate_response(right, table, bindings, row, response_column)?;
+            match op {
+                BinaryOp::Add => left + right,
+                BinaryOp::Sub => left - right,
+                BinaryOp::Mul => left * right,
+                BinaryOp::Div if right == 0.0 => {
+                    return Err(response_eval_error(
+                        "BAYES_INPUT_RESPONSE_DIVISION_BY_ZERO",
+                        "Response expression divided by zero.",
+                        response_column,
+                        row,
+                    ));
+                }
+                BinaryOp::Div => left / right,
+                BinaryOp::Pow => left.powf(right),
+            }
+        }
+        Expression::Call { function, args } => {
+            let values = args
+                .iter()
+                .map(|arg| evaluate_response(arg, table, bindings, row, response_column))
+                .collect::<Result<Vec<_>, _>>()?;
+            match function {
+                MathFunction::Exp => values[0].exp(),
+                MathFunction::Ln if values[0] <= 0.0 => {
+                    return Err(response_eval_error(
+                        "BAYES_INPUT_RESPONSE_LN_DOMAIN",
+                        "Response ln argument must be greater than zero.",
+                        response_column,
+                        row,
+                    ));
+                }
+                MathFunction::Ln => values[0].ln(),
+                MathFunction::Sqrt if values[0] < 0.0 => {
+                    return Err(response_eval_error(
+                        "BAYES_INPUT_RESPONSE_SQRT_DOMAIN",
+                        "Response sqrt argument must be non-negative.",
+                        response_column,
+                        row,
+                    ));
+                }
+                MathFunction::Sqrt => values[0].sqrt(),
+                MathFunction::Abs => values[0].abs(),
+                MathFunction::Sin => values[0].sin(),
+                MathFunction::Cos => values[0].cos(),
+                MathFunction::Min => values.into_iter().fold(f64::INFINITY, f64::min),
+                MathFunction::Max => values.into_iter().fold(f64::NEG_INFINITY, f64::max),
+            }
+        }
+    };
+    if !value.is_finite() {
+        return Err(response_eval_error(
+            "BAYES_INPUT_RESPONSE_RESULT_NON_FINITE",
+            "Response expression returned a non-finite value.",
+            response_column,
+            row,
+        ));
+    }
+    Ok(value)
+}
+
+fn response_eval_error(
+    code: &'static str,
+    message: &str,
+    column: &str,
+    row: usize,
+) -> BayesInputValidationError {
+    BayesInputValidationError::new(
+        code,
+        format!("{message} Row {}.", row + 1),
+        Some(column.to_string()),
+        Some(row),
+    )
 }
 
 fn validate_numeric_predictor_column(

@@ -780,7 +780,12 @@ fn materialize_input_table(
 }
 
 fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
-    let mut columns = vec![spec.response.column.clone()];
+    let mut columns = spec
+        .response
+        .data_variables
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
     for column in spec.data_variables.values() {
         if !columns.iter().any(|existing| existing == column) {
             columns.push(column.clone());
@@ -894,7 +899,10 @@ mod tests {
     impl BayesBackend for CountingBackend {
         fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
             assert!(request.task_id.starts_with("bayes-"));
-            assert_eq!(request.spec.response.symbol, "y");
+            assert_eq!(
+                request.spec.response.data_variables.get("y"),
+                Some(&"response".to_string())
+            );
             assert!(request.input_table.is_none());
             *self.calls.lock().expect("calls lock") += 1;
             Ok(InferenceResult {
@@ -973,7 +981,12 @@ mod tests {
         BayesModelDraft {
             formula_text: "y \\sim \\operatorname{Normal}\\left(a * x + b, \\sigma\\right)"
                 .to_string(),
-            response_symbol: Some("y".to_string()),
+            raw_response: crate::sci::api::bayes::RawExpression::Symbol {
+                name: "y".to_string(),
+            },
+            bound_response: Some(Expression::DataVariable {
+                name: "y".to_string(),
+            }),
             symbols: vec![
                 SymbolDraft {
                     name: "y".to_string(),
@@ -1017,8 +1030,8 @@ mod tests {
                 ],
             }),
             response_binding: Some(ResponseBinding {
+                symbol: "y".to_string(),
                 column: "response".to_string(),
-                symbol: Some("y".to_string()),
             }),
             data_bindings: BTreeMap::from([("x".to_string(), "time".to_string())]),
             bound_predictor: Some(Expression::Binary {

@@ -35,8 +35,8 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     likelihood_type = String(field(likelihood, "type", ""))
     likelihood_type in ("normal", "bernoulli_logit", "poisson_log") || return nothing
 
-    y_column = require_string(field(field(model, "response"), "column"), "response.column")
-    y = bayes_response_vector(table, y_column, likelihood_type, task_id)
+    response = field(model, "response")
+    y = bayes_response_vector(table, response, likelihood_type, task_id)
     length(y) == input_rows || throw(ArgumentError("response column length must match input rows"))
 
     data_variables = field(model, "dataVariables", nothing)
@@ -106,6 +106,13 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
             "parameter" => nothing,
         ),
     ]
+    if bayes_response_is_transformed(response)
+        push!(warnings, Dict(
+            "code" => "JULIA_BAYES_RESPONSE_MODEL_SCALE",
+            "message" => "Posterior predictive observed values and draws are reported on the transformed model scale; no inverse transform was applied.",
+            "parameter" => nothing,
+        ))
+    end
     append!(warnings, bayes_diagnostic_warnings(summaries, draws * chains))
 
     return Dict(
@@ -122,37 +129,7 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     )
 end
 
-function bayes_response_vector(table, column_name::String, likelihood_type::String, task_id::String)
-    if likelihood_type == "normal"
-        return bayes_numeric_vector(table, column_name, task_id)
-    end
 
-    column_symbol = Symbol(column_name)
-    hasproperty(table, column_symbol) || throw(ArgumentError("column `$column_name` was not found"))
-    column = getproperty(table, column_symbol)
-    values = Vector{Int}(undef, length(column))
-    for index in eachindex(column)
-        check_cancelled(task_id)
-        value = column[index]
-        if likelihood_type == "bernoulli_logit"
-            if value isa Bool
-                values[index] = value ? 1 : 0
-            elseif value isa Real && !(value isa Bool) && isfinite(Float64(value)) && (Float64(value) == 0.0 || Float64(value) == 1.0)
-                values[index] = Int(Float64(value))
-            else
-                throw(ArgumentError("BernoulliLogit response column `$column_name` must contain boolean or 0/1 values"))
-            end
-        elseif likelihood_type == "poisson_log"
-            value isa Real && !(value isa Bool) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
-            numeric = Float64(value)
-            isfinite(numeric) && numeric >= 0.0 && numeric == floor(numeric) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
-            values[index] = Int(numeric)
-        else
-            throw(ArgumentError("unsupported response likelihood `$likelihood_type`"))
-        end
-    end
-    return values
-end
 
 function bayes_write_generic_posterior_predictive(path::String, chain, chain_names::Vector{String}, model_names::Vector{String}, table, data_variables, predictor, y, likelihood_type::String, sigma_parameter, task_id::String)
     values = Array(chain)

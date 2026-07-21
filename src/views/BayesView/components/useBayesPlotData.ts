@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InferenceResultDTO } from '@/shared/types/bayes';
 
 interface AsyncDataState<T> {
@@ -25,19 +25,21 @@ export function useBayesPlotData<T>(
 
 function useAsyncData<T>(key: string | null, load: () => Promise<T>): AsyncDataState<T> {
   const [state, setState] = useState<AsyncDataState<T>>({ data: null, loading: false, error: null });
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   useEffect(() => {
     let stale = false;
     setState({ data: null, loading: Boolean(key), error: null });
     if (!key) return;
 
-    void load()
+    void loadRef.current()
       .then(data => { if (!stale) setState({ data, loading: false, error: null }); })
       .catch((caught: unknown) => {
         if (!stale) setState({ data: null, loading: false, error: caught instanceof Error ? caught.message : String(caught) });
       });
     return () => { stale = true; };
-  }, [key, load]);
+  }, [key]);
 
   return state;
 }

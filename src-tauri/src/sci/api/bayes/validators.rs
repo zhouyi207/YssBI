@@ -11,6 +11,7 @@ pub fn validate_draft(draft: &BayesModelDraft) -> ValidationReport {
     let mut context = ValidationContext::default();
     validate_formula(draft, &mut context);
     validate_dataset_and_bindings(draft, &mut context);
+    validate_response_expression(draft, &mut context);
     validate_expression(draft, &mut context);
     validate_likelihood(draft, &mut context);
     validate_parameters(draft, &mut context);
@@ -73,6 +74,14 @@ fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut Validati
         return;
     };
 
+    if response_binding.symbol.trim().is_empty() {
+        context.error(
+            "RESPONSE_SYMBOL_REQUIRED",
+            "响应表达式必须绑定一个基础数据符号。",
+            "responseBinding.symbol",
+        );
+    }
+
     if response_binding.column.trim().is_empty() {
         context.error(
             "RESPONSE_REQUIRED",
@@ -108,6 +117,56 @@ fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut Validati
                 format!("dataBindings.{}", symbol.name),
             ),
         }
+    }
+}
+
+fn validate_response_expression(draft: &BayesModelDraft, context: &mut ValidationContext) {
+    let Some(response) = &draft.bound_response else {
+        context.error(
+            "RESPONSE_EXPRESSION_REQUIRED",
+            "响应表达式尚未绑定。",
+            "boundResponse",
+        );
+        return;
+    };
+    validate_expression_node(response, "boundResponse", context);
+
+    let mut data = BTreeSet::new();
+    let mut parameters = BTreeSet::new();
+    collect_expression_symbols(response, &mut data, &mut parameters);
+    if !parameters.is_empty() {
+        context.error(
+            "RESPONSE_PARAMETER_FORBIDDEN",
+            "响应表达式不能引用模型参数。",
+            "boundResponse",
+        );
+    }
+    if data.len() != 1 {
+        context.error(
+            "RESPONSE_DATA_SYMBOL_COUNT_INVALID",
+            "响应表达式必须且只能引用一个基础数据符号。",
+            "boundResponse",
+        );
+    }
+    if let Some(binding) = &draft.response_binding
+        && data.len() == 1
+        && !data.contains(&binding.symbol)
+    {
+        context.error(
+            "RESPONSE_BINDING_MISMATCH",
+            "响应表达式的数据符号与响应列绑定不一致。",
+            "responseBinding.symbol",
+        );
+    }
+
+    if !matches!(draft.likelihood, LikelihoodSpec::Normal { .. })
+        && !matches!(response, Expression::DataVariable { name } if draft.response_binding.as_ref().is_some_and(|binding| binding.symbol == *name))
+    {
+        context.error(
+            "LIKELIHOOD_RESPONSE_TRANSFORM_UNSUPPORTED",
+            "BernoulliLogit 和 PoissonLog 仅支持未变换的响应符号。",
+            "boundResponse",
+        );
     }
 }
 
@@ -189,7 +248,7 @@ fn validate_function_arity(
 ) {
     let valid = match function {
         MathFunction::Exp
-        | MathFunction::Log
+        | MathFunction::Ln
         | MathFunction::Sqrt
         | MathFunction::Abs
         | MathFunction::Sin

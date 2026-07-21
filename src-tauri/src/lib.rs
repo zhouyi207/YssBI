@@ -3,7 +3,6 @@
 //! 包含所有核心功能：schema 定义、节点系统、执行器、项目管理、状态管理等。
 
 pub mod application;
-pub mod ast;
 pub mod commands;
 pub mod database;
 pub mod error;
@@ -13,6 +12,7 @@ pub mod frontend;
 pub mod graph;
 pub mod julia;
 pub mod log;
+pub mod math;
 pub mod project;
 pub mod schema;
 pub mod sci;

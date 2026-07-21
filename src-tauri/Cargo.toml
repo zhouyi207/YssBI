@@ -58,6 +58,7 @@ faer.workspace = true
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 thiserror = "2.0.18"
 regex = "1"
+mathlex = "=0.4.2"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
 calamine = "0.26"
 rand = "0.8"
