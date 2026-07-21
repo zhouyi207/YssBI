@@ -6,7 +6,8 @@ import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 
 import type { BayesDatasetSelectionDTO, BayesInferenceTaskDTO, ValidationReportDTO } from '@/shared/types/bayes';
 import { useBayesInferenceTask, useBayesModelDraft, useBayesValidation } from '@/features/application/bayes';
-import type { BayesInferenceError, FormulaParseError } from '@/features/application/bayes';
+import type { BayesInferenceError } from '@/features/application/bayes';
+import { issueTargetStep } from '@/features/domain/bayes';
 import { useProjectSync } from '@/features/application/initialization';
 import { initProjectSync, useDatabaseStore } from '@/features/core/dataStore';
 import { DatabaseService } from '@/services/database/databaseService';
@@ -14,7 +15,7 @@ import { usePersistedWindow, useWindowMaximized } from '@/features/application/w
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
-import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormulaStep, SamplerStep, SymbolRoleStep } from './components/BayesPanels';
@@ -88,6 +89,10 @@ export function BayesView() {
   }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
   const inference = useBayesInferenceTask();
+  const symbolIssues = validation.stale || !validation.report
+    ? []
+    : [...validation.report.errors, ...validation.report.warnings]
+      .filter(issue => ['data', 'likelihood', 'parameters'].includes(issueTargetStep(issue)));
   const run = async () => {
     const report = await validation.validate();
     if (!report.ok) return;
@@ -114,8 +119,6 @@ export function BayesView() {
             <TabsTrigger value="results">Results</TabsTrigger>
           </TabsList>
           <BayesActionBar
-            validationOk={validation.report?.ok === true && !validation.stale}
-            validationStale={validation.stale}
             validationLoading={validation.loading}
             task={inference.task}
             onRun={run}
@@ -126,11 +129,17 @@ export function BayesView() {
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
-                <BayesIssueBanner error={inference.error} formulaError={modelDraft.formulaError} validation={validation.report} />
-                <FormulaStep draft={modelDraft.draft} onModelEquationChange={modelDraft.updateModelEquation} />
+                <BayesIssueBanner error={inference.error} validation={null} />
+                <FormulaStep
+                  draft={modelDraft.draft}
+                  error={modelDraft.formulaError}
+                  onErrorClear={modelDraft.clearFormulaError}
+                  onModelEquationChange={modelDraft.updateModelEquation}
+                />
                 <SymbolRoleStep
                   draft={modelDraft.draft}
                   datasets={datasets}
+                  issues={symbolIssues}
                   onSymbolConfigurationChange={modelDraft.updateSymbolConfiguration}
                   onDeleteSymbol={modelDraft.deleteSymbol}
                 />
@@ -170,15 +179,13 @@ function sameBayesDataset(left: BayesDatasetSelectionDTO, right: BayesDatasetSel
 
 function BayesIssueBanner({
   error,
-  formulaError,
   validation,
 }: {
   error: BayesInferenceError | null;
-  formulaError?: FormulaParseError | null;
   validation: ValidationReportDTO | null;
 }) {
   const issues = validation ? [...validation.errors, ...validation.warnings].slice(0, 4) : [];
-  if (!error && !formulaError && issues.length === 0) return null;
+  if (!error && issues.length === 0) return null;
 
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3 text-sm">
@@ -190,12 +197,7 @@ function BayesIssueBanner({
           {typeof error.row === 'number' ? ` (row: ${error.row + 1})` : ''}
         </p>
       ) : null}
-      {formulaError ? (
-        <p className="text-destructive">
-          <span className="font-mono">[{formulaError.code}]</span> {formulaError.message}
-          {formulaError.detail ? ` (${formulaError.detail})` : ''}
-        </p>
-      ) : null}
+
       {issues.map(issue => (
         <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
           <span className="font-mono">[{issue.code}]</span> {issue.message}{issue.path ? ` (${issue.path})` : ''}
@@ -206,15 +208,11 @@ function BayesIssueBanner({
 }
 
 function BayesActionBar({
-  validationOk,
-  validationStale,
   validationLoading,
   task,
   onRun,
   onCancel,
 }: {
-  validationOk: boolean;
-  validationStale: boolean;
   validationLoading: boolean;
   task: BayesInferenceTaskDTO | null;
   onRun: () => void | Promise<unknown>;
@@ -222,13 +220,8 @@ function BayesActionBar({
 }) {
   const taskStatus = task?.status ?? null;
   const running = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
-  const taskLabel = task?.progress?.stage ?? taskStatus;
   return (
     <div className="flex shrink-0 items-center gap-2">
-      <Badge variant={validationOk ? 'default' : validationStale ? 'warning' : 'secondary'}>
-        {validationLoading ? 'validating' : validationOk ? 'valid' : validationStale ? 'stale' : 'not validated'}
-      </Badge>
-      {taskLabel && <Badge variant={running ? 'warning' : 'secondary'}>{taskLabel}</Badge>}
       <Button size="sm" onClick={onRun} disabled={running || validationLoading}>
         {running ? 'Running...' : 'Run'}
       </Button>

@@ -2,9 +2,7 @@ import type {
   BayesModelDraftDTO,
 
   LikelihoodSpecDTO,
-  RawExpressionDTO,
   ParseExpressionRequestDTO,
-  ParseExpressionResponseDTO,
 } from '@/shared/types/bayes';
 import { likelihoodParameterNames } from '@/features/domain/bayes';
 
@@ -14,22 +12,7 @@ export interface FormulaParseError {
   detail?: string;
 }
 
-interface EditableFormulaDraft {
-  formulaText: string;
-  rawResponse: RawExpressionDTO | null;
-  rawPredictor: RawExpressionDTO | null;
-}
 
-export interface FormulaParseState {
-  generation: number;
-  formula: EditableFormulaDraft;
-  error: FormulaParseError | null;
-}
-
-export type FormulaParseAction =
-  | { type: 'started'; generation: number; formulaText: string }
-  | { type: 'succeeded'; generation: number; response: ParseExpressionResponseDTO }
-  | { type: 'failed'; generation: number; error: FormulaParseError };
 
 export function buildFormulaParseRequest(
   draft: BayesModelDraftDTO,
@@ -58,24 +41,6 @@ export function restoreParsedSymbols(
   return next;
 }
 
-
-export function formulaParseReducer(state: FormulaParseState, action: FormulaParseAction): FormulaParseState {
-  if (action.type === 'started' && action.generation <= state.generation) return state;
-  if (action.type !== 'started' && action.generation !== state.generation) return state;
-
-  switch (action.type) {
-    case 'started':
-      return {
-        generation: action.generation,
-        formula: { formulaText: action.formulaText, rawResponse: null, rawPredictor: null },
-        error: null,
-      };
-    case 'succeeded':
-      return { generation: state.generation, formula: action.response.formula, error: null };
-    case 'failed':
-      return { ...state, error: action.error };
-  }
-}
 
 export function formatFormulaParseError(caught: unknown): FormulaParseError {
   if (typeof caught === 'object' && caught !== null) {

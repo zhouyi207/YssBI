@@ -5,6 +5,7 @@ import type {
   InferenceConfigDTO,
   LikelihoodSpecDTO,
   ParameterSpecDTO,
+  ParseExpressionResponseDTO,
   PriorSpecDTO,
   SymbolDraftDTO,
 } from '@/shared/types/bayes';
@@ -25,10 +26,8 @@ import {
 import {
   buildFormulaParseRequest,
   formatFormulaParseError,
-  formulaParseReducer,
   restoreParsedSymbols,
   type FormulaParseError,
-  type FormulaParseState,
 } from './formulaParsing';
 
 export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefaultBayesDraft()) {
@@ -40,43 +39,27 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
 
   const draftHash = useMemo(() => hashBayesDraft(draft), [draft]);
 
-  const updateModelEquation = async (formulaText: string, likelihood: LikelihoodSpecDTO) => {
+  const updateModelEquation = async (formulaText: string, likelihood: LikelihoodSpecDTO): Promise<boolean> => {
     const generation = ++formulaRequestGeneration.current;
     const request = buildFormulaParseRequest(draft, formulaText, likelihood);
     setFormulaError(null);
-    setDraft(current => {
-      const parsing = formulaParseReducer(formulaState(current, generation - 1, null), {
-        type: 'started',
-        generation,
-        formulaText,
-      });
-      return { ...current, formulaText: parsing.formula.formulaText, likelihood };
-    });
 
     try {
       const response = await parseBayesExpression(request);
-      if (generation !== formulaRequestGeneration.current) return;
+      if (generation !== formulaRequestGeneration.current) return false;
       setDeletedSymbolNames(currentDeleted => {
         const nextDeleted = restoreParsedSymbols(currentDeleted, response.symbols);
-        setDraft(current => {
-          const parsed = formulaParseReducer(formulaState(current, generation, null), {
-            type: 'succeeded',
-            generation,
-            response,
-          });
-          return rebuildDraft(applyParsedFormula(current, parsed.formula), nextDeleted);
-        });
+        setDraft(current => rebuildDraft(
+          applyParsedFormula({ ...current, likelihood }, response.formula),
+          nextDeleted,
+        ));
         return nextDeleted;
       });
+      return true;
     } catch (caught) {
-      if (generation !== formulaRequestGeneration.current) return;
-      const error = formatFormulaParseError(caught);
-      const failed = formulaParseReducer(formulaStateFromText(formulaText, generation), {
-        type: 'failed',
-        generation,
-        error,
-      });
-      setFormulaError(failed.error);
+      if (generation !== formulaRequestGeneration.current) return false;
+      setFormulaError(formatFormulaParseError(caught));
+      return false;
     }
   };
 
@@ -216,38 +199,14 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     updateSampler,
     unusedParameterNames,
     formulaError,
-  };
-}
-
-function formulaState(
-  draft: BayesModelDraftDTO,
-  generation: number,
-  error: FormulaParseError | null,
-): FormulaParseState {
-  return {
-    generation,
-    formula: {
-      formulaText: draft.formulaText,
-      rawResponse: draft.rawResponse,
-      rawPredictor: draft.rawPredictor,
-    },
-    error,
-  };
-}
-
-function formulaStateFromText(formulaText: string, generation: number): FormulaParseState {
-  return {
-    generation,
-    formula: { formulaText, rawResponse: null, rawPredictor: null },
-    error: null,
+    clearFormulaError: () => setFormulaError(null),
   };
 }
 
 function applyParsedFormula(
   draft: BayesModelDraftDTO,
-  formula: FormulaParseState['formula'],
+  formula: ParseExpressionResponseDTO['formula'],
 ): BayesModelDraftDTO {
-  if (!formula.rawResponse) return draft;
   const responseName = responseBaseNameFromRaw(formula.rawResponse);
   return {
     ...draft,

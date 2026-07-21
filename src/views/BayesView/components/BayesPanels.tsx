@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import type { BayesColumnDTypeDTO, BayesDatasetSelectionDTO, BayesModelDraftDTO, BayesSymbolRoleDTO, InferenceConfigDTO, LikelihoodSpecDTO, ParameterConstraintDTO, PriorSpecDTO } from '@/shared/types/bayes';
+import type { BayesColumnDTypeDTO, BayesDatasetSelectionDTO, BayesModelDraftDTO, BayesSymbolRoleDTO, InferenceConfigDTO, LikelihoodSpecDTO, ParameterConstraintDTO, PriorSpecDTO, ValidationIssueDTO } from '@/shared/types/bayes';
+import type { FormulaParseError } from '@/features/application/bayes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,9 +15,13 @@ import { defaultPriorForConstraint, formatExpression, formatPrior, formatRawExpr
 export function FormulaStep({
   draft,
   onModelEquationChange,
+  onErrorClear,
+  error,
 }: {
   draft: BayesModelDraftDTO;
-  onModelEquationChange: (formulaText: string, likelihood: LikelihoodSpecDTO) => void | Promise<void>;
+  onModelEquationChange: (formulaText: string, likelihood: LikelihoodSpecDTO) => Promise<boolean>;
+  onErrorClear: () => void;
+  error: FormulaParseError | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [responseExpression, setResponseExpression] = useState(currentResponseExpression(draft));
@@ -39,20 +44,24 @@ export function FormulaStep({
   const commit = async () => {
     const nextResponse = responseExpression.trim() || 'y';
     const nextFormulaText = composeLikelihoodLatex(nextResponse, distribution, distributionArgs);
-    await onModelEquationChange(nextFormulaText, likelihoodFromFormulaParts(distribution, distributionArgs, draft.likelihood));
-    setEditing(false);
+    const saved = await onModelEquationChange(
+      nextFormulaText,
+      likelihoodFromFormulaParts(distribution, distributionArgs, draft.likelihood),
+    );
+    if (saved) setEditing(false);
   };
 
   const cancel = () => {
     setResponseExpression(currentResponseExpression(draft));
     setDistribution(likelihoodDistribution(draft.likelihood));
     setDistributionArgs(initialDistributionArgs(draft));
+    onErrorClear();
     setEditing(false);
   };
 
   return (
     <Card>
-      <CardHeader><PanelTitle title="1. Formula" description="先输入数学模型，再决定符号含义" /></CardHeader>
+      <CardHeader><PanelTitle title="1. Formula" issues={error ? [formulaErrorIssue(error)] : []} /></CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
@@ -249,9 +258,11 @@ export function SymbolRoleStep({
   datasets,
   onSymbolConfigurationChange,
   onDeleteSymbol,
+  issues,
 }: {
   draft: BayesModelDraftDTO;
   datasets: BayesDatasetSelectionDTO[];
+  issues: ValidationIssueDTO[];
   onSymbolConfigurationChange: (configuration: {
     name: string;
     dataset: BayesDatasetSelectionDTO | null;
@@ -315,7 +326,7 @@ export function SymbolRoleStep({
 
   return (
     <Card>
-      <CardHeader><PanelTitle title="2. Symbols" description="维护方程符号、角色以及对应数据或先验分布" /></CardHeader>
+      <CardHeader><PanelTitle title="2. Symbols" issues={issues} /></CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">{responseColumnHint(draft.likelihood)}</p>
         <div className="rounded-md border border-border">
@@ -879,13 +890,35 @@ export function SamplerStep({ draft, onSamplerChange }: { draft: BayesModelDraft
 
 
 
-export function PanelTitle({ title, description }: { title: string; description: string }) {
+export function PanelTitle({
+  title,
+  description,
+  issues = [],
+}: {
+  title: string;
+  description?: string;
+  issues?: ValidationIssueDTO[];
+}) {
   return (
-    <div>
+    <div className="space-y-1">
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      <p className="text-xs text-muted-foreground">{description}</p>
+      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      {issues.map(issue => (
+        <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+          <span className="font-mono">[{issue.code}]</span> {issue.message}
+        </p>
+      ))}
     </div>
   );
+}
+
+function formulaErrorIssue(error: FormulaParseError): ValidationIssueDTO {
+  return {
+    code: error.code,
+    severity: 'error',
+    message: `${error.message}${error.detail ? ` (${error.detail})` : ''}`,
+    path: 'formulaText',
+  };
 }
 
 function EditableNumberField({
