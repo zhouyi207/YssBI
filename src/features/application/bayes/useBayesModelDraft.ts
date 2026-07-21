@@ -26,14 +26,12 @@ import {
 import {
   buildFormulaParseRequest,
   formatFormulaParseError,
-  restoreParsedSymbols,
   type FormulaParseError,
 } from './formulaParsing';
 
 export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefaultBayesDraft()) {
   const [draft, setDraft] = useState<BayesModelDraftDTO>(initialDraft);
   const [unusedParameterNames, setUnusedParameterNames] = useState<string[]>([]);
-  const [deletedSymbolNames, setDeletedSymbolNames] = useState<Set<string>>(() => new Set());
   const [formulaError, setFormulaError] = useState<FormulaParseError | null>(null);
   const formulaRequestGeneration = useRef(0);
 
@@ -47,14 +45,9 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     try {
       const response = await parseBayesExpression(request);
       if (generation !== formulaRequestGeneration.current) return false;
-      setDeletedSymbolNames(currentDeleted => {
-        const nextDeleted = restoreParsedSymbols(currentDeleted, response.symbols);
-        setDraft(current => rebuildDraft(
-          applyParsedFormula({ ...current, likelihood }, response.formula),
-          nextDeleted,
-        ));
-        return nextDeleted;
-      });
+      setDraft(current => rebuildDraft(
+        applyParsedFormula({ ...current, likelihood }, response.formula),
+      ));
       return true;
     } catch (caught) {
       if (generation !== formulaRequestGeneration.current) return false;
@@ -114,15 +107,7 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     });
   };
 
-  const deleteSymbol = (name: string) => {
-    formulaRequestGeneration.current += 1;
-    setDeletedSymbolNames(currentDeleted => {
-      const nextDeleted = new Set(currentDeleted);
-      nextDeleted.add(name);
-      setDraft(current => rebuildDraft(removeSymbol(current, name), nextDeleted));
-      return nextDeleted;
-    });
-  };
+
 
   const updateSymbols = (symbols: SymbolDraftDTO[]) => {
     formulaRequestGeneration.current += 1;
@@ -142,19 +127,16 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     setDraft(current => ({ ...current, sampler }));
   };
 
-  const rebuildDraft = (next: BayesModelDraftDTO, deletedNames: Set<string> = deletedSymbolNames): BayesModelDraftDTO => {
+  const rebuildDraft = (next: BayesModelDraftDTO): BayesModelDraftDTO => {
     const responseName = responseBaseNameFromRaw(next.rawResponse);
     const rawSymbols = [
       ...collectRawSymbols(next.rawResponse),
       ...collectRawSymbols(next.rawPredictor),
       ...likelihoodParameterNames(next.likelihood),
-    ]
-      .filter((name, index, names) => names.indexOf(name) === index)
-      .filter(name => !deletedNames.has(name));
+    ].filter((name, index, names) => names.indexOf(name) === index);
     const datasetColumns = next.dataset?.columns.map(column => column.name) ?? [];
     const likelihoodParameters = new Set(likelihoodParameterNames(next.likelihood));
     const symbols = createSymbolDrafts(rawSymbols, next.symbols, datasetColumns)
-      .filter(symbol => !deletedNames.has(symbol.name))
       .map(symbol => {
         if (symbol.name === responseName) {
           return { ...symbol, role: 'dependent' as const, inferredRole: 'dependent' as const };
@@ -192,7 +174,6 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     updateSymbolConstraint,
     updateDataset,
     updateSymbolConfiguration,
-    deleteSymbol,
     updateSymbols,
     updateLikelihood,
     updateParameters,
@@ -311,16 +292,7 @@ function preferredColumn(
   return compatible?.name ?? dataset.columns[0]?.name ?? null;
 }
 
-function removeSymbol(draft: BayesModelDraftDTO, name: string): BayesModelDraftDTO {
-  const { [name]: _removed, ...dataBindings } = draft.dataBindings;
-  return {
-    ...draft,
-    responseBinding: responseBaseNameFromRaw(draft.rawResponse) === name ? null : draft.responseBinding,
-    dataBindings,
-    symbols: draft.symbols.filter(symbol => symbol.name !== name),
-    parameters: draft.parameters.filter(parameter => parameter.name !== name),
-  };
-}
+
 
 function firstDatasetColumn(draft: BayesModelDraftDTO): string | undefined {
   return draft.dataset?.columns[0]?.name;

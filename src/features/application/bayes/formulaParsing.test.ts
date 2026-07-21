@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BayesModelDraftDTO, LikelihoodSpecDTO } from '@/shared/types/bayes';
 import { createEmptyBayesDraft } from '@/features/domain/bayes';
-import { buildFormulaParseRequest, restoreParsedSymbols } from './formulaParsing';
+import { buildFormulaParseRequest } from './formulaParsing';
 
 const normalLikelihood: LikelihoodSpecDTO = {
   type: 'normal',
@@ -31,8 +31,5 @@ describe('Bayes formula parsing state', () => {
     });
   });
 
-  it('restores symbols that the user adds back through the formula', () => {
-    expect(restoreParsedSymbols(new Set(['a', 'old']), ['y', 'a', 'x'])).toEqual(new Set(['old']));
-  });
 
 });

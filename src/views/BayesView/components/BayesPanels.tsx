@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import type { BayesColumnDTypeDTO, BayesDatasetSelectionDTO, BayesModelDraftDTO, BayesSymbolRoleDTO, InferenceConfigDTO, LikelihoodSpecDTO, ParameterConstraintDTO, PriorSpecDTO, ValidationIssueDTO } from '@/shared/types/bayes';
+import type { BayesDatasetSelectionDTO, BayesModelDraftDTO, BayesSymbolRoleDTO, InferenceConfigDTO, LikelihoodSpecDTO, ParameterConstraintDTO, PriorSpecDTO, ValidationIssueDTO } from '@/shared/types/bayes';
 import type { FormulaParseError } from '@/features/application/bayes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -11,6 +11,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { defaultPriorForConstraint, formatExpression, formatPrior, formatRawExpressionLatex } from '@/features/domain/bayes';
+
+export interface BayesDatasetOption extends BayesDatasetSelectionDTO {
+  displayName: string;
+}
 
 export function FormulaStep({
   draft,
@@ -61,15 +65,14 @@ export function FormulaStep({
 
   return (
     <Card>
-      <CardHeader><PanelTitle title="1. Formula" issues={error ? [formulaErrorIssue(error)] : []} /></CardHeader>
+      <CardHeader className="flex-row items-start justify-between gap-3">
+        <PanelTitle title="1. Formula" issues={error ? [formulaErrorIssue(error)] : []} />
+        <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={editing}>
+          编辑
+        </Button>
+      </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="bayes-response-expression">Model equation</Label>
-            <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={editing}>
-              编辑
-            </Button>
-          </div>
           {editing ? (
             <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
               <div className="grid gap-3 md:grid-cols-[120px_180px_minmax(0,1fr)]">
@@ -235,9 +238,14 @@ function extractPredictorLatex(formulaText: string): string | null {
   return null;
 }
 
+const LATEX_GREEK_SYMBOLS = new Set([
+  'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa',
+  'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'upsilon', 'phi',
+  'chi', 'psi', 'omega',
+]);
+
 function latexSymbol(value: string): string {
-  if (value === 'sigma') return '\\sigma';
-  return value;
+  return LATEX_GREEK_SYMBOLS.has(value) ? `\\${value}` : value;
 }
 
 function latexToPlainSymbol(value: string | undefined): string | null {
@@ -257,11 +265,10 @@ export function SymbolRoleStep({
   draft,
   datasets,
   onSymbolConfigurationChange,
-  onDeleteSymbol,
   issues,
 }: {
   draft: BayesModelDraftDTO;
-  datasets: BayesDatasetSelectionDTO[];
+  datasets: BayesDatasetOption[];
   issues: ValidationIssueDTO[];
   onSymbolConfigurationChange: (configuration: {
     name: string;
@@ -271,7 +278,6 @@ export function SymbolRoleStep({
     constraint: ParameterConstraintDTO;
     prior: PriorSpecDTO;
   }) => void;
-  onDeleteSymbol: (name: string) => void;
 }) {
   const [editingSymbol, setEditingSymbol] = useState<string | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
@@ -315,7 +321,7 @@ export function SymbolRoleStep({
     const dataset = datasets.find(item => item.sourceId === selectedDatasetId) ?? null;
     onSymbolConfigurationChange({
       name,
-      dataset,
+      dataset: dataset ? datasetSelectionFromOption(dataset) : null,
       role,
       column: detailValue,
       constraint,
@@ -328,25 +334,22 @@ export function SymbolRoleStep({
     <Card>
       <CardHeader><PanelTitle title="2. Symbols" issues={issues} /></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">{responseColumnHint(draft.likelihood)}</p>
         <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Symbol</TableHead><TableHead>Role</TableHead><TableHead>Data / Prior</TableHead><TableHead>Constraint</TableHead><TableHead>Bounds</TableHead><TableHead className="w-32">Actions</TableHead></TableRow>
+              <TableRow><TableHead>Symbol</TableHead><TableHead>Role</TableHead><TableHead>Data</TableHead><TableHead>Column</TableHead><TableHead>Prior</TableHead><TableHead>Bounds</TableHead><TableHead className="w-32">Actions</TableHead></TableRow>
             </TableHeader>
             <TableBody>
-              {draft.symbols.map(symbol => (
+              {symbolsInDisplayOrder(draft.symbols).map(symbol => (
                 <TableRow key={symbol.name}>
                   <TableCell><LatexInline formulaText={latexSymbol(symbol.name)} /></TableCell>
                   <TableCell>{roleLabel(symbol.role)}</TableCell>
-                  <TableCell><span className="font-mono">{symbolDetailLabel(draft, symbol.name, symbol.role)}</span></TableCell>
-                  <TableCell className="font-mono">{constraintLabel(draft, symbol.name)}</TableCell>
+                  <TableCell>{dataSourceLabel(draft, symbol.role, datasets)}</TableCell>
+                  <TableCell className="font-mono">{columnLabel(draft, symbol.name, symbol.role)}</TableCell>
+                  <TableCell className="font-mono">{priorLabel(draft, symbol.name, symbol.role)}</TableCell>
                   <TableCell className="font-mono">{boundsLabel(draft, symbol.name)}</TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="outline" onClick={() => beginEdit(symbol.name)}>编辑</Button>
-                      <Button size="sm" variant="ghost" onClick={() => onDeleteSymbol(symbol.name)}>删除</Button>
-                    </div>
+                    <Button size="sm" variant="outline" onClick={() => beginEdit(symbol.name)}>编辑</Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -355,7 +358,6 @@ export function SymbolRoleStep({
         </div>
         <SymbolConfigDialog
           open={editingSymbol !== null}
-          draft={draft}
           datasets={datasets}
           symbol={editingSymbol}
           selectedDatasetId={selectedDatasetId}
@@ -397,7 +399,7 @@ export function SymbolRoleStep({
 function SymbolRoleSelect({ value, onChange }: { value: BayesSymbolRoleDTO; onChange: (role: BayesSymbolRoleDTO) => void }) {
   return (
     <Select value={value} onValueChange={(nextValue) => onChange(nextValue as BayesSymbolRoleDTO)}>
-      <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
+      <SelectTrigger className="w-40 max-w-full"><SelectValue /></SelectTrigger>
       <SelectContent>
         <SelectItem value="dependent">因变量</SelectItem>
         <SelectItem value="independent">自变量</SelectItem>
@@ -407,61 +409,36 @@ function SymbolRoleSelect({ value, onChange }: { value: BayesSymbolRoleDTO; onCh
   );
 }
 
-function responseColumnHint(likelihood: LikelihoodSpecDTO): string {
-  switch (likelihood.type) {
-    case 'normal':
-      return '响应列要求：连续数值列；自变量列要求：有限数值。';
-    case 'bernoulli_logit':
-      return '响应列要求：boolean 或只包含 0/1 的数值列；自变量列要求：有限数值。';
-    case 'poisson_log':
-      return '响应列要求：非负整数计数列；自变量列要求：有限数值。';
-  }
+
+
+function numericColumns(columns: BayesDatasetSelectionDTO['columns']): BayesDatasetSelectionDTO['columns'] {
+  return columns.filter(column => column.dtype === 'number' || column.dtype === 'integer');
 }
 
-function preferredSymbolColumn(
-  dataset: BayesDatasetSelectionDTO,
-  symbolName: string,
-  role: BayesSymbolRoleDTO,
-  likelihood: LikelihoodSpecDTO,
-): string | null {
-  const compatible = dataset.columns.filter(column => !columnCompatibilityHint(column.dtype, role, likelihood));
-  return compatible.find(column => column.name === symbolName)?.name
-    ?? compatible[0]?.name
-    ?? dataset.columns[0]?.name
+function preferredSymbolColumn(dataset: BayesDatasetSelectionDTO, symbolName: string): string | null {
+  const columns = numericColumns(dataset.columns);
+  return columns.find(column => column.name === symbolName)?.name
+    ?? columns[0]?.name
     ?? null;
-}
-
-function columnCompatibilityHint(dtype: BayesColumnDTypeDTO, role: BayesSymbolRoleDTO, likelihood: LikelihoodSpecDTO): string {
-  if (role === 'independent') {
-    return dtype === 'number' || dtype === 'integer' ? '' : ' · check type';
-  }
-  if (role !== 'dependent') return '';
-  if (likelihood.type === 'normal') return dtype === 'number' || dtype === 'integer' ? '' : ' · check type';
-  if (likelihood.type === 'bernoulli_logit') return dtype === 'boolean' || dtype === 'integer' || dtype === 'number' ? '' : ' · check type';
-  return dtype === 'integer' || dtype === 'number' ? '' : ' · check type';
 }
 
 
 
 function SymbolDetailEditor({
   columns,
-  role,
   value,
-  likelihood,
   onValueChange,
 }: {
   columns: BayesDatasetSelectionDTO['columns'];
-  role: BayesSymbolRoleDTO;
   value: string;
-  likelihood: LikelihoodSpecDTO;
   onValueChange: (value: string) => void;
 }) {
   return (
     <Select value={value} onValueChange={onValueChange} disabled={columns.length === 0}>
-      <SelectTrigger size="sm" className="w-48"><SelectValue placeholder="选择数据列" /></SelectTrigger>
+      <SelectTrigger><SelectValue placeholder="选择数据列" /></SelectTrigger>
       <SelectContent>
         {columns.map(column => (
-          <SelectItem key={column.name} value={column.name}>{column.name} · {column.dtype}{columnCompatibilityHint(column.dtype, role, likelihood)}</SelectItem>
+          <SelectItem key={column.name} value={column.name}>{column.name} · {column.dtype}</SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -470,7 +447,6 @@ function SymbolDetailEditor({
 
 function SymbolConfigDialog({
   open,
-  draft,
   datasets,
   symbol,
   selectedDatasetId,
@@ -489,8 +465,7 @@ function SymbolConfigDialog({
   onSave,
 }: {
   open: boolean;
-  draft: BayesModelDraftDTO;
-  datasets: BayesDatasetSelectionDTO[];
+  datasets: BayesDatasetOption[];
   symbol: string | null;
   selectedDatasetId: string;
   role: BayesSymbolRoleDTO;
@@ -508,99 +483,127 @@ function SymbolConfigDialog({
   onSave: () => void;
 }) {
   const selectedDataset = datasets.find(dataset => dataset.sourceId === selectedDatasetId) ?? null;
-  const selectedColumns = selectedDataset?.columns ?? [];
+  const selectedColumns = numericColumns(selectedDataset?.columns ?? []);
+  const priorLabels = priorArgLabels(priorDistribution);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-w-170">
-        <DialogHeader className="border-b border-border bg-muted/20">
-          <DialogTitle>Symbol configuration{symbol ? ` · ${symbol}` : ''}</DialogTitle>
+      <DialogContent
+        explicitClose
+        className="grid max-h-[85vh] w-[min(calc(100vw-2rem),44rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] rounded-lg"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between gap-3 border-b border-border bg-muted/30">
+          <DialogTitle>Symbol configuration</DialogTitle>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="关闭"
+            className="ml-auto"
+            onClick={onClose}
+          >
+            <span aria-hidden="true" className="text-lg leading-none">×</span>
+          </Button>
         </DialogHeader>
-        <div className="space-y-4 px-6 py-5">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Symbol</Label>
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+        <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-5">
+          <section className="grid gap-4 rounded-md border border-border bg-muted/10 p-4 md:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)]">
+            <div className="flex min-w-0 items-center gap-3">
+              <Label className="w-14 shrink-0 text-xs font-medium text-muted-foreground">Symbol</Label>
+              <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                 <LatexInline formulaText={latexSymbol(symbol ?? '')} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Role</Label>
-              <SymbolRoleSelect value={role} onChange={onRoleChange} />
+            <div className="flex min-w-0 items-center gap-3">
+              <Label className="w-10 shrink-0 text-xs font-medium text-muted-foreground">Role</Label>
+              <div className="min-w-0 flex-1">
+                <SymbolRoleSelect value={role} onChange={onRoleChange} />
+              </div>
             </div>
-          </div>
+          </section>
 
           {role === 'parameter' ? (
-            <>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Constraint</Label>
-                  <ConstraintSelect value={constraint.type} onChange={(type) => onConstraintChange(defaultConstraint(type, constraint))} />
+            <div className="space-y-4">
+              <section className="space-y-3 rounded-md border border-border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">Parameter constraint</h3>
+                  <span className="text-xs text-muted-foreground">
+                    <LatexInline formulaText={`${latexSymbol(symbol ?? 'parameter')} \\in ${constraintSetLatex(constraint)}`} />
+                  </span>
                 </div>
-              </div>
-              <BoundsEditor constraint={constraint} onChange={onConstraintChange} />
-              <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Prior distribution</Label>
-                  <Select value={priorDistribution} onValueChange={(value) => onPriorDistributionChange(value as PriorSpecDTO['distribution'])}>
-                    <SelectTrigger><SelectValue placeholder="选择分布" /></SelectTrigger>
-                    <SelectContent>
-                      {priorDistributionsForConstraint(constraint).map(distribution => (
-                        <SelectItem key={distribution} value={distribution}>{priorDistributionLabel(distribution)}{isPriorCompatibleWithConstraint(distribution, constraint) ? ' · recommended' : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex w-full items-center gap-3">
+                  <Label className="w-18 shrink-0 text-xs text-muted-foreground">Constraint</Label>
+                                    <div className="w-48 max-w-full">
+                    <ConstraintSelect value={constraint.type} onChange={(type) => onConstraintChange(defaultConstraint(type, constraint))} />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Prior args</Label>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {priorArgLabels(priorDistribution).map((label, index) => (
+                <BoundsEditor constraint={constraint} onChange={onConstraintChange} />
+              </section>
+              <section className="space-y-3 rounded-md border border-border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">Prior</h3>
+                  <span className="text-xs text-muted-foreground">
+                    <LatexInline formulaText={priorSummaryLatex(symbol, priorDistribution, priorArgs)} />
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="w-24 shrink-0 text-xs text-muted-foreground">Prior distribution</Label>
+                                    <div className="w-64 max-w-full">
+                    <Select value={priorDistribution} onValueChange={(value) => onPriorDistributionChange(value as PriorSpecDTO['distribution'])}>
+                      <SelectTrigger><SelectValue placeholder="选择分布" /></SelectTrigger>
+                      <SelectContent>
+                        {priorDistributionsForConstraint(constraint).map(distribution => (
+                          <SelectItem key={distribution} value={distribution}>{priorDistributionLabel(distribution)}{isPriorCompatibleWithConstraint(distribution, constraint) ? ' · recommended' : ''}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className={`grid gap-3 ${priorParameterGridClass(priorLabels.length)}`}>
+                  {priorLabels.map((label, index) => (
+                    <div key={label} className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{label}</Label>
                       <Input
-                        key={label}
                         aria-label={label}
                         value={priorArgs[index] ?? ''}
                         className="font-mono"
-                        placeholder={label}
                         onChange={(event) => onPriorArgsChange(replaceAt(priorArgs, index, event.target.value))}
                       />
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div className="space-y-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-                <div className="font-mono">{symbol ?? 'parameter'} ~ {priorDistributionLabel(priorDistribution)}({priorArgs.filter(Boolean).join(', ')})；{constraintSummary(constraint)}</div>
-                <p className="text-xs text-muted-foreground">{constraintPriorHint(constraint)}</p>
-              </div>
-            </>
+              </section>
+            </div>
           ) : (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
+            <section className="space-y-4 rounded-md border border-border p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">Data binding</h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Data source</Label>
                 <Select value={selectedDatasetId} onValueChange={(sourceId) => {
                   onDatasetChange(sourceId);
                   const dataset = datasets.find(item => item.sourceId === sourceId);
-                  const nextColumn = dataset ? preferredSymbolColumn(dataset, symbol ?? '', role, draft.likelihood) : null;
+                  const nextColumn = dataset ? preferredSymbolColumn(dataset, symbol ?? '') : null;
                   onDetailValueChange(nextColumn ?? '');
                 }}>
                   <SelectTrigger><SelectValue placeholder="选择数据源" /></SelectTrigger>
                   <SelectContent>
                     {datasets.map(dataset => (
-                      <SelectItem key={dataset.sourceId} value={dataset.sourceId}>{dataset.sourceId}</SelectItem>
+                      <SelectItem key={dataset.sourceId} value={dataset.sourceId}>{dataset.displayName}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {datasets.length === 0 ? <p className="text-xs text-muted-foreground">当前项目没有可用数据源，请先导入数据。</p> : null}
-              </div>
-              <div className="space-y-1.5">
+                  {datasets.length === 0 ? <p className="text-xs text-muted-foreground">当前项目没有可用数据源，请先导入数据。</p> : null}
+                </div>
+                <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Data column</Label>
-                <SymbolDetailEditor columns={selectedColumns} role={role} value={detailValue} likelihood={draft.likelihood} onValueChange={onDetailValueChange} />
-                {selectedDataset && selectedColumns.length === 0 ? <p className="text-xs text-muted-foreground">当前数据源没有列信息，正在同步或请刷新数据源。</p> : null}
-                <p className="text-xs text-muted-foreground">{role === 'dependent' ? responseColumnHint(draft.likelihood) : '自变量列要求：有限数值。'}</p>
+                <SymbolDetailEditor columns={selectedColumns} value={detailValue} onValueChange={onDetailValueChange} />
+                  {selectedDataset && selectedColumns.length === 0 ? <p className="text-xs text-muted-foreground">当前数据源没有列信息，正在同步或请刷新数据源。</p> : null}
+                </div>
               </div>
-            </div>
+            </section>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>取消</Button>
           <Button onClick={onSave}>保存</Button>
         </DialogFooter>
@@ -640,18 +643,7 @@ function isPriorCompatibleWithConstraint(distribution: PriorSpecDTO['distributio
   }
 }
 
-function constraintPriorHint(constraint: ParameterConstraintDTO): string {
-  switch (constraint.type) {
-    case 'real':
-      return 'real 参数推荐 Normal、StudentT、Cauchy 或合适范围的 Uniform。';
-    case 'positive':
-      return 'positive 参数推荐 LogNormal、Gamma、Exponential 或 HalfNormal。';
-    case 'unit':
-      return 'unit 参数推荐 Beta 或 Uniform(0, 1)。';
-    case 'bounded':
-      return 'bounded 参数推荐使用与上下界一致的 Uniform。';
-  }
-}
+
 
 function ConstraintSelect({ value, onChange }: { value: ParameterConstraintDTO['type']; onChange: (type: ParameterConstraintDTO['type']) => void }) {
   return (
@@ -668,12 +660,10 @@ function ConstraintSelect({ value, onChange }: { value: ParameterConstraintDTO['
 }
 
 function BoundsEditor({ constraint, onChange }: { constraint: ParameterConstraintDTO; onChange: (constraint: ParameterConstraintDTO) => void }) {
-  if (constraint.type !== 'bounded') {
-    return <p className="text-xs text-muted-foreground">Bounds: {boundsSummary(constraint)}</p>;
-  }
+  if (constraint.type !== 'bounded') return null;
 
   return (
-    <div className="grid gap-3 md:grid-cols-[1fr_1fr_150px_150px]">
+    <div className="grid gap-3 md:grid-cols-4">
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Lower bound</Label>
         <Input
@@ -728,6 +718,14 @@ function defaultConstraint(type: ParameterConstraintDTO['type'], previous: Param
   }
 }
 
+function symbolsInDisplayOrder(symbols: readonly BayesModelDraftDTO['symbols'][number][]): BayesModelDraftDTO['symbols'] {
+  const roleOrder: Record<BayesSymbolRoleDTO, number> = { dependent: 0, independent: 1, parameter: 2 };
+  return symbols
+    .map((symbol, index) => ({ symbol, index }))
+    .sort((left, right) => roleOrder[left.symbol.role] - roleOrder[right.symbol.role] || left.index - right.index)
+    .map(({ symbol }) => symbol);
+}
+
 function roleLabel(role: BayesSymbolRoleDTO): string {
   switch (role) {
     case 'dependent':
@@ -743,13 +741,37 @@ function parameterForSymbol(draft: BayesModelDraftDTO, name: string) {
   return draft.parameters.find(parameter => parameter.name === name);
 }
 
-function constraintLabel(draft: BayesModelDraftDTO, name: string): string {
-  return parameterForSymbol(draft, name)?.constraint.type ?? '—';
-}
+
 
 function boundsLabel(draft: BayesModelDraftDTO, name: string): string {
   const constraint = parameterForSymbol(draft, name)?.constraint;
   return constraint ? boundsSummary(constraint) : '—';
+}
+
+function constraintSetLatex(constraint: ParameterConstraintDTO): string {
+  switch (constraint.type) {
+    case 'real':
+      return '(-\\infty, \\infty)';
+    case 'positive':
+      return '(0, \\infty)';
+    case 'unit':
+      return '(0, 1)';
+    case 'bounded': {
+      const left = constraint.includeLower ? '[' : '(';
+      const right = constraint.includeUpper ? ']' : ')';
+      return `${left}${constraint.lower}, ${constraint.upper}${right}`;
+    }
+  }
+}
+
+function priorSummaryLatex(
+  symbol: string | null,
+  distribution: PriorSpecDTO['distribution'],
+  args: readonly string[],
+): string {
+  const distributionName = priorDistributionLabel(distribution);
+  const values = args.slice(0, priorArgLabels(distribution).length).map(value => value || '\\cdots');
+  return `${latexSymbol(symbol ?? 'parameter')} \\sim \\operatorname{${distributionName}}\\left(${values.join(', ')}\\right)`;
 }
 
 function boundsSummary(constraint: ParameterConstraintDTO): string {
@@ -768,9 +790,7 @@ function boundsSummary(constraint: ParameterConstraintDTO): string {
   }
 }
 
-function constraintSummary(constraint: ParameterConstraintDTO): string {
-  return `${constraint.type} ${boundsSummary(constraint)}`;
-}
+
 
 function symbolDetailValue(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): string {
   if (role === 'dependent') return draft.responseBinding?.symbol === name ? draft.responseBinding.column : '';
@@ -779,18 +799,32 @@ function symbolDetailValue(draft: BayesModelDraftDTO, name: string, role: BayesS
 }
 
 function defaultSymbolDetailValue(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): string {
-  const current = symbolDetailValue(draft, name, role);
-  if (current) return current;
   if (role === 'parameter') return 'normal';
-  return draft.dataset?.columns[0]?.name ?? '';
+  const columns = numericColumns(draft.dataset?.columns ?? []);
+  const current = symbolDetailValue(draft, name, role);
+  if (columns.some(column => column.name === current)) return current;
+  return columns.find(column => column.name === name)?.name ?? columns[0]?.name ?? '';
 }
 
-function symbolDetailLabel(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): string {
-  if (role === 'parameter') {
-    const parameter = parameterForSymbol(draft, name);
-    return parameter ? `${parameter.constraint.type}; ${formatPrior(parameter.prior)}` : '未设置分布';
-  }
-  return symbolDetailValue(draft, name, role) || '未绑定数据';
+function dataSourceLabel(
+  draft: BayesModelDraftDTO,
+  role: BayesSymbolRoleDTO,
+  datasets: readonly BayesDatasetOption[],
+): string {
+  if (role === 'parameter') return '—';
+  if (!draft.dataset) return '未选择数据';
+  return datasets.find(dataset => dataset.sourceId === draft.dataset?.sourceId)?.displayName ?? '未知数据源';
+}
+
+function columnLabel(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): string {
+  if (role === 'parameter') return '—';
+  return symbolDetailValue(draft, name, role) || '未绑定列';
+}
+
+function priorLabel(draft: BayesModelDraftDTO, name: string, role: BayesSymbolRoleDTO): string {
+  if (role !== 'parameter') return '—';
+  const parameter = parameterForSymbol(draft, name);
+  return parameter ? formatPrior(parameter.prior) : '未设置分布';
 }
 
 function priorDistributionLabel(distribution: PriorSpecDTO['distribution']): string {
@@ -800,20 +834,40 @@ function priorDistributionLabel(distribution: PriorSpecDTO['distribution']): str
     .join('');
 }
 
+function datasetSelectionFromOption(option: BayesDatasetOption): BayesDatasetSelectionDTO {
+  return {
+    sourceType: option.sourceType,
+    sourceId: option.sourceId,
+    columns: option.columns,
+  };
+}
+
+function priorParameterGridClass(parameterCount: number): string {
+  if (parameterCount === 1) return 'md:grid-cols-1';
+  if (parameterCount === 2) return 'md:grid-cols-2';
+  return 'md:grid-cols-3';
+}
+
 function priorArgLabels(distribution: PriorSpecDTO['distribution']): string[] {
   switch (distribution) {
     case 'normal':
+      return ['Mean', 'Standard deviation'];
     case 'log_normal':
+      return ['Log mean', 'Log standard deviation'];
     case 'uniform':
+      return ['Lower bound', 'Upper bound'];
     case 'beta':
+      return ['Alpha', 'Beta'];
     case 'gamma':
-    case 'cauchy':
-      return ['arg1', 'arg2'];
-    case 'student_t':
-      return ['df', 'loc', 'scale'];
+      return ['Shape', 'Scale'];
     case 'exponential':
+      return ['Scale'];
+    case 'student_t':
+      return ['Degrees of freedom', 'Location', 'Scale'];
+    case 'cauchy':
+      return ['Location', 'Scale'];
     case 'half_normal':
-      return ['arg1'];
+      return ['Scale'];
   }
 }
 

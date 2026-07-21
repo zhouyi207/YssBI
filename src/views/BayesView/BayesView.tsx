@@ -18,7 +18,7 @@ import { WindowMenuBar } from '@/shared/ui/WindowChrome';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FormulaStep, SamplerStep, SymbolRoleStep } from './components/BayesPanels';
+import { FormulaStep, SamplerStep, SymbolRoleStep, type BayesDatasetOption } from './components/BayesPanels';
 import { ResultOverview } from './components/BayesResultPanels';
 
 export function BayesView() {
@@ -44,10 +44,11 @@ export function BayesView() {
 
   const databases = useDatabaseStore(state => state.databases);
   const updateDatabase = useDatabaseStore(state => state.updateDatabase);
-  const datasets = useMemo(
+  const datasets = useMemo<BayesDatasetOption[]>(
     () => Object.values(databases).map(database => ({
       sourceType: 'table' as const,
       sourceId: database.id,
+      displayName: database.name,
       columns: (database.columns ?? []).map(column => ({
         name: column.name,
         dtype: bayesColumnDType(column.type),
@@ -84,7 +85,11 @@ export function BayesView() {
     const nextDataset = currentDataset ?? datasets[0] ?? null;
     if (!nextDataset) return;
     if (!currentDataset || !sameBayesDataset(currentDataset, modelDraft.draft.dataset)) {
-      modelDraft.updateDataset(nextDataset);
+      modelDraft.updateDataset({
+        sourceType: nextDataset.sourceType,
+        sourceId: nextDataset.sourceId,
+        columns: nextDataset.columns,
+      });
     }
   }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
@@ -141,7 +146,6 @@ export function BayesView() {
                   datasets={datasets}
                   issues={symbolIssues}
                   onSymbolConfigurationChange={modelDraft.updateSymbolConfiguration}
-                  onDeleteSymbol={modelDraft.deleteSymbol}
                 />
                 <SamplerStep draft={modelDraft.draft} onSamplerChange={modelDraft.updateSampler} />
               </section>

@@ -32,14 +32,7 @@ export function buildFormulaParseRequest(
   };
 }
 
-export function restoreParsedSymbols(
-  deletedSymbols: ReadonlySet<string>,
-  parsedSymbols: readonly string[],
-): Set<string> {
-  const next = new Set(deletedSymbols);
-  parsedSymbols.forEach(symbol => next.delete(symbol));
-  return next;
-}
+
 
 
 export function formatFormulaParseError(caught: unknown): FormulaParseError {
