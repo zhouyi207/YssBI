@@ -16,6 +16,9 @@ export interface StatusBarRenderContext {
   connectionCount: number;
   executionStatus: string;
   colorTheme: string;
+  juliaWorkerState: "checking" | "starting" | "ready" | "unavailable";
+  juliaWorkerLabel: string;
+  juliaWorkerTooltip: string;
 }
 
 export interface StatusBarItemViewModel {

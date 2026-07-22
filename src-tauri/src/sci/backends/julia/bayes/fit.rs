@@ -5,6 +5,7 @@ use std::sync::Arc;
 use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
+use super::predictor::compile_predictor;
 use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerProgressCallback, JuliaWorkerTask};
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesDataExchangeManifest,
@@ -119,6 +120,8 @@ fn write_exchange_files(
         .ok_or_else(|| "Julia Bayesian input path has no parent directory.".to_string())?;
     let model_spec_path = task_dir.join("model_spec.json");
     let inference_config_path = task_dir.join("inference_config.json");
+    let predictor_kernel_path = task_dir.join("predictor_kernel.jl");
+    let likelihood_kernel_path = task_dir.join("likelihood_kernel.jl");
     let exchange_manifest_path = task_dir.join("exchange_manifest.json");
     let output_path = task_dir.join("output.arrow");
     let metadata_path = task_dir.join("metadata.json");
@@ -129,11 +132,19 @@ fn write_exchange_files(
         &spec.sampler,
         "Bayesian inference config",
     )?;
+    let predictor = compile_predictor(spec)?;
+    fs::write(&predictor_kernel_path, &predictor.predictor_source)
+        .map_err(|error| format!("Failed to write Julia predictor kernel: {error}"))?;
+    fs::write(&likelihood_kernel_path, &predictor.likelihood_source)
+        .map_err(|error| format!("Failed to write Julia likelihood kernel: {error}"))?;
     let manifest = BayesDataExchangeManifest::new(
         task_id,
         input_path.to_string_lossy().into_owned(),
         model_spec_path.to_string_lossy().into_owned(),
         inference_config_path.to_string_lossy().into_owned(),
+        predictor_kernel_path.to_string_lossy().into_owned(),
+        likelihood_kernel_path.to_string_lossy().into_owned(),
+        predictor.columns,
         output_path.to_string_lossy().into_owned(),
         metadata_path.to_string_lossy().into_owned(),
         dataframe.height(),

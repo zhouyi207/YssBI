@@ -4,6 +4,7 @@ import {
   VscGitPullRequest,
   VscGraph,
   VscRadioTower,
+  VscServerProcess,
   VscSymbolEvent,
   VscSymbolMethod,
   VscZoomIn,
@@ -24,6 +25,14 @@ function executionDotClass(status: string): string {
     status === "completed" && "bg-emerald-200",
     status === "error" && "bg-red-200",
     status !== "running" && status !== "completed" && status !== "error" && "bg-muted-foreground/70",
+  );
+}
+
+function juliaWorkerClass(state: StatusBarRenderContext["juliaWorkerState"]): string {
+  return cn(
+    state === "ready" && "text-emerald-400",
+    (state === "checking" || state === "starting") && "animate-pulse text-yellow-300",
+    state === "unavailable" && "text-red-400",
   );
 }
 
@@ -85,6 +94,18 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
         <>
           <span className="text-[var(--accent-color)]">{typeIcon(ctx.activeType)}</span>
           <span className="truncate">{ctx.activeTitle}</span>
+        </>
+      ),
+    },
+    {
+      id: "julia-worker",
+      alignment: "right",
+      priority: 8,
+      tooltip: (ctx) => ctx.juliaWorkerTooltip,
+      render: (ctx) => (
+        <>
+          <VscServerProcess size={13} className={juliaWorkerClass(ctx.juliaWorkerState)} />
+          <span>{ctx.juliaWorkerLabel}</span>
         </>
       ),
     },

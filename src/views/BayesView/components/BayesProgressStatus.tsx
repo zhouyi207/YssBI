@@ -4,7 +4,8 @@ import { Progress } from '@/components/ui/progress';
 
 export function BayesProgressStatus({ task, stageOverride }: { task: BayesInferenceTaskDTO; stageOverride?: string }) {
   const [now, setNow] = useState(() => Date.now());
-  const startedAt = useRef(Date.now());
+  const totalStartedAt = useRef(Date.now());
+  const stageStartedAt = useRef(Date.now());
   const lastSample = useRef<{ completed: number; at: number } | null>(null);
   const smoothedRate = useRef<number | null>(null);
   const progress = task.progress;
@@ -14,11 +15,17 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
 
   useEffect(() => {
     const timestamp = Date.now();
-    startedAt.current = timestamp;
+    totalStartedAt.current = timestamp;
+    stageStartedAt.current = timestamp;
     lastSample.current = null;
     smoothedRate.current = null;
     setNow(timestamp);
   }, [task.taskId]);
+
+  useEffect(() => {
+    stageStartedAt.current = Date.now();
+    setNow(Date.now());
+  }, [stage]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -43,7 +50,8 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
   const remainingSeconds = hasSampleCount && ['warmup', 'sampling'].includes(stage) && smoothedRate.current && completed > 0
     ? Math.max(0, (total - completed) / smoothedRate.current)
     : null;
-  const elapsedSeconds = Math.max(0, (now - startedAt.current) / 1_000);
+  const totalElapsedSeconds = Math.max(0, (now - totalStartedAt.current) / 1_000);
+  const stageElapsedSeconds = Math.max(0, (now - stageStartedAt.current) / 1_000);
 
   return (
     <div className="w-64 space-y-1">
@@ -61,10 +69,14 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
       <div className="flex justify-between gap-3 text-[10px] text-muted-foreground">
         <span>
           {hasSampleCount && ['warmup', 'sampling'].includes(stage)
-            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${formatDuration(elapsedSeconds)}`
-            : `已运行 ${formatDuration(elapsedSeconds)}`}
+            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · 本阶段 ${formatDuration(stageElapsedSeconds)}`
+            : `本阶段 ${formatDuration(stageElapsedSeconds)}`}
         </span>
-        <span>{remainingSeconds === null ? (hasSampleCount && ['warmup', 'sampling'].includes(stage) ? '正在估算' : '') : `预计剩余 ${formatDuration(remainingSeconds)}`}</span>
+        <span>
+          {remainingSeconds === null
+            ? `总计 ${formatDuration(totalElapsedSeconds)}`
+            : `剩余 ${formatDuration(remainingSeconds)} · 总计 ${formatDuration(totalElapsedSeconds)}`}
+        </span>
       </div>
     </div>
   );
@@ -75,6 +87,14 @@ export function bayesOverallProgress(stage: string, completed?: number, total?: 
     return Math.min(90, Math.round((completed / total) * 90));
   }
   const milestones: Record<string, number> = {
+    materializing_data: 1,
+    loading_model: 2,
+    loading_data: 3,
+    preparing_response: 4,
+    loading_kernels: 5,
+    preparing_kernels: 6,
+    building_model: 7,
+    initializing_nuts: 8,
     summarizing: 92,
     writing_samples: 94,
     posterior_predictive: 96,
@@ -91,7 +111,13 @@ export function bayesProgressStageLabel(stage: string): string {
     queued: '等待运行',
     running: '正在启动',
     materializing_data: '正在准备数据',
-    loading_model: '正在加载并编译模型',
+    loading_model: '正在启动 Julia 任务',
+    loading_data: '正在读取模型与数据',
+    preparing_response: '正在准备响应变量',
+    loading_kernels: '正在加载生成的计算 Kernel',
+    preparing_kernels: '正在准备 Predictor Kernel',
+    building_model: '正在构造先验与 Turing 模型',
+    initializing_nuts: '正在特化模型并初始化 NUTS',
     warmup: 'NUTS 预热',
     sampling: '后验采样',
     summarizing: '正在计算参数摘要',

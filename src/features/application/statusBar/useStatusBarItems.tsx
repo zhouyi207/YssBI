@@ -20,6 +20,7 @@ import {
   type StatusBarRenderContext,
 } from "@/features/core/statusBar";
 import { useStatusBarActions } from "./useStatusBarActions";
+import { useJuliaWorkerStatus } from "./useJuliaWorkerStatus";
 
 function fileNameFromPath(path: string | null) {
   if (!path) return null;
@@ -62,6 +63,7 @@ function ViewportStatus({ scope }: { scope: ViewportScope | null }) {
 export function useStatusBarItems(): StatusBarItemsSnapshot {
   const { t } = useTranslation();
   const actions = useStatusBarActions();
+  const juliaWorker = useJuliaWorkerStatus();
 
   const editor = useLayoutStore(
     useShallow((state) => {
@@ -131,8 +133,11 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       connectionCount: graphStats.connectionCount,
       executionStatus,
       colorTheme,
+      juliaWorkerState: juliaWorker.state,
+      juliaWorkerLabel: juliaWorker.label,
+      juliaWorkerTooltip: juliaWorker.tooltip,
     }),
-    [t, project, editor, graphStats, executionStatus, colorTheme],
+    [t, project, editor, graphStats, executionStatus, colorTheme, juliaWorker],
   );
 
   const builtIn = useMemo(

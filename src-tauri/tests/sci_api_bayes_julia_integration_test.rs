@@ -53,7 +53,7 @@ struct PosteriorMeanExpectation {
 }
 
 #[test]
-fn julia_bayes_fixed_linear_poc_runs_when_enabled() {
+fn julia_bayes_generated_linear_runs_when_enabled() {
     run_julia_fixture_when_enabled(simple_linear_normal_fixture(), "julia-bayes-linear-test");
 }
 
@@ -88,7 +88,7 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
 
     let app_data_dir = temp_app_data_dir();
     let worker = JuliaWorkerManager::new();
-    worker.prepare(&app_data_dir).expect("prepare Julia worker");
+    worker.warm_up(&app_data_dir).expect("warm up Julia worker");
 
     let backend = JuliaBayesBackend::new(&app_data_dir, worker);
     let expected_total = fixture.model_spec.sampler.chains
@@ -107,11 +107,21 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
         .expect("Julia Bayesian backend result");
 
     let progress_updates = progress_updates.lock().unwrap();
-    assert!(
-        progress_updates
-            .iter()
-            .any(|progress| progress.stage == "warmup")
-    );
+    for expected_stage in [
+        "loading_data",
+        "loading_kernels",
+        "preparing_kernels",
+        "building_model",
+        "initializing_nuts",
+        "warmup",
+    ] {
+        assert!(
+            progress_updates
+                .iter()
+                .any(|progress| progress.stage == expected_stage),
+            "missing progress stage {expected_stage}",
+        );
+    }
     assert!(
         progress_updates
             .iter()
@@ -193,9 +203,7 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
         }
     }
     assert!(result.diagnostics.warnings.iter().all(|warning| {
-        !warning.code.ends_with("_READY")
-            && !warning.code.contains("TURING_GENERIC")
-            && warning.code != "JULIA_BAYES_TURING_LINEAR_POC"
+        !warning.code.ends_with("_READY") && !warning.code.contains("TURING_GENERIC")
     }));
 
     let _ = fs::remove_dir_all(app_data_dir);

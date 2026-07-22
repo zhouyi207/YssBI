@@ -22,11 +22,12 @@ const STDERR_BUFFER_LINES: usize = 100;
 const WORKER_PROJECT: &str = include_str!("../../julia/Project.toml");
 const WORKER_MANIFEST: &str = include_str!("../../julia/Manifest.toml");
 const WORKER_SCRIPT: &str = include_str!("../../julia/worker.jl");
+const WORKER_SCIENTIFIC_RUNTIME: &str = include_str!("../../julia/scientific_runtime.jl");
 const WORKER_ACF_PACF_OP: &str = include_str!("../../julia/ops/acf_pacf.jl");
 const WORKER_SERIAL_TESTS_OP: &str = include_str!("../../julia/ops/serial_tests.jl");
 const WORKER_BAYES_FIT_OP: &str = include_str!("../../julia/ops/bayes_fit.jl");
 const WORKER_BAYES_EXPRESSION_OP: &str = include_str!("../../julia/ops/bayes/expression.jl");
-const WORKER_BAYES_TURING_LINEAR_OP: &str = include_str!("../../julia/ops/bayes/turing_linear.jl");
+const WORKER_BAYES_RUNTIME_OP: &str = include_str!("../../julia/ops/bayes/runtime.jl");
 const WORKER_BAYES_TURING_GENERIC_NORMAL_OP: &str =
     include_str!("../../julia/ops/bayes/turing_generic_normal.jl");
 
@@ -67,6 +68,7 @@ pub enum JuliaWorkerEnvironmentState {
 #[serde(rename_all = "snake_case")]
 pub enum JuliaWorkerProcessState {
     Stopped,
+    Starting,
     Running,
     Crashed,
 }
@@ -91,8 +93,16 @@ pub struct JuliaWorkerManager {
 
 struct JuliaWorkerInner {
     worker: Mutex<Option<Arc<WorkerProcess>>>,
+    startup: Mutex<JuliaWorkerStartupState>,
     request_gate: Mutex<()>,
     active_task_id: Mutex<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+enum JuliaWorkerStartupState {
+    Idle,
+    Preparing,
+    Failed(String),
 }
 
 impl JuliaWorkerManager {
@@ -100,6 +110,7 @@ impl JuliaWorkerManager {
         Self {
             inner: Arc::new(JuliaWorkerInner {
                 worker: Mutex::new(None),
+                startup: Mutex::new(JuliaWorkerStartupState::Idle),
                 request_gate: Mutex::new(()),
                 active_task_id: Mutex::new(None),
             }),
@@ -107,22 +118,81 @@ impl JuliaWorkerManager {
     }
 
     pub fn status(&self, app_data_dir: &Path) -> JuliaWorkerStatus {
+        let worker_dir = app_data_dir.join(WORKER_DIR);
+        let startup = self
+            .inner
+            .startup
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_else(|_| {
+                JuliaWorkerStartupState::Failed(
+                    "Julia worker startup state is unavailable.".to_string(),
+                )
+            });
+        if matches!(startup, JuliaWorkerStartupState::Preparing) {
+            return JuliaWorkerStatus {
+                runtime_state: JuliaRuntimeState::Ready,
+                environment_state: JuliaWorkerEnvironmentState::Missing,
+                process_state: JuliaWorkerProcessState::Starting,
+                project_dir: worker_dir.to_string_lossy().into_owned(),
+                message: None,
+            };
+        }
+        if self.process_state() == JuliaWorkerProcessState::Running {
+            return JuliaWorkerStatus {
+                runtime_state: JuliaRuntimeState::Ready,
+                environment_state: JuliaWorkerEnvironmentState::Ready,
+                process_state: JuliaWorkerProcessState::Running,
+                project_dir: worker_dir.to_string_lossy().into_owned(),
+                message: None,
+            };
+        }
+
         let runtime = get_runtime_status();
         let (worker_dir, asset_message) = ensure_worker_assets(app_data_dir)
             .map(|path| (path, None))
-            .unwrap_or_else(|message| (app_data_dir.join(WORKER_DIR), Some(message)));
+            .unwrap_or_else(|message| (worker_dir, Some(message)));
         let (environment_state, environment_message) = asset_message.map_or_else(
             || inspect_worker_environment(&worker_dir),
             |message| (JuliaWorkerEnvironmentState::Invalid, Some(message)),
         );
-        let process_state = self.process_state();
+        let startup_message = match startup {
+            JuliaWorkerStartupState::Failed(message) => Some(message),
+            _ => None,
+        };
         JuliaWorkerStatus {
             runtime_state: runtime.state,
             environment_state,
-            process_state,
+            process_state: self.process_state(),
             project_dir: worker_dir.to_string_lossy().into_owned(),
-            message: runtime.message.or(environment_message),
+            message: runtime.message.or(environment_message).or(startup_message),
         }
+    }
+
+    pub fn warm_up(&self, app_data_dir: &Path) -> Result<(), String> {
+        let _request_guard = self
+            .inner
+            .request_gate
+            .lock()
+            .map_err(|_| "Julia worker request gate is unavailable.".to_string())?;
+        self.set_startup_state(JuliaWorkerStartupState::Preparing);
+        let result = self.prepare(app_data_dir).and_then(|()| {
+            let worker = self.worker(app_data_dir)?;
+            let request_id = Uuid::new_v4().to_string();
+            worker.send(json!({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "ping"
+            }))?;
+            worker.await_response(&request_id, "startup", None)
+        });
+        match &result {
+            Ok(()) => self.set_startup_state(JuliaWorkerStartupState::Idle),
+            Err(message) => {
+                self.set_startup_state(JuliaWorkerStartupState::Failed(message.clone()))
+            }
+        }
+        result
     }
 
     pub fn prepare(&self, app_data_dir: &Path) -> Result<(), String> {
@@ -259,6 +329,12 @@ impl JuliaWorkerManager {
             worker.terminate();
         }
         Ok(())
+    }
+
+    fn set_startup_state(&self, state: JuliaWorkerStartupState) {
+        if let Ok(mut startup) = self.inner.startup.lock() {
+            *startup = state;
+        }
     }
 
     fn set_active_task(&self, task_id: Option<String>) -> Result<(), String> {
@@ -476,14 +552,12 @@ fn inspect_worker_environment(worker_dir: &Path) -> (JuliaWorkerEnvironmentState
         worker_dir.join("Project.toml"),
         worker_dir.join("Manifest.toml"),
         worker_dir.join("worker.jl"),
+        worker_dir.join("scientific_runtime.jl"),
         worker_dir.join("ops").join("acf_pacf.jl"),
         worker_dir.join("ops").join("serial_tests.jl"),
         worker_dir.join("ops").join("bayes_fit.jl"),
         worker_dir.join("ops").join("bayes").join("expression.jl"),
-        worker_dir
-            .join("ops")
-            .join("bayes")
-            .join("turing_linear.jl"),
+        worker_dir.join("ops").join("bayes").join("runtime.jl"),
         worker_dir
             .join("ops")
             .join("bayes")
@@ -536,6 +610,10 @@ fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, String> {
     write_asset(&worker_dir.join("Project.toml"), WORKER_PROJECT)?;
     write_asset(&worker_dir.join("Manifest.toml"), WORKER_MANIFEST)?;
     write_asset(&worker_dir.join("worker.jl"), WORKER_SCRIPT)?;
+    write_asset(
+        &worker_dir.join("scientific_runtime.jl"),
+        WORKER_SCIENTIFIC_RUNTIME,
+    )?;
     let ops_dir = worker_dir.join("ops");
     fs::create_dir_all(&ops_dir)
         .map_err(|error| format!("Failed to create Julia worker ops directory: {error}"))?;
@@ -550,10 +628,7 @@ fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, String> {
         &bayes_ops_dir.join("expression.jl"),
         WORKER_BAYES_EXPRESSION_OP,
     )?;
-    write_asset(
-        &bayes_ops_dir.join("turing_linear.jl"),
-        WORKER_BAYES_TURING_LINEAR_OP,
-    )?;
+    write_asset(&bayes_ops_dir.join("runtime.jl"), WORKER_BAYES_RUNTIME_OP)?;
     write_asset(
         &bayes_ops_dir.join("turing_generic_normal.jl"),
         WORKER_BAYES_TURING_GENERIC_NORMAL_OP,

@@ -1,139 +1,57 @@
-using Arrow
-using Distributions
-using Logging
-using MCMCChains
-using Random
-using Statistics
-using Turing
 
-@model function yssbi_compiled_regression_model(design, offset, y, likelihood_type::String, priors, sigma_index)
+
+@model function yssbi_generated_regression_model(columns, likelihood, y, priors)
     theta ~ arraydist(priors)
-
-    for row_index in eachindex(y)
-        linear_predictor = offset[row_index]
-        for parameter_index in axes(design, 2)
-            linear_predictor += design[row_index, parameter_index] * theta[parameter_index]
-        end
-
-        if likelihood_type == "normal"
-            y[row_index] ~ Normal(linear_predictor, theta[Int(sigma_index)])
-        elseif likelihood_type == "bernoulli_logit"
-            y[row_index] ~ Bernoulli(bayes_logistic(linear_predictor))
-        elseif likelihood_type == "poisson_log"
-            y[row_index] ~ Poisson(exp(linear_predictor))
-        else
-            throw(ArgumentError("unsupported compiled Turing likelihood `$likelihood_type`"))
-        end
-    end
+    Turing.@addlogprob! likelihood(theta, columns, y)
 end
 
-@model function yssbi_generic_regression_model(table, data_variables, predictor, y, likelihood_type::String, parameter_names, priors, sigma_index, task_id::String)
-    theta ~ arraydist(priors)
+function bayes_load_predictor(exchange, table, row_count::Int, task_id::String)
+    kernel_path = require_string(field(exchange, "predictorKernelPath"), "exchange.predictorKernelPath")
+    predictor_expression = Meta.parse(read(kernel_path, String))
+    predictor = @RuntimeGeneratedFunction(predictor_expression)
+    likelihood_path = require_string(
+        field(exchange, "likelihoodKernelPath"), "exchange.likelihoodKernelPath",
+    )
+    likelihood_expression = Meta.parse(read(likelihood_path, String))
+    likelihood = @RuntimeGeneratedFunction(likelihood_expression)
 
-    for row_index in eachindex(y)
-        params = Dict{String, Any}()
-        for index in eachindex(parameter_names)
-            params[parameter_names[index]] = theta[index]
-        end
-        linear_predictor = bayes_evaluate_expression(predictor, table, data_variables, params, row_index, task_id)
-
-        if likelihood_type == "normal"
-            sigma = theta[Int(sigma_index)]
-            y[row_index] ~ Normal(linear_predictor, sigma)
-        elseif likelihood_type == "bernoulli_logit"
-            y[row_index] ~ Bernoulli(bayes_logistic(linear_predictor))
-        elseif likelihood_type == "poisson_log"
-            y[row_index] ~ Poisson(exp(linear_predictor))
-        else
-            throw(ArgumentError("unsupported generic Turing likelihood `$likelihood_type`"))
-        end
+    column_names = String.(field(exchange, "predictorColumns", String[]))
+    columns = Matrix{Float64}(undef, row_count, length(column_names))
+    for (column_index, column_name) in enumerate(column_names)
+        values = bayes_numeric_vector(table, column_name, task_id)
+        length(values) == row_count || throw(ArgumentError("predictor column `$column_name` has an invalid length"))
+        columns[:, column_index] = values
     end
+    return (predictor = predictor, likelihood = likelihood, columns = columns)
 end
 
-function bayes_expression_depends_on_parameters(expr)::Bool
-    node_type = String(field(expr, "type", ""))
-    if node_type == "parameter"
-        return true
-    elseif node_type in ("number", "data_variable", "column")
-        return false
-    elseif node_type == "unary"
-        return bayes_expression_depends_on_parameters(field(expr, "arg"))
-    elseif node_type == "binary"
-        return bayes_expression_depends_on_parameters(field(expr, "left")) ||
-            bayes_expression_depends_on_parameters(field(expr, "right"))
-    elseif node_type == "call"
-        return any(bayes_expression_depends_on_parameters, field(expr, "args", Any[]))
-    end
-    return true
-end
 
-function bayes_expression_is_affine(expr)::Bool
-    node_type = String(field(expr, "type", ""))
-    if node_type in ("number", "data_variable", "column", "parameter")
-        return true
-    elseif node_type == "unary"
-        return String(field(expr, "op", "")) == "neg" &&
-            bayes_expression_is_affine(field(expr, "arg"))
-    elseif node_type == "binary"
-        op = String(field(expr, "op", ""))
-        left = field(expr, "left")
-        right = field(expr, "right")
-        if op in ("add", "sub")
-            return bayes_expression_is_affine(left) && bayes_expression_is_affine(right)
-        elseif op == "mul"
-            return bayes_expression_is_affine(left) && bayes_expression_is_affine(right) &&
-                !(bayes_expression_depends_on_parameters(left) && bayes_expression_depends_on_parameters(right))
-        elseif op == "div"
-            return bayes_expression_is_affine(left) && !bayes_expression_depends_on_parameters(right)
-        end
-        return !bayes_expression_depends_on_parameters(expr)
-    elseif node_type == "call"
-        return !bayes_expression_depends_on_parameters(expr)
-    end
-    return false
-end
 
-function bayes_compile_affine_predictor(predictor, table, data_variables, parameter_names::Vector{String}, row_count::Int, task_id::String)
-    bayes_expression_is_affine(predictor) || return nothing
-    parameters = Dict{String, Any}(name => 0.0 for name in parameter_names)
-    offset = Vector{Float64}(undef, row_count)
-    design = Matrix{Float64}(undef, row_count, length(parameter_names))
-
-    for row_index in 1:row_count
-        row_index % 256 == 1 && check_cancelled(task_id)
-        offset[row_index] = Float64(bayes_evaluate_expression(
-            predictor, table, data_variables, parameters, row_index, task_id,
-        ))
-    end
-    for (parameter_index, parameter_name) in enumerate(parameter_names)
-        parameters[parameter_name] = 1.0
-        for row_index in 1:row_count
-            row_index % 256 == 1 && check_cancelled(task_id)
-            value = bayes_evaluate_expression(
-                predictor, table, data_variables, parameters, row_index, task_id,
-            )
-            design[row_index, parameter_index] = Float64(value) - offset[row_index]
-        end
-        parameters[parameter_name] = 0.0
-    end
-    return (design = design, offset = offset)
-end
-
-function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
+function bayes_try_generic_normal_turing(model, exchange, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
     input_rows >= 4 || throw(ArgumentError("generic Turing regression requires at least 4 observations"))
     likelihood = field(model, "likelihood")
     likelihood_type = String(field(likelihood, "type", ""))
     likelihood_type in ("normal", "bernoulli_logit", "poisson_log") || return nothing
 
+    send_progress(task_id, "preparing_response")
     response = field(model, "response")
     y = bayes_response_vector(table, response, likelihood_type, task_id)
     length(y) == input_rows || throw(ArgumentError("response column length must match input rows"))
 
-    data_variables = field(model, "dataVariables", nothing)
-    data_variables === nothing && throw(ArgumentError("model dataVariables are required"))
-    predictor = field(model, "predictor", nothing)
-    predictor === nothing && throw(ArgumentError("model predictor is required"))
+    send_progress(task_id, "loading_kernels")
+    compiled_predictor = bayes_load_predictor(exchange, table, input_rows, task_id)
+    send_progress(task_id, "preparing_kernels")
+    preview_parameters = [
+        bayes_prior_default(field(parameter, "prior"))
+        for parameter in field(model, "parameters", Any[])
+    ]
+    for row_index in 1:min(input_rows, 5)
+        value = compiled_predictor.predictor(preview_parameters, compiled_predictor.columns, row_index)
+        isfinite(value) || throw(ArgumentError("predictor returned a non-finite value at row $row_index"))
+    end
 
+
+    send_progress(task_id, "building_model")
     sigma_parameter = likelihood_type == "normal" ? bayes_normal_sigma_parameter(model) : nothing
     likelihood_type == "normal" && sigma_parameter === nothing && return nothing
 
@@ -161,25 +79,13 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     seed = field(sampler, "seed", nothing)
     seed !== nothing && Random.seed!(UInt(seed))
 
-    compiled_predictor = bayes_compile_affine_predictor(
-        predictor,
-        table,
-        data_variables,
-        parameter_names,
-        input_rows,
-        task_id,
+    model_instance = yssbi_generated_regression_model(
+        compiled_predictor.columns,
+        compiled_predictor.likelihood,
+        y,
+        priors,
     )
-    model_instance = if compiled_predictor === nothing
-        yssbi_generic_regression_model(
-            table, data_variables, predictor, y, likelihood_type,
-            parameter_names, priors, sigma_index, task_id,
-        )
-    else
-        yssbi_compiled_regression_model(
-            compiled_predictor.design, compiled_predictor.offset,
-            y, likelihood_type, priors, sigma_index,
-        )
-    end
+    send_progress(task_id, "initializing_nuts")
     chain = bayes_sample_with_progress(
         model_instance,
         bayes_nuts_sampler(warmup, target_accept, max_tree_depth),
@@ -207,7 +113,10 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
 
     ppc_path = joinpath(dirname(output_path), "posterior_predictive.arrow")
     send_progress(task_id, "posterior_predictive")
-    bayes_write_generic_posterior_predictive(ppc_path, chain, chain_names, parameter_names, table, data_variables, predictor, compiled_predictor, y, likelihood_type, sigma_parameter, response, task_id)
+    bayes_write_generic_posterior_predictive(
+        ppc_path, chain, chain_names, parameter_names, compiled_predictor,
+        y, likelihood_type, sigma_parameter, response, task_id,
+    )
     push!(artifacts, Dict(
         "kind" => "posterior_predictive",
         "format" => "arrow_ipc",
@@ -236,7 +145,7 @@ end
 
 
 
-function bayes_write_generic_posterior_predictive(path::String, chain, chain_names::Vector{String}, model_names::Vector{String}, table, data_variables, predictor, compiled_predictor, y, likelihood_type::String, sigma_parameter, response, task_id::String)
+function bayes_write_generic_posterior_predictive(path::String, chain, chain_names::Vector{String}, model_names::Vector{String}, compiled_predictor, y, likelihood_type::String, sigma_parameter, response, task_id::String)
     values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     parameter_indices = Dict{String, Int}()
@@ -268,29 +177,14 @@ function bayes_write_generic_posterior_predictive(path::String, chain, chain_nam
         for chain_index in axes(values, 3)
             for draw_index in axes(values, 1)
                 draw_index % 256 == 1 && check_cancelled(task_id)
-                params = nothing
-                linear_predictor = if compiled_predictor === nothing
-                    params = Dict{String, Any}()
-                    for model_name in model_names
-                        params[model_name] = values[draw_index, parameter_indices[model_name], chain_index]
-                    end
-                    bayes_evaluate_expression(predictor, table, data_variables, params, observation, task_id)
-                else
-                    value = compiled_predictor.offset[observation]
-                    for model_index in eachindex(model_names)
-                        value += compiled_predictor.design[observation, model_index] *
-                            values[draw_index, chain_parameter_indices[model_index], chain_index]
-                    end
-                    value
-                end
+                theta = @view values[draw_index, chain_parameter_indices, chain_index]
+                linear_predictor = compiled_predictor.predictor(
+                    theta, compiled_predictor.columns, observation,
+                )
                 prediction = if likelihood_type == "normal"
-                    sigma = if compiled_predictor === nothing
-                        abs(Float64(params[sigma_parameter]))
-                    else
-                        abs(Float64(values[
-                            draw_index, parameter_indices[sigma_parameter], chain_index,
-                        ]))
-                    end
+                    sigma = abs(Float64(values[
+                        draw_index, parameter_indices[sigma_parameter], chain_index,
+                    ]))
                     rand(Normal(Float64(linear_predictor), sigma))
                 elseif likelihood_type == "bernoulli_logit"
                     Float64(rand(Bernoulli(bayes_logistic(linear_predictor))))

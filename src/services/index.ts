@@ -21,4 +21,7 @@ export { JuliaRuntimeService } from "./julia/juliaRuntimeService";
 export type {
   JuliaRuntimeStatus,
   JuliaRuntimeState,
+  JuliaWorkerStatus,
+  JuliaWorkerEnvironmentState,
+  JuliaWorkerProcessState,
 } from "./julia/juliaRuntimeService";

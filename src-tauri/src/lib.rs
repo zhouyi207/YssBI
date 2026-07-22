@@ -79,10 +79,16 @@ pub fn run() {
             app.manage(project_registry);
             app.manage(application::bayes::BayesInferenceService::with_backend(
                 std::sync::Arc::new(sci::backends::julia::bayes::JuliaBayesBackend::new(
-                    app_dir,
+                    app_dir.clone(),
                     bayes_worker.clone(),
                 )),
             ));
+            let warmup_worker = bayes_worker.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Err(error) = warmup_worker.warm_up(&app_dir) {
+                    tauri_plugin_log::log::warn!("Failed to warm up Julia worker: {error}");
+                }
+            });
 
             // 加载并应用主窗口几何状态：先 set_size/set_position/maximize，
             // 再 show()。tauri.conf.json 中主窗口需配置为 `visible: false`，
@@ -238,6 +244,7 @@ pub fn run() {
             read_bayes_posterior_predictive,
             // ==================== Julia runtime ====================
             get_julia_runtime_status,
+            get_julia_worker_status,
             install_julia_runtime,
             // ==================== 日志 ====================
             frontend_log,

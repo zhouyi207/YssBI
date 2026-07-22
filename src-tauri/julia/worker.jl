@@ -1,7 +1,6 @@
 #!/usr/bin/env julia
 
-using Arrow
-using JSON3
+include(joinpath(@__DIR__, "scientific_runtime.jl"))
 
 const CANCELLED_TASK_IDS = Set{String}()
 const CANCEL_LOCK = ReentrantLock()
@@ -67,7 +66,10 @@ end
 
 include(joinpath(@__DIR__, "ops", "acf_pacf.jl"))
 include(joinpath(@__DIR__, "ops", "serial_tests.jl"))
+include(joinpath(@__DIR__, "ops", "bayes", "expression.jl"))
 include(joinpath(@__DIR__, "ops", "bayes_fit.jl"))
+include(joinpath(@__DIR__, "ops", "bayes", "runtime.jl"))
+include(joinpath(@__DIR__, "ops", "bayes", "turing_generic_normal.jl"))
 
 const OPERATIONS = Dict{String, Function}(
     "acf_pacf" => run_acf_pacf,
@@ -115,6 +117,16 @@ function handle_message(request)
     method = field(request, "method")
     method isa AbstractString || throw(ArgumentError("`method` must be a string"))
     params = field(request, "params", nothing)
+
+    if method == "ping"
+        request_id = field(request, "id", nothing)
+        request_id !== nothing && send_message(Dict(
+            "jsonrpc" => "2.0",
+            "id" => request_id,
+            "result" => Dict("ready" => true),
+        ))
+        return
+    end
 
     if method == "cancel"
         task_id = require_string(field(params, "taskId"), "taskId")

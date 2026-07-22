@@ -231,6 +231,17 @@ export const enUS = {
       ready: "Ready · Julia {{version}}",
       invalid: "Runtime is invalid or cannot start",
     },
+    worker: {
+      checking: "Checking Julia",
+      checkingDetail: "Checking the Julia compute engine status",
+      starting: "Loading Julia",
+      startingDetail: "Preparing dependencies and starting the Julia compute engine",
+      ready: "Julia ready",
+      readyDetail: "The Julia compute engine is loaded and ready for scientific computing",
+      unavailable: "Julia unavailable",
+      unavailableDetail: "The Julia compute engine is not running",
+      statusFailed: "Unable to read the Julia compute engine status",
+    },
     install: {
       title: "Install Julia Runtime",
       message: "Julia provides optional advanced scientific computing for YssBI. YssBI uses the system Julia and installs the latest Julia release when it is missing.",

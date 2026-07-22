@@ -20,6 +20,9 @@ const ctx: StatusBarRenderContext = {
   connectionCount: 3,
   executionStatus: "idle",
   colorTheme: "Dark Modern (Default)",
+  juliaWorkerState: "ready",
+  juliaWorkerLabel: "Julia ready",
+  juliaWorkerTooltip: "Julia worker is ready",
 };
 
 const noopActions = {

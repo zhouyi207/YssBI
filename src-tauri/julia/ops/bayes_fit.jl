@@ -1,4 +1,4 @@
-include(joinpath(@__DIR__, "bayes", "expression.jl"))
+
 
 struct UnsupportedBayesCapability <: Exception
     message::String
@@ -7,6 +7,7 @@ end
 Base.showerror(io::IO, error::UnsupportedBayesCapability) = print(io, "unsupported capability: ", error.message)
 
 function run_bayes_fit(params, task_id::String)
+    send_progress(task_id, "loading_data")
     input_path = require_string(field(params, "inputPath"), "inputPath")
     output_path = require_string(field(params, "outputPath"), "outputPath")
     metadata_path = require_string(field(params, "metadataPath"), "metadataPath")
@@ -32,12 +33,10 @@ function run_bayes_fit(params, task_id::String)
     input_columns = String.(propertynames(input_table))
     input_rows = isempty(input_columns) ? 0 : length(getproperty(input_table, Symbol(input_columns[1])))
 
-    bayes_predictor_preview(model, input_table, input_rows, task_id)
-
-    result = bayes_try_turing_linear_fit(model, input_table, input_rows, task_id, output_path, metadata_path)
-    if result === nothing
-        result = bayes_try_turing_generic_normal_fit(model, input_table, input_rows, task_id, output_path, metadata_path)
-    end
+    exchange === nothing && throw(ArgumentError("Bayesian exchange manifest is required"))
+    result = bayes_try_turing_generic_normal_fit(
+        model, exchange, input_table, input_rows, task_id, output_path, metadata_path,
+    )
     result === nothing && throw(UnsupportedBayesCapability(
         "Turing execution supports only Normal, BernoulliLogit, and PoissonLog regression models with supported scalar priors",
     ))
@@ -129,30 +128,14 @@ function bayes_sample_with_progress(model_instance, sampler, draws::Int, warmup:
     return chain_with_warmup[(warmup + 1):iterations_per_chain, :, :]
 end
 
-function bayes_try_turing_linear_fit(model, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
-    if !isdefined(Main, :bayes_run_fixed_linear_turing)
-        include(joinpath(@__DIR__, "bayes", "turing_linear.jl"))
-    end
-    runner = Base.invokelatest(getfield, Main, :bayes_run_fixed_linear_turing)
-    return Base.invokelatest(
-        runner,
-        model,
-        table,
-        input_rows,
-        task_id,
-        output_path,
-        metadata_path,
-    )
-end
 
-function bayes_try_turing_generic_normal_fit(model, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
-    if !isdefined(Main, :bayes_try_generic_normal_turing)
-        include(joinpath(@__DIR__, "bayes", "turing_generic_normal.jl"))
-    end
+
+function bayes_try_turing_generic_normal_fit(model, exchange, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
     runner = Base.invokelatest(getfield, Main, :bayes_try_generic_normal_turing)
     return Base.invokelatest(
         runner,
         model,
+        exchange,
         table,
         input_rows,
         task_id,

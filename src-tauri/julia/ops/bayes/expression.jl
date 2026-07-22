@@ -25,16 +25,7 @@ function bayes_prior_default(prior)
     throw(ArgumentError("unsupported prior distribution `$distribution`"))
 end
 
-function bayes_parameter_defaults(parameter_specs)
-    defaults = Dict{String, Float64}()
-    for parameter in parameter_specs
-        name = require_string(field(parameter, "name"), "parameter.name")
-        prior = field(parameter, "prior")
-        prior === nothing && throw(ArgumentError("parameter `$name` is missing prior"))
-        defaults[name] = bayes_prior_default(prior)
-    end
-    return defaults
-end
+
 
 function bayes_column_value(table, column_name::String, row_index::Int)
     column_symbol = Symbol(column_name)
@@ -77,7 +68,7 @@ function bayes_eval_function(name::String, args)
     throw(ArgumentError("unsupported expression function `$name`"))
 end
 
-function bayes_evaluate_expression(expr, table, data_variables, parameters, row_index::Int, task_id::String)
+function bayes_evaluate_response_expression(expr, table, data_variables, row_index::Int, task_id::String)
     node_type = require_string(field(expr, "type"), "expression.type")
 
     if node_type == "number"
@@ -89,19 +80,16 @@ function bayes_evaluate_expression(expr, table, data_variables, parameters, row_
     elseif node_type == "column"
         name = require_string(field(expr, "name"), "expression.name")
         return bayes_column_value(table, name, row_index)
-    elseif node_type == "parameter"
-        name = require_string(field(expr, "name"), "expression.name")
-        haskey(parameters, name) || throw(ArgumentError("parameter `$name` was not found"))
-        return parameters[name]
+
     elseif node_type == "unary"
         op = require_string(field(expr, "op"), "expression.op")
-        arg = bayes_evaluate_expression(field(expr, "arg"), table, data_variables, parameters, row_index, task_id)
+        arg = bayes_evaluate_response_expression(field(expr, "arg"), table, data_variables, row_index, task_id)
         op == "neg" && return -arg
         throw(ArgumentError("unsupported unary operator `$op`"))
     elseif node_type == "binary"
         op = require_string(field(expr, "op"), "expression.op")
-        left = bayes_evaluate_expression(field(expr, "left"), table, data_variables, parameters, row_index, task_id)
-        right = bayes_evaluate_expression(field(expr, "right"), table, data_variables, parameters, row_index, task_id)
+        left = bayes_evaluate_response_expression(field(expr, "left"), table, data_variables, row_index, task_id)
+        right = bayes_evaluate_response_expression(field(expr, "right"), table, data_variables, row_index, task_id)
         op == "add" && return left + right
         op == "sub" && return left - right
         op == "mul" && return left * right
@@ -112,7 +100,7 @@ function bayes_evaluate_expression(expr, table, data_variables, parameters, row_
         function_name = require_string(field(expr, "function"), "expression.function")
         raw_args = field(expr, "args", Any[])
         values = Any[
-            bayes_evaluate_expression(arg, table, data_variables, parameters, row_index, task_id)
+            bayes_evaluate_response_expression(arg, table, data_variables, row_index, task_id)
             for arg in raw_args
         ]
         return bayes_eval_function(function_name, values)
@@ -134,10 +122,9 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
     row_count = isempty(propertynames(table)) ? 0 : length(getproperty(table, first(propertynames(table))))
     if likelihood_type == "normal"
         values = Vector{Float64}(undef, row_count)
-        parameters = Dict{String, Float64}()
         for row_index in 1:row_count
             row_index % 256 == 1 && check_cancelled(task_id)
-            value = bayes_evaluate_expression(expression, table, data_variables, parameters, row_index, task_id)
+            value = bayes_evaluate_response_expression(expression, table, data_variables, row_index, task_id)
             isfinite(value) || throw(ArgumentError("response expression returned a non-finite value at row $row_index"))
             values[row_index] = Float64(value)
         end
@@ -221,23 +208,4 @@ function bayes_predictive_scale_summaries(response, predictions::Vector{Float64}
         original_q025 = bayes_inverse_response(response, model_q025),
         original_q975 = bayes_inverse_response(response, model_q975),
     )
-end
-
-function bayes_predictor_preview(model, table, input_rows::Int, task_id::String)
-    input_rows <= 0 && return Float64[]
-    predictor = field(model, "predictor")
-    predictor === nothing && throw(ArgumentError("model predictor is required"))
-    data_variables = field(model, "dataVariables", nothing)
-    data_variables === nothing && throw(ArgumentError("model dataVariables are required"))
-    parameter_specs = field(model, "parameters", Any[])
-    parameters = bayes_parameter_defaults(parameter_specs)
-
-    preview_count = min(input_rows, 5)
-    values = Float64[]
-    for row_index in 1:preview_count
-        value = bayes_evaluate_expression(predictor, table, data_variables, parameters, row_index, task_id)
-        isfinite(value) || throw(ArgumentError("predictor returned a non-finite value at row $row_index"))
-        push!(values, value)
-    end
-    return values
 end

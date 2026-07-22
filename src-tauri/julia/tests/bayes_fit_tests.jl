@@ -1,8 +1,9 @@
-using JSON3
 using Test
 
+include(joinpath(@__DIR__, "..", "scientific_runtime.jl"))
+include(joinpath(@__DIR__, "..", "ops", "bayes", "expression.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes_fit.jl"))
-include(joinpath(@__DIR__, "..", "ops", "bayes", "turing_linear.jl"))
+include(joinpath(@__DIR__, "..", "ops", "bayes", "runtime.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes", "turing_generic_normal.jl"))
 
 if !isdefined(Main, :check_cancelled)
@@ -38,60 +39,50 @@ end
           "args": [{"type": "number", "value": 1.0}]
         }
     """)
-    @test_throws ArgumentError bayes_evaluate_expression(
+    @test_throws ArgumentError bayes_evaluate_response_expression(
         legacy,
         NamedTuple(),
         JSON3.read("{}"),
-        Dict{String, Float64}(),
         1,
         "task",
     )
 end
 
-@testset "Affine predictors compile to a design matrix" begin
-    predictor = JSON3.read("""
-        {
-          "type": "binary", "op": "add",
-          "left": {"type": "parameter", "name": "beta_0"},
-          "right": {
-            "type": "binary", "op": "add",
-            "left": {
-              "type": "binary", "op": "mul",
-              "left": {"type": "parameter", "name": "beta_1"},
-              "right": {"type": "data_variable", "name": "x_1"}
-            },
-            "right": {
-              "type": "binary", "op": "mul",
-              "left": {"type": "parameter", "name": "beta_2"},
-              "right": {"type": "data_variable", "name": "x_2"}
-            }
-          }
-        }
-    """)
-    table = (first = [2.0, 3.0], second = [5.0, 7.0])
-    data_variables = JSON3.read("{\"x_1\":\"first\",\"x_2\":\"second\"}")
-    compiled = bayes_compile_affine_predictor(
-        predictor,
-        table,
-        data_variables,
-        ["beta_0", "beta_1", "beta_2", "sigma"],
-        2,
-        "task",
-    )
+@testset "Generated predictors load with contiguous columns" begin
+    table = (time = [0.0, 1.0, 2.0],)
+    mktemp() do predictor_path, predictor_io
+        write(predictor_io, "function (theta, columns, row_index)\n")
+        write(predictor_io, "    @inbounds return theta[1] * exp(-theta[2] * columns[row_index, 1]) + theta[3]\n")
+        write(predictor_io, "end\n")
+        close(predictor_io)
+        mktemp() do likelihood_path, likelihood_io
+            write(likelihood_io, "function (theta, columns, y)\n")
+            write(likelihood_io, "    result = zero(eltype(theta))\n")
+            write(likelihood_io, "    @inbounds for row in eachindex(y)\n")
+            write(likelihood_io, "        result += logpdf(Normal(theta[1] * exp(-theta[2] * columns[row, 1]) + theta[3], theta[4]), y[row])\n")
+            write(likelihood_io, "    end\n")
+            write(likelihood_io, "    return result\nend\n")
+            close(likelihood_io)
+            exchange = Dict(
+                "predictorKernelPath" => predictor_path,
+                "likelihoodKernelPath" => likelihood_path,
+                "predictorColumns" => ["time"],
+            )
 
-    @test compiled !== nothing
-    @test compiled.offset == [0.0, 0.0]
-    @test compiled.design ≈ [1.0 2.0 5.0 0.0; 1.0 3.0 7.0 0.0]
+            compiled = bayes_load_predictor(exchange, table, 3, "task")
+            theta = [2.0, 0.5, 1.0, 0.25]
+            expected = [3.0, 2.0 * exp(-0.5) + 1.0, 2.0 * exp(-1.0) + 1.0]
+            @test compiled.columns == reshape([0.0, 1.0, 2.0], 3, 1)
+            @test [compiled.predictor(theta, compiled.columns, row) for row in 1:3] ≈ expected
+            @test compiled.likelihood(theta, compiled.columns, expected) ≈
+                sum(logpdf(Normal(value, theta[4]), value) for value in expected)
+        end
+    end
 end
 
-@testset "Bayesian capability and failure boundaries" begin
+@testset "Bayesian capability boundary" begin
     unsupported = UnsupportedBayesCapability("test model")
     @test sprint(showerror, unsupported) == "unsupported capability: test model"
-
-    @eval function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::String, output_path::String, metadata_path::String)
-        error("sampling failed")
-    end
-    @test_throws ErrorException bayes_try_turing_linear_fit(nothing, nothing, 4, "task", "output", "metadata")
 end
 
 @testset "Artifact manifest is the only result path source" begin

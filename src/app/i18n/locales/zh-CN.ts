@@ -231,6 +231,17 @@ export const zhCN = {
       ready: "已就绪 · Julia {{version}}",
       invalid: "Runtime 无效或不可启动",
     },
+    worker: {
+      checking: "Julia 检查中",
+      checkingDetail: "正在检查 Julia 计算引擎状态",
+      starting: "Julia 加载中",
+      startingDetail: "正在准备依赖并启动 Julia 计算引擎",
+      ready: "Julia 已就绪",
+      readyDetail: "Julia 计算引擎已加载，可直接开始科学计算",
+      unavailable: "Julia 不可用",
+      unavailableDetail: "Julia 计算引擎未启动",
+      statusFailed: "无法读取 Julia 计算引擎状态",
+    },
     install: {
       title: "安装 Julia Runtime",
       message: "Julia 为 YssBI 提供可选的高级科学计算能力。YssBI 会使用系统中的 Julia；如未安装，将安装最新版 Julia。",
