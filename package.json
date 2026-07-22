@@ -31,7 +31,7 @@
         "@tanstack/react-virtual": "^3.13.18",
         "@tauri-apps/api": "^2.11.0",
         "@tauri-apps/plugin-dialog": "^2.7.1",
-        "@tauri-apps/plugin-log": "^2.8.0",
+        "@tauri-apps/plugin-log": "^2.9.0",
         "@tauri-apps/plugin-opener": "^2",
         "@types/d3": "^7.4.3",
         "class-variance-authority": "^0.7.1",
