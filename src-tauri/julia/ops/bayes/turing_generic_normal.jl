@@ -100,6 +100,7 @@ function bayes_compile_affine_predictor(predictor, table, data_variables, parame
     design = Matrix{Float64}(undef, row_count, length(parameter_names))
 
     for row_index in 1:row_count
+        row_index % 256 == 1 && check_cancelled(task_id)
         offset[row_index] = Float64(bayes_evaluate_expression(
             predictor, table, data_variables, parameters, row_index, task_id,
         ))
@@ -107,6 +108,7 @@ function bayes_compile_affine_predictor(predictor, table, data_variables, parame
     for (parameter_index, parameter_name) in enumerate(parameter_names)
         parameters[parameter_name] = 1.0
         for row_index in 1:row_count
+            row_index % 256 == 1 && check_cancelled(task_id)
             value = bayes_evaluate_expression(
                 predictor, table, data_variables, parameters, row_index, task_id,
             )
@@ -188,10 +190,12 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     )
 
     chain_names = ["theta[$index]" for index in eachindex(parameter_names)]
+    send_progress(task_id, "summarizing")
     summaries = bayes_chain_summaries(chain, chain_names, parameter_names)
 
     artifacts = Any[]
     if Bool(field(sampler, "saveSamples", false))
+        send_progress(task_id, "writing_samples")
         bayes_write_samples(output_path, chain, chain_names, parameter_names)
         push!(artifacts, Dict(
             "kind" => "posterior_samples",
@@ -202,6 +206,7 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     end
 
     ppc_path = joinpath(dirname(output_path), "posterior_predictive.arrow")
+    send_progress(task_id, "posterior_predictive")
     bayes_write_generic_posterior_predictive(ppc_path, chain, chain_names, parameter_names, table, data_variables, predictor, compiled_predictor, y, likelihood_type, sigma_parameter, response, task_id)
     push!(artifacts, Dict(
         "kind" => "posterior_predictive",
@@ -213,6 +218,7 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
     warnings = Any[]
 
     append!(warnings, bayes_diagnostic_warnings(summaries, draws * chains))
+    send_progress(task_id, "finalizing")
 
     return Dict(
         "summaries" => summaries,
@@ -254,8 +260,11 @@ function bayes_write_generic_posterior_predictive(path::String, chain, chain_nam
     q025_original = Float64[]
     q975_original = Float64[]
 
+    prediction_count = size(values, 1) * size(values, 3)
     for observation in eachindex(y)
-        predictions = Float64[]
+        check_cancelled(task_id)
+        predictions = Vector{Float64}(undef, prediction_count)
+        prediction_index = 1
         for chain_index in axes(values, 3)
             for draw_index in axes(values, 1)
                 draw_index % 256 == 1 && check_cancelled(task_id)
@@ -290,7 +299,8 @@ function bayes_write_generic_posterior_predictive(path::String, chain, chain_nam
                 else
                     throw(ArgumentError("unsupported posterior predictive likelihood `$likelihood_type`"))
                 end
-                push!(predictions, prediction)
+                predictions[prediction_index] = prediction
+                prediction_index += 1
             end
         end
         summaries = bayes_predictive_scale_summaries(response, predictions)

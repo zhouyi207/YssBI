@@ -75,8 +75,12 @@ export function bayesOverallProgress(stage: string, completed?: number, total?: 
     return Math.min(90, Math.round((completed / total) * 90));
   }
   const milestones: Record<string, number> = {
-    reading_result: 94,
-    writing_artifacts: 97,
+    summarizing: 92,
+    writing_samples: 94,
+    posterior_predictive: 96,
+    finalizing: 97,
+    reading_result: 98,
+    writing_artifacts: 98,
     rendering_result: 99,
   };
   return milestones[stage] ?? null;
@@ -90,6 +94,10 @@ export function bayesProgressStageLabel(stage: string): string {
     loading_model: '正在加载并编译模型',
     warmup: 'NUTS 预热',
     sampling: '后验采样',
+    summarizing: '正在计算参数摘要',
+    writing_samples: '正在写入后验样本',
+    posterior_predictive: '正在计算后验预测',
+    finalizing: '正在完成诊断与产物',
     reading_result: '正在读取结果',
     writing_artifacts: '正在计算结果数据',
     rendering_result: '正在计算并渲染结果数据',

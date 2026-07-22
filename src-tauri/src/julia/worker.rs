@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{JuliaRuntimeState, get_runtime_status, system_julia_executable};
+use super::{JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable};
 
 const WORKER_DIR: &str = "julia-worker";
 const TASK_DIR: &str = "tasks";
@@ -128,7 +128,7 @@ impl JuliaWorkerManager {
     pub fn prepare(&self, app_data_dir: &Path) -> Result<(), String> {
         let worker_dir = ensure_worker_assets(app_data_dir)?;
         let executable = system_julia_executable()?;
-        let status = Command::new(executable)
+        let status = background_command(executable)
             .arg(format!("--project={}", worker_dir.display()))
             .args(["--startup-file=no", "-e", "using Pkg; Pkg.instantiate()"])
             .stdin(Stdio::null())
@@ -319,7 +319,7 @@ impl WorkerProcess {
     fn spawn(worker_dir: &Path) -> Result<Self, String> {
         let executable = system_julia_executable()?;
         let script = worker_dir.join("worker.jl");
-        let mut child = Command::new(executable)
+        let mut child = background_command(executable)
             .arg(format!("--project={}", worker_dir.display()))
             .args(["--startup-file=no", "--history-file=no"])
             .arg(script)
@@ -500,7 +500,7 @@ fn inspect_worker_environment(worker_dir: &Path) -> (JuliaWorkerEnvironmentState
         Ok(executable) => executable,
         Err(message) => return (JuliaWorkerEnvironmentState::Invalid, Some(message)),
     };
-    let output = Command::new(executable)
+    let output = background_command(executable)
         .arg(format!("--project={}", worker_dir.display()))
         .args(["--startup-file=no", "-e", "using Arrow, JSON3"])
         .stdin(Stdio::null())

@@ -161,9 +161,11 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
         task_id,
     )
     model_parameter_names = [parts.slope, parts.intercept, sigma_parameter]
+    send_progress(task_id, "summarizing")
     summaries = bayes_chain_summaries(chain, ["a", "b", "sigma"], model_parameter_names)
     artifacts = Any[]
     if Bool(field(sampler, "saveSamples", false))
+        send_progress(task_id, "writing_samples")
         bayes_write_samples(output_path, chain, ["a", "b", "sigma"], model_parameter_names)
         push!(artifacts, Dict(
             "kind" => "posterior_samples",
@@ -173,7 +175,8 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
         ))
     end
     ppc_path = joinpath(dirname(output_path), "posterior_predictive.arrow")
-    bayes_write_posterior_predictive(ppc_path, chain, x, y, response)
+    send_progress(task_id, "posterior_predictive")
+    bayes_write_posterior_predictive(ppc_path, chain, x, y, response, task_id)
     push!(artifacts, Dict(
         "kind" => "posterior_predictive",
         "format" => "arrow_ipc",
@@ -183,6 +186,7 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
     warnings = Any[]
 
     append!(warnings, bayes_diagnostic_warnings(summaries, draws * chains))
+    send_progress(task_id, "finalizing")
 
     return Dict(
         "summaries" => summaries,
@@ -212,7 +216,7 @@ function bayes_max_treedepth_hits(chain, max_tree_depth::Int)
     return count(value -> Int(value) >= max_tree_depth, values)
 end
 
-function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64}, y::Vector{Float64}, response)
+function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64}, y::Vector{Float64}, response, task_id::String)
     values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     a_index = findfirst(name -> name == "a", available_names)
@@ -233,15 +237,19 @@ function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64
     q025_original = Float64[]
     q975_original = Float64[]
 
+    prediction_count = size(values, 1) * size(values, 3)
     for observation in eachindex(y)
-        predictions = Float64[]
+        check_cancelled(task_id)
+        predictions = Vector{Float64}(undef, prediction_count)
+        prediction_index = 1
         for chain_index in axes(values, 3)
             for draw_index in axes(values, 1)
                 a = Float64(values[draw_index, a_index, chain_index])
                 b = Float64(values[draw_index, b_index, chain_index])
                 sigma = abs(Float64(values[draw_index, sigma_index, chain_index]))
                 mu = a * x[observation] + b
-                push!(predictions, rand(Normal(mu, sigma)))
+                predictions[prediction_index] = rand(Normal(mu, sigma))
+                prediction_index += 1
             end
         end
         summaries = bayes_predictive_scale_summaries(response, predictions)
@@ -278,6 +286,11 @@ function bayes_write_samples(output_path::String, chain, chain_names::Vector{Str
     chains = Int[]
     draws = Int[]
     sample_values = Float64[]
+    row_capacity = length(chain_names) * size(values, 1) * size(values, 3)
+    sizehint!(parameters, row_capacity)
+    sizehint!(chains, row_capacity)
+    sizehint!(draws, row_capacity)
+    sizehint!(sample_values, row_capacity)
 
     for (chain_name, model_name) in zip(chain_names, model_names)
         parameter_index = findfirst(name -> name == chain_name, available_names)
@@ -308,6 +321,7 @@ function bayes_chain_summaries(chain, chain_names::Vector{String}, model_names::
     stats = summarystats(chain).nt
     stats_names = String.(stats.parameters)
     summaries = Any[]
+    sizehint!(summaries, length(chain_names))
 
     for (chain_name, model_name) in zip(chain_names, model_names)
         draw_index = findfirst(name -> name == chain_name, available_names)
@@ -316,15 +330,16 @@ function bayes_chain_summaries(chain, chain_names::Vector{String}, model_names::
         stats_index === nothing && continue
 
         draws = vec(values[:, draw_index, :])
-        sorted = sort(collect(skipmissing(draws)))
-        isempty(sorted) && continue
+        isempty(draws) && continue
+        sort!(draws)
+        q025, median, q975 = quantile(draws, [0.025, 0.5, 0.975]; sorted = true)
         push!(summaries, Dict(
             "parameter" => model_name,
             "mean" => finite_or_nothing(stats.mean[stats_index]),
             "sd" => finite_or_nothing(stats.std[stats_index]),
-            "median" => quantile(sorted, 0.5),
-            "q025" => quantile(sorted, 0.025),
-            "q975" => quantile(sorted, 0.975),
+            "median" => median,
+            "q025" => q025,
+            "q975" => q975,
             "rhat" => finite_or_nothing(stats.rhat[stats_index]),
             "essBulk" => finite_or_nothing(stats.ess_bulk[stats_index]),
             "essTail" => finite_or_nothing(stats.ess_tail[stats_index]),

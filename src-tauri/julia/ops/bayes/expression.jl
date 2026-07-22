@@ -78,7 +78,6 @@ function bayes_eval_function(name::String, args)
 end
 
 function bayes_evaluate_expression(expr, table, data_variables, parameters, row_index::Int, task_id::String)
-    check_cancelled(task_id)
     node_type = require_string(field(expr, "type"), "expression.type")
 
     if node_type == "number"
@@ -137,6 +136,7 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
         values = Vector{Float64}(undef, row_count)
         parameters = Dict{String, Float64}()
         for row_index in 1:row_count
+            row_index % 256 == 1 && check_cancelled(task_id)
             value = bayes_evaluate_expression(expression, table, data_variables, parameters, row_index, task_id)
             isfinite(value) || throw(ArgumentError("response expression returned a non-finite value at row $row_index"))
             values[row_index] = Float64(value)
@@ -192,15 +192,34 @@ function bayes_inverse_response(response, value::Real)::Float64
 end
 
 function bayes_predictive_scale_summaries(response, predictions::Vector{Float64})
-    model_values = sort(predictions)
-    original_values = sort(bayes_inverse_response.(Ref(response), predictions))
+    transform = bayes_response_transform(response)
+    model_mean = mean(predictions)
+    sort!(predictions)
+    model_q025, model_q975 = quantile(predictions, [0.025, 0.975]; sorted = true)
+    if transform == "identity"
+        return (
+            model_mean = model_mean,
+            model_q025 = model_q025,
+            model_q975 = model_q975,
+            original_mean = model_mean,
+            original_q025 = model_q025,
+            original_q975 = model_q975,
+        )
+    end
+
+    original_sum = 0.0
+    for prediction in predictions
+        value = bayes_inverse_response(response, prediction)
+        isfinite(value) || throw(ArgumentError("posterior predictive inverse transform produced a non-finite value"))
+        original_sum += value
+    end
     return (
-        model_mean = mean(model_values),
-        model_q025 = quantile(model_values, 0.025),
-        model_q975 = quantile(model_values, 0.975),
-        original_mean = mean(original_values),
-        original_q025 = quantile(original_values, 0.025),
-        original_q975 = quantile(original_values, 0.975),
+        model_mean = model_mean,
+        model_q025 = model_q025,
+        model_q975 = model_q975,
+        original_mean = original_sum / length(predictions),
+        original_q025 = bayes_inverse_response(response, model_q025),
+        original_q975 = bayes_inverse_response(response, model_q975),
     )
 end
 

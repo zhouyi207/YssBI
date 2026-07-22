@@ -4,14 +4,27 @@
 //! not maintain a separate project-local Julia runtime.
 
 use serde::Serialize;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::time::{Duration, Instant};
 
 pub mod worker;
 
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+pub(crate) fn background_command(program: impl AsRef<OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -132,15 +145,15 @@ fn windows_app_execution_alias(executable_name: &str) -> Option<PathBuf> {
 
 fn juliaup_command() -> Command {
     windows_app_execution_alias("juliaup.exe")
-        .map(Command::new)
-        .unwrap_or_else(|| Command::new("juliaup"))
+        .map(background_command)
+        .unwrap_or_else(|| background_command("juliaup"))
 }
 
 fn install_juliaup() -> Result<(), String> {
     #[cfg(windows)]
     {
         run_command(
-            Command::new("winget").args([
+            background_command("winget").args([
                 "install",
                 "--id",
                 "JuliaLang.Juliaup",
@@ -220,7 +233,7 @@ fn status_from_probe(probe: RuntimeProbe) -> JuliaRuntimeStatus {
 }
 
 fn julia_version(executable: &Path) -> Result<String, String> {
-    let mut child = Command::new(executable)
+    let mut child = background_command(executable)
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -271,11 +284,25 @@ fn parse_julia_version(output: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use super::background_command;
     use super::{
         JuliaRuntimeState, RuntimeProbe, julia_executable_name, parse_julia_version,
         status_from_probe,
     };
     use std::path::PathBuf;
+
+    #[cfg(windows)]
+    #[test]
+    fn background_command_preserves_captured_output() {
+        let output = background_command("cmd")
+            .args(["/C", "echo", "ready"])
+            .output()
+            .unwrap();
+
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("ready"));
+    }
 
     #[test]
     fn parses_julia_version_output() {
