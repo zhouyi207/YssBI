@@ -358,6 +358,7 @@ src/app/appConfig/appLinks.ts
 - [ ] bayes 中的有很多的 errors.push(error("PREDICTOR_REQUIRED", "预测表达式尚未解析或绑定。", "boundPredictor")); 后期都是要修复的
 - [ ] bayes 中的 ast 感觉可以和 src 下的 ast 放置在一起，在这里好像有 latex -> json ast，json -> julia ast，normal formula -> json ast 等等 ast
 - [ ] bayes 长任务的通知最好是作为复用模块
+- [ ] Failed to install Juliaup: 找不到与输入条件匹配的程序包。安装不了 julia
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
