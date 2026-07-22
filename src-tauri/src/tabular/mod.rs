@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod dataframe_io;
 pub mod r#ref;
 pub mod snapshot;
 pub mod variable;

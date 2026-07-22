@@ -104,13 +104,7 @@ function bayes_try_generic_normal_turing(model, table, input_rows::Int, task_id:
         "rows" => nothing,
     ))
 
-    warnings = Any[
-        Dict(
-            "code" => bayes_generic_warning_code(likelihood_type),
-            "message" => "Generic $(bayes_likelihood_label(likelihood_type)) regression was sampled with Turing.jl from the safe predictor AST.",
-            "parameter" => nothing,
-        ),
-    ]
+    warnings = Any[]
     if bayes_response_is_transformed(response)
         push!(warnings, Dict(
             "code" => "JULIA_BAYES_RESPONSE_MODEL_SCALE",
@@ -137,7 +131,7 @@ end
 
 
 function bayes_write_generic_posterior_predictive(path::String, chain, chain_names::Vector{String}, model_names::Vector{String}, table, data_variables, predictor, y, likelihood_type::String, sigma_parameter, task_id::String)
-    values = Array(chain)
+    values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     parameter_indices = Dict{String, Int}()
     for (chain_name, model_name) in zip(chain_names, model_names)
@@ -200,18 +194,4 @@ function bayes_logistic(value)
     end
     z = exp(value)
     return z / (one(value) + z)
-end
-
-function bayes_generic_warning_code(likelihood_type::String)
-    likelihood_type == "normal" && return "JULIA_BAYES_TURING_GENERIC_NORMAL"
-    likelihood_type == "bernoulli_logit" && return "JULIA_BAYES_TURING_GENERIC_BERNOULLI_LOGIT"
-    likelihood_type == "poisson_log" && return "JULIA_BAYES_TURING_GENERIC_POISSON_LOG"
-    return "JULIA_BAYES_TURING_GENERIC_MODEL"
-end
-
-function bayes_likelihood_label(likelihood_type::String)
-    likelihood_type == "normal" && return "Normal"
-    likelihood_type == "bernoulli_logit" && return "BernoulliLogit"
-    likelihood_type == "poisson_log" && return "PoissonLog"
-    return likelihood_type
 end

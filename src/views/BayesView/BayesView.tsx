@@ -126,6 +126,7 @@ export function BayesView() {
           </TabsList>
           <BayesActionBar
             validationLoading={validation.loading}
+            phase={inference.phase}
             task={inference.task}
             onRun={run}
             onCancel={inference.cancel}
@@ -214,24 +215,28 @@ function BayesIssueBanner({
 
 function BayesActionBar({
   validationLoading,
+  phase,
   task,
   onRun,
   onCancel,
 }: {
   validationLoading: boolean;
+  phase: ReturnType<typeof useBayesInferenceTask>['phase'];
   task: BayesInferenceTaskDTO | null;
   onRun: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
   const taskStatus = task?.status ?? null;
-  const running = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
+  const cancellable = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
+  const busy = cancellable || phase === 'submitting' || phase === 'reading_result';
+  const stageOverride = phase === 'reading_result' ? 'rendering_result' : undefined;
   return (
     <div className="flex shrink-0 items-center gap-3">
-      {running && task ? <BayesProgressStatus task={task} /> : null}
-      <Button size="sm" onClick={onRun} disabled={running || validationLoading}>
-        {running ? 'Running...' : 'Run'}
+      {busy && task ? <BayesProgressStatus task={task} stageOverride={stageOverride} /> : null}
+      <Button size="sm" onClick={onRun} disabled={busy || validationLoading}>
+        {busy ? 'Running...' : 'Run'}
       </Button>
-      <Button size="sm" variant="outline" onClick={onCancel} disabled={!running}>
+      <Button size="sm" variant="outline" onClick={onCancel} disabled={!cancellable}>
         Cancel
       </Button>
     </div>

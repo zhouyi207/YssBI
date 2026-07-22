@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use std::fs::{self, File};
+use std::fs;
+use std::path::Path;
 
-use polars::prelude::{DataFrame, IpcReader, SerReader};
+use polars::prelude::DataFrame;
 
 use crate::error::AppError;
 use crate::project::ProjectState;
@@ -18,6 +19,7 @@ use crate::sci::api::bayes::{
     TaskStatus, TracePlotData, TracePoint, TraceSeries, draft_to_model_spec,
     validate_bayes_input_table, validate_draft,
 };
+use crate::tabular::dataframe_io::{read_ipc_dataframe, write_csv_dataframe};
 
 #[derive(Clone)]
 pub struct BayesInferenceService {
@@ -198,6 +200,36 @@ impl BayesInferenceService {
         Ok(())
     }
 
+    pub fn export_artifact_csv(
+        &self,
+        task_id: &str,
+        kind: ResultArtifactKind,
+        destination: &str,
+    ) -> Result<(), AppError> {
+        if !matches!(
+            kind,
+            ResultArtifactKind::PosteriorSamples | ResultArtifactKind::PosteriorPredictive
+        ) {
+            return Err(AppError::new(
+                "bayes_artifact_export_unsupported",
+                "Only posterior samples and posterior predictive artifacts can be exported as CSV",
+            ));
+        }
+        let result = {
+            let state = self.lock_state()?;
+            result_from_state(&state, task_id)?
+        };
+        let source = artifact_path(&result, kind).ok_or_else(|| {
+            AppError::new(
+                "bayes_artifact_not_found",
+                format!("Bayesian artifact for task {task_id} was not found"),
+            )
+        })?;
+        let mut dataframe = read_bayes_artifact_dataframe(&source, "Bayesian artifact")?;
+        write_csv_dataframe(Path::new(destination), &mut dataframe)
+            .map_err(|error| AppError::new("bayes_artifact_export_failed", error))
+    }
+
     pub fn sample_page(
         &self,
         task_id: &str,
@@ -256,7 +288,8 @@ impl BayesInferenceService {
                     format!("Bayesian posterior predictive data for task {task_id} was not found"),
                 )
             })?;
-        let dataframe = read_arrow_dataframe(&ppc_path, "Bayesian posterior predictive data")?;
+        let dataframe =
+            read_bayes_artifact_dataframe(&ppc_path, "Bayesian posterior predictive data")?;
         posterior_predictive_page_from_dataframe(&dataframe, offset, limit)
     }
 
@@ -272,7 +305,7 @@ impl BayesInferenceService {
                     format!("Bayesian inference samples for task {task_id} were not found"),
                 )
             })?;
-        read_arrow_dataframe(&samples_path, "Bayesian posterior samples")
+        read_bayes_artifact_dataframe(&samples_path, "Bayesian posterior samples")
     }
 
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, BayesInferenceState>, AppError> {
@@ -435,14 +468,8 @@ fn result_from_state(
     })
 }
 
-fn read_arrow_dataframe(path: &str, label: &str) -> Result<DataFrame, AppError> {
-    let file = File::open(path).map_err(|error| {
-        AppError::new(
-            "bayes_result_artifact_read_failed",
-            format!("Failed to open {label}: {error}"),
-        )
-    })?;
-    IpcReader::new(file).finish().map_err(|error| {
+fn read_bayes_artifact_dataframe(path: &str, label: &str) -> Result<DataFrame, AppError> {
+    read_ipc_dataframe(Path::new(path)).map_err(|error| {
         AppError::new(
             "bayes_result_artifact_read_failed",
             format!("Failed to read {label}: {error}"),

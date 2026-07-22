@@ -54,11 +54,7 @@ struct PosteriorMeanExpectation {
 
 #[test]
 fn julia_bayes_fixed_linear_poc_runs_when_enabled() {
-    run_julia_fixture_when_enabled(
-        simple_linear_normal_fixture(),
-        "julia-bayes-linear-test",
-        "JULIA_BAYES_TURING_LINEAR_POC",
-    );
+    run_julia_fixture_when_enabled(simple_linear_normal_fixture(), "julia-bayes-linear-test");
 }
 
 #[test]
@@ -66,7 +62,6 @@ fn julia_bayes_generic_normal_runs_when_enabled() {
     run_julia_fixture_when_enabled(
         exponential_decay_normal_fixture(),
         "julia-bayes-nonlinear-test",
-        "JULIA_BAYES_TURING_GENERIC_NORMAL",
     );
 }
 
@@ -75,24 +70,15 @@ fn julia_bayes_bernoulli_logit_runs_when_enabled() {
     run_julia_fixture_when_enabled(
         simple_bernoulli_logit_fixture(),
         "julia-bayes-bernoulli-logit-test",
-        "JULIA_BAYES_TURING_GENERIC_BERNOULLI_LOGIT",
     );
 }
 
 #[test]
 fn julia_bayes_poisson_log_runs_when_enabled() {
-    run_julia_fixture_when_enabled(
-        simple_poisson_log_fixture(),
-        "julia-bayes-poisson-log-test",
-        "JULIA_BAYES_TURING_GENERIC_POISSON_LOG",
-    );
+    run_julia_fixture_when_enabled(simple_poisson_log_fixture(), "julia-bayes-poisson-log-test");
 }
 
-fn run_julia_fixture_when_enabled(
-    fixture: BayesGoldenFixture,
-    task_id: &str,
-    expected_warning_code: &str,
-) {
+fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
     if std::env::var_os("YSSBI_RUN_JULIA_BAYES_TESTS").is_none() {
         eprintln!(
             "skipped: set YSSBI_RUN_JULIA_BAYES_TESTS=1 to run Julia Bayesian integration tests"
@@ -206,14 +192,11 @@ fn run_julia_fixture_when_enabled(
             );
         }
     }
-    assert!(
-        result
-            .diagnostics
-            .warnings
-            .iter()
-            .any(|warning| warning.code == expected_warning_code),
-        "missing expected warning `{expected_warning_code}`"
-    );
+    assert!(result.diagnostics.warnings.iter().all(|warning| {
+        !warning.code.ends_with("_READY")
+            && !warning.code.contains("TURING_GENERIC")
+            && warning.code != "JULIA_BAYES_TURING_LINEAR_POC"
+    }));
 
     let _ = fs::remove_dir_all(app_data_dir);
 }

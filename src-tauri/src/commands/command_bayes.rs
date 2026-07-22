@@ -6,8 +6,8 @@ use crate::error::AppError;
 use crate::project::ProjectState;
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, ColumnMeta, DensityPlotData,
-    InferenceResult, ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage, TracePlotData,
-    parse_model_expression, validate_draft,
+    InferenceResult, ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage,
+    ResultArtifactKind, TracePlotData, parse_model_expression, validate_draft,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +81,16 @@ pub fn clear_bayes_inference_task(
     task_id: String,
 ) -> Result<(), AppError> {
     service.clear_task(&task_id)
+}
+
+#[tauri::command]
+pub fn export_bayes_artifact_csv(
+    service: State<'_, BayesInferenceService>,
+    task_id: String,
+    kind: ResultArtifactKind,
+    destination: String,
+) -> Result<(), AppError> {
+    service.export_artifact_csv(&task_id, kind, &destination)
 }
 
 #[tauri::command]

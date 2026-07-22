@@ -139,17 +139,7 @@ export function describeDiagnosticWarning(warning: DiagnosticWarningDTO): Diagno
         explanation: '独立有效样本较少，均值、分位数和可信区间可能有较大 Monte Carlo 误差。',
         suggestion: '增加 samples，检查自相关；必要时标准化 predictor 或调整模型参数化。',
       };
-    case 'JULIA_BAYES_TURING_LINEAR_POC':
-    case 'JULIA_BAYES_TURING_GENERIC_NORMAL':
-    case 'JULIA_BAYES_TURING_GENERIC_BERNOULLI_LOGIT':
-    case 'JULIA_BAYES_TURING_GENERIC_POISSON_LOG':
-      return {
-        code: warning.code,
-        parameter: warning.parameter,
-        title: 'Julia backend executed',
-        explanation: '当前模型已由 Julia/Turing 后端完成采样。',
-        suggestion: '继续检查采样诊断和 posterior predictive，而不是只看采样是否成功。',
-      };
+
     default:
       return {
         code: warning.code,

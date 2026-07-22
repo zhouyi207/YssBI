@@ -76,6 +76,25 @@ end
           ["summary", "metadata", "posterior_samples"]
 end
 
+@testset "MCMC chain dimensions remain distinct" begin
+    chain = Chains(
+        reshape(collect(1.0:80.0), 20, 1, 4),
+        [:theta],
+    )
+
+    values = bayes_chain_values(chain)
+    @test size(values) == (20, 1, 4)
+
+    mktemp() do path, io
+        close(io)
+        bayes_write_samples(path, chain, ["theta"], ["theta"])
+        samples = Arrow.Table(read(path))
+        @test unique(samples.chain) == [1, 2, 3, 4]
+        @test count(==(1), samples.chain) == 20
+        @test count(==(4), samples.chain) == 20
+    end
+end
+
 @testset "NUTS tree depth configuration and diagnostics" begin
     sampler = bayes_nuts_sampler(10, 0.8, 7)
     @test getfield(sampler, :max_depth) == 7

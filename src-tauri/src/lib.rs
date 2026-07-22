@@ -230,6 +230,7 @@ pub fn run() {
             cancel_bayes_inference,
             read_bayes_inference_result,
             clear_bayes_inference_task,
+            export_bayes_artifact_csv,
             read_bayes_posterior_samples,
             read_bayes_trace_plot_data,
             read_bayes_density_plot_data,

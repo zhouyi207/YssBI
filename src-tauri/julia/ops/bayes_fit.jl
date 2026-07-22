@@ -32,26 +32,7 @@ function run_bayes_fit(params, task_id::String)
     input_columns = String.(propertynames(input_table))
     input_rows = isempty(input_columns) ? 0 : length(getproperty(input_table, Symbol(input_columns[1])))
 
-    predictor_preview = bayes_predictor_preview(model, input_table, input_rows, task_id)
-    preview_text = isempty(predictor_preview) ? "no preview rows" : join(string.(predictor_preview), ", ")
-
-    base_warnings = Any[
-        Dict(
-            "code" => "JULIA_BAYES_ENGINE_READY",
-            "message" => "Julia Bayesian engine op is reachable.",
-            "parameter" => nothing,
-        ),
-        Dict(
-            "code" => "JULIA_BAYES_INPUT_READY",
-            "message" => "Julia received $(input_rows) rows and $(length(input_columns)) columns: $(join(input_columns, ", ")).",
-            "parameter" => nothing,
-        ),
-        Dict(
-            "code" => "JULIA_BAYES_PREDICTOR_READY",
-            "message" => "Predictor AST evaluated successfully for preview values: $(preview_text).",
-            "parameter" => nothing,
-        ),
-    ]
+    bayes_predictor_preview(model, input_table, input_rows, task_id)
 
     result = bayes_try_turing_linear_fit(model, input_table, input_rows, task_id, output_path, metadata_path)
     if result === nothing
@@ -60,7 +41,7 @@ function run_bayes_fit(params, task_id::String)
     result === nothing && throw(UnsupportedBayesCapability(
         "Turing execution supports only Normal, BernoulliLogit, and PoissonLog regression models with supported scalar priors",
     ))
-    append!(result["diagnostics"]["warnings"], base_warnings)
+
 
     summary_path = joinpath(dirname(metadata_path), "summary.json")
     bayes_attach_artifact_manifest!(result, task_id, summary_path, metadata_path)
@@ -115,6 +96,8 @@ function bayes_attach_artifact_manifest!(result, task_id::String, summary_path::
     )
     return result
 end
+
+bayes_chain_values(chain) = Array(chain.value)
 
 function bayes_sample_with_progress(model_instance, sampler, draws::Int, warmup::Int, chains::Int, task_id::String)
     iterations_per_chain = warmup + draws

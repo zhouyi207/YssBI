@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { BayesInferenceTaskDTO } from '@/shared/types/bayes';
 import { Progress } from '@/components/ui/progress';
 
-export function BayesProgressStatus({ task }: { task: BayesInferenceTaskDTO }) {
+export function BayesProgressStatus({ task, stageOverride }: { task: BayesInferenceTaskDTO; stageOverride?: string }) {
   const [now, setNow] = useState(() => Date.now());
   const startedAt = useRef(Date.now());
   const lastSample = useRef<{ completed: number; at: number } | null>(null);
   const smoothedRate = useRef<number | null>(null);
   const progress = task.progress;
+  const stage = stageOverride ?? progress?.stage ?? task.status;
   const completed = progress?.completed;
   const total = progress?.total;
 
@@ -37,9 +38,9 @@ export function BayesProgressStatus({ task }: { task: BayesInferenceTaskDTO }) {
     lastSample.current = { completed, at: timestamp };
   }, [completed]);
 
-  const hasCount = completed !== undefined && total !== undefined && total > 0;
-  const percentage = hasCount ? Math.min(100, Math.round((completed / total) * 100)) : null;
-  const remainingSeconds = hasCount && smoothedRate.current && completed > 0
+  const hasSampleCount = completed !== undefined && total !== undefined && total > 0;
+  const percentage = bayesOverallProgress(stage, completed, total);
+  const remainingSeconds = hasSampleCount && ['warmup', 'sampling'].includes(stage) && smoothedRate.current && completed > 0
     ? Math.max(0, (total - completed) / smoothedRate.current)
     : null;
   const elapsedSeconds = Math.max(0, (now - startedAt.current) / 1_000);
@@ -47,11 +48,11 @@ export function BayesProgressStatus({ task }: { task: BayesInferenceTaskDTO }) {
   return (
     <div className="w-64 space-y-1">
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="truncate text-foreground">{bayesProgressStageLabel(progress?.stage ?? task.status)}</span>
+        <span className="truncate text-foreground">{bayesProgressStageLabel(stage)}</span>
         <span className="shrink-0 font-mono text-muted-foreground">{percentage === null ? '' : `${percentage}%`}</span>
       </div>
-      {hasCount ? (
-        <Progress value={completed} max={total} className="h-1.5" />
+      {percentage !== null ? (
+        <Progress value={percentage} max={100} className="h-1.5" />
       ) : (
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
@@ -59,14 +60,26 @@ export function BayesProgressStatus({ task }: { task: BayesInferenceTaskDTO }) {
       )}
       <div className="flex justify-between gap-3 text-[10px] text-muted-foreground">
         <span>
-          {hasCount
+          {hasSampleCount && ['warmup', 'sampling'].includes(stage)
             ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${formatDuration(elapsedSeconds)}`
             : `已运行 ${formatDuration(elapsedSeconds)}`}
         </span>
-        <span>{remainingSeconds === null ? (hasCount ? '正在估算' : '') : `预计剩余 ${formatDuration(remainingSeconds)}`}</span>
+        <span>{remainingSeconds === null ? (hasSampleCount && ['warmup', 'sampling'].includes(stage) ? '正在估算' : '') : `预计剩余 ${formatDuration(remainingSeconds)}`}</span>
       </div>
     </div>
   );
+}
+
+export function bayesOverallProgress(stage: string, completed?: number, total?: number): number | null {
+  if (['warmup', 'sampling'].includes(stage) && completed !== undefined && total !== undefined && total > 0) {
+    return Math.min(90, Math.round((completed / total) * 90));
+  }
+  const milestones: Record<string, number> = {
+    reading_result: 94,
+    writing_artifacts: 97,
+    rendering_result: 99,
+  };
+  return milestones[stage] ?? null;
 }
 
 export function bayesProgressStageLabel(stage: string): string {
@@ -78,7 +91,8 @@ export function bayesProgressStageLabel(stage: string): string {
     warmup: 'NUTS 预热',
     sampling: '后验采样',
     reading_result: '正在读取结果',
-    writing_artifacts: '正在保存结果',
+    writing_artifacts: '正在计算结果数据',
+    rendering_result: '正在计算并渲染结果数据',
     cancelling: '正在取消',
   };
   return labels[stage] ?? stage;

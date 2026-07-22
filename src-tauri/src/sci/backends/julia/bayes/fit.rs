@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use polars::prelude::{Column, DataFrame, IpcWriter, SerWriter};
+use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerProgressCallback, JuliaWorkerTask};
@@ -11,6 +11,7 @@ use crate::sci::api::bayes::{
     BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
     ResultArtifactKind, TaskProgress,
 };
+use crate::tabular::dataframe_io::write_ipc_dataframe;
 
 #[derive(Clone)]
 pub struct JuliaBayesBackend {
@@ -110,7 +111,8 @@ fn write_exchange_files(
         DataFrame::new(0, vec![Column::new("__unused".into(), &values)])
             .expect("empty input table is valid")
     });
-    write_input_table(input_path, &mut dataframe)?;
+    write_ipc_dataframe(input_path, &mut dataframe)
+        .map_err(|error| format!("Failed to write Julia Bayesian input table: {error}"))?;
 
     let task_dir = input_path
         .parent()
@@ -148,14 +150,6 @@ fn write_exchange_files(
         &manifest,
         "Bayesian exchange manifest",
     )
-}
-
-fn write_input_table(path: &Path, dataframe: &mut DataFrame) -> Result<(), String> {
-    let mut file = File::create(path)
-        .map_err(|error| format!("Failed to create Julia Bayesian input file: {error}"))?;
-    IpcWriter::new(&mut file)
-        .finish(dataframe)
-        .map_err(|error| format!("Failed to write Julia Bayesian input table: {error}"))
 }
 
 fn write_json_file<T: serde::Serialize>(path: &Path, value: &T, label: &str) -> Result<(), String> {
@@ -343,13 +337,7 @@ mod tests {
                     "warmup": 1000,
                     "divergences": 0,
                     "maxTreedepthHits": 0,
-                    "warnings": [
-                        {
-                            "code": "JULIA_BAYES_ENGINE_READY",
-                            "message": "Julia Bayesian engine op is reachable; Turing sampling is not implemented yet.",
-                            "parameter": null
-                        }
-                    ]
+                    "warnings": []
                 }
             }"#,
         )

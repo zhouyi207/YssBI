@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import type {
   AutocorrelationPlotDataDTO,
   BayesInferenceTaskDTO,
@@ -6,7 +7,6 @@ import type {
   DensityPlotDataDTO,
   InferenceResultDTO,
   PosteriorPredictivePageDTO,
-  PosteriorSamplePageDTO,
   TracePlotDataDTO,
 } from '@/shared/types/bayes';
 
@@ -26,23 +26,23 @@ export async function readBayesInferenceResult(taskId: string): Promise<Inferenc
   return invoke<InferenceResultDTO>('read_bayes_inference_result', { taskId });
 }
 
+export async function revealBayesResultFolder(artifactPath: string): Promise<void> {
+  await revealItemInDir(artifactPath);
+}
+
+export async function exportBayesArtifactCsv(
+  taskId: string,
+  kind: 'posterior_samples' | 'posterior_predictive',
+  destination: string,
+): Promise<void> {
+  await invoke('export_bayes_artifact_csv', { taskId, kind, destination });
+}
+
 export async function clearBayesInferenceTask(taskId: string): Promise<void> {
   await invoke('clear_bayes_inference_task', { taskId });
 }
 
-export async function readBayesPosteriorSamples(
-  taskId: string,
-  offset: number,
-  limit: number,
-  parameter?: string,
-): Promise<PosteriorSamplePageDTO> {
-  return invoke<PosteriorSamplePageDTO>('read_bayes_posterior_samples', {
-    taskId,
-    offset,
-    limit,
-    parameter: parameter ?? null,
-  });
-}
+
 
 export async function readBayesTracePlotData(
   taskId: string,

@@ -1,7 +1,7 @@
-use std::fs::{self, File};
+use std::fs;
 use std::path::Path;
 
-use polars::prelude::{Column, DataFrame, IpcReader, IpcWriter, SerReader, SerWriter};
+use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerTask};
@@ -10,6 +10,7 @@ use crate::sci::api::time_series::serial_tests::{
 };
 use crate::sci::engine::SciContext;
 use crate::sci::error::SciError;
+use crate::tabular::dataframe_io::{read_ipc_dataframe, write_ipc_dataframe};
 
 pub fn compute(
     context: &SciContext<'_>,
@@ -95,18 +96,12 @@ fn write_input(path: &Path, residuals: &[f64], exog: Option<&[Vec<f64>]>) -> Res
 
     let mut dataframe = DataFrame::new(residuals.len(), columns)
         .map_err(|error| format!("Failed to create Julia serial-tests input table: {error}"))?;
-    let mut file = File::create(path)
-        .map_err(|error| format!("Failed to create Julia serial-tests input file: {error}"))?;
-    IpcWriter::new(&mut file)
-        .finish(&mut dataframe)
+    write_ipc_dataframe(path, &mut dataframe)
         .map_err(|error| format!("Failed to write Julia serial-tests input table: {error}"))
 }
 
 fn read_output(path: &Path) -> Result<SerialTestsOutput, SciError> {
-    let file = File::open(path).map_err(|error| {
-        SciError::julia_task_failed(format!("Julia worker did not write output: {error}"))
-    })?;
-    let dataframe = IpcReader::new(file).finish().map_err(|error| {
+    let dataframe = read_ipc_dataframe(path).map_err(|error| {
         SciError::julia_task_failed(format!(
             "Failed to read Julia serial-tests output table: {error}"
         ))

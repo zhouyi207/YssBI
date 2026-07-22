@@ -48,19 +48,7 @@ export interface InferenceResultDTO {
   artifactManifest: ResultArtifactManifestDTO;
 }
 
-export interface PosteriorSampleRowDTO {
-  parameter: string;
-  chain: number;
-  draw: number;
-  value: number;
-}
 
-export interface PosteriorSamplePageDTO {
-  rows: PosteriorSampleRowDTO[];
-  offset: number;
-  limit: number;
-  total: number;
-}
 
 export interface TracePointDTO {
   draw: number;

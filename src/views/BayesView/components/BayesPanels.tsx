@@ -244,7 +244,7 @@ const LATEX_GREEK_SYMBOLS = new Set([
   'chi', 'psi', 'omega',
 ]);
 
-function latexSymbol(value: string): string {
+export function latexSymbol(value: string): string {
   return LATEX_GREEK_SYMBOLS.has(value) ? `\\${value}` : value;
 }
 
@@ -1043,7 +1043,7 @@ function LatexFormulaPreview({ formulaText }: { formulaText: string }) {
   );
 }
 
-function LatexInline({ formulaText }: { formulaText: string }) {
+export function LatexInline({ formulaText }: { formulaText: string }) {
   const html = useMemo(() => renderLatex(formulaText, false), [formulaText]);
   return <span className="[&_.katex]:text-foreground" dangerouslySetInnerHTML={{ __html: html }} />;
 }

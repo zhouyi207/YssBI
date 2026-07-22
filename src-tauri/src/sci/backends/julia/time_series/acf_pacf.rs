@@ -1,11 +1,12 @@
-use std::fs::{self, File};
+use std::fs;
 use std::path::Path;
 
 use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerTask};
 use crate::sci::api::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput};
 use crate::sci::engine::SciContext;
 use crate::sci::error::SciError;
-use polars::prelude::{Column, DataFrame, IpcReader, IpcWriter, SerReader, SerWriter};
+use crate::tabular::dataframe_io::{read_ipc_dataframe, write_ipc_dataframe};
+use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 pub fn compute(
@@ -51,18 +52,12 @@ fn compute_with_worker(
 fn write_input(path: &Path, values: &[f64]) -> Result<(), String> {
     let mut dataframe = DataFrame::new(values.len(), vec![Column::new("value".into(), values)])
         .map_err(|error| format!("Failed to create Julia input table: {error}"))?;
-    let mut file = File::create(path)
-        .map_err(|error| format!("Failed to create Julia input file: {error}"))?;
-    IpcWriter::new(&mut file)
-        .finish(&mut dataframe)
+    write_ipc_dataframe(path, &mut dataframe)
         .map_err(|error| format!("Failed to write Julia input table: {error}"))
 }
 
 fn read_output(path: &Path, n: usize) -> Result<AcfPacfOutput, SciError> {
-    let file = File::open(path).map_err(|error| {
-        SciError::julia_task_failed(format!("Julia worker did not write output: {error}"))
-    })?;
-    let dataframe = IpcReader::new(file).finish().map_err(|error| {
+    let dataframe = read_ipc_dataframe(path).map_err(|error| {
         SciError::julia_task_failed(format!("Failed to read Julia output table: {error}"))
     })?;
     let acf = dataframe

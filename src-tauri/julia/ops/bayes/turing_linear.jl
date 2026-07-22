@@ -180,13 +180,7 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
         "path" => ppc_path,
         "rows" => nothing,
     ))
-    warnings = Any[
-        Dict(
-            "code" => "JULIA_BAYES_TURING_LINEAR_POC",
-            "message" => "Fixed Normal linear regression was sampled with Turing.jl.",
-            "parameter" => nothing,
-        ),
-    ]
+    warnings = Any[]
     if bayes_response_is_transformed(response)
         push!(warnings, Dict(
             "code" => "JULIA_BAYES_RESPONSE_MODEL_SCALE",
@@ -220,12 +214,12 @@ function bayes_max_treedepth_hits(chain, max_tree_depth::Int)
     tree_depth_index = findfirst(name -> String(name) in ("tree_depth", "tree_depth__"), internal_names)
     tree_depth_index === nothing && return nothing
     internals = MCMCChains.get_sections(chain, :internals)
-    values = Array(internals[:, [internal_names[tree_depth_index]], :])
+    values = bayes_chain_values(internals[:, [internal_names[tree_depth_index]], :])
     return count(value -> Int(value) >= max_tree_depth, values)
 end
 
 function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64}, y::Vector{Float64})
-    values = Array(chain)
+    values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     a_index = findfirst(name -> name == "a", available_names)
     b_index = findfirst(name -> name == "b", available_names)
@@ -269,7 +263,7 @@ function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64
 end
 
 function bayes_write_samples(output_path::String, chain, chain_names::Vector{String}, model_names::Vector{String})
-    values = Array(chain)
+    values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     parameters = String[]
     chains = Int[]
@@ -300,7 +294,7 @@ function bayes_write_samples(output_path::String, chain, chain_names::Vector{Str
 end
 
 function bayes_chain_summaries(chain, chain_names::Vector{String}, model_names::Vector{String})
-    values = Array(chain)
+    values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     stats = summarystats(chain).nt
     stats_names = String.(stats.parameters)
