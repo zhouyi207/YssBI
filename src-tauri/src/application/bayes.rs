@@ -6,7 +6,7 @@ use std::thread;
 use std::fs;
 use std::path::Path;
 
-use polars::prelude::DataFrame;
+use polars::prelude::{DataFrame, Float64Chunked};
 
 use crate::error::AppError;
 use crate::project::ProjectState;
@@ -15,9 +15,9 @@ use crate::sci::api::bayes::{
     BayesBackendError, BayesBackendRequest, BayesInferenceTask, BayesModelDraft, BayesModelSpec,
     BayesProgressCallback, DatasetSourceType, DensityPlotData, DensityPoint, DensitySeries,
     InferenceResult, PlaceholderBayesBackend, PosteriorPredictivePage, PosteriorPredictiveRow,
-    PosteriorSamplePage, PosteriorSampleRow, ResultArtifactKind, TaskError, TaskProgress,
-    TaskStatus, TracePlotData, TracePoint, TraceSeries, draft_to_model_spec,
-    validate_bayes_input_table, validate_draft,
+    PosteriorPredictiveSummary, PosteriorSamplePage, PosteriorSampleRow, ResultArtifactKind,
+    TaskError, TaskProgress, TaskStatus, TracePlotData, TracePoint, TraceSeries,
+    draft_to_model_spec, validate_bayes_input_table, validate_draft,
 };
 use crate::tabular::dataframe_io::{read_ipc_dataframe, write_csv_dataframe};
 
@@ -542,42 +542,68 @@ fn posterior_predictive_page_from_dataframe(
         .column("observation")
         .and_then(|column| column.i64())
         .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
-    let observed = dataframe
-        .column("observed")
-        .and_then(|column| column.f64())
+    let transforms = dataframe
+        .column("response_transform")
+        .and_then(|column| column.str())
         .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
-    let means = dataframe
-        .column("mean")
-        .and_then(|column| column.f64())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
-    let q025 = dataframe
-        .column("q025")
-        .and_then(|column| column.f64())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
-    let q975 = dataframe
-        .column("q975")
-        .and_then(|column| column.f64())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
+    let response_transform = transforms.get(0).unwrap_or("identity").to_string();
+    if transforms
+        .into_iter()
+        .flatten()
+        .any(|value| value != response_transform)
+    {
+        return Err(AppError::new(
+            "bayes_posterior_predictive_invalid",
+            "Posterior predictive rows contain inconsistent response transforms",
+        ));
+    }
+    let observed_model = predictive_f64_column(dataframe, "observed_model")?;
+    let mean_model = predictive_f64_column(dataframe, "mean_model")?;
+    let q025_model = predictive_f64_column(dataframe, "q025_model")?;
+    let q975_model = predictive_f64_column(dataframe, "q975_model")?;
+    let observed_original = predictive_f64_column(dataframe, "observed_original")?;
+    let mean_original = predictive_f64_column(dataframe, "mean_original")?;
+    let q025_original = predictive_f64_column(dataframe, "q025_original")?;
+    let q975_original = predictive_f64_column(dataframe, "q975_original")?;
 
     let total = dataframe.height();
     let rows = (offset..total.min(offset.saturating_add(limit)))
         .filter_map(|index| {
             Some(PosteriorPredictiveRow {
                 observation: usize::try_from(observations.get(index)?).ok()?,
-                observed: observed.get(index)?,
-                mean: means.get(index)?,
-                q025: q025.get(index)?,
-                q975: q975.get(index)?,
+                model: PosteriorPredictiveSummary {
+                    observed: observed_model.get(index)?,
+                    mean: mean_model.get(index)?,
+                    q025: q025_model.get(index)?,
+                    q975: q975_model.get(index)?,
+                },
+                original: PosteriorPredictiveSummary {
+                    observed: observed_original.get(index)?,
+                    mean: mean_original.get(index)?,
+                    q025: q025_original.get(index)?,
+                    q975: q975_original.get(index)?,
+                },
             })
         })
         .collect();
 
     Ok(PosteriorPredictivePage {
         rows,
+        response_transform,
         offset,
         limit,
         total,
     })
+}
+
+fn predictive_f64_column<'a>(
+    dataframe: &'a DataFrame,
+    name: &str,
+) -> Result<&'a Float64Chunked, AppError> {
+    dataframe
+        .column(name)
+        .and_then(|column| column.f64())
+        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))
 }
 
 fn trace_plot_data_from_dataframe(
@@ -1098,10 +1124,15 @@ mod tests {
             3,
             vec![
                 Column::new("observation".into(), &[1_i64, 2, 3]),
-                Column::new("observed".into(), &[3.0, 5.0, 7.0]),
-                Column::new("mean".into(), &[3.1, 5.1, 6.9]),
-                Column::new("q025".into(), &[2.5, 4.4, 6.2]),
-                Column::new("q975".into(), &[3.8, 5.8, 7.7]),
+                Column::new("response_transform".into(), &["ln", "ln", "ln"]),
+                Column::new("observed_model".into(), &[1.0, 2.0, 3.0]),
+                Column::new("mean_model".into(), &[1.1, 2.1, 3.1]),
+                Column::new("q025_model".into(), &[0.5, 1.4, 2.2]),
+                Column::new("q975_model".into(), &[1.8, 2.8, 3.7]),
+                Column::new("observed_original".into(), &[3.0, 5.0, 7.0]),
+                Column::new("mean_original".into(), &[3.1, 5.1, 6.9]),
+                Column::new("q025_original".into(), &[2.5, 4.4, 6.2]),
+                Column::new("q975_original".into(), &[3.8, 5.8, 7.7]),
             ],
         )
         .expect("valid ppc dataframe");
@@ -1109,9 +1140,10 @@ mod tests {
         let page = posterior_predictive_page_from_dataframe(&dataframe, 1, 1).expect("ppc page");
         assert_eq!(page.total, 3);
         assert_eq!(page.rows.len(), 1);
+        assert_eq!(page.response_transform, "ln");
         assert_eq!(page.rows[0].observation, 2);
-        assert_eq!(page.rows[0].observed, 5.0);
-        assert_eq!(page.rows[0].mean, 5.1);
+        assert_eq!(page.rows[0].model.observed, 2.0);
+        assert_eq!(page.rows[0].original.mean, 5.1);
     }
 
     #[test]

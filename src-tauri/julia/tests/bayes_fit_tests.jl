@@ -3,6 +3,7 @@ using Test
 
 include(joinpath(@__DIR__, "..", "ops", "bayes_fit.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes", "turing_linear.jl"))
+include(joinpath(@__DIR__, "..", "ops", "bayes", "turing_generic_normal.jl"))
 
 if !isdefined(Main, :check_cancelled)
     check_cancelled(::String) = nothing
@@ -27,6 +28,8 @@ end
     """)
     table = (response = [1.0, exp(1.0), exp(2.0)],)
     @test bayes_response_vector(table, response, "normal", "task") ≈ [0.0, 1.0, 2.0]
+    @test bayes_response_transform(response) == "ln"
+    @test bayes_inverse_response(response, log(3.0)) ≈ 3.0
 
     legacy = JSON3.read("""
         {
@@ -43,6 +46,42 @@ end
         1,
         "task",
     )
+end
+
+@testset "Affine predictors compile to a design matrix" begin
+    predictor = JSON3.read("""
+        {
+          "type": "binary", "op": "add",
+          "left": {"type": "parameter", "name": "beta_0"},
+          "right": {
+            "type": "binary", "op": "add",
+            "left": {
+              "type": "binary", "op": "mul",
+              "left": {"type": "parameter", "name": "beta_1"},
+              "right": {"type": "data_variable", "name": "x_1"}
+            },
+            "right": {
+              "type": "binary", "op": "mul",
+              "left": {"type": "parameter", "name": "beta_2"},
+              "right": {"type": "data_variable", "name": "x_2"}
+            }
+          }
+        }
+    """)
+    table = (first = [2.0, 3.0], second = [5.0, 7.0])
+    data_variables = JSON3.read("{\"x_1\":\"first\",\"x_2\":\"second\"}")
+    compiled = bayes_compile_affine_predictor(
+        predictor,
+        table,
+        data_variables,
+        ["beta_0", "beta_1", "beta_2", "sigma"],
+        2,
+        "task",
+    )
+
+    @test compiled !== nothing
+    @test compiled.offset == [0.0, 0.0]
+    @test compiled.design ≈ [1.0 2.0 5.0 0.0; 1.0 3.0 7.0 0.0]
 end
 
 @testset "Bayesian capability and failure boundaries" begin

@@ -173,7 +173,7 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
         ))
     end
     ppc_path = joinpath(dirname(output_path), "posterior_predictive.arrow")
-    bayes_write_posterior_predictive(ppc_path, chain, x, y)
+    bayes_write_posterior_predictive(ppc_path, chain, x, y, response)
     push!(artifacts, Dict(
         "kind" => "posterior_predictive",
         "format" => "arrow_ipc",
@@ -181,13 +181,7 @@ function bayes_run_fixed_linear_turing(model, table, input_rows::Int, task_id::S
         "rows" => nothing,
     ))
     warnings = Any[]
-    if bayes_response_is_transformed(response)
-        push!(warnings, Dict(
-            "code" => "JULIA_BAYES_RESPONSE_MODEL_SCALE",
-            "message" => "Posterior predictive observed values and draws are reported on the transformed model scale; no inverse transform was applied.",
-            "parameter" => nothing,
-        ))
-    end
+
     append!(warnings, bayes_diagnostic_warnings(summaries, draws * chains))
 
     return Dict(
@@ -218,7 +212,7 @@ function bayes_max_treedepth_hits(chain, max_tree_depth::Int)
     return count(value -> Int(value) >= max_tree_depth, values)
 end
 
-function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64}, y::Vector{Float64})
+function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64}, y::Vector{Float64}, response)
     values = bayes_chain_values(chain)
     available_names = String.(names(chain))
     a_index = findfirst(name -> name == "a", available_names)
@@ -229,10 +223,15 @@ function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64
     sigma_index === nothing && throw(ArgumentError("chain parameter `sigma` was not found"))
 
     observations = Int[]
-    observed = Float64[]
-    means = Float64[]
-    q025 = Float64[]
-    q975 = Float64[]
+    response_transforms = String[]
+    observed_model = Float64[]
+    mean_model = Float64[]
+    q025_model = Float64[]
+    q975_model = Float64[]
+    observed_original = Float64[]
+    mean_original = Float64[]
+    q025_original = Float64[]
+    q975_original = Float64[]
 
     for observation in eachindex(y)
         predictions = Float64[]
@@ -245,20 +244,30 @@ function bayes_write_posterior_predictive(path::String, chain, x::Vector{Float64
                 push!(predictions, rand(Normal(mu, sigma)))
             end
         end
-        sorted = sort(predictions)
+        summaries = bayes_predictive_scale_summaries(response, predictions)
         push!(observations, Int(observation))
-        push!(observed, y[observation])
-        push!(means, mean(sorted))
-        push!(q025, quantile(sorted, 0.025))
-        push!(q975, quantile(sorted, 0.975))
+        push!(response_transforms, bayes_response_transform(response))
+        push!(observed_model, y[observation])
+        push!(mean_model, summaries.model_mean)
+        push!(q025_model, summaries.model_q025)
+        push!(q975_model, summaries.model_q975)
+        push!(observed_original, bayes_inverse_response(response, y[observation]))
+        push!(mean_original, summaries.original_mean)
+        push!(q025_original, summaries.original_q025)
+        push!(q975_original, summaries.original_q975)
     end
 
     Arrow.write(path, (
         observation = observations,
-        observed = observed,
-        mean = means,
-        q025 = q025,
-        q975 = q975,
+        response_transform = response_transforms,
+        observed_model = observed_model,
+        mean_model = mean_model,
+        q025_model = q025_model,
+        q975_model = q975_model,
+        observed_original = observed_original,
+        mean_original = mean_original,
+        q025_original = q025_original,
+        q975_original = q975_original,
     ))
 end
 

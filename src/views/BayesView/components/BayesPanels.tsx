@@ -245,7 +245,12 @@ const LATEX_GREEK_SYMBOLS = new Set([
 ]);
 
 export function latexSymbol(value: string): string {
-  return LATEX_GREEK_SYMBOLS.has(value) ? `\\${value}` : value;
+  if (LATEX_GREEK_SYMBOLS.has(value)) return `\\${value}`;
+  const indexed = value.match(/^([A-Za-z]+)_(?:\{([A-Za-z0-9_]+)\}|([A-Za-z0-9_]+))$/);
+  if (!indexed) return value;
+  const [, base, bracedIndex, plainIndex] = indexed;
+  const renderedBase = LATEX_GREEK_SYMBOLS.has(base) ? `\\${base}` : base;
+  return `${renderedBase}_{${bracedIndex ?? plainIndex}}`;
 }
 
 function latexToPlainSymbol(value: string | undefined): string | null {

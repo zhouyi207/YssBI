@@ -161,8 +161,7 @@ pub struct AutocorrelationPoint {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct PosteriorPredictiveRow {
-    pub observation: usize,
+pub struct PosteriorPredictiveSummary {
     pub observed: f64,
     pub mean: f64,
     pub q025: f64,
@@ -171,8 +170,17 @@ pub struct PosteriorPredictiveRow {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct PosteriorPredictiveRow {
+    pub observation: usize,
+    pub model: PosteriorPredictiveSummary,
+    pub original: PosteriorPredictiveSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct PosteriorPredictivePage {
     pub rows: Vec<PosteriorPredictiveRow>,
+    pub response_transform: String,
     pub offset: usize,
     pub limit: usize,
     pub total: usize,

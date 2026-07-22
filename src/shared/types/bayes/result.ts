@@ -98,16 +98,22 @@ export interface AutocorrelationPlotDataDTO {
   maxLag: number;
 }
 
-export interface PosteriorPredictiveRowDTO {
-  observation: number;
+export interface PosteriorPredictiveSummaryDTO {
   observed: number;
   mean: number;
   q025: number;
   q975: number;
 }
 
+export interface PosteriorPredictiveRowDTO {
+  observation: number;
+  model: PosteriorPredictiveSummaryDTO;
+  original: PosteriorPredictiveSummaryDTO;
+}
+
 export interface PosteriorPredictivePageDTO {
   rows: PosteriorPredictiveRowDTO[];
+  responseTransform: 'identity' | 'ln';
   offset: number;
   limit: number;
   total: number;

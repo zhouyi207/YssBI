@@ -260,6 +260,13 @@ function SamplingMetric({ label, value, severity = 'good' }: { label: string; va
 export function ResultOverview({ result }: { result: InferenceResultDTO | null }) {
   const artifactPath = result?.artifactManifest.artifacts[0]?.path;
   const assessment = evaluateInferenceDiagnostics(result);
+  const [predictiveScale, setPredictiveScale] = useState<'original' | 'model'>('original');
+  const [responseTransform, setResponseTransform] = useState<'identity' | 'ln'>('identity');
+
+  useEffect(() => {
+    setPredictiveScale('original');
+    setResponseTransform('identity');
+  }, [result?.artifactManifest.taskId]);
   const openResultFolder = () => {
     if (!artifactPath) return;
     void revealBayesResultFolder(artifactPath).catch(error => {
@@ -313,11 +320,29 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
-          <PanelTitle title="Posterior Predictive" description="预测区间与后验预测数据" />
+          <div className="flex flex-wrap items-center gap-4">
+            <PanelTitle title="Posterior Predictive" description="预测区间与后验预测数据" />
+            {responseTransform !== 'identity' ? (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">Scale</Label>
+                <Select value={predictiveScale} onValueChange={value => setPredictiveScale(value as 'original' | 'model')}>
+                  <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="original">Original</SelectItem>
+                    <SelectItem value="model">Model ({responseTransform})</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </div>
           <BayesCsvExportButton result={result} kind="posterior_predictive" fileName="posterior-predictive.csv" />
         </CardHeader>
         <CardContent>
-          <PosteriorPredictivePreview result={result} />
+          <PosteriorPredictivePreview
+            result={result}
+            scale={predictiveScale}
+            onResponseTransform={setResponseTransform}
+          />
         </CardContent>
       </Card>
     </section>
@@ -551,17 +576,31 @@ function PosteriorPlotFrame({
 
 
 
-export function posteriorPredictiveChartData(rows: readonly PosteriorPredictiveRowDTO[]) {
-  return rows.map(row => ({
-    observation: row.observation,
-    observed: row.observed,
-    mean: row.mean,
-    lower: row.q025,
-    upper: row.q975,
-  }));
+export function posteriorPredictiveChartData(
+  rows: readonly PosteriorPredictiveRowDTO[],
+  scale: 'original' | 'model',
+) {
+  return rows.map(row => {
+    const summary = row[scale];
+    return {
+      observation: row.observation,
+      observed: summary.observed,
+      mean: summary.mean,
+      lower: summary.q025,
+      upper: summary.q975,
+    };
+  });
 }
 
-function PosteriorPredictivePreview({ result }: { result: InferenceResultDTO | null }) {
+function PosteriorPredictivePreview({
+  result,
+  scale,
+  onResponseTransform,
+}: {
+  result: InferenceResultDTO | null;
+  scale: 'original' | 'model';
+  onResponseTransform: (transform: 'identity' | 'ln') => void;
+}) {
   const [plotRows, setPlotRows] = useState<PosteriorPredictiveRowDTO[]>([]);
   const [plotError, setPlotError] = useState<string | null>(null);
   const taskId = artifactTaskId(result, 'posterior_predictive');
@@ -574,12 +613,16 @@ function PosteriorPredictivePreview({ result }: { result: InferenceResultDTO | n
 
     let cancelled = false;
     readBayesPosteriorPredictive(taskId, 0, Math.max(artifactRows ?? 10_000, 1))
-      .then(data => { if (!cancelled) setPlotRows(data.rows); })
+      .then(data => {
+        if (cancelled) return;
+        setPlotRows(data.rows);
+        onResponseTransform(data.responseTransform);
+      })
       .catch((caught: unknown) => {
         if (!cancelled) setPlotError(caught instanceof Error ? caught.message : String(caught));
       });
     return () => { cancelled = true; };
-  }, [artifactRows, taskId]);
+  }, [artifactRows, onResponseTransform, taskId]);
 
   if (!result) return <p className="text-sm text-muted-foreground">运行完成后显示 posterior predictive。</p>;
   if (!findArtifact(result, 'posterior_predictive')) return <p className="text-sm text-muted-foreground">当前结果没有保存 posterior predictive 数据。</p>;
@@ -588,10 +631,10 @@ function PosteriorPredictivePreview({ result }: { result: InferenceResultDTO | n
     <div className="space-y-4">
       {plotRows.length > 0 ? (
         <PredictiveIntervalChart
-          data={posteriorPredictiveChartData(plotRows)}
+          data={posteriorPredictiveChartData(plotRows, scale)}
           xLabel="observation"
-          yLabel="response"
-        />
+          yLabel={scale === 'original' ? 'response' : 'response (model scale)'}
+                  />
       ) : null}
       {plotError ? <p className="text-sm text-destructive">预测区间图读取失败：{plotError}</p> : null}
     </div>

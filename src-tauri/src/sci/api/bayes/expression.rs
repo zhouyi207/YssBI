@@ -347,6 +347,25 @@ mod tests {
     }
 
     #[test]
+    fn preserves_indexed_greek_symbols_as_distinct_parameter_names() {
+        let known = names(&[
+            "y", "beta_0", "beta_1", "beta_2", "beta_3", "x_1", "x_2", "x_4",
+        ]);
+        let parsed = parse_model_expression(
+            r"y = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \beta_{3}x_{4}",
+            ParseOptions::latex(&known),
+        )
+        .unwrap();
+
+        assert_eq!(
+            parsed.symbols,
+            [
+                "beta_0", "beta_1", "beta_2", "beta_3", "x_1", "x_2", "x_4", "y"
+            ]
+        );
+    }
+
+    #[test]
     fn supports_project_math_function_whitelist() {
         let known = names(&["y", "x"]);
         for function in ["exp", "ln", "sqrt", "abs", "sin", "cos", "min", "max"] {

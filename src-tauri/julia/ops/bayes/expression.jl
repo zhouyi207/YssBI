@@ -173,8 +173,35 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
     return values
 end
 
+function bayes_response_transform(response)::String
+    expression = field(response, "expression", nothing)
+    field(expression, "type", "") == "data_variable" && return "identity"
+    field(expression, "type", "") == "call" && field(expression, "function", "") == "ln" && return "ln"
+    throw(ArgumentError("response expression does not have a supported inverse transform"))
+end
+
 function bayes_response_is_transformed(response)
-    return field(field(response, "expression", nothing), "type", "") != "data_variable"
+    return bayes_response_transform(response) != "identity"
+end
+
+function bayes_inverse_response(response, value::Real)::Float64
+    transform = bayes_response_transform(response)
+    transform == "identity" && return Float64(value)
+    transform == "ln" && return exp(Float64(value))
+    throw(ArgumentError("unsupported response inverse transform `$transform`"))
+end
+
+function bayes_predictive_scale_summaries(response, predictions::Vector{Float64})
+    model_values = sort(predictions)
+    original_values = sort(bayes_inverse_response.(Ref(response), predictions))
+    return (
+        model_mean = mean(model_values),
+        model_q025 = quantile(model_values, 0.025),
+        model_q975 = quantile(model_values, 0.975),
+        original_mean = mean(original_values),
+        original_q025 = quantile(original_values, 0.025),
+        original_q975 = quantile(original_values, 0.975),
+    )
 end
 
 function bayes_predictor_preview(model, table, input_rows::Int, task_id::String)

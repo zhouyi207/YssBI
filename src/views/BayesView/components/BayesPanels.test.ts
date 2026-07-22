@@ -16,19 +16,20 @@ describe('parameter diagnostic ratings', () => {
 
 describe('posterior predictive chart projection', () => {
   it('maps predictive quantiles to interval bounds without changing observations', () => {
-    expect(posteriorPredictiveChartData([{
+    const rows = [{
       observation: 7,
-      observed: 5.1,
-      mean: 5.3,
-      q025: 4.4,
-      q975: 6.2,
-    }])).toEqual([{
+      model: { observed: 1.6, mean: 1.7, q025: 1.4, q975: 1.9 },
+      original: { observed: 5.1, mean: 5.3, q025: 4.4, q975: 6.2 },
+    }];
+
+    expect(posteriorPredictiveChartData(rows, 'original')).toEqual([{
       observation: 7,
       observed: 5.1,
       mean: 5.3,
       lower: 4.4,
       upper: 6.2,
     }]);
+    expect(posteriorPredictiveChartData(rows, 'model')[0]?.mean).toBe(1.7);
   });
 });
 
@@ -52,6 +53,9 @@ describe('posterior trace chain selection', () => {
 describe('Bayesian symbol LaTeX mapping', () => {
   it('maps known Greek parameter names without changing ordinary symbols', () => {
     expect(latexSymbol('sigma')).toBe('\\sigma');
+    expect(latexSymbol('beta_0')).toBe('\\beta_{0}');
+    expect(latexSymbol('beta_{12}')).toBe('\\beta_{12}');
+    expect(latexSymbol('x_1')).toBe('x_{1}');
     expect(latexSymbol('a')).toBe('a');
   });
 });
