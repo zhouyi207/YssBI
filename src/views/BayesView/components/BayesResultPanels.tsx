@@ -1,56 +1,44 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
-import type { InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
-import { KDEChart, MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
+import type { AutocorrelationSeriesDTO, DensitySeriesDTO, InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
+import { MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { diagnosticSeverityClass, evaluateInferenceDiagnostics, parameterDiagnosticLabel, parameterDiagnosticStatus } from '@/features/domain/bayes';
+import { diagnosticSeverityClass, evaluateInferenceDiagnostics, parameterDiagnosticStatus } from '@/features/domain/bayes';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
 import { LatexInline, PanelTitle, formatNumber, latexSymbol } from './BayesPanels';
 import { useBayesPlotData } from './useBayesPlotData';
 
-const RHAT_RATINGS = [
-  ['1.000', '极好'],
-  ['>1.000 且 <1.01', '推荐标准'],
-  ['1.01–1.05', '有点问题'],
-  ['>1.05–1.10', '不建议相信'],
-  ['>1.10', '基本没收敛'],
-] as const;
-
-const ESS_RATINGS = [
-  ['>2000', '非常好'],
-  ['1001–2000', '很好'],
-  ['400–1000', '可接受'],
-  ['100–399', '偏低'],
-  ['<100', '不可靠'],
-] as const;
+type RatingCode = 'unavailable' | 'excellent' | 'recommended' | 'concerning' | 'untrustworthy' | 'notConverged'
+  | 'veryGood' | 'good' | 'acceptable' | 'low' | 'unreliable';
 
 type DiagnosticWarningDescription = ReturnType<typeof evaluateInferenceDiagnostics>['warnings'][number];
 
-export function rhatRating(value?: number): { label: string; className: string } {
-  if (value == null) return { label: '不可用', className: 'text-muted-foreground' };
-  if (value > 1.1) return { label: '基本没收敛', className: 'text-destructive' };
-  if (value > 1.05) return { label: '不建议相信', className: 'text-destructive' };
-  if (value >= 1.01) return { label: '有点问题', className: 'text-amber-500' };
-  if (value > 1) return { label: '推荐标准', className: 'text-emerald-500' };
-  return { label: '极好', className: 'text-emerald-500' };
+export function rhatRating(value?: number): { code: RatingCode; className: string } {
+  if (value == null) return { code: 'unavailable', className: 'text-muted-foreground' };
+  if (value > 1.1) return { code: 'notConverged', className: 'text-destructive' };
+  if (value > 1.05) return { code: 'untrustworthy', className: 'text-destructive' };
+  if (value >= 1.01) return { code: 'concerning', className: 'text-amber-500' };
+  if (value > 1) return { code: 'recommended', className: 'text-emerald-500' };
+  return { code: 'excellent', className: 'text-emerald-500' };
 }
 
-export function essRating(value?: number): { label: string; className: string } {
-  if (value == null) return { label: '不可用', className: 'text-muted-foreground' };
-  if (value < 100) return { label: '不可靠', className: 'text-destructive' };
-  if (value < 400) return { label: '偏低', className: 'text-amber-500' };
-  if (value <= 1_000) return { label: '可接受', className: 'text-emerald-500' };
-  if (value <= 2_000) return { label: '很好', className: 'text-emerald-500' };
-  return { label: '非常好', className: 'text-emerald-500' };
+export function essRating(value?: number): { code: RatingCode; className: string } {
+  if (value == null) return { code: 'unavailable', className: 'text-muted-foreground' };
+  if (value < 100) return { code: 'unreliable', className: 'text-destructive' };
+  if (value < 400) return { code: 'low', className: 'text-amber-500' };
+  if (value <= 1_000) return { code: 'acceptable', className: 'text-emerald-500' };
+  if (value <= 2_000) return { code: 'good', className: 'text-emerald-500' };
+  return { code: 'veryGood', className: 'text-emerald-500' };
 }
 
 function uniqueParameterWarnings(warnings: readonly DiagnosticWarningDescription[], parameter: string, code: string) {
@@ -95,10 +83,11 @@ function ParameterMetricValue({
   warnings,
 }: {
   value: string;
-  rating: { label: string; className: string };
+  rating: { code: RatingCode; className: string };
   details?: readonly string[];
   warnings: readonly DiagnosticWarningDescription[];
 }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -108,13 +97,13 @@ function ParameterMetricValue({
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-sm p-3">
         <div className="space-y-2">
-          <p className="font-medium">评级：{rating.label}</p>
+          <p className="font-medium">{t('bayes.results.diagnostics.ratingPrefix', { rating: t(`bayes.results.ratings.${rating.code}`) })}</p>
           {details?.map(detail => <p key={detail}>{detail}</p>)}
           {warnings.map(warning => (
             <div key={`${warning.parameter}-${warning.code}`} className="space-y-1 border-t border-background/20 pt-2">
-              <p className="font-medium">{warning.title}</p>
-              <p>{warning.explanation}</p>
-              <p>建议：{warning.suggestion}</p>
+              <p className="font-medium">{t(`bayes.results.diagnostics.warnings.${warning.code}.title`, { parameter: warning.parameter })}</p>
+              <p>{t(`bayes.results.diagnostics.warnings.${warning.code}.explanation`)}</p>
+              <p>{t('bayes.results.diagnostics.suggestionPrefix', { suggestion: t(`bayes.results.diagnostics.warnings.${warning.code}.suggestion`) })}</p>
             </div>
           ))}
         </div>
@@ -130,24 +119,39 @@ function ResultSummaryContent({
   result: InferenceResultDTO | null;
   assessment: ReturnType<typeof evaluateInferenceDiagnostics>;
 }) {
-  if (!result) return <p className="text-sm text-muted-foreground">运行完成后显示参数摘要。</p>;
+  const { t } = useTranslation();
+  if (!result) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.summary')}</p>;
   const diagnostics = result.diagnostics;
+  const rhatRatings = [
+    ['1.000', t('bayes.results.ratings.excellent')],
+    ['>1.000 & <1.01', t('bayes.results.ratings.recommended')],
+    ['1.01–1.05', t('bayes.results.ratings.concerning')],
+    ['>1.05–1.10', t('bayes.results.ratings.untrustworthy')],
+    ['>1.10', t('bayes.results.ratings.notConverged')],
+  ] as const;
+  const essRatings = [
+    ['>2000', t('bayes.results.ratings.veryGood')],
+    ['1001–2000', t('bayes.results.ratings.good')],
+    ['400–1000', t('bayes.results.ratings.acceptable')],
+    ['100–399', t('bayes.results.ratings.low')],
+    ['<100', t('bayes.results.ratings.unreliable')],
+  ] as const;
   const globalWarnings = assessment.warnings.filter(warning => !warning.parameter);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <SamplingMetric label="Chains" value={diagnostics.chains} />
-        <SamplingMetric label="Draws / chain" value={diagnostics.drawsPerChain} />
-        <SamplingMetric label="Warmup / chain" value={diagnostics.warmup} />
+        <SamplingMetric label={t('bayes.results.metrics.chains')} value={diagnostics.chains} />
+                <SamplingMetric label={t('bayes.results.metrics.drawsPerChain')} value={diagnostics.drawsPerChain} />
+                <SamplingMetric label={t('bayes.results.metrics.warmupPerChain')} value={diagnostics.warmup} />
         <SamplingMetric
-          label="Divergences"
-          value={diagnostics.divergences ?? 'unavailable'}
+          label={t('bayes.results.metrics.divergences')}
+                    value={diagnostics.divergences ?? t('bayes.results.ratings.unavailable')}
           severity={(diagnostics.divergences ?? 0) > 0 ? 'bad' : diagnostics.divergences == null ? 'unknown' : 'good'}
         />
         <SamplingMetric
-          label="Tree-depth hits"
-          value={diagnostics.maxTreedepthHits ?? 'unavailable'}
+          label={t('bayes.results.metrics.treeDepthHits')}
+                    value={diagnostics.maxTreedepthHits ?? t('bayes.results.ratings.unavailable')}
           severity={(diagnostics.maxTreedepthHits ?? 0) > 0 ? 'warning' : diagnostics.maxTreedepthHits == null ? 'unknown' : 'good'}
         />
       </div>
@@ -156,19 +160,19 @@ function ResultSummaryContent({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>status</TableHead><TableHead>parameter</TableHead><TableHead>mean</TableHead><TableHead>sd</TableHead><TableHead>2.5%</TableHead><TableHead>97.5%</TableHead>
+              <TableHead>{t('bayes.results.table.status')}</TableHead><TableHead>{t('bayes.results.table.parameter')}</TableHead><TableHead>{t('bayes.results.table.mean')}</TableHead><TableHead>{t('bayes.results.table.sd')}</TableHead><TableHead>2.5%</TableHead><TableHead>97.5%</TableHead>
               <TableHead>
                               <DiagnosticMetricHeader
                                 label="R-hat"
-                                ratings={RHAT_RATINGS}
-                                description="衡量多条 MCMC chain 是否收敛到同一后验分布；数值越接近 1，链间混合通常越好。"
+                                ratings={rhatRatings}
+                                                                description={t('bayes.results.diagnostics.rhatDescription')}
                               />
                             </TableHead>
               <TableHead>
                 <DiagnosticMetricHeader
                   label="ESS bulk / tail"
-                  ratings={ESS_RATINGS}
-                  description="左侧为 Bulk ESS，右侧为 Tail ESS。单元格颜色与综合评级采用两者中较低的一项。"
+                  ratings={essRatings}
+                                    description={t('bayes.results.diagnostics.essDescription')}
                 />
               </TableHead>
             </TableRow>
@@ -183,7 +187,7 @@ function ResultSummaryContent({
               const tailEss = row.essTail == null ? '—' : String(Math.round(row.essTail));
               return (
                 <TableRow key={row.parameter}>
-                  <TableCell className={parameterStatusClass(status)}>{parameterDiagnosticLabel(status)}</TableCell>
+                  <TableCell className={parameterStatusClass(status)}>{t(`bayes.results.status.${status}`)}</TableCell>
                   <TableCell><LatexInline formulaText={latexSymbol(row.parameter)} /></TableCell>
                   <TableCell>{formatNumber(row.mean)}</TableCell>
                   <TableCell>{formatNumber(row.sd)}</TableCell>
@@ -201,8 +205,8 @@ function ResultSummaryContent({
                       value={`${bulkEss} / ${tailEss}`}
                       rating={ess}
                       details={[
-                        `Bulk ESS：${bulkEss}（${essRating(row.essBulk).label}）`,
-                        `Tail ESS：${tailEss}（${essRating(row.essTail).label}）`,
+                        t('bayes.results.diagnostics.essDetail', { metric: 'Bulk ESS', value: bulkEss, rating: t(`bayes.results.ratings.${essRating(row.essBulk).code}`) }),
+                                                t('bayes.results.diagnostics.essDetail', { metric: 'Tail ESS', value: tailEss, rating: t(`bayes.results.ratings.${essRating(row.essTail).code}`) }),
                       ]}
                       warnings={uniqueParameterWarnings(assessment.warnings, row.parameter, 'ESS_TOO_LOW')}
                     />
@@ -217,9 +221,9 @@ function ResultSummaryContent({
       {globalWarnings.length > 0 ? <DiagnosticWarningList warnings={globalWarnings} /> : null}
       {assessment.severity !== 'good' && assessment.suggestions.length > 0 ? (
         <div className="space-y-1 rounded-md border border-border bg-muted/10 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Suggested next steps</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('bayes.results.diagnostics.suggestedNextSteps')}</p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-            {assessment.suggestions.map(suggestion => <li key={suggestion}>{suggestion}</li>)}
+            {diagnosticSuggestionKeys(assessment.severity).map(key => <li key={key}>{t(key)}</li>)}
           </ul>
         </div>
       ) : null}
@@ -227,7 +231,13 @@ function ResultSummaryContent({
   );
 }
 
+function diagnosticSuggestionKeys(severity: ReturnType<typeof evaluateInferenceDiagnostics>['severity']): string[] {
+  if (severity === 'unknown') return ['bayes.results.diagnostics.suggestions.checkMetrics', 'bayes.results.diagnostics.suggestions.saveSamples'];
+  return ['bayes.results.diagnostics.suggestions.increaseSampling', 'bayes.results.diagnostics.suggestions.inspectPlots'];
+}
+
 function SummaryDiagnosticBadge({ assessment }: { assessment: ReturnType<typeof evaluateInferenceDiagnostics> }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -235,13 +245,13 @@ function SummaryDiagnosticBadge({ assessment }: { assessment: ReturnType<typeof 
           type="button"
           className={`rounded-sm border border-border px-2 py-1 text-xs font-medium uppercase ${diagnosticSeverityClass(assessment.severity)}`}
         >
-          {assessment.severity}
+          {t(`bayes.results.severity.${assessment.severity}`)}
         </button>
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-sm p-3">
         <div className="space-y-1">
-          <p className="font-medium">{assessment.title}</p>
-          <p>{assessment.summary}</p>
+          <p className="font-medium">{t(`bayes.results.diagnostics.assessment.${assessment.severity}.title`)}</p>
+          <p>{t(`bayes.results.diagnostics.assessment.${assessment.severity}.summary`)}</p>
         </div>
       </TooltipContent>
     </Tooltip>
@@ -258,6 +268,7 @@ function SamplingMetric({ label, value, severity = 'good' }: { label: string; va
 }
 
 export function ResultOverview({ result }: { result: InferenceResultDTO | null }) {
+  const { t } = useTranslation();
   const artifactPath = result?.artifactManifest.artifacts[0]?.path;
   const assessment = evaluateInferenceDiagnostics(result);
   const [predictiveScale, setPredictiveScale] = useState<'original' | 'model'>('original');
@@ -270,8 +281,8 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
   const openResultFolder = () => {
     if (!artifactPath) return;
     void revealBayesResultFolder(artifactPath).catch(error => {
-      uiStore.showToast(formatErrorMessage(error), 'error');
-    });
+          uiStore.showToast(t('bayes.results.errors.openFolder', { error: formatErrorMessage(error) }), 'error');
+        });
   };
 
   return (
@@ -279,12 +290,12 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
       <div className="flex justify-end">
         <Button size="sm" variant="outline" disabled={!artifactPath} onClick={openResultFolder}>
           <VscFolderOpened />
-          打开结果文件夹
+          {t('bayes.results.actions.openFolder')}
         </Button>
       </div>
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
-          <PanelTitle title="Result Summary" description="标准化 InferenceResultDTO 展示" />
+          <PanelTitle title={t('bayes.results.titles.summary')} />
           {result ? <SummaryDiagnosticBadge assessment={assessment} /> : null}
         </CardHeader>
         <CardContent>
@@ -294,7 +305,7 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
-          <PanelTitle title="Posterior Trace" description="后端返回 trace 数据，前端负责渲染" />
+          <PanelTitle title={t('bayes.results.titles.posteriorTrace')} />
           <BayesCsvExportButton
             result={result}
             kind="posterior_samples"
@@ -306,13 +317,13 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><PanelTitle title="Posterior Density" description="后端返回 density 数据，前端负责渲染" /></CardHeader>
+        <CardHeader><PanelTitle title={t('bayes.results.titles.posteriorDensity')} /></CardHeader>
         <CardContent>
           <PosteriorDensityPreview result={result} />
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><PanelTitle title="Autocorrelation" description="后端返回 autocorrelation 数据，前端负责渲染" /></CardHeader>
+        <CardHeader><PanelTitle title={t('bayes.results.titles.autocorrelation')} /></CardHeader>
         <CardContent>
           <AutocorrelationPreview result={result} />
         </CardContent>
@@ -321,15 +332,15 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
-            <PanelTitle title="Posterior Predictive" description="预测区间与后验预测数据" />
+            <PanelTitle title={t('bayes.results.titles.posteriorPredictive')} />
             {responseTransform !== 'identity' ? (
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Scale</Label>
+                <Label className="text-xs text-muted-foreground">{t('bayes.results.controls.scale')}</Label>
                 <Select value={predictiveScale} onValueChange={value => setPredictiveScale(value as 'original' | 'model')}>
                   <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="original">Original</SelectItem>
-                    <SelectItem value="model">Model ({responseTransform})</SelectItem>
+                    <SelectItem value="original">{t('bayes.results.controls.originalScale')}</SelectItem>
+                                        <SelectItem value="model">{t('bayes.results.controls.modelScale', { transform: responseTransform })}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -353,34 +364,35 @@ function BayesCsvExportButton({
   result,
   kind,
   fileName,
-  label = '导出 CSV',
+  label,
 }: {
   result: InferenceResultDTO | null;
   kind: 'posterior_samples' | 'posterior_predictive';
   fileName: string;
   label?: string;
 }) {
+  const { t } = useTranslation();
   const available = Boolean(result && findArtifact(result, kind));
   const exportCsv = async () => {
     if (!result || !available) return;
     try {
       const destination = await save({
-        title: '导出 CSV',
+        title: t('bayes.results.actions.exportCsv'),
         defaultPath: fileName,
         filters: [{ name: 'CSV', extensions: ['csv'] }],
       });
       if (!destination) return;
       await exportBayesArtifactCsv(result.artifactManifest.taskId, kind, destination);
-      uiStore.showToast('CSV 导出成功', 'success');
-    } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), 'error');
+      uiStore.showToast(t('bayes.results.messages.exportSuccess'), 'success');
+          } catch (error) {
+            uiStore.showToast(t('bayes.results.errors.exportCsv', { error: formatErrorMessage(error) }), 'error');
     }
   };
 
   return (
     <Button size="sm" variant="outline" disabled={!available} onClick={() => void exportCsv()}>
       <VscCloudDownload />
-      {label}
+      {label ?? t('bayes.results.actions.exportCsv')}
     </Button>
   );
 }
@@ -410,6 +422,7 @@ export function filterTraceSeries(series: readonly TraceSeriesDTO[], selectedCha
 }
 
 function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }) {
+  const { t } = useTranslation();
   const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadTracePlot);
   const [selectedChain, setSelectedChain] = useState('__all__');
   const chains = useMemo(() => traceChains(data?.series ?? []), [data]);
@@ -439,12 +452,12 @@ function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }
       onParameterChange={handleParameterChange}
       secondaryControl={(
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Chain</Label>
+          <Label className="text-xs text-muted-foreground">{t('bayes.results.controls.chain')}</Label>
           <Select value={selectedChain} onValueChange={setSelectedChain}>
             <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All chains ({chains.length})</SelectItem>
-              {chains.map(chain => <SelectItem key={chain} value={String(chain)}>chain {chain}</SelectItem>)}
+              <SelectItem value="__all__">{t('bayes.results.controls.allChains', { count: chains.length })}</SelectItem>
+                            {chains.map(chain => <SelectItem key={chain} value={String(chain)}>{t('bayes.results.controls.chainNumber', { chain })}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -455,20 +468,29 @@ function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }
           <MultiLineChart
             series={visibleSeries.map(item => ({
               id: `${item.parameter}-${item.chain}`,
-              label: `chain ${item.chain}`,
-              points: item.points.map(point => ({ x: point.draw, y: point.value })),
+                            label: t('bayes.results.controls.chainNumber', { chain: item.chain }),
+                            points: item.points.map(point => ({ x: point.draw, y: point.value })),
             }))}
-            xLabel={`draw, stride ${data.stride}`}
-            yLabel="value"
+            xLabel={t('bayes.results.chart.drawStride', { stride: data.stride })}
+                        yLabel={t('bayes.results.chart.value')}
           />
-        ) : <p className="text-sm text-muted-foreground">没有 trace 数据。</p>
+        ) : <p className="text-sm text-muted-foreground">{t('bayes.results.empty.trace')}</p>
       )}
     </PosteriorPlotFrame>
   );
 }
 
 function PosteriorDensityPreview({ result }: { result: InferenceResultDTO | null }) {
+  const { t } = useTranslation();
   const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadDensityPlot);
+  const [selectedChain, setSelectedChain] = useState('__all__');
+  const chains = useMemo(() => seriesChains(data?.series ?? []), [data]);
+  const visibleSeries = filterDensitySeries(data?.series ?? [], selectedChain);
+  const handleParameterChange = (nextParameter: string) => {
+    setSelectedChain('__all__');
+    setSelectedParameter(nextParameter);
+  };
+  useResetChainSelection(result, chains, selectedChain, setSelectedChain);
 
   return (
     <PosteriorPlotFrame
@@ -477,25 +499,39 @@ function PosteriorDensityPreview({ result }: { result: InferenceResultDTO | null
       selectedParameter={parameter}
       loading={loading}
       error={error}
-      onParameterChange={setSelectedParameter}
+      onParameterChange={handleParameterChange}
+      secondaryControl={<ChainSelector value={selectedChain} chains={chains} includePooled onChange={setSelectedChain} />}
     >
       {data && (
-        data.series.some(item => item.points.length > 0) ? (
-          <KDEChart
-            data={data.series.flatMap(item => item.points.map(point => ({ x: point.x, y: point.density })))}
-            xLabel={parameter ?? 'value'}
-            yLabel="Density"
-            height={224}
-            className="rounded-md border border-border bg-muted/10"
+        visibleSeries.some(item => item.points.length > 0) ? (
+          <MultiLineChart
+            series={visibleSeries.map(item => ({
+              id: `${item.parameter}-${item.chain ?? 'pooled'}`,
+              label: item.chain == null
+                ? t('bayes.results.controls.pooled')
+                : t('bayes.results.controls.chainNumber', { chain: item.chain }),
+              points: item.points.map(point => ({ x: point.x, y: point.density })),
+            }))}
+            xLabel={parameter ?? t('bayes.results.chart.value')}
+            yLabel={t('bayes.results.chart.density')}
           />
-        ) : <p className="text-sm text-muted-foreground">没有 density 数据。</p>
+        ) : <p className="text-sm text-muted-foreground">{t('bayes.results.empty.density')}</p>
       )}
     </PosteriorPlotFrame>
   );
 }
 
 function AutocorrelationPreview({ result }: { result: InferenceResultDTO | null }) {
+  const { t } = useTranslation();
   const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadAutocorrelationPlot);
+  const [selectedChain, setSelectedChain] = useState('__all__');
+  const chains = useMemo(() => seriesChains(data?.series ?? []), [data]);
+  const visibleSeries = filterChainSeries(data?.series ?? [], selectedChain);
+  const handleParameterChange = (nextParameter: string) => {
+    setSelectedChain('__all__');
+    setSelectedParameter(nextParameter);
+  };
+  useResetChainSelection(result, chains, selectedChain, setSelectedChain);
 
   return (
     <PosteriorPlotFrame
@@ -504,23 +540,101 @@ function AutocorrelationPreview({ result }: { result: InferenceResultDTO | null 
       selectedParameter={parameter}
       loading={loading}
       error={error}
-      onParameterChange={setSelectedParameter}
+      onParameterChange={handleParameterChange}
+      secondaryControl={<ChainSelector value={selectedChain} chains={chains} onChange={setSelectedChain} />}
     >
       {data && (
-        data.series.some(item => item.points.length > 0) ? (
+        visibleSeries.some(item => item.points.length > 0) ? (
           <MultiLineChart
-            series={data.series.map(item => ({
+            series={visibleSeries.map(item => ({
               id: `${item.parameter}-${item.chain}`,
-              label: `chain ${item.chain}`,
+              label: t('bayes.results.controls.chainNumber', { chain: item.chain }),
               points: item.points.map(point => ({ x: point.lag, y: point.autocorrelation })),
             }))}
-            xLabel={`lag, max ${data.maxLag}`}
-            yLabel="autocorrelation"
+            xLabel={t('bayes.results.chart.lagMax', { maxLag: data.maxLag })}
+            yLabel={t('bayes.results.chart.autocorrelation')}
             yDomain={[-1, 1]}
           />
-        ) : <p className="text-sm text-muted-foreground">没有 autocorrelation 数据。</p>
+        ) : <p className="text-sm text-muted-foreground">{t('bayes.results.empty.autocorrelation')}</p>
       )}
     </PosteriorPlotFrame>
+  );
+}
+
+function seriesChains(series: readonly { chain: number | null }[]): number[] {
+  return Array.from(new Set(
+    series.flatMap(item => item.chain == null ? [] : [item.chain]),
+  )).sort((left, right) => left - right);
+}
+
+export function filterDensitySeries(
+  series: readonly DensitySeriesDTO[],
+  selectedChain: string,
+): DensitySeriesDTO[] {
+  if (selectedChain === '__pooled__') return series.filter(item => item.chain == null);
+  if (selectedChain === '__all__') return series.filter(item => item.chain != null);
+  const chain = Number(selectedChain);
+  return series.filter(item => item.chain === chain);
+}
+
+export function filterAutocorrelationSeries(
+  series: readonly AutocorrelationSeriesDTO[],
+  selectedChain: string,
+): AutocorrelationSeriesDTO[] {
+  return filterChainSeries(series, selectedChain);
+}
+
+function filterChainSeries<T extends { chain: number }>(series: readonly T[], selectedChain: string): T[] {
+  if (selectedChain === '__all__') return [...series];
+  const chain = Number(selectedChain);
+  return series.filter(item => item.chain === chain);
+}
+
+function useResetChainSelection(
+  result: InferenceResultDTO | null,
+  chains: readonly number[],
+  selectedChain: string,
+  setSelectedChain: (value: string) => void,
+) {
+  useEffect(() => {
+    setSelectedChain('__all__');
+  }, [result?.artifactManifest.taskId, setSelectedChain]);
+
+  useEffect(() => {
+    if (!selectedChain.startsWith('__') && !chains.includes(Number(selectedChain))) {
+      setSelectedChain('__all__');
+    }
+  }, [chains, selectedChain, setSelectedChain]);
+}
+
+function ChainSelector({
+  value,
+  chains,
+  includePooled = false,
+  onChange,
+}: {
+  value: string;
+  chains: readonly number[];
+  includePooled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-2">
+      <Label className="text-xs text-muted-foreground">{t('bayes.results.controls.chain')}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all__">{t('bayes.results.controls.allChains', { count: chains.length })}</SelectItem>
+          {includePooled ? <SelectItem value="__pooled__">{t('bayes.results.controls.pooled')}</SelectItem> : null}
+          {chains.map(chain => (
+            <SelectItem key={chain} value={String(chain)}>
+              {t('bayes.results.controls.chainNumber', { chain })}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -543,15 +657,16 @@ function PosteriorPlotFrame({
   secondaryControl?: ReactNode;
   children: ReactNode;
 }) {
-  if (!result) return <p className="text-sm text-muted-foreground">运行完成后显示图表数据。</p>;
-  if (!findArtifact(result, 'posterior_samples')) return <p className="text-sm text-muted-foreground">当前结果没有保存 posterior samples，因此无法生成 trace / density / autocorrelation。请在 sampler 中启用 saveSamples 后重新运行。</p>;
-  if (parameters.length === 0) return <p className="text-sm text-muted-foreground">没有可绘制的参数。</p>;
+  const { t } = useTranslation();
+  if (!result) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.plots')}</p>;
+  if (!findArtifact(result, 'posterior_samples')) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.posteriorSamples')}</p>;
+  if (parameters.length === 0) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.parameters')}</p>;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Parameter</Label>
+          <Label className="text-xs text-muted-foreground">{t('bayes.results.controls.parameter')}</Label>
           <Select value={selectedParameter} onValueChange={onParameterChange}>
             <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -565,8 +680,8 @@ function PosteriorPlotFrame({
         </div>
         {secondaryControl}
       </div>
-      {loading ? <p className="text-sm text-muted-foreground">正在读取 plot 数据...</p> : null}
-      {error ? <p className="text-sm text-destructive">Plot 数据读取失败：{error}</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">{t('bayes.results.loading.plot')}</p> : null}
+            {error ? <p className="text-sm text-destructive">{t('bayes.results.errors.plot', { error })}</p> : null}
       {!loading && !error ? children : null}
     </div>
   );
@@ -601,6 +716,7 @@ function PosteriorPredictivePreview({
   scale: 'original' | 'model';
   onResponseTransform: (transform: 'identity' | 'ln') => void;
 }) {
+  const { t } = useTranslation();
   const [plotRows, setPlotRows] = useState<PosteriorPredictiveRowDTO[]>([]);
   const [plotError, setPlotError] = useState<string | null>(null);
   const taskId = artifactTaskId(result, 'posterior_predictive');
@@ -624,19 +740,19 @@ function PosteriorPredictivePreview({
     return () => { cancelled = true; };
   }, [artifactRows, onResponseTransform, taskId]);
 
-  if (!result) return <p className="text-sm text-muted-foreground">运行完成后显示 posterior predictive。</p>;
-  if (!findArtifact(result, 'posterior_predictive')) return <p className="text-sm text-muted-foreground">当前结果没有保存 posterior predictive 数据。</p>;
+  if (!result) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.posteriorPredictive')}</p>;
+    if (!findArtifact(result, 'posterior_predictive')) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.posteriorPredictiveData')}</p>;
 
   return (
     <div className="space-y-4">
       {plotRows.length > 0 ? (
         <PredictiveIntervalChart
           data={posteriorPredictiveChartData(plotRows, scale)}
-          xLabel="observation"
-          yLabel={scale === 'original' ? 'response' : 'response (model scale)'}
+          xLabel={t('bayes.results.chart.observation')}
+                    yLabel={scale === 'original' ? t('bayes.results.chart.response') : t('bayes.results.chart.responseModelScale')}
                   />
       ) : null}
-      {plotError ? <p className="text-sm text-destructive">预测区间图读取失败：{plotError}</p> : null}
+      {plotError ? <p className="text-sm text-destructive">{t('bayes.results.errors.predictivePlot', { error: plotError })}</p> : null}
     </div>
   );
 }
@@ -648,15 +764,16 @@ function DiagnosticWarningList({
 }: {
   warnings: ReturnType<typeof evaluateInferenceDiagnostics>['warnings'];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/10 p-3">
-      <p className="text-xs font-medium text-muted-foreground">Warnings explained</p>
+      <p className="text-xs font-medium text-muted-foreground">{t('bayes.results.diagnostics.warningsExplained')}</p>
       <div className="space-y-2">
         {warnings.map((warning, index) => (
           <div key={`${warning.code}-${warning.parameter ?? 'global'}-${index}`} className="space-y-1 border-l-2 border-amber-500 pl-3 text-xs">
-            <p><span className="font-mono text-amber-500">[{warning.code}]</span> <span className="font-medium text-foreground">{warning.title}</span></p>
-            <p className="text-muted-foreground">{warning.explanation}</p>
-            <p className="text-muted-foreground">建议：{warning.suggestion}</p>
+            <p><span className="font-mono text-amber-500">[{warning.code}]</span> <span className="font-medium text-foreground">{t(`bayes.results.diagnostics.warnings.${warning.code}.title`, { parameter: warning.parameter })}</span></p>
+                        <p className="text-muted-foreground">{t(`bayes.results.diagnostics.warnings.${warning.code}.explanation`)}</p>
+                        <p className="text-muted-foreground">{t('bayes.results.diagnostics.suggestionPrefix', { suggestion: t(`bayes.results.diagnostics.warnings.${warning.code}.suggestion`) })}</p>
           </div>
         ))}
       </div>

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultBayesDraft, createEmptyBayesDraft, DEFAULT_BAYES_FORMULA } from '@/features/domain/bayes';
 import { composeLikelihoodLatex, currentResponseExpression, latexSymbol } from './BayesPanels';
-import { essRating, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
+import { essRating, filterAutocorrelationSeries, filterDensitySeries, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
 
 describe('parameter diagnostic ratings', () => {
   it('rates R-hat and ESS at user-facing severity boundaries', () => {
-    expect(rhatRating(1.001).label).toBe('推荐标准');
-    expect(rhatRating(1.06).label).toBe('不建议相信');
-    expect(essRating(80).label).toBe('不可靠');
-    expect(essRating(399).label).toBe('偏低');
-    expect(essRating(400).label).toBe('可接受');
-    expect(essRating(undefined).label).toBe('不可用');
+    expect(rhatRating(1.001).code).toBe('recommended');
+        expect(rhatRating(1.06).code).toBe('untrustworthy');
+        expect(essRating(80).code).toBe('unreliable');
+        expect(essRating(399).code).toBe('low');
+        expect(essRating(400).code).toBe('acceptable');
+        expect(essRating(undefined).code).toBe('unavailable');
   });
 });
 
@@ -47,6 +47,29 @@ describe('posterior trace chain selection', () => {
   it('shows all series by default and only the selected chain on demand', () => {
     expect(filterTraceSeries(series, '__all__')).toEqual(series);
     expect(filterTraceSeries(series, '2')).toEqual([series[0], series[2]]);
+  });
+});
+
+describe('posterior density and autocorrelation chain selection', () => {
+  const density = [
+    { parameter: 'a', chain: null, points: [{ x: 0, density: 0.5 }] },
+    { parameter: 'a', chain: 1, points: [{ x: 0, density: 0.4 }] },
+    { parameter: 'a', chain: 2, points: [{ x: 0, density: 0.6 }] },
+  ];
+  const autocorrelation = [
+    { parameter: 'a', chain: 1, points: [{ lag: 0, autocorrelation: 1 }] },
+    { parameter: 'a', chain: 2, points: [{ lag: 0, autocorrelation: 1 }] },
+  ];
+
+  it('keeps pooled density separate from all-chain overlays', () => {
+    expect(filterDensitySeries(density, '__pooled__')).toEqual([density[0]]);
+    expect(filterDensitySeries(density, '__all__')).toEqual([density[1], density[2]]);
+    expect(filterDensitySeries(density, '2')).toEqual([density[2]]);
+  });
+
+  it('filters autocorrelation without pooling chains', () => {
+    expect(filterAutocorrelationSeries(autocorrelation, '__all__')).toEqual(autocorrelation);
+    expect(filterAutocorrelationSeries(autocorrelation, '1')).toEqual([autocorrelation[0]]);
   });
 });
 

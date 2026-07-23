@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import type { BayesInferenceTaskDTO } from '@/shared/types/bayes';
 import { Progress } from '@/components/ui/progress';
 
 export function BayesProgressStatus({ task, stageOverride }: { task: BayesInferenceTaskDTO; stageOverride?: string }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
   const totalStartedAt = useRef(Date.now());
   const stageStartedAt = useRef(Date.now());
@@ -56,7 +59,7 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
   return (
     <div className="w-64 space-y-1">
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="truncate text-foreground">{bayesProgressStageLabel(stage)}</span>
+        <span className="truncate text-foreground">{bayesProgressStageLabel(stage, t)}</span>
         <span className="shrink-0 font-mono text-muted-foreground">{percentage === null ? '' : `${percentage}%`}</span>
       </div>
       {percentage !== null ? (
@@ -69,13 +72,16 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
       <div className="flex justify-between gap-3 text-[10px] text-muted-foreground">
         <span>
           {hasSampleCount && ['warmup', 'sampling'].includes(stage)
-            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · 本阶段 ${formatDuration(stageElapsedSeconds)}`
-            : `本阶段 ${formatDuration(stageElapsedSeconds)}`}
+            ? `${completed.toLocaleString()} / ${total.toLocaleString()} · ${t('bayes.progress.stageElapsed', { duration: formatDuration(stageElapsedSeconds) })}`
+            : t('bayes.progress.stageElapsed', { duration: formatDuration(stageElapsedSeconds) })}
         </span>
         <span>
           {remainingSeconds === null
-            ? `总计 ${formatDuration(totalElapsedSeconds)}`
-            : `剩余 ${formatDuration(remainingSeconds)} · 总计 ${formatDuration(totalElapsedSeconds)}`}
+            ? t('bayes.progress.totalElapsed', { duration: formatDuration(totalElapsedSeconds) })
+            : t('bayes.progress.remainingAndTotal', {
+              remaining: formatDuration(remainingSeconds),
+              total: formatDuration(totalElapsedSeconds),
+            })}
         </span>
       </div>
     </div>
@@ -106,30 +112,32 @@ export function bayesOverallProgress(stage: string, completed?: number, total?: 
   return milestones[stage] ?? null;
 }
 
-export function bayesProgressStageLabel(stage: string): string {
-  const labels: Record<string, string> = {
-    queued: '等待运行',
-    running: '正在启动',
-    materializing_data: '正在准备数据',
-    loading_model: '正在启动 Julia 任务',
-    loading_data: '正在读取模型与数据',
-    preparing_response: '正在准备响应变量',
-    loading_kernels: '正在加载生成的计算 Kernel',
-    preparing_kernels: '正在准备 Predictor Kernel',
-    building_model: '正在构造先验与 Turing 模型',
-    initializing_nuts: '正在特化模型并初始化 NUTS',
-    warmup: 'NUTS 预热',
-    sampling: '后验采样',
-    summarizing: '正在计算参数摘要',
-    writing_samples: '正在写入后验样本',
-    posterior_predictive: '正在计算后验预测',
-    finalizing: '正在完成诊断与产物',
-    reading_result: '正在读取结果',
-    writing_artifacts: '正在计算结果数据',
-    rendering_result: '正在计算并渲染结果数据',
-    cancelling: '正在取消',
-  };
-  return labels[stage] ?? stage;
+const BAYES_PROGRESS_STAGE_KEYS: Record<string, string> = {
+  queued: 'bayes.progress.stages.queued',
+  running: 'bayes.progress.stages.running',
+  materializing_data: 'bayes.progress.stages.materializingData',
+  loading_model: 'bayes.progress.stages.loadingModel',
+  loading_data: 'bayes.progress.stages.loadingData',
+  preparing_response: 'bayes.progress.stages.preparingResponse',
+  loading_kernels: 'bayes.progress.stages.loadingKernels',
+  preparing_kernels: 'bayes.progress.stages.preparingKernels',
+  building_model: 'bayes.progress.stages.buildingModel',
+  initializing_nuts: 'bayes.progress.stages.initializingNuts',
+  warmup: 'bayes.progress.stages.warmup',
+  sampling: 'bayes.progress.stages.sampling',
+  summarizing: 'bayes.progress.stages.summarizing',
+  writing_samples: 'bayes.progress.stages.writingSamples',
+  posterior_predictive: 'bayes.progress.stages.posteriorPredictive',
+  finalizing: 'bayes.progress.stages.finalizing',
+  reading_result: 'bayes.progress.stages.readingResult',
+  writing_artifacts: 'bayes.progress.stages.writingArtifacts',
+  rendering_result: 'bayes.progress.stages.renderingResult',
+  cancelling: 'bayes.progress.stages.cancelling',
+};
+
+export function bayesProgressStageLabel(stage: string, t: TFunction): string {
+  const key = BAYES_PROGRESS_STAGE_KEYS[stage];
+  return key ? t(key) : stage;
 }
 
 export function formatDuration(seconds: number): string {

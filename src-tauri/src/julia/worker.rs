@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable};
+use super::{JuliaRuntimeState, background_command, system_julia_executable};
 
 const WORKER_DIR: &str = "julia-worker";
 const TASK_DIR: &str = "tasks";
@@ -148,24 +148,22 @@ impl JuliaWorkerManager {
             };
         }
 
-        let runtime = get_runtime_status();
-        let (worker_dir, asset_message) = ensure_worker_assets(app_data_dir)
-            .map(|path| (path, None))
-            .unwrap_or_else(|message| (worker_dir, Some(message)));
-        let (environment_state, environment_message) = asset_message.map_or_else(
-            || inspect_worker_environment(&worker_dir),
-            |message| (JuliaWorkerEnvironmentState::Invalid, Some(message)),
-        );
-        let startup_message = match startup {
-            JuliaWorkerStartupState::Failed(message) => Some(message),
-            _ => None,
-        };
-        JuliaWorkerStatus {
-            runtime_state: runtime.state,
-            environment_state,
-            process_state: self.process_state(),
-            project_dir: worker_dir.to_string_lossy().into_owned(),
-            message: runtime.message.or(environment_message).or(startup_message),
+        match startup {
+            JuliaWorkerStartupState::Failed(message) => JuliaWorkerStatus {
+                runtime_state: JuliaRuntimeState::Invalid,
+                environment_state: JuliaWorkerEnvironmentState::Invalid,
+                process_state: self.process_state(),
+                project_dir: worker_dir.to_string_lossy().into_owned(),
+                message: Some(message),
+            },
+            JuliaWorkerStartupState::Idle => JuliaWorkerStatus {
+                runtime_state: JuliaRuntimeState::Missing,
+                environment_state: JuliaWorkerEnvironmentState::Missing,
+                process_state: self.process_state(),
+                project_dir: worker_dir.to_string_lossy().into_owned(),
+                message: Some("Julia worker has not been started.".to_string()),
+            },
+            JuliaWorkerStartupState::Preparing => unreachable!(),
         }
     }
 
@@ -544,62 +542,6 @@ impl WorkerProcess {
 impl Drop for WorkerProcess {
     fn drop(&mut self) {
         self.terminate();
-    }
-}
-
-fn inspect_worker_environment(worker_dir: &Path) -> (JuliaWorkerEnvironmentState, Option<String>) {
-    let required_files = [
-        worker_dir.join("Project.toml"),
-        worker_dir.join("Manifest.toml"),
-        worker_dir.join("worker.jl"),
-        worker_dir.join("scientific_runtime.jl"),
-        worker_dir.join("ops").join("acf_pacf.jl"),
-        worker_dir.join("ops").join("serial_tests.jl"),
-        worker_dir.join("ops").join("bayes_fit.jl"),
-        worker_dir.join("ops").join("bayes").join("expression.jl"),
-        worker_dir.join("ops").join("bayes").join("runtime.jl"),
-        worker_dir
-            .join("ops")
-            .join("bayes")
-            .join("turing_generic_normal.jl"),
-    ];
-    if required_files.iter().any(|path| !path.is_file()) {
-        return (
-            JuliaWorkerEnvironmentState::Missing,
-            Some("Julia worker assets were not prepared.".to_string()),
-        );
-    }
-
-    let executable = match system_julia_executable() {
-        Ok(executable) => executable,
-        Err(message) => return (JuliaWorkerEnvironmentState::Invalid, Some(message)),
-    };
-    let output = background_command(executable)
-        .arg(format!("--project={}", worker_dir.display()))
-        .args(["--startup-file=no", "-e", "using Arrow, JSON3"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output();
-    match output {
-        Ok(output) if output.status.success() => (JuliaWorkerEnvironmentState::Ready, None),
-        Ok(output) => {
-            let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            (
-                JuliaWorkerEnvironmentState::Invalid,
-                Some(if detail.is_empty() {
-                    "Julia worker packages are not available.".to_string()
-                } else {
-                    detail
-                }),
-            )
-        }
-        Err(error) => (
-            JuliaWorkerEnvironmentState::Invalid,
-            Some(format!(
-                "Failed to inspect Julia worker environment: {error}"
-            )),
-        ),
     }
 }
 

@@ -127,6 +127,7 @@ pub struct DensityPoint {
 #[serde(rename_all = "camelCase")]
 pub struct DensitySeries {
     pub parameter: String,
+    pub chain: Option<usize>,
     pub points: Vec<DensityPoint>,
 }
 

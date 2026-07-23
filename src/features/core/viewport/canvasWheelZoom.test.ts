@@ -1,19 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { applyWheelZoomToViewport, isCanvasWheelZoomGesture } from './canvasWheelZoom';
+import { applyWheelZoomToViewport } from './canvasWheelZoom';
 
 describe('canvasWheelZoom', () => {
   const base = { x: 100, y: 50, scale: 1 };
   const rect = { left: 0, top: 0, width: 800, height: 600 } as DOMRect;
 
-  it('detects ctrl/meta wheel as zoom gesture', () => {
-    expect(isCanvasWheelZoomGesture({ ctrlKey: true, metaKey: false })).toBe(true);
-    expect(isCanvasWheelZoomGesture({ ctrlKey: false, metaKey: true })).toBe(true);
-    expect(isCanvasWheelZoomGesture({ ctrlKey: false, metaKey: false })).toBe(false);
-  });
-
-  it('zooms toward cursor with ctrl+wheel', () => {
+  it('zooms toward cursor with plain wheel', () => {
     const e = {
-      ctrlKey: true,
+      ctrlKey: false,
       metaKey: false,
       deltaY: -100,
       clientX: 400,
@@ -26,15 +20,18 @@ describe('canvasWheelZoom', () => {
     expect(next.y).not.toBe(base.y);
   });
 
-  it('ignores plain wheel without modifier', () => {
-    const e = {
+  it('does not require or reject modifier keys', () => {
+    const plainWheel = {
       ctrlKey: false,
       metaKey: false,
       deltaY: 100,
       clientX: 100,
       clientY: 100,
     } as WheelEvent;
+    const modifiedWheel = { ...plainWheel, ctrlKey: true } as WheelEvent;
 
-    expect(applyWheelZoomToViewport(base, e, rect)).toEqual(base);
+    expect(applyWheelZoomToViewport(base, plainWheel, rect)).toEqual(
+      applyWheelZoomToViewport(base, modifiedWheel, rect),
+    );
   });
 });

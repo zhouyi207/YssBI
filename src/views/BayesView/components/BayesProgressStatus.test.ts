@@ -1,19 +1,26 @@
+import type { TFunction } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import { bayesOverallProgress, bayesProgressStageLabel, formatDuration } from './BayesProgressStatus';
 
+const translateKey = ((key: string) => key) as TFunction;
+
 describe('Bayes progress presentation', () => {
-  it('uses stable user-facing labels for backend stages', () => {
-    expect(bayesProgressStageLabel('loading_model')).toBe('正在启动 Julia 任务');
-    expect(bayesProgressStageLabel('loading_data')).toBe('正在读取模型与数据');
-    expect(bayesProgressStageLabel('loading_kernels')).toBe('正在加载生成的计算 Kernel');
-    expect(bayesProgressStageLabel('building_model')).toBe('正在构造先验与 Turing 模型');
-    expect(bayesProgressStageLabel('initializing_nuts')).toBe('正在特化模型并初始化 NUTS');
-    expect(bayesProgressStageLabel('warmup')).toBe('NUTS 预热');
-    expect(bayesProgressStageLabel('sampling')).toBe('后验采样');
-    expect(bayesProgressStageLabel('summarizing')).toBe('正在计算参数摘要');
-    expect(bayesProgressStageLabel('posterior_predictive')).toBe('正在计算后验预测');
-    expect(bayesProgressStageLabel('writing_artifacts')).toBe('正在计算结果数据');
-    expect(bayesProgressStageLabel('rendering_result')).toBe('正在计算并渲染结果数据');
+  it('translates stable user-facing labels for backend stages', () => {
+    expect(bayesProgressStageLabel('loading_model', translateKey)).toBe('bayes.progress.stages.loadingModel');
+    expect(bayesProgressStageLabel('loading_data', translateKey)).toBe('bayes.progress.stages.loadingData');
+    expect(bayesProgressStageLabel('loading_kernels', translateKey)).toBe('bayes.progress.stages.loadingKernels');
+    expect(bayesProgressStageLabel('building_model', translateKey)).toBe('bayes.progress.stages.buildingModel');
+    expect(bayesProgressStageLabel('initializing_nuts', translateKey)).toBe('bayes.progress.stages.initializingNuts');
+    expect(bayesProgressStageLabel('warmup', translateKey)).toBe('bayes.progress.stages.warmup');
+    expect(bayesProgressStageLabel('sampling', translateKey)).toBe('bayes.progress.stages.sampling');
+    expect(bayesProgressStageLabel('summarizing', translateKey)).toBe('bayes.progress.stages.summarizing');
+    expect(bayesProgressStageLabel('posterior_predictive', translateKey)).toBe('bayes.progress.stages.posteriorPredictive');
+    expect(bayesProgressStageLabel('writing_artifacts', translateKey)).toBe('bayes.progress.stages.writingArtifacts');
+    expect(bayesProgressStageLabel('rendering_result', translateKey)).toBe('bayes.progress.stages.renderingResult');
+  });
+
+  it('falls back to the backend value for unknown stages', () => {
+    expect(bayesProgressStageLabel('unknown_stage', translateKey)).toBe('unknown_stage');
   });
 
   it('reserves progress milestones for output parsing and frontend rendering', () => {

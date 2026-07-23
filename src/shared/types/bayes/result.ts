@@ -74,6 +74,7 @@ export interface DensityPointDTO {
 
 export interface DensitySeriesDTO {
   parameter: string;
+  chain: number | null;
   points: DensityPointDTO[];
 }
 

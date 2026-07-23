@@ -121,8 +121,8 @@ export function BayesView() {
       <Tabs defaultValue="model" className="min-h-0 flex-1 gap-0">
         <section className="flex items-center justify-between gap-4 border-b border-border px-6 py-3">
           <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="model">Model</TabsTrigger>
-            <TabsTrigger value="results">Results</TabsTrigger>
+            <TabsTrigger value="model">{t('bayes.tabs.model')}</TabsTrigger>
+            <TabsTrigger value="results">{t('bayes.tabs.results')}</TabsTrigger>
           </TabsList>
           <BayesActionBar
             validationLoading={validation.loading}
@@ -190,6 +190,7 @@ function BayesIssueBanner({
   error: BayesInferenceError | null;
   validation: ValidationReportDTO | null;
 }) {
+  const { t } = useTranslation();
   const issues = validation ? [...validation.errors, ...validation.warnings].slice(0, 4) : [];
   if (!error && issues.length === 0) return null;
 
@@ -199,8 +200,8 @@ function BayesIssueBanner({
         <p className="text-destructive">
           <span className="font-mono">[{error.code}]</span> {error.message}
           {error.detail ? ` (${error.detail})` : ''}
-          {error.column ? ` (column: ${error.column})` : ''}
-          {typeof error.row === 'number' ? ` (row: ${error.row + 1})` : ''}
+          {error.column ? ` ${t('bayes.issue.column', { column: error.column })}` : ''}
+          {typeof error.row === 'number' ? ` ${t('bayes.issue.row', { row: error.row + 1 })}` : ''}
         </p>
       ) : null}
 
@@ -226,6 +227,7 @@ function BayesActionBar({
   onRun: () => void | Promise<unknown>;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const taskStatus = task?.status ?? null;
   const cancellable = taskStatus === 'queued' || taskStatus === 'running' || taskStatus === 'cancelling';
   const busy = cancellable || phase === 'submitting' || phase === 'reading_result';
@@ -234,10 +236,10 @@ function BayesActionBar({
     <div className="flex shrink-0 items-center gap-3">
       {busy && task ? <BayesProgressStatus task={task} stageOverride={stageOverride} /> : null}
       <Button size="sm" onClick={onRun} disabled={busy || validationLoading}>
-        {busy ? 'Running...' : 'Run'}
+        {busy ? t('bayes.actions.running') : t('bayes.actions.run')}
       </Button>
       <Button size="sm" variant="outline" onClick={onCancel} disabled={!cancellable}>
-        Cancel
+        {t('bayes.actions.cancel')}
       </Button>
     </div>
   );

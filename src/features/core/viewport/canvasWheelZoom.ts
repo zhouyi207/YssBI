@@ -11,16 +11,14 @@ import type { ViewportScope } from './viewportScope';
 
 const ZOOM_CLAMP = { min: 0.1, max: 5 } as const;
 
-export function isCanvasWheelZoomGesture(e: Pick<WheelEvent, 'ctrlKey' | 'metaKey'>): boolean {
-  return e.ctrlKey || e.metaKey;
-}
+
 
 export function applyWheelZoomToViewport(
   current: EditorViewport,
   e: WheelEvent,
   canvasRect: DOMRect,
 ): EditorViewport {
-  if (!isCanvasWheelZoomGesture(e)) return current;
+
 
   const mouseX = e.clientX - canvasRect.left;
   const mouseY = e.clientY - canvasRect.top;
@@ -36,7 +34,7 @@ export function applyWheelZoomToViewport(
   };
 }
 
-/** Ctrl/Meta + wheel zoom bound to the canvas element (not global window). */
+/** Wheel zoom bound to the canvas element (not global window). */
 export function attachCanvasWheelZoom(
   canvasEl: HTMLElement,
   scope: ViewportScope,
@@ -44,8 +42,6 @@ export function attachCanvasWheelZoom(
   const timers: { commit?: number | null; persist?: number | null } = {};
 
   const onWheel = (e: WheelEvent) => {
-    if (!isCanvasWheelZoomGesture(e)) return;
-
     e.preventDefault();
     e.stopPropagation();
 

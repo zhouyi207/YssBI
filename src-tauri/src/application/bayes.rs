@@ -656,29 +656,50 @@ fn density_plot_data_from_dataframe(
     grid_points: usize,
 ) -> Result<DensityPlotData, AppError> {
     let rows = sample_rows_from_dataframe(dataframe, parameter)?;
-    let mut grouped: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut grouped: BTreeMap<String, BTreeMap<usize, Vec<f64>>> = BTreeMap::new();
     for row in rows {
-        grouped.entry(row.parameter).or_default().push(row.value);
+        grouped
+            .entry(row.parameter)
+            .or_default()
+            .entry(row.chain)
+            .or_default()
+            .push(row.value);
     }
 
-    let series = grouped
-        .into_iter()
-        .map(|(parameter, values)| DensitySeries {
-            parameter,
-            points: crate::sci::kde::gaussian_kde_grid(&values, grid_points)
-                .into_iter()
-                .map(|point| DensityPoint {
-                    x: point.x,
-                    density: point.density,
-                })
-                .collect(),
-        })
-        .collect();
+    let mut series = Vec::new();
+    for (parameter, chains) in grouped {
+        let pooled = chains.values().flatten().copied().collect::<Vec<_>>();
+        series.push(density_series(&parameter, None, &pooled, grid_points));
+        series.extend(
+            chains.into_iter().map(|(chain, values)| {
+                density_series(&parameter, Some(chain), &values, grid_points)
+            }),
+        );
+    }
 
     Ok(DensityPlotData {
         series,
         grid_points,
     })
+}
+
+fn density_series(
+    parameter: &str,
+    chain: Option<usize>,
+    values: &[f64],
+    grid_points: usize,
+) -> DensitySeries {
+    DensitySeries {
+        parameter: parameter.to_string(),
+        chain,
+        points: crate::sci::kde::gaussian_kde_grid(values, grid_points)
+            .into_iter()
+            .map(|point| DensityPoint {
+                x: point.x,
+                density: point.density,
+            })
+            .collect(),
+    }
 }
 
 fn autocorrelation_plot_data_from_dataframe(
@@ -1158,8 +1179,11 @@ mod tests {
         let density =
             density_plot_data_from_dataframe(&dataframe, Some("b"), 8).expect("density data");
         assert_eq!(density.grid_points, 8);
-        assert_eq!(density.series.len(), 1);
+        assert_eq!(density.series.len(), 3);
         assert_eq!(density.series[0].parameter, "b");
+        assert_eq!(density.series[0].chain, None);
+        assert_eq!(density.series[1].chain, Some(1));
+        assert_eq!(density.series[2].chain, Some(2));
         assert_eq!(density.series[0].points.len(), 8);
         assert!(
             density.series[0]

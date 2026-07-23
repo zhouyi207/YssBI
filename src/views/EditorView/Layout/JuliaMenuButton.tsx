@@ -12,18 +12,18 @@ import {
 import { uiStore } from "@/features/core/ui/UIStore";
 import {
   JuliaRuntimeService,
-  type JuliaRuntimeStatus,
+  type JuliaWorkerStatus,
 } from "@/services/julia/juliaRuntimeService";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 
 export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<JuliaRuntimeStatus | null>(null);
+  const [status, setStatus] = useState<JuliaWorkerStatus | null>(null);
   const [loading, setLoading] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
-      setStatus(await JuliaRuntimeService.getStatus());
+      setStatus(await JuliaRuntimeService.getWorkerStatus());
     } catch (error) {
       uiStore.showToast(formatErrorMessage(error), "error");
     }
@@ -45,7 +45,6 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
     uiStore.startProgress({ stage: t("julia.install.preparing"), detail: t("julia.install.preparingDetail") });
     try {
       const nextStatus = await JuliaRuntimeService.install();
-      setStatus(nextStatus);
       if (nextStatus.state === "ready") {
         uiStore.showToast(t("julia.install.success", { version: nextStatus.version }), "success");
       } else {
@@ -60,14 +59,15 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
     }
   }, [refreshStatus, t]);
 
-  const ready = status?.state === "ready";
+  const ready = status?.processState === "running";
+  const runtimeReady = status?.runtimeState === "ready";
   const statusLabel = loading
     ? t("julia.status.installing")
-    : ready
-      ? t("julia.status.ready", { version: status?.version })
-      : status?.state === "invalid"
-        ? t("julia.status.invalid")
-        : t("julia.status.notInstalled");
+    : status?.processState === "starting"
+      ? t("julia.worker.starting")
+      : ready
+        ? t("julia.worker.ready")
+        : t("julia.worker.unavailable");
 
   return (
     <DropdownMenu onOpenChange={(open) => open && void refreshStatus()}>
@@ -87,7 +87,7 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
           {statusLabel}
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-0" />
-        {!ready && (
+        {!runtimeReady && (
           <DropdownMenuItem disabled={loading} onSelect={() => void install()}>
             {t("julia.menu.install")}
           </DropdownMenuItem>
@@ -96,7 +96,7 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
           {t("julia.menu.refresh")}
         </DropdownMenuItem>
         {ready && (
-          <DropdownMenuItem disabled title={status?.installDir ?? undefined}>
+          <DropdownMenuItem disabled title={status?.projectDir ?? undefined}>
             {t("julia.menu.managedRuntime")}
           </DropdownMenuItem>
         )}

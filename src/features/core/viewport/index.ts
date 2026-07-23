@@ -33,8 +33,4 @@ export {
   viewportTransformStyle,
   viewportGridStyle,
 } from './viewportTransform';
-export {
-  applyWheelZoomToViewport,
-  attachCanvasWheelZoom,
-  isCanvasWheelZoomGesture,
-} from './canvasWheelZoom';
+export { applyWheelZoomToViewport, attachCanvasWheelZoom } from './canvasWheelZoom';
