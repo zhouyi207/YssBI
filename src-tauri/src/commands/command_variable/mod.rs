@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::event::{Event, EventNode, EventVariable, emit_project_event};
+use crate::event::{Event, EventVariable, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
 use crate::project::ProjectState;
 use crate::schema::VariableInstanceDTO;
@@ -76,8 +76,6 @@ pub fn update_variable(
     if let Some(ref dt) = data_type {
         ensure_variable_data_type(dt)?;
     }
-    let type_changed = data_type.is_some();
-    let name_changed = name.is_some();
 
     let updated = state
         .update_variable(&variable_id, name, data_type, data_value, description, tags)
@@ -97,16 +95,6 @@ pub fn update_variable(
             data: (&updated).into(),
         }),
     );
-
-    for sync in state.sync_variable_references(&variable_id, name_changed, type_changed, &updated) {
-        emit_project_event(
-            &app,
-            Event::Node(EventNode::PinTypesInferred {
-                graph_path: sync.graph_path.as_str().to_string(),
-                pin_types: sync.pin_types,
-            }),
-        );
-    }
 
     if persist_global {
         state.persist_current_project()?;

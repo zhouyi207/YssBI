@@ -24,7 +24,6 @@ export interface NestedEvent {
 // ==================== 事件 Payload 类型 ====================
 
 export interface ProjectLoadedPayload {
-    data: ProjectData;
     path: string | null;
 }
 

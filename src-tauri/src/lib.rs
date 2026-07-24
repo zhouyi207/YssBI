@@ -7,14 +7,18 @@ pub mod commands;
 pub mod database;
 pub mod error;
 pub mod event;
-pub mod execution;
+#[allow(dead_code, unused_imports)]
+mod execution;
 pub mod frontend;
-pub mod graph;
+#[allow(dead_code, unused_imports)]
+mod graph;
 pub mod julia;
 pub mod log;
 pub mod math;
+pub mod node_system;
 pub mod project;
-pub mod schema;
+#[allow(dead_code, unused_imports)]
+mod schema;
 pub mod sci;
 pub mod tabular;
 pub mod variable;
@@ -66,9 +70,7 @@ pub fn run() {
         // 注册全局状态管理器
         .manage(project::ProjectState::new())
         .manage(project::ProjectWatcherState::new())
-        .manage(execution::ResultSourceStore::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
-        .manage(project::ExecutionCancelRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {
             // 初始化日志管理器
@@ -112,9 +114,26 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // ==================== Schema ====================
-            get_node_definitions,
-            get_editor_schema_command,
+            // ==================== Node system ====================
+            get_localized_node_catalog,
+            create_event,
+            create_function,
+            remove_graph,
+            unload_project_graph,
+            save_project_graph,
+            duplicate_graph,
+            rename_graph_resource,
+            update_function_signature,
+            hydrate_editor_graph,
+            mutate_graph_document,
+            undo_graph_document,
+            redo_graph_document,
+            execute_graph_document,
+            get_result_source_descriptor,
+            get_result_source_value,
+            get_result_source_page,
+            release_result_source,
+            release_run_result_sources,
             // ==================== 项目管理 ====================
             get_project_databases_variables,
             get_project_path,
@@ -137,57 +156,15 @@ pub fn run() {
             load_project,
             flush_project,
             save_project_as,
-            execute_project,
-            cancel_execution,
-            clear_graph_execution_artifacts,
-            get_result_source_descriptor,
-            get_result_source_value,
-            get_result_source_page,
-            get_pin_result_descriptor,
-            release_result_source,
             // ==================== 窗口几何状态 ====================
             get_window_states,
             get_window_state,
             save_window_state,
-            // ==================== Graph CRUD ====================
-            get_graph,
-            unload_project_graph,
-            save_project_graph,
-            remove_graph,
-            duplicate_graph,
-            rename_graph_resource,
-            create_event,
-            create_function,
-            update_function_signature,
-            get_function_call_sites,
-            purge_function_call_sites,
             // ==================== Variable CRUD ====================
             create_variable,
             get_variable,
             update_variable,
             delete_variable,
-            // ==================== Node ====================
-            create_node,
-            create_node_with_id,
-            batch_create_nodes,
-            delete_node,
-            batch_delete_nodes,
-            apply_graph_patch,
-            update_node_positions,
-            batch_create_with_connections,
-            update_call_function_target,
-            // ==================== Connection ====================
-            connect_pins,
-            disconnect_pin,
-            delete_connection,
-            // ==================== Pin ====================
-            update_pin_user_value,
-            clear_pin_user_value,
-            add_repeatable_pin,
-            remove_repeatable_pin,
-            resolve_graph_dynamic_pins,
-            // ==================== History ====================
-            sync_graph_state,
             // ==================== Database ====================
             load_database,
             list_sqlite_tables,

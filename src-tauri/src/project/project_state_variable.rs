@@ -1,18 +1,11 @@
 use super::ProjectState;
 use super::unique_name;
-use crate::event::InferredPinType;
-use crate::graph::pin::PinKind;
+
 use crate::graph::value::{DataType, DataValue};
-use crate::project::GraphResourcePath;
+
 use crate::tabular::{normalize_variable_tabular, remove_variable_cache, sync_variable_cache};
 use crate::variable::VariableId;
 use crate::variable::{VariableInstance, VariableScope};
-
-#[derive(Debug, Clone)]
-pub struct VariableReferenceSync {
-    pub graph_path: GraphResourcePath,
-    pub pin_types: Vec<InferredPinType>,
-}
 
 impl ProjectState {
     fn finalize_variable(&self, variable_id: &VariableId) -> Result<VariableInstance, String> {
@@ -73,6 +66,10 @@ impl ProjectState {
             .unwrap()
             .variables
             .insert(variable_instance.id, variable_instance);
+        self.variable_revisions
+            .write()
+            .unwrap()
+            .insert(id, crate::node_system::document::ResourceRevision::INITIAL);
 
         self.finalize_variable(&id)
             .unwrap_or_else(|_| self.get_variable(&id).expect("variable inserted"))
@@ -86,6 +83,7 @@ impl ProjectState {
             .variables
             .remove(variable_id);
         if removed.is_some() {
+            self.variable_revisions.write().unwrap().remove(variable_id);
             remove_variable_cache(&mut self.project_store.write().unwrap(), variable_id);
             self.recompile_graphs_for_variable(variable_id);
         }
@@ -136,95 +134,6 @@ impl ProjectState {
         let updated = self.finalize_variable(variable_id).ok()?;
         self.recompile_graphs_for_variable(variable_id);
         Some(updated)
-    }
-
-    pub fn sync_variable_references(
-        &self,
-        variable_id: &VariableId,
-        name_changed: bool,
-        type_changed: bool,
-        updated: &VariableInstance,
-    ) -> Vec<VariableReferenceSync> {
-        if !name_changed && !type_changed {
-            return Vec::new();
-        }
-
-        let var_id_str = variable_id.to_string();
-        let new_data_type = &updated.data_type;
-        let new_name = &updated.name;
-        let project_data = self.project_data.read().unwrap();
-        let mut syncs = Vec::new();
-
-        for (graph_path, graph) in project_data.graphs.iter() {
-            let data_state = graph.data_state.read().unwrap();
-            let mut inferred_pins = Vec::new();
-
-            if type_changed {
-                for node in data_state.nodes.values() {
-                    if node.instance_params.variable_id() != Some(var_id_str.as_str()) {
-                        continue;
-                    }
-                    for &pin_id in &node.pin_ids {
-                        if let Some(pin) = data_state.pins.get(&pin_id) {
-                            if pin.definition.kind == PinKind::Data {
-                                inferred_pins.push(InferredPinType {
-                                    pin_id,
-                                    data_type: new_data_type.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            let nodes_to_update: Vec<_> = data_state
-                .nodes
-                .values()
-                .filter(|n| n.instance_params.variable_id() == Some(var_id_str.as_str()))
-                .map(|n| n.id)
-                .collect();
-
-            drop(data_state);
-
-            if nodes_to_update.is_empty() && inferred_pins.is_empty() {
-                continue;
-            }
-
-            {
-                let mut data_state = graph.data_state.write().unwrap();
-                for ipt in &inferred_pins {
-                    data_state
-                        .pin_types
-                        .insert(ipt.pin_id, new_data_type.clone());
-                }
-                for nid in &nodes_to_update {
-                    let pin_ids = if let Some(node) = data_state.nodes.get(nid) {
-                        node.pin_ids.clone()
-                    } else {
-                        Vec::new()
-                    };
-
-                    if name_changed {
-                        for pin_id in pin_ids {
-                            if let Some(pin) = data_state.pins.get_mut(&pin_id) {
-                                if pin.definition.kind == PinKind::Data {
-                                    pin.definition.name = new_name.clone();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !inferred_pins.is_empty() {
-                syncs.push(VariableReferenceSync {
-                    graph_path: graph_path.clone(),
-                    pin_types: inferred_pins,
-                });
-            }
-        }
-
-        syncs
     }
 
     pub fn apply_global_variables_from_disk(&self, project_path: &str) -> Result<(), String> {

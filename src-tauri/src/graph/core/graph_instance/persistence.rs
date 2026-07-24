@@ -2,8 +2,8 @@ use super::*;
 
 // 持久化格式（Phase B）
 //
-// 磁盘格式与 `GraphRebuildSnapshot` 对齐：扁平的 `nodes[]`（pin 内联）+ 扁平的
-// `connections[]`。静态 pin 的完整定义在加载后由 registry 经 `set_registry`
+// 磁盘格式使用扁平的 `nodes[]`（pin 内联）+ 扁平的 `connections[]`。
+// 静态 pin 的完整定义在加载后由 registry 经 `set_registry`
 // 重新挂载；动态/可重复 pin 自带完整定义覆盖。运行期缓存
 // （`pin_types` / `type_var_bindings` / `resolved_schema`）不落盘。
 //

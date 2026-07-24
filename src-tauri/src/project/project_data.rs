@@ -1,33 +1,46 @@
-use super::ProjectError;
-use super::ProjectMetadata;
+use super::{GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata};
 use crate::database::DatabaseDecl;
-use crate::graph::GraphInstance;
-use crate::project::GraphResourcePath;
+use crate::node_system::document::{FunctionDocument, FunctionSignature, GraphDocument};
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphResourceDocument {
+    pub name: String,
+    pub kind: GraphDocumentKind,
+    pub document: GraphDocument,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<FunctionDocument>,
+}
+
+impl GraphResourceDocument {
+    pub fn new(name: impl Into<String>, kind: GraphDocumentKind) -> Self {
+        Self {
+            name: name.into(),
+            kind,
+            document: GraphDocument::default(),
+            function: matches!(kind, GraphDocumentKind::Function)
+                .then(|| FunctionDocument::new(FunctionSignature::default())),
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectData {
     pub variables: HashMap<VariableId, VariableInstance>,
-    pub graphs: HashMap<GraphResourcePath, GraphInstance>,
+    pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }
 
 impl ProjectData {
-    /// 创建新的空项目数据
     pub fn new() -> Self {
-        Self {
-            variables: HashMap::new(),
-            graphs: HashMap::new(),
-            databases: HashMap::new(),
-            metadata: ProjectMetadata::default(),
-        }
+        Self::default()
     }
 
-    /// 获取项目信息摘要
     pub fn info(&self) -> String {
         format!(
             "variables={}, databases={}, graphs={}",

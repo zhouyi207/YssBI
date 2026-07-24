@@ -152,7 +152,7 @@ impl<E: EventEmitter> Executor<E> {
         while !self.stack.is_empty() {
             if self.is_cancelled() {
                 self.log("Execution cancelled by user".to_string());
-                return Err(crate::project::execution_cancelled_error());
+                return Err("Execution cancelled by user".to_string());
             }
 
             let mut frame = self.stack.pop_ready().ok_or("Stack is empty")?;

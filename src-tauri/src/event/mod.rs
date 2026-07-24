@@ -1,19 +1,14 @@
 //! 项目事件定义和发送逻辑
 //!
-pub mod event_connection;
+
 pub mod event_dataframe;
-pub mod event_event;
-pub mod event_function;
-pub mod event_node;
+
 pub mod event_project;
 pub mod event_resource;
 pub mod event_variable;
 
-pub use event_connection::*;
 pub use event_dataframe::*;
-pub use event_event::*;
-pub use event_function::*;
-pub use event_node::*;
+
 pub use event_project::*;
 pub use event_resource::*;
 pub use event_variable::*;
@@ -27,16 +22,10 @@ use tauri::{AppHandle, Emitter};
 pub enum Event {
     // 项目级事件
     Project(EventProject),
-    // Event 子图事件
-    Event(EventEvent),
-    // Function 子图事件
-    Function(EventFunction),
+
     // 全局变量事件
     Variable(EventVariable),
-    // 节点事件
-    Node(EventNode),
-    // 连接事件
-    Connection(EventConnection),
+
     // DataFrame 事件
     DataFrame(EventDataframe),
     // 统一资源事件

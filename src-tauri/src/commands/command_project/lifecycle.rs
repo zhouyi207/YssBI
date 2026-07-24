@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::event::{Event, EventProject, emit_project_event};
-use crate::execution::ResultSourceStore;
+
 use crate::frontend::FrontendError;
 use crate::log::LogLevel;
 use crate::log_app;
@@ -12,13 +12,10 @@ use crate::project::{
 };
 use tauri::{AppHandle, State};
 
-fn emit_project_loaded(app: &AppHandle, project_data: ProjectData, path: String) {
+fn emit_project_loaded(app: &AppHandle, path: String) {
     emit_project_event(
         app,
-        Event::Project(EventProject::ProjectLoaded {
-            data: project_data,
-            path: Some(path),
-        }),
+        Event::Project(EventProject::ProjectLoaded { path: Some(path) }),
     );
 }
 
@@ -33,7 +30,6 @@ fn start_project_watcher(app: &AppHandle, watcher: &ProjectWatcherState, path: &
 pub fn load_project(
     app: AppHandle,
     state: State<ProjectState>,
-    source_store: State<ResultSourceStore>,
     watcher: State<ProjectWatcherState>,
     path: String,
 ) -> Result<(), FrontendError> {
@@ -56,9 +52,9 @@ pub fn load_project(
         project_data.info()
     );
 
-    state.activate_loaded_snapshot(&source_store, path.clone(), project_data.clone());
+    state.activate_loaded_project(path.clone(), project_data);
     start_project_watcher(&app, &watcher, &path);
-    emit_project_loaded(&app, project_data, path);
+    emit_project_loaded(&app, path);
     Ok(())
 }
 
@@ -67,7 +63,6 @@ pub fn load_project(
 pub async fn save_project_as(
     app: AppHandle,
     state: State<'_, ProjectState>,
-    source_store: State<'_, ResultSourceStore>,
     watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
     path: String,
@@ -83,18 +78,14 @@ pub async fn save_project_as(
 
     let project_data = load_project_from_file(&new_metadata_path).map_err(|e| e.to_string())?;
 
-    state.activate_loaded_snapshot(
-        &source_store,
-        new_metadata_path.clone(),
-        project_data.clone(),
-    );
+    state.activate_loaded_project(new_metadata_path.clone(), project_data.clone());
     start_project_watcher(&app, &watcher, &new_metadata_path);
 
     let record = registry
         .register_project(&project_data.metadata.project_name, &new_metadata_path)
         .await?;
 
-    emit_project_loaded(&app, project_data, new_metadata_path);
+    emit_project_loaded(&app, new_metadata_path);
     Ok(record)
 }
 
@@ -147,15 +138,10 @@ pub fn flush_project(app: AppHandle, state: State<ProjectState>) -> Result<(), A
 
 /// 新建项目（清空当前状态）
 #[tauri::command]
-pub fn new_project(
-    app: AppHandle,
-    state: State<ProjectState>,
-    source_store: State<ResultSourceStore>,
-) -> Result<(), AppError> {
+pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), AppError> {
     log_app!(LogLevel::Info, "[command.new_project] Creating new project");
 
     state.clear();
-    source_store.clear_all();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
 }

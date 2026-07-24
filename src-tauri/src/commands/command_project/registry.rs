@@ -74,7 +74,6 @@ pub async fn remove_registered_project(
 pub async fn delete_registered_project_files(
     app: tauri::AppHandle,
     state: State<'_, crate::project::ProjectState>,
-    source_store: State<'_, crate::execution::ResultSourceStore>,
     registry: State<'_, ProjectRegistry>,
     id: String,
 ) -> Result<(), AppError> {
@@ -98,7 +97,6 @@ pub async fn delete_registered_project_files(
 
     if deleting_active {
         state.clear();
-        source_store.clear_all();
         emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     }
 

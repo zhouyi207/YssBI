@@ -1,0 +1,341 @@
+pub(crate) use crate::node_system::catalog::builtin::ProviderFragment;
+use crate::node_system::catalog::localization::{Aliases, Text};
+use crate::node_system::compiler::{
+    FragmentMetadata, KernelFragment as CompiledKernelFragment, LoweredKernel, LoweredNode,
+    LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+};
+use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
+use crate::node_system::protocol::*;
+use crate::node_system::registry::{CategoryRegistration, RegisteredNode, StructuralNodeRole};
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+impl ProviderFragment {
+    pub(crate) fn add_node_messages(&mut self, spec: &NodeTextSpec) {
+        let keys = NodeKeys::new(spec.id);
+        for (locale, title, description, documentation, aliases) in [
+            (
+                "en-US",
+                spec.title,
+                spec.description,
+                spec.documentation,
+                spec.aliases,
+            ),
+            (
+                "zh-CN",
+                spec.zh_title,
+                spec.zh_description,
+                spec.zh_documentation,
+                spec.zh_aliases,
+            ),
+        ] {
+            self.text(locale, keys.title.clone(), title);
+            self.text(locale, keys.description.clone(), description);
+            self.text(locale, keys.documentation.clone(), documentation);
+            self.aliases(locale, keys.aliases.clone(), aliases);
+        }
+    }
+
+    pub(crate) fn text(&mut self, locale: &'static str, key: I18nKey, value: &'static str) {
+        self.messages
+            .push((locale, leak(key.as_str().to_owned()), Text(value)));
+    }
+
+    pub(crate) fn aliases(
+        &mut self,
+        locale: &'static str,
+        key: I18nKey,
+        values: &'static [&'static str],
+    ) {
+        self.messages
+            .push((locale, leak(key.as_str().to_owned()), Aliases(values)));
+    }
+}
+
+pub(crate) struct NodeTextSpec {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub zh_title: &'static str,
+    pub description: &'static str,
+    pub zh_description: &'static str,
+    pub documentation: &'static str,
+    pub zh_documentation: &'static str,
+    pub aliases: &'static [&'static str],
+    pub zh_aliases: &'static [&'static str],
+}
+
+#[derive(Clone)]
+struct NodeKeys {
+    title: I18nKey,
+    description: I18nKey,
+    documentation: I18nKey,
+    aliases: I18nKey,
+}
+
+impl NodeKeys {
+    fn new(id: &'static str) -> Self {
+        Self {
+            title: i18n(leak(format!("nodes.{id}.title"))),
+            description: i18n(leak(format!("nodes.{id}.description"))),
+            documentation: i18n(leak(format!("nodes.{id}.documentation"))),
+            aliases: i18n(leak(format!("nodes.{id}.aliases"))),
+        }
+    }
+}
+
+struct CoreKernelLowerer {
+    handle: &'static str,
+    effect: EffectSemantics,
+}
+
+impl NodeLowerer for CoreKernelLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let kernel = KernelHandle::new(self.handle)
+            .map_err(|error| LoweringError::new(error.to_string()))?;
+        let parameters = CompiledParameterHandle::new(format!("node.{}", context.node_id))
+            .map_err(|error| LoweringError::new(error.to_string()))?;
+        Ok(LoweredNode {
+            kernel: LoweredKernel::Kernel(CompiledKernelFragment {
+                kernel,
+                metadata: FragmentMetadata {
+                    effect: self.effect,
+                    ..FragmentMetadata::default()
+                },
+            }),
+            parameters,
+        })
+    }
+}
+
+pub(crate) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
+    let effect = protocol.execution.effects;
+    RegisteredNode::leaf(
+        Arc::new(protocol),
+        Arc::new(NodeImplementation::new(CoreKernelLowerer {
+            handle: kernel,
+            effect,
+        })),
+    )
+}
+
+pub(crate) fn structural(protocol: NodeProtocol, role: StructuralNodeRole) -> RegisteredNode {
+    RegisteredNode::structural(Arc::new(protocol), role)
+}
+
+pub(crate) fn protocol(
+    id: &'static str,
+    category: &'static str,
+    ports: Vec<PortSpec>,
+    type_parameters: Vec<TypeParameterId>,
+    type_constraints: Vec<TypeConstraint>,
+    parameters: Vec<ParameterSpec>,
+    execution: ExecutionSemantics,
+) -> NodeProtocol {
+    let keys = NodeKeys::new(id);
+    NodeProtocol {
+        type_id: semantic(id, NodeTypeId::new),
+        catalog: NodeCatalogProtocol {
+            title_key: keys.title,
+            description_key: Some(keys.description),
+            documentation_key: Some(keys.documentation),
+            aliases_key: Some(keys.aliases),
+            category_id: semantic(category, NodeCategoryId::new),
+            icon_id: semantic(leak(format!("builtin.{category}")), IconId::new),
+            style_id: semantic("builtin.default", NodeStyleId::new),
+            hidden: false,
+        },
+        interface: NodeInterfaceProtocol::new(ports, type_parameters, type_constraints)
+            .expect("core node family must produce a valid interface"),
+        parameters: ParameterSchema::new(parameters)
+            .expect("core node family must produce unique parameters"),
+        execution,
+        scope: NodeScope::Any,
+        managed_role: None,
+    }
+}
+
+pub(crate) fn data_port(
+    node_id: &'static str,
+    key: &'static str,
+    direction: PortDirection,
+    value_type: TypeExpr,
+) -> PortSpec {
+    data_port_with_instances(node_id, key, direction, value_type, PortInstances::Declared)
+}
+
+pub(crate) fn data_port_with_instances(
+    node_id: &'static str,
+    key: &'static str,
+    direction: PortDirection,
+    value_type: TypeExpr,
+    instances: PortInstances,
+) -> PortSpec {
+    PortSpec {
+        key: semantic(key, PortKey::new),
+        label_key: port_key(node_id, key),
+        direction,
+        kind: PortKind::Data,
+        value_type,
+        instances,
+        connections: ConnectionsPerPort::Single,
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Allowed,
+            default_value: None,
+        }),
+        consumption: (direction == PortDirection::Input)
+            .then_some(InputConsumption::FullyMaterialized),
+        production: (direction == PortDirection::Output)
+            .then_some(OutputProduction::FullyMaterialized),
+        editor: PortEditorSpec::Default,
+        schema: None,
+    }
+}
+
+pub(crate) fn control_port(
+    node_id: &'static str,
+    key: &'static str,
+    direction: PortDirection,
+    instances: PortInstances,
+) -> PortSpec {
+    PortSpec {
+        key: semantic(key, PortKey::new),
+        label_key: port_key(node_id, key),
+        direction,
+        kind: PortKind::Control,
+        value_type: TypeExpr::Unknown,
+        instances,
+        connections: ConnectionsPerPort::Single,
+        input_binding: None,
+        consumption: None,
+        production: None,
+        editor: PortEditorSpec::Default,
+        schema: None,
+    }
+}
+
+pub(crate) fn parameter(
+    node_id: &'static str,
+    key: &'static str,
+    value_type: TypeExpr,
+    default_value: Option<ParameterValue>,
+    constraints: Vec<ParameterConstraint>,
+    editor: ParameterEditorSpec,
+) -> ParameterSpec {
+    ParameterSpec {
+        key: semantic(key, ParameterKey::new),
+        title_key: parameter_key(node_id, key, "title"),
+        description_key: Some(parameter_key(node_id, key, "description")),
+        value_type,
+        default_value,
+        constraints,
+        editor,
+    }
+}
+
+pub(crate) fn concrete(id: &'static str) -> TypeExpr {
+    TypeExpr::Concrete(semantic(id, TypeId::new))
+}
+
+pub(crate) fn data_series(element: &'static str) -> TypeExpr {
+    TypeExpr::Applied {
+        constructor: semantic("core.data_series", TypeConstructorId::new),
+        arguments: vec![concrete(element)],
+    }
+}
+
+pub(crate) fn pure() -> ExecutionSemantics {
+    ExecutionSemantics {
+        determinism: Determinism::Deterministic,
+        purity: Purity::Pure,
+        evaluation: EvaluationPolicy::DemandDriven,
+        cache: CachePolicy::PerRun,
+        effects: EffectSemantics::None,
+    }
+}
+
+pub(crate) fn effectful() -> ExecutionSemantics {
+    ExecutionSemantics {
+        determinism: Determinism::EnvironmentDependent,
+        purity: Purity::Effectful,
+        evaluation: EvaluationPolicy::EagerWhenRegionEntered,
+        cache: CachePolicy::None,
+        effects: EffectSemantics::Ordered,
+    }
+}
+
+pub(crate) fn port_key(node_id: &'static str, key: &'static str) -> I18nKey {
+    i18n(leak(format!("nodes.{node_id}.ports.{key}.label")))
+}
+
+pub(crate) fn parameter_key(
+    node_id: &'static str,
+    key: &'static str,
+    suffix: &'static str,
+) -> I18nKey {
+    i18n(leak(format!("nodes.{node_id}.parameters.{key}.{suffix}")))
+}
+
+pub(crate) fn add_port_messages(
+    fragment: &mut ProviderFragment,
+    node_id: &'static str,
+    entries: &[(&'static str, &'static str, &'static str)],
+) {
+    for (key, en, zh) in entries {
+        let message_key = port_key(node_id, key);
+        fragment.text("en-US", message_key.clone(), en);
+        fragment.text("zh-CN", message_key, zh);
+    }
+}
+
+pub(crate) fn add_parameter_messages(
+    fragment: &mut ProviderFragment,
+    node_id: &'static str,
+    entries: &[(
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+        &'static str,
+    )],
+) {
+    for (key, en, zh, description, zh_description) in entries {
+        let title_key = parameter_key(node_id, key, "title");
+        let description_key = parameter_key(node_id, key, "description");
+        fragment.text("en-US", title_key.clone(), en);
+        fragment.text("zh-CN", title_key, zh);
+        fragment.text("en-US", description_key.clone(), description);
+        fragment.text("zh-CN", description_key, zh_description);
+    }
+}
+
+pub(crate) fn category(
+    id: &'static str,
+    title_key: &'static str,
+    order: i32,
+) -> CategoryRegistration {
+    CategoryRegistration {
+        id: semantic(id, NodeCategoryId::new),
+        title_key: i18n(title_key),
+        parent: None,
+        order,
+    }
+}
+
+pub(crate) fn empty_classes() -> BTreeSet<TypeClassId> {
+    BTreeSet::new()
+}
+
+pub(crate) fn i18n(value: &'static str) -> I18nKey {
+    semantic(value, I18nKey::new)
+}
+
+pub(crate) fn semantic<T>(
+    value: &'static str,
+    make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
+) -> T {
+    make(value).expect("core node semantic identifiers are static and valid")
+}
+
+pub(crate) fn leak(value: String) -> &'static str {
+    Box::leak(value.into_boxed_str())
+}

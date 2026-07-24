@@ -2,14 +2,13 @@ use crate::application::database_schema::enriched_database_dtos;
 use crate::error::AppError;
 use crate::log::LogLevel;
 use crate::log_app;
+use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::project::{
     ProjectIndex, ProjectState, RevealProjectResourceRequest, format_path_for_user_path,
     normalize_existing_path, resolve_reveal_path,
 };
-use crate::schema::{DatabasesVariablesDTO, GraphInstanceDTO, VariableInstanceDTO};
+use crate::schema::{DatabasesVariablesDTO, VariableInstanceDTO};
 use tauri::State;
-
-use super::types::LoadedProjectGraphDTO;
 
 /// 分阶段加载第一步：获取 databases + variables（含 schema）
 #[tauri::command]
@@ -60,18 +59,14 @@ pub fn get_project_index(state: State<ProjectState>) -> Result<ProjectIndex, App
 pub fn load_project_graph(
     state: State<ProjectState>,
     graph_path: String,
-) -> Result<LoadedProjectGraphDTO, AppError> {
+    locale: Option<String>,
+) -> Result<EditorGraphProjectionDto, AppError> {
     let graph_path =
         crate::project::GraphResourcePath::new(graph_path).map_err(|e| e.to_string())?;
-    let document = state.load_graph_from_current_project(&graph_path)?;
-    Ok(LoadedProjectGraphDTO {
-        graph: GraphInstanceDTO::from(&document.graph),
-        variables: document
-            .local_variables
-            .iter()
-            .map(|(id, variable)| (id.to_string(), VariableInstanceDTO::from(variable)))
-            .collect(),
-    })
+    state.load_graph_from_current_project(&graph_path)?;
+    state
+        .graph_projection(&graph_path, locale.as_deref().unwrap_or("en-US"))
+        .map_err(AppError::internal)
 }
 
 /// Resolve the on-disk path for a project resource (graph / database / worksheet).

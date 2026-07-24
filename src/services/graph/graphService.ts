@@ -87,21 +87,6 @@ export class GraphService {
         }
     }
 
-    /**
-     * 获取 Graph 详情
-     * @param graphPath - Graph 路径
-     * @returns Graph 对象
-     */
-    static async getGraph(graphPath: string): Promise<Graph> {
-        try {
-            const graph = await invoke<GraphInstanceDTO>("get_graph", { graphPath });
-            logger.graph.info(`Graph '${graphPath}' retrieved successfully`, 'GraphService');
-            return toFrontendGraph(graph);
-        } catch (error) {
-            logger.graph.error(`Error getting graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
 
     static async resolveGraphDynamicPins(graphPath: string): Promise<{ graph: Graph; inferenceWarnings: GraphValidationWarningDTO[] }> {
         try {

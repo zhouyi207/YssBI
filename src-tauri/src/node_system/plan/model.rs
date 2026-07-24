@@ -1,0 +1,336 @@
+use crate::node_system::analysis::CompileProvenance;
+use crate::node_system::document::NodeId;
+use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction};
+use std::fmt;
+
+macro_rules! index_type {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(u32);
+
+        impl $name {
+            pub const fn new(index: u32) -> Self {
+                Self(index)
+            }
+
+            pub const fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        impl From<u32> for $name {
+            fn from(index: u32) -> Self {
+                Self::new(index)
+            }
+        }
+    };
+}
+
+index_type!(OperationIndex);
+index_type!(ValueRef);
+index_type!(RelationalSubplanIndex);
+index_type!(RelationalOperatorIndex);
+
+macro_rules! opaque_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(Box<str>);
+
+        impl $name {
+            pub fn new(value: impl Into<Box<str>>) -> Result<Self, InvalidPlanId> {
+                let value = value.into();
+                if value.is_empty() || value.trim() != value.as_ref() {
+                    return Err(InvalidPlanId);
+                }
+                Ok(Self(value))
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+    };
+}
+
+opaque_id!(KernelHandle);
+opaque_id!(CompiledParameterHandle);
+opaque_id!(FunctionPlanHandle);
+opaque_id!(RelationalBackendId);
+opaque_id!(RelationalFragmentId);
+opaque_id!(ResourceId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidPlanId;
+
+impl fmt::Display for InvalidPlanId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("plan identifiers must be non-empty and have no surrounding whitespace")
+    }
+}
+
+impl std::error::Error for InvalidPlanId {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionPlan {
+    pub provenance: CompileProvenance,
+    /// Number of plan-global logical values addressable by `ValueRef`.
+    pub value_count: u32,
+    pub operations: Box<[PlannedOperation]>,
+    /// Values supplied without a producing operation in this plan.
+    pub value_sources: Box<[PlanValueSource]>,
+    pub value_dependencies: Box<[ValueDependency]>,
+    pub root_region: StructuredControlRegion,
+    pub effect_dependencies: Box<[EffectDependency]>,
+    pub relational_subplans: Box<[RelationalSubplan]>,
+    pub resources: Box<[CompiledResourceRequirement]>,
+    pub results: Box<[PlanResult]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PlanValueSource {
+    /// A value supplied by the event or function activation that enters this plan.
+    ExternalInput(ValueRef),
+    /// A value produced by structured control, such as a branch, loop, or call result.
+    ControlProduced(ValueRef),
+}
+
+impl PlanValueSource {
+    pub const fn value(self) -> ValueRef {
+        match self {
+            Self::ExternalInput(value) | Self::ControlProduced(value) => value,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedOperation {
+    pub source_node_id: NodeId,
+    pub source_node_type_id: NodeTypeId,
+    pub kernel: PlannedKernel,
+    pub inputs: Box<[PlannedInput]>,
+    pub outputs: Box<[PlannedOutput]>,
+    pub params: CompiledParameterHandle,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedInput {
+    pub value: ValueRef,
+    pub consumption: InputConsumption,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedOutput {
+    pub value: ValueRef,
+    pub production: OutputProduction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlannedKernel {
+    Native(KernelHandle),
+    Relational(RelationalSubplanIndex),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValueDependency {
+    pub source: ValueRef,
+    pub destination: ValueRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectDependency {
+    pub before: OperationIndex,
+    pub after: OperationIndex,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StructuredControlRegion {
+    Sequence(Box<[ControlStep]>),
+    If {
+        condition: ValueRef,
+        then_region: Box<StructuredControlRegion>,
+        else_region: Box<StructuredControlRegion>,
+        results: Box<[BranchResultBinding]>,
+    },
+    Loop {
+        body: Box<StructuredControlRegion>,
+        carried: Box<[LoopCarriedBinding]>,
+        continue_condition: ValueRef,
+        max_iterations: u64,
+    },
+    Call {
+        target: FunctionPlanHandle,
+        arguments: Box<[RegionValueBinding]>,
+        results: Box<[RegionValueBinding]>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ControlStep {
+    Operation(OperationIndex),
+    Region(Box<StructuredControlRegion>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegionValueBinding {
+    pub destination: ValueRef,
+    pub source: ValueRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BranchResultBinding {
+    pub destination: ValueRef,
+    pub then_source: ValueRef,
+    pub else_source: ValueRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoopCarriedBinding {
+    pub body_input: ValueRef,
+    pub initial_source: ValueRef,
+    pub next_source: ValueRef,
+    pub result: ValueRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationalSubplan {
+    pub backend: RelationalBackendId,
+    pub compiled_plan: CompiledRelationalPlan,
+    /// Bridges required to materialize inputs consumed by this subplan.
+    pub materialization_bridges: Box<[PlannedMaterializationBridge]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedMaterializationBridge {
+    pub producer_fragment: RelationalFragmentId,
+    pub consumer_fragment: RelationalFragmentId,
+    pub producer_subplan: RelationalSubplanIndex,
+    pub consumer_subplan: RelationalSubplanIndex,
+    pub bridge: MaterializationBridge,
+}
+
+/// Backend-independent relational data consumed by a single relational runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledRelationalPlan {
+    /// Stable provenance and deterministic compilation order for the merged island.
+    pub fragment_order: Box<[RelationalFragmentId]>,
+    pub operators: Box<[RelationalOperator]>,
+    pub roots: Box<[RelationalOperatorIndex]>,
+    pub pushdown_hints: Box<[RelationalPushdownHint]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationalOperator {
+    /// An input supplied across a materialization boundary.
+    Input { name: Box<str> },
+    Source {
+        resource: ResourceId,
+        relation: Box<str>,
+    },
+    Project {
+        input: RelationalOperatorIndex,
+        columns: Box<[RelationalProjection]>,
+    },
+    Filter {
+        input: RelationalOperatorIndex,
+        predicate: RelationalExpression,
+    },
+    Rename {
+        input: RelationalOperatorIndex,
+        columns: Box<[RelationalRename]>,
+    },
+    Limit {
+        input: RelationalOperatorIndex,
+        rows: u64,
+    },
+    Union {
+        inputs: Box<[RelationalOperatorIndex]>,
+        all: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationalProjection {
+    pub name: Box<str>,
+    pub expression: RelationalExpression,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationalRename {
+    pub from: Box<str>,
+    pub to: Box<str>,
+}
+
+/// Structured expressions keep backend compilers from receiving executable query text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationalExpression {
+    Column(Box<str>),
+    Literal(RelationalLiteral),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
+    LessThan(Box<Self>, Box<Self>),
+    LessThanOrEqual(Box<Self>, Box<Self>),
+    GreaterThan(Box<Self>, Box<Self>),
+    GreaterThanOrEqual(Box<Self>, Box<Self>),
+    And(Box<[Self]>),
+    Or(Box<[Self]>),
+    Not(Box<Self>),
+    IsNull(Box<Self>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationalLiteral {
+    Null,
+    Boolean(bool),
+    Integer(i64),
+    String(Box<str>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationalPushdownHint {
+    Projection {
+        source: RelationalOperatorIndex,
+        columns: Box<[Box<str>]>,
+    },
+    Limit {
+        source: RelationalOperatorIndex,
+        rows: u64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaterializationBridge {
+    Stream,
+    Buffer,
+    Collect,
+    Spill,
+    Replay,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledResourceRequirement {
+    pub resource: ResourceId,
+    pub kind: ResourceKind,
+    pub access: ResourceAccess,
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceKind {
+    DatabaseConnection,
+    Accelerator,
+    Sidecar,
+    TemporaryStorage,
+    ExternalArtifact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceAccess {
+    Shared,
+    Exclusive,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanResult {
+    pub name: Box<str>,
+    pub value: ValueRef,
+}
