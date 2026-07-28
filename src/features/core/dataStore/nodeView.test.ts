@@ -1,18 +1,23 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { NodeData, PinData } from '@/shared/types/store/graph';
-import type { NodeDefinition } from '@/shared/types/domain/node';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import { toUiNode, uiNodeHasNoHeader } from './nodeView';
 
 const baseNode: NodeData = {
   id: 'node-1',
   graphPath: 'graph-1',
-  nodeType: 'Math:Add',
-  category: ['Math'],
-  title: 'Add',
+  nodeType: 'math.add',
+  category: [],
+  title: 'Projected Add',
   inputs: ['pin-in'],
   outputs: ['pin-out'],
   position: { x: 10, y: 20 },
+  display: {
+    title: 'Projected Add',
+    description: 'Projected description',
+    userLabel: null,
+    iconId: null,
+    styleId: 'math',
+  },
 };
 
 const inputPin: PinData = {
@@ -21,7 +26,6 @@ const inputPin: PinData = {
   name: 'A',
   type: 'object',
   direction: 'input',
-  dataType: { kind: 'Float64' },
 };
 
 const outputPin: PinData = {
@@ -30,51 +34,31 @@ const outputPin: PinData = {
   name: 'Result',
   type: 'object',
   direction: 'output',
-  dataType: { kind: 'Float64' },
 };
 
 describe('toUiNode', () => {
-  beforeEach(() => {
-    const def: NodeDefinition = {
-      name: 'Add',
-      category: ['Math'],
-      nodeType: 'Math:Add',
-      nodeMetadata: {
-        uiStyle: 'math',
-        supports_dynamic_pins: false,
-        graph_scope: 'any',
-        shell_role: null,
-      },
-      pinSlots: [],
-      typeCapabilities: [],
-    };
-    useNodeRegistryStore.getState().setDefinitionsFromSchema(
-      new Map([['Math:Add', def]]),
-    );
-  });
-
-  it('maps NodeData and pin slices to UINode with connection views', () => {
+  it('maps projected display and pin slices to a canvas node', () => {
     const view = toUiNode(baseNode, {
       pins: [
-        { pin: inputPin, connectionIds: ['pin-out->pin-in'] },
-        { pin: outputPin, connectionIds: ['pin-out->pin-in'] },
+        { pin: inputPin, connectionIds: ['connection-1'] },
+        { pin: outputPin, connectionIds: ['connection-1'] },
       ],
     });
 
-    expect(view.id).toBe('node-1');
-    expect(view.uiStyle).toBe('math');
-    expect(view.inputs).toHaveLength(1);
-    expect(view.outputs).toHaveLength(1);
+    expect(view).toMatchObject({
+      id: 'node-1',
+      nodeType: 'math.add',
+      title: 'Projected Add',
+      description: 'Projected description',
+      uiStyle: 'math',
+    });
     expect(view.inputs[0].connected).toBe(true);
-    expect(view.outputs[0].connectionIds).toEqual(['pin-out->pin-in']);
+    expect(view.outputs[0].connectionIds).toEqual(['connection-1']);
   });
 
-  it('applies title override for contextual nodes', () => {
-    const view = toUiNode(baseNode, {
-      title: 'My Function',
-      pins: [],
-    });
-    expect(view.title).toBe('My Function');
+  it('applies an explicit contextual title override', () => {
+    const view = toUiNode(baseNode, { title: 'Context title', pins: [] });
+    expect(view.title).toBe('Context title');
   });
 });
 

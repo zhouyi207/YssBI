@@ -3,6 +3,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
 export async function revealProjectResourceInExplorer(
@@ -23,7 +24,8 @@ export async function revealProjectResourceInExplorer(
 export async function renameWorksheetResource(id: string, nextName: string): Promise<void> {
   const store = useWorksheetStore.getState();
   if (!store.documents[id]) {
-    store.upsertDocument(await WorksheetService.loadWorksheet(id));
+    const { projectInstanceId } = captureProjectCommandContext();
+    store.upsertDocument(await WorksheetService.loadWorksheet(projectInstanceId, id));
   }
   store.updateDocument(id, { name: nextName });
   await store.saveDocument(id);

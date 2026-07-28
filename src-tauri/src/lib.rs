@@ -126,6 +126,7 @@ pub fn run() {
             update_function_signature,
             hydrate_editor_graph,
             mutate_graph_document,
+            get_project_history_status,
             undo_graph_document,
             redo_graph_document,
             execute_graph_document,

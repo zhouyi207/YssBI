@@ -7,6 +7,11 @@ import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+import { useHistoryStore } from '@/features/core/history';
+import {
+  EDITOR_MUTATION_CAPABILITIES,
+  notifyNodeCreationUnavailable,
+} from './editorMutationAvailability';
 
 interface UseEditorKeyboardProps {
   deleteSelected: () => void;
@@ -53,6 +58,8 @@ export function useEditorKeyboard({
   toggleDetail,
   toggleZenMode,
 }: UseEditorKeyboardProps) {
+  const canUndo = useHistoryStore((state) => state.canUndo && !state.pending);
+  const canRedo = useHistoryStore((state) => state.canRedo && !state.pending);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const pendingCtrlKRef = useRef(false);
   const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,19 +125,26 @@ export function useEditorKeyboard({
       if (e.key === "Delete" || e.key === "Backspace") {
         deleteSelected();
       } else if (isControlKey && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) redo();
-        else undo();
+        if (e.shiftKey) {
+          if (canRedo) redo();
+        } else if (canUndo) undo();
       } else if (isControlKey && e.key.toLowerCase() === "y") {
-        redo();
+        if (canRedo) redo();
       } else if (isControlKey && e.key.toLowerCase() === "c") {
         copy();
       } else if (isControlKey && e.key.toLowerCase() === "x") {
         cut();
       } else if (isControlKey && e.key.toLowerCase() === "v") {
-        paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+        e.preventDefault();
+        if (EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
+          paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+        } else {
+          notifyNodeCreationUnavailable();
+        }
       } else if (isControlKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        duplicateSelected?.();
+        if (EDITOR_MUTATION_CAPABILITIES.duplicateNodes) duplicateSelected?.();
+        else notifyNodeCreationUnavailable();
       } else if (isControlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (e.shiftKey) saveGraphAs();
@@ -219,6 +233,8 @@ export function useEditorKeyboard({
     deleteSelected,
     undo,
     redo,
+    canUndo,
+    canRedo,
     copy,
     cut,
     paste,

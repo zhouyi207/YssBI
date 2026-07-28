@@ -228,7 +228,7 @@ pub struct RunResult {
     pub correlation: CorrelationContext,
     pub values: BTreeMap<Box<str>, RuntimeValue>,
     pub committed_variable_ids: Box<[crate::variable::VariableId]>,
-    pub resource_deltas: Vec<crate::node_system::document::ResourceDeltaEvent>,
+    pub resource_mutation: Option<crate::event::ResourceMutationResultDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

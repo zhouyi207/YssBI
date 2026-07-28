@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { activateGraphTab, deactivateGraphTab } from './activateGraphTab';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
-import { markResourceLoaded } from '@/features/core/resource';
-import { makeTestGraph } from '@/tests/helpers/graphFixtures';
+import { getDocumentState, markResourceLoaded } from '@/features/core/resource';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 
 describe('activateGraphTab', () => {
   const graphPath = 'events/Main.yssbi-event';
@@ -11,11 +12,13 @@ describe('activateGraphTab', () => {
   beforeEach(() => {
     useGraphSessionStore.getState().reset();
     useGraphDataStore.setState({ graphEntities: {} });
+    useDocumentStateStore.getState().clear();
     vi.restoreAllMocks();
   });
 
   it('calls loadGraph once and completes editor activation when graph is available', async () => {
-    useGraphDataStore.getState().addGraphFromData(graphPath, makeTestGraph({ path: graphPath }));
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     markResourceLoaded({ id: graphPath, kind: 'event' });
 
     const loadGraph = vi.fn(async () => true);
@@ -27,6 +30,17 @@ describe('activateGraphTab', () => {
     expect(loadGraph).toHaveBeenCalledTimes(1);
     expect(loadGraph).toHaveBeenCalledWith(graphPath);
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe(graphPath);
+  });
+
+  it('does not mark an empty graph cache loaded when loadGraph reports success', async () => {
+    const loadGraph = vi.fn(async () => true);
+    useProjectIOStore.setState({ loadGraph });
+
+    const ok = await activateGraphTab(graphPath, 'editor-1');
+
+    expect(ok).toBe(false);
+    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
+    expect(getDocumentState({ id: graphPath, kind: 'event' })?.loaded).not.toBe(true);
   });
 
   it('rolls back session when loadGraph fails', async () => {

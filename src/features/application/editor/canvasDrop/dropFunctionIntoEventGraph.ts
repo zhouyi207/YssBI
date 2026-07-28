@@ -5,12 +5,17 @@ import { clientToWorldInCanvas, isPointInsideCanvas } from './variableDrop';
 import { isFunctionAvailable } from './editorResources';
 import type { CreateNodeFn } from './createNodeFn';
 import type { EditorFunctions } from '@/features/core/editor';
+import {
+  EDITOR_MUTATION_CAPABILITIES,
+  notifyNodeCreationUnavailable,
+} from '../editorMutationAvailability';
 
 export function canDropFunctionIntoEventGraph(
   groupId: string,
   resource: Pick<GraphResourceDragData, 'type' | 'id'>,
   shiftKey: boolean,
 ): boolean {
+  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) return false;
   if (!shiftKey || resource.type !== 'function') return false;
 
   const activeTab = getActiveLayoutTab(groupId)?.tab;
@@ -31,6 +36,10 @@ export async function dropFunctionCallIntoEventGraph(
   functions: EditorFunctions,
   createNode: CreateNodeFn,
 ): Promise<boolean> {
+  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) {
+    notifyNodeCreationUnavailable();
+    return false;
+  }
   if (!isPointInsideCanvas(canvasElement, clientX, clientY)) return false;
   if (!isFunctionAvailable(functionPath, functions)) return false;
 

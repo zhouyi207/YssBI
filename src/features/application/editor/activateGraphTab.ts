@@ -1,6 +1,6 @@
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { useProjectIOStore } from '@/features/core/dataStore';
+import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
 import { markResourceLoaded } from '@/features/core/resource';
 import { ensureEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
@@ -35,7 +35,7 @@ export async function activateGraphTab(
   touchGraphDocument(graphPath);
 
   const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
-  if (!loaded) {
+  if (!loaded || !useGraphDataStore.getState().hasGraph(graphPath)) {
     if (previous) {
       sessionStore.setFocusedSession(groupId, previous);
     } else {

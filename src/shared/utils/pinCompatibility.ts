@@ -1,7 +1,7 @@
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { Pin, PinDirection } from '@/shared/types/domain/pin';
 import { isExecPin } from '@/shared/types/domain/pinSemantics';
-import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
+import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
 import type {
   PinDataTypeDefinition,
   PinTypeCapability,
@@ -9,7 +9,12 @@ import type {
   PinSlot,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
-import { getActiveTypeSystem, structCanAccept } from '@/shared/types/domain/typeSystem';
+import { structCanAccept } from '@/shared/types/domain/typeSystem';
+import type { PinData } from '@/shared/types/store/graph';
+
+export type ConnectionCandidatePin = Pin & Partial<
+  Pick<PinData, 'connections' | 'kind' | 'resolvedType'>
+>;
 
 /**
  * Mirror of backend DataType.can_accept():
@@ -18,7 +23,7 @@ import { getActiveTypeSystem, structCanAccept } from '@/shared/types/domain/type
 function canAcceptDataType(
   target: DataType,
   source: DataType,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   if (target.kind === source.kind) {
     if (target.kind === 'Array' && source.kind === 'Array') {
@@ -60,7 +65,7 @@ export function buildPinDataType(pin: Pin): DataType {
 export function pinAcceptsType(
   draggedPin: Pin,
   candidateType: DataType,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   const draggedType = buildPinDataType(draggedPin);
   if (draggedPin.direction === 'input') {
@@ -70,17 +75,17 @@ export function pinAcceptsType(
 }
 
 export function isPinCompatible(
-  candidate: Pin,
-  dragged: Pin,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  candidate: ConnectionCandidatePin,
+  dragged: ConnectionCandidatePin,
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   return canConnectPins(candidate, dragged, typeSystem);
 }
 
 export function canConnectPins(
-  a: Pin,
-  b: Pin,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  a: ConnectionCandidatePin,
+  b: ConnectionCandidatePin,
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   if (a.id === b.id) return false;
   if (a.nodeId === b.nodeId) return false;
@@ -94,7 +99,15 @@ export function canConnectPins(
   if (sourceIsExec !== targetIsExec) return false;
   if (sourceIsExec) return true;
 
-  return canAcceptDataType(buildPinDataType(target), buildPinDataType(source), typeSystem);
+  if (source.connections?.canConnect === false || target.connections?.canConnect === false) {
+    return false;
+  }
+
+  if (!source.dataType || !target.dataType) {
+    return source.kind === 'data' && target.kind === 'data';
+  }
+
+  return canAcceptDataType(target.dataType, source.dataType, typeSystem);
 }
 
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
@@ -111,7 +124,7 @@ function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
 function isCapabilityCompatible(
   cap: PinTypeCapability,
   draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   const neededDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
   if (cap.direction !== neededDir) return false;
@@ -137,7 +150,7 @@ function isCapabilityCompatible(
 export function isNodeCompatibleWithPin(
   def: NodeDefinition,
   draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   if (!def.typeCapabilities || def.typeCapabilities.length === 0) return true;
   return def.typeCapabilities.some((cap) => isCapabilityCompatible(cap, draggedPin, typeSystem));
@@ -178,7 +191,7 @@ function generateInitialPinsFromSlots(slots: PinSlot[]): PinDefinitionDTO[] {
 export function findAutoConnectPinIndex(
   slots: PinSlot[],
   draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = getActiveTypeSystem(),
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): number {
   const targetDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
   const draggedIsExec = isExecPin(draggedPin);

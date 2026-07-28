@@ -23,6 +23,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
 import { ZenModeHintOverlay } from "./Layout/ZenModeHintOverlay";
 import { NodeDocumentationModal } from "./Layout/NodeDocumentationModal";
+import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
 function EditorWindowReady() {
   const rootId = useLayoutStore((s) => s.rootId);
@@ -36,6 +37,7 @@ function EditorWindowReady() {
   useWorkbenchLayout();
   useEditorWorkbenchAppearance();
   useProjectSync();
+  useProjectionLocaleSync();
 
   const editor = useEditorGroup();
   const { toggleLogPanel, toggleDetail } = useMenubar();

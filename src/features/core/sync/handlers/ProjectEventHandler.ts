@@ -40,11 +40,7 @@ export class ProjectClearedHandler extends BaseEventHandler<void> {
 export class ProjectSavedHandler extends BaseEventHandler<ProjectSavedPayload> {
     eventType = 'ProjectSaved';
     
-    handle(payload: ProjectSavedPayload, callbacks?: EventCallbacks): void {
-        this.log('Project saved:', payload.path);
-        
-        useProjectIOStore.getState().setCurrentPath(payload.path);
-        
-        callbacks?.onProjectSaved?.(payload.path);
+    handle(payload: ProjectSavedPayload, _callbacks?: EventCallbacks): void {
+        this.log('Project saved:', payload.result.operationId);
     }
 }

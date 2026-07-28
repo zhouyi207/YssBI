@@ -56,6 +56,21 @@ describe('resolveDetailPanelModel', () => {
     ).toMatchObject({ kind: 'data', id: 'df-1', dataframe: { name: 'Sales' } });
   });
 
+  it('preserves the focused graph path for node detail selection', () => {
+    expect(
+      resolveDetailPanelModel({
+        target: { kind: 'node', id: 'shared-node', graphPath: 'functions/second' },
+        selectedLog: null,
+        worksheetDocument: null,
+        ...catalog,
+      }),
+    ).toEqual({
+      kind: 'node',
+      nodeId: 'shared-node',
+      graphPath: 'functions/second',
+    });
+  });
+
   it('merges function signature pins into function panel model', () => {
     const model = resolveDetailPanelModel({
       target: { kind: 'function', path: 'fn-1' },

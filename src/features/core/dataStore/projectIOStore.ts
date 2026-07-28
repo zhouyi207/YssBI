@@ -1,18 +1,18 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
-import { ProjectService, toFrontendGraph } from '@/services/project/projectService';
-import { GraphService } from '@/services/graph/graphService';
+import { ProjectService } from '@/services/project/projectService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { logger } from '@/utils/appLogger';
 
 import type { DatabaseRecord } from '@/shared/types/dto/database';
 import { normalizeDatabases } from '@/shared/types/dto/database';
-import { domainGraphRecordToGraphData, graphDataRecordToDomainGraphs } from '@/shared/types/dto/graphModel';
+import { graphDataRecordToDomainGraphs } from '@/shared/types/dto/graphModel';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
-import { syncFunctionSignatureFromGraph, hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
+
+import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
@@ -26,15 +26,23 @@ import {
   variableCatalogToResourceMetas,
 } from '@/features/core/variable/variableCatalog';
 import { resetClientProjectState } from './projectClientReset';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { useHistoryStore } from '@/features/core/history';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
 import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
+import {
+  beginGraphLoadLifecycle,
+  loadGraphProjection,
+  resetGraphProjectionCoordinator,
+} from '@/features/application/editorProjection/graphProjectionCoordinator';
 
 interface ProjectIOStore {
   status: LoadStatus;
   error: string | null;
 
   currentPath: string | null;
+  projectInstanceId: string | null;
 
   setCurrentPath(path: string | null): void;
   /** 从 Rust 当前项目状态拉取并灌入前端 store（路径、变量、库、图索引）；合并并发调用 */
@@ -127,6 +135,7 @@ async function refreshProjectResourceIndex(): Promise<boolean> {
 async function refreshProjectResourceIndexOnce(): Promise<boolean> {
   try {
     const index = await ProjectService.getProjectIndex();
+    if (index.projectInstanceId !== useProjectIOStore.getState().projectInstanceId) return false;
     const variableCatalog = applyVariableCatalogFromIndex(index.variables);
     useVariableStore.getState().setVariables(variableCatalog);
 
@@ -176,13 +185,23 @@ function applyDatabasesFromRaw(raw: Record<string, unknown>): Record<string, Dat
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
 let loadProjectInFlight: Promise<ProjectData | null> | null = null;
 
-const loadGraphInFlight = new Map<string, Promise<boolean>>();
+interface GraphLoadInFlight {
+  lifecycleToken: number;
+  promise: Promise<boolean>;
+}
+
+const loadGraphInFlight = new Map<string, GraphLoadInFlight>();
+
+export function invalidateGraphLoadOwnership(graphPath: string): void {
+  loadGraphInFlight.delete(graphPath);
+}
 
 export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   status: LoadStatus.Idle,
   error: null,
 
   currentPath: null,
+  projectInstanceId: null,
 
   setCurrentPath: (path) => set({ currentPath: path ? formatDisplayPath(path) : null }),
 
@@ -200,12 +219,17 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
 
         // Drop residue from any previously loaded project before hydrating new
         // values. Backend authoritatively cleared its in-memory state already.
+        resetGraphProjectionCoordinator();
+        loadGraphInFlight.clear();
         resetClientProjectState();
+        set({ projectInstanceId: null });
+        useGraphDataStore.setState({ graphEntities: {} });
 
         const { databases } = await ProjectService.getDatabasesVariables();
         const normalizedDatabases = applyDatabasesFromRaw(databases as Record<string, unknown>);
 
         const index = await ProjectService.getProjectIndex();
+        set({ projectInstanceId: index.projectInstanceId });
         const normalizedVariables = applyVariableCatalogFromIndex(index.variables);
         useVariableStore.getState().setVariables(normalizedVariables);
 
@@ -219,7 +243,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         useWorksheetStore.getState().setIndex(
           worksheetIndex,
         );
-        useGraphDataStore.getState().hydrateGraphs({});
+
         useResourceStore.getState().setSnapshot({
           resources: buildResourceIndex({
             graphs: index.graphs,
@@ -230,7 +254,15 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
           graphOrder,
         });
         hydrateFunctionSignaturesFromProjectIndex(index.graphs);
+        useHistoryStore.setState({
+          canUndo: index.history.canUndo,
+          canRedo: index.history.canRedo,
+        });
         reconcileOpenLayoutTabsWithResources();
+        projectPublicationCoordinator.startProject(
+          index.projectInstanceId,
+          index.publicationRevision,
+        );
 
         set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
         logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
@@ -256,11 +288,15 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   refreshResourceIndex: refreshProjectResourceIndex,
 
   loadProjectFromData: (project, path) => {
+    resetGraphProjectionCoordinator();
+    loadGraphInFlight.clear();
     resetClientProjectState();
+    set({ projectInstanceId: null });
+    useGraphDataStore.setState({ graphEntities: {} });
     const normalizedVariables = normalizeVariables(project.variables);
     const normalizedDatabases = applyDatabasesFromRaw(project.databases as Record<string, unknown>);
     useVariableStore.getState().setVariables(normalizedVariables);
-    useGraphDataStore.getState().hydrateGraphs(domainGraphRecordToGraphData(project.graphs));
+
     useResourceStore.getState().setSnapshot({
       resources: buildResourceIndex({
         graphs: Object.values(project.graphs).map((graph) => ({
@@ -284,54 +320,24 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     }
 
     const existing = loadGraphInFlight.get(graphPath);
-    if (existing) return existing;
+    if (existing) return existing.promise;
 
-    const pending = (async (): Promise<boolean> => {
-      try {
-        const { graph, variables } = await ProjectService.loadProjectGraph(graphPath);
-        let frontendGraph;
-        try {
-          const resolved = await GraphService.resolveGraphDynamicPins(graphPath);
-          const warningsByPin = new Map<string, string>();
-          for (const warning of resolved.inferenceWarnings) {
-            warningsByPin.set(warning.fromPinId, warning.message);
-            warningsByPin.set(warning.toPinId, warning.message);
-          }
-          frontendGraph = {
-            ...resolved.graph,
-            pins: resolved.graph.pins.map((pin) => ({ ...pin, validationWarning: warningsByPin.get(pin.id) })),
-          };
-        } catch (resolveErr) {
-          logger.sys.warn(
-            'Dynamic pin materialize failed, using loaded graph: ' +
-              formatErrorMessage(resolveErr, 'resolve failed'),
-            'ProjectIOStore',
-          );
-          frontendGraph = toFrontendGraph(graph);
-        }
-        useVariableStore.getState().setVariables({
-          ...useVariableStore.getState().variables,
-          ...normalizeVariables(variables as Parameters<typeof normalizeVariables>[0]),
-        });
-        useResourceStore.getState().upsertResource(
-          buildGraphResourceMeta(frontendGraph.type, graphPath, frontendGraph.name),
-        );
-        syncFunctionSignatureFromGraph({
-          ...frontendGraph,
-        });
-        useGraphDataStore.getState().addGraphFromData(graphPath, frontendGraph);
-        return true;
-      } catch (err) {
-        const errorMessage = formatErrorMessage(err, 'Failed to load graph');
-        logger.sys.error('Failed to load graph: ' + errorMessage, 'ProjectIOStore');
+    const lifecycleToken = beginGraphLoadLifecycle(graphPath);
+    const pending = loadGraphProjection(graphPath, lifecycleToken)
+      .catch((err) => {
+        const errorMessage = formatErrorMessage(err, 'Failed to load graph projection');
+        logger.sys.error('Failed to load graph projection: ' + errorMessage, 'ProjectIOStore');
         set({ error: errorMessage });
         return false;
-      } finally {
-        loadGraphInFlight.delete(graphPath);
-      }
-    })();
+      })
+      .finally(() => {
+        const current = loadGraphInFlight.get(graphPath);
+        if (current?.lifecycleToken === lifecycleToken && current.promise === pending) {
+          loadGraphInFlight.delete(graphPath);
+        }
+      });
 
-    loadGraphInFlight.set(graphPath, pending);
+    loadGraphInFlight.set(graphPath, { lifecycleToken, promise: pending });
     return pending;
   },
 

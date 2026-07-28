@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import type { Pin, PinDirection } from '@/shared/types/domain/pin';
+import type { PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
-import { buildPinDataType, pinAcceptsType, isPinCompatible, canConnectPins, findAutoConnectPinIndex } from './pinCompatibility';
+import {
+  buildPinDataType,
+  pinAcceptsType,
+  isPinCompatible,
+  canConnectPins,
+  findAutoConnectPinIndex,
+  type ConnectionCandidatePin,
+} from './pinCompatibility';
 import { defaultFunctionSignature, resolveEffectiveDefinition, CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 
 const FLOAT64: DataType = { kind: 'Float64' };
@@ -21,14 +28,16 @@ const TYPE_SYSTEM: TypeSystemSnapshot = {
   },
 };
 
-function pin(partial: Partial<Pin> & { direction: PinDirection }): Pin {
+function pin(
+  partial: Partial<ConnectionCandidatePin> & { direction: PinDirection },
+): ConnectionCandidatePin {
   return {
     id: partial.id ?? 'p1',
     nodeId: partial.nodeId ?? 'n1',
     name: partial.name ?? 'pin',
     type: partial.type ?? 'object',
     ...partial,
-  } as Pin;
+  } as ConnectionCandidatePin;
 }
 
 describe('buildPinDataType', () => {
@@ -169,6 +178,48 @@ describe('isPinCompatible reuses pinAcceptsType', () => {
 });
 
 describe('canConnectPins', () => {
+  it('allows Rust to validate projected data ports without a legacy type-system snapshot', () => {
+    const output = pin({
+      id: 'projected-output',
+      nodeId: 'source',
+      direction: 'output',
+      kind: 'data',
+      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
+      resolvedType: { display: 'Float64', resolved: true },
+    });
+    const input = pin({
+      id: 'projected-input',
+      nodeId: 'target',
+      direction: 'input',
+      kind: 'data',
+      connections: { current: 0, maximum: 1, ordered: false, canConnect: true },
+      resolvedType: { display: 'Float64', resolved: true },
+    });
+
+    expect(canConnectPins(output, input)).toBe(true);
+  });
+
+  it('rejects projected ports whose Rust-authored connection capability is disabled', () => {
+    const output = pin({
+      id: 'projected-output',
+      nodeId: 'source',
+      direction: 'output',
+      kind: 'data',
+      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
+      resolvedType: { display: 'Float64', resolved: true },
+    });
+    const input = pin({
+      id: 'projected-input',
+      nodeId: 'target',
+      direction: 'input',
+      kind: 'data',
+      connections: { current: 1, maximum: 1, ordered: false, canConnect: false },
+      resolvedType: { display: 'Float64', resolved: true },
+    });
+
+    expect(canConnectPins(output, input)).toBe(false);
+  });
+
   it('accepts compatible pins regardless of argument order', () => {
     const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
     const input = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });

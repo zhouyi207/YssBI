@@ -1,8 +1,7 @@
-import { useDatabaseStore, useGraphMetaStore } from '@/features/core/dataStore';
+import { useDatabaseStore } from '@/features/core/dataStore';
+import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import {
   commitAfterCommand,
-  graphResourceRef,
-  normalizeBackendResourceMeta,
   useResourceStore,
   type ResourceRef,
 } from '@/features/core/resource';
@@ -10,6 +9,8 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
 import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+
 import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
 
@@ -24,18 +25,18 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   if (!name) return;
 
   if (ref.kind === 'event' || ref.kind === 'function') {
-    const backendMeta = await GraphService.renameGraphResource(ref.id, name);
-    const meta = normalizeBackendResourceMeta(backendMeta);
-    const targetRef = graphResourceRef(meta.id, ref.kind);
-
-    // Path migration is owned by GraphResourceMoved; patch name/uri only to preserve document state.
-    useResourceStore.getState().patchResource(targetRef, {
-      name: meta.name,
-      uri: meta.uri,
-      exists: meta.exists,
-      loaded: meta.loaded,
-    });
-    useGraphMetaStore.getState().updateGraph(meta.id, { name: meta.name });
+    const projectInstanceId = useProjectIOStore.getState().projectInstanceId;
+    if (!projectInstanceId) {
+      throw new Error('Cannot rename a graph without an active project lifecycle');
+    }
+    const result = await GraphService.renameGraphResource(projectInstanceId, ref.id, name);
+    if (
+      result.projectInstanceId !== projectInstanceId
+      || useProjectIOStore.getState().projectInstanceId !== projectInstanceId
+    ) {
+      throw new Error('stale project lifecycle for graph rename');
+    }
+    await projectPublicationCoordinator.submit({ result });
     return;
   }
 

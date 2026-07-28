@@ -1,15 +1,15 @@
 use super::CancellationToken;
 use crate::node_system::analysis::{ProjectSessionId, RunId};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
 struct ProjectRuns {
     active: BTreeMap<ProjectSessionId, BTreeMap<RunId, CancellationToken>>,
     preparing: BTreeMap<ProjectSessionId, BTreeMap<u64, CancellationToken>>,
-    draining: BTreeSet<ProjectSessionId>,
+    draining: BTreeMap<ProjectSessionId, usize>,
 }
 
 #[derive(Default)]
@@ -30,7 +30,7 @@ impl ProjectRunRegistry {
         cancellation: CancellationToken,
     ) -> Result<ProjectPreRunRegistration<'_>, ProjectRunRegistrationError> {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
-        if runs.draining.contains(&project) {
+        if runs.draining.contains_key(&project) {
             cancellation.cancel();
             return Err(ProjectRunRegistrationError::ProjectDraining(project));
         }
@@ -53,7 +53,7 @@ impl ProjectRunRegistry {
         cancellation: CancellationToken,
     ) -> Result<ProjectRunRegistration<'_>, ProjectRunRegistrationError> {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
-        if runs.draining.contains(&project) {
+        if runs.draining.contains_key(&project) {
             cancellation.cancel();
             return Err(ProjectRunRegistrationError::ProjectDraining(project));
         }
@@ -68,9 +68,12 @@ impl ProjectRunRegistry {
         })
     }
 
-    pub fn cancel_and_drain(&self, project: &ProjectSessionId) {
+    pub fn begin_drain(self: &Arc<Self>, project: &ProjectSessionId) -> ProjectRunDrainGuard {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
-        runs.draining.insert(project.clone());
+        let drain_count = runs.draining.entry(project.clone()).or_default();
+        *drain_count = drain_count
+            .checked_add(1)
+            .expect("project run drain guard count overflowed");
         if let Some(preparing) = runs.preparing.get(project) {
             for cancellation in preparing.values() {
                 cancellation.cancel();
@@ -87,7 +90,14 @@ impl ProjectRunRegistry {
                 .wait(runs)
                 .unwrap_or_else(|error| error.into_inner());
         }
-        runs.draining.remove(project);
+        ProjectRunDrainGuard {
+            registry: Arc::clone(self),
+            project: project.clone(),
+        }
+    }
+
+    pub fn cancel_and_drain(self: &Arc<Self>, project: &ProjectSessionId) {
+        drop(self.begin_drain(project));
     }
 
     pub fn active_run_count(&self) -> usize {
@@ -98,6 +108,17 @@ impl ProjectRunRegistry {
             .values()
             .map(BTreeMap::len)
             .sum()
+    }
+
+    #[cfg(test)]
+    fn drain_count_for_test(&self, project: &ProjectSessionId) -> usize {
+        self.runs
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .draining
+            .get(project)
+            .copied()
+            .unwrap_or_default()
     }
 
     fn release_pre_run(&self, project: &ProjectSessionId, registration_id: u64) {
@@ -126,6 +147,30 @@ impl ProjectRunRegistry {
             runs.active.remove(project);
             self.drained.notify_all();
         }
+    }
+
+    fn release_drain(&self, project: &ProjectSessionId) {
+        let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        let remove_project = if let Some(drain_count) = runs.draining.get_mut(project) {
+            *drain_count -= 1;
+            *drain_count == 0
+        } else {
+            false
+        };
+        if remove_project {
+            runs.draining.remove(project);
+        }
+    }
+}
+
+pub struct ProjectRunDrainGuard {
+    registry: Arc<ProjectRunRegistry>,
+    project: ProjectSessionId,
+}
+
+impl Drop for ProjectRunDrainGuard {
+    fn drop(&mut self) {
+        self.registry.release_drain(&self.project);
     }
 }
 
@@ -180,6 +225,48 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn nested_drain_guards_keep_admission_closed_until_last_drop() {
+        let registry = Arc::new(ProjectRunRegistry::new());
+        let session = ProjectSessionId::new("nested-drain");
+        let first = registry.begin_drain(&session);
+        let second = registry.begin_drain(&session);
+
+        assert_eq!(registry.drain_count_for_test(&session), 2);
+        assert!(matches!(
+            registry.track_pre_run(session.clone(), CancellationToken::new()),
+            Err(ProjectRunRegistrationError::ProjectDraining(_))
+        ));
+        assert!(matches!(
+            registry.track(session.clone(), RunId::new(1), CancellationToken::new()),
+            Err(ProjectRunRegistrationError::ProjectDraining(_))
+        ));
+
+        drop(first);
+        assert_eq!(registry.drain_count_for_test(&session), 1);
+        assert!(matches!(
+            registry.track_pre_run(session.clone(), CancellationToken::new()),
+            Err(ProjectRunRegistrationError::ProjectDraining(_))
+        ));
+        assert!(matches!(
+            registry.track(session.clone(), RunId::new(2), CancellationToken::new()),
+            Err(ProjectRunRegistrationError::ProjectDraining(_))
+        ));
+
+        drop(second);
+        assert_eq!(registry.drain_count_for_test(&session), 0);
+        drop(
+            registry
+                .track_pre_run(session.clone(), CancellationToken::new())
+                .unwrap(),
+        );
+        drop(
+            registry
+                .track(session, RunId::new(3), CancellationToken::new())
+                .unwrap(),
+        );
+    }
 
     #[test]
     fn project_drain_cancels_graph_compiler_with_the_pre_run_token() {

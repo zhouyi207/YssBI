@@ -1,5 +1,10 @@
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import type { FunctionSignaturePin, GraphType } from '@/shared/types';
+import { dataTypeFromDisplayString } from '@/shared/types/domain/dataType';
+import {
+  createDataSignaturePin,
+} from '@/shared/types/domain/functionSignaturePin';
+import type { FunctionSignatureDto } from '@/shared/types/dto/editorMutation';
 import type { ProjectGraphIndexRow } from '@/services/project/projectService';
 
 /** 从后端图 DTO / 领域图读取签名并写入 graphMetaStore（UI 签名唯一来源，见 functionResourceView）。 */
@@ -34,6 +39,30 @@ export function syncFunctionSignatureFromGraph(graph: FunctionSignatureSource): 
   });
 }
 
+export function functionSignaturePins(signature: FunctionSignatureDto): {
+  functionInputs: FunctionSignaturePin[];
+  functionOutputs: FunctionSignaturePin[];
+} {
+  const functionInputs = signature.parameters.map((parameter) =>
+    createDataSignaturePin(
+      parameter.id,
+      parameter.name,
+      dataTypeFromDisplayString(parameter.type_name) ?? { kind: 'Any' },
+    ),
+  );
+  const returnType = signature.return_type
+    ? dataTypeFromDisplayString(signature.return_type) ?? { kind: 'Any' as const }
+    : null;
+  return {
+    functionInputs,
+    functionOutputs: returnType
+      ? [createDataSignaturePin('return', 'Result', returnType)]
+      : [],
+  };
+}
+
+
+
 /** 项目打开 / 索引刷新：从 `getProjectIndex` 的函数行 hydrate 签名表（与后端索引层对齐）。 */
 export function hydrateFunctionSignaturesFromProjectIndex(
   graphs: ProjectGraphIndexRow[],
@@ -41,10 +70,14 @@ export function hydrateFunctionSignaturesFromProjectIndex(
   const graphMetaStore = useGraphMetaStore.getState();
   for (const row of graphs) {
     if (row.type !== 'function') continue;
+    if (row.functionRevision == null || !row.functionSignature) continue;
     const existing = graphMetaStore.graphs[row.path];
+    if (existing?.functionRevision != null
+      && existing.functionRevision >= row.functionRevision) continue;
     const patch = {
-      functionInputs: row.functionInputs ?? [],
-      functionOutputs: row.functionOutputs ?? [],
+      functionRevision: row.functionRevision,
+      functionSignature: row.functionSignature,
+      ...functionSignaturePins(row.functionSignature),
     };
     if (existing) {
       graphMetaStore.updateGraph(row.path, patch);

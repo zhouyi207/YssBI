@@ -6,6 +6,8 @@ export interface WorksheetEncodings {
 }
 
 export interface WorksheetDocument {
+  schemaVersion: number;
+  revision: number;
   id: string;
   name: string;
   databaseId: string;

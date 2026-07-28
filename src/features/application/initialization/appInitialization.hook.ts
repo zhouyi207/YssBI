@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
-import { useSchemaStore } from '@/features/core/schema';
 import { initProjectSync } from '@/features/core/dataStore';
 import { logger } from '@/utils/appLogger';
-
 
 export function useAppInitialization(): InitializationState {
     const [state, setState] = useState<InitializationState>({
@@ -12,29 +10,10 @@ export function useAppInitialization(): InitializationState {
         error: null,
     });
 
-    const schemaStatus = useSchemaStore((s) => s.status);
-    const schemaError = useSchemaStore((s) => s.error);
-
-    const isSchemaReady = schemaStatus === LoadStatus.Ready;
-
     useEffect(() => {
         let cancelled = false;
 
-        if (state.error) return;
-
-        if (schemaError) {
-            logger.sys.error('Initialization failed: Schema error ' + schemaError, 'AppInit');
-            setState({ status: LoadStatus.Error, error: `Schema: ${schemaError}` });
-            return;
-        }
-
-        if (!isSchemaReady) {
-            setState({ status: LoadStatus.Loading, error: null });
-            if (schemaStatus === LoadStatus.Idle) {
-                useSchemaStore.getState().syncFromBackend();
-            }
-            return;
-        }
+        setState({ status: LoadStatus.Loading, error: null });
 
         const syncProject = async () => {
             try {
@@ -52,12 +31,12 @@ export function useAppInitialization(): InitializationState {
             }
         };
 
-        syncProject();
+        void syncProject();
 
         return () => {
             cancelled = true;
         };
-    }, [isSchemaReady, schemaError, schemaStatus, state.error]);
+    }, []);
 
     return state;
 }

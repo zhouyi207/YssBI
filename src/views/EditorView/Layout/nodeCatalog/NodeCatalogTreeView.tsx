@@ -35,6 +35,7 @@ export interface NodeCatalogTreeViewProps {
   showSearchBar?: boolean;
   /** Debounced filter string (used when showSearchBar is false). */
   filterQuery?: string;
+  leafActionsEnabled?: boolean;
 }
 
 function CatalogSearchBar({
@@ -102,6 +103,7 @@ export function NodeCatalogTreeView({
   autoFocusSearch = true,
   showSearchBar = true,
   filterQuery = '',
+  leafActionsEnabled = true,
 }: NodeCatalogTreeViewProps) {
   const { t } = useTranslation();
   const [queryRaw, setQueryRaw] = useState('');
@@ -234,6 +236,7 @@ export function NodeCatalogTreeView({
                   level={row.level}
                   selected={selectedKey === row.item.nodeType}
                   onLeafClick={onLeafClick}
+                  actionsEnabled={leafActionsEnabled}
                 />
               ) : (
                 <CategoryRow
@@ -264,11 +267,13 @@ const CatalogLeafRow = React.memo(function CatalogLeafRow({
   level,
   selected,
   onLeafClick,
+  actionsEnabled,
 }: {
   item: NodeCatalogItem;
   level: number;
   selected: boolean;
   onLeafClick?: (item: NodeCatalogItem) => void;
+  actionsEnabled: boolean;
 }) {
   if (!item?.nodeType) return null;
 
@@ -283,6 +288,7 @@ const CatalogLeafRow = React.memo(function CatalogLeafRow({
         selected && 'bg-[var(--sidebar-active)]',
       )}
       style={{ paddingLeft }}
+      disabled={!actionsEnabled}
       onClick={() => onLeafClick?.(item)}
     >
       {nodeCatalogItemIcon(item)}

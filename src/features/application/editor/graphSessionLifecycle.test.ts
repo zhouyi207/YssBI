@@ -6,7 +6,15 @@ vi.mock('@/services/graph/graphService', () => ({
   },
 }));
 
+vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
+  GraphProjectionService: {
+    loadGraph: vi.fn(),
+    hydrateGraph: vi.fn(),
+  },
+}));
+
 vi.mock('@/features/core/dataStore/projectIOStore', () => ({
+  invalidateGraphLoadOwnership: vi.fn(),
   useProjectIOStore: {
     getState: () => ({
       loadGraph: vi.fn(async () => true),
@@ -17,11 +25,33 @@ vi.mock('@/features/core/dataStore/projectIOStore', () => ({
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { resetEditorTabStore, seedEditorGroupTabs } from '@/features/core/layout/editorTabTestUtils';
 import { useGraphDataStore } from '@/features/core/dataStore';
+import {
+  buildGraphResourceMeta,
+  getDocumentState,
+  markResourceLoaded,
+  useDocumentStateStore,
+  useResourceStore,
+} from '@/features/core/resource';
+import { isGraphCachedInMemory } from '@/features/core/dataStore/graphDocumentLoadPolicy';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import {
+  hydrateGraphProjection,
+  resetGraphProjectionCoordinator,
+} from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
 import { unloadGraphDocument } from './graphDocumentUnload';
 import { activateEditorGroup } from './switchEditorTab';
 import { activateGraphTab } from './activateGraphTab';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 vi.mock('./activateGraphTab', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./activateGraphTab')>();
@@ -36,6 +66,9 @@ describe('graphSessionLifecycle', () => {
     vi.clearAllMocks();
     useGraphSessionStore.getState().reset();
     useGraphDataStore.setState({ graphEntities: {} });
+    useResourceStore.getState().clear();
+    useDocumentStateStore.getState().clear();
+    resetGraphProjectionCoordinator();
     resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',
@@ -110,6 +143,28 @@ describe('graphSessionLifecycle', () => {
     await unloadGraphDocument('events/closed.yssbi-event');
 
     expect(useGraphDataStore.getState().graphEntities['events/closed.yssbi-event']).toBeUndefined();
+  });
+
+  it('keeps a graph unloaded when a pending locale hydration resolves later', async () => {
+    const graphPath = 'events/closed.yssbi-event';
+    const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 4, title: 'Current' });
+    const localized = makeEditorProjectionFixture({ graphPath, sourceRevision: 4, title: 'Localized' });
+    const pending = deferred<typeof localized.projection>();
+    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useResourceStore.getState().setSnapshot({
+      resources: [buildGraphResourceMeta('event', graphPath, 'Closed')],
+    });
+    markResourceLoaded({ id: graphPath, kind: 'event' });
+    vi.mocked(GraphProjectionService.hydrateGraph).mockReturnValue(pending.promise);
+
+    const hydration = hydrateGraphProjection(graphPath, 'en-US');
+    await unloadGraphDocument(graphPath);
+    pending.resolve(localized.projection);
+    await hydration;
+
+    expect(useGraphDataStore.getState().hasGraph(graphPath)).toBe(false);
+    expect(getDocumentState({ id: graphPath, kind: 'event' })?.loaded).toBe(false);
+    expect(isGraphCachedInMemory(graphPath)).toBe(false);
   });
 
   it('activateEditorGroup keeps previous group graphs when their tabs remain open', async () => {

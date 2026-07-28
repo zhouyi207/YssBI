@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useEditorSessionDetailActions } from '@/features/application/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
 import { DetailEmptyState } from './DetailEmptyState';
@@ -29,7 +30,8 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
 
   useEffect(() => {
     if (!worksheetTargetId || worksheetDocument) return;
-    void WorksheetService.loadWorksheet(worksheetTargetId)
+    const { projectInstanceId } = captureProjectCommandContext();
+    void WorksheetService.loadWorksheet(projectInstanceId, worksheetTargetId)
       .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
       .catch(() => undefined);
   }, [worksheetTargetId, worksheetDocument]);
@@ -39,7 +41,7 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
       case 'log':
         return <LogDetailPanel log={model.log} />;
       case 'node':
-        return <NodeDetailPanel nodeId={model.nodeId} />;
+        return <NodeDetailPanel graphPath={model.graphPath} nodeId={model.nodeId} />;
       case 'nodeDefinition':
         return <NodeDefinitionDetailPanel nodeType={model.nodeType} />;
       case 'variable':

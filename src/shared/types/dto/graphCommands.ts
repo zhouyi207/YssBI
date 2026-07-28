@@ -1,5 +1,5 @@
 import type { PinData } from '@/shared/types';
-import type { GraphUndoPatch } from './graphUndoPatch';
+
 
 export interface CreateNodeResult { nodeId: string; pinIds: string[]; }
 export interface AutoDisconnected { fromPin: string; toPin: string; }
@@ -11,7 +11,6 @@ export interface ConnectPinsResult {
 export interface RemovedConnection { fromPin: string; toPin: string; }
 export interface DisconnectPinResult {
   removedConnections: RemovedConnection[];
-  undoPatch: GraphUndoPatch;
 }
 export interface AddRepeatablePinResult { pinId: string; pin: PinData; }
 export interface RemoveRepeatablePinResult {

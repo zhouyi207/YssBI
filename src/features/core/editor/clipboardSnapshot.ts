@@ -1,21 +1,19 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { isShellNodeDefinition } from '@/shared/types/domain';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
+import { canCopyNode } from '@/features/core/dataStore/graphNodeSelectors';
+
 import type { ClipboardEntry, ClipboardPinEntry, ClipboardSnapshot } from './stores/useClipboardStore';
 
 export function buildClipboardSnapshot(nodeIds: string[] , graphPath: string): ClipboardSnapshot | null {
   if (nodeIds.length === 0 || !graphPath) return null;
 
   const dataStore = useGraphDataStore.getState();
-  const registry = useNodeRegistryStore.getState();
+
   const allSelectedPinIds = new Set<string>();
   const entries: ClipboardEntry[] = [];
 
   for (const nodeId of nodeIds) {
     const node = dataStore.getGraphNode(graphPath, nodeId);
-    if (!node || node.isInternal) continue;
-    // 壳节点不可复制（Event Begin / Function Entry/Return）。
-    if (isShellNodeDefinition(registry.getDefinition(node.nodeType))) continue;
+    if (!node || !canCopyNode(graphPath, nodeId)) continue;
 
     const pinIds = dataStore.getGraphNodePins(graphPath, nodeId);
     const pins: ClipboardPinEntry[] = [];

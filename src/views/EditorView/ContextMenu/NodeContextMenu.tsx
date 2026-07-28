@@ -2,10 +2,15 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscCopy, VscEdit, VscLink, VscTrash } from "react-icons/vsc";
 import { ContextMenu, type ContextMenuPosition, type ContextMenuSection } from "@/shared/ui/contextMenu";
+import type { NodeCapabilitiesDto } from '@/shared/types/dto/editorProjection';
+import {
+  EDITOR_MUTATION_CAPABILITIES,
+  NODE_CREATION_UNAVAILABLE_MESSAGE,
+} from '@/features/application/editor/editorMutationAvailability';
 
 export interface NodeContextMenuProps {
   position: ContextMenuPosition;
-  isInternal?: boolean;
+  capabilities?: Pick<NodeCapabilitiesDto, 'managed' | 'canCopy' | 'canDelete'>;
   hasLinks?: boolean;
   onCopy: () => void;
   onCut: () => void;
@@ -18,7 +23,7 @@ export interface NodeContextMenuProps {
 
 export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   position,
-  isInternal,
+  capabilities,
   hasLinks,
   onCopy,
   onCut,
@@ -29,16 +34,26 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
-  const editable = !isInternal;
+  const canCopy = capabilities?.managed === false && capabilities.canCopy === true;
+  const canDelete = capabilities?.managed === false && capabilities.canDelete === true;
+  const canCut = canCopy && canDelete;
 
   const sections = useMemo((): ContextMenuSection[] => {
     const n = (key: string) => t(`contextMenu.node.${key}`);
     return [
       {
         items: [
-          { id: "copy", label: n("copy"), icon: <VscCopy size={12} />, disabled: !editable, shortcut: "Ctrl+C", onClick: onCopy },
-          { id: "cut", label: n("cut"), icon: <VscCopy size={12} />, disabled: !editable, shortcut: "Ctrl+X", onClick: onCut },
-          { id: "duplicate", label: n("duplicate"), icon: <VscCopy size={12} />, disabled: !editable, shortcut: "Ctrl+D", onClick: onDuplicate },
+          { id: "copy", label: n("copy"), icon: <VscCopy size={12} />, disabled: !canCopy, shortcut: "Ctrl+C", onClick: onCopy },
+          { id: "cut", label: n("cut"), icon: <VscCopy size={12} />, disabled: !canCut, shortcut: "Ctrl+X", onClick: onCut },
+          {
+            id: "duplicate",
+            label: n("duplicate"),
+            icon: <VscCopy size={12} />,
+            disabled: !EDITOR_MUTATION_CAPABILITIES.duplicateNodes,
+            title: NODE_CREATION_UNAVAILABLE_MESSAGE,
+            shortcut: "Ctrl+D",
+            onClick: onDuplicate,
+          },
         ],
       },
       {
@@ -56,11 +71,11 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       },
       {
         items: [
-          { id: "delete", label: n("delete"), icon: <VscTrash size={12} />, disabled: !editable, danger: true, shortcut: "Del", onClick: onDelete },
+          { id: "delete", label: n("delete"), icon: <VscTrash size={12} />, disabled: !canDelete, danger: true, shortcut: "Del", onClick: onDelete },
         ],
       },
     ];
-  }, [t, editable, hasLinks, onCopy, onCut, onDuplicate, onDelete, onBreakAllLinks, onSelectLinked]);
+  }, [t, canCopy, canCut, canDelete, hasLinks, onCopy, onCut, onDuplicate, onDelete, onBreakAllLinks, onSelectLinked]);
 
   return (
     <ContextMenu

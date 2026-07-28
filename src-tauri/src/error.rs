@@ -1,4 +1,4 @@
-use crate::project::ProjectError;
+use crate::project::{ProjectError, ProjectFilesystemError};
 use serde::Serialize;
 use serde_json::Value;
 use std::fmt;
@@ -33,6 +33,16 @@ impl From<String> for AppError {
 impl From<AppError> for String {
     fn from(error: AppError) -> Self {
         error.message
+    }
+}
+
+impl From<ProjectFilesystemError> for AppError {
+    fn from(error: ProjectFilesystemError) -> Self {
+        let mut app_error = Self::new(error.code(), error.to_string());
+        if error.recovery_required() {
+            app_error.details = Some(serde_json::json!({ "recoveryRequired": true }));
+        }
+        app_error
     }
 }
 

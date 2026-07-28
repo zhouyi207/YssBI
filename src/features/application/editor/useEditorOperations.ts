@@ -1,16 +1,20 @@
 import { useCallback, useRef } from 'react';
-import { getGraphByPath } from '@/features/core/dataStore';
-import { isShellNode } from '@/features/core/dataStore/graphNodeSelectors';
+import {
+  canCutNode,
+  canDeleteNode,
+} from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useClipboardStore } from '@/features/core/editor';
 import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
-import type { ClipboardSnapshot } from '@/features/core/editor/stores/useClipboardStore';
-import { useHistoryStore, executeCommand } from '@/features/core/history';
+import { executeCommand } from '@/features/core/history';
+import {
+  redoEditorHistory,
+  undoEditorHistory,
+} from '@/features/application/editorMutation/historyCoordinator';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { getViewport, editorViewportScope } from '@/features/core/viewport';
-import { logger } from '@/utils/appLogger';
+import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
 
 
 /**
@@ -18,18 +22,15 @@ import { logger } from '@/utils/appLogger';
  * Handles clipboard operations, history, and node operations
  */
 export function useEditorOperations() {
-  const clipboard = useClipboardStore((s) => s.clipboard);
   const setClipboard = useClipboardStore((s) => s.setClipboard);
 
-  const { activeTabId, selectedNodeIds, groupId } = useActiveEditorGroup();
+  const { activeTabId, selectedNodeIds } = useActiveEditorGroup();
 
   const activeTabIdRef = useRef(activeTabId);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
-  const groupIdRef = useRef(groupId);
 
   activeTabIdRef.current = activeTabId;
   selectedNodeIdsRef.current = selectedNodeIds;
-  groupIdRef.current = groupId;
 
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -40,13 +41,17 @@ export function useEditorOperations() {
 
   // ===== History =====
   const undo = useCallback(async () => {
-    const tid = activeTabIdRef.current;
-    return tid ? useHistoryStore.getState().undo(tid) : false;
+    const graphPath = activeTabIdRef.current;
+    if (!graphPath) return false;
+    const outcome = await undoEditorHistory(graphPath);
+    return outcome.status === 'applied';
   }, []);
 
   const redo = useCallback(async () => {
-    const tid = activeTabIdRef.current;
-    return tid ? useHistoryStore.getState().redo(tid) : false;
+    const graphPath = activeTabIdRef.current;
+    if (!graphPath) return false;
+    const outcome = await redoEditorHistory(graphPath);
+    return outcome.status === 'applied';
   }, []);
 
   // ===== Clipboard =====
@@ -70,45 +75,21 @@ export function useEditorOperations() {
     if (snapshot) setClipboard(snapshot);
   }, [setClipboard]);
 
-  const duplicateNodes = useCallback(async (nodeIds: string[], offset = { x: 40, y: 40 }) => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    const snapshot = buildClipboardSnapshot(nodeIds, tid);
-    if (!snapshot) return;
-
-    const dupSnapshot: ClipboardSnapshot = {
-      ...snapshot,
-      entries: snapshot.entries.map((e) => ({
-        ...e,
-        position: { x: e.position.x + offset.x, y: e.position.y + offset.y },
-      })),
-    };
-
-    try {
-      await executeCommand(tid, 'Composite', { snapshot: dupSnapshot });
-    } catch (e) {
-      logger.graph.error(`Failed to duplicate nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      uiStore.showToast("创建副本失败", "error", 2000);
-    }
+  const duplicateNodes = useCallback(async (_nodeIds: string[], _offset = { x: 40, y: 40 }) => {
+    notifyNodeCreationUnavailable();
+    return false;
   }, []);
 
   const deleteNodesById = useCallback(async (nodeIds: string[]) => {
     const tid = activeTabIdRef.current;
     if (!tid || nodeIds.length === 0) return;
 
-    const dataStore = useGraphDataStore.getState();
-    const idsToDelete = nodeIds.filter((id) => {
-      const node = dataStore.getGraphNode(tid, id);
-      return node && !node.isInternal;
-    });
+    const idsToDelete = nodeIds.filter((id) => canDeleteNode(tid, id));
     if (idsToDelete.length === 0) return;
 
-    try {
-      await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
-    } catch (e) {
-      logger.graph.error(`Failed to delete nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      uiStore.showToast("删除失败", "error", 2000);
-    }
+    const applied = await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
+    if (!applied) uiStore.showToast("删除失败", "error", 2000);
+    return applied;
   }, []);
 
   const breakAllNodeLinks = useCallback(async (nodeId: string) => {
@@ -118,12 +99,10 @@ export function useEditorOperations() {
     for (const pinId of pinIds) {
       const connIds = useGraphDataStore.getState().getGraphPinConnections(tid, pinId);
       if (connIds.length === 0) continue;
-      try {
-        await executeCommand(tid, 'DisconnectPin', { pinId });
-      } catch (e) {
-        logger.graph.error(`Failed to disconnect pin: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      }
+      const applied = await executeCommand(tid, 'DisconnectPin', { pinId });
+      if (!applied) return false;
     }
+    return true;
   }, []);
 
   const selectLinkedNodes = useCallback((nodeId: string) => {
@@ -152,53 +131,21 @@ export function useEditorOperations() {
   const disconnectPinById = useCallback(async (pinId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    try {
-      await executeCommand(tid, 'DisconnectPin', { pinId });
-    } catch (e) {
-      logger.graph.error(`Failed to disconnect pin: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-    }
+    return executeCommand(tid, 'DisconnectPin', { pinId });
   }, []);
 
   const resetPinValue = useCallback(async (nodeId: string, pinId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    try {
-      const { PinService } = await import('@/services');
-      await PinService.clearPinUserValue(tid, nodeId, pinId);
-      useGraphDataStore.getState().updatePin(pinId, { userValue: undefined }, tid);
-    } catch (e) {
-      logger.graph.error(`Failed to reset pin value: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      uiStore.showToast("恢复默认值失败", "error", 2000);
-    }
+    const applied = await executeCommand(tid, 'SetPinValue', { nodeId, pinId, newValue: null });
+    if (!applied) uiStore.showToast("恢复默认值失败", "error", 2000);
+    return applied;
   }, []);
 
-  const paste = useCallback(async (pos?: { x: number; y: number }) => {
-    if (!clipboard || clipboard.entries.length === 0) return;
-    const tid = activeTabIdRef.current;
-    const gid = groupIdRef.current;
-    if (!tid || !gid) return;
-
-    const vp = getViewport(editorViewportScope(gid, tid));
-    const tX = pos ? pos.x : -vp.x / vp.scale + 100;
-    const tY = pos ? pos.y : -vp.y / vp.scale + 100;
-    const minX = Math.min(...clipboard.entries.map(e => e.position.x));
-    const minY = Math.min(...clipboard.entries.map(e => e.position.y));
-
-    const snapshot: ClipboardSnapshot = {
-      ...clipboard,
-      entries: clipboard.entries.map(e => ({
-        ...e,
-        position: { x: e.position.x + (tX - minX), y: e.position.y + (tY - minY) },
-      })),
-    };
-
-    try {
-      await executeCommand(tid, 'Composite', { snapshot });
-    } catch (e) {
-      logger.graph.error(`Failed to paste nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      uiStore.showToast("粘贴失败", "error", 2000);
-    }
-  }, [clipboard]);
+  const paste = useCallback(async (_pos?: { x: number; y: number }) => {
+    notifyNodeCreationUnavailable();
+    return false;
+  }, []);
 
   const deleteSelected = useCallback(async () => {
     const sIds = new Set(selectedNodeIdsRef.current);
@@ -206,35 +153,40 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
 
-    const currentGraph = getGraphByPath(tid);
-    if (!currentGraph) return;
-
-    const currentNodes = currentGraph.nodes;
-    const idsToDelete = currentNodes
-      .filter(n => sIds.has(n.id) && !n.isInternal && !isShellNode(tid, n.id))
-      .map(n => n.id);
+    const dataStore = useGraphDataStore.getState();
+    const idsToDelete = dataStore
+      .getGraphNodeIds(tid)
+      .filter((nodeId) => sIds.has(nodeId) && canDeleteNode(tid, nodeId));
     if (idsToDelete.length === 0) return;
 
     setSelectedNodeIds([]);
 
-    try {
-      await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
-    } catch (e) {
-      logger.graph.error(`Failed to delete nodes: ${e instanceof Error ? e.message : String(e)}`, 'EditorOperations');
-      uiStore.showToast("删除失败", "error", 2000);
-    }
+    const applied = await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
+    if (!applied) uiStore.showToast("删除失败", "error", 2000);
+    return applied;
   }, [setSelectedNodeIds]);
 
   const cutNodes = useCallback(async (nodeIds: string[]) => {
-    copyNodes(nodeIds);
-    await deleteNodesById(nodeIds);
-    setSelectedNodeIds([]);
+    const tid = activeTabIdRef.current;
+    if (!tid) return;
+    const cuttableIds = nodeIds.filter((nodeId) => canCutNode(tid, nodeId));
+    if (cuttableIds.length === 0) return;
+
+    copyNodes(cuttableIds);
+    const deleted = await deleteNodesById(cuttableIds);
+    if (deleted) setSelectedNodeIds([]);
   }, [copyNodes, deleteNodesById, setSelectedNodeIds]);
 
   const cut = useCallback(async () => {
-    copy();
-    await deleteSelected();
-  }, [copy, deleteSelected]);
+    const tid = activeTabIdRef.current;
+    if (!tid) return;
+    const selected = new Set(selectedNodeIdsRef.current);
+    const nodeIds = useGraphDataStore
+      .getState()
+      .getGraphNodeIds(tid)
+      .filter((nodeId) => selected.has(nodeId));
+    await cutNodes(nodeIds);
+  }, [cutNodes]);
 
   const duplicateSelected = useCallback(async () => {
     const sIds = selectedNodeIdsRef.current;

@@ -1,3 +1,5 @@
+import type { HistoryStatusDto, ResourceKeyDto } from './editorMutation';
+
 /** Project registry command DTOs. Kept at the IPC boundary to avoid service-local copies. */
 export interface ProjectRecordRow {
   id: string;
@@ -21,4 +23,13 @@ export interface CleanupInvalidProjectsResult {
 export interface ProjectPathValidation {
   ok: boolean;
   message: string | null;
+}
+
+export interface ProjectSaveResultDto {
+  projectInstanceId: string;
+  operationId: string;
+  publicationRevision: number;
+  affectedResources: ResourceKeyDto[];
+  indexInvalidated: boolean;
+  history: HistoryStatusDto;
 }

@@ -1,15 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Graph } from "@/shared/types/domain";
-import type { FunctionSignaturePatch } from "@/shared/types";
-import type { GraphInstanceDTO, FunctionCallSiteDTO, GraphValidationWarningDTO } from "@/shared/types/dto";
-import { markResourceLoaded } from "@/features/core/resource";
-import type { BackendProjectResourceMeta } from "@/features/core/resource";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import type {
+    FunctionCallSiteDTO,
+    GraphInstanceDTO,
+    ProjectSaveResultDto,
+    ResourceMutationResultDto,
+} from "@/shared/types/dto";
+
 import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
 
+
+
 /**
- * Graph Service - 管理 Event、Function 的创建、删除、更新和查询
+ * Graph Service - 管理 Event、Function 资源生命周期与函数引用查询
  *
  * 创建时即分配 `events/…` / `functions/…` 路径并写入磁盘；正文在打开 tab 时从文件加载。
  */
@@ -60,44 +64,7 @@ export class GraphService {
         }
     }
 
-    static async updateFunctionSignature(
-        functionPath: string,
-        patch: FunctionSignaturePatch,
-    ): Promise<{ graph: Graph; callerGraphs: Graph[] }> {
-        try {
-            const result = await invoke<{
-                graph: GraphInstanceDTO;
-                callerGraphs: GraphInstanceDTO[];
-            }>(
-                "update_function_signature",
-                {
-                    functionPath,
-                    inputs: patch.inputs,
-                    outputs: patch.outputs,
-                },
-            );
-            logger.graph.info(`Function '${functionPath}' signature updated successfully`, 'GraphService');
-            return {
-                graph: toFrontendGraph(result.graph),
-                callerGraphs: (result.callerGraphs ?? []).map(toFrontendGraph),
-            };
-        } catch (error) {
-            logger.graph.error(`Error updating function signature: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
 
-
-    static async resolveGraphDynamicPins(graphPath: string): Promise<{ graph: Graph; inferenceWarnings: GraphValidationWarningDTO[] }> {
-        try {
-            const result = await invoke<{ graph: GraphInstanceDTO; inferenceWarnings: GraphValidationWarningDTO[] }>("resolve_graph_dynamic_pins", { graphPath });
-            logger.graph.info(`Graph '${graphPath}' dynamic pins materialized`, 'GraphService');
-            return { graph: toFrontendGraph(result.graph), inferenceWarnings: result.inferenceWarnings ?? [] };
-        } catch (error) {
-            logger.graph.error(`Error resolving graph dynamic pins: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
-            throw error;
-        }
-    }
 
     static async getFunctionCallSites(functionPath: string): Promise<FunctionCallSiteDTO[]> {
         return invoke<FunctionCallSiteDTO[]>("get_function_call_sites", { functionPath });
@@ -128,17 +95,26 @@ export class GraphService {
         return graphs.map(toFrontendGraph);
     }
 
-    static async unloadProjectGraph(graphPath: string): Promise<void> {
-        await invoke("unload_project_graph", { graphPath });
-        const kind = inferGraphResourceKind(graphPath);
-        if (kind) {
-            markResourceLoaded({ id: graphPath, kind }, false);
-        }
+    static async unloadProjectGraph(
+        graphPath: string,
+        lifecycleToken: number,
+        projectInstanceId: string,
+    ): Promise<void> {
+        await invoke("unload_project_graph", { graphPath, lifecycleToken, projectInstanceId });
     }
 
-    static async saveProjectGraph(graphPath: string): Promise<string> {
-        const result = await invoke<{ path: string }>("save_project_graph", { graphPath });
-        return result.path;
+    static async saveProjectGraph(
+        projectInstanceId: string,
+        graphPath: string,
+        expectedRevision: number,
+        operationId: string,
+    ): Promise<ProjectSaveResultDto> {
+        return await invoke<ProjectSaveResultDto>("save_project_graph", {
+            projectInstanceId,
+            graphPath,
+            expectedRevision,
+            operationId,
+        });
     }
 
     static async duplicateGraph(graphPath: string): Promise<string> {
@@ -148,9 +124,14 @@ export class GraphService {
     }
 
     static async renameGraphResource(
+        projectInstanceId: string,
         graphPath: string,
         newName: string,
-    ): Promise<BackendProjectResourceMeta> {
-        return invoke('rename_graph_resource', { graphPath, newName });
+    ): Promise<ResourceMutationResultDto> {
+        return invoke<ResourceMutationResultDto>('rename_graph_resource', {
+            projectInstanceId,
+            graphPath,
+            newName,
+        });
     }
 }

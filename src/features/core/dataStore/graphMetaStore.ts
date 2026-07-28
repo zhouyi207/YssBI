@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { GraphPath, NodeId, type FunctionSignaturePin } from '@/shared/types';
+import type { FunctionSignatureDto } from '@/shared/types/dto/editorMutation';
 import { logger } from '@/utils/appLogger';
 
 /** 函数签名投影（名称见 ResourceStore，图体见 GraphDataStore）。 */
@@ -8,6 +9,8 @@ export interface GraphMeta {
   name: string;
   type: 'event' | 'function';
   entryNodeId?: NodeId;
+  functionRevision?: number;
+  functionSignature?: FunctionSignatureDto;
   functionInputs?: FunctionSignaturePin[];
   functionOutputs?: FunctionSignaturePin[];
 }

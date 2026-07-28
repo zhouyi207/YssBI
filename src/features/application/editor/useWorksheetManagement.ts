@@ -4,6 +4,9 @@ import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames'
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { commitFileFirstResourceIndex } from '@/features/application/resource/resourceActions';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useSidebarTab } from './useSidebarTab';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
@@ -16,11 +19,16 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
   const addWorksheet = useCallback(
     async (databaseId?: string) => {
       try {
-        const document = await WorksheetService.createWorksheet(
+        const context = captureProjectCommandContext();
+        const created = await WorksheetService.createWorksheet(
+          context.projectInstanceId,
+          context.operationId,
           DEFAULT_WORKSHEET_NAME,
           databaseId,
         );
-        useWorksheetStore.getState().upsertDocument(document);
+        await projectPublicationCoordinator.submit({ result: created.result });
+
+        const { document } = created;
         await commitFileFirstResourceIndex();
         switchSidebarTab('charts');
         await openWorksheet(document.id, document.name);
@@ -39,7 +47,8 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
   const ensureWorksheetLoaded = useCallback(async (worksheetId: string) => {
     const cached = useWorksheetStore.getState().documents[worksheetId];
     if (cached) return cached;
-    const document = await WorksheetService.loadWorksheet(worksheetId);
+    const { projectInstanceId } = captureProjectCommandContext();
+    const document = await WorksheetService.loadWorksheet(projectInstanceId, worksheetId);
     useWorksheetStore.getState().upsertDocument(document);
     return document;
   }, []);
@@ -53,7 +62,8 @@ export function useOpenWorksheet() {
   return useCallback(async (id: string, _name: string) => {
     if (!useWorksheetStore.getState().documents[id]) {
       try {
-        const loaded = await WorksheetService.loadWorksheet(id);
+        const { projectInstanceId } = captureProjectCommandContext();
+        const loaded = await WorksheetService.loadWorksheet(projectInstanceId, id);
         useWorksheetStore.getState().upsertDocument(loaded);
       } catch {
         // Index-only open: WorksheetEditor retries load on mount.

@@ -23,6 +23,16 @@ describe('callFunctionDiagnostics', () => {
   it('detects empty and missing Call Function targets', () => {
     const graphPath = 'events/Main.yssbi-event';
     const bucket = {
+      basis: {
+        graphPath,
+        graphRevision: 1,
+        registryFingerprint: [],
+        resourceVersions: {},
+      },
+      sourceRevision: 1,
+      requestGeneration: 1,
+      diagnostics: [],
+      hasBlockingDiagnostics: false,
       nodes: {
         'call-empty': {
           id: 'call-empty',

@@ -9,7 +9,7 @@ use super::{ProjectError, SCHEMA_VERSION};
 pub const WORKSHEETS_DIR: &str = "worksheets";
 pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorksheetEncodings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -18,10 +18,12 @@ pub struct WorksheetEncodings {
     pub y: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorksheetDocument {
     pub schema_version: u32,
+    #[serde(default)]
+    pub revision: crate::node_system::document::ResourceRevision,
     pub id: String,
     pub name: String,
     pub database_id: String,
@@ -42,6 +44,7 @@ impl WorksheetDocument {
     pub fn new(name: impl Into<String>, database_id: impl Into<String>) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
+            revision: crate::node_system::document::ResourceRevision::INITIAL,
             id: Uuid::new_v4().to_string(),
             name: name.into(),
             database_id: database_id.into(),
@@ -113,7 +116,13 @@ pub fn load_worksheet_from_file(
     root: &Path,
     worksheet_id: &str,
 ) -> Result<WorksheetDocument, ProjectError> {
-    flatten_worksheet_layout(root)?;
+    load_worksheet_from_root_readonly(root, worksheet_id)
+}
+
+pub(crate) fn load_worksheet_from_root_readonly(
+    root: &Path,
+    worksheet_id: &str,
+) -> Result<WorksheetDocument, ProjectError> {
     for path in list_worksheet_files(root)? {
         let document = read_worksheet_document_path(path.as_path())?;
         if document.id == worksheet_id {
@@ -126,22 +135,11 @@ pub fn load_worksheet_from_file(
     )))
 }
 
-pub fn save_worksheet_to_file(
-    root: &Path,
+pub fn serialize_worksheet(
     document: &WorksheetDocument,
-) -> Result<(), ProjectError> {
-    flatten_worksheet_layout(root)?;
-    ensure_worksheets_dir(root)?;
-    let relative_path = worksheet_relative_path_for_save(root, &document.name, &document.id)?;
-    write_json(root.join(&relative_path).as_path(), document)
-}
-
-pub fn delete_worksheet_from_file(root: &Path, worksheet_id: &str) -> Result<(), ProjectError> {
-    flatten_worksheet_layout(root)?;
-    if let Some(path) = worksheet_absolute_path(root, worksheet_id)? {
-        std::fs::remove_file(path)?;
-    }
-    Ok(())
+) -> Result<(PathBuf, Vec<u8>), ProjectError> {
+    let contents = serde_json::to_vec_pretty(document).map_err(ProjectError::Serialize)?;
+    Ok((worksheet_relative_path(document), contents))
 }
 
 pub fn existing_worksheet_names(
@@ -159,6 +157,24 @@ pub fn existing_worksheet_names(
     let mut out: Vec<String> = names.into_iter().collect();
     out.sort();
     Ok(out)
+}
+
+pub(crate) fn load_worksheets_from_root(
+    root: &Path,
+) -> Result<std::collections::HashMap<String, WorksheetDocument>, ProjectError> {
+    let worksheets_dir = root.join(WORKSHEETS_DIR);
+    if !worksheets_dir.exists() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let mut paths = Vec::new();
+    collect_all_worksheet_files(&worksheets_dir, &mut paths)?;
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|path| {
+            read_worksheet_document_path(&path).map(|document| (document.id.clone(), document))
+        })
+        .collect()
 }
 
 fn list_worksheet_files(root: &Path) -> Result<Vec<PathBuf>, ProjectError> {
@@ -253,31 +269,6 @@ pub fn worksheet_absolute_path(
     Ok(None)
 }
 
-fn worksheet_relative_path_for_save(
-    root: &Path,
-    worksheet_name: &str,
-    worksheet_id: &str,
-) -> Result<String, ProjectError> {
-    let target_dir = root.join(WORKSHEETS_DIR);
-    std::fs::create_dir_all(&target_dir)?;
-    let existing_path = worksheet_absolute_path(root, worksheet_id)?;
-    let file_name = unique_worksheet_file_name(
-        target_dir.as_path(),
-        worksheet_name,
-        existing_path.as_deref(),
-    );
-    let next_path = target_dir.join(&file_name);
-    if let Some(existing_path) = existing_path {
-        if existing_path != next_path && existing_path.exists() {
-            std::fs::remove_file(existing_path)?;
-        }
-    }
-    next_path
-        .strip_prefix(root)
-        .map(path_to_slash_string)
-        .map_err(|e| ProjectError::InvalidProjectFormat(e.to_string()))
-}
-
 fn unique_worksheet_file_name(
     dir: &Path,
     worksheet_name: &str,
@@ -302,6 +293,10 @@ fn unique_worksheet_file_name(
     unreachable!("unique worksheet file name loop should always return")
 }
 
+pub(crate) fn worksheet_relative_path(document: &WorksheetDocument) -> PathBuf {
+    PathBuf::from(WORKSHEETS_DIR).join(format!("{}.{}", document.id, WORKSHEET_EXTENSION))
+}
+
 fn sanitize_file_stem(name: &str) -> String {
     let sanitized: String = name
         .trim()
@@ -323,19 +318,6 @@ fn sanitize_file_stem(name: &str) -> String {
     }
 }
 
-fn path_to_slash_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let json = serde_json::to_string_pretty(value).map_err(ProjectError::Serialize)?;
-    std::fs::write(path, json)?;
-    Ok(())
-}
-
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ProjectError> {
     let content = std::fs::read_to_string(path).map_err(ProjectError::Io)?;
     serde_json::from_str(&content).map_err(ProjectError::Deserialize)
@@ -355,7 +337,7 @@ mod tests {
     fn flatten_worksheet_layout_hoists_nested_files() {
         let root = temp_project_dir();
         let document = WorksheetDocument::new("Nested Sheet", "db-1");
-        save_worksheet_to_file(root.as_path(), &document).unwrap();
+        crate::project::fixtures::write_worksheet(root.as_path(), &document).unwrap();
 
         let nested_dir = root.join(WORKSHEETS_DIR).join("Sub");
         std::fs::create_dir_all(&nested_dir).unwrap();
@@ -386,7 +368,7 @@ mod tests {
     fn save_worksheet_writes_to_worksheets_root() {
         let root = temp_project_dir();
         let document = WorksheetDocument::new("Root Sheet", "db-1");
-        save_worksheet_to_file(root.as_path(), &document).unwrap();
+        crate::project::fixtures::write_worksheet(root.as_path(), &document).unwrap();
 
         let path = root
             .join(WORKSHEETS_DIR)

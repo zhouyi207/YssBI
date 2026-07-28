@@ -694,3 +694,26 @@ All Cargo commands used `CARGO_BUILD_JOBS=1` and were run one at a time.
 ## Commit state
 
 No commit was created.
+
+---
+
+# Node runtime correctness follow-up
+
+## Scope and status
+
+**PARTIAL — NEXT PRODUCTION CUT REQUIRED**
+
+- Immutable variable reads were already implemented before this slice.
+- Exclusive Run variable access now fails before resource acquisition; this slice does not commit variable writes.
+- Durable revisioned variable write commits remain future work.
+- Prediction family and ADF specification validation are strict.
+- `VarSummary` now performs real VAR estimation.
+- Statistics migration is not complete: OLS covariance configuration, non-identity GLS, panel estimator dispatch, DID inference, and summary formatting remain open and are not reported as complete.
+
+## Final-review fix wave
+
+- ADF now has a dedicated `regression` runtime parameter. One real production-chain test traverses catalog default/explicit `regression = trend` → `GraphDocument` → `build_run_parameters` → `build_builtin_kernel_registry` → `RunExecutor` → ADF kernel → `node_statistics`; it distinguishes the adapter's trend result from constant and, in the same test, proves an invalid regression reaches the final Run as `RunError::KernelFailed`. The separate builder/kernel tests are supplementary coverage.
+- `VAR Summary` now declares positive integer `lags` with default `1`. A production-chain test starts from catalog defaults, builds runtime parameters, executes the production kernel through `RunExecutor`, and proves lag `2` through coefficient counts and `L2.` labels. `VAR Lag Order` remains on `max_lags`.
+- Resource validation errors are structurally classified. Unsupported exclusive variable access reaches callers as `RunError::InvalidPlan` / `RunErrorCode::InvalidPlan`; project session and resource version mismatches remain `ResourceSnapshotMismatch`.
+- Prediction coverage now includes missing and non-string families plus a non-`ols` model passed to `LinearPredict`, in addition to nonlinear family mismatches.
+- These end-to-end claims are limited to the production chains explicitly exercised above. Durable revisioned variable writes and the unrelated statistics migrations listed in the preceding section remain open.

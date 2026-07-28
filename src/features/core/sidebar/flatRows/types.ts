@@ -1,4 +1,4 @@
-import type { HistoryEntry } from '@/features/core/history';
+
 import type { NodeCatalogItem } from '@/features/domain/nodeCatalog';
 import type { MouseEvent } from 'react';
 import type { SidebarSectionKey } from '../sidebarSectionState';
@@ -61,14 +61,7 @@ export type FlatSidebarRow =
       id: string;
       name: string;
     }
-  | {
-      kind: 'history';
-      rowKey: string;
-      level: number;
-      entry: HistoryEntry;
-      highlighted: boolean;
-      stack: 'undo' | 'redo';
-    }
+
   | {
       kind: 'node';
       rowKey: string;

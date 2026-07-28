@@ -1,34 +1,18 @@
-import { PinService } from '@/services/graph/pin/pinService';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { CommandHandler } from '../types';
+import { executeGraphIntent } from './executeGraphIntent';
 
 export interface AddRepeatablePinArgs {
   nodeId: string;
-  slotIndex: number;
+  template: string;
 }
 
-export interface AddRepeatablePinContext {
-  nodeId: string;
-  slotIndex: number;
-  pinId: string;
-}
-
-export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs, AddRepeatablePinContext> = {
-  async execute(graphPath, args) {
-    const result = await PinService.addRepeatablePin(graphPath, args.nodeId, args.slotIndex);
-    return {
-      nodeId: args.nodeId,
-      slotIndex: args.slotIndex,
-      pinId: result.pinId,
-    };
-  },
-
-  async undo(graphPath, context) {
-    await PinService.removeRepeatablePin(graphPath, context.nodeId, context.pinId);
-  },
-
-  async redo(graphPath, context) {
-    const result = await PinService.addRepeatablePin(graphPath, context.nodeId, context.slotIndex);
-    context.pinId = result.pinId;
+export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs> = {
+  execute(graphPath, args) {
+    return executeGraphIntent(graphPath, {
+      type: 'addPortInstance',
+      payload: { nodeId: args.nodeId, template: args.template, order: null },
+    });
   },
 };
 
@@ -37,30 +21,18 @@ export interface RemoveRepeatablePinArgs {
   pinId: string;
 }
 
-export interface RemoveRepeatablePinContext {
-  nodeId: string;
-  pinId: string;
-  slotIndex: number;
-  pinIndex: number;
-}
-
-export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs, RemoveRepeatablePinContext> = {
-  async execute(graphPath, args) {
-    const result = await PinService.removeRepeatablePin(graphPath, args.nodeId, args.pinId);
-    return {
-      nodeId: args.nodeId,
-      pinId: args.pinId,
-      slotIndex: result.slotIndex,
-      pinIndex: result.pinIndex,
-    };
-  },
-
-  async undo(graphPath, context) {
-    const result = await PinService.addRepeatablePin(graphPath, context.nodeId, context.slotIndex);
-    context.pinId = result.pinId;
-  },
-
-  async redo(graphPath, context) {
-    await PinService.removeRepeatablePin(graphPath, context.nodeId, context.pinId);
+export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs> = {
+  execute(graphPath, args) {
+    const pin = useGraphDataStore.getState().getGraphPin(graphPath, args.pinId);
+    if (!pin?.address || pin.address.kind !== 'instance') {
+      throw new Error(`Port '${args.pinId}' is not a removable port instance`);
+    }
+    if (pin.address.nodeId !== args.nodeId) {
+      throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);
+    }
+    return executeGraphIntent(graphPath, {
+      type: 'removePortInstance',
+      payload: { address: pin.address },
+    });
   },
 };

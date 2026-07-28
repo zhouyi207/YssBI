@@ -11,9 +11,15 @@ pub use model::{
 };
 pub use validation::RegistryValidationError;
 
-use crate::node_system::protocol::{NodeProtocol, ProtocolError, StaticNodeProtocol};
+use crate::node_system::protocol::{NodeProtocol, NodeTypeId, ProtocolError, StaticNodeProtocol};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+impl NodeRegistry {
+    pub fn protocol(&self, id: &NodeTypeId) -> Option<&NodeProtocol> {
+        self.get(id).map(|node| node.protocol.as_ref())
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct NodeRegistryBuilder {

@@ -1,57 +1,31 @@
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useHistoryStore } from '@/features/core/history';
-import type { HistoryEntry } from '@/features/core/history';
-import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
-import {
-  buildCommandsFlatRows,
-  useSidebarSectionExpandSnapshot,
-  useSidebarStore,
-} from '@/features/core/sidebar';
+import { useEditorHistoryAvailability } from '@/features/application/editor';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
-import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
-import { noopSidebarHandler } from '../sections/sidebarFlatRowContext';
-
-const EMPTY_STACK: HistoryEntry[] = [];
 
 export function SidebarCommandsTab() {
   const { t } = useTranslation();
-  const sectionExpanded = useSidebarSectionExpandSnapshot('commandsUndo', 'commandsRedo');
-  const toggleSection = useSidebarStore((s) => s.toggleSection);
+  const { activeTabId, canUndo, canRedo, pending } = useEditorHistoryAvailability();
 
-  const { activeTabId } = useActiveEditorGroup();
-
-  const undoStack = useHistoryStore((s) =>
-    activeTabId ? s.histories[activeTabId]?.undoStack ?? EMPTY_STACK : EMPTY_STACK,
-  );
-  const redoStack = useHistoryStore((s) =>
-    activeTabId ? s.histories[activeTabId]?.redoStack ?? EMPTY_STACK : EMPTY_STACK,
-  );
-
-  const rows = useMemo(
-    () =>
-      buildCommandsFlatRows({
-        undoStack,
-        redoStack,
-        hasActiveTab: Boolean(activeTabId),
-        expandedSections: sectionExpanded,
-        labels: {
-          undo: `${t('common.undo')} (${undoStack.length})`,
-          redo: `${t('common.redo')} (${redoStack.length})`,
-          noHistory: t('sidebar.noCommandHistory'),
-          noActiveGraph: t('sidebar.noActiveGraph'),
-        },
-      }),
-    [activeTabId, redoStack, sectionExpanded, t, undoStack],
-  );
+  if (!activeTabId) {
+    return (
+      <SidebarTabPanel>
+        <div className="p-3 text-xs text-muted-foreground">{t('sidebar.noActiveGraph')}</div>
+      </SidebarTabPanel>
+    );
+  }
 
   return (
     <SidebarTabPanel>
-      <SidebarFlatRowPanel
-        rows={rows}
-        onToggleSection={toggleSection}
-        onToggleGroup={noopSidebarHandler}
-      />
+      <div className="flex flex-col gap-1 p-2 text-xs text-muted-foreground">
+        <div className="flex h-7 items-center justify-between rounded-sm px-2">
+          <span>{t('common.undo')}</span>
+          <span aria-label={canUndo ? 'available' : 'unavailable'}>{pending ? '…' : canUndo ? '✓' : '—'}</span>
+        </div>
+        <div className="flex h-7 items-center justify-between rounded-sm px-2">
+          <span>{t('common.redo')}</span>
+          <span aria-label={canRedo ? 'available' : 'unavailable'}>{pending ? '…' : canRedo ? '✓' : '—'}</span>
+        </div>
+      </div>
     </SidebarTabPanel>
   );
 }

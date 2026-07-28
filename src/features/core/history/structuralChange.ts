@@ -2,8 +2,11 @@ import { useExecutionStore } from '@/features/core/execution';
 import type { CommandType } from './types';
 
 const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
-  'CreateNode', 'CreateNodeWithConnection', 'DeleteNodes', 'ConnectPins', 'DisconnectPin', 'Composite',
-  'AddRepeatablePin', 'RemoveRepeatablePin',
+  'DeleteNodes',
+  'ConnectPins',
+  'DisconnectPin',
+  'AddRepeatablePin',
+  'RemoveRepeatablePin',
 ]);
 
 export function notifyStructuralChange(type: CommandType , graphPath: string) {

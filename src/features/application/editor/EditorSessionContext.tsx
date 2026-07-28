@@ -48,7 +48,7 @@ export function useEditorSession(): EditorSession {
   const shared = useEditorSessionSharedContext();
   const workspace = useEditorGroupWorkspace();
   const ui = useEditorSessionUi();
-  const { canUndo, canRedo } = useEditorHistoryAvailability();
+  const { canUndo, canRedo, pending } = useEditorHistoryAvailability();
 
   return useMemo(
     (): EditorSession => ({
@@ -59,8 +59,9 @@ export function useEditorSession(): EditorSession {
       activeEditorGroupId: workspace.groupId,
       canUndo,
       canRedo,
+      pending,
     }),
-    [commands, shared, workspace, ui, canUndo, canRedo],
+    [commands, shared, workspace, ui, canUndo, canRedo, pending],
   );
 }
 

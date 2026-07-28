@@ -1,4 +1,6 @@
-use super::{GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata};
+use super::{
+    GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata, WorksheetDocument,
+};
 use crate::database::DatabaseDecl;
 use crate::node_system::document::{FunctionDocument, FunctionSignature, GraphDocument};
 use crate::variable::{VariableId, VariableInstance};
@@ -32,6 +34,8 @@ impl GraphResourceDocument {
 pub struct ProjectData {
     pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
+    #[serde(default)]
+    pub worksheets: HashMap<String, WorksheetDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }
@@ -43,10 +47,11 @@ impl ProjectData {
 
     pub fn info(&self) -> String {
         format!(
-            "variables={}, databases={}, graphs={}",
+            "variables={}, databases={}, graphs={}, worksheets={}",
             self.variables.len(),
             self.databases.len(),
-            self.graphs.len()
+            self.graphs.len(),
+            self.worksheets.len()
         )
     }
 

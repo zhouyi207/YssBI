@@ -28,13 +28,43 @@ import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 import { openExternalUrl } from "@/shared/utils/openExternalUrl";
 import { AboutModal } from "./AboutModal";
+import { EDITOR_MUTATION_CAPABILITIES } from '@/features/application/editor/editorMutationAvailability';
 import { JuliaMenuButton } from "./JuliaMenuButton";
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   shortcut?: string;
   onClick?: () => void;
   type?: 'item' | 'separator';
+}
+
+export function buildEditMenuItems(
+  translate: (key: string) => string,
+  state: { activeTabId: string | null; canUndo: boolean; canRedo: boolean },
+  actions: {
+    undo: () => void;
+    redo: () => void;
+    cut: () => void;
+    copy: () => void;
+    paste: () => void;
+    deleteSelected: () => void;
+  },
+): MenuItem[] {
+  const active = !!state.activeTabId;
+  return [
+    { label: translate("common.undo"), shortcut: "Ctrl+Z", onClick: (active && state.canUndo) ? actions.undo : undefined },
+    { label: translate("common.redo"), shortcut: "Ctrl+Y", onClick: (active && state.canRedo) ? actions.redo : undefined },
+    { label: "-" },
+    { label: translate("menubar.cut"), shortcut: "Ctrl+X", onClick: active ? actions.cut : undefined },
+    { label: translate("menubar.copy"), shortcut: "Ctrl+C", onClick: active ? actions.copy : undefined },
+    {
+      label: translate("menubar.paste"),
+      shortcut: "Ctrl+V",
+      onClick: active && EDITOR_MUTATION_CAPABILITIES.pasteNodes ? actions.paste : undefined,
+    },
+    { label: "-" },
+    { label: translate("common.delete"), shortcut: "Del", onClick: active ? actions.deleteSelected : undefined },
+  ];
 }
 
 interface MenuButtonProps {
@@ -161,16 +191,11 @@ export function Menubar() {
     { label: t("menubar.saveProjectAs"), shortcut: "Ctrl+Shift+S", onClick: canSaveProjectAs ? () => saveGraphAs() : undefined },
   ];
 
-  const editItems: MenuItem[] = [
-    { label: t("common.undo"), shortcut: "Ctrl+Z", onClick: (activeTabId && canUndo) ? undo : undefined },
-    { label: t("common.redo"), shortcut: "Ctrl+Y", onClick: (activeTabId && canRedo) ? redo : undefined },
-    { label: "-" },
-    { label: t("menubar.cut"), shortcut: "Ctrl+X", onClick: activeTabId ? cut : undefined },
-    { label: t("menubar.copy"), shortcut: "Ctrl+C", onClick: activeTabId ? copy : undefined },
-    { label: t("menubar.paste"), shortcut: "Ctrl+V", onClick: activeTabId ? () => paste() : undefined },
-    { label: "-" },
-    { label: t("common.delete"), shortcut: "Del", onClick: activeTabId ? deleteSelected : undefined },
-  ];
+  const editItems = buildEditMenuItems(
+    (key) => t(key),
+    { activeTabId, canUndo, canRedo },
+    { undo, redo, cut, copy, paste, deleteSelected },
+  );
 
   const dataItems: MenuItem[] = [
     { label: t("menubar.manageVariables") },

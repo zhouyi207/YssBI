@@ -24,16 +24,16 @@ describe('canDropFunctionIntoEventGraph', () => {
 
     expect(canDropFunctionIntoEventGraph('g1', draggedFunction, false)).toBe(false);
     expect(canDropFunctionIntoEventGraph('g1', { type: 'event', id: 'events/Main.yssbi-event' }, true)).toBe(false);
-    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(true);
+    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(false);
   });
 
-  it('allows dropping onto another function graph', () => {
+  it('keeps function-to-function node creation unavailable', () => {
     vi.mocked(getActiveLayoutTab).mockReturnValue({
       activeTabId: 'functions/B.yssbi-function',
       tab: { id: 'functions/B.yssbi-function', type: 'function', component: 'GraphEditor' },
     });
 
-    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(true);
+    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(false);
   });
 
   it('rejects dropping a function onto itself', () => {

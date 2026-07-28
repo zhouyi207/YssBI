@@ -64,6 +64,7 @@ pub struct StatisticsKernelParameters {
     pub lags: Option<usize>,
     pub max_lags: Option<usize>,
     pub rank: Option<usize>,
+    pub regression: Option<Box<str>>,
     pub trend: Option<Box<str>>,
 }
 
@@ -242,6 +243,23 @@ fn prediction(
     else {
         return Err(KernelError::new("prediction model is invalid"));
     };
+    let expected_family = match operation {
+        StatisticsOperation::LinearPredict => "ols",
+        StatisticsOperation::LogitPredict => "logit",
+        StatisticsOperation::ProbitPredict => "probit",
+        _ => unreachable!("prediction operation"),
+    };
+    let Value::String(family) = model
+        .get("family")
+        .ok_or_else(|| KernelError::new("prediction model has no family"))?
+    else {
+        return Err(KernelError::new("prediction model family is invalid"));
+    };
+    if family.as_ref() != expected_family {
+        return Err(KernelError::new(format!(
+            "statistics prediction {operation:?} requires model family '{expected_family}', got '{family}'"
+        )));
+    }
     let coefficients = model
         .get("coefficients")
         .ok_or_else(|| KernelError::new("prediction model has no coefficients"))
@@ -319,7 +337,7 @@ fn execute_operation(
             let result = crate::sci::api::node_statistics::augmented_dickey_fuller(
                 &series,
                 parameters.lags.unwrap_or(1),
-                parameters.trend.as_deref().unwrap_or("constant"),
+                parameters.regression.as_deref().unwrap_or("constant"),
             )
             .map_err(KernelError::new)?;
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
@@ -406,14 +424,12 @@ fn execute_operation(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             require_constant_trend("VAR summary", parameters)?;
-            let result = crate::sci::api::node_statistics::var_lag_order(
-                series,
-                parameters.max_lags.unwrap_or(4),
-            )
-            .map_err(KernelError::new)?;
+            let result =
+                crate::sci::api::node_statistics::var_fit(series, parameters.lags.unwrap_or(1))
+                    .map_err(KernelError::new)?;
             Ok(vec![
                 RuntimeValue::Scalar(protocol_value(result)?),
-                RuntimeValue::Scalar(Value::String("VAR lag-order selection from yss_sci".into())),
+                RuntimeValue::Scalar(Value::String("VAR estimation from yss_sci".into())),
             ])
         }
         Iv2slsSummary | IvLimlSummary => {
@@ -639,6 +655,149 @@ mod tests {
     }
 
     #[test]
+    fn adf_uses_only_the_regression_parameter() {
+        let input = series(&[1.0, 1.4, 1.1, 1.8, 1.5, 2.2, 1.9, 2.6, 2.3, 3.0, 2.7, 3.4]);
+        for regression in ["none", "trend"] {
+            let parameters = StatisticsKernelParameters {
+                lags: Some(1),
+                max_lags: None,
+                rank: None,
+                regression: Some(regression.into()),
+                trend: Some(if regression == "none" {
+                    "trend".into()
+                } else {
+                    "none".into()
+                }),
+            };
+
+            let outputs = execute_operation(
+                StatisticsOperation::AdfTest,
+                ScientificApi::TimeSeries,
+                &parameters,
+                std::slice::from_ref(&input),
+            )
+            .unwrap();
+            let expected = crate::sci::api::node_statistics::augmented_dickey_fuller(
+                &[1.0, 1.4, 1.1, 1.8, 1.5, 2.2, 1.9, 2.6, 2.3, 3.0, 2.7, 3.4],
+                1,
+                regression,
+            )
+            .unwrap();
+
+            assert_eq!(
+                outputs[0],
+                RuntimeValue::Scalar(protocol_value(expected).unwrap())
+            );
+        }
+
+        let parameters = StatisticsKernelParameters {
+            lags: Some(1),
+            max_lags: None,
+            rank: None,
+            regression: Some("unexpected".into()),
+            trend: Some("constant".into()),
+        };
+        let error = execute_operation(
+            StatisticsOperation::AdfTest,
+            ScientificApi::TimeSeries,
+            &parameters,
+            &[input],
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "unsupported ADF regression 'unexpected'");
+    }
+
+    #[test]
+    fn prediction_rejects_incompatible_model_family() {
+        let cases = [
+            (
+                StatisticsOperation::LinearPredict,
+                "logit",
+                "statistics prediction LinearPredict requires model family 'ols', got 'logit'",
+            ),
+            (
+                StatisticsOperation::LogitPredict,
+                "ols",
+                "statistics prediction LogitPredict requires model family 'logit', got 'ols'",
+            ),
+            (
+                StatisticsOperation::ProbitPredict,
+                "logit",
+                "statistics prediction ProbitPredict requires model family 'probit', got 'logit'",
+            ),
+        ];
+
+        for (operation, family, expected_error) in cases {
+            let model = RuntimeValue::Scalar(
+                protocol_value(serde_json::json!({
+                    "family": family,
+                    "coefficients": [0.0, 1.0],
+                }))
+                .unwrap(),
+            );
+            let error = prediction(operation, &[model, series(&[1.0])]).unwrap_err();
+
+            assert_eq!(error.to_string(), expected_error);
+        }
+    }
+
+    #[test]
+    fn prediction_rejects_missing_and_non_string_model_family() {
+        let cases = [
+            (
+                serde_json::json!({"coefficients": [0.0, 1.0]}),
+                "prediction model has no family",
+            ),
+            (
+                serde_json::json!({"family": 1, "coefficients": [0.0, 1.0]}),
+                "prediction model family is invalid",
+            ),
+        ];
+
+        for (model, expected_error) in cases {
+            let model = RuntimeValue::Scalar(protocol_value(model).unwrap());
+            let error = prediction(StatisticsOperation::LinearPredict, &[model, series(&[1.0])])
+                .unwrap_err();
+
+            assert_eq!(error.to_string(), expected_error);
+        }
+    }
+
+    #[test]
+    fn var_summary_runs_estimation_instead_of_lag_selection() {
+        let ts_a = series(&[
+            1.0, 1.2, 0.9, 1.1, 1.4, 1.0, 0.8, 1.3, 1.1, 0.9, 1.2, 1.5, 1.1, 0.7, 1.0, 1.3,
+        ]);
+        let ts_b = series(&[
+            0.5, 0.7, 0.6, 0.9, 0.8, 1.0, 0.7, 0.6, 0.9, 1.1, 0.8, 0.7, 1.0, 0.9, 0.6, 0.8,
+        ]);
+        let parameters = StatisticsKernelParameters {
+            lags: Some(1),
+            max_lags: Some(2),
+            rank: None,
+            regression: None,
+            trend: Some("constant".into()),
+        };
+
+        let outputs = execute_operation(
+            StatisticsOperation::VarSummary,
+            ScientificApi::TimeSeries,
+            &parameters,
+            &[ts_a, ts_b],
+        )
+        .unwrap();
+
+        let result = object(&outputs[0]);
+        assert!(result.contains_key("equations"));
+        assert!(result.contains_key("coefficients"));
+        assert!(!result.contains_key("rows"));
+        assert_eq!(
+            outputs[1],
+            RuntimeValue::Scalar(Value::String("VAR estimation from yss_sci".into()))
+        );
+    }
+
+    #[test]
     fn operation_specific_statistics_match_sci_golden_fixtures() {
         let x = series(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
         let linear_y = series(&[1.0, 2.2, 2.8, 4.1, 5.2, 5.8, 7.1, 8.2]);
@@ -719,6 +878,7 @@ mod tests {
             lags: Some(2),
             max_lags: Some(2),
             rank: Some(1),
+            regression: Some("constant".into()),
             trend: Some("constant".into()),
         };
         let adf = execute_operation(

@@ -67,11 +67,8 @@ export function useCanvasInteraction({
             return;
         }
 
-        try {
-            await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });
-        } catch (error) {
-            logger.graph.error(`Failed to connect pins: ${error instanceof Error ? error.message : String(error)}`, 'CanvasInteraction');
-        }
+        const applied = await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });
+        if (!applied) logger.graph.error('Failed to connect ports', 'CanvasInteraction');
     }, [activeTabIdRef]);
 
     const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
@@ -133,11 +130,8 @@ export function useCanvasInteraction({
             const tid = resolveTabId(gid, activeTabIdRef);
             if (!tid) return;
 
-            try {
-                await executeCommand(tid, 'DisconnectPin', { pinId: pin.id });
-            } catch (error) {
-                logger.graph.error(`Failed to disconnect pin: ${error instanceof Error ? error.message : String(error)}`, 'CanvasInteraction');
-            }
+            const applied = await executeCommand(tid, 'DisconnectPin', { pinId: pin.id });
+            if (!applied) logger.graph.error('Failed to disconnect port', 'CanvasInteraction');
             return;
         }
 

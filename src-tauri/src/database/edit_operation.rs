@@ -55,7 +55,7 @@ pub struct EditState {
     pub redo_count: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EditHistory {
     undo_stack: Vec<EditOperation>,
     redo_stack: Vec<EditOperation>,

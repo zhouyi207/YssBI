@@ -31,7 +31,7 @@ export type FunctionDetailModel = {
 export type DetailPanelModel =
   | { kind: 'empty' }
   | { kind: 'log'; log: LogMessage }
-  | { kind: 'node'; nodeId: string }
+  | { kind: 'node'; nodeId: string; graphPath: string }
   | { kind: 'nodeDefinition'; nodeType: string }
   | { kind: 'variable'; id: string; variable: Variable }
   | { kind: 'event'; path: string; event: { path: string; name: string } }
@@ -57,7 +57,7 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     case 'log':
       return selectedLog ? { kind: 'log', log: selectedLog } : { kind: 'empty' };
     case 'node':
-      return { kind: 'node', nodeId: target.id };
+      return { kind: 'node', nodeId: target.id, graphPath: target.graphPath };
     case 'nodeDefinition':
       return { kind: 'nodeDefinition', nodeType: target.nodeType };
     case 'variable': {

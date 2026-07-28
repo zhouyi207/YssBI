@@ -1,28 +1,30 @@
-/**
- * Command Executor — Central pipeline for execute / undo / redo.
- *
- * executeCommand() is the single entry point for all editor mutations
- * that should participate in undo/redo.
- */
-
-import { useHistoryStore } from './historyStore';
 import { getCommandHandler } from './commands';
-import type { CommandArgsByType, CommandContextByType } from './commands/registryTypes';
+import type { AvailableCommandType, CommandHandlerMap } from './commands/registryTypes';
 import { notifyStructuralChange } from './structuralChange';
-import type { CommandType, ExecuteOptions } from './types';
+import type { CommandHandler } from './types';
 
-/**
- * Execute an editor command and push it onto the undo stack.
- */
-export async function executeCommand<K extends CommandType>(
+function isAppliedResult(result: unknown): boolean {
+  if (result === true) return true;
+  return typeof result === 'object'
+    && result !== null
+    && 'status' in result
+    && (result as { status?: unknown }).status === 'applied';
+}
+
+type CommandArgs<K extends AvailableCommandType> = Parameters<CommandHandlerMap[K]['execute']>[1];
+
+export async function executeCommand<K extends AvailableCommandType>(
   graphPath: string,
   type: K,
-  args: CommandArgsByType[K],
-  options?: ExecuteOptions,
-): Promise<CommandContextByType[K]> {
-  const handler = getCommandHandler(type);
-  const context = await handler.execute(graphPath, args);
-  useHistoryStore.getState().push(graphPath, type, context, options);
-  notifyStructuralChange(type, graphPath);
-  return context;
+  args: CommandArgs<K>,
+): Promise<boolean> {
+  try {
+    const handler = getCommandHandler(type) as CommandHandler<CommandArgs<K>>;
+    const result = await handler.execute(graphPath, args);
+    const applied = isAppliedResult(result);
+    if (applied) notifyStructuralChange(type, graphPath);
+    return applied;
+  } catch {
+    return false;
+  }
 }

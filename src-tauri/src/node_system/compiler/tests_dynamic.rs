@@ -344,6 +344,68 @@ fn identity_none_diagnoses_persistent_connection_and_override() {
 }
 
 #[test]
+fn user_created_dynamic_interface_materializes_without_member_locator() {
+    let current = basis(1);
+    let bound = address(40);
+    let graph = document(Some((
+        bound.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey("a".into()),
+        },
+    )));
+    let mut user_protocol = protocol();
+    user_protocol.interface.ports[0].instances = PortInstances::UserCreated {
+        min: 0,
+        max: Some(2),
+    };
+
+    let result = materialize_dynamic_interface(
+        &current,
+        node_id(),
+        &user_protocol,
+        &graph,
+        &InterfaceResolverSet::new(),
+    );
+
+    assert!(result.diagnostics.is_empty());
+    assert!(result.projected_bindings.is_empty());
+    assert_eq!(result.interface.ports.len(), 1);
+    assert_eq!(result.interface.ports[0].address, bound);
+    assert_eq!(
+        result.interface.ports[0].status,
+        ResolvedPortStatus::Resolved
+    );
+}
+
+#[test]
+fn user_created_dynamic_interface_binding_mismatch_is_diagnosed() {
+    let current = basis(1);
+    let bound = address(41);
+    let graph = document(Some((
+        bound.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey("a".into()),
+        },
+    )));
+
+    let result = materialize_dynamic_interface(
+        &current,
+        node_id(),
+        &protocol(),
+        &graph,
+        &resolver_set(Vec::new()),
+    );
+
+    assert_eq!(result.interface.ports[0].address, bound);
+    assert_eq!(result.interface.ports[0].status, ResolvedPortStatus::Orphan);
+    assert!(
+        result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code.as_str() == "compiler.port.binding_kind_mismatch"
+        })
+    );
+}
+
+#[test]
 fn missing_and_duplicate_resolvers_are_reported() {
     let current = basis(1);
     let graph = document(None);

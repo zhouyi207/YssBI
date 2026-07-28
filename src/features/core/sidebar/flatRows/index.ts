@@ -5,6 +5,6 @@ export { buildGraphsFlatRows } from './buildGraphsFlatRows';
 export { buildVariablesFlatRows } from './buildVariablesFlatRows';
 export { buildDataFlatRows } from './buildDataFlatRows';
 export { buildChartsFlatRows } from './buildChartsFlatRows';
-export { buildCommandsFlatRows } from './buildCommandsFlatRows';
+
 export { buildNodesFlatRows } from './buildNodesFlatRows';
 export { nodeGroupKey, resolveGroupExpanded, NODE_GROUP_PREFIX } from './groupExpandState';

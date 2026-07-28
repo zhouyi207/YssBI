@@ -2,7 +2,7 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import { GraphService } from '@/services/graph/graphService';
 import { deleteResource } from '@/features/application/resource/resourceActions';
-import { applyCallerGraphUpdates } from '@/features/application/graphDocument/graphDocumentActions';
+import { invalidateGraphProjections } from '@/features/application/editorProjection/graphProjectionCoordinator';
 
 function graphDisplayName(path: string, kind: 'event' | 'function'): string {
   return useResourceStore.getState().resources[resourceKey({ id: path, kind })]?.name ?? path;
@@ -43,7 +43,7 @@ async function deleteFunctionWithCallSiteConfirm(functionPath: string): Promise<
 
   if (result === 'discard') {
     const callerGraphs = await GraphService.purgeFunctionCallSites(functionPath);
-    await applyCallerGraphUpdates(functionPath, callerGraphs);
+    await invalidateGraphProjections(callerGraphs.map((graph) => graph.path));
   }
 
   await deleteResource({ id: functionPath, kind: 'function' });

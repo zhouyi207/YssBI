@@ -3,6 +3,7 @@ import { GroupContext } from '@/features/core/editor';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 import { WorksheetEmptyState } from './WorksheetEmptyState';
 
@@ -18,7 +19,8 @@ export function WorksheetEditor() {
   useEffect(() => {
     if (!activeTabId) return;
     if (useWorksheetStore.getState().documents[activeTabId]) return;
-    void WorksheetService.loadWorksheet(activeTabId)
+    const { projectInstanceId } = captureProjectCommandContext();
+    void WorksheetService.loadWorksheet(projectInstanceId, activeTabId)
       .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
       .catch(() => undefined);
   }, [activeTabId]);

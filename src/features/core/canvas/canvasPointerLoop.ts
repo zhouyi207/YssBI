@@ -1,5 +1,7 @@
 import type { RefObject } from 'react';
 import { useGestureStore } from '@/features/core/gesture';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
@@ -113,6 +115,21 @@ function installPointerLoop(): () => void {
         lastY = e.clientY;
       }
       nextGesture = { ...g, moved, lastX, lastY, dragDelta };
+
+      const gid = g.groupId || deps.activeGroupIdRef.current;
+      const graphPath = resolveTabId(gid, deps.activeTabIdRef);
+      if (graphPath) {
+        const graphStore = useGraphDataStore.getState();
+        const interactionStore = useGraphInteractionStore.getState();
+        for (const nodeId of g.dragNodeIds ?? []) {
+          const committed = graphStore.getGraphNode(graphPath, nodeId)?.position;
+          if (!committed) continue;
+          interactionStore.setPositionOverride(graphPath, nodeId, {
+            x: committed.x + dragDelta.x,
+            y: committed.y + dragDelta.y,
+          });
+        }
+      }
     }
 
     if (nextGesture) {
@@ -176,8 +193,10 @@ function installPointerLoop(): () => void {
       cancelAnimationFrame(rAFId);
       rAFId = null;
     }
+    latestEvent = null;
 
     finalizeSelection(e);
+    processGestureFrame(e);
 
     const g = useGestureStore.getState().gesture;
     if (!g) return;
@@ -204,22 +223,30 @@ function installPointerLoop(): () => void {
     } else if (g.type === 'drag') {
       const gid = g.groupId || deps.activeGroupIdRef.current;
       if (g.moved) {
-        const delta = g.dragDelta || { x: 0, y: 0 };
-        if (Math.abs(delta.x) > 0.001 || Math.abs(delta.y) > 0.001) {
-          const dragIds = g.dragNodeIds || [];
-          const tid = resolveTabId(gid, deps.activeTabIdRef);
-          if (tid && dragIds.length > 0) {
-            executeCommand(
-              tid,
-              'MoveNodes',
-              { nodeIds: dragIds, delta },
-              { mergeKey: `move-${[...dragIds].sort().join(',')}` },
-            ).catch((err) =>
-              logger.graph.warn(
-                `MoveNodes command failed: ${err instanceof Error ? err.message : String(err)}`,
-                'CanvasInteraction',
-              ),
-            );
+        const dragIds = g.dragNodeIds || [];
+        const graphPath = resolveTabId(gid, deps.activeTabIdRef);
+        if (graphPath && dragIds.length > 0) {
+          const overrides = useGraphInteractionStore.getState().positionOverrides[graphPath] ?? {};
+          const positions = dragIds.flatMap((nodeId) => {
+            const position = overrides[nodeId];
+            return position ? [{ nodeId, position }] : [];
+          });
+          if (positions.length === 0) {
+            useGraphInteractionStore.getState().clearPositionOverrides(graphPath, dragIds);
+          } else {
+            void executeCommand(graphPath, 'MoveNodes', { positions })
+              .then((applied) => {
+                if (!applied) logger.graph.warn('MoveNodes command was not applied', 'CanvasInteraction');
+              })
+              .catch((err) =>
+                logger.graph.warn(
+                  `MoveNodes command failed: ${err instanceof Error ? err.message : String(err)}`,
+                  'CanvasInteraction',
+                ),
+              )
+              .finally(() => {
+                useGraphInteractionStore.getState().clearPositionOverrides(graphPath, dragIds);
+              });
           }
         }
       } else {

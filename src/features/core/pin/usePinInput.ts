@@ -63,16 +63,12 @@ export function usePinInput({
   const savePinValue = useCallback(
     async (val?: unknown) => {
       const raw = val !== undefined ? val : value;
-      try {
-        await executeCommand(
-          graphPath,
-          'SetPinValue',
-          { pinId, nodeId, newValue: raw },
-          { mergeKey: `pin-value-${pinId}` },
-        );
-      } catch (error) {
-        logger.graph.error(`Failed to update pin value: ${error instanceof Error ? error.message : String(error)}`, 'PinInput');
-      }
+      const applied = await executeCommand(
+        graphPath,
+        'SetPinValue',
+        { pinId, nodeId, newValue: raw },
+      );
+      if (!applied) logger.graph.error('Failed to update port value', 'PinInput');
     },
     [graphPath, nodeId, pinId, value]
   );

@@ -1,20 +1,12 @@
-import { useMemo } from 'react';
 import type { Pin, Variable } from '@/shared/types/domain';
 import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
-import { buildContextualCatalogItems, type NodeCatalogItem } from '@/features/domain/nodeCatalog';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
+import type { NodeCatalogItem } from '@/features/domain/nodeCatalog';
 import { Card } from '@/components/ui/card';
-import { NodeCatalogTreeView } from './nodeCatalog/NodeCatalogTreeView';
+import { NODE_CATALOG_UNAVAILABLE_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
 
 export function NodePalette({
   x,
   y,
-  onSelect,
-  filterPin,
-  variables = {},
-  functions = {},
-  graphKind,
-  graphPath,
 }: {
   x: number;
   y: number;
@@ -25,35 +17,13 @@ export function NodePalette({
   graphKind?: 'event' | 'function';
   graphPath?: string;
 }) {
-  const definitions = useNodeRegistryStore((s) => s.definitionsArray);
-
-  const variableKeysStr = useMemo(() => Object.keys(variables).sort().join(','), [variables]);
-  const functionKeysStr = useMemo(() => Object.keys(functions).sort().join(','), [functions]);
-
-  const items = useMemo(
-    () =>
-      buildContextualCatalogItems({
-        definitions,
-        filterPin,
-        variables,
-        functions,
-        graphKind,
-        graphPath,
-      }),
-    [definitions, filterPin, variableKeysStr, functionKeysStr, variables, functions, graphKind, graphPath],
-  );
-
   return (
     <Card
-      className="menu-container fixed z-50 flex h-[min(24rem,calc(100vh-4rem))] w-80 min-h-48 flex-col overflow-hidden shadow-2xl animate-zoom-in"
+      className="menu-container fixed z-50 w-80 p-4 text-sm text-muted-foreground shadow-2xl animate-zoom-in"
       style={{ left: x, top: y }}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      <NodeCatalogTreeView
-        items={items}
-        onLeafClick={onSelect}
-        autoFocusSearch
-      />
+      {NODE_CATALOG_UNAVAILABLE_MESSAGE}
     </Card>
   );
 }

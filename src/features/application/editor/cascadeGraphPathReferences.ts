@@ -109,7 +109,18 @@ function remapEditorGraphPaths(from: string, to: string): void {
   }
 }
 
-/** Cascade all in-memory references when a graph resource path changes. */
+/** Migrate only temporary editor UI state for a renamed graph resource. */
+export function remapGraphTemporaryUiState(from: string, to: string): void {
+  if (pathsEqual(from, to)) return;
+  remapEditorGraphPaths(from, to);
+  remapGraphViewport(from, to);
+  const projectPath = useProjectIOStore.getState().currentPath;
+  if (projectPath) {
+    remapEditorViewStateGraphPath(projectPath, from, to);
+  }
+}
+
+/** Cascade all in-memory references when a graph resource path changes on disk. */
 export function cascadeGraphPathReferences(from: string, to: string): void {
   if (pathsEqual(from, to)) return;
   cascadeSubGraphPathInLoadedGraphs(from, to);

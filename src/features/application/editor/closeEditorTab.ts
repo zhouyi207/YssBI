@@ -1,11 +1,14 @@
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
-import { listAllOpenEditorTabs } from '@/features/core/layout/editorTabStore';
+
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { isResourceDocumentDirty } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
@@ -69,14 +72,16 @@ export async function closeEditorTab(
 }
 
 export async function performWorksheetDelete(worksheetId: string): Promise<void> {
-  await WorksheetService.deleteWorksheet(worksheetId);
-  useWorksheetStore.getState().removeDocument(worksheetId);
-
-  for (const { groupId, tab } of listAllOpenEditorTabs()) {
-    if (tab.id === worksheetId) {
-      await closeWorksheetTab(worksheetId, groupId, true);
-    }
+  const context = captureProjectCommandContext();
+  const committed = await WorksheetService.deleteWorksheet(
+    context.projectInstanceId,
+    context.operationId,
+    worksheetId,
+  );
+  if (committed.document.id !== worksheetId) {
+    throw new Error('worksheet delete result does not match the requested worksheet');
   }
+  await projectPublicationCoordinator.submit({ result: committed.result });
 }
 
 export async function deleteWorksheetWithConfirm(worksheetId: string): Promise<boolean> {

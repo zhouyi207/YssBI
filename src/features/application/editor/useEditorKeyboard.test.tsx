@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditorKeyboard } from './useEditorKeyboard';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const noop = () => {};
+const paste = vi.fn();
+const duplicateSelected = vi.fn();
 
 const baseProps = {
   deleteSelected: noop,
@@ -13,7 +17,8 @@ const baseProps = {
   redo: noop,
   copy: noop,
   cut: noop,
-  paste: noop,
+  paste,
+  duplicateSelected,
   saveGraph: noop,
   saveGraphAs: noop,
   importGraph: noop,
@@ -33,6 +38,7 @@ describe('useEditorKeyboard', () => {
   let root: Root;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -58,6 +64,23 @@ describe('useEditorKeyboard', () => {
 
     expect(preventDefault).toHaveBeenCalled();
     expect(useLayoutStore.getState().isNodeDocumentationOpen).toBe(true);
+  });
+
+  it.each([
+    { key: 'v', action: paste },
+    { key: 'd', action: duplicateSelected },
+  ])('does not route disabled Ctrl+$key mutation shortcuts', ({ key, action }) => {
+    const event = new KeyboardEvent('keydown', {
+      key,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(action).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('does not preventDefault on Alt so native menu access still works', () => {

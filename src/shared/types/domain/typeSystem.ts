@@ -13,20 +13,10 @@ export const EMPTY_TYPE_SYSTEM: TypeSystemSnapshot = {
   structTypes: {},
 };
 
-let activeTypeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM;
-
-export function setActiveTypeSystem(snapshot: TypeSystemSnapshot): void {
-  activeTypeSystem = snapshot;
-}
-
-export function getActiveTypeSystem(): TypeSystemSnapshot {
-  return activeTypeSystem;
-}
-
 export function structTypeExtends(
   sourceKey: string,
   targetKey: string,
-  snapshot: TypeSystemSnapshot = activeTypeSystem,
+  snapshot: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   const visited = new Set<string>();
   const stack = [sourceKey];
@@ -51,7 +41,7 @@ export function structTypeExtends(
 export function structCanAccept(
   targetKey: string,
   sourceKey: string,
-  snapshot: TypeSystemSnapshot = activeTypeSystem,
+  snapshot: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
   return targetKey === sourceKey || structTypeExtends(sourceKey, targetKey, snapshot);
 }

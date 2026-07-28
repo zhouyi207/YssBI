@@ -2,8 +2,8 @@ use super::relational::RunRelationalBackends;
 use super::{
     ActivationId, CancellationToken, CompiledParameterStore, FrameId, KernelContext,
     KernelRegistry, NOOP_RUN_EVENT_SINK, ProjectRunRegistry, RelationalBackendProvider,
-    RelationalContext, RelationalInput, ResourceProvider, ResultStore, RunError, RunErrorCode,
-    RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
+    RelationalContext, RelationalInput, ResourceErrorKind, ResourceProvider, ResultStore, RunError,
+    RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
     materialize_bridge,
 };
 use crate::node_system::analysis::{
@@ -209,7 +209,7 @@ impl<'a> RunExecutor<'a> {
                 correlation,
                 values,
                 committed_variable_ids: Box::new([]),
-                resource_deltas: Vec::new(),
+                resource_mutation: None,
             })
         })();
         frame.close_streams();
@@ -229,7 +229,13 @@ impl<'a> RunExecutor<'a> {
         let result = self
             .resources
             .validate_plan(&plan.provenance, &plan.resources)
-            .map_err(|error| RunError::ResourceSnapshotMismatch(error.0))
+            .map_err(|error| match error.kind() {
+                ResourceErrorKind::SnapshotMismatch => {
+                    RunError::ResourceSnapshotMismatch(error.into_message())
+                }
+                ResourceErrorKind::UnsupportedAccess => RunError::InvalidPlan(error.into_message()),
+                ResourceErrorKind::Acquire => RunError::InvalidPlan(error.into_message()),
+            })
             .and_then(|()| RunResourceSet::acquire(&plan.resources, self.resources));
         self.trace.record(SpanEvent::new(
             SpanKind::ResourceAcquire,

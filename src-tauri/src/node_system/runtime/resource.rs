@@ -25,18 +25,53 @@ pub trait ResourceProvider: Send + Sync {
     ) -> Result<Box<dyn ResourceLease>, ResourceError>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceErrorKind {
+    Acquire,
+    SnapshotMismatch,
+    UnsupportedAccess,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResourceError(pub Box<str>);
+pub struct ResourceError {
+    kind: ResourceErrorKind,
+    message: Box<str>,
+}
 
 impl ResourceError {
     pub fn new(message: impl Into<Box<str>>) -> Self {
-        Self(message.into())
+        Self {
+            kind: ResourceErrorKind::Acquire,
+            message: message.into(),
+        }
+    }
+
+    pub fn snapshot_mismatch(message: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: ResourceErrorKind::SnapshotMismatch,
+            message: message.into(),
+        }
+    }
+
+    pub fn unsupported_access(message: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: ResourceErrorKind::UnsupportedAccess,
+            message: message.into(),
+        }
+    }
+
+    pub fn kind(&self) -> ResourceErrorKind {
+        self.kind
+    }
+
+    pub fn into_message(self) -> Box<str> {
+        self.message
     }
 }
 
 impl fmt::Display for ResourceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
+        formatter.write_str(&self.message)
     }
 }
 
@@ -62,7 +97,7 @@ impl RunResourceSet {
                 Err(error) => {
                     return Err(RunError::ResourceAcquire {
                         resource: requirement.resource.clone(),
-                        message: error.0,
+                        message: error.into_message(),
                     });
                 }
             }

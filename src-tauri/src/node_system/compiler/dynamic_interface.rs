@@ -383,7 +383,36 @@ impl<'a> MaterializationState<'a> {
             .collect::<Vec<_>>();
 
         for (address, binding) in bindings {
-            let (origin, order, old_last_known) = binding_parts(&binding);
+            if let DynamicPortBinding::UserCreated { .. } = &binding {
+                let status = if matches!(spec.instances, PortInstances::UserCreated { .. }) {
+                    ResolvedPortStatus::Resolved
+                } else {
+                    self.push_port_diagnostic(
+                        "compiler.port.binding_kind_mismatch",
+                        &address,
+                        address.to_string(),
+                    );
+                    ResolvedPortStatus::Orphan
+                };
+                self.ports
+                    .insert(address.clone(), resolved_port(address, spec, status));
+                continue;
+            }
+            if matches!(spec.instances, PortInstances::UserCreated { .. }) {
+                self.push_port_diagnostic(
+                    "compiler.port.binding_kind_mismatch",
+                    &address,
+                    address.to_string(),
+                );
+                self.ports.insert(
+                    address.clone(),
+                    resolved_port(address, spec, ResolvedPortStatus::Orphan),
+                );
+                continue;
+            }
+            let Some((origin, order, old_last_known)) = binding_parts(&binding) else {
+                continue;
+            };
             let member = members.and_then(|values| values.get(origin));
             let status = if members.is_some() && member.is_none() {
                 ResolvedPortStatus::Orphan
@@ -446,7 +475,7 @@ impl<'a> MaterializationState<'a> {
         self.document.port_bindings.iter().find(|(address, binding)| {
             address.node_id == self.node_id
                 && matches!(&address.port, PortRef::Instance { template, .. } if template == &spec.key)
-                && binding_origin(binding) == locator
+                && binding_origin(binding).is_some_and(|origin| origin == locator)
         })
     }
 
@@ -520,28 +549,30 @@ impl<'a> MaterializationState<'a> {
     }
 }
 
-fn binding_origin(binding: &DynamicPortBinding) -> &DynamicMemberLocator {
+fn binding_origin(binding: &DynamicPortBinding) -> Option<&DynamicMemberLocator> {
     match binding {
+        DynamicPortBinding::UserCreated { .. } => None,
         DynamicPortBinding::Resolved { origin, .. } | DynamicPortBinding::Orphan { origin, .. } => {
-            origin
+            Some(origin)
         }
     }
 }
 
 fn binding_parts(
     binding: &DynamicPortBinding,
-) -> (
+) -> Option<(
     &DynamicMemberLocator,
     &OrderKey,
     Option<&LastKnownPortMetadata>,
-) {
+)> {
     match binding {
-        DynamicPortBinding::Resolved { origin, order } => (origin, order, None),
+        DynamicPortBinding::UserCreated { .. } => None,
+        DynamicPortBinding::Resolved { origin, order } => Some((origin, order, None)),
         DynamicPortBinding::Orphan {
             origin,
             order,
             last_known,
-        } => (origin, order, Some(last_known)),
+        } => Some((origin, order, Some(last_known))),
     }
 }
 

@@ -6,6 +6,11 @@ import { markResourceDirty } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
+import {
+    captureGraphSaveCommandContext,
+    isGraphSaveCommandRevisionCurrent,
+    type GraphSaveCommandContext,
+} from '@/features/application/projectCommandContext';
 
 /**
  * Persist every dirty graph tab to disk and clear its dirty flag.
@@ -19,6 +24,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
 
     const tabStore = useEditorTabStore.getState();
     for (const tab of dirty) {
+        let context: GraphSaveCommandContext | undefined;
         try {
             warnCallFunctionIssuesBeforeSave(tab.graphPath);
             const layoutTab = tabStore.resolveTab(tab.graphPath);
@@ -27,10 +33,18 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
                 await useWorksheetStore.getState().saveDocument(tab.graphPath);
                 markResourceDirty({ id: tab.graphPath, kind: 'worksheet' }, false);
             } else if (layoutTab?.type === 'event' || layoutTab?.type === 'function') {
-                const savedPath = await GraphService.saveProjectGraph(tab.graphPath);
-                markResourceDirty({ id: savedPath, kind: layoutTab.type }, false);
+                context = captureGraphSaveCommandContext(tab.graphPath);
+                await GraphService.saveProjectGraph(
+                    context.projectInstanceId,
+                    tab.graphPath,
+                    context.expectedRevision,
+                    context.operationId,
+                );
+                if (!isGraphSaveCommandRevisionCurrent(context, tab.graphPath)) return false;
+                markResourceDirty({ id: tab.graphPath, kind: layoutTab.type }, false);
             }
         } catch (error) {
+            if (context && !context.isCurrent()) return false;
             const message = error instanceof Error ? error.message : String(error);
             logger.app.error(
                 `Failed to save graph '${tab.title}' (${tab.graphPath}): ${message}`,

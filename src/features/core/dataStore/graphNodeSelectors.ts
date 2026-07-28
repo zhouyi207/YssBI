@@ -1,15 +1,25 @@
 import type { NodeData } from '@/shared/types/store/graph';
-import { isShellNodeDefinition } from '@/shared/types/domain';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
+
 import { useGraphDataStore } from './graphDataStore';
 
-/** Whether a node instance is a system-managed shell (Event Begin, Function Entry/Return). */
-export function isShellNode(graphPath: string, nodeId: string): boolean {
-  const node = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
-  if (!node) return false;
-  const def = useNodeRegistryStore.getState().getDefinition(node.nodeType);
-  return isShellNodeDefinition(def);
+function projectedNodeCapabilities(graphPath: string, nodeId: string) {
+  return useGraphDataStore.getState().getGraphNode(graphPath, nodeId)?.capabilities;
 }
+
+export function canCopyNode(graphPath: string, nodeId: string): boolean {
+  const capabilities = projectedNodeCapabilities(graphPath, nodeId);
+  return capabilities?.managed === false && capabilities.canCopy === true;
+}
+
+export function canDeleteNode(graphPath: string, nodeId: string): boolean {
+  const capabilities = projectedNodeCapabilities(graphPath, nodeId);
+  return capabilities?.managed === false && capabilities.canDelete === true;
+}
+
+export function canCutNode(graphPath: string, nodeId: string): boolean {
+  return canCopyNode(graphPath, nodeId) && canDeleteNode(graphPath, nodeId);
+}
+
 
 /** Find an internal node in a graph by nodeType (store-native, no links rebuild). */
 export function findInternalNodeInGraph(

@@ -5,7 +5,6 @@
 import type { NodeData, PinData, PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { derivePinConnectionView } from './pinLinks';
-import { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
 
 export interface UiNodePinSlice {
   pin: PinData;
@@ -25,8 +24,7 @@ export function uiNodeHasNoHeader(node: Pick<UINode, 'uiStyle'>): boolean {
 
 /** 由 store 节点数据与 graph-scoped pin 切片构建画布节点视图 */
 export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
-  const meta = resolveNodeViewMeta(nodeData);
-  const title = options.title ?? meta.title;
+  const title = options.title ?? nodeData.display?.title ?? nodeData.title;
   const inputs: PinView[] = [];
   const outputs: PinView[] = [];
 
@@ -39,11 +37,11 @@ export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
 
   return {
     id: nodeData.id,
-    nodeType: meta.nodeType,
-    category: meta.category,
+    nodeType: nodeData.nodeType,
+    category: nodeData.category,
     title,
-    uiStyle: meta.uiStyle,
-    description: meta.description,
+    uiStyle: nodeData.display?.styleId ?? 'default',
+    description: nodeData.display?.description ?? nodeData.description,
     position: nodeData.position ?? { x: 0, y: 0 },
     isInternal: nodeData.isInternal,
     paramsKind: nodeData.paramsKind,

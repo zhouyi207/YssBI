@@ -1,13 +1,8 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
 import { useNodeStyle } from "@/features/core/node";
-import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
-import { getPinMetaData } from "@/features/core/pin";
-import {
-  getRepeatableSlot,
-} from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
@@ -56,12 +51,13 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
     return "dimmed";
   }, [activePin]);
 
-  const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
-
-  const repeatableSlot = useMemo(() => getRepeatableSlot(nodeDef), [nodeDef]);
+  const hasRepeatableInput = inputsData.some((pin) => pin.instanceKind === "userCreated");
 
   const removePinHandler = onRemovePin
-    ? (pinId: string) => onRemovePin(node.id, pinId)
+    ? (pinId: string) => {
+        const pin = [...node.inputs, ...node.outputs].find((candidate) => candidate.id === pinId);
+        if (pin?.canRemove) onRemovePin(node.id, pinId);
+      }
     : undefined;
 
   return (
@@ -93,7 +89,6 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               <Pin
                 key={pin.id}
                 {...pin}
-                metaData={getPinMetaData(nodeDef, pin.name)}
                 graphPath={graphPath}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
@@ -109,7 +104,6 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               <Pin
                 key={pin.id}
                 {...pin}
-                metaData={getPinMetaData(nodeDef, pin.name)}
                 graphPath={graphPath}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
@@ -129,7 +123,6 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
             <Pin
               key={pin.id}
               {...pin}
-              metaData={getPinMetaData(nodeDef, pin.name)}
               graphPath={graphPath}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
@@ -139,7 +132,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               onRemovePin={removePinHandler}
             />
           ))}
-          {onAddInput && repeatableSlot && (
+          {onAddInput && hasRepeatableInput && (
             <Button
               type="button"
               variant="ghost"
@@ -161,7 +154,6 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
             <Pin
               key={pin.id}
               {...pin}
-              metaData={getPinMetaData(nodeDef, pin.name)}
               graphPath={graphPath}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}

@@ -183,6 +183,10 @@ fn parameters(spec: &NodeSpec) -> Vec<ParameterSpec> {
             positive_integer_parameter("lags", 1),
             select_parameter("trend", "constant"),
         ],
+        Stage::Summary if spec.family == Family::Var => vec![
+            positive_integer_parameter("lags", 1),
+            select_parameter("trend", "constant"),
+        ],
         Stage::Summary if spec.family == Family::PanelDid => vec![
             toggle_parameter("event_study", false),
             positive_integer_parameter("placebo_repetitions", 100),

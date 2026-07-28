@@ -17,6 +17,11 @@ import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { prepareActiveGroupBeforeLastTabClose } from '@/features/core/layout/editorGroupFocus';
 import { activateCurrentEditorTab, activateEditorGroup } from './switchEditorTab';
 import { deactivateGraphTab } from './activateGraphTab';
+import {
+  captureGraphSaveCommandContext,
+  isGraphSaveCommandRevisionCurrent,
+  type GraphSaveCommandContext,
+} from '@/features/application/projectCommandContext';
 
 async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
   const layoutStore = useLayoutStore.getState();
@@ -45,13 +50,21 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
       type: 'info',
     });
     if (shouldSave) {
+      let context: GraphSaveCommandContext | undefined;
       try {
-        const savedPath = await GraphService.saveProjectGraph(effectivePath);
+        context = captureGraphSaveCommandContext(effectivePath);
+        await GraphService.saveProjectGraph(
+          context.projectInstanceId,
+          effectivePath,
+          context.expectedRevision,
+          context.operationId,
+        );
+        if (!isGraphSaveCommandRevisionCurrent(context, effectivePath)) return false;
         if (isGraphLayoutTab(located.tab)) {
-          markResourceDirty({ id: savedPath, kind: located.tab.type }, false);
+          markResourceDirty({ id: effectivePath, kind: located.tab.type }, false);
         }
-        effectivePath = savedPath;
       } catch (error) {
+        if (context && !context.isCurrent()) return false;
         uiStore.showToast(`保存失败：${error instanceof Error ? error.message : String(error)}`, 'error', 3000);
         return false;
       }

@@ -3,8 +3,8 @@ import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
-import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
 import { uiStore } from "@/features/core/ui/UIStore";
+import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
 import {
@@ -13,17 +13,10 @@ import {
   type SidebarDragState,
 } from '@/features/core/dnd';
 import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import {
-  canDropFunctionIntoEventGraph,
-  clientToWorldInCanvas,
-  dropFunctionCallIntoEventGraph,
-  isPointInsideCanvas,
-  spawnNodeFromTemplate,
-  spawnVariableFromMenu,
-  type CreateNodeFn,
-  type VariableDropMenu,
-  type VariableNodeType,
+import type {
+  CreateNodeFn,
+  VariableDropMenu,
+  VariableNodeType,
 } from "./canvasDrop";
 
 export type { VariableDropMenu } from "./canvasDrop";
@@ -48,11 +41,8 @@ export function useCanvasDrop({
   canvasElementRef,
   groupId,
   graphPath,
-  variables,
-  functions,
   setContextMenu,
   setPendingConnection,
-  createNode,
   enabled = true,
 }: UseCanvasDropParams) {
   const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
@@ -86,15 +76,18 @@ export function useCanvasDrop({
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
       if (!graphPath) return;
-      const nodeData = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
-      const nodeType = nodeData?.nodeType;
-      let slotIndex = 0;
-      if (nodeType) {
-        const def = useNodeRegistryStore.getState().getDefinition(nodeType);
-        const idx = def?.pinSlots.findIndex(s => s.slotKind === 'repeatable') ?? -1;
-        if (idx >= 0) slotIndex = idx;
+      const store = useGraphDataStore.getState();
+      const template = store.getGraphNodePins(graphPath, nodeId)
+        .map((pinId) => store.getGraphPin(graphPath, pinId))
+        .find((pin) => pin?.instanceKind === 'userCreated' && pin.templateKey)
+        ?.templateKey;
+      if (!template) {
+        uiStore.showToast('Repeatable port template is unavailable', 'error');
+        return;
       }
-      executeCommand(graphPath, 'AddRepeatablePin', { nodeId, slotIndex });
+      void executeCommand(graphPath, 'AddRepeatablePin', { nodeId, template }).then((applied) => {
+        if (!applied) uiStore.showToast('Failed to add repeatable port', 'error');
+      });
     },
     [graphPath]
   );
@@ -102,9 +95,8 @@ export function useCanvasDrop({
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
       if (!graphPath) return Promise.resolve();
-      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined).catch((err) => {
-        uiStore.showToast(err instanceof Error ? err.message : String(err), "error");
-        throw err;
+      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then((applied) => {
+        if (!applied) uiStore.showToast('Failed to remove repeatable port', 'error');
       });
     },
     [graphPath]
@@ -130,11 +122,11 @@ export function useCanvasDrop({
   );
 
   const spawnFromVariableMenu = useCallback(
-    async (menu: VariableDropMenu, nodeType: VariableNodeType) => {
-      await spawnVariableFromMenu(menu, nodeType, variables, createNode);
+    async (_menu: VariableDropMenu, _nodeType: VariableNodeType) => {
+      notifyNodeCreationUnavailable();
       setVariableDropMenu(null);
     },
-    [variables, createNode],
+    [],
   );
 
   const handleVariableDropGet = useCallback(
@@ -148,47 +140,13 @@ export function useCanvasDrop({
   );
 
   const handleSidebarCanvasDrop = useCallback(
-    async (dragState: SidebarDragState, event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
-      const el = canvasElementRef.current;
-      if (!el) return false;
-
-      if (isGraphResourceDragState(dragState)) {
-        const resource = dragState.sidebarResource;
-        if (!canDropFunctionIntoEventGraph(groupId, resource, event.shiftKey)) return false;
-        const activeTab = getActiveLayoutTab(groupId)?.tab;
-        if (!activeTab || (activeTab.type !== 'event' && activeTab.type !== 'function')) return false;
-        return dropFunctionCallIntoEventGraph(
-          el,
-          groupId,
-          activeTab.id,
-          resource.id,
-          dragState.x,
-          dragState.y,
-          functions,
-          createNode,
-        );
-      }
-
-      if (!isNodeTemplateDragState(dragState)) return false;
-      if (!isPointInsideCanvas(el, dragState.x, dragState.y)) return false;
-
-      const worldPosition = clientToWorldInCanvas(el, groupId, graphPath, dragState.x, dragState.y);
-
-      await spawnNodeFromTemplate(
-        dragState.template,
-        worldPosition,
-        { x: dragState.x, y: dragState.y },
-        event,
-        {
-          variables,
-          functions,
-          createNode,
-          onVariableMenu: setVariableDropMenu,
-        },
-      );
-      return true;
+    async (dragState: SidebarDragState, _event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
+      if (!canvasElementRef.current) return false;
+      if (!isGraphResourceDragState(dragState) && !isNodeTemplateDragState(dragState)) return false;
+      notifyNodeCreationUnavailable();
+      return false;
     },
-    [canvasElementRef, groupId, graphPath, variables, functions, createNode],
+    [canvasElementRef],
   );
 
   useEffect(() => {
@@ -207,5 +165,6 @@ export function useCanvasDrop({
     handleContextMenu,
     handleVariableDropGet,
     handleVariableDropSet,
+    handleSidebarCanvasDrop,
   };
 }

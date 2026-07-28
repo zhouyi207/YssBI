@@ -10,9 +10,7 @@ use crate::database::{
     ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
 };
 use crate::database::{EditHistory, EditState};
-use crate::project::{
-    ProjectState, project_root_from_path, relative_project_duckdb_path, unique_name,
-};
+use crate::project::{ProjectSession, ProjectState, relative_project_duckdb_path, unique_name};
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use serde::Serialize;
 use uuid::Uuid;
@@ -41,17 +39,27 @@ pub fn load_database(
     state: &ProjectState,
     engine: DatabaseEngineDTO,
 ) -> Result<LoadDatabaseResult, String> {
+    let (session, _lease) = state.acquire_database_write_lease()?;
     match engine {
         DatabaseEngineDTO::Csv {
             path,
             delimiter,
             has_header,
             infer_schema_length,
-        } => load_csv_via_duckdb(state, path, delimiter, has_header, infer_schema_length),
+        } => load_csv_via_duckdb(
+            state,
+            &session,
+            path,
+            delimiter,
+            has_header,
+            infer_schema_length,
+        ),
         DatabaseEngineDTO::Parquet { path, columns } => {
-            load_parquet_via_duckdb(state, path, columns)
+            load_parquet_via_duckdb(state, &session, path, columns)
         }
-        DatabaseEngineDTO::Excel { path, sheet } => load_excel_via_duckdb(state, path, sheet),
+        DatabaseEngineDTO::Excel { path, sheet } => {
+            load_excel_via_duckdb(state, &session, path, sheet)
+        }
         DatabaseEngineDTO::Sql {
             engine,
             connection_string,
@@ -59,7 +67,7 @@ pub fn load_database(
         } => {
             let engine_sql = DatabaseEngineSql::try_from(engine)
                 .map_err(|e| format!("Invalid SQL engine config: {}", e))?;
-            load_sql_via_duckdb(state, engine_sql, connection_string, table)
+            load_sql_via_duckdb(state, &session, engine_sql, connection_string, table)
         }
         DatabaseEngineDTO::DuckDb { .. } => Err(
             "DuckDb datasets are discovered from the project store; reopen the project to refresh"
@@ -73,12 +81,13 @@ pub fn load_database(
 
 fn load_csv_via_duckdb(
     state: &ProjectState,
+    session: &ProjectSession,
     csv_path: String,
     delimiter: char,
     has_header: bool,
     infer_schema_length: Option<usize>,
 ) -> Result<LoadDatabaseResult, String> {
-    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
+    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
     let meta = ingest_csv_to_duckdb(
         Path::new(&csv_path),
@@ -91,6 +100,7 @@ fn load_csv_via_duckdb(
 
     register_duckdb_instance(
         state,
+        session,
         id,
         table,
         name_from_path(&csv_path),
@@ -102,10 +112,11 @@ fn load_csv_via_duckdb(
 
 fn load_parquet_via_duckdb(
     state: &ProjectState,
+    session: &ProjectSession,
     parquet_path: String,
     columns: Option<Vec<String>>,
 ) -> Result<LoadDatabaseResult, String> {
-    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
+    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
     let meta = ingest_parquet_to_duckdb(
         Path::new(&parquet_path),
@@ -116,6 +127,7 @@ fn load_parquet_via_duckdb(
 
     register_duckdb_instance(
         state,
+        session,
         id,
         table,
         name_from_path(&parquet_path),
@@ -127,15 +139,17 @@ fn load_parquet_via_duckdb(
 
 fn load_excel_via_duckdb(
     state: &ProjectState,
+    session: &ProjectSession,
     excel_path: String,
     sheet: String,
 ) -> Result<LoadDatabaseResult, String> {
-    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
+    let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
     let meta = ingest_excel_to_duckdb(Path::new(&excel_path), &sheet, &duckdb_abs, &table)?;
 
     register_duckdb_instance(
         state,
+        session,
         id,
         table,
         name_from_path(&excel_path),
@@ -146,23 +160,21 @@ fn load_excel_via_duckdb(
 }
 
 fn prepare_duckdb_ingest_paths(
-    state: &ProjectState,
+    session: &ProjectSession,
 ) -> Result<(String, String, PathBuf, String), String> {
-    let project_path = state
-        .get_path()
-        .ok_or_else(|| "请先打开或创建项目后再导入数据".to_string())?;
-    let project_root = project_root_from_path(&project_path);
-    crate::project::ensure_project_database_dir(&project_root).map_err(|e| e.to_string())?;
+    crate::project::ensure_project_database_dir(session.root.as_path())
+        .map_err(|e| e.to_string())?;
 
     let id = format!("db-{}", Uuid::new_v4());
     let table = id.clone();
     let relative_path = relative_project_duckdb_path();
-    let duckdb_abs = project_root.join(&relative_path);
+    let duckdb_abs = session.root.as_path().join(&relative_path);
     Ok((id, table, duckdb_abs, relative_path))
 }
 
 fn register_duckdb_instance(
     state: &ProjectState,
+    session: &ProjectSession,
     id: String,
     table: String,
     base_name: String,
@@ -200,7 +212,7 @@ fn register_duckdb_instance(
             history: EditHistory::new(),
         },
     };
-    state.add_database(instance);
+    state.add_database_for_session(session, instance)?;
 
     Ok(LoadDatabaseResult {
         id,
@@ -213,16 +225,18 @@ fn register_duckdb_instance(
 
 fn load_sql_via_duckdb(
     state: &ProjectState,
+    session: &ProjectSession,
     engine: DatabaseEngineSql,
     connection_string: String,
     table: String,
 ) -> Result<LoadDatabaseResult, String> {
     let mut df = sql_reader::read_table_to_dataframe(&engine, &connection_string, &table)?;
-    let (id, table_id, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(state)?;
+    let (id, table_id, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
     let meta = ingest_dataframe_to_duckdb(&mut df, &duckdb_abs, &table_id)?;
     let base_name = table.clone();
     register_duckdb_instance(
         state,
+        session,
         id,
         table_id,
         base_name,
@@ -263,6 +277,9 @@ pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) ->
 }
 
 pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaResult, String> {
+    state
+        .ensure_project_operational()
+        .map_err(|error| format!("{}: {error}", error.code()))?;
     let store = state.project_store.read().unwrap();
     let db = store.databases.get(id).ok_or("Database not found")?;
 
@@ -296,6 +313,7 @@ fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
 }
 
 pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(), String> {
+    let (session, _lease) = state.acquire_database_write_lease()?;
     let name = name.trim();
     if name.is_empty() {
         return Err("Dataset name cannot be empty".into());
@@ -315,46 +333,34 @@ pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(),
         }
     }
 
-    let engine = {
-        let mut store = state.project_store.write().unwrap();
-        let db = store.databases.get_mut(id).ok_or("Database not found")?;
-        db.decl.name = Some(name.to_string());
-        db.decl.engine.clone()
-    };
-
-    {
-        let mut data = state.project_data.write().unwrap();
-        if let Some(decl) = data.databases.get_mut(id) {
-            decl.name = Some(name.to_string());
-        }
-    }
-
+    let engine = state
+        .database_snapshot_for_session(&session, id)?
+        .decl
+        .engine;
     if let Some((relative_path, table)) = engine.duckdb_table() {
-        if let Some(project_path) = state.get_path() {
-            let root = project_root_from_path(&project_path);
-            let abs = root.join(relative_path);
-            write_display_name(&abs, table, name)?;
-        }
+        let abs = session.root.as_path().join(relative_path);
+        write_display_name(&abs, table, name)?;
     }
-
-    state.invalidate_graph_runtime();
-    Ok(())
+    state.commit_database_name(&session, id, name)
 }
 
-pub fn remove_duckdb_table_if_needed(engine: &DatabaseEngine, project_root: Option<&Path>) {
+pub fn remove_duckdb_table_if_needed(
+    engine: &DatabaseEngine,
+    project_root: Option<&Path>,
+) -> Result<(), String> {
     let Some((relative_path, table)) = engine.duckdb_table() else {
-        return;
+        return Ok(());
     };
     let Some(root) = project_root else {
-        return;
+        return Ok(());
     };
-    let abs = root.join(relative_path);
-    let _ = drop_data_table(&abs, table);
+    drop_data_table(&root.join(relative_path), table)
 }
 
 /// Persist in-memory edits into the project's DuckDB table (`project.duckdb`).
 /// DuckDB-backed datasets transition back to `DatabaseState::DuckDb` after a successful save.
 pub fn save_database_changes(state: &ProjectState, id: &str) -> Result<EditState, String> {
-    let project_root = state.get_path().map(|p| project_root_from_path(&p));
-    state.with_database_mut(id, |db| db.save_changes(project_root.as_deref()))
+    state.with_database_writer(id, |db, session| {
+        db.save_changes(Some(session.root.as_path()))
+    })
 }

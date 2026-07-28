@@ -4,6 +4,7 @@ import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
   cascadeGraphPathReferences,
   cascadeSubGraphPathInLoadedGraphs,
@@ -24,30 +25,26 @@ describe('cascadeGraphPathReferences', () => {
     const from = 'functions/Old.yssbi-function';
     const to = 'functions/New.yssbi-function';
 
-    useGraphDataStore.setState({
+    const graphPath = 'events/Caller.yssbi-event';
+    const fixture = makeEditorProjectionFixture({
+      graphPath,
+      nodeId: 'call-1',
+      nodeTypeId: CALL_FUNCTION_NODE_TYPE,
+      title: 'Call',
+    });
+    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphDataStore.setState((state) => ({
       graphEntities: {
-        'events/Caller.yssbi-event': {
+        ...state.graphEntities,
+        [graphPath]: {
+          ...state.graphEntities[graphPath],
           nodes: {
-            'call-1': {
-              id: 'call-1',
-              graphPath: 'events/Caller.yssbi-event',
-              nodeType: CALL_FUNCTION_NODE_TYPE,
-              category: ['value'],
-              subGraphPath: from,
-              title: 'Call',
-              position: { x: 0, y: 0 },
-              inputs: [],
-              outputs: [],
-            },
+            ...state.graphEntities[graphPath].nodes,
+            'call-1': { ...state.graphEntities[graphPath].nodes['call-1'], subGraphPath: from },
           },
-          pins: {},
-          connections: {},
-          graphNodes: ['call-1'],
-          nodePins: {},
-          pinConnections: {},
         },
       },
-    });
+    }));
 
     cascadeSubGraphPathInLoadedGraphs(from, to);
 

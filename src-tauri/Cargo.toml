@@ -65,3 +65,6 @@ rand = "0.8"
 duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
 trash = "5.2"
 notify = "8.2.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Globalization"] }

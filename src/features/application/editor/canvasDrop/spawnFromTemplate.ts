@@ -5,6 +5,10 @@ import { logger } from '@/utils/appLogger';
 import type { CreateNodeFn } from './createNodeFn';
 import { isFunctionAvailable, isVariableAvailable } from './editorResources';
 import {
+  EDITOR_MUTATION_CAPABILITIES,
+  notifyNodeCreationUnavailable,
+} from '../editorMutationAvailability';
+import {
   buildVariableDropMenu,
   resolveVariableSpawnType,
   spawnVariableNode,
@@ -25,27 +29,32 @@ export async function spawnNodeFromTemplate(
   clientPosition: { x: number; y: number },
   event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey'>,
   ctx: SpawnFromTemplateContext,
-): Promise<void> {
+): Promise<boolean> {
+  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) {
+    notifyNodeCreationUnavailable();
+    return false;
+  }
+
   if (template.category === 'Data') {
     if (!template.variableId) {
       logger.graph.warn('DataFrame drop missing variableId', 'CanvasDrop');
-      return;
+      return false;
     }
     await ctx.createNode(template.nodeType, worldPosition, {
       dataframeId: template.variableId,
       variableName: template.variableName,
     });
-    return;
+    return true;
   }
 
   if (template.category === 'Variable') {
     if (!template.variableId) {
       logger.graph.warn('Variable drop missing variableId', 'CanvasDrop');
-      return;
+      return false;
     }
     if (!isVariableAvailable(template.variableId, ctx.variables)) {
       logger.graph.warn('Variable no longer exists. Aborting drop', 'CanvasDrop');
-      return;
+      return false;
     }
 
     const spawnType = resolveVariableSpawnType(event, clientPosition.x, clientPosition.y);
@@ -57,24 +66,25 @@ export async function spawnNodeFromTemplate(
         template.variableId,
         template.variableName ?? template.title ?? template.variableId,
       ));
-      return;
+      return true;
     }
 
     await spawnVariableNode(spawnType, worldPosition, template.variableId, ctx.createNode);
-    return;
+    return true;
   }
 
   if (template.nodeType === CALL_FUNCTION_NODE_TYPE) {
     if (!template.subGraphPath) {
       logger.graph.warn('Function call drop missing subGraphPath', 'CanvasDrop');
-      return;
+      return false;
     }
-    if (!isFunctionAvailable(template.subGraphPath, ctx.functions)) return;
+    if (!isFunctionAvailable(template.subGraphPath, ctx.functions)) return false;
     await ctx.createNode(CALL_FUNCTION_NODE_TYPE, worldPosition, { subGraphPath: template.subGraphPath });
-    return;
+    return true;
   }
 
   await ctx.createNode(template.nodeType, worldPosition);
+  return true;
 }
 
 export type { VariableNodeType };

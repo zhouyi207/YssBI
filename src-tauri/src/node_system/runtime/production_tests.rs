@@ -78,7 +78,137 @@ fn project_resource_version_fingerprint_tracks_variables_and_databases() {
 }
 
 #[test]
-fn variable_reads_stay_on_the_snapshot_and_writes_become_effects() {
+fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() {
+    let variable_id = crate::variable::VariableId::new();
+    let resource = resource_id(&format!("variables/{variable_id}"));
+    let variable = Arc::new(crate::variable::VariableInstance {
+        id: variable_id,
+        name: "Rate".into(),
+        data_type: crate::graph::value::DataType::Int64,
+        data_value: crate::graph::value::DataValue::Int64(1),
+        tabular: None,
+        description: String::new(),
+        scope: crate::variable::VariableScope::Global,
+        tags: Vec::new(),
+    });
+    let session = ProjectSessionId::new("project-a");
+    let resource_versions = versions(&[(resource.as_str(), "1")]);
+    let snapshot = ProjectResourceSnapshot::new(session.clone(), resource_versions.clone())
+        .with_variable(resource.clone(), variable);
+    let provider = ProjectResourceProvider::new(snapshot);
+    let provenance = empty_plan(
+        &session,
+        "events/main",
+        &RegistryFingerprint::from_bytes([7; 32]),
+        resource_versions,
+    )
+    .provenance;
+    let shared = CompiledResourceRequirement {
+        resource: resource.clone(),
+        kind: ResourceKind::ExternalArtifact,
+        access: ResourceAccess::Shared,
+        optional: false,
+    };
+
+    assert!(
+        provider
+            .validate_plan(&provenance, std::slice::from_ref(&shared))
+            .is_ok()
+    );
+
+    let exclusive = CompiledResourceRequirement {
+        access: ResourceAccess::Exclusive,
+        ..shared
+    };
+    assert!(provider.validate_plan(&provenance, &[exclusive]).is_ok());
+}
+
+struct NoFunctions;
+
+impl FunctionPlanProvider for NoFunctions {
+    fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
+        Ok(None)
+    }
+}
+
+#[test]
+fn run_executor_classifies_resource_plan_validation_errors() {
+    let variable_id = crate::variable::VariableId::new();
+    let resource = resource_id(&format!("variables/{variable_id}"));
+    let variable = Arc::new(crate::variable::VariableInstance {
+        id: variable_id,
+        name: "Rate".into(),
+        data_type: crate::graph::value::DataType::Int64,
+        data_value: crate::graph::value::DataValue::Int64(1),
+        tabular: None,
+        description: String::new(),
+        scope: crate::variable::VariableScope::Global,
+        tags: Vec::new(),
+    });
+    let session = ProjectSessionId::new("project-a");
+    let resource_versions = versions(&[(resource.as_str(), "1")]);
+    let provider = ProjectResourceProvider::new(
+        ProjectResourceSnapshot::new(session.clone(), resource_versions.clone())
+            .with_variable(resource.clone(), variable),
+    );
+    let mut unsupported = empty_plan(
+        &session,
+        "events/main",
+        &RegistryFingerprint::from_bytes([7; 32]),
+        resource_versions,
+    );
+    unsupported.resources = Box::new([CompiledResourceRequirement {
+        resource: resource.clone(),
+        kind: ResourceKind::ExternalArtifact,
+        access: ResourceAccess::Exclusive,
+        optional: false,
+    }]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
+        .run(&unsupported, CancellationToken::new())
+        .unwrap_err();
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+    assert_eq!(RunErrorCode::from(&error), RunErrorCode::InvalidPlan);
+
+    let stale_session = empty_plan(
+        &ProjectSessionId::new("project-b"),
+        "events/main",
+        &RegistryFingerprint::from_bytes([7; 32]),
+        BTreeMap::new(),
+    );
+    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
+        .run(&stale_session, CancellationToken::new())
+        .unwrap_err();
+    assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
+    assert_eq!(
+        RunErrorCode::from(&error),
+        RunErrorCode::ResourceSnapshotMismatch
+    );
+
+    let mut stale_version = empty_plan(
+        &session,
+        "events/main",
+        &RegistryFingerprint::from_bytes([7; 32]),
+        versions(&[(resource.as_str(), "2")]),
+    );
+    stale_version.resources = Box::new([CompiledResourceRequirement {
+        resource,
+        kind: ResourceKind::ExternalArtifact,
+        access: ResourceAccess::Shared,
+        optional: false,
+    }]);
+    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
+        .run(&stale_version, CancellationToken::new())
+        .unwrap_err();
+    assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
+    assert_eq!(
+        RunErrorCode::from(&error),
+        RunErrorCode::ResourceSnapshotMismatch
+    );
+}
+
+#[test]
+fn variable_reads_stay_on_the_snapshot() {
     let variable_id = crate::variable::VariableId::new();
     let resource = resource_id(&format!("variables/{variable_id}"));
     let variable = Arc::new(crate::variable::VariableInstance {
@@ -101,7 +231,7 @@ fn variable_reads_stay_on_the_snapshot_and_writes_become_effects() {
         .acquire(&CompiledResourceRequirement {
             resource: resource.clone(),
             kind: ResourceKind::ExternalArtifact,
-            access: ResourceAccess::Exclusive,
+            access: ResourceAccess::Shared,
             optional: false,
         })
         .unwrap();
@@ -112,19 +242,10 @@ fn variable_reads_stay_on_the_snapshot_and_writes_become_effects() {
         .variable_access()
         .unwrap();
 
-    access
-        .write(crate::graph::value::DataValue::Int64(2))
-        .unwrap();
+    let cloned = access.read().unwrap();
     assert!(matches!(
-        access.read().unwrap().data_value,
+        cloned.data_value,
         crate::graph::value::DataValue::Int64(1)
-    ));
-    let effects = provider.snapshot().variable_effects();
-    assert_eq!(effects.len(), 1);
-    assert_eq!(effects[0].resource, resource);
-    assert!(matches!(
-        effects[0].after,
-        crate::graph::value::DataValue::Int64(2)
     ));
 }
 

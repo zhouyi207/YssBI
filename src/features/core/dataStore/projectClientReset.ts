@@ -5,7 +5,10 @@
 import { collapseEditorGroupsForProjectSwitch } from '@/features/core/layout/workbenchLayoutService';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useViewportStore } from '@/features/core/viewport';
-import { useHistoryStore } from '@/features/core/history';
+import { resetFunctionSignatureCoordinator } from '@/features/application/editorMutation/functionSignatureCoordinator';
+import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { useDocumentStateStore, useResourceStore } from '@/features/core/resource';
 import { useEditStateStore } from './editStateStore';
@@ -17,10 +20,13 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 
 /** 清空 tab / viewport / history / 数据视图缓存等；变量与 graph 正文由调用方立即覆写。 */
 export function resetClientProjectState(): void {
+  projectPublicationCoordinator.cancelProject();
   useLayoutStore.getState().closeAllGraphTabs();
   collapseEditorGroupsForProjectSwitch();
   useViewportStore.getState().clear();
-  useHistoryStore.getState().clear();
+  resetFunctionSignatureCoordinator();
+  resetHistoryCoordinator();
+  useGraphInteractionStore.setState({ positionOverrides: {} });
   useEditStateStore.getState().clear();
   useColumnStatsStore.getState().clear();
   useColumnDistributionStore.getState().clear();

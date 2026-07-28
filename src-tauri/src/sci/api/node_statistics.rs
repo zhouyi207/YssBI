@@ -8,7 +8,7 @@ use yss_sci::regression::linear_model::{
 };
 use yss_sci::regression::panel::fit_panel_fe_twoway;
 use yss_sci::ts::unit_root::adf_test;
-use yss_sci::ts::var::var_varsoc;
+use yss_sci::ts::var::{VAR, VARConfig, var_varsoc};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -392,8 +392,9 @@ pub fn augmented_dickey_fuller(
 ) -> Result<serde_json::Value, String> {
     let (constant, trend) = match regression {
         "none" | "no_constant" => (false, false),
+        "constant" => (true, false),
         "trend" => (true, true),
-        _ => (true, false),
+        other => return Err(format!("unsupported ADF regression '{other}'")),
     };
     let result = adf_test(series, lags, constant, trend)?;
     serde_json::to_value(serde_json::json!({
@@ -426,6 +427,31 @@ fn multivariate_series(series: Vec<Vec<f64>>) -> Result<Array2<f64>, String> {
         }
     }
     Array2::from_shape_vec((observations, series.len()), values).map_err(|error| error.to_string())
+}
+
+pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, String> {
+    if lags == 0 {
+        return Err("VAR lags must be positive".into());
+    }
+    let y = multivariate_series(series)?;
+    let result = VAR {
+        y,
+        exog: None,
+        config: VARConfig {
+            constant: true,
+            lags: (1..=lags).collect(),
+            step: 8,
+            dfk: false,
+            mlag: 2,
+            sample_start_offset: None,
+            skip_extras: false,
+        },
+        var_names: None,
+        exog_names: None,
+        regression_times: None,
+    }
+    .fit()?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 pub fn var_lag_order(series: Vec<Vec<f64>>, max_lags: usize) -> Result<serde_json::Value, String> {
@@ -475,5 +501,19 @@ fn vec_trend(trend: &str) -> Result<VecTrendSpec, String> {
         "constant" => Ok(VecTrendSpec::Constant),
         "trend" => Ok(VecTrendSpec::Trend),
         other => Err(format!("unsupported VEC trend '{other}'")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn augmented_dickey_fuller_rejects_unknown_regression() {
+        let series = [1.0, 1.4, 1.1, 1.8, 1.5, 2.2, 1.9, 2.6, 2.3, 3.0, 2.7, 3.4];
+
+        let error = augmented_dickey_fuller(&series, 1, "unexpected").unwrap_err();
+
+        assert_eq!(error, "unsupported ADF regression 'unexpected'");
     }
 }

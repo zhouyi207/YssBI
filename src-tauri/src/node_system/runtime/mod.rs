@@ -46,15 +46,17 @@ pub use project_resource::{
     ProjectVariableAccess, VariableWriteEffect,
 };
 pub use project_run::{
-    ProjectPreRunRegistration, ProjectRunRegistration, ProjectRunRegistrationError,
-    ProjectRunRegistry,
+    ProjectPreRunRegistration, ProjectRunDrainGuard, ProjectRunRegistration,
+    ProjectRunRegistrationError, ProjectRunRegistry,
 };
 pub use relational::{
     RelationalBackend, RelationalBackendLease, RelationalBackendProvider,
     RelationalBackendRegistrationError, RelationalBackendRegistry, RelationalContext,
     RelationalError, RelationalExecution, RelationalInput, materialize_bridge,
 };
-pub use resource::{ResourceError, ResourceLease, ResourceProvider, RunResourceSet};
+pub use resource::{
+    ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,
+};
 pub use result_store::{ResultSourceDescriptor, ResultSourceId, ResultSourcePage, ResultStore};
 pub use run::{
     ActivationId, Artifact, ArtifactKind, CancellationToken, FrameId, RunError, RunResult,

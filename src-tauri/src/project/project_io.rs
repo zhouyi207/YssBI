@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE, ProjectData, ProjectError,
-    ProjectWorksheetIndexEntry, ensure_worksheets_dir, flatten_worksheet_layout,
-    read_worksheet_index_entries, scan_graph_resource_index,
+    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, NormalizedProjectRoot,
+    PROJECT_METADATA_FILE, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
+    ensure_worksheets_dir, load_worksheets_from_root, read_worksheet_index_entries,
+    scan_graph_resource_index,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 
@@ -44,6 +45,8 @@ pub struct GraphDocument {
     pub schema_version: u32,
     pub kind: GraphDocumentKind,
     pub name: String,
+    #[serde(default)]
+    pub revision: crate::node_system::document::ResourceRevision,
     pub document: NodeGraphDocument,
     pub function: Option<crate::node_system::document::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
@@ -64,13 +67,16 @@ pub struct ProjectGraphIndexEntry {
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function: Option<crate::node_system::document::FunctionDocument>,
+    pub function_revision: Option<crate::node_system::document::ResourceRevision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_signature: Option<crate::node_system::document::FunctionSignature>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectVariableIndexEntry {
     pub id: String,
+    pub revision: crate::node_system::document::ResourceRevision,
     pub name: String,
     pub data_type: crate::graph::value::DataType,
     pub data_value: crate::graph::value::DataValue,
@@ -87,6 +93,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
     fn from(value: VariableInstance) -> Self {
         Self {
             id: value.id.to_string(),
+            revision: crate::node_system::document::ResourceRevision::INITIAL,
             name: value.name,
             data_type: value.data_type,
             data_value: value.data_value,
@@ -103,6 +110,11 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectIndex {
+    pub project_instance_id: String,
+    #[serde(default)]
+    pub publication_revision: u64,
+    #[serde(default)]
+    pub history: crate::node_system::document::HistoryStatusDto,
     pub project_name: String,
     pub app_version: String,
     pub export_time: String,
@@ -113,22 +125,72 @@ pub struct ProjectIndex {
     pub variables: Vec<ProjectVariableIndexEntry>,
 }
 
-/// 保存项目到文件
-pub fn save_project_to_file(project_data: &ProjectData, path: &str) -> Result<(), ProjectError> {
-    save_project_to_directory(project_data, project_root_from_path(path).as_path())
+pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
+    serde_json::to_vec_pretty(&ProjectManifest {
+        schema_version: SCHEMA_VERSION,
+        project_name: data.metadata.project_name.clone(),
+        app_version: data.metadata.app_version.clone(),
+        export_time: data.metadata.export_time.clone(),
+    })
+    .map_err(ProjectError::Serialize)
 }
 
-pub fn save_project_graph_to_file(
-    project_data: &ProjectData,
-    path: &str,
+pub fn serialize_global_variables(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
+    let variables = data
+        .variables
+        .iter()
+        .filter(|(_, variable)| matches!(variable.scope, VariableScope::Global))
+        .map(|(id, variable)| (*id, variable.clone()))
+        .collect();
+    serialize_global_variable_map(variables)
+}
+
+pub(crate) fn serialize_global_variable_map(
+    variables: std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::variable::VariableInstance,
+    >,
+) -> Result<Vec<u8>, ProjectError> {
+    serde_json::to_vec_pretty(&GlobalVariablesDocument {
+        schema_version: SCHEMA_VERSION,
+        variables,
+    })
+    .map_err(ProjectError::Serialize)
+}
+
+pub fn serialize_graph_document(
+    data: &ProjectData,
     graph_path: &GraphResourcePath,
-) -> Result<String, ProjectError> {
-    let root = project_root_from_path(path);
-    std::fs::create_dir_all(root.as_path())?;
-    std::fs::create_dir_all(root.join(EVENTS_DIR))?;
-    std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
-    ensure_worksheets_dir(root.as_path())?;
-    write_loaded_graph_document(project_data, root.as_path(), graph_path)
+) -> Result<(PathBuf, Vec<u8>), ProjectError> {
+    let graph = data.graphs.get(graph_path).ok_or_else(|| {
+        ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
+    })?;
+    let local_variables = local_variables_for_graph(&data.variables, graph_path, graph.kind);
+    serialize_graph_resource_document(graph, local_variables)
+        .map(|contents| (PathBuf::from(graph_path.as_str()), contents))
+}
+
+pub(crate) fn initialize_project_directory(
+    project_data: &ProjectData,
+    root: &Path,
+) -> Result<(), ProjectError> {
+    save_project_to_directory(project_data, root)
+}
+
+pub(crate) fn serialize_graph_resource_document(
+    graph: &GraphResourceDocument,
+    local_variables: HashMap<VariableId, VariableInstance>,
+) -> Result<Vec<u8>, ProjectError> {
+    serde_json::to_vec_pretty(&GraphDocument {
+        schema_version: SCHEMA_VERSION,
+        kind: graph.kind,
+        name: graph.name.clone(),
+        revision: graph.document.revision,
+        document: graph.document.clone(),
+        function: graph.function.clone(),
+        local_variables,
+    })
+    .map_err(ProjectError::Serialize)
 }
 
 fn write_loaded_graph_document(
@@ -153,6 +215,7 @@ fn write_loaded_graph_document(
             schema_version: SCHEMA_VERSION,
             kind: graph.kind,
             name: graph.name.clone(),
+            revision: graph.document.revision,
             document: graph.document.clone(),
             function: graph.function.clone(),
             local_variables,
@@ -278,6 +341,14 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
+    for worksheet in project_data.worksheets.values() {
+        let (relative_path, contents) = super::serialize_worksheet(worksheet)?;
+        let target = root.join(relative_path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(target, contents)?;
+    }
 
     let mut manifest = read_project_manifest_from_root(root)?;
     manifest.project_name = project_data.metadata.project_name.clone();
@@ -296,6 +367,7 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.metadata.app_version = manifest.app_version;
     project_data.metadata.export_time = manifest.export_time;
     project_data.databases = discover_databases_from_root(root.as_path())?;
+    project_data.worksheets = load_worksheets_from_root(root.as_path())?;
 
     let variables_path = root.join(GLOBAL_VARIABLES_FILE);
     if variables_path.exists() {
@@ -308,29 +380,34 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
 
 pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
     let root = project_root_from_path(path);
-    flatten_graph_layout(root.as_path())?;
-    flatten_worksheet_layout(root.as_path())?;
-    let manifest = read_project_manifest_from_root(root.as_path())?;
-    let graph_resources = load_graph_resource_index(root.as_path())?;
+    read_project_index_from_root(root.as_path())
+}
+
+pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, ProjectError> {
+    let manifest = read_project_manifest_from_root(root)?;
+    let graph_resources = load_graph_resource_index(root)?;
     let mut graphs = Vec::new();
     graphs.extend(read_graph_index_entries(
-        root.as_path(),
+        root,
         EVENTS_DIR,
         EVENT_EXTENSION,
         GraphDocumentKind::Event,
         &graph_resources,
     )?);
     graphs.extend(read_graph_index_entries(
-        root.as_path(),
+        root,
         FUNCTIONS_DIR,
         FUNCTION_EXTENSION,
         GraphDocumentKind::Function,
         &graph_resources,
     )?);
-    let worksheets = read_worksheet_index_entries(root.as_path())?;
-    let variables = read_variable_index_entries(root.as_path())?;
+    let worksheets = read_worksheet_index_entries(root)?;
+    let variables = read_variable_index_entries(root)?;
 
     Ok(ProjectIndex {
+        project_instance_id: String::new(),
+        publication_revision: 0,
+        history: Default::default(),
         project_name: manifest.project_name,
         app_version: manifest.app_version,
         export_time: manifest.export_time,
@@ -393,10 +470,12 @@ pub fn load_project_graph_from_file(
             read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
         let document =
             bind_graph_document_scope_by_path(document, resource.kind, resource.path.as_str());
+        let mut graph = document.document;
+        graph.revision = document.revision;
         return Ok(super::GraphResourceDocument {
             name: document.name,
             kind: document.kind,
-            document: document.document,
+            document: graph,
             function: document.function,
         });
     }
@@ -458,12 +537,14 @@ pub fn duplicate_project_graph_file(
     write_json(target_path.as_path(), &document)?;
     let graph_path = GraphResourcePath::new(relative_path)
         .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    let mut graph = document.document;
+    graph.revision = document.revision;
     Ok((
         graph_path,
         super::GraphResourceDocument {
             name: document.name,
             kind: document.kind,
-            document: document.document,
+            document: graph,
             function: document.function,
         },
     ))
@@ -488,7 +569,6 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
 }
 
 fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
-    flatten_graph_layout(root)?;
     scan_graph_resource_index(root)
 }
 
@@ -564,24 +644,29 @@ pub fn save_project_as_to_directory(
         ));
     }
 
-    let old_path = state
-        .get_path()
-        .ok_or_else(|| ProjectError::InvalidProjectFormat("项目尚未加载".into()))?;
-    state
-        .persist_current_project()
-        .map_err(ProjectError::InvalidProjectFormat)?;
-
-    let old_root = project_root_from_path(&old_path);
     let new_root = PathBuf::from(new_root_path.trim());
-    if old_root == new_root {
+    let (session, data) = state
+        .project_payload()
+        .map_err(ProjectError::InvalidProjectFormat)?;
+    let old_normalized = session.root.clone();
+    let new_normalized = NormalizedProjectRoot::from_project_path(&new_root)
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    if old_normalized == new_normalized {
         return Err(ProjectError::InvalidProjectFormat(
             "不能另存为当前项目目录".into(),
         ));
     }
-
+    let _filesystem_lease = state
+        .filesystem()
+        .acquire_many([old_normalized.clone(), new_normalized])
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    state
+        .validate_project_session(&session)
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    let old_root = old_normalized.as_path();
+    save_project_to_directory(&data, old_root)?;
     std::fs::create_dir_all(&new_root)?;
-    copy_project_directory(old_root.as_path(), new_root.as_path())?;
-
+    copy_project_directory(old_root, new_root.as_path())?;
     Ok(new_root
         .join(PROJECT_METADATA_FILE)
         .to_string_lossy()
@@ -751,11 +836,16 @@ fn read_graph_index_entries(
             )));
         }
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.name);
+        let (function_revision, function_signature) = header
+            .function
+            .map(|function| (Some(function.revision), Some(function.signature)))
+            .unwrap_or((None, None));
         entries.push(ProjectGraphIndexEntry {
             path: resource.path.as_str().to_string(),
             name,
             graph_type: expected_kind,
-            function: header.function,
+            function_revision,
+            function_signature,
         });
     }
     Ok(entries)
@@ -1220,7 +1310,7 @@ mod tests {
         let mut project = ProjectData::new();
         project.graphs.insert(graph_path.clone(), graph.clone());
 
-        save_project_to_file(&project, root.to_string_lossy().as_ref()).unwrap();
+        initialize_project_directory(&project, root.as_path()).unwrap();
         let graph_file = root.join(graph_path.as_str());
         let value: serde_json::Value = read_json(&graph_file).unwrap();
         let serialized = serde_json::to_string(&value).unwrap();
@@ -1244,7 +1334,7 @@ mod tests {
         project
             .graphs
             .insert(graph_path.clone(), normalized_graph());
-        save_project_to_file(&project, root.to_string_lossy().as_ref()).unwrap();
+        initialize_project_directory(&project, root.as_path()).unwrap();
         let graph_file = root.join(graph_path.as_str());
         let mut value: serde_json::Value = read_json(&graph_file).unwrap();
         value["schemaVersion"] = serde_json::json!(1);
@@ -1268,7 +1358,7 @@ mod tests {
         let mut event = normalized_graph();
         event.name = "Strict".into();
         project.graphs.insert(event_path.clone(), event);
-        save_project_to_file(&project, root.to_string_lossy().as_ref()).unwrap();
+        initialize_project_directory(&project, root.as_path()).unwrap();
 
         let function_file = root.join(function_path.as_str());
         let mut function_value: serde_json::Value = read_json(&function_file).unwrap();
@@ -1300,7 +1390,7 @@ mod tests {
         project
             .graphs
             .insert(graph_path.clone(), normalized_graph());
-        save_project_to_file(&project, root.to_string_lossy().as_ref()).unwrap();
+        initialize_project_directory(&project, root.as_path()).unwrap();
         let graph_file = root.join(graph_path.as_str());
         let mut value: serde_json::Value = read_json(&graph_file).unwrap();
         value["schemaVersion"] = serde_json::json!(1);

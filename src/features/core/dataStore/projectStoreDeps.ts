@@ -10,7 +10,7 @@ export const PROJECT_SNAPSHOT_STORE_HOOKS = ['useGraphDataStore', 'useResourceSt
 export const PROJECT_RESET_STORE_HOOKS = [
   'useLayoutStore',
   'useViewportStore',
-  'useHistoryStore',
+
   'useEditStateStore',
   'useColumnStatsStore',
   'useColumnDistributionStore',

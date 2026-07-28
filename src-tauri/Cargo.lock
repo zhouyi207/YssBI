@@ -9412,6 +9412,7 @@ dependencies = [
  "thiserror 2.0.18",
  "trash",
  "uuid",
+ "windows-sys 0.61.2",
  "yss-sci",
 ]
 

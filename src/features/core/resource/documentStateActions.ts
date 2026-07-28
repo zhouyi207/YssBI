@@ -40,6 +40,16 @@ export function markResourceLoaded(ref: ResourceRef, loaded = true): void {
   }));
 }
 
+export function markResourceStale(ref: ResourceRef, stale = true): void {
+  updateDocumentState(ref, (previous) => ({
+    ...previous,
+    stale,
+    conflict: stale ? previous.conflict : false,
+    missing: false,
+    version: previous.version + 1,
+  }));
+}
+
 export function markResourceDirty(ref: ResourceRef, dirty: boolean): void {
   updateDocumentState(ref, (previous) => ({
     ...previous,

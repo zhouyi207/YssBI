@@ -1,25 +1,58 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import type { PlotColumnPairPayload } from '@/shared/types/domain/worksheet';
+import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+
+export interface WorksheetMutationResultDto {
+  operationId: string;
+  result: ResourceMutationResultDto;
+  document: WorksheetDocument;
+}
 
 export class WorksheetService {
   static async createWorksheet(
+    projectInstanceId: string,
+    operationId: string,
     name?: string,
     databaseId?: string,
+  ): Promise<WorksheetMutationResultDto> {
+    return await invoke<WorksheetMutationResultDto>('create_worksheet', {
+      projectInstanceId,
+      operationId,
+      name,
+      databaseId,
+    });
+  }
+
+  static async loadWorksheet(
+    projectInstanceId: string,
+    worksheetId: string,
   ): Promise<WorksheetDocument> {
-    return await invoke('create_worksheet', { name, databaseId });
+    return await invoke('load_worksheet', { projectInstanceId, worksheetId });
   }
 
-  static async loadWorksheet(worksheetId: string): Promise<WorksheetDocument> {
-    return await invoke('load_worksheet', { worksheetId });
+  static async saveWorksheet(
+    projectInstanceId: string,
+    operationId: string,
+    document: WorksheetDocument,
+  ): Promise<WorksheetMutationResultDto> {
+    return await invoke<WorksheetMutationResultDto>('save_worksheet', {
+      projectInstanceId,
+      operationId,
+      document,
+    });
   }
 
-  static async saveWorksheet(document: WorksheetDocument): Promise<void> {
-    await invoke('save_worksheet', { document });
-  }
-
-  static async deleteWorksheet(worksheetId: string): Promise<void> {
-    await invoke('delete_worksheet', { worksheetId });
+  static async deleteWorksheet(
+    projectInstanceId: string,
+    operationId: string,
+    worksheetId: string,
+  ): Promise<WorksheetMutationResultDto> {
+    return await invoke<WorksheetMutationResultDto>('delete_worksheet', {
+      projectInstanceId,
+      operationId,
+      worksheetId,
+    });
   }
 
   static async getPlotColumnPair(

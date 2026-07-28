@@ -1,35 +1,25 @@
-import { ConnectionService, NodeService } from '@/services';
-import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { CommandHandler } from '../types';
+import { executeGraphIntent } from './executeGraphIntent';
 
 export interface DisconnectPinArgs {
   pinId: string;
 }
 
-export interface DisconnectPinContext {
-  pinId: string;
-  removedConnections: Array<{ fromPin: string; toPin: string }>;
-  undoPatch: GraphUndoPatch;
-}
-
-export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, DisconnectPinContext> = {
+export const disconnectPinCommand: CommandHandler<DisconnectPinArgs, boolean> = {
   async execute(graphPath, args) {
-    const result = await ConnectionService.disconnectPin(graphPath, args.pinId);
+    const connectionIds = [
+      ...useGraphDataStore.getState().getGraphPinConnections(graphPath, args.pinId),
+    ];
+    if (connectionIds.length === 0) return false;
 
-    return {
-      pinId: args.pinId,
-      removedConnections: result.removedConnections,
-      undoPatch: result.undoPatch,
-    };
-  },
-
-  async undo(graphPath, context) {
-    await NodeService.applyGraphPatch(graphPath, context.undoPatch);
-  },
-
-  async redo(graphPath, context) {
-    if (context.removedConnections.length > 0) {
-      await ConnectionService.disconnectPin(graphPath, context.pinId);
+    for (const connectionId of connectionIds) {
+      const outcome = await executeGraphIntent(graphPath, {
+        type: 'disconnect',
+        payload: { connectionId },
+      });
+      if (outcome.status !== 'applied') return false;
     }
+    return true;
   },
 };

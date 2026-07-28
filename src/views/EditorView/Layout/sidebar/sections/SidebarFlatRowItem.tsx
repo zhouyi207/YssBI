@@ -1,12 +1,9 @@
 import { memo } from 'react';
-import { VscDiscard, VscRedo } from 'react-icons/vsc';
 import type { FlatSidebarRow } from '@/features/core/sidebar';
-import { SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 import { sidebarItemIndent } from '../../sidebarUi/sidebarStyles';
 import { SidebarDataRow } from '../rows/SidebarDataRow';
 import { SidebarGraphRow } from '../rows/SidebarGraphRow';
 import { SidebarGroupRow } from '../rows/SidebarGroupRow';
-import { SidebarHistoryRow } from '../rows/SidebarHistoryRow';
 import { SidebarNodeRow } from '../rows/SidebarNodeRow';
 import { SidebarVariableRow } from '../rows/SidebarVariableRow';
 import { SidebarWorksheetRow } from '../rows/SidebarWorksheetRow';
@@ -120,21 +117,6 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({ row }: { ro
           isSelected={ctx.detailTarget?.kind === 'worksheet' && ctx.detailTarget.id === row.id}
           onOpen={ctx.onOpenWorksheet ?? (() => undefined)}
           onContextMenu={(e) => ctx.onWorksheetContextMenu?.(e, row.id, row.name)}
-        />
-      );
-    case 'history':
-      return (
-        <SidebarHistoryRow
-          entry={row.entry}
-          isHighlighted={row.highlighted}
-          indentDepth={row.level}
-          icon={
-            row.stack === 'undo' ? (
-              <VscDiscard size={SIDEBAR_ROW_ICON_SIZE} className="shrink-0 text-muted-foreground" />
-            ) : (
-              <VscRedo size={SIDEBAR_ROW_ICON_SIZE} className="shrink-0 text-muted-foreground" />
-            )
-          }
         />
       );
     case 'node':

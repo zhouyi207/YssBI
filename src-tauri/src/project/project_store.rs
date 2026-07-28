@@ -21,6 +21,8 @@ pub struct ProjectStore {
     pub results: ResultStore,
     pub runs: Arc<ProjectRunRegistry>,
     pub project_session_id: ProjectSessionId,
+    #[cfg(test)]
+    drop_test_hook: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl Default for ProjectStore {
@@ -49,6 +51,8 @@ impl Default for ProjectStore {
             results: ResultStore::new(),
             runs: Arc::new(ProjectRunRegistry::new()),
             project_session_id,
+            #[cfg(test)]
+            drop_test_hook: None,
         }
     }
 }
@@ -56,5 +60,19 @@ impl Default for ProjectStore {
 impl ProjectStore {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_drop_test_hook(&mut self, hook: Arc<dyn Fn() + Send + Sync>) {
+        self.drop_test_hook = Some(hook);
+    }
+}
+
+#[cfg(test)]
+impl Drop for ProjectStore {
+    fn drop(&mut self) {
+        if let Some(hook) = self.drop_test_hook.take() {
+            hook();
+        }
     }
 }

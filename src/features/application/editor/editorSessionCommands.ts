@@ -18,6 +18,7 @@ export type EditorSessionCommands = Omit<
   | 'pendingConnection'
   | 'canUndo'
   | 'canRedo'
+  | 'pending'
 >;
 
 /** Stable identity container — Provider mutates fields in place so preview canvases avoid context churn. */

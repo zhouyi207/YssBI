@@ -28,6 +28,7 @@ export type DataValue =
   | { kind: 'Object'; value: Record<string, unknown> }
   | { kind: 'DataFrame'; value: string }
   | { kind: 'DataSeries'; value: DataSeriesValuePayload | string }
+  | { kind: 'Struct'; value: { typeKey: string; handleId: string } }
   | { kind: 'Null' };
 
 /** 从 DataValue 提取原始值（用于 UI 显示/编辑） */
@@ -45,6 +46,8 @@ export function dataValueToRaw(dv: DataValue): unknown {
       return dv.value;
     case 'DataSeries':
       return typeof dv.value === 'string' ? dv.value : dv.value.id;
+    case 'Struct':
+      return dv.value;
     case 'Array':
       return dv.value.map(dataValueToRaw);
     case 'Object':
@@ -138,6 +141,14 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
               ? { elementType: payload.elementType as import('./dataType').DataType }
               : {}),
           },
+        };
+      }
+      return { kind: 'Null' };
+    case 'Struct':
+      if (raw && typeof raw === 'object' && 'handleId' in raw) {
+        return {
+          kind: 'Struct',
+          value: { typeKey: dataType.inner, handleId: String(raw.handleId) },
         };
       }
       return { kind: 'Null' };

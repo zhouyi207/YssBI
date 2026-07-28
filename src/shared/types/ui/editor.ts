@@ -13,7 +13,7 @@ import type { PinView } from '../store/graph';
  * 扩展领域节点，添加 UI 特定的属性和方法
  */
 export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
-    /** 壳层布局样式（注册表推导，仅视图层；不落 store / domain 持久化）。 */
+    /** Rust editor projection-authored layout style; view-only and not persisted by React. */
     uiStyle: string;
     position: { x: number; y: number };
     isInternal?: boolean;

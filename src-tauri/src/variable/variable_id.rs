@@ -6,7 +6,7 @@ use std::fmt;
 use uuid::Uuid;
 
 /// Variable 唯一标识符
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VariableId(Uuid);
 
 impl VariableId {

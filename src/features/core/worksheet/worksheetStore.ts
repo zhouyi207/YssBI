@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+
 import {
   clearResourceDocumentState,
   markResourceDirty,
@@ -84,8 +87,13 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
   saveDocument: async (worksheetId) => {
     const document = get().documents[worksheetId];
     if (!document) return;
-    await WorksheetService.saveWorksheet(document);
-    markResourceDirty({ id: worksheetId, kind: 'worksheet' }, false);
+    const context = captureProjectCommandContext();
+    const committed = await WorksheetService.saveWorksheet(
+      context.projectInstanceId,
+      context.operationId,
+      document,
+    );
+    await projectPublicationCoordinator.submit({ result: committed.result });
   },
 }));
 

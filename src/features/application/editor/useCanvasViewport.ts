@@ -8,7 +8,7 @@ import {
   editorViewportScope,
 } from '@/features/core/viewport';
 import { useGraphDataStore } from '@/features/core/dataStore';
-import { getDragPreview } from '@/features/core/canvas/dragPreview';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
 import { createSashAwareResizeHandler } from '@/shared/utils/sashResizeGuard';
 import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
@@ -21,6 +21,9 @@ export function useCanvasViewport(
   const viewportScope =
     groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
+  const positionOverrides = useGraphInteractionStore(
+    useShallow((state) => graphPath ? state.positionOverrides[graphPath] ?? {} : {}),
+  );
 
   const graphNodeIds = useGraphDataStore(
     useShallow((s) => (graphPath ? s.getGraphNodeIds(graphPath) : [])),
@@ -132,19 +135,15 @@ export function useCanvasViewport(
     (pinId: string) => {
       const nodeId = pinNodeIdMap[pinId];
       if (!nodeId) return null;
-      const position = nodePositionMap[nodeId];
+      const position = positionOverrides[nodeId] ?? nodePositionMap[nodeId];
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
-      const preview = getDragPreview();
-      const appliesHere = preview.active && preview.groupId === groupId;
-      const ddx = appliesHere && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.x : 0;
-      const ddy = appliesHere && preview.dragNodeIds.has(nodeId) ? preview.dragDelta.y : 0;
       return {
-        x: position.x + offset.x + ddx,
-        y: position.y + offset.y + ddy,
+        x: position.x + offset.x,
+        y: position.y + offset.y,
       };
     },
-    [pinNodeIdMap, nodePositionMap, pinOffsets, groupId],
+    [pinNodeIdMap, nodePositionMap, pinOffsets, positionOverrides],
   );
 
   const getCanvasLocalPoint = useCallback(

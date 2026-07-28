@@ -13,7 +13,6 @@ export {
   buildVariablesFlatRows,
   buildDataFlatRows,
   buildChartsFlatRows,
-  buildCommandsFlatRows,
   buildNodesFlatRows,
   nodeGroupKey,
   resolveGroupExpanded,

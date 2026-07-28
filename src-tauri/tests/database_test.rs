@@ -91,8 +91,6 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
 fn test_project_reload_discovers_duckdb_from_directory() {
     let (project_root, db_id) = setup_iris_duckdb_project();
     let state = ProjectState::new();
-    state.set_path(Some(project_root.to_string_lossy().to_string()));
-
     let mut project_data = ProjectData::new();
     project_data.databases =
         discover_databases_from_root(project_root.as_path()).expect("discover");
@@ -104,7 +102,7 @@ fn test_project_reload_discovers_duckdb_from_directory() {
             .and_then(|d| d.name.as_deref()),
         Some("iris")
     );
-    state.set_data(project_data);
+    state.activate_loaded_project(project_root.to_string_lossy().into_owned(), project_data);
 
     let mut store = state.project_store.write().unwrap();
     let db = store.databases.get_mut(&db_id).expect("database in store");
@@ -241,12 +239,10 @@ fn test_edit_save_persists_to_duckdb() {
 
     let (project_root, db_id) = setup_iris_duckdb_project();
     let state = ProjectState::new();
-    state.set_path(Some(project_root.to_string_lossy().to_string()));
-
     let mut project_data = ProjectData::new();
     project_data.databases =
         discover_databases_from_root(project_root.as_path()).expect("discover");
-    state.set_data(project_data);
+    state.activate_loaded_project(project_root.to_string_lossy().into_owned(), project_data);
 
     state
         .with_database_mut(&db_id, |db| {
@@ -255,6 +251,7 @@ fn test_edit_save_persists_to_duckdb() {
         .expect("edit");
 
     save_database_changes(&state, &db_id).expect("save");
+    drop(state);
 
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     let decl = databases.get(&db_id).expect("decl");

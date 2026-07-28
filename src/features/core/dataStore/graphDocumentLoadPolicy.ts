@@ -10,7 +10,7 @@ export function isGraphCachedInMemory(graphPath: string): boolean {
   if (!kind) return false;
 
   const doc = getDocumentState({ id: graphPath, kind });
-  if (doc?.stale || doc?.conflict) return false;
+  if (!doc?.loaded || doc.stale || doc.conflict) return false;
 
   return true;
 }

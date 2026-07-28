@@ -1,13 +1,8 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
 import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
-import { useNodeRegistryStore } from "@/features/core/nodeRegister/useNodeRegistryStore";
-import { getPinMetaData } from "@/features/core/pin";
-import {
-  getRepeatableSlot,
-} from "@/features/core/pin/repeatablePinUtils";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
@@ -79,12 +74,15 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const outputsExec = node.outputs.filter(isExecPin);
   const outputsData = node.outputs.filter((p) => !isExecPin(p)).map(resolveResourcePin);
 
-  const nodeDef = useNodeRegistryStore((s) => s.definitions.get(node.nodeType ?? ""));
-
-  const repeatableSlot = useMemo(() => getRepeatableSlot(nodeDef), [nodeDef]);
+  const hasRepeatableInput = node.inputs.some(
+    (pin) => !isExecPin(pin) && pin.instanceKind === "userCreated",
+  );
 
   const removePinHandler = onRemovePin
-    ? (pinId: string) => onRemovePin(node.id, pinId)
+    ? (pinId: string) => {
+        const pin = [...node.inputs, ...node.outputs].find((candidate) => candidate.id === pinId);
+        if (pin?.canRemove) onRemovePin(node.id, pinId);
+      }
     : undefined;
 
   const getPinDragState = useCallback((pin: PinModel): "normal" | "highlighted" | "dimmed" => {
@@ -116,12 +114,10 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             <div className="flex flex-col gap-1 flex-1">
               {inputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
-                const metaData = getPinMetaData(nodeDef, pin.name);
                 return (
                   <Pin
                     key={pin.id}
                     {...pin}
-                    metaData={metaData}
                     graphPath={graphPath}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
@@ -137,12 +133,10 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
             <div className="flex flex-col gap-1 flex-1 items-end">
               {outputsExec.map((pin) => {
                 const ds = getPinDragState(pin);
-                const metaData = getPinMetaData(nodeDef, pin.name);
                 return (
                   <Pin
                     key={pin.id}
                     {...pin}
-                    metaData={metaData}
                     graphPath={graphPath}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
@@ -162,12 +156,10 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           <div className="flex flex-col gap-1 flex-1">
             {inputsData.map((pin) => {
               const ds = getPinDragState(pin);
-              const metaData = getPinMetaData(nodeDef, pin.name);
               return (
                 <Pin
                   key={pin.id}
                   {...pin}
-                  metaData={metaData}
                   graphPath={graphPath}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
@@ -183,12 +175,10 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           <div className="flex flex-col gap-1 flex-1 items-end">
             {outputsData.map((pin) => {
               const ds = getPinDragState(pin);
-              const metaData = getPinMetaData(nodeDef, pin.name);
               return (
                 <Pin
                   key={pin.id}
                   {...pin}
-                  metaData={metaData}
                   graphPath={graphPath}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
@@ -203,7 +193,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           </div>
         </div>
 
-        {repeatableSlot && onAddInput && (
+        {hasRepeatableInput && onAddInput && (
           <div className="flex justify-end px-2 pb-2">
             <Button
               type="button"

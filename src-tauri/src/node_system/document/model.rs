@@ -90,6 +90,9 @@ pub struct DocumentConnection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DynamicPortBinding {
+    UserCreated {
+        order: OrderKey,
+    },
     Resolved {
         origin: DynamicMemberLocator,
         order: OrderKey,

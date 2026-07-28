@@ -1,27 +1,20 @@
-import { NodeService } from '@/services';
-import type { GraphUndoPatch } from '@/shared/types/dto/graphUndoPatch';
 import type { CommandHandler } from '../types';
+import { executeGraphIntent } from './executeGraphIntent';
 
 export interface DeleteNodesArgs {
   nodeIds: string[];
 }
 
-export interface DeleteNodesContext {
-  patch: GraphUndoPatch;
-}
-
-export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, DeleteNodesContext> = {
+export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, boolean> = {
   async execute(graphPath, args) {
-    const patch = await NodeService.batchDeleteNodes(graphPath, args.nodeIds);
-    return { patch };
-  },
-
-  async undo(graphPath, context) {
-    await NodeService.applyGraphPatch(graphPath, context.patch);
-  },
-
-  async redo(graphPath, context) {
-    const nodeIds = context.patch.nodes.map((n) => n.id);
-    await NodeService.batchDeleteNodes(graphPath, nodeIds);
+    if (args.nodeIds.length === 0) return false;
+    for (const nodeId of args.nodeIds) {
+      const outcome = await executeGraphIntent(graphPath, {
+        type: 'deleteNode',
+        payload: { nodeId },
+      });
+      if (outcome.status !== 'applied') return false;
+    }
+    return true;
   },
 };

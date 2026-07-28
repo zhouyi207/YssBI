@@ -2,7 +2,6 @@ import { BaseEventHandler } from './BaseEventHandler';
 import type {
   ProjectIndexInvalidatedPayload,
   ResourceChangedPayload,
-  GraphResourceMovedPayload,
 } from '../types';
 import {
   getDocumentState,
@@ -10,7 +9,6 @@ import {
   normalizeBackendResourceMeta,
   useResourceStore,
 } from '@/features/core/resource';
-import { migrateGraphResourcePath } from '@/features/application/editor/migrateGraphResourcePath';
 
 export class ProjectIndexInvalidatedHandler extends BaseEventHandler<ProjectIndexInvalidatedPayload> {
   eventType = 'ProjectIndexInvalidated';
@@ -38,16 +36,5 @@ export class ResourceChangedHandler extends BaseEventHandler<ResourceChangedPayl
       hasConflictDocument: doc?.conflict ?? meta.hasConflictDocument,
       loaded: doc?.loaded ?? meta.loaded,
     });
-  }
-}
-
-export class GraphResourceMovedHandler extends BaseEventHandler<GraphResourceMovedPayload> {
-  eventType = 'GraphResourceMoved';
-
-  handle(payload: GraphResourceMovedPayload): void {
-    this.log('Graph resource moved:', payload.from, '->', payload.to);
-    if (payload.kind !== 'event' && payload.kind !== 'function') return;
-    migrateGraphResourcePath(payload.from, payload.to, payload.kind);
-    void notifyIndexInvalidated('event');
   }
 }

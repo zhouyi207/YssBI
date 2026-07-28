@@ -96,7 +96,7 @@ pub async fn delete_registered_project_files(
         .map_err(AppError::internal)?;
 
     if deleting_active {
-        state.clear();
+        state.clear_project()?;
         emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     }
 

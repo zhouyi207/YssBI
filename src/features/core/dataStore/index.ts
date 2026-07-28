@@ -23,7 +23,7 @@ export * from './projectHelpers';
 export * from './variableStore';
 export * from './graphEntityAccess';
 export * from './graphDataStore';
-export { resolveNodeViewMeta } from '@/features/domain/nodeViewMeta';
+
 export { useNodeView } from './useNodeView';
 export { toUiNode, uiNodeHasNoHeader } from './nodeView';
 export type { ToUiNodeOptions, UiNodePinSlice } from './nodeView';

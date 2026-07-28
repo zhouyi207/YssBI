@@ -1,35 +1,23 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { PinData, PinView } from '@/shared/types/store/graph';
-import { getNodeDefinitionMeta } from '@/shared/types/domain/node';
-import { CALL_FUNCTION_NODE_TYPE, resolveEffectiveDefinition } from '@/features/domain/nodeDefinition';
-import { openGraphResource } from '@/features/application/editor/openGraphResource';
-import { useCallFunctionIssue } from '@/features/application/graphDiagnostics/useCallFunctionDiagnostics';
-import { updateCallFunctionTarget } from '@/features/application/graphDocument/graphDocumentActions';
-import { useFunctionCatalog } from '@/features/core/editor/hooks/useFunctionCatalog';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
-import { useNodeRegistryStore } from '@/features/core/nodeRegister';
 import {
-  pinResultsForSourceGraph,
   executionStatusForSourceGraph,
+  pinResultsForSourceGraph,
   useExecutionStore,
 } from '@/features/core/execution';
+import type { PinData, PinView } from '@/shared/types/store/graph';
+import type { PinResultState } from '@/shared/types/ui';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
-import { resolveNodeDocumentationContent } from '../nodeDocumentation';
-import { resolveNodePinSpecs } from '../resolveNodePinSpecs';
-import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
-import { VscGoToFile } from 'react-icons/vsc';
+import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
-import { DetailFieldRow } from '../shared/DetailFieldRow';
-import { DetailText } from '../shared/DetailText';
-import { Select } from '@/shared/ui';
-import type { PinResultState } from '@/shared/types/ui';
+import { DetailBadge, DetailText } from '../shared/DetailText';
+import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 
 const EMPTY_PINS: PinData[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
@@ -38,52 +26,44 @@ function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
+function formatProjectedValue(value: unknown): string {
+  if (value == null) return '—';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
+}
+
+export function selectNodeDetailNode(
+  state: GraphEntitiesState,
+  graphPath: string,
+  nodeId: string,
+) {
+  return state.graphEntities[graphPath]?.nodes[nodeId];
+}
+
 interface NodeDetailPanelProps {
+  graphPath: string;
   nodeId: string;
 }
 
-export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
-  const { t, i18n } = useTranslation();
-  const graphPath = useGraphDataStore((s) => {
-    for (const [gid, bucket] of Object.entries(s.graphEntities)) {
-      if (bucket.nodes[nodeId]) return gid;
-    }
-    return undefined;
-  });
-  const node = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
+export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
+  const { t } = useTranslation();
+  const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
   const pinObjs = useGraphDataStore(
-    useShallow((s) => {
-      if (!graphPath) return EMPTY_PINS;
-      const pinIds = s.getGraphNodePins(graphPath, nodeId);
-      if (!pinIds.length) return EMPTY_PINS;
-      return pinIds.map((pid) => s.getGraphPin(graphPath, pid)).filter(isPresent);
+    useShallow((state) => {
+      const bucket = state.graphEntities[graphPath];
+      const pinIds = bucket?.nodePins[nodeId];
+      if (!bucket || !pinIds?.length) return EMPTY_PINS;
+      return pinIds.map((pinId) => bucket.pins[pinId]).filter(isPresent);
     }),
   );
   const pinConns = useGraphDataStore(
-    useShallow((s) => {
-      if (!graphPath) return EMPTY_PIN_CONNECTIONS;
-      const pinIds = s.getGraphNodePins(graphPath, nodeId);
-      if (!pinIds.length) return EMPTY_PIN_CONNECTIONS;
-      return pinIds.map((pid) => s.getGraphPinConnections(graphPath, pid));
+    useShallow((state) => {
+      const bucket = state.graphEntities[graphPath];
+      const pinIds = bucket?.nodePins[nodeId];
+      if (!bucket || !pinIds?.length) return EMPTY_PIN_CONNECTIONS;
+      return pinIds.map((pinId) => bucket.pinConnections[pinId]);
     }),
   );
-  const nodeType = node?.nodeType;
-  const functionCatalog = useFunctionCatalog();
-  const functionOptions = useMemo(
-    () =>
-      Object.values(functionCatalog)
-        .map((entry) => ({ label: entry.name, value: entry.id }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [functionCatalog],
-  );
-  const definition = useNodeRegistryStore((s) =>
-    nodeType ? s.definitions.get(nodeType) : undefined,
-  );
-  const effectiveDefinition = useMemo(() => {
-    if (!definition) return undefined;
-    if (nodeType !== CALL_FUNCTION_NODE_TYPE || !node?.subGraphPath) return definition;
-    return resolveEffectiveDefinition(definition, { subGraphPath: node.subGraphPath });
-  }, [definition, nodeType, node?.subGraphPath]);
 
   const pins = useMemo<PinView[]>(
     () =>
@@ -94,29 +74,40 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     [pinObjs, pinConns],
   );
 
-  const pinSpecs = useMemo(
-    () => resolveNodePinSpecs(nodeId, pins, effectiveDefinition),
-    [nodeId, pins, effectiveDefinition],
-  );
+  const pinSpecs = useMemo(() => {
+    const toSpec = (pin: PinView): ResolvedPinSpec => ({
+      id: pin.id,
+      name: pin.display?.instanceLabel ?? pin.display?.label ?? pin.name,
+      direction: pin.direction,
+      kind: pin.type === 'exec' ? 'Exec' : 'Data',
+      typeLabel: pin.resolvedType?.display ?? pin.type,
+      optional: false,
+      slotKind:
+        pin.instanceKind === 'userCreated'
+          ? 'repeatable'
+          : pin.instanceKind === 'derived'
+            ? 'derivedFromInput'
+            : 'fixed',
+      connected: pin.connected,
+      connectionIds: pin.connectionIds,
+    });
+    return {
+      inputs: pins.filter((pin) => pin.direction === 'input').map(toSpec),
+      outputs: pins.filter((pin) => pin.direction === 'output').map(toSpec),
+    };
+  }, [pins]);
 
-  const executionGraphs = useExecutionStore((s) => s.graphs);
-  const pinResults = useMemo(() => {
-    if (!graphPath) return new Map<string, PinResultState>();
-    return pinResultsForSourceGraph(executionGraphs, graphPath);
-  }, [executionGraphs, graphPath]);
+  const executionGraphs = useExecutionStore((state) => state.graphs);
+  const pinResults = useMemo<Map<string, PinResultState>>(
+    () => pinResultsForSourceGraph(executionGraphs, graphPath),
+    [executionGraphs, graphPath],
+  );
   const executionStatus = useMemo(
-    () => (graphPath ? executionStatusForSourceGraph(executionGraphs, graphPath) : undefined),
+    () => executionStatusForSourceGraph(executionGraphs, graphPath),
     [executionGraphs, graphPath],
   );
 
-  const documentation = useMemo(() => {
-    const meta = getNodeDefinitionMeta(effectiveDefinition);
-    return resolveNodeDocumentationContent(meta, i18n.language, node?.description);
-  }, [effectiveDefinition, node?.description, i18n.language]);
-
-  const callTargetIssue = useCallFunctionIssue(graphPath, nodeId);
-
-  if (!node || !graphPath) {
+  if (!node) {
     return (
       <DetailPanelShell title={t('detail.titleNode')}>
         <DetailText as="div" tone="muted" className="p-4">
@@ -126,17 +117,7 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
     );
   }
 
-  const handleOpenCallTarget = () => {
-    if (!node.subGraphPath) return;
-    void openGraphResource(node.subGraphPath, 'function');
-  };
-
-  const handleCallTargetChange = (functionPath: string) => {
-    if (!functionPath || functionPath === node.subGraphPath) return;
-    void updateCallFunctionTarget(graphPath, nodeId, functionPath).catch((error) => {
-      uiStore.showToast(formatErrorMessage(error), 'error');
-    });
-  };
+  const documentation = node.display?.description ?? node.description;
 
   return (
     <DetailPanelShell title={t('detail.titleWithName', { name: node.title || node.nodeType })}>
@@ -147,49 +128,45 @@ export function NodeDetailPanel({ nodeId }: NodeDetailPanelProps) {
           valueClassName="min-w-0"
           className="min-w-0 truncate font-medium"
         >
-          {node.title}
+          {node.display?.title ?? node.title}
         </DetailReadonlyField>
-        {node.category?.length > 0 && (
-          <DetailReadonlyField
-            label={t('detail.fields.category')}
-            valueClassName="min-w-0"
-            className="min-w-0 truncate"
-          >
-            {node.category.join(' / ')}
-          </DetailReadonlyField>
-        )}
-        {nodeType === CALL_FUNCTION_NODE_TYPE && (
-          <DetailFieldRow label={t('detail.callFunction.target')}>
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="min-w-0 flex-1">
-                <Select
-                  className="w-full"
-                  value={node.subGraphPath ?? ''}
-                  options={functionOptions}
-                  onChange={handleCallTargetChange}
-                />
-              </div>
-              <ToolbarIconButton
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                className="shrink-0"
-                disabled={!node.subGraphPath || callTargetIssue != null}
-                tooltip={
-                  callTargetIssue?.kind === 'missing_target' && callTargetIssue.subGraphPath
-                    ? t('detail.callFunction.missingTarget', { path: callTargetIssue.subGraphPath })
-                    : callTargetIssue?.kind === 'empty_target'
-                      ? t('graphDiagnostics.callFunctionEmptyTarget')
-                      : t('detail.callFunction.openTarget')
-                }
-                onClick={handleOpenCallTarget}
-              >
-                <VscGoToFile size={14} />
-              </ToolbarIconButton>
-            </div>
-          </DetailFieldRow>
-        )}
       </DetailForm>
+      {node.parameterEditors && node.parameterEditors.length > 0 && (
+        <DetailCollapsibleSection title="Parameters" defaultOpen>
+          <DetailForm>
+            {node.parameterEditors.map((parameter) => (
+              <DetailReadonlyField key={parameter.key} label={parameter.display.title}>
+                {formatProjectedValue(parameter.value)}
+              </DetailReadonlyField>
+            ))}
+          </DetailForm>
+        </DetailCollapsibleSection>
+      )}
+      {node.capabilities && (
+        <DetailCollapsibleSection title="Capabilities">
+          <div className="flex flex-wrap gap-1.5 px-1 py-2">
+            {Object.entries(node.capabilities)
+              .filter(([, enabled]) => enabled)
+              .map(([capability]) => (
+                <DetailBadge key={capability}>{capability}</DetailBadge>
+              ))}
+          </div>
+        </DetailCollapsibleSection>
+      )}
+      {node.diagnostics && node.diagnostics.length > 0 && (
+        <DetailCollapsibleSection title="Diagnostics" defaultOpen>
+          <div className="space-y-2 px-1 py-2">
+            {node.diagnostics.map((diagnostic, index) => (
+              <div key={`${diagnostic.code}-${index}`} className="flex items-start gap-2">
+                <DetailBadge>{diagnostic.severity}</DetailBadge>
+                <DetailText as="span" tone="muted">
+                  {diagnostic.message}
+                </DetailText>
+              </div>
+            ))}
+          </div>
+        </DetailCollapsibleSection>
+      )}
       <NodePinInterfacePanel
         graphPath={graphPath}
         inputs={pinSpecs.inputs}

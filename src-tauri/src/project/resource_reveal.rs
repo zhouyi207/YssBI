@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::database::{DatabaseDecl, DatabaseEngine};
 use crate::project::GraphResourcePath;
 
-use super::{ProjectError, ProjectState, project_root_from_path, worksheet_absolute_path};
+use super::{ProjectError, ProjectState, worksheet_relative_path};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -37,24 +37,34 @@ pub fn resolve_reveal_path(
     state: &ProjectState,
     request: RevealProjectResourceRequest,
 ) -> Result<PathBuf, ProjectError> {
-    let project_path = state
-        .get_path()
-        .ok_or_else(|| ProjectError::InvalidProjectFormat("No project is open".into()))?;
-    let root = project_root_from_path(&project_path);
-
+    let session = state
+        .capture_project_session()
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    let data = state
+        .get_data()
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    let _filesystem_lease = state
+        .filesystem()
+        .acquire(session.root.clone())
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    state
+        .validate_project_session(&session)
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    let root = session.root.as_path();
     match request {
         RevealProjectResourceRequest::Graph { graph_path } => {
-            absolute_path_for_graph(root.as_path(), &graph_path)
+            absolute_path_for_graph(root, &graph_path)
         }
         RevealProjectResourceRequest::Database { database_id } => {
-            let databases = state.get_data().databases;
-            absolute_path_for_database(root.as_path(), &databases, &database_id)
+            absolute_path_for_database(root, &data.databases, &database_id)
         }
-        RevealProjectResourceRequest::Worksheet { worksheet_id } => {
-            worksheet_absolute_path(root.as_path(), &worksheet_id)?.ok_or_else(|| {
+        RevealProjectResourceRequest::Worksheet { worksheet_id } => data
+            .worksheets
+            .get(&worksheet_id)
+            .map(|document| root.join(worksheet_relative_path(document)))
+            .ok_or_else(|| {
                 ProjectError::InvalidProjectFormat(format!("Worksheet '{worksheet_id}' not found"))
-            })
-        }
+            }),
     }
 }
 

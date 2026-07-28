@@ -2,46 +2,50 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { GraphService } from '@/services/graph/graphService';
-import { updateFunctionSignature } from './graphDocumentActions';
+import { invalidateGraphProjection, invalidateGraphProjections } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { updateCallFunctionTarget, updateFunctionSignature } from './graphDocumentActions';
+
+const commitFunctionSignature = vi.hoisted(() => vi.fn());
+
+vi.mock('@/features/application/editorMutation/functionSignatureCoordinator', () => ({
+  commitFunctionSignature,
+}));
+vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', () => ({
+  currentProjectionLocale: () => 'en-US',
+  hydrateGraphProjection: vi.fn(async () => true),
+  invalidateGraphProjection: vi.fn(async () => true),
+  invalidateGraphProjections: vi.fn(async () => undefined),
+}));
 
 describe('graphDocumentActions', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     useGraphMetaStore.setState({ graphs: {} });
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
-  it('updates function signature through the narrow service API and stores the returned graph', async () => {
+  it('delegates signature edits to the revisioned authoritative coordinator', async () => {
     const inputs = [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })];
-    const outputs = [
-      createDataSignaturePin('output-1', 'Result', {
-        kind: 'Array',
-        inner: { kind: 'Float64' },
-      }),
-    ];
-    const serviceSpy = vi.spyOn(GraphService, 'updateFunctionSignature').mockResolvedValue({
-      graph: {
-        path: 'function-1',
-        name: 'Compute',
-        type: 'function',
-        functionInputs: inputs,
-        functionOutputs: outputs,
-        nodes: [],
-        pins: [],
-        connections: { connections: [] },
-      },
-      callerGraphs: [],
-    });
+    commitFunctionSignature.mockResolvedValueOnce({ status: 'applied' });
 
-    await updateFunctionSignature('function-1', { inputs });
+    await updateFunctionSignature('functions/Compute.yssbi-function', { inputs });
 
-    expect(serviceSpy).toHaveBeenCalledWith('function-1', { inputs });
-    expect(useGraphMetaStore.getState().graphs['function-1']).toEqual(
-      expect.objectContaining({
-        functionInputs: inputs,
-        functionOutputs: outputs,
-      }),
+    expect(commitFunctionSignature).toHaveBeenCalledWith(
+      'functions/Compute.yssbi-function',
+      { inputs },
     );
-    expect(useGraphDataStore.getState().getGraphNodeIds('function-1')).toEqual([]);
+    expect('updateFunctionSignature' in GraphService).toBe(false);
+    expect(useGraphMetaStore.getState().graphs).toEqual({});
+    expect(useGraphDataStore.getState().graphEntities).toEqual({});
+    expect(invalidateGraphProjections).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a Call Function graph instead of patching legacy target fields', async () => {
+    vi.spyOn(GraphService, 'updateCallFunctionTarget').mockResolvedValue(undefined);
+
+    await updateCallFunctionTarget('events/Main.yssbi-event', 'call-1', 'functions/Next');
+
+    expect(invalidateGraphProjection).toHaveBeenCalledWith('events/Main.yssbi-event');
+    expect(useGraphDataStore.getState().hasGraph('events/Main.yssbi-event')).toBe(false);
   });
 });

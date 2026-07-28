@@ -10,7 +10,7 @@ use super::project_error::ProjectError;
 use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
 
 /// 规范化相对路径，例如 `events/MyEvent.yssbi-event`。
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct GraphResourcePath(String);
 

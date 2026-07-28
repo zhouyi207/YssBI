@@ -23,8 +23,9 @@ export interface SnapshotReconcileResult {
 export function reconcileResourceSnapshot(
   incoming: ProjectResourceMeta[],
   previousByKey: Record<ResourceKey, ProjectResourceMeta>,
+  documents: Readonly<Record<ResourceKey, DocumentState>> =
+    useDocumentStateStore.getState().documents,
 ): SnapshotReconcileResult {
-  const documents = useDocumentStateStore.getState().documents;
   const incomingByKey = new Map(incoming.map((resource) => [resourceKey(resource), resource]));
   const documentPatches: SnapshotReconcileResult['documentPatches'] = [];
   const resources: ProjectResourceMeta[] = [];

@@ -43,6 +43,7 @@ export type EditorSessionHistoryActions = ReturnType<typeof useEditorOperations>
 export type EditorSessionHistoryAvailability = {
   canUndo: boolean;
   canRedo: boolean;
+  pending: boolean;
 };
 export type EditorSessionTabActions = ReturnType<typeof useTabManagement>;
 export type EditorSessionWorksheetActions = ReturnType<typeof useWorksheetManagement> & {

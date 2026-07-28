@@ -1,13 +1,12 @@
 use crate::database::DatabaseInstance;
 use crate::error::AppError;
-use crate::project::ProjectState;
-use crate::project::{
-    WorksheetDocument, delete_worksheet_from_file, ensure_worksheets_dir, existing_worksheet_names,
-    load_worksheet_from_file, project_root_from_path, save_worksheet_to_file,
-};
+use crate::event::{Event, EventProject, emit_project_event};
+use crate::node_system::document::OperationId;
+use crate::project::project_writers::WorksheetMutationResultDto;
+use crate::project::{ProjectInstanceId, ProjectState, WorksheetDocument};
 use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 const DEFAULT_MAX_PLOT_POINTS: usize = 10_000;
 
@@ -129,85 +128,119 @@ fn compute_plot_column_pair(
     })
 }
 
-fn unique_worksheet_name(existing: &[String], requested: &str) -> String {
-    let base = requested.trim();
-    let base = if base.is_empty() {
-        "New Worksheet"
-    } else {
-        base
-    };
-    if !existing.iter().any(|name| name == base) {
-        return base.to_string();
-    }
-    for index in 2.. {
-        let candidate = format!("{base} {index}");
-        if !existing.iter().any(|name| name == &candidate) {
-            return candidate;
-        }
-    }
-    unreachable!("unique worksheet name loop should always return")
+fn emit_worksheet_result(
+    mut emit: impl FnMut(Event),
+    result: WorksheetMutationResultDto,
+) -> WorksheetMutationResultDto {
+    emit(Event::Project(EventProject::ResourceMutationCommitted {
+        result: result.result.clone(),
+    }));
+    result
+}
+
+fn create_worksheet_with_emitter(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    name: Option<String>,
+    database_id: Option<String>,
+    emit: impl FnMut(Event),
+) -> Result<WorksheetMutationResultDto, AppError> {
+    state
+        .create_worksheet_document(&project_instance_id, name, database_id, operation_id)
+        .map(|result| emit_worksheet_result(emit, result))
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn create_worksheet(
+    app: AppHandle,
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
     name: Option<String>,
     database_id: Option<String>,
-) -> Result<WorksheetDocument, AppError> {
-    let path = state
-        .get_path()
-        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
-    let root = project_root_from_path(&path);
-    ensure_worksheets_dir(root.as_path()).map_err(AppError::from)?;
-
-    let existing = existing_worksheet_names(root.as_path(), None).map_err(AppError::from)?;
-    let requested = name.unwrap_or_else(|| "New Worksheet".to_string());
-    let unique_name = unique_worksheet_name(&existing, &requested);
-
-    let default_db = database_id.or_else(|| {
-        state
-            .project_store
-            .read()
-            .ok()
-            .and_then(|store| store.databases.keys().next().cloned())
-    });
-
-    let document = WorksheetDocument::new(unique_name, default_db.unwrap_or_default());
-    save_worksheet_to_file(root.as_path(), &document).map_err(AppError::from)?;
-    Ok(document)
+) -> Result<WorksheetMutationResultDto, AppError> {
+    create_worksheet_with_emitter(
+        state.inner(),
+        project_instance_id,
+        operation_id,
+        name,
+        database_id,
+        |event| emit_project_event(&app, event),
+    )
 }
 
 #[tauri::command]
 pub fn load_worksheet(
     state: State<ProjectState>,
+    project_instance_id: String,
     worksheet_id: String,
 ) -> Result<WorksheetDocument, AppError> {
-    let path = state
-        .get_path()
-        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
-    let root = project_root_from_path(&path);
-    load_worksheet_from_file(root.as_path(), &worksheet_id).map_err(AppError::from)
+    let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
+    state
+        .load_worksheet_document(&project_instance_id, &worksheet_id)
+        .map_err(AppError::from)
+}
+
+fn save_worksheet_with_emitter(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    document: WorksheetDocument,
+    emit: impl FnMut(Event),
+) -> Result<WorksheetMutationResultDto, AppError> {
+    state
+        .save_worksheet_document(&project_instance_id, document, operation_id)
+        .map(|result| emit_worksheet_result(emit, result))
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn save_worksheet(
+    app: AppHandle,
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
     document: WorksheetDocument,
-) -> Result<(), AppError> {
-    let path = state
-        .get_path()
-        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
-    let root = project_root_from_path(&path);
-    save_worksheet_to_file(root.as_path(), &document).map_err(AppError::from)
+) -> Result<WorksheetMutationResultDto, AppError> {
+    save_worksheet_with_emitter(
+        state.inner(),
+        project_instance_id,
+        operation_id,
+        document,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn delete_worksheet_with_emitter(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_id: &str,
+    emit: impl FnMut(Event),
+) -> Result<WorksheetMutationResultDto, AppError> {
+    state
+        .delete_worksheet_document(&project_instance_id, worksheet_id, operation_id)
+        .map(|result| emit_worksheet_result(emit, result))
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
-pub fn delete_worksheet(state: State<ProjectState>, worksheet_id: String) -> Result<(), AppError> {
-    let path = state
-        .get_path()
-        .ok_or_else(|| AppError::new("project_not_open", "No project is open"))?;
-    let root = project_root_from_path(&path);
-    delete_worksheet_from_file(root.as_path(), &worksheet_id).map_err(AppError::from)
+pub fn delete_worksheet(
+    app: AppHandle,
+    state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_id: String,
+) -> Result<WorksheetMutationResultDto, AppError> {
+    delete_worksheet_with_emitter(
+        state.inner(),
+        project_instance_id,
+        operation_id,
+        &worksheet_id,
+        |event| emit_project_event(&app, event),
+    )
 }
 
 #[tauri::command]
@@ -223,4 +256,105 @@ pub fn get_plot_column_pair(
             compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
         })
         .map_err(AppError::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event::{Event, EventProject};
+    use crate::project::ProjectData;
+
+    #[test]
+    fn worksheet_commands_preserve_identity_operation_emit_once_and_reject_stale() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-worksheet-command-publication-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        state.set_projection_test_hook(std::sync::Arc::new(|| {
+            panic!("worksheet mutations must not build graph projection snapshots")
+        }));
+        let (names, default_database_id) = state.worksheet_creation_snapshot().unwrap();
+        assert!(names.is_empty());
+        assert_eq!(default_database_id, None);
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let create_operation_id = crate::node_system::document::OperationId::new();
+        let save_operation_id = crate::node_system::document::OperationId::new();
+        let delete_operation_id = crate::node_system::document::OperationId::new();
+        let mut events = Vec::new();
+
+        let created = create_worksheet_with_emitter(
+            &state,
+            project_instance_id.clone(),
+            create_operation_id,
+            Some("Canonical".into()),
+            None,
+            |event| events.push(event),
+        )
+        .unwrap();
+        let worksheet = created.document.clone();
+        let saved = save_worksheet_with_emitter(
+            &state,
+            project_instance_id.clone(),
+            save_operation_id,
+            worksheet.clone(),
+            |event| events.push(event),
+        )
+        .unwrap();
+        let deleted = delete_worksheet_with_emitter(
+            &state,
+            project_instance_id.clone(),
+            delete_operation_id,
+            &worksheet.id,
+            |event| events.push(event),
+        )
+        .unwrap();
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(created.document.name, "Canonical");
+        assert_eq!(created.document.revision.get(), 0);
+        assert_eq!(saved.document.id, worksheet.id);
+        assert_eq!(saved.document.revision.get(), 1);
+        assert_eq!(deleted.document, saved.document);
+        for (event, result) in events
+            .iter()
+            .zip([&created.result, &saved.result, &deleted.result])
+        {
+            assert!(matches!(
+                event,
+                Event::Project(EventProject::ResourceMutationCommitted { result: emitted })
+                    if emitted == result
+            ));
+        }
+        assert_eq!(
+            created.result.project_instance_id,
+            project_instance_id.as_str()
+        );
+        assert_eq!(created.operation_id, create_operation_id);
+        assert_eq!(saved.operation_id, save_operation_id);
+        assert_eq!(deleted.operation_id, delete_operation_id);
+        assert!(created.result.publication_revision < saved.result.publication_revision);
+        assert!(saved.result.publication_revision < deleted.result.publication_revision);
+
+        let stale = project_instance_id;
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            state.get_data().unwrap(),
+        );
+        let event_count = events.len();
+        let error = create_worksheet_with_emitter(
+            &state,
+            stale,
+            crate::node_system::document::OperationId::new(),
+            Some("Stale".into()),
+            None,
+            |event| events.push(event),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(events.len(), event_count);
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

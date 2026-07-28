@@ -1,7 +1,8 @@
 use super::*;
 use crate::node_system::document::{
-    DocumentNode, GraphDocumentOperation, GraphDocumentPatch, GraphRevision, HistoryMutation,
-    MutationConflict, MutationRequest, OperationId, ParameterValues, ResourceKey,
+    DocumentNode, EditorGraphMutationDto, GraphDocumentOperation, GraphDocumentPatch,
+    GraphRevision, HistoryMutation, MutationConflict, MutationRequest, OperationId,
+    ParameterValues, ResourceKey,
 };
 use crate::node_system::protocol::NodeTypeId;
 use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
@@ -12,6 +13,19 @@ fn graph_path() -> GraphResourcePath {
 
 fn document_path() -> crate::node_system::document::GraphResourcePath {
     crate::node_system::document::GraphResourcePath(graph_path().as_str().into())
+}
+
+fn load_graph(
+    state: &ProjectState,
+    graph_path: &GraphResourcePath,
+) -> Result<GraphResourceDocument, String> {
+    let project_instance_id = state
+        .capture_project_session()
+        .map_err(|error| error.to_string())?
+        .instance_id;
+    state
+        .load_graph_resource(&project_instance_id, graph_path, 1)
+        .map_err(|error| error.to_string())
 }
 
 fn node(node_type: &str) -> DocumentNode {
@@ -33,6 +47,1874 @@ fn state_with_empty_graph() -> ProjectState {
     state
 }
 
+fn create_node_mutation() -> EditorGraphMutationDto {
+    EditorGraphMutationDto::CreateNode {
+        node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+        position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    }
+}
+
+fn test_variable(name: &str) -> crate::variable::VariableInstance {
+    let id = crate::variable::VariableId::new();
+    crate::variable::VariableInstance {
+        id,
+        name: name.into(),
+        data_type: crate::graph::value::DataType::Int64,
+        data_value: crate::graph::value::DataValue::Int64(1),
+        tabular: None,
+        description: String::new(),
+        scope: crate::variable::VariableScope::Global,
+        tags: Vec::new(),
+    }
+}
+
+fn state_with_project_path(label: &str) -> (ProjectState, std::path::PathBuf) {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+    (state, root)
+}
+
+fn insert_uncached_duckdb_declaration(state: &ProjectState, path: &str) {
+    state.project_data.write().unwrap().databases.insert(
+        "missing".into(),
+        crate::database::DatabaseDecl {
+            id: "missing".into(),
+            engine: crate::database::DatabaseEngine::DuckDb {
+                path: path.into(),
+                table: "main".into(),
+            },
+            schema_version: 1,
+            required: true,
+            name: Some("Missing".into()),
+        },
+    );
+}
+
+fn editor_mutation_request(
+    base_revision: GraphRevision,
+    operation_id: OperationId,
+) -> MutationRequest<EditorGraphMutationDto> {
+    MutationRequest::new(
+        ResourceKey::Graph(document_path()),
+        base_revision,
+        operation_id,
+        create_node_mutation(),
+    )
+}
+
+#[test]
+fn narrow_graph_move_patch_preserves_unrelated_concurrent_mutation() {
+    let (state, root) = state_with_project_path("narrow-graph-move");
+    let from = GraphResourcePath::new("events/Before.yssbi-event").unwrap();
+    let to = GraphResourcePath::new("events/After.yssbi-event").unwrap();
+    let mut moved = GraphResourceDocument::new("After", GraphDocumentKind::Event);
+    let original = GraphResourceDocument::new("Before", GraphDocumentKind::Event);
+    state.insert_graph(from.clone(), original.clone());
+    let session = state.capture_project_session().unwrap();
+    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        from.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session,
+        operation_id: OperationId::new(),
+        affected_resources: vec![resource.clone()],
+        expected_revisions: [(resource, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let concurrent = test_variable("Concurrent");
+    let concurrent_id = concurrent.id;
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .variables
+        .insert(concurrent_id, concurrent.clone());
+    moved.document.revision = GraphRevision::new(1);
+
+    state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::MoveGraph {
+                from: from.clone(),
+                to: to.clone(),
+                moved_before: original,
+                moved: moved.clone(),
+                referenced_graphs_before: Default::default(),
+                referenced_graphs: Default::default(),
+                loaded_referenced_graphs: Default::default(),
+                referenced_variables_before: Default::default(),
+                referenced_variables: Default::default(),
+            },
+        )
+        .unwrap();
+
+    let data = state.get_data().unwrap();
+    assert!(!data.graphs.contains_key(&from));
+    assert_eq!(data.graphs[&to], moved);
+    assert_eq!(data.variables[&concurrent_id].name, "Concurrent");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn rename_environment_failure_never_changes_filesystem_targets() {
+    let (state, root) = state_with_project_path("rename-environment-failure");
+    let source = state
+        .create_graph_resource("Before", GraphDocumentKind::Event)
+        .unwrap();
+    let source_file = root.join(source.as_str());
+    let source_before = std::fs::read(&source_file).unwrap();
+    let target_file = root.join("events/After.yssbi-event");
+    insert_uncached_duckdb_declaration(&state, "database/missing.duckdb");
+
+    crate::project::set_project_filesystem_rollback_fault(true);
+    let result = state.rename_graph_resource(&state.project_instance_id(), &source, "After");
+    crate::project::set_project_filesystem_rollback_fault(false);
+
+    assert!(result.is_err());
+    assert_eq!(std::fs::read(&source_file).unwrap(), source_before);
+    assert!(!target_file.exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_upsert_environment_failure_never_changes_filesystem_target() {
+    let (upsert_state, upsert_root) =
+        state_with_project_path("worksheet-upsert-environment-failure");
+    let invalid_database = upsert_root.join("database/invalid.duckdb");
+    std::fs::create_dir_all(invalid_database.parent().unwrap()).unwrap();
+    std::fs::write(&invalid_database, b"not a DuckDB database").unwrap();
+    insert_uncached_duckdb_declaration(&upsert_state, "database/invalid.duckdb");
+    let worksheet = WorksheetDocument::new("Uncommitted", "database");
+    let worksheet_file = upsert_root.join(crate::project::worksheet_relative_path(&worksheet));
+
+    crate::project::set_project_filesystem_rollback_fault(true);
+    let upsert_result = upsert_state.upsert_worksheet_document(worksheet.clone());
+    crate::project::set_project_filesystem_rollback_fault(false);
+
+    assert!(upsert_result.is_err());
+    assert!(!worksheet_file.exists());
+    assert!(
+        !upsert_state
+            .project_data
+            .read()
+            .unwrap()
+            .worksheets
+            .contains_key(&worksheet.id)
+    );
+    std::fs::remove_dir_all(upsert_root).unwrap();
+}
+
+#[test]
+fn worksheet_removal_environment_failure_never_changes_filesystem_target() {
+    let (remove_state, remove_root) =
+        state_with_project_path("worksheet-remove-environment-failure");
+    let invalid_database = remove_root.join("database/invalid.duckdb");
+    std::fs::create_dir_all(invalid_database.parent().unwrap()).unwrap();
+    std::fs::write(&invalid_database, b"not a DuckDB database").unwrap();
+    let worksheet = WorksheetDocument::new("Preserved", "database");
+    remove_state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(worksheet.id.clone(), worksheet.clone());
+    remove_state.initialize_worksheet_revision_for_test(&worksheet.id);
+    crate::project::fixtures::write_worksheet(&remove_root, &worksheet).unwrap();
+    insert_uncached_duckdb_declaration(&remove_state, "database/invalid.duckdb");
+    let worksheet_file = remove_root.join(crate::project::worksheet_relative_path(&worksheet));
+    let worksheet_before = std::fs::read(&worksheet_file).unwrap();
+
+    crate::project::set_project_filesystem_rollback_fault(true);
+    let remove_result = remove_state.remove_worksheet_document(&worksheet.id);
+    crate::project::set_project_filesystem_rollback_fault(false);
+
+    assert!(remove_result.is_err());
+    assert_eq!(std::fs::read(&worksheet_file).unwrap(), worksheet_before);
+    assert!(
+        remove_state
+            .project_data
+            .read()
+            .unwrap()
+            .worksheets
+            .contains_key(&worksheet.id)
+    );
+    std::fs::remove_dir_all(remove_root).unwrap();
+}
+
+#[test]
+fn destination_appearance_rejects_graph_move_without_authoritative_effects() {
+    let (state, root) = state_with_project_path("destination-conflict");
+    let from = GraphResourcePath::new("events/Source.yssbi-event").unwrap();
+    let to = GraphResourcePath::new("events/Destination.yssbi-event").unwrap();
+    let source = GraphResourceDocument::new("Source", GraphDocumentKind::Event);
+    state.insert_graph(from.clone(), source.clone());
+    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        from.as_str().into(),
+    ));
+    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        to.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![source_key.clone()],
+        expected_revisions: [(source_key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_absent_resources: [destination_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    state.insert_graph(
+        to.clone(),
+        GraphResourceDocument::new("Concurrent", GraphDocumentKind::Event),
+    );
+
+    let error = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::MoveGraph {
+                from: from.clone(),
+                to: to.clone(),
+                moved_before: source.clone(),
+                moved: source,
+                referenced_graphs_before: Default::default(),
+                referenced_graphs: Default::default(),
+                loaded_referenced_graphs: Default::default(),
+                referenced_variables_before: Default::default(),
+                referenced_variables: Default::default(),
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "resource_revision_conflict");
+    assert!(state.get_data().unwrap().graphs.contains_key(&from));
+    assert_eq!(state.get_data().unwrap().graphs[&to].name, "Concurrent");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn recovery_required_gate_blocks_project_authority_until_activation() {
+    let (state, root) = state_with_project_path("recovery-authority-gate");
+    let graph = graph_path();
+    let resource = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    state.insert_graph(graph.clone(), resource).unwrap();
+    let worksheet = WorksheetDocument::new("Recovery", "database");
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(worksheet.id.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet.id);
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    state
+        .project_recovery_marker()
+        .mark("injected recovery requirement");
+
+    assert!(matches!(
+        state.apply_editor_graph_mutation(
+            &graph,
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        ),
+        Err(MutationConflict::RecoveryRequired(_))
+    ));
+    assert!(matches!(
+        state.update_function_signature_observed(
+            &graph,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    graph.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                Default::default(),
+            ),
+            |_| {},
+        ),
+        Err(MutationConflict::RecoveryRequired(_))
+    ));
+    assert!(matches!(
+        state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        ),
+        Err(MutationConflict::RecoveryRequired(_))
+    ));
+    assert!(
+        state
+            .graph_projection(&graph, "en-US")
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert!(
+        load_graph(&state, &graph)
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert_eq!(
+        state
+            .insert_graph(
+                GraphResourcePath::new("events/Blocked.yssbi-event").unwrap(),
+                GraphResourceDocument::new("Blocked", GraphDocumentKind::Event),
+            )
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state.unload_graph_resource(&graph).unwrap_err().code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .rename_graph_resource(&state.project_instance_id(), &graph, "Blocked")
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .load_worksheet_document(&context.session.instance_id, &worksheet.id)
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state.worksheet_creation_snapshot().unwrap_err().code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .apply_resource_document_patch(
+                &context,
+                ResourceDocumentPatch::RemoveWorksheet {
+                    id: worksheet.id.clone(),
+                },
+            )
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+    state
+        .insert_graph(
+            graph.clone(),
+            GraphResourceDocument::new("Recovered", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    assert!(state.graph_projection(&graph, "en-US").is_ok());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn worksheet_revision_conflict_has_zero_authoritative_effects() {
+    let (state, root) = state_with_project_path("worksheet-revision-conflict");
+    let worksheet = WorksheetDocument::new("Original", "database");
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(worksheet.id.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet.id);
+    let key = ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+        worksheet.id.clone().into(),
+    ));
+    let stale = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![key.clone()],
+        expected_revisions: [(key.clone(), GraphRevision::INITIAL)]
+            .into_iter()
+            .collect(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let current = ProjectTransactionContext {
+        session: stale.session.clone(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![key.clone()],
+        expected_revisions: [(key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let mut concurrent = worksheet.clone();
+    concurrent.name = "Concurrent".into();
+    state
+        .apply_resource_document_patch(
+            &current,
+            ResourceDocumentPatch::UpsertWorksheet {
+                id: concurrent.id.clone(),
+                document: concurrent,
+            },
+        )
+        .unwrap();
+    let mut stale_document = worksheet.clone();
+    stale_document.name = "Stale".into();
+
+    let error = state
+        .apply_resource_document_patch(
+            &stale,
+            ResourceDocumentPatch::UpsertWorksheet {
+                id: stale_document.id.clone(),
+                document: stale_document,
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "resource_revision_conflict");
+    assert_eq!(
+        state.get_data().unwrap().worksheets[&worksheet.id].name,
+        "Concurrent"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stale_worksheet_save_is_rejected_without_disk_or_authoritative_effects() {
+    let (state, root) = state_with_project_path("worksheet-stale-save");
+    let worksheet = WorksheetDocument::new("Original", "database");
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(worksheet.id.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet.id);
+    crate::project::fixtures::write_worksheet(&root, &worksheet).unwrap();
+    let mut current = worksheet.clone();
+    current.name = "Current".into();
+    state.upsert_worksheet_document(current).unwrap();
+    let mut stale = worksheet.clone();
+    stale.name = "Stale".into();
+
+    let error = state.upsert_worksheet_document(stale).unwrap_err();
+
+    assert_eq!(error.code(), "resource_revision_conflict");
+    assert_eq!(
+        state.get_data().unwrap().worksheets[&worksheet.id].name,
+        "Current"
+    );
+    assert_eq!(
+        crate::project::load_worksheet_from_file(&root, &worksheet.id)
+            .unwrap()
+            .name,
+        "Current"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unwind_rollback_failure_blocks_mutations_until_activation() {
+    let (state, root) = state_with_project_path("recovery-boundary");
+    let worksheet = WorksheetDocument::new("Blocked Read", "database");
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(worksheet.id.clone(), worksheet.clone());
+    let session = state.capture_project_session().unwrap();
+    let context = ProjectTransactionContext {
+        session: session.clone(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let lease = state.filesystem().acquire(session.root.clone()).unwrap();
+    let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+        context.clone(),
+        lease,
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "recovery.json".into(),
+            contents: br#"{"changed":true}"#.to_vec(),
+        }],
+        |_, _| Ok(()),
+    )
+    .unwrap();
+    let committed = prepared.commit().unwrap();
+    crate::project::set_project_filesystem_rollback_fault(true);
+    drop(committed);
+
+    let blocked = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::InsertGraph {
+                path: GraphResourcePath::new("events/Blocked.yssbi-event").unwrap(),
+                resource: GraphResourceDocument::new("Blocked", GraphDocumentKind::Event),
+            },
+        )
+        .unwrap_err();
+    assert_eq!(blocked.code(), "project_recovery_required");
+    assert!(blocked.recovery_required());
+    let blocked_read = state
+        .load_worksheet_document(&context.session.instance_id, &worksheet.id)
+        .unwrap_err();
+    assert_eq!(blocked_read.code(), "project_recovery_required");
+
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+    let fresh = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    state
+        .apply_resource_document_patch(
+            &fresh,
+            ResourceDocumentPatch::InsertGraph {
+                path: GraphResourcePath::new("events/Recovered.yssbi-event").unwrap(),
+                resource: GraphResourceDocument::new("Recovered", GraphDocumentKind::Event),
+            },
+        )
+        .unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn recovery_required_blocks_authoritative_entry_points_until_activation() {
+    let state = ProjectState::new();
+    let event = GraphResourcePath::new("events/Recovery.yssbi-event").unwrap();
+    let function = GraphResourcePath::new("functions/Recovery.yssbi-function").unwrap();
+    state.insert_graph(
+        event.clone(),
+        GraphResourceDocument::new("Recovery", GraphDocumentKind::Event),
+    );
+    state.insert_graph(
+        function.clone(),
+        GraphResourceDocument::new("Recovery", GraphDocumentKind::Function),
+    );
+    state.project_recovery_marker().mark("rollback failed");
+    let mut observed = 0;
+
+    let editor_error = state
+        .apply_editor_graph_mutation_observed(
+            &event,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    event.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                create_node_mutation(),
+            ),
+            |_| observed += 1,
+        )
+        .unwrap_err();
+    assert_eq!(editor_error.code(), "project_recovery_required");
+
+    let function_error = state
+        .update_function_signature_observed(
+            &function,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    function.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                crate::node_system::document::FunctionDocumentPatch::new(
+                    Default::default(),
+                    Default::default(),
+                ),
+            ),
+            |_| observed += 1,
+        )
+        .unwrap_err();
+    assert_eq!(function_error.code(), "project_recovery_required");
+
+    for error in [
+        state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    event.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        ),
+        state.redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    event.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        ),
+    ] {
+        assert_eq!(error.unwrap_err().code(), "project_recovery_required");
+    }
+    assert!(
+        state
+            .graph_projection(&event, "en-US")
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert!(
+        load_graph(&state, &event)
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert_eq!(
+        state
+            .insert_graph(
+                GraphResourcePath::new("events/Blocked.yssbi-event").unwrap(),
+                GraphResourceDocument::new("Blocked", GraphDocumentKind::Event),
+            )
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state.unload_graph_resource(&event).unwrap_err().code(),
+        "project_recovery_required"
+    );
+    assert_eq!(observed, 0);
+    assert!(
+        state
+            .execute_graph(&event, &NOOP_RUN_EVENT_SINK)
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert!(
+        state
+            .with_database_mut("missing", |_| Ok(()))
+            .unwrap_err()
+            .contains("project_recovery_required")
+    );
+    assert_eq!(
+        state
+            .result_source_descriptor(crate::node_system::runtime::ResultSourceId::new(1))
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .release_run_result_sources(crate::node_system::analysis::RunId::new(1))
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert!(
+        state
+            .project_data
+            .read()
+            .unwrap()
+            .graphs
+            .contains_key(&event)
+    );
+
+    state.activate_project_fixture("recovered".into(), ProjectData::new());
+    assert!(state.ensure_project_operational().is_ok());
+}
+
+#[test]
+fn rename_remains_committed_when_project_replacement_runs_during_receipt_completion() {
+    let (state, root) = state_with_project_path("rename-replacement-after-publication");
+    let source = state
+        .create_graph_resource("Before", GraphDocumentKind::Event)
+        .unwrap();
+    let target = GraphResourcePath::new("events/After.yssbi-event").unwrap();
+    let replacement_state = state.clone();
+    let receipt_completed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let receipt_completed_for_hook = std::sync::Arc::clone(&receipt_completed);
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        receipt_completed_for_hook.store(true, std::sync::atomic::Ordering::Release);
+        replacement_state.activate_project_fixture("replacement".into(), ProjectData::new());
+    }));
+    let project_instance_id = state.project_instance_id();
+
+    let result = state
+        .rename_graph_resource(&project_instance_id, &source, "After")
+        .unwrap();
+
+    assert!(receipt_completed.load(std::sync::atomic::Ordering::Acquire));
+    assert_eq!(result.path, target);
+    assert_eq!(result.publication.project_instance_id, project_instance_id);
+    assert!(!root.join(source.as_str()).exists());
+    assert!(root.join(target.as_str()).is_file());
+    assert_eq!(state.graph_lifecycle_entry_count(), 0);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn rename_rejects_concurrent_referenced_graph_and_variable_changes() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-rename-touched-conflict-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let source = GraphResourcePath::new("events/Source.yssbi-event").unwrap();
+    let caller = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
+    let source_document = GraphResourceDocument::new("Source", GraphDocumentKind::Event);
+    let mut caller_document = GraphResourceDocument::new("Caller", GraphDocumentKind::Event);
+    let mut reference = node("yssbi.test.reference");
+    reference.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(source.as_str()),
+    );
+    caller_document
+        .document
+        .nodes
+        .insert(reference.id, reference);
+    let mut variable = test_variable("Scoped");
+    variable.scope = crate::variable::VariableScope::Event {
+        event_path: source.as_str().into(),
+    };
+    let variable_id = variable.id;
+    let mut project = ProjectData::new();
+    project
+        .graphs
+        .insert(source.clone(), source_document.clone());
+    project
+        .graphs
+        .insert(caller.clone(), caller_document.clone());
+    project.variables.insert(variable_id, variable);
+    crate::project::fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+    for path in [&source, &caller] {
+        crate::project::fixtures::write_graph(&project, root.to_string_lossy().as_ref(), path)
+            .unwrap();
+    }
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+    let concurrent_state = state.clone();
+    let source_for_hook = source.clone();
+    let caller_for_hook = caller.clone();
+    state.set_graph_rename_io_checkpoint(std::sync::Arc::new(move || {
+        let mut data = concurrent_state.project_data.write().unwrap();
+        let source = data.graphs.get_mut(&source_for_hook).unwrap();
+        source.name = "Concurrent Source".into();
+        source.document.revision = GraphRevision::new(1);
+        let caller = data.graphs.get_mut(&caller_for_hook).unwrap();
+        caller.name = "Concurrent Caller".into();
+        caller.document.revision = GraphRevision::new(1);
+        drop(data);
+        concurrent_state
+            .variable_revisions
+            .write()
+            .unwrap()
+            .insert(variable_id, GraphRevision::new(1));
+    }));
+    let project_instance_id = state.project_instance_id();
+
+    let error = state
+        .rename_graph_resource(&project_instance_id, &source, "Renamed")
+        .unwrap_err();
+
+    assert_eq!(error.code(), "resource_revision_conflict");
+    assert_eq!(
+        state.get_data().unwrap().graphs[&source].name,
+        "Concurrent Source"
+    );
+    assert_eq!(
+        state.get_data().unwrap().graphs[&caller].name,
+        "Concurrent Caller"
+    );
+    assert_eq!(
+        state.variable_revisions.read().unwrap()[&variable_id],
+        GraphRevision::new(1)
+    );
+    assert!(root.join(source.as_str()).is_file());
+    assert!(!root.join("events/Renamed.yssbi-event").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stale_transaction_context_has_zero_authoritative_effects() {
+    let (state, root) = state_with_project_path("stale-transaction");
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+    let before = state.get_data().unwrap();
+    let inserted_path = GraphResourcePath::new("events/Stale.yssbi-event").unwrap();
+
+    let error = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::InsertGraph {
+                path: inserted_path.clone(),
+                resource: GraphResourceDocument::new("Stale", GraphDocumentKind::Event),
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "stale_project_lifecycle");
+    assert_eq!(state.get_data().unwrap().graphs, before.graphs);
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&inserted_path)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_patch_preserves_unrelated_concurrent_project_data() {
+    let (state, root) = state_with_project_path("worksheet-patch");
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let concurrent = test_variable("Concurrent Worksheet Variable");
+    let concurrent_id = concurrent.id;
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .variables
+        .insert(concurrent_id, concurrent);
+    let worksheet = WorksheetDocument::new("Authoritative", "database");
+
+    state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::UpsertWorksheet {
+                id: worksheet.id.clone(),
+                document: worksheet.clone(),
+            },
+        )
+        .unwrap();
+
+    let data = state.get_data().unwrap();
+    assert_eq!(data.worksheets[&worksheet.id].name, "Authoritative");
+    assert_eq!(
+        data.variables[&concurrent_id].name,
+        "Concurrent Worksheet Variable"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn editor_mutation_returns_correlated_delta_projection_and_history_status() {
+    let state = state_with_empty_graph();
+    let operation_id = OperationId::new();
+    let request = editor_mutation_request(GraphRevision::INITIAL, operation_id);
+
+    let result = state
+        .apply_editor_graph_mutation(&graph_path(), "en-US", request)
+        .unwrap();
+
+    assert_eq!(result.delta.caused_by, Some(operation_id));
+    assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
+    assert_eq!(
+        result.delta.to_revision.get(),
+        result.projection_replacement.projection.source_revision
+    );
+    assert!(result.history.can_undo);
+    assert!(!result.history.can_redo);
+}
+
+#[test]
+fn stale_editor_mutation_rejects_without_consuming_history() {
+    let state = state_with_empty_graph();
+    state
+        .apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        )
+        .unwrap();
+    state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(
+        state.history_status(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: true,
+        }
+    );
+
+    let error = state
+        .apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::StaleRevision { .. }));
+    assert_eq!(
+        state.history_status(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: true,
+        }
+    );
+}
+
+#[test]
+fn undo_redo_return_atomic_replacements_and_current_history_status() {
+    let state = state_with_empty_graph();
+    state
+        .apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        )
+        .unwrap();
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(undo.projection_replacements.len(), 1);
+    assert_eq!(
+        undo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![graph_path().as_str().to_string()],
+        }
+    );
+    assert_eq!(
+        undo.projection_replacements[0].projection.source_revision,
+        2
+    );
+    assert_eq!(
+        undo.history,
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: true,
+        }
+    );
+
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(redo.deltas[0].to_revision, GraphRevision::new(3));
+    assert_eq!(redo.projection_replacements.len(), 1);
+    assert_eq!(
+        redo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![graph_path().as_str().to_string()],
+        }
+    );
+    assert_eq!(
+        redo.projection_replacements[0].projection.source_revision,
+        3
+    );
+    assert_eq!(
+        redo.history,
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: true,
+            can_redo: false,
+        }
+    );
+}
+
+#[test]
+fn project_reload_clears_history_status() {
+    let state = state_with_empty_graph();
+    state
+        .apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        )
+        .unwrap();
+    assert!(state.history_status().can_undo);
+
+    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
+
+    assert_eq!(
+        state.history_status(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: false,
+        }
+    );
+}
+
+#[test]
+fn committed_editor_mutation_remains_observable_when_projection_fails() {
+    let state = state_with_empty_graph();
+    state.set_projection_test_hook(std::sync::Arc::new(|| {
+        Err("injected projection failure".into())
+    }));
+    let mut observed = Vec::new();
+
+    let error = state
+        .apply_editor_graph_mutation_observed(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+            |delta| observed.push(delta.clone()),
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::Projection(_)));
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].graph_path, document_path());
+    assert_eq!(observed[0].from_revision, GraphRevision::INITIAL);
+    assert_eq!(observed[0].to_revision, GraphRevision::new(1));
+    assert_eq!(
+        state.get_data().unwrap().graphs[&graph_path()]
+            .document
+            .revision,
+        GraphRevision::new(1)
+    );
+}
+
+fn function_state_with_caller(
+    label: &str,
+) -> (
+    ProjectState,
+    GraphResourcePath,
+    GraphResourcePath,
+    ResourceKey,
+) {
+    let state = ProjectState::new();
+    let function_path =
+        GraphResourcePath::new(format!("functions/{label}.yssbi-function")).unwrap();
+    let caller_path = GraphResourcePath::new(format!("events/{label}Caller.yssbi-event")).unwrap();
+    state.insert_graph(
+        function_path.clone(),
+        GraphResourceDocument::new(label, GraphDocumentKind::Function),
+    );
+    let mut caller =
+        GraphResourceDocument::new(format!("{label} Caller"), GraphDocumentKind::Event);
+    let mut call = node("yssbi.project.function.call");
+    call.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(function_path.as_str()),
+    );
+    caller.document.nodes.insert(call.id, call);
+    state.insert_graph(caller_path.clone(), caller);
+    let resource = ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+        function_path.as_str().into(),
+    ));
+    (state, function_path, caller_path, resource)
+}
+
+fn test_signature() -> crate::node_system::document::FunctionSignature {
+    crate::node_system::document::FunctionSignature {
+        parameters: Vec::new(),
+        return_type: Some("float64".into()),
+    }
+}
+
+fn function_signature_request(
+    resource: ResourceKey,
+    base_revision: GraphRevision,
+    before: crate::node_system::document::FunctionSignature,
+    after: crate::node_system::document::FunctionSignature,
+) -> MutationRequest<crate::node_system::document::FunctionDocumentPatch> {
+    MutationRequest::new(
+        resource,
+        base_revision,
+        OperationId::new(),
+        crate::node_system::document::FunctionDocumentPatch::new(before, after),
+    )
+}
+
+fn assert_recovery_blocks_signature(
+    state: &ProjectState,
+    function_path: &GraphResourcePath,
+    resource: ResourceKey,
+) {
+    let blocked = state.update_function_signature_observed(
+        function_path,
+        "en-US",
+        function_signature_request(
+            resource,
+            GraphRevision::INITIAL,
+            Default::default(),
+            Default::default(),
+        ),
+        |_| panic!("recovery-gated mutation must not be observed"),
+    );
+    assert!(matches!(
+        blocked,
+        Err(MutationConflict::RecoveryRequired(_))
+    ));
+}
+
+#[test]
+fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
+    let (signature_state, signature_path, signature_caller, signature_resource) =
+        function_state_with_caller("SignatureRecovery");
+    let signature_marker = signature_state.project_recovery_marker();
+    signature_state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        signature_marker.mark("injected recovery after committed receipt");
+    }));
+    let signature_observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let signature_events = std::sync::Arc::clone(&signature_observed);
+    let signature_result = signature_state
+        .update_function_signature_observed(
+            &signature_path,
+            "en-US",
+            function_signature_request(
+                signature_resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            move |result| signature_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(signature_result.publication_revision, 1);
+    assert_eq!(
+        signature_observed.lock().unwrap().as_slice(),
+        &[signature_result.clone()]
+    );
+    assert_eq!(
+        signature_result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
+                signature_caller.as_str().to_string(),
+                signature_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert_recovery_blocks_signature(&signature_state, &signature_path, signature_resource);
+
+    let (undo_state, undo_path, undo_caller, undo_resource) =
+        function_state_with_caller("UndoRecovery");
+    undo_state
+        .update_function_signature_observed(
+            &undo_path,
+            "en-US",
+            function_signature_request(
+                undo_resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let undo_marker = undo_state.project_recovery_marker();
+    undo_state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        undo_marker.mark("injected recovery after committed receipt");
+    }));
+    let undo_observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let undo_events = std::sync::Arc::clone(&undo_observed);
+    let undo_result = undo_state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                undo_resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            move |result| undo_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(undo_result.publication_revision, 2);
+    assert_eq!(
+        undo_observed.lock().unwrap().as_slice(),
+        &[undo_result.clone()]
+    );
+    assert_eq!(
+        undo_result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
+                undo_caller.as_str().to_string(),
+                undo_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert_recovery_blocks_signature(&undo_state, &undo_path, undo_resource);
+
+    let (redo_state, redo_path, redo_caller, redo_resource) =
+        function_state_with_caller("RedoRecovery");
+    redo_state
+        .update_function_signature_observed(
+            &redo_path,
+            "en-US",
+            function_signature_request(
+                redo_resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    redo_state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                redo_resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let redo_marker = redo_state.project_recovery_marker();
+    redo_state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        redo_marker.mark("injected recovery after committed receipt");
+    }));
+    let redo_observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let redo_events = std::sync::Arc::clone(&redo_observed);
+    let redo_result = redo_state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                redo_resource.clone(),
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            move |result| redo_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(redo_result.publication_revision, 3);
+    assert_eq!(
+        redo_observed.lock().unwrap().as_slice(),
+        &[redo_result.clone()]
+    );
+    assert_eq!(
+        redo_result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
+                redo_caller.as_str().to_string(),
+                redo_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert_recovery_blocks_signature(&redo_state, &redo_path, redo_resource);
+}
+
+#[test]
+fn committed_projection_failure_after_recovery_marker_returns_incomplete() {
+    let (state, function_path, caller_path, resource) =
+        function_state_with_caller("ProjectionRecovery");
+    state.set_projection_test_hook(std::sync::Arc::new(|| {
+        Err("injected projection failure".into())
+    }));
+    let marker = state.project_recovery_marker();
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        marker.mark("injected recovery after committed receipt");
+    }));
+    let observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let events = std::sync::Arc::clone(&observed);
+
+    let result = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                resource,
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            move |result| events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+
+    assert_eq!(observed.lock().unwrap().as_slice(), &[result.clone()]);
+    assert!(result.projection_replacements.is_empty());
+    assert_eq!(
+        result.projection_status,
+        crate::event::ProjectionStatusDto::Incomplete {
+            invalidated_graph_paths: vec![
+                caller_path.as_str().to_string(),
+                function_path.as_str().to_string(),
+            ],
+        }
+    );
+}
+
+#[test]
+fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-recovery-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let variable = test_variable("Recovery Variable");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let marker = state.project_recovery_marker();
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        marker.mark("injected recovery after committed receipt");
+    }));
+    let resource_id =
+        crate::node_system::plan::ResourceId::new(format!("variables/{}", variable.id)).unwrap();
+
+    let committed = state
+        .commit_variable_effects(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: resource_id.clone(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+        )
+        .unwrap();
+    let result = committed.resource_mutation.unwrap();
+    assert_eq!(result.publication_revision, 1);
+    assert_eq!(result.deltas.len(), 1);
+    assert_eq!(
+        result.deltas[0].resource,
+        ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+            resource_id.as_str().into()
+        ))
+    );
+    assert_eq!(result.deltas[0].from_revision, GraphRevision::INITIAL);
+    assert_eq!(result.deltas[0].to_revision, GraphRevision::new(1));
+    assert_eq!(
+        result.history,
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: true,
+            can_redo: false,
+        }
+    );
+    assert_eq!(
+        result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: Vec::new(),
+        }
+    );
+
+    let mut updated = variable;
+    updated.data_value = crate::graph::value::DataValue::Int64(2);
+    let blocked = state.commit_variable_effects(
+        &session_id,
+        vec![crate::node_system::runtime::VariableWriteEffect {
+            resource: resource_id,
+            expected_revision: GraphRevision::new(1),
+            before: updated,
+            after: crate::graph::value::DataValue::Int64(3),
+        }],
+    );
+    assert!(matches!(
+        blocked,
+        Err(VariableEffectCommitError::Persistence { .. })
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn projection_environment_capture_is_activation_ordered_and_coherent() {
+    let root_a = std::env::temp_dir().join(format!(
+        "yssbi-projection-environment-a-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let root_b = std::env::temp_dir().join(format!(
+        "yssbi-projection-environment-b-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let project_with_database = |root: &std::path::Path, id: &str, column: &str| {
+        std::fs::create_dir_all(root.join("database")).unwrap();
+        let duckdb = root.join("database/project.duckdb");
+        let mut dataframe = polars::df!(column => [1_i64, 2, 3]).unwrap();
+        crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+        let mut project = ProjectData::new();
+        project.databases.insert(
+            id.into(),
+            crate::database::DatabaseDecl {
+                id: id.into(),
+                engine: crate::database::DatabaseEngine::DuckDb {
+                    path: "database/project.duckdb".into(),
+                    table: "main".into(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some(id.into()),
+            },
+        );
+        project
+    };
+    let project_a = project_with_database(&root_a, "a", "column_a");
+    let project_b = project_with_database(&root_b, "b", "column_b");
+    let path_a = root_a.to_string_lossy().into_owned();
+    let path_b = root_b.to_string_lossy().into_owned();
+    let state = ProjectState::new();
+    state.activate_project_fixture(path_a, project_a);
+
+    let (path_locked_tx, path_locked_rx) = std::sync::mpsc::channel();
+    let (release_capture_tx, release_capture_rx) = std::sync::mpsc::channel();
+    let release_capture_rx = std::sync::Mutex::new(release_capture_rx);
+    let first_capture = std::sync::atomic::AtomicBool::new(true);
+    state.set_projection_environment_capture_test_hook(std::sync::Arc::new(move || {
+        if first_capture.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            path_locked_tx.send(()).unwrap();
+            release_capture_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+    let (capture_done_tx, capture_done_rx) = std::sync::mpsc::channel();
+    let capture_state = state.clone();
+    std::thread::spawn(move || {
+        capture_done_tx
+            .send(capture_state.capture_projection_environment_for_test())
+            .unwrap();
+    });
+    path_locked_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    let (activation_started_tx, activation_started_rx) = std::sync::mpsc::channel();
+    state.set_project_activation_test_hook(std::sync::Arc::new(move || {
+        activation_started_tx.send(()).unwrap();
+    }));
+    let (activation_done_tx, activation_done_rx) = std::sync::mpsc::channel();
+    let activation_state = state.clone();
+    let path_b_for_activation = path_b.clone();
+    std::thread::spawn(move || {
+        activation_state.activate_project_fixture(path_b_for_activation, project_b);
+        activation_done_tx.send(()).unwrap();
+    });
+    activation_started_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    release_capture_tx.send(()).unwrap();
+
+    let capture = capture_done_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("projection environment capture must not deadlock");
+    activation_done_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("activation must complete after coherent environment capture");
+    let database_a = crate::node_system::plan::ResourceId::new("databases/a").unwrap();
+    let database_b = crate::node_system::plan::ResourceId::new("databases/b").unwrap();
+    match capture {
+        Ok(environment) => {
+            assert!(environment.database_schemas.contains_key(&database_a));
+            assert!(!environment.database_schemas.contains_key(&database_b));
+        }
+        Err(error) => assert!(error.contains("stale_project_lifecycle")),
+    }
+    assert_eq!(state.get_path().as_deref(), Some(path_b.as_str()));
+    let data = state.get_data().unwrap();
+    assert!(data.databases.contains_key("b"));
+    assert!(!data.databases.contains_key("a"));
+    std::fs::remove_dir_all(root_a).unwrap();
+    std::fs::remove_dir_all(root_b).unwrap();
+}
+
+#[test]
+fn projection_environment_capture_rejects_store_from_overlapping_activation() {
+    let root_a = std::env::temp_dir().join(format!(
+        "yssbi-projection-overlap-a-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let root_b = std::env::temp_dir().join(format!(
+        "yssbi-projection-overlap-b-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let project_with_database = |root: &std::path::Path, id: &str, column: &str| {
+        std::fs::create_dir_all(root.join("database")).unwrap();
+        let duckdb = root.join("database/project.duckdb");
+        let mut dataframe = polars::df!(column => [1_i64, 2, 3]).unwrap();
+        crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+        let mut project = ProjectData::new();
+        project.databases.insert(
+            id.into(),
+            crate::database::DatabaseDecl {
+                id: id.into(),
+                engine: crate::database::DatabaseEngine::DuckDb {
+                    path: "database/project.duckdb".into(),
+                    table: "main".into(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some(id.into()),
+            },
+        );
+        project
+    };
+    let project_a = project_with_database(&root_a, "a", "column_a");
+    let project_b = project_with_database(&root_b, "b", "column_b");
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_a.to_string_lossy().into_owned(), project_a);
+    let expected_session = state.capture_project_session().unwrap();
+
+    let (path_data_released_tx, path_data_released_rx) = std::sync::mpsc::channel();
+    let (resume_capture_tx, resume_capture_rx) = std::sync::mpsc::channel();
+    let resume_capture_rx = std::sync::Mutex::new(resume_capture_rx);
+    let first_capture = std::sync::atomic::AtomicBool::new(true);
+    state.set_projection_environment_after_path_data_test_hook(std::sync::Arc::new(move || {
+        if first_capture.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            path_data_released_tx.send(()).unwrap();
+            resume_capture_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+    let (capture_done_tx, capture_done_rx) = std::sync::mpsc::channel();
+    let capture_state = state.clone();
+    std::thread::spawn(move || {
+        capture_done_tx
+            .send(
+                capture_state
+                    .capture_projection_environment_for_session_for_test(&expected_session),
+            )
+            .unwrap();
+    });
+    path_data_released_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    state.activate_project_fixture(root_b.to_string_lossy().into_owned(), project_b);
+    resume_capture_tx.send(()).unwrap();
+    let capture = capture_done_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("overlapping capture must not deadlock");
+    let error = match capture {
+        Ok(_) => panic!("overlapping capture must reject mixed activation inputs"),
+        Err(error) => error,
+    };
+    assert!(error.contains("stale_project_lifecycle"));
+
+    let current_session = state.capture_project_session().unwrap();
+    let environment = state
+        .capture_projection_environment_for_session_for_test(&current_session)
+        .unwrap();
+    let database_a = crate::node_system::plan::ResourceId::new("databases/a").unwrap();
+    let database_b = crate::node_system::plan::ResourceId::new("databases/b").unwrap();
+    assert!(!environment.database_schemas.contains_key(&database_a));
+    assert!(environment.database_schemas.contains_key(&database_b));
+    assert!(state.get_data().unwrap().databases.contains_key("b"));
+    std::fs::remove_dir_all(root_a).unwrap();
+    std::fs::remove_dir_all(root_b).unwrap();
+}
+
+#[test]
+fn committed_projection_uses_precommit_database_metadata_after_removal() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-committed-projection-metadata-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(root.join("database")).unwrap();
+    let duckdb = root.join("database/project.duckdb");
+    let mut dataframe = polars::df!("captured_column" => [1_i64, 2, 3]).unwrap();
+    crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+
+    let function_path =
+        GraphResourcePath::new("functions/MetadataSnapshot.yssbi-function").unwrap();
+    let caller_path = GraphResourcePath::new("events/MetadataSnapshotCaller.yssbi-event").unwrap();
+    let mut project = ProjectData::new();
+    project.databases.insert(
+        "main".into(),
+        crate::database::DatabaseDecl {
+            id: "main".into(),
+            engine: crate::database::DatabaseEngine::DuckDb {
+                path: "database/project.duckdb".into(),
+                table: "main".into(),
+            },
+            schema_version: 1,
+            required: true,
+            name: Some("Main".into()),
+        },
+    );
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+    state
+        .insert_graph(
+            function_path.clone(),
+            GraphResourceDocument::new("MetadataSnapshot", GraphDocumentKind::Function),
+        )
+        .unwrap();
+    let mut caller =
+        GraphResourceDocument::new("Metadata Snapshot Caller", GraphDocumentKind::Event);
+    let mut call = node("yssbi.project.function.call");
+    call.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(function_path.as_str()),
+    );
+    caller.document.nodes.insert(call.id, call);
+    let mut source = node("yssbi.dataframe.source.get");
+    source.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    );
+    caller.document.nodes.insert(source.id, source);
+    state.insert_graph(caller_path.clone(), caller).unwrap();
+    let duckdb_for_hook = duckdb.clone();
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        std::fs::remove_file(&duckdb_for_hook).unwrap();
+    }));
+
+    let result = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    function_path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+
+    assert_eq!(
+        result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
+                caller_path.as_str().to_string(),
+                function_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert_eq!(result.projection_replacements.len(), 2);
+    assert!(!duckdb.exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn committed_resource_observer_and_response_serialize_identically() {
+    let (state, function_path, _, resource) = function_state_with_caller("CanonicalResult");
+    let observed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let signature_events = std::sync::Arc::clone(&observed);
+    let signature = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            move |result| signature_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    let signature_observed = observed.lock().unwrap().pop().unwrap();
+    assert_eq!(
+        serde_json::to_value(signature).unwrap(),
+        serde_json::to_value(signature_observed).unwrap()
+    );
+    assert!(observed.lock().unwrap().is_empty());
+
+    let undo_events = std::sync::Arc::clone(&observed);
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            move |result| undo_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    let undo_observed = observed.lock().unwrap().pop().unwrap();
+    assert_eq!(
+        serde_json::to_value(undo).unwrap(),
+        serde_json::to_value(undo_observed).unwrap()
+    );
+    assert!(observed.lock().unwrap().is_empty());
+
+    let redo_events = std::sync::Arc::clone(&observed);
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            move |result| redo_events.lock().unwrap().push(result.clone()),
+        )
+        .unwrap();
+    let redo_observed = observed.lock().unwrap().pop().unwrap();
+    assert_eq!(
+        serde_json::to_value(redo).unwrap(),
+        serde_json::to_value(redo_observed).unwrap()
+    );
+    assert!(observed.lock().unwrap().is_empty());
+}
+
+#[test]
+fn committed_results_use_commit_snapshot_during_interleaving() {
+    let state = state_with_empty_graph();
+    let (projection_started_tx, projection_started_rx) = std::sync::mpsc::channel();
+    let (release_projection_tx, release_projection_rx) = std::sync::mpsc::channel();
+    let release_projection_rx = std::sync::Mutex::new(release_projection_rx);
+    state.set_projection_test_hook(std::sync::Arc::new(move || {
+        projection_started_tx.send(()).unwrap();
+        release_projection_rx.lock().unwrap().recv().unwrap();
+        Ok(())
+    }));
+    let mutation_state = state.clone();
+    let mutation = std::thread::spawn(move || {
+        mutation_state.apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
+        )
+    });
+    projection_started_rx.recv().unwrap();
+
+    state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    release_projection_tx.send(()).unwrap();
+    let result = mutation.join().unwrap().unwrap();
+
+    assert_eq!(result.delta.to_revision, GraphRevision::new(1));
+    assert_eq!(result.projection_replacement.projection.source_revision, 1);
+    assert_eq!(
+        result.history,
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: true,
+            can_redo: false,
+        }
+    );
+    assert_eq!(
+        state.history_status(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: true,
+        }
+    );
+}
+
+#[test]
+fn history_status_waits_for_authoritative_publication() {
+    let state = state_with_empty_graph();
+    let (history_changed_tx, history_changed_rx) = std::sync::mpsc::channel();
+    let (release_publication_tx, release_publication_rx) = std::sync::mpsc::channel();
+    let release_publication_rx = std::sync::Mutex::new(release_publication_rx);
+    state.set_mutation_publication_test_hook(std::sync::Arc::new(move || {
+        history_changed_tx.send(()).unwrap();
+        release_publication_rx.lock().unwrap().recv().unwrap();
+    }));
+    let mutation_state = state.clone();
+    let mutation = std::thread::spawn(move || {
+        mutation_state.apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+    });
+    history_changed_rx.recv().unwrap();
+
+    let (status_tx, status_rx) = std::sync::mpsc::channel();
+    let status_state = state.clone();
+    let status = std::thread::spawn(move || {
+        status_tx.send(status_state.history_status()).unwrap();
+    });
+    assert!(
+        status_rx
+            .recv_timeout(std::time::Duration::from_millis(50))
+            .is_err()
+    );
+
+    release_publication_tx.send(()).unwrap();
+    mutation.join().unwrap().unwrap();
+    status.join().unwrap();
+    assert_eq!(
+        status_rx.recv().unwrap(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: true,
+            can_redo: false,
+        }
+    );
+    assert_eq!(
+        state.get_data().unwrap().graphs[&graph_path()]
+            .document
+            .revision,
+        GraphRevision::new(1)
+    );
+}
+
 #[test]
 fn normalized_graph_lifecycle_routes_every_insert_through_project_state() {
     let root = std::env::temp_dir().join(format!(
@@ -40,25 +1922,26 @@ fn normalized_graph_lifecycle_routes_every_insert_through_project_state() {
         uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), root.to_string_lossy().as_ref())
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let state = ProjectState::new();
-    state.set_path(Some(root.to_string_lossy().into_owned()));
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
 
     let created = state
         .create_graph_resource("Lifecycle", GraphDocumentKind::Event)
         .unwrap();
-    assert!(!state.get_data().graphs.contains_key(&created));
-    let loaded = state.load_graph_from_current_project(&created).unwrap();
+    assert!(!state.get_data().unwrap().graphs.contains_key(&created));
+    let loaded = load_graph(&state, &created).unwrap();
     assert_eq!(loaded.name, "Lifecycle");
-    state.save_graph_resource(&created).unwrap();
+    crate::project::fixtures::write_state_graph(&state, &created).unwrap();
     state.unload_graph_resource(&created);
 
     let duplicated = state.duplicate_graph_resource(&created).unwrap();
     assert_ne!(duplicated, created);
-    assert!(!state.get_data().graphs.contains_key(&duplicated));
+    assert!(!state.get_data().unwrap().graphs.contains_key(&duplicated));
+    let project_instance_id = state.project_instance_id();
     let renamed = state
-        .rename_graph_resource(&duplicated, "Lifecycle Copy Renamed")
+        .rename_graph_resource(&project_instance_id, &duplicated, "Lifecycle Copy Renamed")
         .unwrap();
     assert_ne!(renamed, duplicated);
     state.remove_graph_resource(&created).unwrap();
@@ -76,18 +1959,18 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), root.to_string_lossy().as_ref())
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let state = ProjectState::new();
-    state.set_path(Some(root.to_string_lossy().into_owned()));
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
     let caller = state
         .create_graph_resource("Caller", GraphDocumentKind::Event)
         .unwrap();
     let function = state
         .create_graph_resource("Callee", GraphDocumentKind::Function)
         .unwrap();
-    state.load_graph_from_current_project(&caller).unwrap();
-    state.load_graph_from_current_project(&function).unwrap();
+    load_graph(&state, &caller).unwrap();
+    load_graph(&state, &function).unwrap();
     let local_variable_id = crate::variable::VariableId::new();
     state.project_data.write().unwrap().variables.insert(
         local_variable_id,
@@ -124,7 +2007,7 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         )
         .unwrap();
     let duplicated = state.duplicate_graph_resource(&function).unwrap();
-    let duplicate = state.load_graph_from_current_project(&duplicated).unwrap();
+    let duplicate = load_graph(&state, &duplicated).unwrap();
     for shell in duplicate.document.nodes.values().filter(|node| {
         matches!(
             node.node_type.as_str(),
@@ -141,10 +2024,42 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         );
     }
 
+    let project_instance_id = state.project_instance_id();
+    let caller_before_rename = state.get_data().unwrap().graphs[&caller].document.revision;
+    let moved_before_rename = state.get_data().unwrap().graphs[&function]
+        .document
+        .revision;
     let renamed = state
-        .rename_graph_resource(&function, "Renamed Callee")
+        .rename_graph_resource(&project_instance_id, &function, "Renamed Callee")
         .unwrap();
-    let data = state.get_data();
+    assert_eq!(renamed.publication.moves.len(), 1);
+    assert_eq!(renamed.publication.moves[0].from, function.as_str());
+    assert_eq!(renamed.publication.moves[0].to, renamed.path.as_str());
+    let graph_deltas = renamed
+        .publication
+        .deltas
+        .iter()
+        .filter(|delta| matches!(delta.resource, ResourceKey::Graph(_)))
+        .collect::<Vec<_>>();
+    assert_eq!(graph_deltas.len(), 2);
+    assert!(graph_deltas.iter().any(|delta| {
+        delta.resource
+            == ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                renamed.path.as_str().into(),
+            ))
+            && delta.from_revision == moved_before_rename
+            && delta.to_revision == moved_before_rename.next()
+    }));
+    assert!(graph_deltas.iter().any(|delta| {
+        delta.resource
+            == ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                caller.as_str().into(),
+            ))
+            && delta.from_revision == caller_before_rename
+            && delta.to_revision == caller_before_rename.next()
+    }));
+    assert!(renamed.publication.history.can_undo);
+    let data = state.get_data().unwrap();
     let loaded_caller = &data.graphs[&caller];
     assert!(loaded_caller.document.nodes.values().any(|node| {
         node.parameters
@@ -167,6 +2082,430 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
 }
 
 #[test]
+fn activation_releases_root_lease_before_run_drain() {
+    let (state, root) = state_with_project_path("activation-root-lease");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let normalized = NormalizedProjectRoot::from_project_path(&root).unwrap();
+    let filesystem = state.filesystem().clone();
+    state.set_project_activation_test_hook(std::sync::Arc::new(move || {
+        assert!(!filesystem.is_reserved_for_test(&normalized));
+    }));
+
+    state.activate_project_from_path(&root).unwrap();
+
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn unloaded_rename_captures_source_revision_without_panicking() {
+    let (state, root) = state_with_project_path("unloaded-rename-revision");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource("Unloaded", GraphDocumentKind::Event)
+        .unwrap();
+    assert!(!state.get_data().unwrap().graphs.contains_key(&source));
+
+    let renamed = state
+        .rename_graph_resource(&state.project_instance_id(), &source, "Renamed Unloaded")
+        .unwrap();
+
+    assert_eq!(renamed.publication.moves[0].from, source.as_str());
+    assert_eq!(renamed.publication.moves[0].to, renamed.path.as_str());
+    assert_eq!(
+        renamed.publication.deltas[0].from_revision,
+        GraphRevision::INITIAL
+    );
+    assert_eq!(
+        renamed.publication.deltas[0].to_revision,
+        GraphRevision::new(1)
+    );
+    assert!(root.join(renamed.path.as_str()).is_file());
+    assert!(!root.join(source.as_str()).exists());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
+    let (state, root) = state_with_project_path("loaded-rename-history");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource("History Source", GraphDocumentKind::Event)
+        .unwrap();
+    let caller = state
+        .create_graph_resource("History Caller", GraphDocumentKind::Event)
+        .unwrap();
+    load_graph(&state, &source).unwrap();
+    load_graph(&state, &caller).unwrap();
+    let mut reference = node("yssbi.test.reference");
+    reference.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(source.as_str()),
+    );
+    state
+        .apply_graph_patch(
+            &caller,
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    caller.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: reference,
+                }]),
+            ),
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &caller).unwrap();
+    let variable = crate::variable::VariableInstance {
+        id: crate::variable::VariableId::new(),
+        name: "Scoped".into(),
+        data_type: crate::graph::value::DataType::Int64,
+        data_value: crate::graph::value::DataValue::Int64(1),
+        tabular: None,
+        description: String::new(),
+        scope: crate::variable::VariableScope::Event {
+            event_path: source.as_str().into(),
+        },
+        tags: Vec::new(),
+    };
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .variables
+        .insert(variable.id, variable.clone());
+    crate::project::fixtures::write_state_graph(&state, &source).unwrap();
+
+    let renamed = state
+        .rename_graph_resource(&state.project_instance_id(), &source, "History Renamed")
+        .unwrap();
+    let target = renamed.path.clone();
+    let target_revision = renamed
+        .publication
+        .deltas
+        .iter()
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == target.as_str()))
+        .unwrap()
+        .to_revision;
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    target.as_str().into(),
+                )),
+                target_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(renamed.publication.moves[0].name, "History Renamed");
+    assert_eq!(undo.moves[0].from, target.as_str());
+    assert_eq!(undo.moves[0].to, source.as_str());
+    assert_eq!(undo.moves[0].name, "History Source");
+    assert!(root.join(source.as_str()).is_file());
+    assert!(!root.join(target.as_str()).exists());
+    assert!(state.get_data().unwrap().graphs.contains_key(&source));
+    assert!(
+        state.get_data().unwrap().graphs[&caller]
+            .document
+            .nodes
+            .values()
+            .any(|node| {
+                node.parameters
+                    .values()
+                    .any(|value| value.as_str() == Some(source.as_str()))
+            })
+    );
+    assert_eq!(
+        state.get_data().unwrap().variables[&variable.id].scope,
+        variable.scope
+    );
+
+    let source_revision = undo
+        .deltas
+        .iter()
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == source.as_str()))
+        .unwrap()
+        .to_revision;
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    source.as_str().into(),
+                )),
+                source_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(redo.moves[0].from, source.as_str());
+    assert_eq!(redo.moves[0].to, target.as_str());
+    assert_eq!(redo.moves[0].name, "History Renamed");
+    assert!(root.join(target.as_str()).is_file());
+    assert!(!root.join(source.as_str()).exists());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn concurrent_history_append_during_rename_undo_rolls_back_disk_without_moving_history_head() {
+    let (state, root) = state_with_project_path("rename-history-head-race");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource("Move Head", GraphDocumentKind::Event)
+        .unwrap();
+    let renamed = state
+        .rename_graph_resource(&state.project_instance_id(), &source, "Moved Head")
+        .unwrap();
+    let target = renamed.path.clone();
+    let target_revision = renamed.publication.deltas[0].to_revision;
+    let concurrent_state = state.clone();
+    state.set_graph_move_history_io_checkpoint(std::sync::Arc::new(move || {
+        concurrent_state.append_history_head_for_test();
+    }));
+
+    let error = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    target.as_str().into(),
+                )),
+                target_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| panic!("changed history head must not publish"),
+        )
+        .unwrap_err();
+
+    assert!(error.to_string().contains("history head changed"));
+    assert!(root.join(target.as_str()).is_file());
+    assert!(!root.join(source.as_str()).exists());
+    assert!(state.history_status().can_undo);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
+    let (state, root) = state_with_project_path("unloaded-caller-move-history");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource("Unloaded Callee", GraphDocumentKind::Event)
+        .unwrap();
+    let caller = state
+        .create_graph_resource("Unloaded Caller", GraphDocumentKind::Event)
+        .unwrap();
+    load_graph(&state, &caller).unwrap();
+    let mut reference = node("yssbi.test.reference");
+    reference.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(source.as_str()),
+    );
+    state
+        .apply_graph_patch(
+            &caller,
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    caller.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: reference,
+                }]),
+            ),
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &caller).unwrap();
+    state.unload_graph_resource(&caller).unwrap();
+
+    let renamed = state
+        .rename_graph_resource(&state.project_instance_id(), &source, "Renamed Callee")
+        .unwrap();
+    let target = renamed.path.clone();
+    let caller_delta = renamed
+        .publication
+        .deltas
+        .iter()
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .expect("unloaded caller delta");
+    assert_eq!(caller_delta.from_revision, GraphRevision::new(1));
+    assert_eq!(caller_delta.to_revision, GraphRevision::new(2));
+    assert!(!state.get_data().unwrap().graphs.contains_key(&caller));
+    let caller_after =
+        load_project_graph_from_file(root.to_string_lossy().as_ref(), &caller).unwrap();
+    assert!(caller_after.document.nodes.values().any(|node| {
+        node.parameters
+            .values()
+            .any(|value| value.as_str() == Some(target.as_str()))
+    }));
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    target.as_str().into(),
+                )),
+                renamed.publication.deltas[0].to_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let undo_caller = undo
+        .deltas
+        .iter()
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .expect("unloaded caller undo delta");
+    assert_eq!(undo_caller.from_revision, GraphRevision::new(2));
+    assert_eq!(undo_caller.to_revision, GraphRevision::new(3));
+    let caller_undone =
+        load_project_graph_from_file(root.to_string_lossy().as_ref(), &caller).unwrap();
+    assert!(caller_undone.document.nodes.values().any(|node| {
+        node.parameters
+            .values()
+            .any(|value| value.as_str() == Some(source.as_str()))
+    }));
+
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    source.as_str().into(),
+                )),
+                undo.deltas[0].to_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let redo_caller = redo
+        .deltas
+        .iter()
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .expect("unloaded caller redo delta");
+    assert_eq!(redo_caller.from_revision, GraphRevision::new(3));
+    assert_eq!(redo_caller.to_revision, GraphRevision::new(4));
+    let caller_redone =
+        load_project_graph_from_file(root.to_string_lossy().as_ref(), &caller).unwrap();
+    assert!(caller_redone.document.nodes.values().any(|node| {
+        node.parameters
+            .values()
+            .any(|value| value.as_str() == Some(target.as_str()))
+    }));
+
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn unloaded_rename_undo_redo_restores_disk_identity() {
+    let (state, root) = state_with_project_path("unloaded-rename-history");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource("Unloaded History", GraphDocumentKind::Event)
+        .unwrap();
+    let renamed = state
+        .rename_graph_resource(
+            &state.project_instance_id(),
+            &source,
+            "Unloaded History Renamed",
+        )
+        .unwrap();
+    let target = renamed.path.clone();
+    let target_revision = renamed.publication.deltas[0].to_revision;
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    target.as_str().into(),
+                )),
+                target_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(undo.moves[0].to, source.as_str());
+    assert!(root.join(source.as_str()).is_file());
+    let source_revision = undo.deltas[0].to_revision;
+
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    source.as_str().into(),
+                )),
+                source_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(redo.moves[0].to, target.as_str());
+    assert!(root.join(target.as_str()).is_file());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn recovery_gate_rejects_public_snapshots_queries_and_variable_mutations() {
+    let (state, root) = state_with_project_path("recovery-public-authority");
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    state.project_recovery_marker().mark("recovery required");
+
+    assert_eq!(
+        state.get_data().unwrap_err().code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .add_variable(
+                "blocked",
+                crate::graph::value::DataType::Int64,
+                crate::graph::value::DataValue::Int64(1),
+                "",
+                crate::variable::VariableScope::Global,
+                Vec::new(),
+            )
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+    assert_eq!(
+        state
+            .read_project_index(&project_instance_id)
+            .unwrap_err()
+            .code(),
+        "project_recovery_required"
+    );
+
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+    assert!(state.get_data().is_ok());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn project_replacement_during_function_loading_cancels_before_old_resource_insert() {
     let old_root = std::env::temp_dir().join(format!(
         "yssbi-production-loading-old-{}",
@@ -178,20 +2517,26 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
     ));
     std::fs::create_dir_all(&old_root).unwrap();
     std::fs::create_dir_all(&new_root).unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), old_root.to_string_lossy().as_ref())
-        .unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), new_root.to_string_lossy().as_ref())
-        .unwrap();
+    crate::project::fixtures::write_project(
+        &ProjectData::new(),
+        old_root.to_string_lossy().as_ref(),
+    )
+    .unwrap();
+    crate::project::fixtures::write_project(
+        &ProjectData::new(),
+        new_root.to_string_lossy().as_ref(),
+    )
+    .unwrap();
 
     let state = ProjectState::new();
-    state.set_path(Some(old_root.to_string_lossy().into_owned()));
+    state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
     let event = state
         .create_graph_resource("Loading Caller", GraphDocumentKind::Event)
         .unwrap();
     let old_function = state
         .create_graph_resource("Loading Callee", GraphDocumentKind::Function)
         .unwrap();
-    state.load_graph_from_current_project(&event).unwrap();
+    load_graph(&state, &event).unwrap();
 
     let (loading_tx, loading_rx) = std::sync::mpsc::channel();
     state.set_function_load_checkpoint(std::sync::Arc::new(
@@ -215,7 +2560,7 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
     let replacement_state = state.clone();
     let replacement_path = new_root.to_string_lossy().into_owned();
     let replacement = std::thread::spawn(move || {
-        replacement_state.activate_loaded_project(replacement_path, ProjectData::new());
+        replacement_state.activate_project_fixture(replacement_path, ProjectData::new());
     });
 
     let error = execution.join().unwrap().unwrap_err();
@@ -224,10 +2569,10 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
         "unexpected execution error: {error}"
     );
     replacement.join().unwrap();
-    assert!(!state.get_data().graphs.contains_key(&old_function));
+    assert!(!state.get_data().unwrap().graphs.contains_key(&old_function));
     assert_eq!(
-        state.get_path().as_deref(),
-        Some(new_root.to_string_lossy().as_ref())
+        state.capture_project_session().unwrap().root,
+        NormalizedProjectRoot::from_project_path(&new_root).unwrap()
     );
 
     std::fs::remove_dir_all(old_root).unwrap();
@@ -252,9 +2597,10 @@ fn normalized_function_signature_update_is_undoable() {
     };
 
     let operation_id = OperationId::new();
-    let delta = state
-        .update_function_signature(
+    let result = state
+        .update_function_signature_observed(
             &path,
+            "en-US",
             MutationRequest::new(
                 ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
                     path.as_str().into(),
@@ -266,13 +2612,15 @@ fn normalized_function_signature_update_is_undoable() {
                     signature.clone(),
                 ),
             ),
+            |_| {},
         )
         .unwrap();
+    let delta = &result.deltas[0];
     assert_eq!(delta.from_revision.get(), 0);
     assert_eq!(delta.to_revision.get(), 1);
     assert_eq!(delta.caused_by, Some(operation_id));
     assert_eq!(
-        state.get_data().graphs[&path]
+        state.get_data().unwrap().graphs[&path]
             .function
             .as_ref()
             .unwrap()
@@ -280,17 +2628,21 @@ fn normalized_function_signature_update_is_undoable() {
         signature
     );
     state
-        .undo_last_transaction(MutationRequest::new(
-            ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
-                path.as_str().into(),
-            )),
-            GraphRevision::new(1),
-            OperationId::new(),
-            HistoryMutation {},
-        ))
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    path.as_str().into(),
+                )),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
         .unwrap();
     assert_eq!(
-        state.get_data().graphs[&path]
+        state.get_data().unwrap().graphs[&path]
             .function
             .as_ref()
             .unwrap()
@@ -323,29 +2675,34 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
         signature.clone(),
     );
     let signature_operation = OperationId::new();
-    let signature_delta = state
-        .update_function_signature(
+    let signature_result = state
+        .update_function_signature_observed(
             &path,
+            "en-US",
             MutationRequest::new(
                 resource.clone(),
                 GraphRevision::INITIAL,
                 signature_operation,
                 patch.clone(),
             ),
+            |_| {},
         )
         .unwrap();
+    let signature_delta = &signature_result.deltas[0];
     assert_eq!(signature_delta.caused_by, Some(signature_operation));
     assert_eq!(signature_delta.from_revision, GraphRevision::INITIAL);
     assert_eq!(signature_delta.to_revision, GraphRevision::new(1));
     assert!(matches!(
-        state.update_function_signature(
+        state.update_function_signature_observed(
             &path,
+            "en-US",
             MutationRequest::new(
                 resource.clone(),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 patch,
             ),
+            |_| {},
         ),
         Err(MutationConflict::StaleRevision { .. })
     ));
@@ -357,18 +2714,23 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
         HistoryMutation {},
     );
     assert!(matches!(
-        state.undo_last_transaction(stale_undo),
+        state.undo_last_transaction_observed("en-US", stale_undo, |_| {}),
         Err(MutationConflict::StaleRevision { .. })
     ));
     let undo_operation = OperationId::new();
-    let undo_deltas = state
-        .undo_last_transaction(MutationRequest::new(
-            resource.clone(),
-            GraphRevision::new(1),
-            undo_operation,
-            HistoryMutation {},
-        ))
+    let undo_result = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                undo_operation,
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
         .unwrap();
+    let undo_deltas = &undo_result.deltas;
     assert_eq!(undo_deltas.len(), 1);
     assert_eq!(undo_deltas[0].resource, resource);
     assert_eq!(undo_deltas[0].from_revision, GraphRevision::new(1));
@@ -382,30 +2744,311 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
         HistoryMutation {},
     );
     assert!(matches!(
-        state.redo_last_transaction(stale_redo),
+        state.redo_last_transaction_observed("en-US", stale_redo, |_| {}),
         Err(MutationConflict::StaleRevision { .. })
     ));
     let redo_operation = OperationId::new();
-    let redo_deltas = state
-        .redo_last_transaction(MutationRequest::new(
-            undo_deltas[0].resource.clone(),
-            GraphRevision::new(2),
-            redo_operation,
-            HistoryMutation {},
-        ))
+    let redo_result = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                undo_deltas[0].resource.clone(),
+                GraphRevision::new(2),
+                redo_operation,
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
         .unwrap();
+    let redo_deltas = &redo_result.deltas;
     assert_eq!(redo_deltas.len(), 1);
     assert_eq!(redo_deltas[0].from_revision, GraphRevision::new(2));
     assert_eq!(redo_deltas[0].to_revision, GraphRevision::new(3));
     assert_eq!(redo_deltas[0].caused_by, Some(redo_operation));
     assert_eq!(
-        state.get_data().graphs[&path]
+        state.get_data().unwrap().graphs[&path]
             .function
             .as_ref()
             .unwrap()
             .signature,
         signature
     );
+}
+
+#[test]
+fn signature_result_declares_function_and_caller_projection_paths_without_caller_delta() {
+    let state = ProjectState::new();
+    let function_path = GraphResourcePath::new("functions/Declared.yssbi-function").unwrap();
+    let caller_path = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
+    state.insert_graph(
+        function_path.clone(),
+        GraphResourceDocument::new("Declared", GraphDocumentKind::Function),
+    );
+    let mut caller = GraphResourceDocument::new("Caller", GraphDocumentKind::Event);
+    let mut call = node("yssbi.project.function.call");
+    call.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+        serde_json::json!(function_path.as_str()),
+    );
+    caller.document.nodes.insert(call.id, call);
+    state.insert_graph(caller_path.clone(), caller);
+
+    let operation_id = OperationId::new();
+    let result = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    function_path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                operation_id,
+                crate::node_system::document::FunctionDocumentPatch::new(
+                    Default::default(),
+                    crate::node_system::document::FunctionSignature {
+                        parameters: Vec::new(),
+                        return_type: Some("Float64".into()),
+                    },
+                ),
+            ),
+            |_| {},
+        )
+        .unwrap();
+
+    assert_eq!(result.deltas.len(), 1);
+    assert_eq!(result.deltas[0].caused_by, Some(operation_id));
+    assert_eq!(
+        result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
+                caller_path.as_str().to_string(),
+                function_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert_eq!(
+        result
+            .projection_replacements
+            .iter()
+            .map(|replacement| replacement.graph_path.as_str())
+            .collect::<Vec<_>>(),
+        vec![caller_path.as_str(), function_path.as_str()]
+    );
+}
+
+#[test]
+fn concurrent_function_results_keep_commit_publication_order_without_locking_projection() {
+    let state = ProjectState::new();
+    let first_path = GraphResourcePath::new("functions/First.yssbi-function").unwrap();
+    let second_path = GraphResourcePath::new("functions/Second.yssbi-function").unwrap();
+    let caller_path = GraphResourcePath::new("events/SharedCaller.yssbi-event").unwrap();
+    for (path, name) in [(&first_path, "First"), (&second_path, "Second")] {
+        state.insert_graph(
+            path.clone(),
+            GraphResourceDocument::new(name, GraphDocumentKind::Function),
+        );
+    }
+    let mut caller = GraphResourceDocument::new("SharedCaller", GraphDocumentKind::Event);
+    for function_path in [&first_path, &second_path] {
+        let mut call = node("yssbi.project.function.call");
+        call.parameters.insert(
+            crate::node_system::protocol::ParameterKey::new("target").unwrap(),
+            serde_json::json!(function_path.as_str()),
+        );
+        caller.document.nodes.insert(call.id, call);
+    }
+    state.insert_graph(caller_path, caller);
+
+    let (first_projection_tx, first_projection_rx) = std::sync::mpsc::channel();
+    let (release_first_tx, release_first_rx) = std::sync::mpsc::channel();
+    let release_first_rx = std::sync::Mutex::new(release_first_rx);
+    let projection_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_calls = std::sync::Arc::clone(&projection_calls);
+    state.set_projection_test_hook(std::sync::Arc::new(move || {
+        if hook_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            first_projection_tx.send(()).unwrap();
+            release_first_rx.lock().unwrap().recv().unwrap();
+        }
+        Ok(())
+    }));
+
+    let (published_tx, published_rx) = std::sync::mpsc::channel();
+    let spawn_signature = |path: GraphResourcePath, return_type: &'static str| {
+        let mutation_state = state.clone();
+        let published_tx = published_tx.clone();
+        std::thread::spawn(move || {
+            mutation_state
+                .update_function_signature_observed(
+                    &path,
+                    "en-US",
+                    MutationRequest::new(
+                        ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                            path.as_str().into(),
+                        )),
+                        GraphRevision::INITIAL,
+                        OperationId::new(),
+                        crate::node_system::document::FunctionDocumentPatch::new(
+                            Default::default(),
+                            crate::node_system::document::FunctionSignature {
+                                parameters: Vec::new(),
+                                return_type: Some(return_type.into()),
+                            },
+                        ),
+                    ),
+                    move |result| {
+                        published_tx
+                            .send(
+                                serde_json::to_value(result).unwrap()["publicationRevision"]
+                                    .as_u64()
+                                    .unwrap(),
+                            )
+                            .unwrap();
+                    },
+                )
+                .unwrap()
+        })
+    };
+
+    let first = spawn_signature(first_path, "Int64");
+    first_projection_rx.recv().unwrap();
+    let second = spawn_signature(second_path, "Float64");
+    assert_eq!(
+        published_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap(),
+        2,
+        "the second commit must publish while the first projection is blocked",
+    );
+    release_first_tx.send(()).unwrap();
+    assert_eq!(published_rx.recv().unwrap(), 1);
+    assert_eq!(second.join().unwrap().publication_revision, 2);
+    assert_eq!(first.join().unwrap().publication_revision, 1);
+}
+
+#[test]
+fn resource_publication_revision_restarts_for_a_replacement_project() {
+    let state = ProjectState::new();
+    let path = GraphResourcePath::new("functions/Revisioned.yssbi-function").unwrap();
+    let mutate = |state: &ProjectState, return_type: &str| {
+        state.insert_graph(
+            path.clone(),
+            GraphResourceDocument::new("Revisioned", GraphDocumentKind::Function),
+        );
+        state
+            .update_function_signature_observed(
+                &path,
+                "en-US",
+                MutationRequest::new(
+                    ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                        path.as_str().into(),
+                    )),
+                    GraphRevision::INITIAL,
+                    OperationId::new(),
+                    crate::node_system::document::FunctionDocumentPatch::new(
+                        Default::default(),
+                        crate::node_system::document::FunctionSignature {
+                            parameters: Vec::new(),
+                            return_type: Some(return_type.into()),
+                        },
+                    ),
+                ),
+                |_| {},
+            )
+            .unwrap()
+    };
+
+    let previous = mutate(&state, "Int64");
+    assert_eq!(previous.publication_revision, 1);
+    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
+    let replacement = mutate(&state, "Float64");
+    assert_eq!(replacement.publication_revision, 1);
+    assert_ne!(
+        previous.project_instance_id,
+        replacement.project_instance_id
+    );
+}
+
+#[test]
+fn delayed_old_project_result_keeps_its_original_instance_identity() {
+    let state = ProjectState::new();
+    let path = GraphResourcePath::new("functions/Delayed.yssbi-function").unwrap();
+    state.insert_graph(
+        path.clone(),
+        GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
+    );
+    let (projection_started_tx, projection_started_rx) = std::sync::mpsc::channel();
+    let (release_projection_tx, release_projection_rx) = std::sync::mpsc::channel();
+    let release_projection_rx = std::sync::Mutex::new(release_projection_rx);
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_calls = std::sync::Arc::clone(&calls);
+    state.set_projection_test_hook(std::sync::Arc::new(move || {
+        if hook_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            projection_started_tx.send(()).unwrap();
+            release_projection_rx.lock().unwrap().recv().unwrap();
+        }
+        Ok(())
+    }));
+
+    let old_state = state.clone();
+    let old_path = path.clone();
+    let old = std::thread::spawn(move || {
+        old_state
+            .update_function_signature_observed(
+                &old_path,
+                "en-US",
+                MutationRequest::new(
+                    ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                        old_path.as_str().into(),
+                    )),
+                    GraphRevision::INITIAL,
+                    OperationId::new(),
+                    crate::node_system::document::FunctionDocumentPatch::new(
+                        Default::default(),
+                        crate::node_system::document::FunctionSignature {
+                            parameters: Vec::new(),
+                            return_type: Some("Int64".into()),
+                        },
+                    ),
+                ),
+                |_| {},
+            )
+            .unwrap()
+    });
+    projection_started_rx.recv().unwrap();
+
+    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
+    state.insert_graph(
+        path.clone(),
+        GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
+    );
+    let replacement = state
+        .update_function_signature_observed(
+            &path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                crate::node_system::document::FunctionDocumentPatch::new(
+                    Default::default(),
+                    crate::node_system::document::FunctionSignature {
+                        parameters: Vec::new(),
+                        return_type: Some("Float64".into()),
+                    },
+                ),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    release_projection_tx.send(()).unwrap();
+    let delayed = old.join().unwrap();
+
+    assert_eq!(delayed.publication_revision, 1);
+    assert_eq!(replacement.publication_revision, 1);
+    assert_ne!(delayed.project_instance_id, replacement.project_instance_id);
 }
 
 #[test]
@@ -433,14 +3076,23 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
     ));
 
     state
-        .undo_last_transaction(MutationRequest::new(
-            ResourceKey::Graph(document_path()),
-            GraphRevision::new(1),
-            OperationId::new(),
-            HistoryMutation {},
-        ))
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
         .unwrap();
-    let graph = state.get_data().graphs.remove(&graph_path()).unwrap();
+    let graph = state
+        .get_data()
+        .unwrap()
+        .graphs
+        .remove(&graph_path())
+        .unwrap();
     assert!(graph.document.nodes.is_empty());
     assert_eq!(graph.document.revision, GraphRevision::new(2));
 }
@@ -482,18 +3134,18 @@ fn project_execution_publishes_persisted_function_plans() {
         uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), root.to_string_lossy().as_ref())
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let state = ProjectState::new();
-    state.set_path(Some(root.to_string_lossy().into_owned()));
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
     let event = state
         .create_graph_resource("Main", GraphDocumentKind::Event)
         .unwrap();
-    state.load_graph_from_current_project(&event).unwrap();
+    load_graph(&state, &event).unwrap();
     let function = state
         .create_graph_resource("Helper", GraphDocumentKind::Function)
         .unwrap();
-    let begin = state.get_data().graphs[&event]
+    let begin = state.get_data().unwrap().graphs[&event]
         .document
         .nodes
         .values()
@@ -628,25 +3280,14 @@ fn production_relational_backend_executes_project_dataframe_source() {
 }
 
 #[test]
-fn project_execute_graph_lazily_acquires_declared_duckdb_relational_source() {
+fn project_activation_publishes_declared_duckdb_runtime_and_relational_access() {
     let root = std::env::temp_dir().join(format!(
         "yssbi-production-duckdb-run-{}",
         uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(root.join("database")).unwrap();
-    crate::project::save_project_to_file(&ProjectData::new(), root.to_string_lossy().as_ref())
-        .unwrap();
-    let duckdb = root.join("database/project.duckdb");
-    let mut dataframe = polars::df!("value" => [11_i64, 22, 33]).unwrap();
-    crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
-
-    let state = ProjectState::new();
-    state.set_path(Some(root.to_string_lossy().into_owned()));
-    let event = state
-        .create_graph_resource("Production", GraphDocumentKind::Event)
-        .unwrap();
-    state.load_graph_from_current_project(&event).unwrap();
-    state.project_data.write().unwrap().databases.insert(
+    let mut project_data = ProjectData::new();
+    project_data.databases.insert(
         "main".into(),
         crate::database::DatabaseDecl {
             id: "main".into(),
@@ -659,29 +3300,14 @@ fn project_execute_graph_lazily_acquires_declared_duckdb_relational_source() {
             name: Some("Main".into()),
         },
     );
-
-    let mut source = node("yssbi.dataframe.source.get");
-    source.parameters.insert(
-        crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
-        serde_json::json!("databases/main"),
-    );
-
-    state
-        .apply_graph_patch(
-            &event,
-            MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    event.as_str().into(),
-                )),
-                GraphRevision::INITIAL,
-                OperationId::new(),
-                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: source }]),
-            ),
-        )
+    crate::project::fixtures::write_project(&project_data, root.to_string_lossy().as_ref())
         .unwrap();
+    let duckdb = root.join("database/project.duckdb");
+    let mut dataframe = polars::df!("value" => [11_i64, 22, 33]).unwrap();
+    crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
 
-    let result = state.execute_graph(&event, &NOOP_RUN_EVENT_SINK).unwrap();
-    assert!(result.run_id.get() > 0);
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project_data);
 
     let data = state.project_data.read().unwrap();
     let snapshots = crate::project::project_state::snapshot_project_resources(
@@ -719,7 +3345,7 @@ fn project_execute_graph_lazily_acquires_declared_duckdb_relational_source() {
         vec![11, 22, 33]
     );
     assert!(
-        !state
+        state
             .project_store
             .read()
             .unwrap()
@@ -727,6 +3353,9 @@ fn project_execute_graph_lazily_acquires_declared_duckdb_relational_source() {
             .contains_key("main")
     );
 
+    drop(lease);
+    drop(provider);
+    drop(state);
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -828,17 +3457,472 @@ fn project_variable_get_executes_against_authoritative_resource() {
     assert!(result.run_id.get() > 0);
 }
 
+fn tabular_variable(
+    name: &str,
+    scope: crate::variable::VariableScope,
+    values: &str,
+) -> crate::variable::VariableInstance {
+    let id = crate::variable::VariableId::new();
+    let mut variable = crate::variable::VariableInstance {
+        id,
+        name: name.into(),
+        data_type: crate::graph::value::DataType::DataFrame,
+        data_value: crate::graph::value::DataValue::DataFrame(values.into()),
+        tabular: None,
+        description: String::new(),
+        scope,
+        tags: Vec::new(),
+    };
+    crate::tabular::normalize_variable_tabular(&mut variable).unwrap();
+    variable
+}
+
+fn cached_i64_column(state: &ProjectState, variable_id: crate::variable::VariableId) -> Vec<i64> {
+    let handle = crate::tabular::variable_handle(&variable_id);
+    state.project_store.read().unwrap().variable_tabular[&handle]
+        .dataframe
+        .column("value")
+        .unwrap()
+        .i64()
+        .unwrap()
+        .into_no_null_iter()
+        .collect()
+}
+
+fn commit_tabular_effect(
+    state: &ProjectState,
+    variable: &crate::variable::VariableInstance,
+    values: &str,
+) -> Result<VariableEffectCommitResult, VariableEffectCommitError> {
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    state.commit_variable_effects(
+        &session_id,
+        vec![crate::node_system::runtime::VariableWriteEffect {
+            resource: crate::node_system::plan::ResourceId::new(format!(
+                "variables/{}",
+                variable.id
+            ))
+            .unwrap(),
+            expected_revision: GraphRevision::INITIAL,
+            before: variable.clone(),
+            after: crate::graph::value::DataValue::DataFrame(values.into()),
+        }],
+    )
+}
+
+#[test]
+fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-global-variable-effect-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let resource = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+        format!("variables/{}", variable.id).into(),
+    ));
+    state
+        .commit_variable_effects(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+        )
+        .unwrap();
+
+    state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
+        crate::project::load_project_from_file(&root_text)
+            .unwrap()
+            .variables[&variable.id]
+            .data_value
+    );
+
+    state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let canonical = state.get_variable(&variable.id).unwrap().unwrap();
+    let reloaded = crate::project::load_project_from_file(&root_text).unwrap();
+    assert_eq!(
+        serde_json::to_value(&canonical).unwrap(),
+        serde_json::to_value(&reloaded.variables[&variable.id]).unwrap()
+    );
+    assert_eq!(
+        canonical.data_value,
+        crate::graph::value::DataValue::Int64(2)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-local-variable-effect-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let graph_path = GraphResourcePath::new("events/Local.yssbi-event").unwrap();
+    let mut variable = test_variable("Local Rate");
+    variable.scope = crate::variable::VariableScope::Event {
+        event_path: graph_path.as_str().into(),
+    };
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("Local", GraphDocumentKind::Event),
+    );
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let resource = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+        format!("variables/{}", variable.id).into(),
+    ));
+    state
+        .commit_variable_effects(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+        )
+        .unwrap();
+    state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+
+    let canonical = state.get_variable(&variable.id).unwrap().unwrap();
+    let reloaded: crate::project::project_io::GraphDocument =
+        serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&canonical).unwrap(),
+        serde_json::to_value(&reloaded.local_variables[&variable.id]).unwrap()
+    );
+    assert_eq!(
+        canonical.data_value,
+        crate::graph::value::DataValue::Int64(2)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-history-conflict-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    state
+        .commit_variable_effects(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+        )
+        .unwrap();
+    let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+    let conflict_state = state.clone();
+    state.set_mutation_publication_test_hook(std::sync::Arc::new(move || {
+        conflict_state.append_history_head_for_test();
+    }));
+
+    let error = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+                    format!("variables/{}", variable.id).into(),
+                )),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert_eq!(
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
+        crate::graph::value::DataValue::Int64(2)
+    );
+    assert_eq!(
+        std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+        disk_before
+    );
+    assert!(state.history_status().can_undo);
+    assert!(!state.history_status().can_redo);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache() {
+    for (label, scope, graph_path) in [
+        ("global", crate::variable::VariableScope::Global, None),
+        (
+            "local",
+            crate::variable::VariableScope::Event {
+                event_path: "events/Tabular.yssbi-event".into(),
+            },
+            Some(GraphResourcePath::new("events/Tabular.yssbi-event").unwrap()),
+        ),
+    ] {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-{label}-tabular-variable-effect-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let root_text = root.to_string_lossy().into_owned();
+        let variable = tabular_variable("Table", scope, r#"{"value":[1,2]}"#);
+        let mut project = ProjectData::new();
+        if let Some(path) = &graph_path {
+            project.graphs.insert(
+                path.clone(),
+                GraphResourceDocument::new("Tabular", GraphDocumentKind::Event),
+            );
+        }
+        project.variables.insert(variable.id, variable.clone());
+        crate::project::fixtures::write_project(&project, &root_text).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root_text, project);
+        assert_eq!(cached_i64_column(&state, variable.id), vec![1, 2]);
+
+        commit_tabular_effect(&state, &variable, r#"{"value":[7,8,9]}"#).unwrap();
+
+        let canonical = state.get_variable(&variable.id).unwrap().unwrap();
+        assert_eq!(
+            canonical.data_value,
+            crate::graph::value::DataValue::DataFrame(crate::tabular::variable_handle(
+                &variable.id
+            ))
+        );
+        assert_eq!(
+            canonical.tabular.unwrap().to_json().unwrap(),
+            r#"{"value":[7,8,9]}"#
+        );
+        assert_eq!(cached_i64_column(&state, variable.id), vec![7, 8, 9]);
+        assert_eq!(
+            state.variable_revisions.read().unwrap()[&variable.id],
+            GraphRevision::new(1)
+        );
+        let resource = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+            format!("variables/{}", variable.id).into(),
+        ));
+        state
+            .undo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource.clone(),
+                    GraphRevision::new(1),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(cached_i64_column(&state, variable.id), vec![1, 2]);
+        state
+            .redo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource,
+                    GraphRevision::new(2),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(cached_i64_column(&state, variable.id), vec![7, 8, 9]);
+        let disk_variable = if let Some(path) = &graph_path {
+            let document: crate::project::project_io::GraphDocument =
+                serde_json::from_slice(&std::fs::read(root.join(path.as_str())).unwrap()).unwrap();
+            document.local_variables[&variable.id].clone()
+        } else {
+            crate::project::load_project_from_file(root.to_string_lossy().as_ref())
+                .unwrap()
+                .variables[&variable.id]
+                .clone()
+        };
+        assert_eq!(
+            serde_json::to_value(state.get_variable(&variable.id).unwrap().unwrap()).unwrap(),
+            serde_json::to_value(disk_variable).unwrap()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-failed-tabular-variable-effect-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = tabular_variable(
+        "Local Table",
+        crate::variable::VariableScope::Event {
+            event_path: "events/Tabular.yssbi-event".into(),
+        },
+        r#"{"value":[1,2]}"#,
+    );
+    let graph_path = GraphResourcePath::new("events/Tabular.yssbi-event").unwrap();
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("Tabular", GraphDocumentKind::Event),
+    );
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let disk_before = std::fs::read(root.join(graph_path.as_str())).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    let authority_before = state.get_variable(&variable.id).unwrap().unwrap();
+    let cache_before = cached_i64_column(&state, variable.id);
+
+    crate::project::set_project_filesystem_fault(Some(
+        crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
+    ));
+    assert!(commit_tabular_effect(&state, &variable, r#"{"value":[7,8,9]}"#).is_err());
+
+    assert_eq!(
+        serde_json::to_value(state.get_variable(&variable.id).unwrap().unwrap()).unwrap(),
+        serde_json::to_value(authority_before).unwrap()
+    );
+    assert_eq!(cached_i64_column(&state, variable.id), cache_before);
+    assert_eq!(
+        std::fs::read(root.join(graph_path.as_str())).unwrap(),
+        disk_before
+    );
+    assert_eq!(
+        state.variable_revisions.read().unwrap()[&variable.id],
+        GraphRevision::INITIAL
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn variable_effect_commit_is_revisioned_and_undoable() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-commit-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
     let state = ProjectState::new();
-    let variable = state.add_variable(
-        "Rate",
-        crate::graph::value::DataType::Int64,
-        crate::graph::value::DataValue::Int64(1),
-        "",
-        crate::variable::VariableScope::Global,
-        Vec::new(),
-    );
+    state.activate_project_fixture(root_text, project);
     let resource =
         crate::node_system::plan::ResourceId::new(format!("variables/{}", variable.id)).unwrap();
     let session_id = state
@@ -859,41 +3943,190 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
         )
         .unwrap();
     assert_eq!(committed.variable_ids.as_ref(), &[variable.id]);
-    assert_eq!(committed.deltas.len(), 1);
-    assert_eq!(committed.deltas[0].from_revision, GraphRevision::INITIAL);
-    assert_eq!(committed.deltas[0].to_revision, GraphRevision::new(1));
+    let event_result = committed.resource_mutation.clone().unwrap();
+    assert_eq!(event_result.publication_revision, 1);
+    assert_eq!(event_result.deltas.len(), 1);
+    assert_eq!(event_result.deltas[0].from_revision, GraphRevision::INITIAL);
+    assert_eq!(event_result.deltas[0].to_revision, GraphRevision::new(1));
+    assert_eq!(
+        event_result.history,
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: true,
+            can_redo: false,
+        }
+    );
+    assert!(event_result.projection_replacements.is_empty());
+    assert_eq!(
+        event_result.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: Vec::new(),
+        }
+    );
+
     assert!(matches!(
-        state.get_variable(&variable.id).unwrap().data_value,
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
         crate::graph::value::DataValue::Int64(2)
     ));
 
     state
-        .undo_last_transaction(MutationRequest::new(
-            ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
-                format!("variables/{}", variable.id).into(),
-            )),
-            GraphRevision::new(1),
-            OperationId::new(),
-            HistoryMutation {},
-        ))
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+                    format!("variables/{}", variable.id).into(),
+                )),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
         .unwrap();
     assert!(matches!(
-        state.get_variable(&variable.id).unwrap().data_value,
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
         crate::graph::value::DataValue::Int64(1)
     ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn variable_effect_persistence_failure_rolls_back_before_publication() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-transaction-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let resource =
+        crate::node_system::plan::ResourceId::new(format!("variables/{}", variable.id)).unwrap();
+    let effect = crate::node_system::runtime::VariableWriteEffect {
+        resource,
+        expected_revision: GraphRevision::INITIAL,
+        before: variable.clone(),
+        after: crate::graph::value::DataValue::Int64(2),
+    };
+    let history_before = state.history_status();
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+
+    crate::project::set_project_filesystem_fault(Some(
+        crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
+    ));
+    let error = state
+        .commit_variable_effects(&session_id, vec![effect.clone()])
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        VariableEffectCommitError::Persistence { .. }
+    ));
+    assert_eq!(
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
+        crate::graph::value::DataValue::Int64(1)
+    );
+    assert_eq!(state.history_status(), history_before);
+    let failed_index = state.read_project_index(&project_instance_id).unwrap();
+    assert_eq!(failed_index.publication_revision, 0);
+    assert_eq!(
+        std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+        disk_before
+    );
+
+    let committed = state
+        .commit_variable_effects(&session_id, vec![effect])
+        .unwrap();
+    let resource_mutation = committed.resource_mutation.as_ref().unwrap();
+    assert_eq!(resource_mutation.publication_revision, 1);
+    assert_eq!(
+        resource_mutation.deltas[0].from_revision,
+        GraphRevision::INITIAL
+    );
+    assert_eq!(
+        resource_mutation.deltas[0].to_revision,
+        GraphRevision::new(1)
+    );
+    let success_index = state.read_project_index(&project_instance_id).unwrap();
+    assert_eq!(success_index.publication_revision, 1);
+    assert_eq!(
+        crate::project::load_project_from_file(&root_text)
+            .unwrap()
+            .variables[&variable.id]
+            .data_value,
+        crate::graph::value::DataValue::Int64(2)
+    );
+
+    let function_path = GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
+    state
+        .insert_graph(
+            function_path.clone(),
+            GraphResourceDocument::new("Next", GraphDocumentKind::Function),
+        )
+        .unwrap();
+    let next = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    function_path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                crate::node_system::document::FunctionDocumentPatch::new(
+                    Default::default(),
+                    crate::node_system::document::FunctionSignature {
+                        parameters: Vec::new(),
+                        return_type: Some("Int64".into()),
+                    },
+                ),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(next.publication_revision, 2);
+
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-conflict-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
     let state = ProjectState::new();
-    let variable = state.add_variable(
-        "Rate",
-        crate::graph::value::DataType::Int64,
-        crate::graph::value::DataValue::Int64(1),
-        "",
-        crate::variable::VariableScope::Global,
-        Vec::new(),
-    );
+    state.activate_project_fixture(root_text, project);
     let session_id = state
         .project_store
         .read()
@@ -927,9 +4160,14 @@ fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
         }
     ));
     assert!(matches!(
-        state.get_variable(&variable.id).unwrap().data_value,
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
         crate::graph::value::DataValue::Int64(3)
     ));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

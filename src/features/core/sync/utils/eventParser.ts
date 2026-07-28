@@ -9,12 +9,12 @@ export interface ParsedEvent {
 
 /** 顶层事件分类（需递归解析到具体类型） */
 const TOP_LEVEL_TYPES = new Set([
-    'Project', 'Event', 'Function', 'Variable', 'Node', 'Connection', 'DataFrame', 'Resource',
+    'Project', 'Event', 'Function', 'Variable', 'DataFrame', 'Resource',
 ]);
 
 /**
  * 解析后端事件结构
- * 递归处理嵌套：Event { type: "Connection", payload: { type: "ConnectionsBatchDeleted", payload: {...} } }
+ * 递归处理嵌套：Event { type: "Project", payload: { type: "GraphDelta", payload: {...} } }
  */
 export function parseEvent(event: BaseEvent | NestedEvent): ParsedEvent {
     let current: { type: string; payload?: unknown } = event as { type: string; payload?: unknown };
@@ -50,11 +50,9 @@ export function isValidEventType(type: string): boolean {
         // DataFrame
         'DataFrameCreated', 'DataFrameDeleted', 'DataFrameSchemaUpdated',
         // Resource
-        'ResourceChanged', 'GraphResourceMoved', 'ProjectIndexInvalidated',
-        // Node
-        'NodeCreated', 'NodesBatchCreated', 'NodeUpdated', 'NodeDeleted', 'NodesBatchDeleted', 'NodePositionsUpdated', 'NodePinsUpdated', 'PinTypesInferred', 'RuntimeSourcesInvalidated',
-        // Connection
-        'ConnectionCreated', 'ConnectionDeleted', 'ConnectionsBatchDeleted', 'ConnectionsBatchCreated',
+        'ResourceChanged', 'ProjectIndexInvalidated',
+        // Revisioned project mutations
+        'GraphDelta', 'ResourceMutationCommitted',
     ];
     
     return validTypes.includes(type);

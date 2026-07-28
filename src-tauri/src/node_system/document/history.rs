@@ -13,6 +13,7 @@ pub enum ResourceKind {
     Graph,
     Function,
     Variable,
+    Worksheet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -21,6 +22,7 @@ pub enum ResourceKey {
     Graph(GraphResourcePath),
     Function(FunctionResourceKey),
     Variable(VariableResourceKey),
+    Worksheet(WorksheetResourceKey),
 }
 
 impl ResourceKey {
@@ -29,6 +31,7 @@ impl ResourceKey {
             Self::Graph(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
             Self::Variable(_) => ResourceKind::Variable,
+            Self::Worksheet(_) => ResourceKind::Worksheet,
         }
     }
 }
@@ -43,6 +46,7 @@ macro_rules! opaque_resource_type {
 
 opaque_resource_type!(FunctionResourceKey);
 opaque_resource_type!(VariableResourceKey);
+opaque_resource_type!(WorksheetResourceKey);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionParameter {
@@ -96,14 +100,14 @@ impl FunctionDocumentPatch {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VariableDocument {
     pub revision: ResourceRevision,
-    pub value: Value,
+    pub value: Option<Value>,
 }
 
 impl VariableDocument {
     pub fn new(value: Value) -> Self {
         Self {
             revision: ResourceRevision::INITIAL,
-            value,
+            value: Some(value),
         }
     }
 
@@ -115,12 +119,12 @@ impl VariableDocument {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VariableDocumentPatch {
-    pub before: Value,
-    pub after: Value,
+    pub before: Option<Value>,
+    pub after: Option<Value>,
 }
 
 impl VariableDocumentPatch {
-    pub fn new(before: Value, after: Value) -> Self {
+    pub fn new(before: Option<Value>, after: Option<Value>) -> Self {
         Self { before, after }
     }
 
@@ -129,28 +133,47 @@ impl VariableDocumentPatch {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourcePathMovePatch {
+    pub from: Box<str>,
+    pub to: Box<str>,
+}
+
+impl ResourcePathMovePatch {
+    pub fn inverse(&self) -> Self {
+        Self {
+            from: self.to.clone(),
+            to: self.from.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Graph(GraphDocumentPatch),
+    GraphResourceMove(ResourcePathMovePatch),
     Function(FunctionDocumentPatch),
     Variable(VariableDocumentPatch),
+    VariableScopeMove(ResourcePathMovePatch),
 }
 
 impl ResourceDocumentPatch {
     pub const fn kind(&self) -> ResourceKind {
         match self {
-            Self::Graph(_) => ResourceKind::Graph,
+            Self::Graph(_) | Self::GraphResourceMove(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
-            Self::Variable(_) => ResourceKind::Variable,
+            Self::Variable(_) | Self::VariableScopeMove(_) => ResourceKind::Variable,
         }
     }
 
     pub fn inverse(&self) -> Self {
         match self {
             Self::Graph(patch) => Self::Graph(patch.inverse()),
+            Self::GraphResourceMove(patch) => Self::GraphResourceMove(patch.inverse()),
             Self::Function(patch) => Self::Function(patch.inverse()),
             Self::Variable(patch) => Self::Variable(patch.inverse()),
+            Self::VariableScopeMove(patch) => Self::VariableScopeMove(patch.inverse()),
         }
     }
 }
@@ -214,14 +237,50 @@ impl ResourcePatch {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HistoryMutation {}
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryStatusDto {
+    pub can_undo: bool,
+    pub can_redo: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphResourceMoveHistoryPatch {
+    pub from: GraphResourcePath,
+    pub to: GraphResourcePath,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryPersistencePolicy {
+    #[default]
+    InMemoryUntilSave,
+    DurableVariableEffects,
+    DurableResourceMove,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct VariableEffectHistorySnapshots {
+    pub before: BTreeMap<VariableResourceKey, Option<Value>>,
+    pub after: BTreeMap<VariableResourceKey, Option<Value>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectHistoryTransaction {
     pub history_id: HistoryEntryId,
     pub caused_by: OperationId,
     pub changes: Vec<ResourcePatch>,
+    #[serde(default)]
+    pub persistence: HistoryPersistencePolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variable_effect_snapshots: Option<VariableEffectHistorySnapshots>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_resource_move: Option<GraphResourceMoveHistoryPatch>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceDeltaEvent {
     pub resource: ResourceKey,
     pub from_revision: ResourceRevision,
@@ -236,6 +295,9 @@ impl ProjectHistoryTransaction {
             history_id: HistoryEntryId::new(),
             caused_by,
             changes: changes.into(),
+            persistence: HistoryPersistencePolicy::InMemoryUntilSave,
+            variable_effect_snapshots: None,
+            graph_resource_move: None,
         }
     }
 
@@ -249,6 +311,37 @@ impl ProjectHistoryTransaction {
             caused_by,
             vec![ResourcePatch::graph(graph_path, before_revision, forward)],
         )
+    }
+
+    pub fn durable_variable_effects(
+        caused_by: OperationId,
+        changes: impl Into<Vec<ResourcePatch>>,
+        snapshots: VariableEffectHistorySnapshots,
+    ) -> Self {
+        Self {
+            history_id: HistoryEntryId::new(),
+            caused_by,
+            changes: changes.into(),
+            persistence: HistoryPersistencePolicy::DurableVariableEffects,
+            variable_effect_snapshots: Some(snapshots),
+            graph_resource_move: None,
+        }
+    }
+
+    pub fn graph_resource_move(
+        caused_by: OperationId,
+        from: GraphResourcePath,
+        to: GraphResourcePath,
+        payload: Value,
+    ) -> Self {
+        Self {
+            history_id: HistoryEntryId::new(),
+            caused_by,
+            changes: Vec::new(),
+            persistence: HistoryPersistencePolicy::DurableResourceMove,
+            variable_effect_snapshots: None,
+            graph_resource_move: Some(GraphResourceMoveHistoryPatch { from, to, payload }),
+        }
     }
 }
 
@@ -312,6 +405,7 @@ pub enum HistoryError {
     },
     NothingToUndo,
     NothingToRedo,
+    HistoryHeadChanged,
 }
 
 impl fmt::Display for HistoryError {
@@ -366,6 +460,9 @@ impl fmt::Display for HistoryError {
             }
             Self::NothingToUndo => formatter.write_str("there is no transaction to undo"),
             Self::NothingToRedo => formatter.write_str("there is no transaction to redo"),
+            Self::HistoryHeadChanged => {
+                formatter.write_str("history head changed during filesystem transaction")
+            }
         }
     }
 }
@@ -379,6 +476,13 @@ pub struct ProjectHistory {
 }
 
 impl ProjectHistory {
+    pub fn status(&self) -> HistoryStatusDto {
+        HistoryStatusDto {
+            can_undo: self.can_undo(),
+            can_redo: self.can_redo(),
+        }
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
@@ -403,6 +507,11 @@ impl ProjectHistory {
     pub fn reload(&mut self, state: &mut ProjectDocumentState, replacement: ProjectDocumentState) {
         *state = replacement;
         self.clear();
+    }
+
+    pub fn record_committed_transaction(&mut self, transaction: ProjectHistoryTransaction) {
+        self.undo.push(transaction);
+        self.redo.clear();
     }
 
     pub fn apply_transaction(
@@ -434,6 +543,39 @@ impl ProjectHistory {
         Ok(transaction)
     }
 
+    pub fn next_undo(&self) -> Option<&ProjectHistoryTransaction> {
+        self.undo.last()
+    }
+
+    pub fn next_redo(&self) -> Option<&ProjectHistoryTransaction> {
+        self.redo.last()
+    }
+
+    pub fn move_graph_resource_head(
+        &mut self,
+        undo: bool,
+        expected_history_id: &HistoryEntryId,
+    ) -> Result<ProjectHistoryTransaction, HistoryError> {
+        let source = if undo { &mut self.undo } else { &mut self.redo };
+        let transaction = source.last().ok_or(if undo {
+            HistoryError::NothingToUndo
+        } else {
+            HistoryError::NothingToRedo
+        })?;
+        if &transaction.history_id != expected_history_id
+            || transaction.graph_resource_move.is_none()
+        {
+            return Err(HistoryError::HistoryHeadChanged);
+        }
+        let transaction = source.pop().expect("history head checked");
+        if undo {
+            self.redo.push(transaction.clone());
+        } else {
+            self.undo.push(transaction.clone());
+        }
+        Ok(transaction)
+    }
+
     pub fn redo(
         &mut self,
         state: &mut ProjectDocumentState,
@@ -451,7 +593,10 @@ fn validate_new_transaction(
     state: &ProjectDocumentState,
     transaction: &ProjectHistoryTransaction,
 ) -> Result<(), HistoryError> {
-    if transaction.changes.is_empty() {
+    if transaction.changes.is_empty() && transaction.graph_resource_move.is_none() {
+        return Err(HistoryError::EmptyTransaction);
+    }
+    if transaction.graph_resource_move.is_some() && !transaction.changes.is_empty() {
         return Err(HistoryError::EmptyTransaction);
     }
 
@@ -582,5 +727,43 @@ fn resource_revision(
             .get(key)
             .map(|document| document.revision)
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
+        ResourceKey::Worksheet(_) => Err(HistoryError::ResourceNotFound(resource.clone())),
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use crate::node_system::document::{GraphDocumentPatch, GraphResourcePath};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn resource_delta_wire_is_camel_case() {
+        let caused_by = OperationId::from_uuid(Uuid::from_u128(905));
+        let delta = ResourceDeltaEvent {
+            resource: ResourceKey::Graph(GraphResourcePath("events/Main.yssbi-event".into())),
+            from_revision: ResourceRevision::new(4),
+            to_revision: ResourceRevision::new(5),
+            caused_by: Some(caused_by),
+            payload: ResourceDocumentPatch::Graph(GraphDocumentPatch::new([])),
+        };
+
+        assert_eq!(
+            serde_json::to_value(delta).unwrap(),
+            json!({
+                "resource": {
+                    "kind": "graph",
+                    "key": "events/Main.yssbi-event"
+                },
+                "fromRevision": 4,
+                "toRevision": 5,
+                "causedBy": "00000000-0000-0000-0000-000000000389",
+                "payload": {
+                    "kind": "graph",
+                    "patch": { "operations": [] }
+                }
+            })
+        );
     }
 }

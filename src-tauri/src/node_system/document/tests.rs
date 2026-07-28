@@ -1,9 +1,23 @@
 use super::materialization::ProjectedMemberRef;
 use super::*;
-use crate::node_system::protocol::{NodeTypeId, PortKey};
+use crate::node_system::compiler::{
+    LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+};
+use crate::node_system::protocol::{
+    CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy, I18nKey,
+    NodeCategoryId, NodeScope, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
+    ProviderId, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
+};
+use crate::node_system::registry::{
+    CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
+    RegisteredNode,
+};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use uuid::Uuid;
+
+mod editor_mutation_validation;
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(Uuid::from_u128(value))
@@ -54,6 +68,514 @@ fn binding() -> DynamicPortBinding {
         },
         order: OrderKey("a".into()),
     }
+}
+
+const EDITOR_MUTATION_EXECUTION: crate::node_system::protocol::ExecutionSemantics =
+    crate::node_system::protocol::ExecutionSemantics {
+        determinism: Determinism::Deterministic,
+        purity: Purity::Pure,
+        evaluation: EvaluationPolicy::DemandDriven,
+        cache: CachePolicy::PerRun,
+        effects: EffectSemantics::None,
+    };
+
+struct EditorMutationTestLowerer;
+
+impl NodeLowerer for EditorMutationTestLowerer {
+    fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        unreachable!("mutation planning never lowers nodes")
+    }
+}
+
+fn editor_mutation_registry() -> NodeRegistry {
+    editor_mutation_registry_with(NodeScope::Any, 1)
+}
+
+fn editor_mutation_registry_with(scope: NodeScope, minimum_inputs: u16) -> NodeRegistry {
+    let protocol = StaticNodeProtocol {
+        type_id: "yssbi.test.editor_mutation",
+        catalog: StaticNodeCatalogProtocol {
+            title_key: "nodes.test.editor_mutation.title",
+            description_key: None,
+            documentation_key: None,
+            aliases_key: None,
+            category_id: "test",
+            icon_id: "test",
+            style_id: "test",
+            hidden: false,
+        },
+        ports: Box::leak(
+            vec![
+                StaticPortSpec {
+                    key: "output",
+                    label_key: "nodes.test.editor_mutation.output",
+                    direction: PortDirection::Output,
+                    kind: PortKind::Data,
+                    instances: PortInstances::Declared,
+                    connections: ConnectionsPerPort::Multiple {
+                        max: None,
+                        ordered: false,
+                    },
+                    input_binding: None,
+                },
+                StaticPortSpec {
+                    key: "inputs",
+                    label_key: "nodes.test.editor_mutation.inputs",
+                    direction: PortDirection::Input,
+                    kind: PortKind::Data,
+                    instances: PortInstances::UserCreated {
+                        min: minimum_inputs,
+                        max: Some(minimum_inputs.max(2)),
+                    },
+                    connections: ConnectionsPerPort::Single,
+                    input_binding: Some(crate::node_system::protocol::InputBindingSpec {
+                        literal_policy: crate::node_system::protocol::LiteralPolicy::Allowed,
+                        default_value: None,
+                    }),
+                },
+            ]
+            .into_boxed_slice(),
+        ),
+        execution: EDITOR_MUTATION_EXECUTION,
+        scope,
+        managed_role: None,
+    };
+    let mut provider = ProviderRegistration::new(ProviderId::new("yssbi").unwrap());
+    provider.categories = vec![CategoryRegistration {
+        id: NodeCategoryId::new("test").unwrap(),
+        title_key: I18nKey::new("categories.test.title").unwrap(),
+        parent: None,
+        order: 0,
+    }]
+    .into_boxed_slice();
+    provider.i18n = I18nManifest {
+        keys: BTreeSet::from([
+            I18nKey::new("categories.test.title").unwrap(),
+            I18nKey::new("nodes.test.editor_mutation.title").unwrap(),
+            I18nKey::new("nodes.test.editor_mutation.output").unwrap(),
+            I18nKey::new("nodes.test.editor_mutation.inputs").unwrap(),
+        ]),
+    };
+    provider.nodes = vec![RegisteredNode::leaf(
+        Arc::new(
+            crate::node_system::protocol::NodeProtocol::from_static(Box::leak(Box::new(protocol)))
+                .unwrap(),
+        ),
+        Arc::new(NodeImplementation::new(EditorMutationTestLowerer)),
+    )]
+    .into_boxed_slice();
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(provider).unwrap();
+    builder.freeze().unwrap()
+}
+
+fn editor_mutation_node(id: NodeId) -> DocumentNode {
+    DocumentNode {
+        id,
+        node_type: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        position: NodePosition { x: 1.0, y: 2.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    }
+}
+
+#[test]
+fn canonical_editor_mutation_address_wire_declared() {
+    let mutation = EditorGraphMutationDto::SetLiteral {
+        address: declared(node_id(901), "value").into(),
+        literal: Some(json!(42)),
+    };
+    let expected = json!({
+        "type": "setLiteral",
+        "payload": {
+            "address": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000385",
+                "portKey": "value"
+            },
+            "literal": 42
+        }
+    });
+
+    assert_eq!(serde_json::to_value(&mutation).unwrap(), expected);
+    assert_eq!(
+        serde_json::from_value::<EditorGraphMutationDto>(expected).unwrap(),
+        mutation
+    );
+}
+
+#[test]
+fn canonical_editor_mutation_address_wire_instance() {
+    let mutation = EditorGraphMutationDto::RemovePortInstance {
+        address: PortAddress::instance(
+            node_id(902),
+            PortKey::new("inputs").unwrap(),
+            instance_id(904),
+        )
+        .into(),
+    };
+    let expected = json!({
+        "type": "removePortInstance",
+        "payload": {
+            "address": {
+                "kind": "instance",
+                "nodeId": "00000000-0000-0000-0000-000000000386",
+                "templateKey": "inputs",
+                "instanceId": "00000000-0000-0000-0000-000000000388"
+            }
+        }
+    });
+
+    assert_eq!(serde_json::to_value(&mutation).unwrap(), expected);
+    assert_eq!(
+        serde_json::from_value::<EditorGraphMutationDto>(expected).unwrap(),
+        mutation
+    );
+}
+
+#[test]
+fn editor_mutation_wire_is_stable_and_camel_case() {
+    let first = node_id(901);
+    let second = node_id(902);
+    let connection = connection_id(903);
+    let instance = instance_id(904);
+    let output = PortAddressDto::from(declared(first, "output"));
+    let input = PortAddressDto::from(PortAddress::instance(
+        second,
+        PortKey::new("inputs").unwrap(),
+        instance,
+    ));
+    let cases = [
+        (
+            EditorGraphMutationDto::CreateNode {
+                node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+                position: NodePosition { x: 1.0, y: 2.0 },
+                parameters: ParameterValues::new(),
+                user_label: Some("Created".to_owned()),
+            },
+            json!({
+                "type": "createNode",
+                "payload": {
+                    "nodeTypeId": "yssbi.test.editor_mutation",
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "parameters": {},
+                    "userLabel": "Created"
+                }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::DeleteNode { node_id: first },
+            json!({ "type": "deleteNode", "payload": { "nodeId": first } }),
+        ),
+        (
+            EditorGraphMutationDto::MoveNodes {
+                positions: vec![NodePositionMutationDto {
+                    node_id: first,
+                    position: NodePosition { x: 3.0, y: 4.0 },
+                }],
+            },
+            json!({
+                "type": "moveNodes",
+                "payload": {
+                    "positions": [{ "nodeId": first, "position": { "x": 3.0, "y": 4.0 } }]
+                }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::Connect {
+                output: output.clone(),
+                input: input.clone(),
+                order: Some(OrderKey("a".into())),
+            },
+            json!({
+                "type": "connect",
+                "payload": { "output": output, "input": input.clone(), "order": "a" }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::Disconnect {
+                connection_id: connection,
+            },
+            json!({ "type": "disconnect", "payload": { "connectionId": connection } }),
+        ),
+        (
+            EditorGraphMutationDto::SetLiteral {
+                address: input.clone(),
+                literal: Some(json!(42)),
+            },
+            json!({
+                "type": "setLiteral",
+                "payload": { "address": input.clone(), "literal": 42 }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::AddPortInstance {
+                node_id: second,
+                template: PortKey::new("inputs").unwrap(),
+                order: None,
+            },
+            json!({
+                "type": "addPortInstance",
+                "payload": { "nodeId": second, "template": "inputs", "order": null }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::RemovePortInstance {
+                address: input.clone(),
+            },
+            json!({
+                "type": "removePortInstance",
+                "payload": { "address": input }
+            }),
+        ),
+    ];
+
+    for (mutation, expected) in cases {
+        let serialized = serde_json::to_value(&mutation).unwrap();
+        assert_eq!(serialized, expected);
+        assert_eq!(
+            serde_json::from_value::<EditorGraphMutationDto>(serialized).unwrap(),
+            mutation
+        );
+    }
+}
+
+#[test]
+fn create_node_rejects_protocol_scope_mismatch() {
+    let registry = editor_mutation_registry_with(NodeScope::Event, 0);
+    let mutation = EditorGraphMutationDto::CreateNode {
+        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        position: NodePosition { x: 1.0, y: 2.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    };
+
+    let error = mutation
+        .into_patch(
+            &graph_path("functions/scope-mismatch"),
+            &GraphDocument::default(),
+            &registry,
+        )
+        .unwrap_err();
+
+    assert!(error.to_string().contains("scope"));
+}
+
+#[test]
+fn create_node_materializes_required_user_created_ports() {
+    let registry = editor_mutation_registry_with(NodeScope::Any, 2);
+    let patch = EditorGraphMutationDto::CreateNode {
+        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        position: NodePosition { x: 1.0, y: 2.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    }
+    .into_patch(
+        &graph_path("events/initial-ports"),
+        &GraphDocument::default(),
+        &registry,
+    )
+    .unwrap();
+
+    let node_id = match &patch.operations[0] {
+        GraphDocumentOperation::InsertNode { node } => node.id,
+        operation => panic!("expected node insertion first, got {operation:?}"),
+    };
+    let bindings = patch
+        .operations
+        .iter()
+        .skip(1)
+        .map(|operation| match operation {
+            GraphDocumentOperation::InsertPortBinding {
+                address,
+                binding: DynamicPortBinding::UserCreated { .. },
+            } => address,
+            operation => panic!("unexpected create operation: {operation:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(bindings.len(), 2);
+    assert!(bindings.iter().all(|address| address.node_id == node_id));
+    assert_ne!(bindings[0], bindings[1]);
+}
+
+#[test]
+fn create_connect_and_add_port_allocate_identity_in_rust() {
+    let registry = editor_mutation_registry();
+    let path = graph_path("events/editor-mutation");
+    let existing_id = node_id(911);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(editor_mutation_node(existing_id))
+        .unwrap();
+
+    let create_patch = EditorGraphMutationDto::CreateNode {
+        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        position: NodePosition { x: 5.0, y: 8.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    let created_id = match &create_patch.operations[0] {
+        GraphDocumentOperation::InsertNode { node } => node.id,
+        operation => panic!("expected node insertion first, got {operation:?}"),
+    };
+    assert_ne!(created_id, existing_id);
+    assert!(matches!(
+        &create_patch.operations[1..],
+        [GraphDocumentOperation::InsertPortBinding {
+            address,
+            binding: DynamicPortBinding::UserCreated { .. },
+        }] if address.node_id == created_id
+    ));
+    document.apply_patch(&create_patch).unwrap();
+
+    let add_patch = EditorGraphMutationDto::AddPortInstance {
+        node_id: existing_id,
+        template: PortKey::new("inputs").unwrap(),
+        order: None,
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    let input = match &add_patch.operations[..] {
+        [
+            GraphDocumentOperation::InsertPortBinding {
+                address,
+                binding: DynamicPortBinding::UserCreated { .. },
+            },
+        ] => address.clone(),
+        operations => panic!("unexpected add-port operations: {operations:?}"),
+    };
+    assert!(matches!(input.port, PortRef::Instance { .. }));
+    document.apply_patch(&add_patch).unwrap();
+
+    let connect_patch = EditorGraphMutationDto::Connect {
+        output: declared(created_id, "output").into(),
+        input: input.clone().into(),
+        order: None,
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    let allocated_connection = match &connect_patch.operations[..] {
+        [GraphDocumentOperation::InsertConnection { connection }] => connection,
+        operations => panic!("unexpected connect operations: {operations:?}"),
+    };
+    assert_eq!(allocated_connection.output.node_id, created_id);
+    assert_eq!(allocated_connection.input, input);
+    assert!(!document.connections.contains_key(&allocated_connection.id));
+}
+
+#[test]
+fn move_nodes_is_atomic_and_reversible() {
+    let registry = editor_mutation_registry();
+    let path = graph_path("events/move-nodes");
+    let first = node_id(921);
+    let second = node_id(922);
+    let missing = node_id(923);
+    let mut document = GraphDocument::default();
+    document.create_node(editor_mutation_node(first)).unwrap();
+    document.create_node(editor_mutation_node(second)).unwrap();
+    let before = document.clone();
+
+    let invalid = EditorGraphMutationDto::MoveNodes {
+        positions: vec![
+            NodePositionMutationDto {
+                node_id: first,
+                position: NodePosition { x: 13.0, y: 21.0 },
+            },
+            NodePositionMutationDto {
+                node_id: missing,
+                position: NodePosition { x: 34.0, y: 55.0 },
+            },
+        ],
+    };
+    assert!(invalid.into_patch(&path, &document, &registry).is_err());
+    assert_graph_content_eq(&document, &before);
+
+    let patch = EditorGraphMutationDto::MoveNodes {
+        positions: vec![
+            NodePositionMutationDto {
+                node_id: first,
+                position: NodePosition { x: 13.0, y: 21.0 },
+            },
+            NodePositionMutationDto {
+                node_id: second,
+                position: NodePosition { x: 34.0, y: 55.0 },
+            },
+        ],
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    assert_eq!(patch.operations.len(), 2);
+
+    document.apply_patch(&patch).unwrap();
+    assert_eq!(
+        document.nodes[&first].position,
+        NodePosition { x: 13.0, y: 21.0 }
+    );
+    assert_eq!(
+        document.nodes[&second].position,
+        NodePosition { x: 34.0, y: 55.0 }
+    );
+    document.apply_patch(&patch.inverse()).unwrap();
+    assert_graph_content_eq(&document, &before);
+}
+
+#[test]
+fn user_created_port_enforces_protocol_min_and_max() {
+    let registry = editor_mutation_registry();
+    let path = graph_path("events/user-created-port");
+    let owner = node_id(931);
+    let template = PortKey::new("inputs").unwrap();
+    let first = PortAddress::instance(owner, template.clone(), instance_id(932));
+    let mut document = GraphDocument::default();
+    document.create_node(editor_mutation_node(owner)).unwrap();
+    document
+        .bind_port(
+            first.clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey("a".into()),
+            },
+        )
+        .unwrap();
+
+    let add_patch = EditorGraphMutationDto::AddPortInstance {
+        node_id: owner,
+        template: template.clone(),
+        order: Some(OrderKey("b".into())),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&add_patch).unwrap();
+    assert!(
+        EditorGraphMutationDto::AddPortInstance {
+            node_id: owner,
+            template: template.clone(),
+            order: None,
+        }
+        .into_patch(&path, &document, &registry)
+        .is_err()
+    );
+
+    let second = document
+        .port_bindings
+        .keys()
+        .find(|address| **address != first)
+        .cloned()
+        .unwrap();
+    let remove_patch = EditorGraphMutationDto::RemovePortInstance {
+        address: second.into(),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&remove_patch).unwrap();
+    assert!(
+        EditorGraphMutationDto::RemovePortInstance {
+            address: first.into(),
+        }
+        .into_patch(&path, &document, &registry)
+        .is_err()
+    );
 }
 
 #[test]
@@ -764,9 +1286,33 @@ fn function_signature_and_caller_graph_undo_as_one_project_transaction() {
 }
 
 #[test]
+fn legacy_history_transaction_defaults_to_in_memory_until_save() {
+    let transaction = ProjectHistoryTransaction::graph(
+        operation_id(629),
+        graph_path("events/legacy-history"),
+        ResourceRevision::INITIAL,
+        GraphDocumentPatch::new(Vec::new()),
+    );
+    let mut legacy = serde_json::to_value(&transaction).unwrap();
+    legacy.as_object_mut().unwrap().remove("persistence");
+
+    let decoded: ProjectHistoryTransaction = serde_json::from_value(legacy).unwrap();
+
+    assert_eq!(
+        decoded.persistence,
+        HistoryPersistencePolicy::InMemoryUntilSave
+    );
+    assert_eq!(decoded.history_id, transaction.history_id);
+    assert_eq!(decoded.caused_by, transaction.caused_by);
+    assert_eq!(decoded.changes, transaction.changes);
+    assert!(decoded.variable_effect_snapshots.is_none());
+    assert!(decoded.graph_resource_move.is_none());
+}
+
+#[test]
 fn variable_patch_is_reversible_and_monotonic() {
     let key = variable_key("variables/threshold");
-    let patch = VariableDocumentPatch::new(json!(10), json!(20));
+    let patch = VariableDocumentPatch::new(Some(json!(10)), Some(json!(20)));
     let mut state = ProjectDocumentState::new(
         BTreeMap::new(),
         BTreeMap::new(),
@@ -783,9 +1329,9 @@ fn variable_patch_is_reversible_and_monotonic() {
     let mut history = ProjectHistory::default();
 
     history.apply_transaction(&mut state, transaction).unwrap();
-    assert_eq!(state.variables[&key].value, json!(20));
+    assert_eq!(state.variables[&key].value, Some(json!(20)));
     history.undo(&mut state).unwrap();
-    assert_eq!(state.variables[&key].value, json!(10));
+    assert_eq!(state.variables[&key].value, Some(json!(10)));
     assert_eq!(state.variables[&key].revision.get(), 2);
 }
 

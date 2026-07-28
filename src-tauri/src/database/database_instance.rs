@@ -23,6 +23,7 @@ use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct DatabaseInstance {
     pub decl: DatabaseDecl,
     pub state: DatabaseState,

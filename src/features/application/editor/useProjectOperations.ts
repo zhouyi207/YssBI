@@ -10,6 +10,11 @@ import { ProjectService, isExecutionCancelledError } from '@/services/project/pr
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
+import {
+  captureGraphSaveCommandContext,
+  isGraphSaveCommandRevisionCurrent,
+  type GraphSaveCommandContext,
+} from '@/features/application/projectCommandContext';
 import { uiStore } from '@/features/core/ui/UIStore';
 import {
   useExecutionStore,
@@ -58,6 +63,7 @@ export function useProjectOperations() {
   }, []);
 
   const saveGraph = useCallback(async () => {
+    let context: GraphSaveCommandContext | undefined;
     const projectPath = await resolveActiveProjectPath();
     if (!projectPath) {
       uiStore.showToast("项目尚未加载", "warning", 2000);
@@ -92,10 +98,18 @@ export function useProjectOperations() {
 
       warnCallFunctionIssuesBeforeSave(activeTabId);
 
-      const savedPath = await GraphService.saveProjectGraph(activeTabId);
-      markResourceDirty({ id: savedPath, kind: activeTab.type }, false);
+      context = captureGraphSaveCommandContext(activeTabId);
+      await GraphService.saveProjectGraph(
+        context.projectInstanceId,
+        activeTabId,
+        context.expectedRevision,
+        context.operationId,
+      );
+      if (!isGraphSaveCommandRevisionCurrent(context, activeTabId)) return;
+      markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
       uiStore.showToast("图已保存", "success", 2000);
     } catch (e) {
+      if (context && !context.isCurrent()) return;
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast(`保存失败：${formatErrorMessage(e)}`, "error", 2000);
     }

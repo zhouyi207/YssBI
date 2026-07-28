@@ -184,7 +184,7 @@ impl ResourceProvider for ProjectResourceProvider {
         requirements: &[CompiledResourceRequirement],
     ) -> Result<(), ResourceError> {
         if provenance.project_session_id != self.snapshot.project_session_id {
-            return Err(ResourceError::new(format!(
+            return Err(ResourceError::snapshot_mismatch(format!(
                 "plan belongs to project session '{}', but resources belong to '{}'",
                 provenance.project_session_id.as_str(),
                 self.snapshot.project_session_id.as_str()
@@ -196,13 +196,13 @@ impl ResourceProvider for ProjectResourceProvider {
             }
             let key = ResourceKey::new(requirement.resource.as_str());
             let Some(expected) = provenance.basis.resource_versions.get(&key) else {
-                return Err(ResourceError::new(format!(
+                return Err(ResourceError::snapshot_mismatch(format!(
                     "plan has no version for project resource '{}'",
                     requirement.resource.as_str()
                 )));
             };
             let Some(actual) = self.snapshot.versions.get(&key) else {
-                return Err(ResourceError::new(format!(
+                return Err(ResourceError::snapshot_mismatch(format!(
                     "snapshot has no version for project resource '{}'",
                     requirement.resource.as_str()
                 )));
@@ -270,7 +270,7 @@ fn stale_version(
     expected: &ResourceVersion,
     actual: &ResourceVersion,
 ) -> ResourceError {
-    ResourceError::new(format!(
+    ResourceError::snapshot_mismatch(format!(
         "project resource '{}' is stale: plan requires '{}', snapshot has '{}'",
         resource.as_str(),
         expected.as_str(),

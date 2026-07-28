@@ -94,7 +94,7 @@ pub fn get_database_meta(
 pub async fn delete_database(state: State<'_, ProjectState>, id: String) -> Result<(), AppError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
-        state.delete_database(&id);
+        state.delete_database(&id)?;
         Ok(())
     })
     .await
@@ -198,7 +198,7 @@ pub fn edit_cell(
     row_id: Option<i64>,
 ) -> Result<serde_json::Value, AppError> {
     let edit_state =
-        state.with_database_mut(&id, |db| db.edit_cell(row, &col_name, value, row_id))?;
+        state.with_database_writer(&id, |db, _| db.edit_cell(row, &col_name, value, row_id))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
@@ -208,7 +208,7 @@ pub fn add_row(
     id: String,
     index: Option<usize>,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.add_row(index))?;
+    let edit_state = state.with_database_writer(&id, |db, _| db.add_row(index))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
@@ -220,7 +220,7 @@ pub fn delete_rows(
     row_ids: Option<Vec<i64>>,
 ) -> Result<serde_json::Value, AppError> {
     let edit_state =
-        state.with_database_mut(&id, |db| db.delete_rows(&indices, row_ids.as_deref()))?;
+        state.with_database_writer(&id, |db, _| db.delete_rows(&indices, row_ids.as_deref()))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
@@ -231,7 +231,7 @@ pub fn add_column(
     name: String,
     dtype: String,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.add_column(&name, &dtype))?;
+    let edit_state = state.with_database_writer(&id, |db, _| db.add_column(&name, &dtype))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
@@ -241,7 +241,7 @@ pub fn delete_column(
     id: String,
     name: String,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.delete_column(&name))?;
+    let edit_state = state.with_database_writer(&id, |db, _| db.delete_column(&name))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
@@ -253,7 +253,7 @@ pub fn cast_column(
     new_dtype: String,
     force: Option<bool>,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| {
+    let edit_state = state.with_database_writer(&id, |db, _| {
         db.cast_column(&col_name, &new_dtype, force.unwrap_or(false))
     })?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
@@ -266,19 +266,20 @@ pub fn rename_column(
     old_name: String,
     new_name: String,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.rename_column(&old_name, &new_name))?;
+    let edit_state =
+        state.with_database_writer(&id, |db, _| db.rename_column(&old_name, &new_name))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
 #[tauri::command]
 pub fn undo_edit(state: State<ProjectState>, id: String) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.undo_edit())?;
+    let edit_state = state.with_database_writer(&id, |db, _| db.undo_edit())?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 
 #[tauri::command]
 pub fn redo_edit(state: State<ProjectState>, id: String) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| db.redo_edit())?;
+    let edit_state = state.with_database_writer(&id, |db, _| db.redo_edit())?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }
 

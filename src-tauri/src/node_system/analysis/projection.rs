@@ -3,7 +3,8 @@ use super::{
     ResolvedPortStatus, ResourceVersionSet,
 };
 use crate::node_system::document::{
-    ConnectionId, GraphDocument, GraphRevision, NodeId, PortAddress, PortRef,
+    ConnectionId, EffectiveInputBinding, GraphDocument, GraphRevision, NodeId, PortAddress,
+    PortAddressDto,
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, ParameterEditorSpec, PortDirection, PortEditorSpec, PortInstances,
@@ -46,6 +47,7 @@ pub struct EditorGraphProjectionDto {
     pub graph_path: Box<str>,
     pub source_revision: u64,
     pub nodes: Vec<EditorNodeProjectionDto>,
+    pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,
     pub has_blocking_diagnostics: bool,
 }
@@ -57,11 +59,36 @@ pub struct EditorNodeProjectionDto {
     pub source_revision: u64,
     pub node_id: Box<str>,
     pub node_type_id: Box<str>,
+    pub position: NodePositionDto,
     pub display: NodeDisplayDto,
     pub ports: Vec<ResolvedPortDto>,
     pub parameter_editors: Vec<ParameterEditorDto>,
     pub capabilities: NodeCapabilitiesDto,
     pub diagnostics: Vec<DiagnosticDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodePositionDto {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl PartialEq for NodePositionDto {
+    fn eq(&self, other: &Self) -> bool {
+        self.x.to_bits() == other.x.to_bits() && self.y.to_bits() == other.y.to_bits()
+    }
+}
+
+impl Eq for NodePositionDto {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorConnectionProjectionDto {
+    pub connection_id: Box<str>,
+    pub output: PortAddressDto,
+    pub input: PortAddressDto,
+    pub order: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,27 +125,10 @@ pub struct ResolvedPortDto {
     pub orphan: bool,
     pub can_remove: bool,
     pub connections: PortConnectionCapabilityDto,
+    pub input: Option<EditorInputBindingDto>,
     pub resolved_type: Option<TypeSummaryDto>,
     pub resolved_schema: Option<SchemaSummaryDto>,
     pub status: ResolvedPortStatusDto,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum PortAddressDto {
-    Declared {
-        node_id: Box<str>,
-        port_key: Box<str>,
-    },
-    Instance {
-        node_id: Box<str>,
-        template_key: Box<str>,
-        instance_id: Box<str>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,6 +168,23 @@ pub struct PortConnectionCapabilityDto {
     pub maximum: Option<u32>,
     pub ordered: bool,
     pub can_connect: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorInputBindingDto {
+    pub literal_override: Option<serde_json::Value>,
+    pub protocol_default: Option<serde_json::Value>,
+    pub effective: EffectiveInputBindingKindDto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectiveInputBindingKindDto {
+    Connections,
+    Literal,
+    ProtocolDefault,
+    Unbound,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,7 +266,11 @@ pub enum DiagnosticSeverityDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DiagnosticLocationDto {
     Graph,
     Node { node_id: Box<str> },
@@ -258,6 +289,7 @@ pub struct GraphProjectionDelta {
     pub to_basis: ProjectionBasis,
     pub removed_node_ids: Vec<Box<str>>,
     pub node_replacements: Vec<EditorNodeProjectionDto>,
+    pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,
     pub has_blocking_diagnostics: bool,
 }
@@ -357,6 +389,16 @@ impl EditorGraphProjectionDto {
             .iter()
             .map(|diagnostic| project_diagnostic(diagnostic, localization))
             .collect::<Vec<_>>();
+        let connections = document
+            .connections
+            .values()
+            .map(|connection| EditorConnectionProjectionDto {
+                connection_id: connection.id.to_string().into(),
+                output: project_address(&connection.output),
+                input: project_address(&connection.input),
+                order: connection.order.as_ref().map(|order| order.0.clone()),
+            })
+            .collect();
 
         let nodes = document
             .nodes
@@ -398,6 +440,31 @@ impl EditorGraphProjectionDto {
                                     spec.connections,
                                     orphan,
                                 );
+                                let input = (port.direction == PortDirection::Input).then(|| {
+                                    let literal_override = document
+                                        .input_states
+                                        .get(&port.address)
+                                        .and_then(|state| state.literal_override.clone());
+                                    let protocol_default = spec
+                                        .input_binding
+                                        .as_ref()
+                                        .and_then(|binding| binding.default_value.as_ref())
+                                        .map(|default| {
+                                            serde_json::to_value(&default.value)
+                                                .expect("protocol values must serialize")
+                                        });
+                                    let effective = project_effective_input_binding(
+                                        document.effective_input_binding(
+                                            &port.address,
+                                            protocol_default.clone(),
+                                        ),
+                                    );
+                                    EditorInputBindingDto {
+                                        literal_override,
+                                        protocol_default,
+                                        effective,
+                                    }
+                                });
                                 let instance_label = orphan_label(document, &port.address);
                                 let label = instance_label.clone().unwrap_or_else(|| {
                                     localization.text(&spec.label_key, &DiagnosticArguments::new())
@@ -415,6 +482,7 @@ impl EditorGraphProjectionDto {
                                     orphan,
                                     can_remove,
                                     connections,
+                                    input,
                                     resolved_type: analysis
                                         .partial_types
                                         .get(&port.address)
@@ -495,6 +563,10 @@ impl EditorGraphProjectionDto {
                     source_revision,
                     node_id: node.id.to_string().into(),
                     node_type_id: node.node_type.as_str().into(),
+                    position: NodePositionDto {
+                        x: node.position.x,
+                        y: node.position.y,
+                    },
                     display,
                     ports,
                     parameter_editors,
@@ -509,6 +581,7 @@ impl EditorGraphProjectionDto {
             graph_path,
             source_revision,
             nodes,
+            connections,
             has_blocking_diagnostics: diagnostics.iter().any(|diagnostic| diagnostic.blocking),
             diagnostics,
         })
@@ -542,6 +615,7 @@ impl EditorGraphProjectionDto {
         self.graph_path = self.basis.graph_path.clone();
         self.source_revision = self.basis.graph_revision;
         self.nodes = next_nodes;
+        self.connections = delta.connections;
         self.diagnostics = delta.diagnostics;
         self.has_blocking_diagnostics = delta.has_blocking_diagnostics;
         Ok(())
@@ -583,9 +657,19 @@ impl GraphProjectionDelta {
             to_basis: next.basis.clone(),
             removed_node_ids,
             node_replacements,
+            connections: next.connections.clone(),
             diagnostics: next.diagnostics.clone(),
             has_blocking_diagnostics: next.has_blocking_diagnostics,
         })
+    }
+}
+
+fn project_effective_input_binding(binding: EffectiveInputBinding) -> EffectiveInputBindingKindDto {
+    match binding {
+        EffectiveInputBinding::Connections(_) => EffectiveInputBindingKindDto::Connections,
+        EffectiveInputBinding::Literal(_) => EffectiveInputBindingKindDto::Literal,
+        EffectiveInputBinding::ProtocolDefault(_) => EffectiveInputBindingKindDto::ProtocolDefault,
+        EffectiveInputBinding::Unbound => EffectiveInputBindingKindDto::Unbound,
     }
 }
 
@@ -788,20 +872,7 @@ fn project_parameter_editor(
 }
 
 fn project_address(address: &PortAddress) -> PortAddressDto {
-    match &address.port {
-        PortRef::Declared { key } => PortAddressDto::Declared {
-            node_id: address.node_id.to_string().into(),
-            port_key: key.as_str().into(),
-        },
-        PortRef::Instance {
-            template,
-            instance_id,
-        } => PortAddressDto::Instance {
-            node_id: address.node_id.to_string().into(),
-            template_key: template.as_str().into(),
-            instance_id: instance_id.to_string().into(),
-        },
-    }
+    address.into()
 }
 
 fn project_diagnostic(
@@ -903,7 +974,23 @@ impl From<DiagnosticSeverity> for DiagnosticSeverityDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
+    use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
+    use crate::node_system::document::{
+        DocumentConnection, DocumentNode, InputState, NodePosition, OrderKey,
+    };
+    use crate::node_system::protocol::{NodeTypeId, PortKey};
     use crate::node_system::registry::RegistryFingerprint;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    struct EmptyResources;
+
+    impl ResourceSnapshot for EmptyResources {
+        fn versions(&self) -> ResourceVersionSet {
+            BTreeMap::new()
+        }
+    }
 
     fn basis(revision: u64) -> ProjectionBasis {
         ProjectionBasis {
@@ -948,6 +1035,11 @@ mod tests {
                 ordered: false,
                 can_connect: true,
             },
+            input: Some(EditorInputBindingDto {
+                literal_override: None,
+                protocol_default: None,
+                effective: EffectiveInputBindingKindDto::Unbound,
+            }),
             resolved_type: Some(TypeSummaryDto {
                 display: "core.string".into(),
                 resolved: true,
@@ -963,6 +1055,7 @@ mod tests {
             source_revision: revision,
             node_id: "node-1".into(),
             node_type_id: "test.node".into(),
+            position: NodePositionDto { x: 0.0, y: 0.0 },
             display: NodeDisplayDto {
                 title: "Test".into(),
                 description: None,
@@ -983,9 +1076,216 @@ mod tests {
             graph_path: "functions/main".into(),
             source_revision: revision,
             nodes: vec![node(revision, ports)],
+            connections: Vec::new(),
             diagnostics: Vec::new(),
             has_blocking_diagnostics: false,
         }
+    }
+
+    #[test]
+    fn diagnostic_locations_serialize_struct_fields_as_camel_case() {
+        let locations = vec![
+            DiagnosticLocationDto::Node {
+                node_id: "node-1".into(),
+            },
+            DiagnosticLocationDto::Port {
+                address: PortAddressDto::Declared {
+                    node_id: "node-1".into(),
+                    port_key: "input".into(),
+                },
+            },
+            DiagnosticLocationDto::Connection {
+                connection_id: "connection-1".into(),
+            },
+            DiagnosticLocationDto::Parameter {
+                node_id: "node-1".into(),
+                key: "formula".into(),
+            },
+        ];
+
+        assert_eq!(
+            serde_json::to_value(locations).unwrap(),
+            json!([
+                { "kind": "node", "nodeId": "node-1" },
+                {
+                    "kind": "port",
+                    "address": {
+                        "kind": "declared",
+                        "nodeId": "node-1",
+                        "portKey": "input"
+                    }
+                },
+                { "kind": "connection", "connectionId": "connection-1" },
+                { "kind": "parameter", "nodeId": "node-1", "key": "formula" }
+            ])
+        );
+    }
+
+    #[test]
+    fn editor_projection_includes_positions_connections_and_input_bindings() {
+        let registry = build_builtin_registry();
+        let (_, catalog) = build_builtin_provider();
+        let branch_id = NodeId::from_uuid(Uuid::from_u128(1));
+        let sleep_id = NodeId::from_uuid(Uuid::from_u128(2));
+        let connection_id = ConnectionId::from_uuid(Uuid::from_u128(3));
+        let branch_enter = PortAddress::declared(branch_id, PortKey::new("enter").unwrap());
+        let branch_condition = PortAddress::declared(branch_id, PortKey::new("condition").unwrap());
+        let branch_true = PortAddress::declared(branch_id, PortKey::new("true").unwrap());
+        let sleep_enter = PortAddress::declared(sleep_id, PortKey::new("enter").unwrap());
+        let mut document = GraphDocument::default();
+        document.nodes.insert(
+            branch_id,
+            DocumentNode {
+                id: branch_id,
+                node_type: NodeTypeId::new("yssbi.control.branch").unwrap(),
+                position: NodePosition { x: 12.5, y: -4.0 },
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        );
+        document.nodes.insert(
+            sleep_id,
+            DocumentNode {
+                id: sleep_id,
+                node_type: NodeTypeId::new("yssbi.control.sleep").unwrap(),
+                position: NodePosition { x: 48.0, y: 8.0 },
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        );
+        document.connections.insert(
+            connection_id,
+            DocumentConnection {
+                id: connection_id,
+                output: branch_true,
+                input: sleep_enter,
+                order: Some(OrderKey("rank-1".into())),
+            },
+        );
+        document.input_states.insert(
+            branch_condition,
+            InputState {
+                literal_override: Some(json!(true)),
+            },
+        );
+        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+            .compile(&document)
+            .analysis;
+        let localization = catalog.localization("en-US");
+
+        let projection = EditorGraphProjectionDto::from_sources(
+            "functions/main",
+            &analysis,
+            &document,
+            &registry,
+            &localization,
+        )
+        .unwrap();
+
+        assert_eq!(
+            projection.nodes[0].position,
+            NodePositionDto { x: 12.5, y: -4.0 }
+        );
+        assert_eq!(
+            projection.connections[0].connection_id.as_ref(),
+            connection_id.to_string()
+        );
+        assert!(matches!(
+            projection.connections[0].output,
+            PortAddressDto::Declared { .. }
+        ));
+        assert_eq!(projection.connections[0].order.as_deref(), Some("rank-1"));
+        let branch = &projection.nodes[0];
+        let sleep = &projection.nodes[1];
+        assert!(
+            branch
+                .ports
+                .iter()
+                .find(|port| port.template_key.as_ref() == "true")
+                .unwrap()
+                .input
+                .is_none()
+        );
+        fn binding<'a>(node: &'a EditorNodeProjectionDto, key: &str) -> &'a EditorInputBindingDto {
+            node.ports
+                .iter()
+                .find(|port| port.template_key.as_ref() == key)
+                .unwrap()
+                .input
+                .as_ref()
+                .unwrap()
+        }
+        let effective = |node: &EditorNodeProjectionDto, key: &str| binding(node, key).effective;
+        assert_eq!(
+            effective(branch, "condition"),
+            EffectiveInputBindingKindDto::Literal
+        );
+        assert_eq!(
+            effective(sleep, "enter"),
+            EffectiveInputBindingKindDto::Connections
+        );
+        assert_eq!(
+            effective(sleep, "duration"),
+            EffectiveInputBindingKindDto::ProtocolDefault
+        );
+        assert_eq!(
+            effective(branch, "enter"),
+            EffectiveInputBindingKindDto::Unbound
+        );
+        assert_eq!(
+            binding(branch, "condition").literal_override,
+            Some(json!(true))
+        );
+        assert_eq!(
+            binding(sleep, "duration").protocol_default,
+            Some(json!({ "Decimal": "1" }))
+        );
+
+        let zh_projection = EditorGraphProjectionDto::from_sources(
+            "functions/main",
+            &analysis,
+            &document,
+            &registry,
+            &catalog.localization("zh-CN"),
+        )
+        .unwrap();
+        assert_eq!(zh_projection.basis, projection.basis);
+        assert_eq!(zh_projection.graph_path, projection.graph_path);
+        assert_eq!(zh_projection.source_revision, projection.source_revision);
+        assert_eq!(zh_projection.connections, projection.connections);
+        assert_eq!(zh_projection.nodes.len(), projection.nodes.len());
+        for (localized, original) in zh_projection.nodes.iter().zip(&projection.nodes) {
+            assert_eq!(localized.node_id, original.node_id);
+            assert_eq!(localized.node_type_id, original.node_type_id);
+            assert_eq!(localized.position, original.position);
+            assert_eq!(
+                localized
+                    .ports
+                    .iter()
+                    .map(|port| &port.address)
+                    .collect::<Vec<_>>(),
+                original
+                    .ports
+                    .iter()
+                    .map(|port| &port.address)
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        let old_input = projection.connections[0].input.clone();
+        let mut current = projection.clone();
+        let mut next = projection;
+        next.basis.graph_revision += 1;
+        next.source_revision += 1;
+        for node in &mut next.nodes {
+            node.source_revision += 1;
+        }
+        next.connections[0].input = project_address(&branch_enter);
+        let delta = GraphProjectionDelta::between(&current, &next).unwrap();
+        current.apply_delta(delta).unwrap();
+
+        assert_ne!(current.connections[0].input, old_input);
+        assert_eq!(current.connections, next.connections);
     }
 
     #[test]

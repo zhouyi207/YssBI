@@ -22,7 +22,7 @@ export * from './pinSemantics';
 export * from './pinVisual';
 export * from './connection';
 export * from './functionSignaturePin';
-export * from './nodeViewMeta';
+
 export * from './graph';
 export * from './graphResourcePath';
 export * from './dataType';
@@ -32,6 +32,6 @@ export * from './variable';
 export * from './project';
 export * from './database';
 export * from './dataframe';
-export * from './schema';
+
 
 export * from './worksheet';

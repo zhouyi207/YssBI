@@ -4,6 +4,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import type { Graph } from "@/shared/types/domain";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
+import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
 import type { CleanupInvalidProjectsResult, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   graphDataToDomainGraph,
@@ -38,8 +39,8 @@ export interface ProjectGraphIndexRow {
     path: string;
     name: string;
     type: "event" | "function";
-    functionInputs?: import('@/shared/types/domain').FunctionSignaturePin[];
-    functionOutputs?: import('@/shared/types/domain').FunctionSignaturePin[];
+    functionRevision?: number;
+    functionSignature?: import('@/shared/types/dto/editorMutation').FunctionSignatureDto;
 }
 
 export interface ProjectWorksheetIndexRow {
@@ -51,6 +52,7 @@ export interface ProjectWorksheetIndexRow {
 
 export interface ProjectVariableIndexRow {
   id: string;
+  revision: number;
   name: string;
   dataType: import('@/shared/types/domain').DataType;
   dataValue: import('@/shared/types/domain').DataValue;
@@ -63,17 +65,15 @@ export interface ProjectVariableIndexRow {
 }
 
 export interface ProjectIndexRow {
+  projectInstanceId: string;
   projectName: string;
   appVersion: string;
   exportTime: string;
+  publicationRevision: number;
+  history: HistoryStatusDto;
   graphs: ProjectGraphIndexRow[];
   worksheets?: ProjectWorksheetIndexRow[];
   variables?: ProjectVariableIndexRow[];
-}
-
-export interface LoadedProjectGraphRow {
-    graph: GraphInstanceDTO;
-    variables: Record<string, unknown>;
 }
 
 /**
@@ -89,11 +89,6 @@ export function toFrontendGraph(data: GraphInstanceDTO): Graph {
     return graph;
 }
 
-/**
- * 将后端 Graph Map 转换为前端 Record
- */
-
-
 // ==================== 项目状态管理 API ====================
 
 export type RevealProjectResourceRequest = {
@@ -103,8 +98,6 @@ export type RevealProjectResourceRequest = {
 
 export class ProjectService {
     // ==================== 项目级操作 ====================
-
-
 
     /**
      * 分阶段加载第一步：获取 databases + variables（含 schema）
@@ -119,7 +112,6 @@ export class ProjectService {
         return { databases: data.databases || {}, variables: data.variables || {} };
     }
 
-
     /**
      * 获取当前项目路径
      */
@@ -129,10 +121,6 @@ export class ProjectService {
 
     static async getProjectIndex(): Promise<ProjectIndexRow> {
         return await invoke("get_project_index");
-    }
-
-    static async loadProjectGraph(graphPath: string): Promise<LoadedProjectGraphRow> {
-        return await invoke("load_project_graph", { graphPath });
     }
 
     /**
@@ -246,9 +234,12 @@ export class ProjectService {
     /**
      * Flush the current file-backed project to disk.
      */
-    static async flushProject(): Promise<void> {
+    static async flushProject(
+        projectInstanceId: string,
+        operationId: string,
+    ): Promise<import('@/shared/types/dto').ProjectSaveResultDto> {
         try {
-            await invoke("flush_project");
+            return await invoke("flush_project", { projectInstanceId, operationId });
         } catch (e) {
             logger.app.error(`Failed to flush project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
             throw e;

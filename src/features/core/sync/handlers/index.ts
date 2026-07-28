@@ -6,8 +6,7 @@ export * from './GraphEventHandler';
 export * from './VariableEventHandler';
 export * from './DataFrameEventHandler';
 export * from './ResourceEventHandler';
-export * from './NodeEventHandler';
-export * from './ConnectionEventHandler';
+export * from './ProjectMutationEventHandler';
 
 import { EventHandler } from '../types';
 import {
@@ -33,25 +32,12 @@ import {
 } from './DataFrameEventHandler';
 import {
     ResourceChangedHandler,
-    GraphResourceMovedHandler,
     ProjectIndexInvalidatedHandler,
 } from './ResourceEventHandler';
 import {
-    NodeCreatedHandler,
-    NodesBatchCreatedHandler,
-    NodeDeletedHandler,
-    NodesBatchDeletedHandler,
-    NodePositionsUpdatedHandler,
-    NodePinsUpdatedHandler,
-    PinTypesInferredHandler,
-    RuntimeSourcesInvalidatedHandler,
-} from './NodeEventHandler';
-import {
-    ConnectionCreatedHandler,
-    ConnectionDeletedHandler,
-    ConnectionsBatchDeletedHandler,
-    ConnectionsBatchCreatedHandler,
-} from './ConnectionEventHandler';
+    GraphDeltaHandler,
+    ResourceMutationCommittedHandler,
+} from './ProjectMutationEventHandler';
 
 /**
  * 创建所有事件处理器实例
@@ -84,22 +70,9 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         // Resource
         new ProjectIndexInvalidatedHandler() as EventHandler<unknown>,
         new ResourceChangedHandler() as EventHandler<unknown>,
-        new GraphResourceMovedHandler() as EventHandler<unknown>,
-        
-        // Node
-        new NodeCreatedHandler() as EventHandler<unknown>,
-        new NodesBatchCreatedHandler() as EventHandler<unknown>,
-        new NodeDeletedHandler() as EventHandler<unknown>,
-        new NodesBatchDeletedHandler() as EventHandler<unknown>,
-        new NodePositionsUpdatedHandler() as EventHandler<unknown>,
-        new NodePinsUpdatedHandler() as EventHandler<unknown>,
-        new PinTypesInferredHandler() as EventHandler<unknown>,
-        new RuntimeSourcesInvalidatedHandler() as EventHandler<unknown>,
 
-        // Connection
-        new ConnectionCreatedHandler() as EventHandler<unknown>,
-        new ConnectionDeletedHandler() as EventHandler<unknown>,
-        new ConnectionsBatchDeletedHandler() as EventHandler<unknown>,
-        new ConnectionsBatchCreatedHandler() as EventHandler<unknown>,
+        // Revisioned project mutations
+        new GraphDeltaHandler() as EventHandler<unknown>,
+        new ResourceMutationCommittedHandler() as EventHandler<unknown>,
     ];
 }

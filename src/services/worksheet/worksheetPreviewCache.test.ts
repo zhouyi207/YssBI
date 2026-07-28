@@ -9,6 +9,8 @@ import {
 } from './worksheetPreviewCache';
 
 const DOCUMENT: WorksheetDocument = {
+  schemaVersion: 3,
+  revision: 0,
   id: 'worksheet-1',
   name: 'Chart',
   databaseId: 'database-1',

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+
 import { toGraphResourceUri } from '@/shared/types/domain/graphResourcePath';
 import { useDocumentStateStore, useResourceStore } from '@/features/core/resource';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
@@ -9,6 +11,8 @@ import {
 
 describe('Resource event handlers', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    useProjectIOStore.setState({ projectInstanceId: 'project-instance-current' });
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
     vi.restoreAllMocks();
@@ -42,6 +46,8 @@ describe('Resource event handlers', () => {
       kind: 'event',
     });
   });
+
+
 
   it('ProjectIndexInvalidatedHandler coalesces bursts into one refreshResourceIndex call', async () => {
     vi.useFakeTimers();

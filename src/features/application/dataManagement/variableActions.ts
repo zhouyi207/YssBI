@@ -8,6 +8,11 @@ import { variableCatalogToResourceMetas } from '@/features/core/variable/variabl
 import { VariableService } from '@/services/variable/variableService';
 import { logger } from '@/utils/appLogger';
 import { uiStore } from '@/features/core/ui/UIStore';
+import {
+  captureProjectCommandContext,
+  type ProjectCommandContext,
+} from '@/features/application/projectCommandContext';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 
 function buildScope(
   isGlobal: boolean,
@@ -45,6 +50,7 @@ export async function createVariableAction(params: {
   activeGraphPath: string | null;
   graphType?: 'event' | 'function';
 }): Promise<string | null> {
+  let context: ProjectCommandContext | undefined;
   try {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
     const dataType = dataTypeFromKey(params.type ?? 'Int64');
@@ -52,7 +58,7 @@ export async function createVariableAction(params: {
       uiStore.showToast('变量类型不能为 Any', 'error');
       return null;
     }
-    const variable: Omit<Variable, 'id'> = {
+    const variable: Omit<Variable, 'id' | 'revision'> = {
       name: baseName,
       dataType,
       dataValue: dataValueFromRaw(getDefaultValue(dataType), dataType),
@@ -61,12 +67,24 @@ export async function createVariableAction(params: {
       tags: [],
     };
 
-    const newVarId = await VariableService.createVariable(variable);
-    const newVar = await VariableService.getVariable(newVarId);
-    useVariableStore.getState().addVariable(newVarId, newVar);
-    rebuildVariableResourceProjection();
-    return newVarId;
+    context = captureProjectCommandContext();
+    const committed = await VariableService.createVariable(
+      context.projectInstanceId,
+      context.operationId,
+      context.publicationRevision,
+      variable,
+    );
+    if (!context.isCurrent()) return null;
+    if (committed.result) {
+      await projectPublicationCoordinator.submit({ result: committed.result });
+    } else if (committed.variable) {
+      useVariableStore.getState().addVariable(committed.variableId, committed.variable);
+      rebuildVariableResourceProjection();
+    }
+    if (!context.isCurrent()) return null;
+    return committed.variableId;
   } catch (e) {
+    if (context && !context.isCurrent()) return null;
     logger.data.error('Failed to create variable: ' + String(e), 'VariableActions');
     uiStore.showToast(`变量创建失败: ${e}`, 'error');
     return null;
@@ -85,12 +103,27 @@ export async function updateVariableAction(
     return null;
   }
 
+  let context: ProjectCommandContext | undefined;
   try {
-    const next = await VariableService.updateVariable(id, data);
-    useVariableStore.getState().updateVariable(id, next);
-    rebuildVariableResourceProjection();
-    return next;
+    context = captureProjectCommandContext();
+    const committed = await VariableService.updateVariable(
+      context.projectInstanceId,
+      context.operationId,
+      previous.revision,
+      id,
+      data,
+    );
+    if (!context.isCurrent()) return null;
+    if (committed.result) {
+      await projectPublicationCoordinator.submit({ result: committed.result });
+    } else if (committed.variable) {
+      useVariableStore.getState().updateVariable(id, committed.variable);
+      rebuildVariableResourceProjection();
+    }
+    if (!context.isCurrent()) return null;
+    return useVariableStore.getState().variables[id] ?? null;
   } catch (e) {
+    if (context && !context.isCurrent()) return null;
     logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableActions');
     uiStore.showToast(`变量更新失败: ${e}`, 'error');
     return null;
@@ -101,12 +134,25 @@ export async function deleteVariableAction(id: string): Promise<boolean> {
   const previous = useVariableStore.getState().variables[id];
   if (!previous) return false;
 
+  let context: ProjectCommandContext | undefined;
   try {
-    await VariableService.deleteVariable(id);
-    useVariableStore.getState().deleteVariable(id);
-    useResourceStore.getState().removeResource({ id, kind: 'variable' });
-    return true;
+    context = captureProjectCommandContext();
+    const committed = await VariableService.deleteVariable(
+      context.projectInstanceId,
+      context.operationId,
+      previous.revision,
+      id,
+    );
+    if (!context.isCurrent()) return false;
+    if (committed.result) {
+      await projectPublicationCoordinator.submit({ result: committed.result });
+    } else {
+      useVariableStore.getState().deleteVariable(id);
+      useResourceStore.getState().removeResource({ id, kind: 'variable' });
+    }
+    return context.isCurrent();
   } catch (e) {
+    if (context && !context.isCurrent()) return false;
     logger.data.error('Failed to delete variable in backend: ' + String(e), 'VariableActions');
     uiStore.showToast(`变量删除失败: ${e}`, 'error');
     return false;

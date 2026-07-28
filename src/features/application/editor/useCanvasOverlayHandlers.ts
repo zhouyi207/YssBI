@@ -2,24 +2,18 @@ import { useCallback } from "react";
 import { findInternalNodeInGraph } from "@/features/core/dataStore";
 import { getViewport, editorViewportScope, type EditorViewport } from "@/features/core/viewport";
 import { DEFAULT_VIEWPORT } from "@/app/appConfig/default";
-import { useNodeRegistryStore } from "@/features/core/nodeRegister";
-import { executeCommand } from "@/features/core/history";
-import { CALL_FUNCTION_NODE_TYPE } from "@/features/domain/nodeDefinition";
 import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
 import type { Pin } from "@/shared/types/domain/pin";
 import type { EditorFunctions } from "@/features/core/editor";
-import { logger } from '@/utils/appLogger';
-import { isFunctionAvailable, type CreateNodeFn } from "./canvasDrop";
+import type { CreateNodeFn } from "./canvasDrop";
+import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
 
 export function useCanvasOverlayHandlers({
   canvasElementRef,
   groupId,
   activeTabId,
-  functions,
-  pendingConnection,
   setContextMenu,
   setPendingConnection,
-  createNode,
   setCanvas,
 }: {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
@@ -67,41 +61,7 @@ export function useCanvasOverlayHandlers({
         }
       }
 
-      const rect = canvasElementRef.current.getBoundingClientRect();
-      const x = (contextMenu.x - rect.left - currentCanvas.x) / currentCanvas.scale;
-      const y = (contextMenu.y - rect.top - currentCanvas.y) / currentCanvas.scale;
-
-      if (item.nodeType === CALL_FUNCTION_NODE_TYPE) {
-        const subId = item.overrides?.subGraphPath;
-        if (!subId || !isFunctionAvailable(subId, functions)) {
-          setContextMenu(null);
-          setPendingConnection(null);
-          return;
-        }
-      }
-
-      const sourcePinForConnect = pendingConnection;
-      const definition =
-        sourcePinForConnect && activeTabId
-          ? useNodeRegistryStore.getState().getDefinition(item.nodeType)
-          : undefined;
-
-      if (sourcePinForConnect && activeTabId && definition) {
-        try {
-          await executeCommand(activeTabId, 'CreateNodeWithConnection', {
-            nodeType: item.nodeType,
-            x,
-            y,
-            params: item.overrides ?? undefined,
-            sourcePin: sourcePinForConnect,
-          });
-        } catch (err) {
-          logger.graph.warn(`Failed to create node with connection: ${err instanceof Error ? err.message : String(err)}`, 'CanvasOverlay');
-        }
-      } else {
-        await createNode(item.nodeType, { x, y }, item.overrides ?? undefined);
-      }
-
+      notifyNodeCreationUnavailable();
       setContextMenu(null);
       setPendingConnection(null);
     },
@@ -109,9 +69,6 @@ export function useCanvasOverlayHandlers({
       canvasElementRef,
       groupId,
       activeTabId,
-      functions,
-      pendingConnection,
-      createNode,
       setContextMenu,
       setPendingConnection,
       setCanvas,

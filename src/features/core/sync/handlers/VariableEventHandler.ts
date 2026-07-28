@@ -8,15 +8,9 @@ import {
   EventCallbacks,
 } from '../types';
 import { useVariableStore } from '@/features/core/dataStore';
-import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
-import type { VariableScope } from '@/shared/types/domain/variable';
 import { rebuildVariableResourceProjection } from '@/features/application/dataManagement/variableActions';
-
-function markVariableScopeDirty(scope: VariableScope) {
-  if (scope.type === 'event') markGraphTabDirty(scope.eventPath);
-  if (scope.type === 'function') markGraphTabDirty(scope.functionPath);
-}
+import { markVariableScopeDirty } from '@/features/core/variable/variableDirty';
 
 export class VariableCreatedHandler extends BaseEventHandler<VariableCreatedPayload> {
   eventType = 'VariableCreated';
