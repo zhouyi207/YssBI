@@ -71,6 +71,7 @@ function result(
   withReplacement: boolean,
 ): ResourceMutationResultDto {
   return {
+    operationId,
     projectInstanceId,
     publicationRevision: 1,
     moves: [],

@@ -6,6 +6,7 @@ import { captureProjectCommandContext } from '@/features/application/projectComm
 
 import {
   clearResourceDocumentState,
+  isResourceDocumentDirty,
   markResourceDirty,
   markResourceLoaded,
   useResourceStore,
@@ -20,7 +21,7 @@ interface WorksheetStore {
   clear: () => void;
   updateDocument: (worksheetId: string, patch: Partial<WorksheetDocument>) => WorksheetDocument | null;
   markDirty: (worksheetId: string) => void;
-  saveDocument: (worksheetId: string) => Promise<void>;
+  saveDocument: (worksheetId: string) => Promise<boolean>;
 }
 
 export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
@@ -86,16 +87,34 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
 
   saveDocument: async (worksheetId) => {
     const document = get().documents[worksheetId];
-    if (!document) return;
+    if (!document) return false;
     const context = captureProjectCommandContext();
     const committed = await WorksheetService.saveWorksheet(
       context.projectInstanceId,
       context.operationId,
       document,
     );
+    if (!context.isCurrent()) return false;
+
     await projectPublicationCoordinator.submit({ result: committed.result });
+    if (!context.isCurrent()) return false;
+    const settled = get().documents[worksheetId];
+    return settled !== undefined
+      && sameWorksheetDocument(settled, committed.document)
+      && !isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' });
   },
 }));
+
+function sameWorksheetDocument(left: WorksheetDocument, right: WorksheetDocument): boolean {
+  return left.schemaVersion === right.schemaVersion
+    && left.revision === right.revision
+    && left.id === right.id
+    && left.name === right.name
+    && left.databaseId === right.databaseId
+    && left.chartType === right.chartType
+    && left.encodings.x === right.encodings.x
+    && left.encodings.y === right.encodings.y;
+}
 
 export function worksheetIndexFromDocuments(
   documents: Record<string, WorksheetDocument>,

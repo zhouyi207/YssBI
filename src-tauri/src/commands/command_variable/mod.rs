@@ -3,6 +3,7 @@ use crate::event::ResourceMutationResultDto;
 use crate::event::{Event, EventProject, EventVariable, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
 use crate::node_system::document::{OperationId, ResourceRevision};
+#[cfg(test)]
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{ProjectInstanceId, ProjectState};
 use crate::schema::VariableInstanceDTO;
@@ -573,13 +574,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(deleted.result.as_ref().unwrap().publication_revision, 3);
-        let deleted_key = ResourceKey::Variable(VariableResourceKey(
-            format!("variables/{variable_id}").into(),
-        ));
-        assert_eq!(
-            state.global_variable_revision_snapshot().get(&deleted_key),
-            Some(&ResourceRevision::new(3))
-        );
+        assert!(state.global_variable_revision_snapshot().is_empty());
         assert_eq!(events.len(), 3);
         for (event, expected_revision) in events.iter().zip(1_u64..=3) {
             assert!(matches!(
@@ -847,8 +842,8 @@ mod tests {
             vec![4, 5, 6, 7, 8, 9]
         );
         assert_eq!(created.result.unwrap().publication_revision, 1);
-        let reloaded = crate::project::load_project_from_file(root.to_string_lossy().as_ref())
-            .unwrap();
+        let reloaded =
+            crate::project::load_project_from_file(root.to_string_lossy().as_ref()).unwrap();
         assert!(!reloaded.variables.contains_key(&variable_id));
         let _ = std::fs::remove_dir_all(root);
     }

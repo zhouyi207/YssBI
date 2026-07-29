@@ -148,6 +148,7 @@ describe('mutation and history services', () => {
 
   it('models canonical resource delta JSON with camelCase correlation fields', () => {
     const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000389',
       projectInstanceId: '00000000-0000-0000-0000-000000000601',
       publicationRevision: 3,
       moves: [],
@@ -172,6 +173,7 @@ describe('mutation and history services', () => {
     };
 
     expect(JSON.parse(JSON.stringify(result))).toEqual({
+      operationId: '00000000-0000-0000-0000-000000000389',
       projectInstanceId: '00000000-0000-0000-0000-000000000601',
       publicationRevision: 3,
       moves: [],

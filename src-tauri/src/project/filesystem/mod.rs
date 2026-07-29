@@ -5,18 +5,23 @@ mod transaction;
 mod windows_path_identity;
 
 pub use crate::project::project_error::ProjectFilesystemError;
-pub use coordinator::{ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet};
-pub use root::NormalizedProjectRoot;
+pub use coordinator::{
+    ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectRootLifecycleGuard,
+};
+pub use root::{NormalizedProjectRoot, ProjectRootBinding, ProjectRootIdentity};
 pub use transaction::{
     CommittedFilesystemMutation, PreparedProjectFilesystemTransaction,
     ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
+pub(crate) use transaction::{metadata_is_redirect, read_secure_project_file};
 
 #[cfg(test)]
 pub use transaction::{
     ProjectFilesystemFaultPoint, set_before_remove_mutation_hook, set_project_filesystem_fault,
-    set_project_filesystem_rollback_fault,
+    set_project_filesystem_rollback_fault, set_project_filesystem_rollback_test_hook,
 };
 
+#[cfg(test)]
+mod source_audit_tests;
 #[cfg(test)]
 mod tests;

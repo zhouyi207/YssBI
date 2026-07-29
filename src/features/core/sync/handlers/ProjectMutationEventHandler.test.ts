@@ -41,6 +41,7 @@ const operationId = '00000000-0000-0000-0000-000000000401';
 
 function resourceResult(publicationRevision = 1): ResourceMutationResultDto {
   return {
+    operationId,
     projectInstanceId,
     publicationRevision,
     moves: [],
@@ -69,6 +70,7 @@ function emptyResult(
   history = { canUndo: true, canRedo: false },
 ): ResourceMutationResultDto {
   return {
+    operationId,
     projectInstanceId,
     publicationRevision,
     moves: [],
@@ -96,6 +98,7 @@ function recoveryIndex(publicationRevision: number) {
 describe('Project mutation event synchronization', () => {
   beforeEach(() => {
     projectPublicationCoordinator.cancelProject();
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
     vi.restoreAllMocks();
     vi.clearAllMocks();
     resetPendingMutations();
@@ -107,6 +110,7 @@ describe('Project mutation event synchronization', () => {
     registerPendingMutation({ operationId, graphPath, baseRevision: 1 });
 
     new GraphDeltaHandler().handle({
+      projectInstanceId,
       delta: {
         graphPath,
         fromRevision: 1,
@@ -127,6 +131,7 @@ describe('Project mutation event synchronization', () => {
     );
 
     new GraphDeltaHandler().handle({
+      projectInstanceId,
       delta: {
         graphPath,
         fromRevision: 1,
@@ -148,6 +153,7 @@ describe('Project mutation event synchronization', () => {
     );
 
     new GraphDeltaHandler().handle({
+      projectInstanceId,
       delta: {
         graphPath,
         fromRevision: 1,
@@ -158,6 +164,19 @@ describe('Project mutation event synchronization', () => {
     });
 
     expect(invalidateGraphProjection).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale project events before pending-operation correlation', () => {
+    projectPublicationCoordinator.startProject('00000000-0000-0000-0000-000000000602', 0);
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit').mockResolvedValue({
+      status: 'applied',
+      affectedGraphPaths: new Set(),
+    });
+    registerPendingMutation({ operationId, graphPath, baseRevision: 1 });
+
+    new ResourceMutationCommittedHandler().handle({ result: resourceResult() });
+
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it('delivers a committed resource result even when its operation ID is pending', () => {

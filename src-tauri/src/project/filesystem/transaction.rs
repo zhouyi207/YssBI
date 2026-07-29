@@ -307,6 +307,8 @@ impl CommittedFilesystemMutation {
 
     pub fn rollback(mut self) -> Result<(), ProjectFilesystemError> {
         self.armed = false;
+        #[cfg(test)]
+        run_project_filesystem_rollback_test_hook();
         let rollback_result =
             restore_before_images(&self.root, &self.journal, &self.created_parent_directories);
         let cleanup_result = cleanup_staging(&self.staging_root);
@@ -399,7 +401,7 @@ fn validate_mutation_paths(
     Ok(())
 }
 
-fn metadata_is_redirect(metadata: &std::fs::Metadata) -> bool {
+pub(crate) fn metadata_is_redirect(metadata: &std::fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
     }
@@ -434,6 +436,24 @@ fn validate_regular_file(path: &Path) -> std::io::Result<()> {
         )));
     }
     Ok(())
+}
+
+pub(crate) fn read_secure_project_file(root: &Path, relative: &Path) -> std::io::Result<Vec<u8>> {
+    if relative.as_os_str().is_empty()
+        || relative.is_absolute()
+        || !relative
+            .components()
+            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
+    {
+        return Err(std::io::Error::other(format!(
+            "project source '{}' is not a safe relative path",
+            relative.display()
+        )));
+    }
+    validate_secure_path(root, relative, true)?;
+    let source = root.join(relative);
+    validate_regular_file(&source)?;
+    std::fs::read(source)
 }
 
 fn validate_secure_path(
@@ -832,6 +852,25 @@ static ROLLBACK_FAULT: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 static BEFORE_REMOVE_MUTATION_HOOK: std::sync::Mutex<
     Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
 > = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+static ROLLBACK_TEST_HOOK: std::sync::Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub fn set_project_filesystem_rollback_test_hook(
+    hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+) {
+    *ROLLBACK_TEST_HOOK.lock().unwrap() = hook;
+}
+
+#[cfg(test)]
+fn run_project_filesystem_rollback_test_hook() {
+    let hook = ROLLBACK_TEST_HOOK.lock().unwrap().clone();
+    if let Some(hook) = hook {
+        hook();
+    }
+}
 
 #[cfg(test)]
 pub fn set_before_remove_mutation_hook(hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>) {

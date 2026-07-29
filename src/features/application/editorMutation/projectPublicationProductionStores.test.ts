@@ -136,6 +136,7 @@ describe('project publication production stores', () => {
     const moves = [move(firstPath), move(secondPath)];
     const preparedMoves = moves.map((entry) => prepareGraphResourceMove(entry, destination));
     const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000902',
       projectInstanceId,
       publicationRevision: 1,
       moves,
@@ -195,6 +196,7 @@ describe('project publication production stores', () => {
     const preparedMoves = moves.map((entry) =>
       prepareGraphResourceMove(entry, destinations.get(entry.to)!));
     const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000903',
       projectInstanceId,
       publicationRevision: 1,
       moves,
@@ -392,6 +394,7 @@ describe('project publication production stores', () => {
   it('applies a matching event and direct worksheet delta exactly once inside publication', async () => {
     const document = worksheet('Created');
     const result = {
+      operationId: '00000000-0000-0000-0000-000000000904',
       projectInstanceId,
       publicationRevision: 1,
       moves: [],

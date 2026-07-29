@@ -133,6 +133,35 @@ impl VariableDocumentPatch {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphResourceLifecycleKind {
+    Event,
+    Function,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphResourceLifecycleState {
+    pub revision: ResourceRevision,
+    pub path: Box<str>,
+    pub kind: GraphResourceLifecycleKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphResourceLifecyclePatch {
+    pub before: Option<GraphResourceLifecycleState>,
+    pub after: Option<GraphResourceLifecycleState>,
+}
+
+impl GraphResourceLifecyclePatch {
+    pub fn inverse(&self) -> Self {
+        Self {
+            before: self.after.clone(),
+            after: self.before.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourcePathMovePatch {
     pub from: Box<str>,
@@ -152,6 +181,7 @@ impl ResourcePathMovePatch {
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Graph(GraphDocumentPatch),
+    GraphResourceLifecycle(GraphResourceLifecyclePatch),
     GraphResourceMove(ResourcePathMovePatch),
     Function(FunctionDocumentPatch),
     Variable(VariableDocumentPatch),
@@ -161,7 +191,9 @@ pub enum ResourceDocumentPatch {
 impl ResourceDocumentPatch {
     pub const fn kind(&self) -> ResourceKind {
         match self {
-            Self::Graph(_) | Self::GraphResourceMove(_) => ResourceKind::Graph,
+            Self::Graph(_) | Self::GraphResourceLifecycle(_) | Self::GraphResourceMove(_) => {
+                ResourceKind::Graph
+            }
             Self::Function(_) => ResourceKind::Function,
             Self::Variable(_) | Self::VariableScopeMove(_) => ResourceKind::Variable,
         }
@@ -170,6 +202,7 @@ impl ResourceDocumentPatch {
     pub fn inverse(&self) -> Self {
         match self {
             Self::Graph(patch) => Self::Graph(patch.inverse()),
+            Self::GraphResourceLifecycle(patch) => Self::GraphResourceLifecycle(patch.inverse()),
             Self::GraphResourceMove(patch) => Self::GraphResourceMove(patch.inverse()),
             Self::Function(patch) => Self::Function(patch.inverse()),
             Self::Variable(patch) => Self::Variable(patch.inverse()),

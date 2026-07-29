@@ -17,22 +17,22 @@ import { NodeDefinitionDetailPanel } from './panels/NodeDefinitionDetailPanel';
 import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
 import { detailSectionTitleClass } from './shared/detailStyles';
 import { workbenchPanelHeaderClass } from '../workbenchPanelHeaderStyles';
-import { useFunctionCallSites } from '@/features/application/graphDocument/useFunctionCallSites';
+
 import { useDetailPanelModel } from './useDetailPanelModel';
 
 export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
   const { updateVariable, updateDataFrame } = useEditorSessionDetailActions();
   const { model, worksheetTargetId, worksheetDocument } = useDetailPanelModel();
-  const functionPath = model.kind === 'function' ? model.path : undefined;
-  const { sites: functionCallSites, loading: functionCallSitesLoading } =
-    useFunctionCallSites(functionPath);
+
 
   useEffect(() => {
     if (!worksheetTargetId || worksheetDocument) return;
-    const { projectInstanceId } = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(projectInstanceId, worksheetTargetId)
-      .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
+    const context = captureProjectCommandContext();
+    void WorksheetService.loadWorksheet(context.projectInstanceId, worksheetTargetId)
+      .then((loaded) => {
+        if (context.isCurrent()) useWorksheetStore.getState().upsertDocument(loaded);
+      })
       .catch(() => undefined);
   }, [worksheetTargetId, worksheetDocument]);
 
@@ -72,8 +72,7 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
         return (
           <FunctionDetailPanel
             fn={model.fn}
-            callSites={functionCallSites}
-            callSitesLoading={functionCallSitesLoading}
+
             onRename={(name) => {
               void renameResource({ id: model.path, kind: 'function' }, name);
             }}

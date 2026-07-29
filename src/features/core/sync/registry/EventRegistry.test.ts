@@ -35,6 +35,7 @@ describe('EventRegistry project mutation registrations', () => {
     expect(registered).toEqual(expect.arrayContaining([
       'ProjectLoaded',
       'ProjectCleared',
+      'ProjectLifecycleCommitted',
       'ProjectSaved',
       'ResourceChanged',
       'ProjectIndexInvalidated',

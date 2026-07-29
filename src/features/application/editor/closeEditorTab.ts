@@ -7,7 +7,10 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+import {
+  captureProjectCommandContext,
+  type ProjectCommandContext,
+} from '@/features/application/projectCommandContext';
 
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
@@ -23,6 +26,7 @@ export async function closeWorksheetTab(
 
   if (isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' }) && !skipDirtyPrompt) {
     const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetId);
+    const context = captureProjectCommandContext();
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
       message: `“${displayName}” 已修改。关闭前是否保存？`,
@@ -30,10 +34,13 @@ export async function closeWorksheetTab(
       cancelText: '不保存',
       type: 'info',
     });
+    if (!context.isCurrent()) return false;
     if (shouldSave) {
       try {
-        await useWorksheetStore.getState().saveDocument(worksheetId);
+        const saved = await useWorksheetStore.getState().saveDocument(worksheetId);
+        if (!saved || !context.isCurrent()) return false;
       } catch (error) {
+        if (!context.isCurrent()) return false;
         uiStore.showToast(
           `保存失败：${error instanceof Error ? error.message : String(error)}`,
           'error',
@@ -71,22 +78,27 @@ export async function closeEditorTab(
   return false;
 }
 
-export async function performWorksheetDelete(worksheetId: string): Promise<void> {
-  const context = captureProjectCommandContext();
+export async function performWorksheetDelete(
+  worksheetId: string,
+  context: ProjectCommandContext = captureProjectCommandContext(),
+): Promise<boolean> {
   const committed = await WorksheetService.deleteWorksheet(
     context.projectInstanceId,
     context.operationId,
     worksheetId,
   );
+  if (!context.isCurrent()) return false;
   if (committed.document.id !== worksheetId) {
     throw new Error('worksheet delete result does not match the requested worksheet');
   }
   await projectPublicationCoordinator.submit({ result: committed.result });
+  return context.isCurrent();
 }
 
 export async function deleteWorksheetWithConfirm(worksheetId: string): Promise<boolean> {
   const doc = useWorksheetStore.getState().documents[worksheetId];
   const name = doc?.name ?? worksheetId;
+  const context = captureProjectCommandContext();
   const confirmed = await uiStore.confirm({
     title: '删除工作表',
     message: `确定要删除工作表「${name}」吗？`,
@@ -94,12 +106,12 @@ export async function deleteWorksheetWithConfirm(worksheetId: string): Promise<b
     cancelText: '取消',
     type: 'danger',
   });
-  if (!confirmed) return false;
+  if (!confirmed || !context.isCurrent()) return false;
 
   try {
-    await performWorksheetDelete(worksheetId);
-    return true;
+    return await performWorksheetDelete(worksheetId, context);
   } catch (error) {
+    if (!context.isCurrent()) return false;
     uiStore.showToast(
       `删除失败：${error instanceof Error ? error.message : String(error)}`,
       'error',

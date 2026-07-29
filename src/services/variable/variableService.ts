@@ -17,17 +17,11 @@ type VariableMutationWireResult = {
   result: ResourceMutationResultDto | null;
 };
 
-function normalizeCommandResult(
-  raw: VariableMutationWireResult,
-  fallbackRevision: number,
-): VariableMutationCommandResult {
-  const revision = raw.result?.deltas.find((delta) =>
-    delta.resource.kind === 'variable'
-      && delta.resource.key === `variables/${raw.variableId}`)?.toRevision ?? fallbackRevision;
+function normalizeCommandResult(raw: VariableMutationWireResult): VariableMutationCommandResult {
   return {
     variableId: raw.variableId,
     variable: raw.variable
-      ? normalizeVariableFromBackend({ ...raw.variable, revision } as Parameters<typeof normalizeVariableFromBackend>[0])
+      ? normalizeVariableFromBackend(raw.variable as Parameters<typeof normalizeVariableFromBackend>[0])
       : null,
     result: raw.result,
   };
@@ -60,25 +54,18 @@ export class VariableService {
       expectedCollectionRevision,
       operationId,
     });
-    return normalizeCommandResult(raw, 0);
+    return normalizeCommandResult(raw);
   }
 
   /**
    * 获取变量
    */
-  static async getVariable(
-    projectInstanceId: string,
-    variableId: string,
-    revision: number,
-  ): Promise<Variable> {
+  static async getVariable(projectInstanceId: string, variableId: string): Promise<Variable> {
     const raw = await invoke<Record<string, unknown>>('get_variable', {
       projectInstanceId,
       variableId,
     });
-    return normalizeVariableFromBackend({
-      ...raw,
-      revision,
-    } as Parameters<typeof normalizeVariableFromBackend>[0]);
+    return normalizeVariableFromBackend(raw as Parameters<typeof normalizeVariableFromBackend>[0]);
   }
 
   /**
@@ -102,7 +89,7 @@ export class VariableService {
       expectedRevision,
       operationId,
     });
-    return normalizeCommandResult(raw, expectedRevision + 1);
+    return normalizeCommandResult(raw);
   }
 
   /**
@@ -120,6 +107,6 @@ export class VariableService {
       expectedRevision,
       variableId,
     });
-    return normalizeCommandResult(raw, expectedRevision + 1);
+    return normalizeCommandResult(raw);
   }
 }

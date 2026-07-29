@@ -95,8 +95,10 @@ export async function updateVariableAction(
   id: string,
   data: Partial<Variable>,
 ): Promise<Variable | null> {
-  const previous = useVariableStore.getState().variables[id];
-  if (!previous) return null;
+  const variableState = useVariableStore.getState();
+  const previous = variableState.variables[id];
+  const expectedRevision = variableState.revisions[id];
+  if (!previous || expectedRevision == null) return null;
 
   if (data.dataType && !isVariableDataTypeAllowed(data.dataType)) {
     uiStore.showToast('变量类型不能为 Any', 'error');
@@ -109,7 +111,7 @@ export async function updateVariableAction(
     const committed = await VariableService.updateVariable(
       context.projectInstanceId,
       context.operationId,
-      previous.revision,
+      expectedRevision,
       id,
       data,
     );
@@ -131,8 +133,10 @@ export async function updateVariableAction(
 }
 
 export async function deleteVariableAction(id: string): Promise<boolean> {
-  const previous = useVariableStore.getState().variables[id];
-  if (!previous) return false;
+  const variableState = useVariableStore.getState();
+  const previous = variableState.variables[id];
+  const expectedRevision = variableState.revisions[id];
+  if (!previous || expectedRevision == null) return false;
 
   let context: ProjectCommandContext | undefined;
   try {
@@ -140,7 +144,7 @@ export async function deleteVariableAction(id: string): Promise<boolean> {
     const committed = await VariableService.deleteVariable(
       context.projectInstanceId,
       context.operationId,
-      previous.revision,
+      expectedRevision,
       id,
     );
     if (!context.isCurrent()) return false;

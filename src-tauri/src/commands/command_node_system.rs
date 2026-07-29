@@ -49,26 +49,80 @@ pub fn get_localized_node_catalog(
         .localize(store.node_registry.as_ref(), &locale))
 }
 
+trait EmitOutcome {
+    fn discard(self);
+}
+
+impl EmitOutcome for () {
+    fn discard(self) {}
+}
+
+impl<E> EmitOutcome for Result<(), E> {
+    fn discard(self) {}
+}
+
+fn emit_resource_result<R: EmitOutcome>(
+    emit: &mut impl FnMut(Event) -> R,
+    result: &ResourceMutationResultDto,
+) {
+    emit(Event::Project(EventProject::ResourceMutationCommitted {
+        result: result.clone(),
+    }))
+    .discard();
+}
+
+fn create_graph_resource_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_name: &str,
+    kind: crate::project::GraphDocumentKind,
+    operation_id: OperationId,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
+    let result = state.create_graph_resource_transaction(
+        &project_instance_id,
+        graph_name,
+        kind,
+        operation_id,
+    )?;
+    emit_resource_result(&mut emit, &result);
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn create_event(
+    app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_name: String,
-) -> Result<String, AppError> {
-    state
-        .create_graph_resource(&graph_name, crate::project::GraphDocumentKind::Event)
-        .map(|path| path.as_str().to_string())
-        .map_err(AppError::internal)
+    operation_id: OperationId,
+) -> Result<ResourceMutationResultDto, AppError> {
+    create_graph_resource_with_emitter(
+        state.inner(),
+        project_instance_id,
+        &graph_name,
+        crate::project::GraphDocumentKind::Event,
+        operation_id,
+        |event| emit_project_event(&app, event),
+    )
 }
 
 #[tauri::command]
 pub fn create_function(
+    app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_name: String,
-) -> Result<String, AppError> {
-    state
-        .create_graph_resource(&graph_name, crate::project::GraphDocumentKind::Function)
-        .map(|path| path.as_str().to_string())
-        .map_err(AppError::internal)
+    operation_id: OperationId,
+) -> Result<ResourceMutationResultDto, AppError> {
+    create_graph_resource_with_emitter(
+        state.inner(),
+        project_instance_id,
+        &graph_name,
+        crate::project::GraphDocumentKind::Function,
+        operation_id,
+        |event| emit_project_event(&app, event),
+    )
 }
 
 #[tauri::command]
@@ -128,44 +182,99 @@ pub fn save_project_graph(
     )
 }
 
+fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_path: GraphResourcePath,
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
+    let result = state.duplicate_graph_resource_transaction(
+        &project_instance_id,
+        &graph_path,
+        expected_revision,
+        operation_id,
+    )?;
+    emit_resource_result(&mut emit, &result);
+    Ok(result)
+}
+
 #[tauri::command]
 pub fn duplicate_graph(
+    app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<String, AppError> {
-    state
-        .duplicate_graph_resource(&parse_graph_path(graph_path)?)
-        .map(|path| path.as_str().to_string())
-        .map_err(AppError::internal)
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+) -> Result<ResourceMutationResultDto, AppError> {
+    duplicate_graph_resource_with_emitter(
+        state.inner(),
+        project_instance_id,
+        parse_graph_path(graph_path)?,
+        expected_revision,
+        operation_id,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn remove_graph_resource_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_path: GraphResourcePath,
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
+    let result = state.remove_graph_resource_transaction(
+        &project_instance_id,
+        &graph_path,
+        expected_revision,
+        operation_id,
+    )?;
+    emit_resource_result(&mut emit, &result);
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn remove_graph(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<(), AppError> {
-    state
-        .remove_graph_resource(&parse_graph_path(graph_path)?)
-        .map_err(AppError::internal)?;
-    crate::event::emit_project_index_invalidated(&app, "remove_graph");
-    Ok(())
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+) -> Result<ResourceMutationResultDto, AppError> {
+    remove_graph_resource_with_emitter(
+        state.inner(),
+        project_instance_id,
+        parse_graph_path(graph_path)?,
+        expected_revision,
+        operation_id,
+        |event| emit_project_event(&app, event),
+    )
 }
 
-fn rename_graph_resource_with_emitter(
+fn rename_graph_resource_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
-    project_instance_id: &str,
+    project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
+    expected_revision: ResourceRevision,
     new_name: &str,
-    mut emit: impl FnMut(Event),
+    lifecycle_token: u64,
+    operation_id: OperationId,
+    mut emit: impl FnMut(Event) -> R,
 ) -> Result<ResourceMutationResultDto, AppError> {
-    let result = state
-        .rename_graph_resource(project_instance_id, &graph_path, new_name)
-        .map_err(AppError::from)?
-        .publication;
-    emit(Event::Project(EventProject::ResourceMutationCommitted {
-        result: result.clone(),
-    }));
+    let result = state.rename_graph_resource_transaction(
+        &project_instance_id,
+        &graph_path,
+        expected_revision,
+        new_name,
+        lifecycle_token,
+        operation_id,
+    )?;
+    emit_resource_result(&mut emit, &result);
     Ok(result)
 }
 
@@ -173,15 +282,21 @@ fn rename_graph_resource_with_emitter(
 pub fn rename_graph_resource(
     app: AppHandle,
     state: State<'_, ProjectState>,
-    project_instance_id: String,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
+    expected_revision: ResourceRevision,
     new_name: String,
+    lifecycle_token: u64,
+    operation_id: OperationId,
 ) -> Result<ResourceMutationResultDto, AppError> {
     rename_graph_resource_with_emitter(
         state.inner(),
-        &project_instance_id,
+        project_instance_id,
         parse_graph_path(graph_path)?,
+        expected_revision,
         &new_name,
+        lifecycle_token,
+        operation_id,
         |event| emit_project_event(&app, event),
     )
 }
@@ -615,10 +730,10 @@ mod tests {
             .find("ActivationGenerationTransition::begin")
             .expect("activation must mark generation changing through RAII");
         let path_install = publish
-            .find("*current_path = path;")
+            .find("std::mem::replace(&mut *current_path, path)")
             .expect("activation must install project path");
         let store_install = publish
-            .find("*current_store = store;")
+            .find("std::mem::replace(&mut *current_store, store)")
             .expect("activation must install project store through the named guard");
         let stable = publish
             .rfind("generation.complete();")
@@ -751,7 +866,7 @@ mod tests {
         for (caller, start, end) in [
             (
                 "rename",
-                "    pub fn rename_graph_resource(",
+                "    pub(super) fn rename_graph_resource_transaction_impl(",
                 "\n    fn graph_rename_mutations(",
             ),
             (
@@ -762,7 +877,7 @@ mod tests {
             (
                 "worksheet removal",
                 "    pub fn remove_worksheet_document(",
-                "\n    fn allocate_graph_path(",
+                "\n    pub(super) fn allocate_graph_path_from_snapshot(",
             ),
         ] {
             let caller_start = project_source
@@ -821,6 +936,7 @@ mod tests {
         let mut events = Vec::new();
 
         let result = ResourceMutationResultDto {
+            operation_id: OperationId::new(),
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
             publication_revision: 7,
             moves: Vec::new(),
@@ -943,9 +1059,12 @@ mod tests {
 
         let error = rename_graph_resource_with_emitter(
             &state,
-            "stale-project-instance",
+            ProjectInstanceId::from_existing("stale-project-instance".into()),
             old_path.clone(),
+            ResourceRevision::INITIAL,
             "New",
+            1,
+            OperationId::new(),
             |event| events.push(event),
         )
         .unwrap_err();
@@ -985,9 +1104,12 @@ mod tests {
 
         let error = rename_graph_resource_with_emitter(
             &state,
-            &project_instance_id,
+            ProjectInstanceId::from_existing(project_instance_id.clone()),
             old_path.clone(),
+            ResourceRevision::INITIAL,
             "New",
+            1,
+            OperationId::new(),
             |event| events.push(event),
         )
         .unwrap_err();
@@ -1001,6 +1123,249 @@ mod tests {
         assert!(root.join(old_path.as_str()).exists());
         assert!(!root.join("events/New.yssbi-event").exists());
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn resource_command_emitter_failure_preserves_committed_receipt_observability() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-resource-command-emitter-failure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        crate::project::fixtures::write_project(
+            &ProjectData::new(),
+            root.to_string_lossy().as_ref(),
+        )
+        .unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let project_id = state.capture_project_session().unwrap().instance_id;
+        let operation_id = OperationId::new();
+
+        let result = create_graph_resource_with_emitter(
+            &state,
+            project_id.clone(),
+            "Committed",
+            GraphDocumentKind::Event,
+            operation_id,
+            |_| Err::<(), _>("emitter offline"),
+        )
+        .unwrap();
+
+        assert_eq!(result.operation_id, operation_id);
+        assert_eq!(result.project_instance_id, project_id.as_str());
+        assert!(root.join("events/Committed.yssbi-event").is_file());
+        let replay = state
+            .create_graph_resource_transaction(
+                &project_id,
+                "Committed",
+                GraphDocumentKind::Event,
+                operation_id,
+            )
+            .unwrap_err();
+        assert_eq!(replay.code(), "duplicate_operation");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resource_commands_emit_one_project_scoped_committed_result() {
+        let source = include_str!("command_node_system.rs");
+
+        for required in [
+            "fn create_graph_resource_with_emitter<R: EmitOutcome>(",
+            "fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(",
+            "fn remove_graph_resource_with_emitter<R: EmitOutcome>(",
+            "fn rename_graph_resource_with_emitter<R: EmitOutcome>(",
+            "project_instance_id: ProjectInstanceId",
+            "expected_revision: ResourceRevision",
+            "lifecycle_token: u64",
+            "operation_id: OperationId",
+        ] {
+            assert!(
+                source.contains(required),
+                "resource command contract is missing {required}"
+            );
+        }
+        let resource_commands = &source[source.find("pub fn create_event(").unwrap()
+            ..source.find("pub fn update_function_signature(").unwrap()];
+        assert_eq!(
+            source
+                .matches("\n    emit_resource_result(&mut emit, &result);")
+                .count(),
+            4,
+            "each resource command helper must emit through the canonical helper"
+        );
+        assert_eq!(
+            resource_commands
+                .matches("EventProject::ResourceMutationCommitted")
+                .count(),
+            0,
+            "resource commands must not construct a second event path"
+        );
+        assert!(!resource_commands.contains("GraphResourceMoved"));
+        assert!(
+            !resource_commands.contains("emit_project_index_invalidated(&app, \"remove_graph\")")
+        );
+
+        let create_root = std::env::temp_dir().join(format!(
+            "yssbi-resource-command-create-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&create_root).unwrap();
+        crate::project::fixtures::write_project(
+            &ProjectData::new(),
+            create_root.to_string_lossy().as_ref(),
+        )
+        .unwrap();
+        let create_state = ProjectState::new();
+        create_state.activate_project_fixture(
+            create_root.to_string_lossy().into_owned(),
+            ProjectData::new(),
+        );
+        let create_id = create_state.capture_project_session().unwrap().instance_id;
+        let mut create_events = Vec::new();
+        let create_operation_id = OperationId::new();
+        let created = create_graph_resource_with_emitter(
+            &create_state,
+            create_id.clone(),
+            "Created",
+            GraphDocumentKind::Event,
+            create_operation_id,
+            |event| create_events.push(event),
+        )
+        .unwrap();
+        assert_eq!(created.operation_id, create_operation_id);
+        assert_eq!(created.project_instance_id, create_id.as_str());
+        assert_eq!(created.deltas.len(), 1);
+        assert_eq!(
+            created.deltas[0].resource,
+            ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                "events/Created.yssbi-event".into(),
+            ))
+        );
+        assert_eq!(created.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(created.deltas[0].to_revision, ResourceRevision::new(1));
+        assert_eq!(created.deltas[0].caused_by, Some(create_operation_id));
+        assert_eq!(
+            serde_json::to_value(&created.deltas[0].payload).unwrap(),
+            serde_json::json!({
+                "kind": "graph_resource_lifecycle",
+                "patch": {
+                    "before": null,
+                    "after": {
+                        "revision": 0,
+                        "path": "events/Created.yssbi-event",
+                        "kind": "event"
+                    }
+                }
+            })
+        );
+        assert!(matches!(
+            create_events.as_slice(),
+            [Event::Project(EventProject::ResourceMutationCommitted { result })]
+                if result == &created
+        ));
+
+        for operation in ["duplicate", "remove", "rename"] {
+            let root = std::env::temp_dir().join(format!(
+                "yssbi-resource-command-{operation}-{}",
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir_all(&root).unwrap();
+            let path = GraphResourcePath::new("events/Source.yssbi-event").unwrap();
+            let mut data = ProjectData::new();
+            data.graphs.insert(
+                path.clone(),
+                GraphResourceDocument::new("Source", GraphDocumentKind::Event),
+            );
+            crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref())
+                .unwrap();
+            crate::project::fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &path)
+                .unwrap();
+            let state = ProjectState::new();
+            state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+            let project_id = state.capture_project_session().unwrap().instance_id;
+            let mut events = Vec::new();
+            let operation_id = OperationId::new();
+            let result = match operation {
+                "duplicate" => duplicate_graph_resource_with_emitter(
+                    &state,
+                    project_id.clone(),
+                    path,
+                    ResourceRevision::INITIAL,
+                    operation_id,
+                    |event| events.push(event),
+                ),
+                "remove" => remove_graph_resource_with_emitter(
+                    &state,
+                    project_id.clone(),
+                    path,
+                    ResourceRevision::INITIAL,
+                    operation_id,
+                    |event| events.push(event),
+                ),
+                "rename" => rename_graph_resource_with_emitter(
+                    &state,
+                    project_id.clone(),
+                    path,
+                    ResourceRevision::INITIAL,
+                    "Renamed",
+                    1,
+                    operation_id,
+                    |event| events.push(event),
+                ),
+                _ => unreachable!(),
+            }
+            .unwrap();
+            assert_eq!(result.operation_id, operation_id);
+            assert_eq!(result.project_instance_id, project_id.as_str());
+            if operation != "rename" {
+                assert_eq!(
+                    result.deltas.len(),
+                    1,
+                    "{operation} must emit one lifecycle delta"
+                );
+                let delta = &result.deltas[0];
+                assert_eq!(delta.from_revision, ResourceRevision::INITIAL);
+                assert_eq!(delta.to_revision, ResourceRevision::new(1));
+                assert_eq!(delta.caused_by, Some(operation_id));
+                let expected_path = if operation == "remove" {
+                    "events/Source.yssbi-event"
+                } else {
+                    "events/Source 1.yssbi-event"
+                };
+                assert_eq!(
+                    delta.resource,
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        expected_path.into(),
+                    ))
+                );
+                let state = serde_json::json!({
+                    "revision": 0,
+                    "path": expected_path,
+                    "kind": "event"
+                });
+                let (before, after) = if operation == "remove" {
+                    (state, serde_json::Value::Null)
+                } else {
+                    (serde_json::Value::Null, state)
+                };
+                assert_eq!(
+                    serde_json::to_value(&delta.payload).unwrap(),
+                    serde_json::json!({
+                        "kind": "graph_resource_lifecycle",
+                        "patch": { "before": before, "after": after }
+                    })
+                );
+            }
+            assert!(matches!(
+                events.as_slice(),
+                [Event::Project(EventProject::ResourceMutationCommitted { result: emitted })]
+                    if emitted == &result
+            ));
+            std::fs::remove_dir_all(root).unwrap();
+        }
+        std::fs::remove_dir_all(create_root).unwrap();
     }
 
     #[test]
@@ -1024,9 +1389,12 @@ mod tests {
 
         let result = rename_graph_resource_with_emitter(
             &state,
-            &project_instance_id,
+            ProjectInstanceId::from_existing(project_instance_id.clone()),
             old_path.clone(),
+            ResourceRevision::INITIAL,
             "New",
+            1,
+            OperationId::new(),
             |event| events.push(event),
         )
         .unwrap();

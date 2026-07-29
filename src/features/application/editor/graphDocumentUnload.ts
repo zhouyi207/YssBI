@@ -1,7 +1,7 @@
 import {
   invalidateGraphLoadOwnership,
   useGraphDataStore,
-  useProjectIOStore,
+
   useVariableStore,
 } from '@/features/core/dataStore';
 import { useExecutionStore } from '@/features/core/execution';
@@ -12,6 +12,11 @@ import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath'
 import { GraphService } from '@/services/graph/graphService';
 import { logger } from '@/utils/appLogger';
 import { shouldRetainGraphDocument } from './graphDocumentRetention';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/services/project/projectIdentity';
 import {
   beginGraphUnloadLifecycle,
   isGraphLifecycleCurrent,
@@ -34,15 +39,25 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
     markResourceLoaded({ id: graphPath, kind }, false);
   }
 
-  const projectInstanceId = useProjectIOStore.getState().projectInstanceId;
-  if (!projectInstanceId) return;
+  let identity: ProjectIdentitySnapshot;
+  try {
+    identity = captureProjectIdentity();
+  } catch {
+    return;
+  }
 
   try {
-    await GraphService.unloadProjectGraph(graphPath, lifecycleToken, projectInstanceId);
+    await GraphService.unloadProjectGraph(
+      graphPath,
+      lifecycleToken,
+      identity.projectInstanceId,
+    );
+    if (!isCurrentProjectIdentity(identity)) return;
     if (kind && isGraphLifecycleCurrent(graphPath, lifecycleToken)) {
       markResourceLoaded({ id: graphPath, kind }, false);
     }
   } catch (error) {
+    if (!isCurrentProjectIdentity(identity)) return;
     logger.graph.warn(
       `Failed to unload graph '${graphPath}': ${error instanceof Error ? error.message : String(error)}`,
       'unloadGraphDocument',

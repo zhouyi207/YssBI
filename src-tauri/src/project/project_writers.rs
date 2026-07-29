@@ -13,7 +13,7 @@ use crate::tabular::VariableTabularCache;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -192,83 +192,6 @@ fn unique_worksheet_name(existing: impl Iterator<Item = String>, requested: &str
         .map(|index| format!("{base} {index}"))
         .find(|candidate| !existing.contains(candidate))
         .expect("worksheet name sequence is unbounded")
-}
-
-fn collect_worksheet_files(directory: &Path, paths: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    let directory_metadata = match std::fs::symlink_metadata(directory) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    reject_worksheet_redirect(directory, &directory_metadata)?;
-    if !directory_metadata.is_dir() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!(
-                "worksheet scan path '{}' is not a directory",
-                directory.display()
-            ),
-        ));
-    }
-    for entry in std::fs::read_dir(directory)? {
-        let path = entry?.path();
-        let metadata = std::fs::symlink_metadata(&path)?;
-        reject_worksheet_redirect(&path, &metadata)?;
-        if metadata.is_dir() {
-            collect_worksheet_files(&path, paths)?;
-        } else if metadata.is_file()
-            && path.extension().and_then(|value| value.to_str()) == Some("yssbi-worksheet")
-        {
-            paths.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn reject_worksheet_redirect(path: &Path, metadata: &std::fs::Metadata) -> std::io::Result<()> {
-    #[cfg(windows)]
-    let is_redirect = {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        metadata.file_type().is_symlink()
-            || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-    };
-    #[cfg(not(windows))]
-    let is_redirect = metadata.file_type().is_symlink();
-
-    if is_redirect {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!(
-                "worksheet scan rejects redirect/reparse path '{}'",
-                path.display()
-            ),
-        ));
-    }
-    Ok(())
-}
-
-fn worksheet_disk_path(
-    root: &Path,
-    worksheet_id: &str,
-) -> Result<Option<PathBuf>, ProjectFilesystemError> {
-    let mut paths = Vec::new();
-    collect_worksheet_files(&root.join(crate::project::WORKSHEETS_DIR), &mut paths)
-        .map_err(prepare_error)?;
-    paths.sort();
-    for path in paths {
-        let contents = std::fs::read(&path).map_err(prepare_error)?;
-        let document =
-            serde_json::from_slice::<WorksheetDocument>(&contents).map_err(prepare_error)?;
-        if document.id == worksheet_id {
-            return path
-                .strip_prefix(root)
-                .map(Path::to_path_buf)
-                .map(Some)
-                .map_err(prepare_error);
-        }
-    }
-    Ok(None)
 }
 
 impl ProjectState {
@@ -490,7 +413,6 @@ impl ProjectState {
         )
     }
 
-    #[cfg(test)]
     pub(crate) fn global_variable_revision_snapshot(
         &self,
     ) -> BTreeMap<ResourceKey, ResourceRevision> {
@@ -766,6 +688,10 @@ impl ProjectState {
         );
         let contents =
             crate::project::serialize_global_variable_map(globals).map_err(prepare_error)?;
+        #[cfg(test)]
+        if let Some(hook) = WRITER_SNAPSHOT_TEST_HOOK.lock().unwrap().clone() {
+            hook();
+        }
         let lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_writer_context(&context, authority_generation)?;
         if let Some(expected) = expected_collection_revision {
@@ -885,6 +811,7 @@ impl ProjectState {
             .as_ref()
             .expect("global mutations record history");
         Ok(ResourceMutationResultDto {
+            operation_id: context.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
             publication_revision,
             moves: Vec::new(),
@@ -1025,21 +952,12 @@ impl ProjectState {
         document: WorksheetDocument,
     ) -> Result<WorksheetMutationResultDto, ProjectFilesystemError> {
         self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let old_path = worksheet_disk_path(snapshot.session.root.as_path(), &document.id)?;
         let (new_path, contents) =
             crate::project::serialize_worksheet(&document).map_err(prepare_error)?;
-        let mut mutations = Vec::new();
-        if let Some(old_path) = old_path {
-            if old_path != new_path {
-                mutations.push(StagedFilesystemMutation::RemoveFile {
-                    relative_path: old_path,
-                });
-            }
-        }
-        mutations.push(StagedFilesystemMutation::Write {
+        let mutations = vec![StagedFilesystemMutation::Write {
             relative_path: new_path,
             contents,
-        });
+        }];
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
             context.clone(),
             lease,
@@ -1124,8 +1042,7 @@ impl ProjectState {
         );
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let path = worksheet_disk_path(snapshot.session.root.as_path(), worksheet_id)?
-            .unwrap_or_else(|| crate::project::worksheet_relative_path(&document));
+        let path = crate::project::worksheet_relative_path(&document);
         let prepared = ProjectFilesystemTransaction::prepare(
             context.clone(),
             lease,
@@ -1165,7 +1082,7 @@ impl ProjectState {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_worksheet_files, set_writer_snapshot_test_hook, worksheet_disk_path};
+    use super::set_writer_snapshot_test_hook;
     use crate::graph::value::{DataType, DataValue};
     use crate::node_system::document::{
         FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
@@ -1179,12 +1096,14 @@ mod tests {
     use std::sync::Arc;
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
-        let mut paths = Vec::new();
-        collect_worksheet_files(
-            &project.root.join(crate::project::WORKSHEETS_DIR),
-            &mut paths,
-        )
-        .unwrap();
+        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
+        let mut paths = std::fs::read_dir(worksheets)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.extension().and_then(|value| value.to_str()) == Some("yssbi-worksheet")
+            })
+            .collect::<Vec<_>>();
         paths.sort();
         paths
     }
@@ -1367,7 +1286,7 @@ mod tests {
         let session = state.capture_project_session().unwrap();
         set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
         let rename_error = state
-            .rename_graph_resource(session.instance_id.as_str(), &graph_path, "After")
+            .rename_graph_resource_fixture(session.instance_id.as_str(), &graph_path, "After")
             .unwrap_err();
         set_project_filesystem_fault(None);
         assert_eq!(rename_error.code(), "transaction_commit_failed");
@@ -1523,13 +1442,48 @@ mod tests {
             .unwrap();
 
         assert_two_distinct_worksheets_on_disk(&project, &first_id, &second_id);
-        let first_path = worksheet_disk_path(&project.root, &first_id)
-            .unwrap()
-            .unwrap();
+        let first_path = crate::project::worksheet_relative_path(&first);
         first =
             serde_json::from_slice(&std::fs::read(project.root.join(first_path)).unwrap()).unwrap();
         assert_eq!(first.id, first_id);
         assert_eq!(first.name, "Report");
+    }
+
+    #[test]
+    fn worksheet_delete_removes_only_its_canonical_id_path() {
+        let project = TestProject::new("worksheet-delete-canonical");
+        let first = WorksheetDocument::new("Same", "database");
+        let second = WorksheetDocument::new("Same", "database");
+        let first_path = project
+            .root
+            .join(crate::project::worksheet_relative_path(&first));
+        let second_path = project
+            .root
+            .join(crate::project::worksheet_relative_path(&second));
+        let mut data = ProjectData::new();
+        data.worksheets.insert(first.id.clone(), first.clone());
+        data.worksheets.insert(second.id.clone(), second.clone());
+        crate::project::fixtures::write_worksheet(&project.root, &first).unwrap();
+        crate::project::fixtures::write_worksheet(&project.root, &second).unwrap();
+        let state = active_state(&project, data);
+        state.initialize_worksheet_revision_for_test(&first.id);
+        state.initialize_worksheet_revision_for_test(&second.id);
+        let session = state.capture_project_session().unwrap();
+
+        state
+            .delete_worksheet_document(&session.instance_id, &first.id, OperationId::new())
+            .unwrap();
+
+        assert!(!first_path.exists());
+        assert!(second_path.is_file());
+        assert!(!state.get_data().unwrap().worksheets.contains_key(&first.id));
+        assert!(
+            state
+                .get_data()
+                .unwrap()
+                .worksheets
+                .contains_key(&second.id)
+        );
     }
 
     #[test]
@@ -1585,125 +1539,27 @@ mod tests {
         assert_two_distinct_worksheets_on_disk(&project, &first.document.id, &second.document.id);
     }
 
-    #[cfg(windows)]
-    fn create_test_junction(link: &std::path::Path, target: &std::path::Path) -> bool {
-        std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .is_ok_and(|status| status.success())
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn worksheet_scan_rejects_external_directory_junction_before_reading() {
-        let project = TestProject::new("worksheet-external-junction");
-        let external = TestProject::new("worksheet-external-target");
-        let external_worksheets = external.root.join("documents");
-        std::fs::create_dir_all(&external_worksheets).unwrap();
-        std::fs::write(
-            external_worksheets.join("secret.yssbi-worksheet"),
-            br#"{"not":"a worksheet"}"#,
-        )
-        .unwrap();
-        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
-        std::fs::create_dir_all(&worksheets).unwrap();
-        if !create_test_junction(&worksheets.join("external"), &external_worksheets) {
-            eprintln!("skipping junction assertion: Windows junction creation is unavailable");
-            return;
-        }
-
-        let error = worksheet_disk_path(&project.root, "missing").unwrap_err();
-        assert_eq!(error.code(), "transaction_prepare_failed");
-        let message = error.to_string().to_ascii_lowercase();
-        assert!(message.contains("reparse") || message.contains("redirect"));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn worksheet_scan_rejects_directory_junction_loop_without_recursing() {
-        let project = TestProject::new("worksheet-junction-loop");
-        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
-        std::fs::create_dir_all(&worksheets).unwrap();
-        if !create_test_junction(&worksheets.join("loop"), &worksheets) {
-            eprintln!("skipping junction assertion: Windows junction creation is unavailable");
-            return;
-        }
-
-        let error = worksheet_disk_path(&project.root, "missing").unwrap_err();
-        assert_eq!(error.code(), "transaction_prepare_failed");
-        let message = error.to_string().to_ascii_lowercase();
-        assert!(message.contains("reparse") || message.contains("redirect"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn worksheet_scan_rejects_external_directory_symlink_before_reading() {
-        use std::os::unix::fs::symlink;
-
-        let project = TestProject::new("worksheet-external-symlink");
-        let external = TestProject::new("worksheet-external-target");
-        let external_worksheets = external.root.join("documents");
-        std::fs::create_dir_all(&external_worksheets).unwrap();
-        std::fs::write(
-            external_worksheets.join("secret.yssbi-worksheet"),
-            br#"{"not":"a worksheet"}"#,
-        )
-        .unwrap();
-        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
-        std::fs::create_dir_all(&worksheets).unwrap();
-        symlink(&external_worksheets, worksheets.join("external")).unwrap();
-
-        let error = worksheet_disk_path(&project.root, "missing").unwrap_err();
-        assert_eq!(error.code(), "transaction_prepare_failed");
-        assert!(
-            error
-                .to_string()
-                .to_ascii_lowercase()
-                .contains("symbolic link")
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn worksheet_scan_rejects_directory_symlink_loop_without_recursing() {
-        use std::os::unix::fs::symlink;
-
-        let project = TestProject::new("worksheet-symlink-loop");
-        let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
-        std::fs::create_dir_all(&worksheets).unwrap();
-        symlink(&worksheets, worksheets.join("loop")).unwrap();
-
-        let error = worksheet_disk_path(&project.root, "missing").unwrap_err();
-        assert_eq!(error.code(), "transaction_prepare_failed");
-        assert!(
-            error
-                .to_string()
-                .to_ascii_lowercase()
-                .contains("symbolic link")
-        );
-    }
-
     #[test]
     fn worksheet_commit_failure_restores_file_and_nested_directory_topology() {
         let project = TestProject::new("worksheet-rollback");
         let nested = project.root.join("worksheets/nested/deeper");
         std::fs::create_dir_all(&nested).unwrap();
+        let sentinel = nested.join("sentinel.txt");
+        std::fs::write(&sentinel, b"untouched").unwrap();
         let mut document = WorksheetDocument::new("Original", "database");
-        let old_path = nested.join("Original.yssbi-worksheet");
-        std::fs::write(&old_path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+        crate::project::fixtures::write_worksheet(&project.root, &document).unwrap();
+        let canonical_path = project
+            .root
+            .join(crate::project::worksheet_relative_path(&document));
+        let original_bytes = std::fs::read(&canonical_path).unwrap();
         let mut data = ProjectData::new();
         data.worksheets
             .insert(document.id.clone(), document.clone());
         let state = active_state(&project, data);
+        state.initialize_worksheet_revision_for_test(&document.id);
         let session = state.capture_project_session().unwrap();
         document.name = "Renamed".into();
-        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
+        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
 
         let error = state
             .save_worksheet_document(&session.instance_id, document, OperationId::new())
@@ -1711,13 +1567,70 @@ mod tests {
         set_project_filesystem_fault(None);
 
         assert_eq!(error.code(), "transaction_commit_failed");
-        assert!(old_path.is_file());
+        assert_eq!(std::fs::read(canonical_path).unwrap(), original_bytes);
+        assert_eq!(std::fs::read(sentinel).unwrap(), b"untouched");
         assert!(nested.is_dir());
-        assert!(
-            !project
-                .root
-                .join("worksheets/Renamed.yssbi-worksheet")
-                .exists()
+    }
+
+    #[test]
+    fn global_update_revalidates_caller_revision_after_waiting_for_root_lease() {
+        let project = TestProject::new("global-revision-wait");
+        let state = std::sync::Arc::new(active_state(&project, ProjectData::new()));
+        let session = state.capture_project_session().unwrap();
+        let variable = state
+            .add_variable(
+                "global",
+                DataType::Int64,
+                DataValue::Int64(1),
+                "",
+                VariableScope::Global,
+                vec![],
+            )
+            .unwrap();
+        state
+            .persist_global_variables(
+                &session.instance_id,
+                state.global_variable_revision_snapshot(),
+                OperationId::new(),
+            )
+            .unwrap();
+        let lease = state.filesystem().acquire(session.root.clone()).unwrap();
+        let (staged_tx, staged_rx) = std::sync::mpsc::channel();
+        set_writer_snapshot_test_hook(Some(std::sync::Arc::new(move || {
+            staged_tx.send(()).unwrap();
+        })));
+        let worker_state = std::sync::Arc::clone(&state);
+        let project_instance_id = session.instance_id.clone();
+        let worker = std::thread::spawn(move || {
+            worker_state.update_global_variable_transaction(
+                &project_instance_id,
+                variable.id,
+                Some("stale".into()),
+                None,
+                None,
+                None,
+                None,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
+        });
+        staged_rx.recv().unwrap();
+        state
+            .variable_revisions
+            .write()
+            .unwrap()
+            .insert(variable.id, ResourceRevision::new(1));
+        drop(lease);
+
+        let error = match worker.join().unwrap() {
+            Ok(_) => panic!("stale variable update unexpectedly committed"),
+            Err(error) => error,
+        };
+        set_writer_snapshot_test_hook(None);
+        assert_eq!(error.code(), "resource_revision_conflict");
+        assert_eq!(
+            state.get_variable(&variable.id).unwrap().unwrap().name,
+            "global"
         );
     }
 

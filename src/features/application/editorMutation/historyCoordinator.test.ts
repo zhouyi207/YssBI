@@ -51,6 +51,7 @@ function installIntVariable(id: string, value: number): void {
         tags: [],
       },
     },
+    revisions: { [id]: 2 },
   });
 }
 
@@ -75,6 +76,7 @@ function replacement(graphPath: string, revision: number, title: string) {
 
 function completeResult(causedBy = operationId): ResourceMutationResultDto {
   return {
+    operationId,
     projectInstanceId,
     publicationRevision: 1,
     moves: [],
@@ -161,6 +163,7 @@ describe('executeHistoryMutation', () => {
     async (direction) => {
       const restoredPath = 'functions/Restored.yssbi-function';
     const result: ResourceMutationResultDto = {
+      operationId,
       projectInstanceId,
       publicationRevision: 1,
       moves: [{
@@ -261,6 +264,7 @@ describe('executeHistoryMutation', () => {
 
   it('suppresses the correlated incomplete event and applies the returned IPC result once', async () => {
     const result: ResourceMutationResultDto = {
+      operationId,
       projectInstanceId,
       publicationRevision: 1,
       moves: [],
@@ -341,6 +345,7 @@ describe('executeHistoryMutation', () => {
   it('accepts a correlated transaction that does not modify the concurrency anchor', async () => {
     installIntVariable(thresholdVariableId, 10);
     const result: ResourceMutationResultDto = {
+      operationId,
       projectInstanceId,
       publicationRevision: 1,
       moves: [],
@@ -351,7 +356,26 @@ describe('executeHistoryMutation', () => {
         causedBy: operationId,
         payload: {
           kind: 'variable',
-          patch: { before: { Int64: 10 }, after: { Int64: 5 } },
+          patch: {
+            before: {
+              id: thresholdVariableId,
+              name: 'History variable',
+              dataType: 'Int64',
+              dataValue: { Int64: 10 },
+              description: '',
+              scope: { type: 'global' },
+              tags: [],
+            },
+            after: {
+              id: thresholdVariableId,
+              name: 'History variable',
+              dataType: 'Int64',
+              dataValue: { Int64: 5 },
+              description: '',
+              scope: { type: 'global' },
+              tags: [],
+            },
+          },
         },
       }],
       projectionReplacements: [],

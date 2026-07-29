@@ -30,8 +30,8 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
             const layoutTab = tabStore.resolveTab(tab.graphPath);
 
             if (layoutTab?.type === 'worksheet') {
-                await useWorksheetStore.getState().saveDocument(tab.graphPath);
-                markResourceDirty({ id: tab.graphPath, kind: 'worksheet' }, false);
+                const saved = await useWorksheetStore.getState().saveDocument(tab.graphPath);
+                if (!saved) return false;
             } else if (layoutTab?.type === 'event' || layoutTab?.type === 'function') {
                 context = captureGraphSaveCommandContext(tab.graphPath);
                 await GraphService.saveProjectGraph(

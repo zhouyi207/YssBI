@@ -41,7 +41,7 @@ export function parseEvent(event: BaseEvent | NestedEvent): ParsedEvent {
 export function isValidEventType(type: string): boolean {
     const validTypes = [
         // Project
-        'ProjectLoaded', 'ProjectCleared', 'ProjectSaved',
+        'ProjectLoaded', 'ProjectCleared', 'ProjectLifecycleCommitted', 'ProjectSaved',
         // Graph
         'EventUpdated', 'EventDeleted',
         'FunctionUpdated', 'FunctionDeleted',

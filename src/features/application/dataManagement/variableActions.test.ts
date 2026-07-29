@@ -3,6 +3,7 @@ import type { Variable } from '@/shared/types/domain';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
+import { useHistoryStore } from '@/features/core/history';
 import { VariableService } from '@/services/variable/variableService';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
@@ -17,7 +18,6 @@ function deferred<T>() {
 
 const original: Variable = {
   id: '00000000-0000-0000-0000-000000000701',
-  revision: 1,
   name: 'Original',
   dataType: { kind: 'Int64' },
   dataValue: { kind: 'Int64', value: 1 },
@@ -50,15 +50,19 @@ function mutation(params: {
   operationId: string;
   before: Variable | null;
   after: Variable | null;
+  fromRevision?: number;
+  toRevision?: number;
+  history?: { canUndo: boolean; canRedo: boolean };
 }): ResourceMutationResultDto {
   return {
+    operationId: params.operationId,
     projectInstanceId: 'project-a',
     publicationRevision: params.revision,
     moves: [],
     deltas: [{
       resource: { kind: 'variable', key: `variables/${original.id}` },
-      fromRevision: params.before?.revision ?? 0,
-      toRevision: params.after?.revision ?? (params.before?.revision ?? 0) + 1,
+      fromRevision: params.fromRevision ?? (params.before ? 1 : 0),
+      toRevision: params.toRevision ?? (params.before ? 2 : 1),
       causedBy: params.operationId,
       payload: {
         kind: 'variable',
@@ -67,7 +71,7 @@ function mutation(params: {
     }],
     projectionReplacements: [],
     projectionStatus: { status: 'complete', expectedGraphPaths: [] },
-    history: { canUndo: true, canRedo: false },
+    history: params.history ?? { canUndo: true, canRedo: false },
   };
 }
 
@@ -76,18 +80,23 @@ describe('variable command lifecycle guards', () => {
     vi.restoreAllMocks();
     useVariableStore.getState().clear();
     useVariableStore.getState().addVariable(original.id, original);
+    useVariableStore.getState().setVariableRevision(original.id, 1);
     startProject('project-a');
   });
 
   it('ignores a delayed update completion from the previous project without a toast', async () => {
-    const request = deferred<Variable>();
+    const request = deferred<Awaited<ReturnType<typeof VariableService.updateVariable>>>();
     vi.spyOn(VariableService, 'updateVariable').mockReturnValue(request.promise);
     const toast = vi.spyOn(uiStore, 'showToast');
 
     const completion = updateVariableAction(original.id, { name: 'Changed' });
     startProject('project-b');
     useVariableStore.getState().clear();
-    request.resolve({ ...original, name: 'Changed' });
+    request.resolve({
+      variableId: original.id,
+      variable: { ...original, name: 'Changed' },
+      result: null,
+    });
 
     await expect(completion).resolves.toBeNull();
     expect(useVariableStore.getState().variables).toEqual({});
@@ -117,10 +126,10 @@ describe('variable command lifecycle guards', () => {
 
   it('deduplicates event-first global update and advances the coordinator watermark once', async () => {
     const operationId = crypto.randomUUID();
-    const updated = { ...original, revision: 2, name: 'Changed' };
+    const updated = { ...original, name: 'Changed' };
     const result = mutation({ revision: 1, operationId, before: original, after: updated });
     vi.spyOn(VariableService, 'updateVariable').mockImplementation(async (...args) => {
-      expect(args[2]).toBe(original.revision);
+      expect(args[2]).toBe(1);
       new ResourceMutationCommittedHandler().handle({ result });
       return { variableId: original.id, variable: updated, result };
     });
@@ -134,7 +143,7 @@ describe('variable command lifecycle guards', () => {
 
   it('deduplicates direct-first create and event echo without a follow-up read', async () => {
     useVariableStore.getState().clear();
-    const created = { ...original, revision: 1 };
+    const created = { ...original };
     const operationId = crypto.randomUUID();
     const result = mutation({ revision: 1, operationId, before: null, after: created });
     vi.spyOn(VariableService, 'createVariable').mockImplementation(async (...args) => {
@@ -152,6 +161,50 @@ describe('variable command lifecycle guards', () => {
     expect(useVariableStore.getState().variables[created.id]).toEqual(created);
   });
 
+  it('applies contiguous global create update delete publications across event and direct orderings', async () => {
+    useVariableStore.getState().clear();
+    const created = { ...original, name: 'Created' };
+    const updated = { ...created, name: 'Updated', description: 'metadata' };
+    const createResult = mutation({
+      revision: 1,
+      operationId: crypto.randomUUID(),
+      before: null,
+      after: created,
+      fromRevision: 0,
+      toRevision: 1,
+    });
+    const updateResult = mutation({
+      revision: 2,
+      operationId: crypto.randomUUID(),
+      before: created,
+      after: updated,
+      fromRevision: 1,
+      toRevision: 2,
+    });
+    const deleteResult = mutation({
+      revision: 3,
+      operationId: crypto.randomUUID(),
+      before: updated,
+      after: null,
+      fromRevision: 2,
+      toRevision: 3,
+      history: { canUndo: true, canRedo: false },
+    });
+    const handler = new ResourceMutationCommittedHandler();
+
+    handler.handle({ result: createResult });
+    await projectPublicationCoordinator.submit({ result: createResult });
+    await projectPublicationCoordinator.submit({ result: updateResult });
+    handler.handle({ result: updateResult });
+    handler.handle({ result: deleteResult });
+    await projectPublicationCoordinator.submit({ result: deleteResult });
+
+    expect(useVariableStore.getState().variables[original.id]).toBeUndefined();
+    expect(useVariableStore.getState().revisions[original.id]).toBe(3);
+    expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: false });
+    expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(3);
+  });
+
   it('passes the authoritative variable revision to delete and applies only publication result', async () => {
     const operationId = crypto.randomUUID();
     const result = mutation({ revision: 1, operationId, before: original, after: null });
@@ -162,7 +215,7 @@ describe('variable command lifecycle guards', () => {
     });
 
     await expect(deleteVariableAction(original.id)).resolves.toBe(true);
-    expect(remove.mock.calls[0][2]).toBe(original.revision);
+    expect(remove.mock.calls[0][2]).toBe(1);
     expect(useVariableStore.getState().variables[original.id]).toBeUndefined();
   });
 });

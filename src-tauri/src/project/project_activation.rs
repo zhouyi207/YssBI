@@ -9,6 +9,56 @@ use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
 use crate::variable::VariableId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Condvar, Mutex};
+
+#[derive(Clone, Default)]
+pub(crate) struct ProjectActivationCoordinator {
+    shared: Arc<ProjectActivationAdmission>,
+}
+
+#[derive(Default)]
+struct ProjectActivationAdmission {
+    owned: Mutex<bool>,
+    available: Condvar,
+}
+
+pub(crate) struct ProjectActivationToken {
+    shared: Arc<ProjectActivationAdmission>,
+}
+
+impl ProjectActivationCoordinator {
+    pub(crate) fn acquire(&self) -> ProjectActivationToken {
+        let mut owned = self
+            .shared
+            .owned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while *owned {
+            owned = self
+                .shared
+                .available
+                .wait(owned)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        *owned = true;
+        ProjectActivationToken {
+            shared: Arc::clone(&self.shared),
+        }
+    }
+}
+
+impl Drop for ProjectActivationToken {
+    fn drop(&mut self) {
+        let mut owned = self
+            .shared
+            .owned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *owned = false;
+        drop(owned);
+        self.shared.available.notify_one();
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PreparedAuthorityBasis {
@@ -30,7 +80,7 @@ pub struct PreparedProjectActivation {
 }
 
 impl PreparedProjectActivation {
-    fn from_data(
+    pub(super) fn from_data(
         session_root: Option<NormalizedProjectRoot>,
         mut data: ProjectData,
         authority_basis: Option<PreparedAuthorityBasis>,
@@ -129,10 +179,7 @@ impl ProjectState {
                     path: PathBuf::new(),
                     message: "a pathless activation must use clear_project".into(),
                 })?;
-        let (_activation, activation_recovered) = match self.project_activation.lock() {
-            Ok(guard) => (guard, false),
-            Err(error) => (error.into_inner(), true),
-        };
+        let _activation = self.project_activation.acquire();
         let (runs, project_session_id) = self.current_run_registry();
         let _drain_guard = runs.begin_drain(&project_session_id);
         self.run_project_activation_test_hook();
@@ -149,9 +196,6 @@ impl ProjectState {
         }
         self.run_activation_final_rebuild_test_hook();
         let published = self.publish_project_activation(prepared)?;
-        if activation_recovered {
-            self.project_activation.clear_poison();
-        }
         drop(lease);
         let instance_id = published.dispose();
         Ok(ProjectSession { instance_id, root })
@@ -167,17 +211,11 @@ impl ProjectState {
 
     pub fn clear_project(&self) -> Result<ProjectInstanceId, ProjectFilesystemError> {
         let prepared = self.prepare_project_activation(None)?;
-        let (_activation, activation_recovered) = match self.project_activation.lock() {
-            Ok(guard) => (guard, false),
-            Err(error) => (error.into_inner(), true),
-        };
+        let _activation = self.project_activation.acquire();
         let (runs, project_session_id) = self.current_run_registry();
         let _drain_guard = runs.begin_drain(&project_session_id);
         self.run_project_activation_test_hook();
         let published = self.publish_project_activation(prepared)?;
-        if activation_recovered {
-            self.project_activation.clear_poison();
-        }
         Ok(published.dispose())
     }
 
@@ -244,10 +282,10 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_from_path(&old_root).unwrap();
         let event = state
-            .create_graph_resource("Loading Caller", GraphDocumentKind::Event)
+            .create_graph_resource_fixture("Loading Caller", GraphDocumentKind::Event)
             .unwrap();
         let old_function = state
-            .create_graph_resource("Loading Callee", GraphDocumentKind::Function)
+            .create_graph_resource_fixture("Loading Callee", GraphDocumentKind::Function)
             .unwrap();
         let session = state.capture_project_session().unwrap();
         state

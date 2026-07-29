@@ -19,9 +19,11 @@ export function WorksheetEditor() {
   useEffect(() => {
     if (!activeTabId) return;
     if (useWorksheetStore.getState().documents[activeTabId]) return;
-    const { projectInstanceId } = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(projectInstanceId, activeTabId)
-      .then((loaded) => useWorksheetStore.getState().upsertDocument(loaded))
+    const context = captureProjectCommandContext();
+    void WorksheetService.loadWorksheet(context.projectInstanceId, activeTabId)
+      .then((loaded) => {
+        if (context.isCurrent()) useWorksheetStore.getState().upsertDocument(loaded);
+      })
       .catch(() => undefined);
   }, [activeTabId]);
 

@@ -9,11 +9,24 @@ import { renameResource } from './resourceActions';
 vi.mock('@/features/application/editorMutation/projectPublicationCoordinator', () => ({
   projectPublicationCoordinator: {
     submit: vi.fn(async () => ({ status: 'applied', affectedGraphPaths: new Set() })),
+    captureCommandLifecycle: vi.fn(() => ({
+      projectInstanceId: 'project-instance-current',
+      epoch: 1,
+      publicationRevision: 0,
+    })),
+    ownsCommandLifecycle: vi.fn((projectInstanceId: string) =>
+      useProjectIOStore.getState().projectInstanceId === projectInstanceId),
+    assertCommandLifecycle: vi.fn((projectInstanceId: string) => {
+      if (useProjectIOStore.getState().projectInstanceId !== projectInstanceId) {
+        throw new Error('stale project lifecycle');
+      }
+    }),
   },
 }));
 
 function renameResult(projectInstanceId: string, publicationRevision = 1) {
   return {
+    operationId: '00000000-0000-0000-0000-000000000123',
     projectInstanceId,
     publicationRevision,
     moves: [{
@@ -49,6 +62,21 @@ describe('renameResource project ownership', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     useResourceStore.getState().clear();
+    useResourceStore.getState().setSnapshot({
+      resources: [{
+        id: 'events/Old.yssbi-event',
+        kind: 'event',
+        name: 'Old',
+        uri: 'yssbi://event/events/Old.yssbi-event',
+        revision: 0,
+        exists: true,
+        loaded: false,
+        hasDirtyDocument: false,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      }],
+      graphOrder: ['events/Old.yssbi-event'],
+    });
     useGraphMetaStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-current' });
   });
@@ -74,6 +102,7 @@ describe('renameResource project ownership', () => {
         kind: 'event',
         name: 'Old',
         uri: 'yssbi://event/events/Old.yssbi-event',
+        revision: 0,
         exists: true,
         loaded: false,
         hasDirtyDocument: false,
@@ -100,7 +129,10 @@ describe('renameResource project ownership', () => {
     expect(GraphService.renameGraphResource).toHaveBeenCalledWith(
       'project-instance-current',
       'events/Old.yssbi-event',
+      0,
       'New',
+      expect.any(Number),
+      expect.any(String),
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledOnce();
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
@@ -119,7 +151,7 @@ describe('renameResource project ownership', () => {
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-replacement' });
     resolveRename(renameResult('project-instance-current'));
 
-    await expect(pending).rejects.toThrow('stale project lifecycle');
+    await expect(pending).rejects.toThrow('stale');
     expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
   });
 });

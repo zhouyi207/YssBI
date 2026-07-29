@@ -23,6 +23,11 @@ import {
   type ProjectGraphIndexRow,
 } from '@/services/project/projectService';
 import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/services/project/projectIdentity';
+import {
   completePendingMutation,
   invalidatePendingMutation,
   registerPendingMutation,
@@ -38,12 +43,13 @@ export interface ExecuteFunctionSignatureMutationInput {
 export interface FunctionSignatureCoordinatorDependencies {
   createOperationId(): string;
   mutateSignature(
+    projectInstanceId: string,
     functionPath: string,
     locale: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto>;
   hydrateGraph(graphPath: string, locale: string): Promise<unknown>;
-  loadFunctionResources(): Promise<ProjectGraphIndexRow[]>;
+  loadFunctionResources(projectInstanceId: string): Promise<ProjectGraphIndexRow[]>;
   updateHistoryStatus(status: HistoryStatusDto): void;
 }
 
@@ -57,10 +63,12 @@ const pendingSignatureOperations = new Set<string>();
 
 const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
   createOperationId: () => crypto.randomUUID(),
-  mutateSignature: (functionPath, locale, request) =>
-    FunctionMutationService.updateSignature(functionPath, locale, request),
+  mutateSignature: (projectInstanceId, functionPath, locale, request) =>
+    FunctionMutationService.updateSignature(projectInstanceId, functionPath, locale, request),
   hydrateGraph: hydrateGraphProjection,
-  loadFunctionResources: async () => (await ProjectService.getProjectIndex()).graphs,
+  loadFunctionResources: async (projectInstanceId) => (
+    await ProjectService.getProjectIndex(projectInstanceId)
+  ).graphs,
   updateHistoryStatus: setHistoryStatus,
 };
 
@@ -125,11 +133,15 @@ async function hydrateAuthoritativeState(
   graphPaths: Iterable<string>,
   locale: string,
   dependencies: FunctionSignatureCoordinatorDependencies,
+  identity: ProjectIdentitySnapshot,
 ): Promise<void> {
-  hydrateFunctionSignaturesFromProjectIndex(await dependencies.loadFunctionResources());
+  const resources = await dependencies.loadFunctionResources(identity.projectInstanceId);
+  if (!isCurrentProjectIdentity(identity)) return;
+  hydrateFunctionSignaturesFromProjectIndex(resources);
   await Promise.all(
     [...new Set(graphPaths)].map((graphPath) => dependencies.hydrateGraph(graphPath, locale)),
   );
+  if (!isCurrentProjectIdentity(identity)) return;
 }
 
 
@@ -161,18 +173,33 @@ export async function executeFunctionSignatureMutation(
     payload: requestPatch,
   };
   const epoch = coordinatorEpoch;
+  const identity = captureProjectIdentity();
   registerPendingMutation(pending);
   pendingSignatureOperations.add(operationId);
 
   try {
     let result: ResourceMutationResultDto;
     try {
-      result = await dependencies.mutateSignature(input.functionPath, input.locale, request);
+      result = await dependencies.mutateSignature(
+        identity.projectInstanceId,
+        input.functionPath,
+        input.locale,
+        request,
+      );
+      if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
     } catch (error) {
+      if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
       if (epoch !== coordinatorEpoch) return { status: 'stale' };
       if (!isFunctionRevisionConflict(error)) throw error;
-      await hydrateAuthoritativeState([input.functionPath], input.locale, dependencies);
-      if (epoch !== coordinatorEpoch) return { status: 'stale' };
+      await hydrateAuthoritativeState(
+        [input.functionPath],
+        input.locale,
+        dependencies,
+        identity,
+      );
+      if (!isCurrentProjectIdentity(identity) || epoch !== coordinatorEpoch) {
+        return { status: 'stale' };
+      }
       return { status: 'conflict' };
     }
 

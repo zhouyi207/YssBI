@@ -18,15 +18,17 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         worksheet_id: &str,
     ) -> Result<WorksheetDocument, ProjectFilesystemError> {
-        load_worksheet_document_with_reader(
-            self,
-            expected_project_instance_id,
-            worksheet_id,
-            |root, worksheet_id| {
-                crate::project::worksheet_io::load_worksheet_from_root_readonly(root, worksheet_id)
-                    .map_err(read_error)
-            },
-        )
+        let session = expected_session(self, expected_project_instance_id)?;
+        let _lease = self.filesystem().acquire(session.root.clone())?;
+        self.validate_project_session(&session)?;
+        let (_, _, _, data) = self.coherent_project_read_snapshot(&session)?;
+        let document = data.worksheets.get(worksheet_id).cloned().ok_or_else(|| {
+            ProjectFilesystemError::TransactionPrepareFailed {
+                message: format!("worksheet '{worksheet_id}' not found in current authority"),
+            }
+        })?;
+        self.validate_project_session(&session)?;
+        Ok(document)
     }
 }
 
@@ -68,28 +70,6 @@ fn read_project_index_with(
     Ok(index)
 }
 
-fn load_worksheet_document_with_reader(
-    state: &ProjectState,
-    expected_project_instance_id: &ProjectInstanceId,
-    worksheet_id: &str,
-    read: impl FnOnce(&std::path::Path, &str) -> Result<WorksheetDocument, ProjectFilesystemError>,
-) -> Result<WorksheetDocument, ProjectFilesystemError> {
-    let session = expected_session(state, expected_project_instance_id)?;
-    let _lease = state.filesystem().acquire(session.root.clone())?;
-    state.validate_project_session(&session)?;
-    let disk_result = read(session.root.as_path(), worksheet_id);
-    state.validate_project_session(&session)?;
-    let disk_document = disk_result?;
-    let (_, _, _, data) = state.coherent_project_read_snapshot(&session)?;
-    let document = data
-        .worksheets
-        .get(worksheet_id)
-        .cloned()
-        .unwrap_or(disk_document);
-    state.validate_project_session(&session)?;
-    Ok(document)
-}
-
 fn overlay_authoritative_project_index(
     data: &ProjectData,
     variable_revisions: &std::collections::BTreeMap<
@@ -120,19 +100,32 @@ fn overlay_authoritative_project_index(
                 entry
             }),
     );
+    index.worksheets = data
+        .worksheets
+        .values()
+        .cloned()
+        .map(|worksheet| crate::project::ProjectWorksheetIndexEntry {
+            id: worksheet.id,
+            name: worksheet.name,
+            database_id: worksheet.database_id,
+            chart_type: worksheet.chart_type,
+        })
+        .collect();
+    index
+        .worksheets
+        .sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     for entry in &mut index.graphs {
         let Ok(path) = crate::project::GraphResourcePath::new(&entry.path) else {
             continue;
         };
-        let Some(function) = data
-            .graphs
-            .get(&path)
-            .and_then(|resource| resource.function.as_ref())
-        else {
+        let Some(resource) = data.graphs.get(&path) else {
             continue;
         };
-        entry.function_revision = Some(function.revision);
-        entry.function_signature = Some(function.signature.clone());
+        entry.revision = resource.document.revision;
+        if let Some(function) = resource.function.as_ref() {
+            entry.function_revision = Some(function.revision);
+            entry.function_signature = Some(function.signature.clone());
+        }
     }
 }
 
@@ -265,6 +258,10 @@ mod tests {
         fixtures::write_graph(&disk, root.to_string_lossy().as_ref(), &function_path).unwrap();
 
         let mut authoritative = disk;
+        let worksheet = WorksheetDocument::new("Authoritative worksheet", "db-1");
+        authoritative
+            .worksheets
+            .insert(worksheet.id.clone(), worksheet.clone());
         let global = authoritative.variables.values_mut().next().unwrap();
         global.name = "authoritative_global".into();
         let function = authoritative.graphs.get_mut(&function_path).unwrap();
@@ -284,6 +281,9 @@ mod tests {
 
         assert_eq!(index.variables.len(), 1);
         assert_eq!(index.variables[0].name, "authoritative_global");
+        assert_eq!(index.worksheets.len(), 1);
+        assert_eq!(index.worksheets[0].id, worksheet.id);
+        assert_eq!(index.worksheets[0].name, worksheet.name);
         let function = index
             .graphs
             .iter()
@@ -345,32 +345,23 @@ mod tests {
     }
 
     #[test]
-    fn worksheet_load_rejects_replaced_project_before_returning_document() {
-        let root = project_root("worksheet-replacement");
-        let worksheet = WorksheetDocument::new("Old worksheet", "db-1");
+    fn worksheet_load_reads_current_authority_without_disk_fallback() {
+        let root = project_root("worksheet-authority");
+        let worksheet = WorksheetDocument::new("Authoritative worksheet", "db-1");
         let mut project = ProjectData::new();
         project
             .worksheets
             .insert(worksheet.id.clone(), worksheet.clone());
-        fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+        fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
         let expected = state.capture_project_session().unwrap().instance_id;
-        let replacement_state = state.clone();
 
-        let worksheet_id = worksheet.id.clone();
-        let result = super::load_worksheet_document_with_reader(
-            &state,
-            &expected,
-            &worksheet_id,
-            move |_, _| {
-                replacement_state.activate_project_fixture("project-b".into(), ProjectData::new());
-                Ok(worksheet)
-            },
-        );
+        let loaded = state
+            .load_worksheet_document(&expected, &worksheet.id)
+            .unwrap();
 
-        assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
-        assert!(state.get_data().unwrap().worksheets.is_empty());
+        assert_eq!(loaded, worksheet);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

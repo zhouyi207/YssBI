@@ -1,13 +1,18 @@
 import i18n from 'i18next';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+
 import { markResourceStale } from '@/features/core/resource';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/services/project/projectIdentity';
 
 const latestGenerationByGraph = new Map<string, number>();
 const lifecycleTokenByGraph = new Map<string, number>();
@@ -67,6 +72,7 @@ async function requestGraphProjection(
   graphPath: string,
   operation: ProjectionRequestOperation,
   lifecycleToken: number,
+  identity: ProjectIdentitySnapshot,
   request: (graphPath: string, locale: string, lifecycleToken: number) => Promise<EditorGraphProjectionDto>,
   locale = currentProjectionLocale(),
 ): Promise<boolean> {
@@ -77,7 +83,9 @@ async function requestGraphProjection(
   let projection: EditorGraphProjectionDto;
   try {
     projection = await request(graphPath, locale, lifecycleToken);
+    if (!isCurrentProjectIdentity(identity)) return false;
   } catch (error) {
+    if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(
       `Graph projection ${operation} IPC failed for '${graphPath}': ${formatErrorMessage(error, 'Unknown IPC error')}`,
       'GraphProjectionCoordinator',
@@ -88,7 +96,8 @@ async function requestGraphProjection(
     return false;
   }
 
-  if (!ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)) return false;
+  if (!isCurrentProjectIdentity(identity)
+    || !ownsLatestRequest(graphPath, requestGeneration, requestEpoch, lifecycleToken)) return false;
   const result = useGraphDataStore
     .getState()
     .replaceProjection(graphPath, projection, requestGeneration);
@@ -123,6 +132,10 @@ export function beginGraphUnloadLifecycle(graphPath: string): number {
   return invalidateGraphLifecycle(graphPath);
 }
 
+export function beginGraphRenameLifecycle(graphPath: string): number {
+  return startGraphLifecycle(graphPath);
+}
+
 export function isGraphLifecycleCurrent(graphPath: string, lifecycleToken: number): boolean {
   return lifecycleTokenByGraph.get(graphPath) === lifecycleToken;
 }
@@ -130,9 +143,10 @@ export function isGraphLifecycleCurrent(graphPath: string, lifecycleToken: numbe
 export async function prepareGraphProjectionForPublication(
   graphPath: string,
   projectInstanceId: string,
-  _publicationEpoch: number,
+  publicationEpoch: number,
 ): Promise<EditorGraphProjectionDto | false> {
-  if (useProjectIOStore.getState().projectInstanceId !== projectInstanceId) return false;
+  const identity = { projectInstanceId, epoch: publicationEpoch };
+  if (!isCurrentProjectIdentity(identity)) return false;
   const lifecycleToken = currentOrStartGraphLifecycle(graphPath);
   const requestEpoch = coordinatorEpoch;
   try {
@@ -142,11 +156,12 @@ export async function prepareGraphProjectionForPublication(
       lifecycleToken,
       projectInstanceId,
     );
-    if (requestEpoch !== coordinatorEpoch
-      || lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
-      || useProjectIOStore.getState().projectInstanceId !== projectInstanceId) return false;
+    if (!isCurrentProjectIdentity(identity)
+      || requestEpoch !== coordinatorEpoch
+      || lifecycleTokenByGraph.get(graphPath) !== lifecycleToken) return false;
     return projection;
   } catch (error) {
+    if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(
       `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, 'Unknown IPC error')}`,
       'GraphProjectionCoordinator',
@@ -159,17 +174,22 @@ export function loadGraphProjection(
   graphPath: string,
   lifecycleToken = beginGraphLoadLifecycle(graphPath),
 ): Promise<boolean> {
-  const projectInstanceId = useProjectIOStore.getState().projectInstanceId;
-  if (!projectInstanceId) return Promise.resolve(false);
+  let identity: ProjectIdentitySnapshot;
+  try {
+    identity = captureProjectIdentity();
+  } catch {
+    return Promise.resolve(false);
+  }
   return requestGraphProjection(
     graphPath,
     'load',
     lifecycleToken,
+    identity,
     (path, locale, token) => GraphProjectionService.loadGraph(
       path,
       locale,
       token,
-      projectInstanceId,
+      identity.projectInstanceId,
     ),
   );
 }
@@ -179,11 +199,17 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
     setGraphProjectionStale(graphPath, true);
     return Promise.resolve(false);
   }
+  const identity = captureProjectIdentity();
   return requestGraphProjection(
     graphPath,
     'hydrate',
     currentOrStartGraphLifecycle(graphPath),
-    (path, requestLocale) => GraphProjectionService.hydrateGraph(path, requestLocale),
+    identity,
+    (path, requestLocale) => GraphProjectionService.hydrateGraph(
+      identity.projectInstanceId,
+      path,
+      requestLocale,
+    ),
     locale,
   );
 }

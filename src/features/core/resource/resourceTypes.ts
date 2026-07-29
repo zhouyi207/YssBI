@@ -21,6 +21,7 @@ export interface ProjectResourceMeta {
   uri: string;
   parentId?: string;
   scope?: { type: 'global' | 'event' | 'function'; graphPath?: string };
+  revision?: number;
   exists: boolean;
   loaded: boolean;
   hasDirtyDocument: boolean;

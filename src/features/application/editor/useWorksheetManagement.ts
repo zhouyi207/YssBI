@@ -18,22 +18,28 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
 
   const addWorksheet = useCallback(
     async (databaseId?: string) => {
+      let context: ReturnType<typeof captureProjectCommandContext> | undefined;
       try {
-        const context = captureProjectCommandContext();
+        context = captureProjectCommandContext();
         const created = await WorksheetService.createWorksheet(
           context.projectInstanceId,
           context.operationId,
           DEFAULT_WORKSHEET_NAME,
           databaseId,
         );
+        if (!context.isCurrent()) return;
         await projectPublicationCoordinator.submit({ result: created.result });
+        if (!context.isCurrent()) return;
 
         const { document } = created;
         await commitFileFirstResourceIndex();
+        if (!context.isCurrent()) return;
         switchSidebarTab('charts');
         await openWorksheet(document.id, document.name);
+        if (!context.isCurrent()) return;
         uiStore.showToast(t('worksheet.created'), 'success', 2000);
       } catch (error) {
+        if (context && !context.isCurrent()) return;
         uiStore.showToast(
           `${t('worksheet.createFailed')}: ${error instanceof Error ? error.message : String(error)}`,
           'error',
@@ -47,8 +53,9 @@ export function useWorksheetManagement(openWorksheet: (id: string, name: string)
   const ensureWorksheetLoaded = useCallback(async (worksheetId: string) => {
     const cached = useWorksheetStore.getState().documents[worksheetId];
     if (cached) return cached;
-    const { projectInstanceId } = captureProjectCommandContext();
-    const document = await WorksheetService.loadWorksheet(projectInstanceId, worksheetId);
+    const context = captureProjectCommandContext();
+    const document = await WorksheetService.loadWorksheet(context.projectInstanceId, worksheetId);
+    if (!context.isCurrent()) return null;
     useWorksheetStore.getState().upsertDocument(document);
     return document;
   }, []);
@@ -61,11 +68,13 @@ export function useOpenWorksheet() {
 
   return useCallback(async (id: string, _name: string) => {
     if (!useWorksheetStore.getState().documents[id]) {
+      const context = captureProjectCommandContext();
       try {
-        const { projectInstanceId } = captureProjectCommandContext();
-        const loaded = await WorksheetService.loadWorksheet(projectInstanceId, id);
+        const loaded = await WorksheetService.loadWorksheet(context.projectInstanceId, id);
+        if (!context.isCurrent()) return;
         useWorksheetStore.getState().upsertDocument(loaded);
       } catch {
+        if (!context.isCurrent()) return;
         // Index-only open: WorksheetEditor retries load on mount.
       }
     }

@@ -33,6 +33,24 @@ import {
 } from '@/features/core/execution/executionRecording';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
+import {
+  ProjectLifecycleProtocolError,
+  applyProjectLifecycleReceipt,
+  cancelPendingProjectLifecycleOperation,
+  claimProjectLifecycleInitiatorSettlement,
+  recoverProjectLifecycleDirectFailure,
+  registerPendingProjectLifecycleOperation,
+  type PendingProjectLifecycleOperation,
+} from '@/features/application/projectLifecycleReceipt';
+import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+
+function notifySaveAsSettlement(result: import('@/shared/types/dto/project').LifecycleMutationResultDto): void {
+  if (result.outcome !== 'committed' || !result.record) {
+    uiStore.showToast(`另存为需要恢复：${result.recovery?.action ?? result.outcome}`, "warning", 4000);
+    return;
+  }
+  uiStore.showToast(`项目已另存为：${result.record.name}`, "success", 3000);
+}
 
 /**
  * Project Operations Hook
@@ -42,21 +60,57 @@ export function useProjectOperations() {
   const { t } = useTranslation();
 
   const saveGraphAs = useCallback(async () => {
-    const projectPath = await resolveActiveProjectPath();
-    if (!projectPath) {
-      uiStore.showToast("项目尚未加载", "warning", 2000);
-      return;
-    }
+    let pending: PendingProjectLifecycleOperation | undefined;
     try {
+      pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
+      const projectPath = await resolveActiveProjectPath();
+      if (!pending.isCurrent()) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        return;
+      }
+      if (!projectPath) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        uiStore.showToast("项目尚未加载", "warning", 2000);
+        return;
+      }
       const dirtySaved = await saveAllDirtyGraphs();
-      if (!dirtySaved) return;
+      if (!pending.isCurrent()) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        return;
+      }
+      if (!dirtySaved) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        return;
+      }
 
-      const record = await ProjectService.saveProjectAs();
-      if (!record) return;
-
-      await useProjectIOStore.getState().loadProject();
-      uiStore.showToast(`项目已另存为：${record.name}`, "success", 3000);
+      const result = await ProjectService.saveProjectAs(
+        pending.projectInstanceId!,
+        pending.operationId,
+      );
+      if (!pending.isCurrent()) return;
+      if (!result) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        return;
+      }
+      const settlement = await applyProjectLifecycleReceipt(
+        result,
+        'direct',
+        createProjectLifecycleReceiptDependencies(),
+      );
+      if (settlement.status === 'stale' || !pending.isCurrent()) return;
+      const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
+      if (claimed) notifySaveAsSettlement(claimed.result);
     } catch (e) {
+      if (e instanceof ProjectLifecycleProtocolError && e.zeroEffects) return;
+      if (pending) {
+        const recovered = await recoverProjectLifecycleDirectFailure(pending.operationId);
+        if (recovered && pending.isCurrent()) {
+          const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
+          if (claimed) notifySaveAsSettlement(claimed.result);
+          return;
+        }
+        if (!pending.isCurrent()) return;
+      }
       logger.app.error(String(e), 'ProjectOperations');
       uiStore.showToast(`另存为失败：${formatErrorMessage(e)}`, "error", 3000);
     }
@@ -86,8 +140,8 @@ export function useProjectOperations() {
 
       const activeTab = active?.tab;
       if (activeTab?.type === 'worksheet') {
-        await useWorksheetStore.getState().saveDocument(activeTabId);
-        uiStore.showToast(t('worksheet.saved'), 'success', 2000);
+        const saved = await useWorksheetStore.getState().saveDocument(activeTabId);
+        if (saved) uiStore.showToast(t('worksheet.saved'), 'success', 2000);
         return;
       }
 

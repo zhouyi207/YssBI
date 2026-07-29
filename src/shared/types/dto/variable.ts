@@ -39,13 +39,8 @@ export function normalizeVariableFromBackend(raw: VariablePayloadRaw): Variable 
 
   const dataValue = dataValueFromBackend(raw.dataValue as DataValueBackend);
 
-  if (!Number.isSafeInteger(raw.revision) || (raw.revision as number) < 0) {
-    throw new Error(`variable '${raw.id}' revision is missing or malformed`);
-  }
-
   return {
     id: raw.id,
-    revision: raw.revision as number,
     name: raw.name,
     dataType,
     dataValue,

@@ -20,7 +20,11 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from '@/features/core/resource';
-import { applyVariableCatalogFromIndex, variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
+import {
+  applyVariableCatalogFromIndex,
+  variableCatalogToResourceMetas,
+  variableRevisionsFromIndex,
+} from '@/features/core/variable/variableCatalog';
 import { functionSignaturePins } from '@/features/application/graphDocument/functionSignatureSync';
 import { useHistoryStore } from '@/features/core/history';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
@@ -32,7 +36,12 @@ function publicationPaths(result: ResourceMutationResultDto): string[] {
   const statusPaths = result.projectionStatus.status === 'complete'
     ? result.projectionStatus.expectedGraphPaths
     : result.projectionStatus.invalidatedGraphPaths;
-  return [...statusPaths, ...result.moves.map((move) => move.to)];
+  const lifecyclePaths = result.deltas.flatMap((delta) => {
+    if (delta.payload.kind !== 'graph_resource_lifecycle') return [];
+    const { before, after } = delta.payload.patch;
+    return [before?.path, after?.path].filter((path): path is string => path != null);
+  });
+  return [...statusPaths, ...result.moves.map((move) => move.to), ...lifecyclePaths];
 }
 
 function validFunctionSignature(value: unknown): boolean {
@@ -352,6 +361,7 @@ export function prepareProjectRecoveryCommit(
   plan: ProjectRecoveryPreparation,
 ): PreparedProjectRecovery {
   const variables = applyVariableCatalogFromIndex(plan.index.variables);
+  const variableRevisions = variableRevisionsFromIndex(plan.index.variables);
   const worksheetState = useWorksheetStore.getState();
   const worksheetIndex = (plan.index.worksheets ?? []).map((worksheet) => ({
     id: worksheet.id,
@@ -450,6 +460,7 @@ export function prepareProjectRecoveryCommit(
       documents,
       graphMeta,
       variables,
+      variableRevisions,
       worksheetIndex,
       worksheetDocuments,
       tabs,
@@ -461,7 +472,10 @@ export function prepareProjectRecoveryCommit(
 }
 
 export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): void {
-  useVariableStore.setState({ variables: plan.storeState.variables });
+  useVariableStore.setState({
+    variables: plan.storeState.variables,
+    revisions: plan.storeState.variableRevisions,
+  });
   useWorksheetStore.setState({
     index: plan.storeState.worksheetIndex,
     documents: plan.storeState.worksheetDocuments,

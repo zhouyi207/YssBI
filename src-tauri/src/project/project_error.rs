@@ -9,8 +9,12 @@ pub enum ProjectFilesystemError {
     StaleProjectLifecycle { message: String },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
+    #[error("duplicate project operation: {message}")]
+    DuplicateOperation { message: String },
     #[error("project filesystem transaction is busy: {message}")]
     FilesystemTransactionBusy { message: String },
+    #[error("project lifecycle admission is closed: {message}")]
+    ProjectLifecycleAdmissionClosed { message: String },
     #[error("project requires recovery before mutations can continue: {message}")]
     ProjectRecoveryRequired { message: String },
     #[error("failed to prepare project filesystem transaction: {message}")]
@@ -30,7 +34,9 @@ impl ProjectFilesystemError {
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
+            Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
+            Self::ProjectLifecycleAdmissionClosed { .. } => "project_lifecycle_admission_closed",
             Self::ProjectRecoveryRequired { .. } => "project_recovery_required",
             Self::TransactionPrepareFailed { .. } => "transaction_prepare_failed",
             Self::TransactionCommitFailed { .. } => "transaction_commit_failed",

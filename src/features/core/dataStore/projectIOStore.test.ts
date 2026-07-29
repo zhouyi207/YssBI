@@ -5,16 +5,25 @@ import { graphDataToDomainGraph } from '@/shared/types/dto/graphModel';
 import { LoadStatus } from '@/shared/types/ui/common';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
-import { useProjectIOStore } from './projectIOStore';
+import {
+  prepareAuthoritativeProjectLoad,
+  useProjectIOStore,
+  type AuthoritativeProjectLoadPlanDependencies,
+} from './projectIOStore';
 import { useResourceStore, resourceKey, markResourceLoaded } from '@/features/core/resource';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { toGraphResourceUri } from '@/shared/types/domain/graphResourcePath';
 import { useVariableStore } from './variableStore';
 import { useHistoryStore } from '@/features/core/history';
+import { useGraphMetaStore } from './graphMetaStore';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { ProjectService } from '@/services/project/projectService';
+import { captureProjectIdentity } from '@/services/project/projectIdentity';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 
@@ -33,7 +42,8 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
   },
 }));
 
-vi.mock('@/features/application/graphDocument/functionSignatureSync', () => ({
+vi.mock('@/features/application/graphDocument/functionSignatureSync', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/application/graphDocument/functionSignatureSync')>()),
   hydrateFunctionSignaturesFromProjectIndex: vi.fn(),
   syncFunctionSignatureFromGraph: vi.fn(),
 }));
@@ -85,6 +95,7 @@ describe('useProjectIOStore snapshot paths', () => {
     useDatabaseStore.getState().clear();
     useVariableStore.getState().clear();
     useResourceStore.getState().clear();
+    projectPublicationCoordinator.startProject('project-instance-1', 0);
     useProjectIOStore.setState({
       status: LoadStatus.Idle,
       error: null,
@@ -150,7 +161,141 @@ describe('useProjectIOStore snapshot paths', () => {
     });
   });
 
+  it.each([
+    'normalizeDatabases',
+    'normalizeVariables',
+    'prepareFunctionState',
+    'prepareResourceState',
+    'prepareLayoutState',
+    'validateCoordinatorStart',
+  ] as const)('%s preparation failure has zero frontend effects', async (stage) => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000602';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
+    vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/replacement.yssbi');
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({
+      databases: { 'db-new': { id: 'db-new', name: 'New database' } },
+      variables: {},
+    });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 8,
+      history: { canUndo: true, canRedo: false },
+      projectName: 'Replacement',
+      graphs: [{
+        path: 'functions/New.yssbi-function',
+        name: 'New',
+        type: 'function',
+        functionRevision: 1,
+        functionSignature: { parameters: [], return_type: null },
+      }],
+      variables: [],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+    useDatabaseStore.setState({ databases: { old: { id: 'old', name: 'Old' } } });
+    useVariableStore.setState({ variables: {}, revisions: {} });
+    useGraphMetaStore.setState({ graphs: {} });
+    useWorksheetStore.setState({ index: [], documents: {} });
+    useResourceStore.setState({ resources: {}, graphOrder: ['old-graph'] });
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    const before = {
+      projectIO: useProjectIOStore.getState(),
+      databases: useDatabaseStore.getState(),
+      variables: useVariableStore.getState(),
+      functions: useGraphMetaStore.getState(),
+      worksheets: useWorksheetStore.getState(),
+      resources: useResourceStore.getState(),
+      tabs: useEditorTabStore.getState(),
+      layout: useLayoutStore.getState(),
+      coordinator: projectPublicationCoordinator.getSnapshotForTests(),
+    };
+    const fault = vi.fn(() => {
+      throw new Error(`${stage} failed`);
+    });
+
+    await expect(prepareAuthoritativeProjectLoad(
+      captureProjectIdentity(),
+      { [stage]: fault } as Partial<AuthoritativeProjectLoadPlanDependencies>,
+    )).rejects.toThrow(`${stage} failed`);
+
+    expect(useProjectIOStore.getState()).toBe(before.projectIO);
+    expect(useDatabaseStore.getState()).toBe(before.databases);
+    expect(useVariableStore.getState()).toBe(before.variables);
+    expect(useGraphMetaStore.getState()).toBe(before.functions);
+    expect(useWorksheetStore.getState()).toBe(before.worksheets);
+    expect(useResourceStore.getState()).toBe(before.resources);
+    expect(useEditorTabStore.getState()).toBe(before.tabs);
+    expect(useLayoutStore.getState()).toBe(before.layout);
+    expect(projectPublicationCoordinator.getSnapshotForTests()).toEqual(before.coordinator);
+  });
+
+  it('rejects an index completion from a replaced project before resetting or hydrating stores', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+    projectPublicationCoordinator.startProject(projectInstanceId, 3);
+    useProjectIOStore.setState({ projectInstanceId });
+    useVariableStore.setState({
+      variables: {
+        replacement: { id: 'replacement' } as never,
+      },
+      revisions: { replacement: 1 },
+    });
+    const request = deferred<Awaited<ReturnType<typeof ProjectService.getProjectIndex>>>();
+    vi.mocked(ProjectService.getProjectIndex).mockReturnValue(request.promise);
+
+    const refresh = useProjectIOStore.getState().refreshResourceIndex();
+    await vi.waitFor(() => expect(ProjectService.getProjectIndex).toHaveBeenCalledOnce());
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    request.resolve({
+      projectInstanceId,
+      publicationRevision: 3,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Stale project',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    await expect(refresh).resolves.toBe(false);
+    expect(Object.keys(useVariableStore.getState().variables)).toEqual(['replacement']);
+  });
+
+  it('captures one identity epoch for path databases and index hydration', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
+    const pathRequest = deferred<string | null>();
+    vi.mocked(ProjectService.getProjectPath).mockReturnValue(pathRequest.promise);
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 0,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Stale project',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    const preparation = prepareAuthoritativeProjectLoad(captureProjectIdentity());
+    await vi.waitFor(() => expect(ProjectService.getProjectPath).toHaveBeenCalledOnce());
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    pathRequest.resolve('/tmp/stale.yssbi');
+
+    await expect(preparation).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
+    expect(ProjectService.getDatabasesVariables).not.toHaveBeenCalled();
+    expect(ProjectService.getProjectIndex).not.toHaveBeenCalled();
+  });
+
   it('loadProject hydrates index and clears graph bodies', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/demo.yssbi');
     vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({
       databases: { 'df-1': { id: 'df-1', name: 'Data' } },
@@ -192,6 +337,7 @@ describe('useProjectIOStore snapshot paths', () => {
   it('cancels old direct and event waiters before replacement-project store reset', async () => {
     const projectInstanceId = '00000000-0000-0000-0000-000000000601';
     const oldResult: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000401',
       projectInstanceId,
       publicationRevision: 2,
       moves: [],
@@ -224,7 +370,10 @@ describe('useProjectIOStore snapshot paths', () => {
     const event = projectPublicationCoordinator.submit({ result: structuredClone(oldResult) });
     await vi.waitFor(() => expect(ProjectService.getProjectIndex).toHaveBeenCalledOnce());
     const cancelProject = vi.spyOn(projectPublicationCoordinator, 'cancelProject');
-    const clearResources = vi.spyOn(useResourceStore.getState(), 'clear');
+    const assignResources = vi.spyOn(useResourceStore, 'setState');
+    const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000602';
+    projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId: replacementProjectInstanceId });
 
     const replacement = useProjectIOStore.getState().loadProject();
 
@@ -232,9 +381,9 @@ describe('useProjectIOStore snapshot paths', () => {
     await expect(event).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     await expect(replacement).resolves.not.toBeNull();
     expect(cancelProject).toHaveBeenCalled();
-    expect(clearResources).toHaveBeenCalled();
+    expect(assignResources).toHaveBeenCalled();
     expect(cancelProject.mock.invocationCallOrder[0]).toBeLessThan(
-      clearResources.mock.invocationCallOrder[0],
+      assignResources.mock.invocationCallOrder[0],
     );
     expect(projectPublicationCoordinator.getSnapshotForTests()).toMatchObject({
       projectInstanceId: '00000000-0000-0000-0000-000000000602',
@@ -361,6 +510,7 @@ describe('useProjectIOStore snapshot paths', () => {
       },
       metadata: { exportTime: '2026-07-25T00:00:00.000Z', appVersion: '1.0.0' },
     }, null);
+    projectPublicationCoordinator.startProject('project-instance-2', 0);
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-2' });
     const currentRequest = useProjectIOStore.getState().loadGraph(graphPath);
 

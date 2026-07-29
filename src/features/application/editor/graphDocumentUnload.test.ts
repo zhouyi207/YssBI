@@ -14,6 +14,7 @@ import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionSer
 import { GraphService } from '@/services/graph/graphService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { unloadGraphDocument } from './graphDocumentUnload';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 
 vi.mock('@/features/application/editor/graphDocumentRetention', () => ({
   shouldRetainGraphDocument: () => false,
@@ -46,6 +47,8 @@ describe('graph document lifecycle ownership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetGraphProjectionCoordinator();
+    projectPublicationCoordinator.cancelProject();
+    projectPublicationCoordinator.startProject('project-instance-1', 0);
     useGraphDataStore.setState({ graphEntities: {} });
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-1' });
     useResourceStore.getState().clear();

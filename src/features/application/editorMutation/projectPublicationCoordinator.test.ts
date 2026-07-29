@@ -57,6 +57,7 @@ function publication(
     functionPath?: string;
     functionRevision?: number;
     history?: { canUndo: boolean; canRedo: boolean };
+    operationId?: string;
   } = {},
 ): ResourceMutationResultDto {
   const projectionPaths = options.expectedGraphPaths;
@@ -87,6 +88,7 @@ function publication(
     });
   }
   return {
+    operationId: options.operationId ?? `00000000-0000-0000-0000-${publicationRevision.toString().padStart(12, '0')}`,
     projectInstanceId,
     publicationRevision,
     moves,
@@ -277,7 +279,7 @@ function createHarness() {
       },
       storeState: {
         resources: {}, graphOrder: [], documents: {}, graphMeta: {}, variables: {},
-        worksheetIndex: [], worksheetDocuments: {},
+        variableRevisions: {}, worksheetIndex: [], worksheetDocuments: {},
         tabs: { registry: {}, placements: {} }, focusedSession: null, viewports: {},
       },
       history: result.history,
@@ -292,6 +294,7 @@ function createHarness() {
         documents: {},
         graphMeta: {},
         variables: {},
+        variableRevisions: {},
         worksheetIndex: [],
         worksheetDocuments: {},
         tabs: { registry: {}, placements: {} },
@@ -386,6 +389,26 @@ const moveBefore: ResourceMoveDto = {
 };
 
 describe('ProjectPublicationCoordinator', () => {
+  it('validates a new project baseline before cancelling the current coordinator', () => {
+    const harness = createHarness();
+    const before = harness.coordinator.getSnapshotForTests();
+
+    expect(() => harness.coordinator.startProject('', -1)).toThrow(
+      'project publication baseline is malformed',
+    );
+
+    expect(harness.coordinator.getSnapshotForTests()).toEqual(before);
+  });
+
+  it('rejects a result without required top-level operation correlation', async () => {
+    const harness = createHarness();
+    const missing = publication(1) as Partial<ResourceMutationResultDto>;
+    delete missing.operationId;
+
+    await expect(harness.coordinator.submit({ result: missing as ResourceMutationResultDto }))
+      .rejects.toMatchObject({ code: 'publication_protocol_error' });
+  });
+
   it('queues reverse arrival N+1 then N without installing N+1 first', async () => {
     const harness = createHarness();
     const before = structuredClone(harness.state);

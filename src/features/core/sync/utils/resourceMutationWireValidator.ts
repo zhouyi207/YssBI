@@ -178,6 +178,24 @@ function isResourcePathMovePatch(value: unknown): boolean {
     && value.from !== value.to;
 }
 
+function isGraphResourceLifecycleState(value: unknown, path: string): boolean {
+  if (!isRecord(value)
+    || !Number.isSafeInteger(value.revision)
+    || (value.revision as number) < 0
+    || value.path !== path) return false;
+  return value.kind === inferGraphResourceKind(path);
+}
+
+function isGraphResourceLifecyclePatch(value: unknown, path: string): boolean {
+  if (!isRecord(value)
+    || Object.keys(value).length !== 2
+    || !hasOwn(value, 'before')
+    || !hasOwn(value, 'after')) return false;
+  const beforeValid = value.before === null || isGraphResourceLifecycleState(value.before, path);
+  const afterValid = value.after === null || isGraphResourceLifecycleState(value.after, path);
+  return beforeValid && afterValid && (value.before === null) !== (value.after === null);
+}
+
 function isOperationCorrelation(value: unknown): value is string | null {
   return value === null || isUuid(value);
 }
@@ -188,6 +206,8 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
   if (kind === 'graph') {
     return isGraphPath(key)
       && ((value.payload.kind === 'graph' && isGraphPatch(value.payload.patch))
+        || (value.payload.kind === 'graph_resource_lifecycle'
+          && isGraphResourceLifecyclePatch(value.payload.patch, key))
         || (value.payload.kind === 'graph_resource_move'
           && isResourcePathMovePatch(value.payload.patch)));
   }
@@ -205,11 +225,19 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
 
 function isResourceDelta(value: unknown): value is ResourceDeltaDto {
   if (!isRecord(value) || !isResourceAndPayload(value)) return false;
-  return Number.isSafeInteger(value.fromRevision)
-    && Number.isSafeInteger(value.toRevision)
-    && (value.fromRevision as number) >= 0
-    && value.toRevision === (value.fromRevision as number) + 1
-    && isOperationCorrelation(value.causedBy);
+  if (!Number.isSafeInteger(value.fromRevision)
+    || !Number.isSafeInteger(value.toRevision)
+    || (value.fromRevision as number) < 0
+    || value.toRevision !== (value.fromRevision as number) + 1
+    || !isOperationCorrelation(value.causedBy)) return false;
+  if (isRecord(value.payload) && value.payload.kind === 'graph_resource_lifecycle') {
+    const patch = value.payload.patch as UnknownRecord;
+    const present = patch.before ?? patch.after;
+    return isUuid(value.causedBy)
+      && isRecord(present)
+      && present.revision === value.fromRevision;
+  }
+  return true;
 }
 
 function deltaTarget(delta: ResourceDeltaDto): string {

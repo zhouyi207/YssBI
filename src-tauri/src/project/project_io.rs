@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+use super::ensure_worksheets_dir;
 use super::{
-    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, NormalizedProjectRoot,
-    PROJECT_METADATA_FILE, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
-    ensure_worksheets_dir, load_worksheets_from_root, read_worksheet_index_entries,
-    scan_graph_resource_index,
+    GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
+    ProjectData, ProjectError, ProjectWorksheetIndexEntry, load_worksheets_from_root,
+    read_worksheet_index_entries, scan_graph_resource_index,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 
@@ -66,6 +67,7 @@ pub struct ProjectGraphIndexEntry {
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
+    pub revision: crate::node_system::document::ResourceRevision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_revision: Option<crate::node_system::document::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -170,6 +172,7 @@ pub fn serialize_graph_document(
         .map(|contents| (PathBuf::from(graph_path.as_str()), contents))
 }
 
+#[cfg(test)]
 pub(crate) fn initialize_project_directory(
     project_data: &ProjectData,
     root: &Path,
@@ -193,6 +196,7 @@ pub(crate) fn serialize_graph_resource_document(
     .map_err(ProjectError::Serialize)
 }
 
+#[cfg(test)]
 fn write_loaded_graph_document(
     project_data: &ProjectData,
     root: &Path,
@@ -224,96 +228,7 @@ fn write_loaded_graph_document(
     Ok(relative_path)
 }
 
-pub(crate) fn remap_variable_scope_path(scope: &mut VariableScope, from: &str, to: &str) -> bool {
-    match scope {
-        VariableScope::Event { event_path }
-            if super::graph_resource_index::normalize_resource_path(event_path) == from =>
-        {
-            *event_path = to.to_string();
-            true
-        }
-        VariableScope::Function { function_path }
-            if super::graph_resource_index::normalize_resource_path(function_path) == from =>
-        {
-            *function_path = to.to_string();
-            true
-        }
-        _ => false,
-    }
-}
-
-pub(crate) fn remap_graph_document_references(
-    document: &mut NodeGraphDocument,
-    from: &str,
-    to: &str,
-) -> bool {
-    let from = super::graph_resource_index::normalize_resource_path(from);
-    let to = super::graph_resource_index::normalize_resource_path(to);
-    let mut changed = false;
-    for node in document.nodes.values_mut() {
-        for value in node.parameters.values_mut() {
-            if value.as_str().is_some_and(|path| {
-                super::graph_resource_index::normalize_resource_path(path) == from
-            }) {
-                *value = serde_json::Value::String(to.clone());
-                changed = true;
-            }
-        }
-    }
-    changed
-}
-
-/// 当图资源路径变更时，级联更新磁盘上其它文件中的 Call 引用与变量 scope。
-pub fn cascade_graph_path_references_on_disk(
-    root: &Path,
-    from: &str,
-    to: &str,
-    skip_graph_file: Option<&Path>,
-) -> Result<(), ProjectError> {
-    let from = super::graph_resource_index::normalize_resource_path(from);
-    let to = super::graph_resource_index::normalize_resource_path(to);
-    if from == to {
-        return Ok(());
-    }
-
-    let global_path = root.join(GLOBAL_VARIABLES_FILE);
-    if global_path.is_file() {
-        let mut doc: GlobalVariablesDocument = read_json(global_path.as_path())?;
-        let mut changed = false;
-        for variable in doc.variables.values_mut() {
-            if remap_variable_scope_path(&mut variable.scope, &from, &to) {
-                changed = true;
-            }
-        }
-        if changed {
-            write_json(global_path.as_path(), &doc)?;
-        }
-    }
-
-    let index = super::graph_resource_index::scan_graph_resource_index(root)?;
-    for entry in index.entries() {
-        let file_path = root.join(entry.path.as_str());
-        if skip_graph_file == Some(file_path.as_path()) {
-            continue;
-        }
-        if !file_path.is_file() {
-            continue;
-        }
-        let mut document = read_graph_document(file_path.as_path(), entry.kind)?;
-        let mut changed = false;
-        for variable in document.local_variables.values_mut() {
-            if remap_variable_scope_path(&mut variable.scope, &from, &to) {
-                changed = true;
-            }
-        }
-        changed |= remap_graph_document_references(&mut document.document, &from, &to);
-        if changed {
-            write_json(file_path.as_path(), &document)?;
-        }
-    }
-    Ok(())
-}
-
+#[cfg(test)]
 fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<(), ProjectError> {
     std::fs::create_dir_all(root)?;
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
@@ -459,25 +374,20 @@ pub fn read_graph_call_sites_from_project(
     read_graph_call_sites_from_file(root.join(resource.path.as_str()).as_path())
 }
 
-pub fn load_project_graph_from_file(
+pub(crate) fn load_project_graph_document_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
-) -> Result<super::GraphResourceDocument, ProjectError> {
+) -> Result<GraphDocument, ProjectError> {
     let root = project_root_from_path(path);
     let graph_resources = load_graph_resource_index(root.as_path())?;
     if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
         let document =
             read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
-        let document =
-            bind_graph_document_scope_by_path(document, resource.kind, resource.path.as_str());
-        let mut graph = document.document;
-        graph.revision = document.revision;
-        return Ok(super::GraphResourceDocument {
-            name: document.name,
-            kind: document.kind,
-            document: graph,
-            function: document.function,
-        });
+        return Ok(bind_graph_document_scope_by_path(
+            document,
+            resource.kind,
+            resource.path.as_str(),
+        ));
     }
 
     Err(ProjectError::InvalidProjectFormat(format!(
@@ -486,68 +396,19 @@ pub fn load_project_graph_from_file(
     )))
 }
 
-pub fn remove_project_graph_from_file(
+pub fn load_project_graph_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
-) -> Result<Option<GraphDocumentKind>, ProjectError> {
-    let root = project_root_from_path(path);
-    let graph_resources = load_graph_resource_index(root.as_path())?;
-    if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
-        std::fs::remove_file(root.join(resource.path.as_str()))?;
-        return Ok(Some(resource.kind));
-    }
-    Ok(None)
-}
-
-pub fn duplicate_project_graph_file(
-    path: &str,
-    graph_path: &GraphResourcePath,
-) -> Result<(GraphResourcePath, super::GraphResourceDocument), ProjectError> {
-    let root = project_root_from_path(path);
-    let (source_path, kind, mut document) = find_graph_document_path(root.as_path(), graph_path)?
-        .ok_or_else(|| {
-        ProjectError::InvalidProjectFormat(format!("graph '{}' not found", graph_path))
-    })?;
-    let source_dir = source_path.parent().unwrap_or_else(|| root.as_path());
-    let graph_resources = load_graph_resource_index(root.as_path())?;
-    let names: Vec<String> = read_graph_index_entries(
-        root.as_path(),
-        graph_dir_for_kind(kind),
-        graph_extension_for_kind(kind),
-        kind,
-        &graph_resources,
-    )?
-    .into_iter()
-    .map(|entry| entry.name)
-    .collect();
-    document.name = crate::project::unique_name::unique_name(&document.name, names);
-    let file_name = unique_graph_file_name(
-        source_dir,
-        &document.name,
-        graph_extension_for_kind(kind),
-        None,
-    );
-    let target_path = source_dir.join(file_name);
-    let relative_path = target_path
-        .strip_prefix(root.as_path())
-        .map(path_to_slash_string)
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    rebind_graph_document_local_variable_scopes(&mut document, kind, &relative_path);
-    remap_graph_document_references(&mut document.document, graph_path.as_str(), &relative_path);
-    write_json(target_path.as_path(), &document)?;
-    let graph_path = GraphResourcePath::new(relative_path)
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+) -> Result<super::GraphResourceDocument, ProjectError> {
+    let document = load_project_graph_document_from_file(path, graph_path)?;
     let mut graph = document.document;
     graph.revision = document.revision;
-    Ok((
-        graph_path,
-        super::GraphResourceDocument {
-            name: document.name,
-            kind: document.kind,
-            document: graph,
-            function: document.function,
-        },
-    ))
+    Ok(super::GraphResourceDocument {
+        name: document.name,
+        kind: document.kind,
+        document: graph,
+        function: document.function,
+    })
 }
 
 fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, ProjectError> {
@@ -587,90 +448,6 @@ pub fn project_root_from_path(path: &str) -> PathBuf {
     } else {
         path
     }
-}
-
-/// Move a project directory to the system recycle bin after validating `metadata.yssbi` exists.
-pub fn delete_project_directory(path: &str) -> Result<(), ProjectError> {
-    let root = project_root_from_path(path);
-    let manifest = root.join(PROJECT_METADATA_FILE);
-    if !manifest.is_file() {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "missing {PROJECT_METADATA_FILE} under {}",
-            root.display()
-        )));
-    }
-    if root.exists() {
-        trash::delete(&root).map_err(|e| {
-            ProjectError::InvalidProjectFormat(format!(
-                "failed to move project to recycle bin: {e}"
-            ))
-        })?;
-    }
-    Ok(())
-}
-
-fn copy_project_directory(src: &Path, dst: &Path) -> Result<(), ProjectError> {
-    if !src.is_dir() {
-        return Err(ProjectError::InvalidProjectFormat(format!(
-            "source project directory not found: {}",
-            src.display()
-        )));
-    }
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let target = dst.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_project_directory(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
-/// 将当前项目复制到新目录，返回新 `metadata.yssbi` 绝对路径。
-/// 调用方负责在复制后 reload 内存状态并切换 `ProjectState` 路径。
-pub fn save_project_as_to_directory(
-    state: &crate::project::ProjectState,
-    new_root_path: &str,
-) -> Result<String, ProjectError> {
-    use crate::project::validate_new_project_path;
-
-    let validation = validate_new_project_path(new_root_path);
-    if !validation.ok {
-        return Err(ProjectError::InvalidProjectFormat(
-            validation.message.unwrap_or_else(|| "项目路径无效".into()),
-        ));
-    }
-
-    let new_root = PathBuf::from(new_root_path.trim());
-    let (session, data) = state
-        .project_payload()
-        .map_err(ProjectError::InvalidProjectFormat)?;
-    let old_normalized = session.root.clone();
-    let new_normalized = NormalizedProjectRoot::from_project_path(&new_root)
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    if old_normalized == new_normalized {
-        return Err(ProjectError::InvalidProjectFormat(
-            "不能另存为当前项目目录".into(),
-        ));
-    }
-    let _filesystem_lease = state
-        .filesystem()
-        .acquire_many([old_normalized.clone(), new_normalized])
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    state
-        .validate_project_session(&session)
-        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
-    let old_root = old_normalized.as_path();
-    save_project_to_directory(&data, old_root)?;
-    std::fs::create_dir_all(&new_root)?;
-    copy_project_directory(old_root, new_root.as_path())?;
-    Ok(new_root
-        .join(PROJECT_METADATA_FILE)
-        .to_string_lossy()
-        .into_owned())
 }
 
 fn local_variables_for_graph(
@@ -770,6 +547,8 @@ struct GraphFileHeader {
     schema_version: u32,
     kind: GraphDocumentKind,
     name: String,
+    #[serde(default)]
+    revision: crate::node_system::document::ResourceRevision,
     function: Option<crate::node_system::document::FunctionDocument>,
 }
 
@@ -844,22 +623,12 @@ fn read_graph_index_entries(
             path: resource.path.as_str().to_string(),
             name,
             graph_type: expected_kind,
+            revision: header.revision,
             function_revision,
             function_signature,
         });
     }
     Ok(entries)
-}
-
-fn rebind_graph_document_local_variable_scopes(
-    document: &mut GraphDocument,
-    kind: GraphDocumentKind,
-    graph_path: &str,
-) {
-    let scope = scoped_variable_scope(kind, graph_path);
-    for variable in document.local_variables.values_mut() {
-        variable.scope = scope.clone();
-    }
 }
 
 fn scoped_variable_scope(kind: GraphDocumentKind, graph_path: &str) -> VariableScope {
@@ -905,6 +674,7 @@ fn read_graph_local_variable_index_entries(
         for variable in document.local_variables.into_values() {
             entries.push(ProjectVariableIndexEntry {
                 id: variable.id.to_string(),
+                revision: crate::node_system::document::ResourceRevision::INITIAL,
                 name: variable.name,
                 data_type: variable.data_type,
                 data_value: variable.data_value,
@@ -967,6 +737,7 @@ fn list_graph_files(root: &Path, dir: &str, extension: &str) -> Result<Vec<PathB
     Ok(paths)
 }
 
+#[cfg(test)]
 fn graph_relative_path_for_save(
     root: &Path,
     dir: &str,
@@ -995,6 +766,7 @@ fn graph_relative_path_for_save(
         .map_err(|e| ProjectError::InvalidProjectFormat(e.to_string()))
 }
 
+#[cfg(test)]
 fn find_graph_file_path(
     root: &Path,
     dir: &str,
@@ -1073,20 +845,6 @@ fn sanitize_file_stem(name: &str) -> String {
         "Untitled".to_string()
     } else {
         sanitized.to_string()
-    }
-}
-
-fn graph_dir_for_kind(kind: GraphDocumentKind) -> &'static str {
-    match kind {
-        GraphDocumentKind::Event => EVENTS_DIR,
-        GraphDocumentKind::Function => FUNCTIONS_DIR,
-    }
-}
-
-fn graph_extension_for_kind(kind: GraphDocumentKind) -> &'static str {
-    match kind {
-        GraphDocumentKind::Event => EVENT_EXTENSION,
-        GraphDocumentKind::Function => FUNCTION_EXTENSION,
     }
 }
 
@@ -1203,6 +961,7 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ProjectErro
     serde_json::from_str(&content).map_err(ProjectError::Deserialize)
 }
 
+#[cfg(test)]
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

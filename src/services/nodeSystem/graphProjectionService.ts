@@ -16,7 +16,15 @@ export class GraphProjectionService {
     });
   }
 
-  static hydrateGraph(graphPath: string, locale: string): Promise<EditorGraphProjectionDto> {
-    return invoke<EditorGraphProjectionDto>('hydrate_editor_graph', { graphPath, locale });
+  static hydrateGraph(
+    projectInstanceId: string,
+    graphPath: string,
+    locale: string,
+  ): Promise<EditorGraphProjectionDto> {
+    return invoke<EditorGraphProjectionDto>('hydrate_editor_graph', {
+      projectInstanceId,
+      graphPath,
+      locale,
+    });
   }
 }

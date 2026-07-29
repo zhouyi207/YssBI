@@ -4,11 +4,32 @@ use sqlx::{FromRow, SqlitePool};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use super::{format_path_for_user, format_path_for_user_path};
+use super::{
+    NormalizedProjectRoot, ProjectRootBinding, ProjectRootIdentity, format_path_for_user,
+    format_path_for_user_path,
+};
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProjectRootIdentityState {
+    Valid,
+    Invalid,
+    Unmigrated,
+}
+
+impl ProjectRootIdentityState {
+    fn from_stored(value: &str) -> Self {
+        match value {
+            "valid" => Self::Valid,
+            "invalid" => Self::Invalid,
+            _ => Self::Unmigrated,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRecord {
     pub id: String,
@@ -17,6 +38,16 @@ pub struct ProjectRecord {
     pub created_at: String,
     pub last_opened_at: Option<String>,
     pub is_favorite: bool,
+    pub root_identity: ProjectRootIdentity,
+    pub root_identity_state: ProjectRootIdentityState,
+}
+
+impl ProjectRecord {
+    pub fn deletion_identity(&self) -> Option<&ProjectRootIdentity> {
+        (self.root_identity_state == ProjectRootIdentityState::Valid
+            && !self.root_identity.as_str().is_empty())
+        .then_some(&self.root_identity)
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -40,6 +71,8 @@ struct ProjectRecordRow {
     created_at: String,
     last_opened_at: Option<String>,
     is_favorite: i64,
+    root_identity: String,
+    root_identity_state: String,
 }
 
 impl ProjectRecordRow {
@@ -51,6 +84,8 @@ impl ProjectRecordRow {
             created_at: self.created_at,
             last_opened_at: self.last_opened_at,
             is_favorite: self.is_favorite != 0,
+            root_identity: ProjectRootIdentity::from_stored(self.root_identity),
+            root_identity_state: ProjectRootIdentityState::from_stored(&self.root_identity_state),
         }
     }
 }
@@ -99,19 +134,70 @@ impl ProjectRegistry {
                 path TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL,
                 last_opened_at TEXT,
-                is_favorite INTEGER NOT NULL DEFAULT 0
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                root_identity TEXT NOT NULL DEFAULT '',
+                root_identity_state TEXT NOT NULL DEFAULT 'unmigrated'
             )
             "#,
         )
         .execute(&self.pool)
         .await?;
+        let columns =
+            sqlx::query_scalar::<_, String>("SELECT name FROM pragma_table_info('projects')")
+                .fetch_all(&self.pool)
+                .await?;
+        if !columns.iter().any(|column| column == "root_identity") {
+            sqlx::query("ALTER TABLE projects ADD COLUMN root_identity TEXT NOT NULL DEFAULT ''")
+                .execute(&self.pool)
+                .await?;
+        }
+        if !columns.iter().any(|column| column == "root_identity_state") {
+            sqlx::query(
+                "ALTER TABLE projects ADD COLUMN root_identity_state TEXT NOT NULL DEFAULT 'unmigrated'",
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+        let rows = sqlx::query_as::<_, (String, String, String, String)>(
+            "SELECT id, path, root_identity, root_identity_state FROM projects WHERE root_identity_state = 'unmigrated'",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        for (id, path, identity, state) in rows {
+            if state == "valid" && !identity.is_empty() {
+                continue;
+            }
+            match ProjectRootBinding::for_existing(&path)
+                .ok()
+                .and_then(|binding| binding.identity().cloned())
+            {
+                Some(identity) => {
+                    sqlx::query(
+                        "UPDATE projects SET root_identity = ?, root_identity_state = 'valid' WHERE id = ?",
+                    )
+                    .bind(identity.as_str())
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                }
+                None => {
+                    sqlx::query(
+                        "UPDATE projects SET root_identity = '', root_identity_state = 'invalid' WHERE id = ?",
+                    )
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            }
+        }
         Ok(())
     }
 
     pub async fn list_projects(&self) -> Result<Vec<ProjectRecord>, sqlx::Error> {
         let rows = sqlx::query_as::<_, ProjectRecordRow>(
             r#"
-            SELECT id, name, path, created_at, last_opened_at, is_favorite
+            SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity,
+                   root_identity_state
             FROM projects
             ORDER BY is_favorite DESC,
                      (last_opened_at IS NULL),
@@ -129,9 +215,17 @@ impl ProjectRegistry {
 
     pub async fn register_project(&self, name: &str, path: &str) -> Result<ProjectRecord, String> {
         let name = normalize_project_name(name);
+        let binding = ProjectRootBinding::for_existing(path).map_err(|error| error.to_string())?;
+        let root_identity = binding
+            .identity()
+            .cloned()
+            .ok_or_else(|| "project root identity is missing".to_string())?;
         let path = normalize_existing_path(path)?;
 
         if let Some(existing) = self.fetch_by_path(&path).await.map_err(|e| e.to_string())? {
+            if existing.deletion_identity() != Some(&root_identity) {
+                return Err("registered project root identity changed".into());
+            }
             sqlx::query(
                 r#"
                 UPDATE projects
@@ -153,15 +247,20 @@ impl ProjectRegistry {
 
         sqlx::query(
             r#"
-            INSERT INTO projects (id, name, path, created_at, last_opened_at, is_favorite)
-            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0)
-            ON CONFLICT(path) DO UPDATE SET
-                last_opened_at = excluded.last_opened_at
+            INSERT INTO projects (
+                id, name, path, created_at, last_opened_at, is_favorite, root_identity,
+                root_identity_state
+            )
+            VALUES (
+                ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 0, ?, 'valid'
+            )
             "#,
         )
         .bind(&id)
         .bind(&name)
         .bind(&path)
+        .bind(root_identity.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| e.to_string())?;
@@ -178,7 +277,8 @@ impl ProjectRegistry {
     ) -> Result<Option<ProjectRecordRow>, sqlx::Error> {
         sqlx::query_as::<_, ProjectRecordRow>(
             r#"
-            SELECT id, name, path, created_at, last_opened_at, is_favorite
+            SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity,
+                   root_identity_state
             FROM projects
             WHERE path = ?
             "#,
@@ -207,17 +307,18 @@ impl ProjectRegistry {
 
             let rows = sqlx::query_as::<_, ProjectRecordRow>(
                 r#"
-                SELECT id, name, path, created_at, last_opened_at, is_favorite
+                SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity,
+                       root_identity_state
                 FROM projects
                 "#,
             )
             .fetch_all(&self.pool)
             .await?;
 
-            if let Some(row) = rows
-                .into_iter()
-                .find(|row| paths_refer_to_same_project(&row.path, canonical))
-            {
+            if let Some(row) = rows.into_iter().find(|row| {
+                NormalizedProjectRoot::from_project_path(&row.path).ok()
+                    == NormalizedProjectRoot::from_project_path(canonical).ok()
+            }) {
                 let _ = self.reconcile_stored_path(&row.id, canonical).await;
                 return Ok(Some(row.into_record()));
             }
@@ -227,6 +328,16 @@ impl ProjectRegistry {
             .fetch_by_path_exact(path)
             .await?
             .map(ProjectRecordRow::into_record))
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn fail_project_remove_for_test(&self) {
+        sqlx::query(
+            "CREATE TEMP TRIGGER fail_project_remove BEFORE DELETE ON projects BEGIN SELECT RAISE(FAIL, 'injected registry remove failure'); END",
+        )
+        .execute(&self.pool)
+        .await
+        .unwrap();
     }
 
     pub async fn remove_project(&self, id: &str) -> Result<(), String> {
@@ -244,7 +355,8 @@ impl ProjectRegistry {
     pub async fn fetch_by_id(&self, id: &str) -> Result<Option<ProjectRecord>, String> {
         let row = sqlx::query_as::<_, ProjectRecordRow>(
             r#"
-            SELECT id, name, path, created_at, last_opened_at, is_favorite
+            SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity,
+                   root_identity_state
             FROM projects
             WHERE id = ?
             "#,
@@ -310,7 +422,13 @@ impl ProjectRegistry {
                 total,
             });
 
-            if is_registered_project_valid(&project.path) {
+            let current_identity = (project.root_identity_state == ProjectRootIdentityState::Valid)
+                .then(|| ProjectRootBinding::for_existing(&project.path).ok())
+                .flatten()
+                .and_then(|binding| binding.identity().cloned());
+            if project.root_identity_state == ProjectRootIdentityState::Valid
+                && current_identity.as_ref() == Some(&project.root_identity)
+            {
                 continue;
             }
 
@@ -468,14 +586,6 @@ fn invalid(message: &str) -> ProjectPathValidation {
     }
 }
 
-/// Whether two paths refer to the same YssBI project on disk.
-pub fn paths_refer_to_same_project(a: &str, b: &str) -> bool {
-    match (normalize_existing_path(a), normalize_existing_path(b)) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => false,
-    }
-}
-
 pub fn normalize_project_name(name: &str) -> String {
     let name = name.trim();
     if name.is_empty() {
@@ -521,7 +631,300 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project::{ProjectRootBinding, ProjectState};
     use std::fs;
+
+    #[test]
+    fn old_schema_backfills_real_root_identity_for_inactive_delete() {
+        tauri::async_runtime::block_on(async {
+            let app_dir = std::env::temp_dir()
+                .join(format!("yssbi-registry-migration-{}", uuid::Uuid::new_v4()));
+            let db_dir = app_dir.join("db");
+            let project_root = app_dir.join("project");
+            fs::create_dir_all(&db_dir).unwrap();
+            fs::create_dir_all(&project_root).unwrap();
+            let metadata = project_root.join(PROJECT_METADATA_FILE);
+            fs::write(&metadata, "{}").unwrap();
+            let db_path = db_dir.join("projects.sqlite");
+            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::from_str(&url)
+                        .unwrap()
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            sqlx::query(
+                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('legacy', 'Legacy', ?, '2026-01-01T00:00:00Z')")
+                .bind(metadata.to_string_lossy().as_ref())
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('missing', 'Missing', ?, '2026-01-01T00:00:00Z')")
+                .bind(app_dir.join("missing").to_string_lossy().as_ref())
+                .execute(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+
+            let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let record = registry.fetch_by_id("legacy").await.unwrap().unwrap();
+
+            assert_eq!(record.root_identity_state, ProjectRootIdentityState::Valid);
+            assert!(!record.root_identity.as_str().is_empty());
+            let missing = registry.fetch_by_id("missing").await.unwrap().unwrap();
+            assert_eq!(
+                missing.root_identity_state,
+                ProjectRootIdentityState::Invalid
+            );
+            assert!(missing.deletion_identity().is_none());
+            registry.remove_project("missing").await.unwrap();
+            let result = ProjectState::new().delete_project_transaction(
+                Path::new(&record.path),
+                record.deletion_identity(),
+                None,
+                crate::node_system::document::OperationId::new(),
+            );
+            assert!(result.is_ok());
+            drop(registry);
+            let _ = fs::remove_dir_all(app_dir);
+        });
+    }
+
+    #[test]
+    fn invalid_legacy_row_stays_invalid_across_restart_and_same_path_replacement() {
+        tauri::async_runtime::block_on(async {
+            let app_dir = std::env::temp_dir().join(format!(
+                "yssbi-registry-invalid-stable-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let db_dir = app_dir.join("db");
+            let replacement_root = app_dir.join("replacement");
+            fs::create_dir_all(&db_dir).unwrap();
+            let db_path = db_dir.join("projects.sqlite");
+            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::from_str(&url)
+                        .unwrap()
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            sqlx::query(
+                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('invalid', 'Old Missing', ?, '2026-01-01T00:00:00Z')")
+                .bind(replacement_root.to_string_lossy().as_ref())
+                .execute(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+
+            let first = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let invalid = first.fetch_by_id("invalid").await.unwrap().unwrap();
+            assert_eq!(
+                invalid.root_identity_state,
+                ProjectRootIdentityState::Invalid
+            );
+            assert!(invalid.deletion_identity().is_none());
+            drop(first);
+
+            fs::create_dir_all(&replacement_root).unwrap();
+            let metadata = replacement_root.join(PROJECT_METADATA_FILE);
+            fs::write(&metadata, "{}").unwrap();
+            let second = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let still_invalid = second.fetch_by_id("invalid").await.unwrap().unwrap();
+
+            assert_eq!(
+                still_invalid.root_identity_state,
+                ProjectRootIdentityState::Invalid
+            );
+            assert!(still_invalid.root_identity.as_str().is_empty());
+            assert!(still_invalid.deletion_identity().is_none());
+            assert!(
+                second
+                    .register_project("Replacement", metadata.to_string_lossy().as_ref())
+                    .await
+                    .unwrap_err()
+                    .contains("identity")
+            );
+            second.remove_project("invalid").await.unwrap();
+            let registered = second
+                .register_project("Replacement", metadata.to_string_lossy().as_ref())
+                .await
+                .unwrap();
+            assert_eq!(
+                registered.root_identity_state,
+                ProjectRootIdentityState::Valid
+            );
+            drop(second);
+            let _ = fs::remove_dir_all(app_dir);
+        });
+    }
+
+    #[test]
+    fn cleanup_removes_terminal_and_replaced_valid_rows_before_reregistration() {
+        tauri::async_runtime::block_on(async {
+            let app_dir = std::env::temp_dir().join(format!(
+                "yssbi-registry-cleanup-identity-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let terminal_root = app_dir.join("terminal");
+            let valid_root = app_dir.join("valid");
+            fs::create_dir_all(app_dir.join("db")).unwrap();
+            fs::create_dir_all(&valid_root).unwrap();
+            let valid_metadata = valid_root.join(PROJECT_METADATA_FILE);
+            fs::write(&valid_metadata, "{}").unwrap();
+
+            let db_path = app_dir.join("db").join("projects.sqlite");
+            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::from_str(&url)
+                        .unwrap()
+                        .create_if_missing(true),
+                )
+                .await
+                .unwrap();
+            sqlx::query(
+                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('terminal', 'Terminal', ?, '2026-01-01T00:00:00Z')")
+                .bind(terminal_root.to_string_lossy().as_ref())
+                .execute(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+
+            let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let valid = registry
+                .register_project("Valid", valid_metadata.to_string_lossy().as_ref())
+                .await
+                .unwrap();
+
+            fs::create_dir_all(&terminal_root).unwrap();
+            let terminal_metadata = terminal_root.join(PROJECT_METADATA_FILE);
+            fs::write(&terminal_metadata, "{}").unwrap();
+            fs::rename(&valid_root, app_dir.join("valid-original")).unwrap();
+            fs::create_dir_all(&valid_root).unwrap();
+            fs::write(&valid_metadata, "{}").unwrap();
+
+            let cleanup = registry
+                .cleanup_invalid_projects(
+                    None,
+                    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(cleanup.removed, 2);
+            assert!(registry.fetch_by_id("terminal").await.unwrap().is_none());
+            assert!(registry.fetch_by_id(&valid.id).await.unwrap().is_none());
+            let terminal_registered = registry
+                .register_project(
+                    "Terminal Replacement",
+                    terminal_metadata.to_string_lossy().as_ref(),
+                )
+                .await
+                .unwrap();
+            let valid_registered = registry
+                .register_project(
+                    "Valid Replacement",
+                    valid_metadata.to_string_lossy().as_ref(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                terminal_registered.root_identity_state,
+                ProjectRootIdentityState::Valid
+            );
+            assert_eq!(
+                valid_registered.root_identity_state,
+                ProjectRootIdentityState::Valid
+            );
+
+            drop(registry);
+            let _ = fs::remove_dir_all(app_dir);
+        });
+    }
+
+    #[test]
+    fn registry_persists_native_root_identity_and_rejects_same_path_replacement() {
+        tauri::async_runtime::block_on(async {
+            let app_dir = std::env::temp_dir().join(format!(
+                "yssbi-registry-root-identity-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let project_root = app_dir.join("project");
+            fs::create_dir_all(&project_root).unwrap();
+            let metadata = project_root.join(PROJECT_METADATA_FILE);
+            fs::write(&metadata, "{}").unwrap();
+            let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let expected = ProjectRootBinding::for_existing(&metadata)
+                .unwrap()
+                .identity()
+                .unwrap()
+                .clone();
+
+            let registered = registry
+                .register_project("Original", &metadata.to_string_lossy())
+                .await
+                .unwrap();
+            assert_eq!(registered.root_identity, expected);
+            assert_eq!(
+                registry
+                    .fetch_by_id(&registered.id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .root_identity,
+                expected
+            );
+
+            fs::remove_dir_all(&project_root).unwrap();
+            fs::create_dir_all(&project_root).unwrap();
+            fs::write(&metadata, "{}").unwrap();
+            let replacement = ProjectRootBinding::for_existing(&metadata)
+                .unwrap()
+                .identity()
+                .unwrap()
+                .clone();
+            assert_ne!(replacement, expected);
+
+            let error = registry
+                .register_project("Replacement", &metadata.to_string_lossy())
+                .await
+                .unwrap_err();
+            assert!(error.contains("identity"));
+            assert_eq!(
+                registry
+                    .fetch_by_id(&registered.id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .root_identity,
+                expected
+            );
+            drop(registry);
+            let _ = fs::remove_dir_all(app_dir);
+        });
+    }
 
     #[test]
     fn registered_project_valid_when_metadata_exists() {

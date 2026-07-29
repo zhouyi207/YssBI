@@ -9,9 +9,12 @@ import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 export async function revealProjectResourceInExplorer(
   request: RevealProjectResourceRequest,
 ): Promise<void> {
+  const context = captureProjectCommandContext();
   try {
-    await ProjectService.revealProjectResource(request);
+    await ProjectService.revealProjectResource(context.projectInstanceId, request);
+    if (!context.isCurrent()) return;
   } catch (error) {
+    if (!context.isCurrent()) return;
     uiStore.showToast(
       i18n.t('contextMenu.sidebar.revealInExplorerFailed', {
         error: formatErrorMessage(error, 'Unknown error'),
@@ -24,8 +27,10 @@ export async function revealProjectResourceInExplorer(
 export async function renameWorksheetResource(id: string, nextName: string): Promise<void> {
   const store = useWorksheetStore.getState();
   if (!store.documents[id]) {
-    const { projectInstanceId } = captureProjectCommandContext();
-    store.upsertDocument(await WorksheetService.loadWorksheet(projectInstanceId, id));
+    const context = captureProjectCommandContext();
+    const document = await WorksheetService.loadWorksheet(context.projectInstanceId, id);
+    if (!context.isCurrent()) return;
+    store.upsertDocument(document);
   }
   store.updateDocument(id, { name: nextName });
   await store.saveDocument(id);

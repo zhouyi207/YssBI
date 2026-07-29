@@ -85,6 +85,8 @@ export interface PreparedVariableDeltaInstall {
   readonly id: string;
   readonly before: Variable | null;
   readonly after: Variable | null;
+  readonly fromRevision: number;
+  readonly toRevision: number;
 }
 
 export interface PreparedWorksheetDeltaInstall {
@@ -107,6 +109,7 @@ export interface PreparedPublicationStoreState {
   readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
   readonly graphMeta: Readonly<Record<string, GraphMeta>>;
   readonly variables: Readonly<Record<string, Variable>>;
+  readonly variableRevisions: Readonly<Record<string, number>>;
   readonly worksheetIndex: WorksheetIndexEntry[];
   readonly worksheetDocuments: Readonly<Record<string, WorksheetDocument>>;
   readonly tabs: EditorTabMemento;
@@ -156,7 +159,7 @@ export interface PreparedProjectRecovery extends ProjectRecoveryPreparation {
 }
 
 export interface ProjectPublicationDependencies {
-  loadRecoverySnapshot(): Promise<ProjectIndexRow>;
+  loadRecoverySnapshot(projectInstanceId: string): Promise<ProjectIndexRow>;
   prepareGraphProjection(
     graphPath: string,
     projectInstanceId: string,
@@ -236,11 +239,15 @@ export class ProjectPublicationCoordinator {
 
   constructor(private readonly dependencies: ProjectPublicationDependencies) {}
 
-  startProject(projectInstanceId: string, appliedRevision: number): void {
-    this.cancelProject();
+  validateProjectStart(projectInstanceId: string, appliedRevision: number): void {
     if (!projectInstanceId || !Number.isSafeInteger(appliedRevision) || appliedRevision < 0) {
       throw protocolError('project publication baseline is malformed');
     }
+  }
+
+  startProject(projectInstanceId: string, appliedRevision: number): void {
+    this.validateProjectStart(projectInstanceId, appliedRevision);
+    this.cancelProject();
     this.state.projectInstanceId = projectInstanceId;
     this.state.appliedRevision = appliedRevision;
   }
@@ -310,12 +317,11 @@ export class ProjectPublicationCoordinator {
     return promise;
   }
 
-  captureCommandLifecycle(): {
-    projectInstanceId: string;
+  captureApplicationLifecycle(): {
+    projectInstanceId: string | null;
     epoch: number;
     publicationRevision: number;
   } {
-    if (!this.state.projectInstanceId) throw staleLifecycleError();
     return {
       projectInstanceId: this.state.projectInstanceId,
       epoch: this.state.epoch,
@@ -323,12 +329,34 @@ export class ProjectPublicationCoordinator {
     };
   }
 
+  ownsApplicationLifecycle(projectInstanceId: string | null, epoch: number): boolean {
+    return this.state.projectInstanceId === projectInstanceId && this.state.epoch === epoch;
+  }
+
+  captureCommandLifecycle(): {
+    projectInstanceId: string;
+    epoch: number;
+    publicationRevision: number;
+  } {
+    const lifecycle = this.captureApplicationLifecycle();
+    if (!lifecycle.projectInstanceId) throw staleLifecycleError();
+    return {
+      projectInstanceId: lifecycle.projectInstanceId,
+      epoch: lifecycle.epoch,
+      publicationRevision: lifecycle.publicationRevision,
+    };
+  }
+
   ownsCommandLifecycle(projectInstanceId: string, epoch: number): boolean {
-    return this.ownsLifecycle(projectInstanceId, epoch);
+    return this.ownsApplicationLifecycle(projectInstanceId, epoch);
   }
 
   assertCommandLifecycle(projectInstanceId: string, epoch: number): void {
     this.assertLifecycle(projectInstanceId, epoch);
+  }
+
+  markProjectProjectionStale(): void {
+    this.dependencies.markProjectProjectionStale();
   }
 
   getSnapshotForTests(): {
@@ -509,7 +537,7 @@ export class ProjectPublicationCoordinator {
     let snapshotRevision: number | null = null;
     let rejectCoveredAtStart = false;
     try {
-      const index = await this.dependencies.loadRecoverySnapshot();
+      const index = await this.dependencies.loadRecoverySnapshot(projectInstanceId);
       this.assertLifecycle(projectInstanceId, epoch);
       const indexError = validateProjectRecoveryIndex(index, projectInstanceId);
       if (indexError) throw new Error(indexError);
@@ -603,7 +631,7 @@ export class ProjectPublicationCoordinator {
 }
 
 const productionDependencies: ProjectPublicationDependencies = {
-  loadRecoverySnapshot: () => ProjectService.getProjectIndex(),
+  loadRecoverySnapshot: (projectInstanceId) => ProjectService.getProjectIndex(projectInstanceId),
   prepareGraphProjection: prepareGraphProjectionForPublication,
   captureLoadedGraphPaths: () => new Set(Object.keys(useGraphDataStore.getState().graphEntities)),
   preparePublication: prepareSynchronousPublicationCommit,

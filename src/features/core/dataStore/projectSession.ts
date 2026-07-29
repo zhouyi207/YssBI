@@ -1,6 +1,10 @@
 import { ProjectService } from '@/services/project/projectService';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 import { useProjectIOStore } from './projectIOStore';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/services/project/projectIdentity';
 
 let reconcilePathInFlight: Promise<string | null> | null = null;
 
@@ -14,9 +18,11 @@ export async function reconcileProjectPath(): Promise<string | null> {
 
   if (reconcilePathInFlight) return reconcilePathInFlight;
 
+  const identity = captureProjectIdentity();
   reconcilePathInFlight = (async () => {
     try {
-      const path = await ProjectService.getProjectPath();
+      const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+      if (!isCurrentProjectIdentity(identity)) return null;
       if (path) {
         useProjectIOStore.getState().setCurrentPath(path);
         return formatDisplayPath(path);

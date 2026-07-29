@@ -12,7 +12,8 @@ mod transaction;
 pub use error::DocumentError;
 pub use history::{
     FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionResourceKey,
-    FunctionSignature, GraphResourceMoveHistoryPatch, HistoryError, HistoryMutation,
+    FunctionSignature, GraphResourceLifecycleKind, GraphResourceLifecyclePatch,
+    GraphResourceLifecycleState, GraphResourceMoveHistoryPatch, HistoryError, HistoryMutation,
     HistoryPersistencePolicy, HistoryStatusDto, ProjectDocumentState, ProjectHistory,
     ProjectHistoryTransaction, ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey,
     ResourceKind, ResourcePatch, ResourcePathMovePatch, VariableDocument, VariableDocumentPatch,

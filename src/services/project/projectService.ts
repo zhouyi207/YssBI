@@ -5,7 +5,7 @@ import type { ExecutionEvent } from "@/shared/types/ui/execution";
 import type { Graph } from "@/shared/types/domain";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
 import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
-import type { CleanupInvalidProjectsResult, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
+import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   graphDataToDomainGraph,
   graphInstanceDtoToGraphData,
@@ -39,6 +39,7 @@ export interface ProjectGraphIndexRow {
     path: string;
     name: string;
     type: "event" | "function";
+    revision?: number;
     functionRevision?: number;
     functionSignature?: import('@/shared/types/dto/editorMutation').FunctionSignatureDto;
 }
@@ -102,12 +103,13 @@ export class ProjectService {
     /**
      * 分阶段加载第一步：获取 databases + variables（含 schema）
      */
-    static async getDatabasesVariables(): Promise<{
+    static async getDatabasesVariables(projectInstanceId: string): Promise<{
         databases: Record<string, unknown>;
         variables: Record<string, unknown>;
     }> {
         const data = await invoke<{ databases: Record<string, unknown>; variables: Record<string, unknown> }>(
-            "get_project_databases_variables"
+            "get_project_databases_variables",
+            { projectInstanceId },
         );
         return { databases: data.databases || {}, variables: data.variables || {} };
     }
@@ -115,12 +117,12 @@ export class ProjectService {
     /**
      * 获取当前项目路径
      */
-    static async getProjectPath(): Promise<string | null> {
-        return await invoke("get_project_path");
+    static async getProjectPath(projectInstanceId: string): Promise<string | null> {
+        return await invoke("get_project_path", { projectInstanceId });
     }
 
-    static async getProjectIndex(): Promise<ProjectIndexRow> {
-        return await invoke("get_project_index");
+    static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
+        return await invoke("get_project_index", { projectInstanceId });
     }
 
     /**
@@ -138,8 +140,12 @@ export class ProjectService {
         return await invoke("validate_new_project_path", { path });
     }
 
-    static async createProject(name: string, path: string): Promise<ProjectRecordRow> {
-        return await invoke("create_project", { name, path });
+    static async createProject(
+        name: string,
+        path: string,
+        operationId: string,
+    ): Promise<LifecycleMutationResultDto> {
+        return await invoke("create_project", { name, path, operationId });
     }
 
     static async listRegisteredProjects(): Promise<ProjectRecordRow[]> {
@@ -202,8 +208,16 @@ export class ProjectService {
         await invoke("remove_registered_project", { id });
     }
 
-    static async deleteRegisteredProjectFiles(id: string): Promise<void> {
-        await invoke("delete_registered_project_files", { id });
+    static async deleteRegisteredProjectFiles(
+        id: string,
+        expectedActiveProjectInstanceId: string | null,
+        operationId: string,
+    ): Promise<LifecycleMutationResultDto> {
+        return await invoke("delete_registered_project_files", {
+            id,
+            expectedActiveProjectInstanceId,
+            operationId,
+        });
     }
 
     static async toggleRegisteredProjectFavorite(id: string): Promise<boolean> {
@@ -226,9 +240,11 @@ export class ProjectService {
      * 从文件加载项目到状态管理器
      * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
-    static async loadProjectToState(path: string): Promise<{ path: string }> {
-        await invoke("load_project", { path });
-        return { path };
+    static async loadProjectToState(path: string): Promise<{
+        path: string;
+        projectInstanceId: string;
+    }> {
+        return await invoke("load_project", { path });
     }
 
     /**
@@ -257,9 +273,12 @@ export class ProjectService {
     /**
      * 另存为：选择空目录，复制当前项目并切换工作路径。
      */
-    static async saveProjectAs(): Promise<ProjectRecordRow | null> {
+    static async saveProjectAs(
+        projectInstanceId: string,
+        operationId: string,
+    ): Promise<LifecycleMutationResultDto | null> {
         try {
-            const currentPath = await this.getProjectPath();
+            const currentPath = await this.getProjectPath(projectInstanceId);
             if (!currentPath) {
                 throw new Error("项目尚未加载");
             }
@@ -277,7 +296,11 @@ export class ProjectService {
                 throw new Error(validation.message ?? "项目路径无效");
             }
 
-            return await invoke<ProjectRecordRow>("save_project_as", { path: selected });
+            return await invoke<LifecycleMutationResultDto>("save_project_as", {
+                path: selected,
+                projectInstanceId,
+                operationId,
+            });
         } catch (e) {
             logger.app.error(`Failed to save project as: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
             throw e;
@@ -312,8 +335,12 @@ export class ProjectService {
         await invoke("clear_graph_execution_artifacts", { graphPath });
     }
 
-    static async revealProjectResource(request: RevealProjectResourceRequest): Promise<void> {
+    static async revealProjectResource(
+        projectInstanceId: string,
+        request: RevealProjectResourceRequest,
+    ): Promise<void> {
         const path = await invoke<string>("get_project_resource_path", {
+            projectInstanceId,
             kind: request.kind,
             resourceId: request.resourceId,
         });

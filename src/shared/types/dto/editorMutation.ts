@@ -157,8 +157,20 @@ export interface ResourcePathMovePatchDto {
   to: string;
 }
 
+export interface GraphResourceLifecycleStateDto {
+  revision: number;
+  path: string;
+  kind: 'event' | 'function';
+}
+
+export interface GraphResourceLifecyclePatchDto {
+  before: GraphResourceLifecycleStateDto | null;
+  after: GraphResourceLifecycleStateDto | null;
+}
+
 export type ResourceDocumentPatchDto =
   | { kind: 'graph'; patch: GraphDocumentPatchDto }
+  | { kind: 'graph_resource_lifecycle'; patch: GraphResourceLifecyclePatchDto }
   | { kind: 'graph_resource_move'; patch: ResourcePathMovePatchDto }
   | { kind: 'function'; patch: FunctionDocumentPatchDto }
   | { kind: 'variable'; patch: VariableDocumentPatchDto }
@@ -198,6 +210,7 @@ export interface ResourceMoveDto {
 }
 
 export interface ResourceMutationResultDto {
+  operationId: string;
   projectInstanceId: string;
   publicationRevision: number;
   moves: ResourceMoveDto[];

@@ -1,4 +1,5 @@
 use crate::project::{PROJECT_METADATA_FILE, ProjectFilesystemError, project_root_from_path};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
@@ -11,6 +12,81 @@ use super::windows_path_identity::WindowsPathIdentity;
 type NativePathIdentity = WindowsPathIdentity;
 #[cfg(not(windows))]
 type NativePathIdentity = PathBuf;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ProjectRootIdentity(String);
+
+impl ProjectRootIdentity {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn from_stored(value: String) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ProjectRootBinding {
+    caller_root: PathBuf,
+    normalized: NormalizedProjectRoot,
+    identity: Option<ProjectRootIdentity>,
+}
+
+impl ProjectRootBinding {
+    pub fn for_destination(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+        let caller_root = validate_caller_root_components(path.as_ref(), false)?;
+        let normalized = NormalizedProjectRoot::from_project_path(&caller_root)?;
+        let identity = root_object_identity_if_existing(&caller_root)?;
+        Ok(Self {
+            caller_root,
+            normalized,
+            identity,
+        })
+    }
+
+    pub fn for_existing(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+        let caller_root = validate_caller_root_components(path.as_ref(), true)?;
+        let normalized = NormalizedProjectRoot::from_project_path(&caller_root)?;
+        let identity = Some(root_object_identity(&caller_root)?);
+        Ok(Self {
+            caller_root,
+            normalized,
+            identity,
+        })
+    }
+
+    pub fn normalized(&self) -> &NormalizedProjectRoot {
+        &self.normalized
+    }
+
+    pub fn identity(&self) -> Option<&ProjectRootIdentity> {
+        self.identity.as_ref()
+    }
+
+    pub fn bind_existing(&self) -> Result<Self, ProjectFilesystemError> {
+        let rebound = Self::for_existing(&self.caller_root)?;
+        if rebound.normalized != self.normalized {
+            return Err(invalid_root(
+                &self.caller_root,
+                "project root changed while waiting",
+            ));
+        }
+        Ok(rebound)
+    }
+
+    pub fn revalidate(&self) -> Result<(), ProjectFilesystemError> {
+        let rebound = Self::for_existing(&self.caller_root)?;
+        if rebound.normalized != self.normalized || rebound.identity != self.identity {
+            return Err(invalid_root(
+                &self.caller_root,
+                "project root native identity changed",
+            ));
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct NormalizedProjectRoot {
@@ -83,6 +159,150 @@ impl PartialOrd for NormalizedProjectRoot {
 impl Ord for NormalizedProjectRoot {
     fn cmp(&self, other: &Self) -> Ordering {
         self.identity.cmp(&other.identity)
+    }
+}
+
+fn validate_caller_root_components(
+    path: &Path,
+    require_existing: bool,
+) -> Result<PathBuf, ProjectFilesystemError> {
+    let original = path.to_path_buf();
+    let trimmed = trim_path(path);
+    if trimmed.as_os_str().is_empty() {
+        return Err(invalid_root(original, "path is empty"));
+    }
+    let root = native_project_root_from_path(&trimmed);
+    let absolute = if root.is_absolute() {
+        root
+    } else {
+        std::env::current_dir()
+            .map_err(|error| invalid_root(&original, error.to_string()))?
+            .join(root)
+    };
+    let lexical = lexical_absolute_path(&absolute);
+    let mut current = PathBuf::new();
+    let mut missing = false;
+    for component in lexical.components() {
+        current.push(component.as_os_str());
+        if missing || matches!(component, Component::Prefix(_) | Component::RootDir) {
+            continue;
+        }
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                if super::transaction::metadata_is_redirect(&metadata) {
+                    return Err(invalid_root(
+                        &original,
+                        format!(
+                            "project root component '{}' is a redirect",
+                            current.display()
+                        ),
+                    ));
+                }
+                if current != lexical && !metadata.is_dir() {
+                    return Err(invalid_root(
+                        &original,
+                        format!(
+                            "project root ancestor '{}' is not a directory",
+                            current.display()
+                        ),
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => missing = true,
+            Err(error) => return Err(invalid_root(&original, error.to_string())),
+        }
+    }
+    if require_existing && missing {
+        return Err(invalid_root(&original, "project root does not exist"));
+    }
+    Ok(lexical)
+}
+
+fn lexical_absolute_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                normalized.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+        }
+    }
+    normalized
+}
+
+fn root_object_identity_if_existing(
+    root: &Path,
+) -> Result<Option<ProjectRootIdentity>, ProjectFilesystemError> {
+    match std::fs::symlink_metadata(root) {
+        Ok(_) => root_object_identity(root).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(invalid_root(root, error.to_string())),
+    }
+}
+
+fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFilesystemError> {
+    let metadata =
+        std::fs::symlink_metadata(root).map_err(|error| invalid_root(root, error.to_string()))?;
+    if super::transaction::metadata_is_redirect(&metadata) || !metadata.is_dir() {
+        return Err(invalid_root(root, "project root is not a real directory"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            GetFileInformationByHandle,
+        };
+        let directory = std::fs::OpenOptions::new()
+            .access_mode(0)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(root)
+            .map_err(|error| invalid_root(root, error.to_string()))?;
+        let mut information = BY_HANDLE_FILE_INFORMATION::default();
+        let success =
+            unsafe { GetFileInformationByHandle(directory.as_raw_handle(), &mut information) };
+        if success == 0 {
+            return Err(invalid_root(
+                root,
+                std::io::Error::last_os_error().to_string(),
+            ));
+        }
+        if information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(invalid_root(root, "project root is a reparse point"));
+        }
+        let file = ((information.nFileIndexHigh as u64) << 32) | information.nFileIndexLow as u64;
+        return Ok(ProjectRootIdentity(format!(
+            "windows:{:08x}:{file:016x}",
+            information.dwVolumeSerialNumber
+        )));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        return Ok(ProjectRootIdentity(format!(
+            "unix:{:016x}:{:016x}",
+            metadata.dev(),
+            metadata.ino()
+        )));
+    }
+    #[allow(unreachable_code)]
+    Err(invalid_root(
+        root,
+        "native project root identity is unsupported",
+    ))
+}
+
+fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectFilesystemError {
+    ProjectFilesystemError::InvalidRoot {
+        path: path.as_ref().to_path_buf(),
+        message: message.into(),
     }
 }
 

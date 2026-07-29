@@ -10,6 +10,10 @@ pub enum ResourceDocumentPatch {
     },
     RemoveGraph {
         path: GraphResourcePath,
+        revision: crate::node_system::document::ResourceRevision,
+    },
+    UnloadGraph {
+        path: GraphResourcePath,
     },
     MoveGraph {
         from: GraphResourcePath,

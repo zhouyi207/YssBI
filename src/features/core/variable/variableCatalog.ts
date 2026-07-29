@@ -6,7 +6,6 @@ import type { ProjectResourceMeta } from '@/features/core/resource';
 export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {
   return normalizeVariableFromBackend({
     id: row.id,
-    revision: row.revision,
     name: row.name,
     dataType: row.dataType,
     dataValue: row.dataValue,
@@ -14,6 +13,12 @@ export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {
     scope: row.scope,
     tags: row.tags ?? [],
   });
+}
+
+export function variableRevisionsFromIndex(
+  rows: ProjectVariableIndexRow[] | undefined,
+): Record<string, number> {
+  return Object.fromEntries((rows ?? []).map((row) => [row.id, row.revision]));
 }
 
 export function applyVariableCatalogFromIndex(

@@ -8,6 +8,20 @@ import type {
   GraphDeltaEventPayload,
   ResourceMutationCommittedPayload,
 } from '../types';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/services/project/projectIdentity';
+
+function isCurrentProjectEvent(projectInstanceId: string): boolean {
+  try {
+    const identity = captureProjectIdentity();
+    return identity.projectInstanceId === projectInstanceId
+      && isCurrentProjectIdentity(identity);
+  } catch {
+    return false;
+  }
+}
 
 export class GraphDeltaHandler extends BaseEventHandler<GraphDeltaEventPayload> {
   eventType = 'GraphDelta';
@@ -15,6 +29,7 @@ export class GraphDeltaHandler extends BaseEventHandler<GraphDeltaEventPayload> 
   handle(payload: GraphDeltaEventPayload): void {
     const delta: GraphDeltaDto | undefined = payload?.delta;
     if (!delta || typeof delta.graphPath !== 'string') return;
+    if (!isCurrentProjectEvent(payload.projectInstanceId)) return;
 
     const pending = delta.causedBy ? getPendingMutation(delta.causedBy) : undefined;
     if (pending?.graphPath === delta.graphPath) return;
@@ -32,6 +47,8 @@ export class ResourceMutationCommittedHandler extends BaseEventHandler<ResourceM
   handle(payload: ResourceMutationCommittedPayload): void {
     const result: unknown = payload?.result;
     if (!result || typeof result !== 'object') return;
+    const projectInstanceId = (result as { projectInstanceId?: unknown }).projectInstanceId;
+    if (typeof projectInstanceId !== 'string' || !isCurrentProjectEvent(projectInstanceId)) return;
     void projectPublicationCoordinator.submit({
       result: result as ResourceMutationResultDto,
     }).catch((error) => {

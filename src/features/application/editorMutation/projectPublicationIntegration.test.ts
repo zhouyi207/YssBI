@@ -9,6 +9,7 @@ const productionFiles = [
   'src/features/application/resource/resourceActions.ts',
   'src/features/application/editor/closeEditorTab.ts',
   'src/features/application/editor/useWorksheetManagement.ts',
+  'src/features/application/dataManagement/variableActions.ts',
   'src/features/core/dataStore/projectIOStore.ts',
 ];
 
@@ -24,10 +25,10 @@ describe('project publication integration boundary', () => {
     expect(joined).not.toMatch(/migrateGraphResourcePath/);
     expect(joined).not.toMatch(/setResourceMutationProjectInstanceId/);
     expect(joined).not.toMatch(/resetResourceMutationPublicationState/);
-    for (const [path, source] of sources.slice(0, 6)) {
+    for (const [path, source] of sources.slice(0, 7)) {
       expect(source, path).toContain('projectPublicationCoordinator.submit');
     }
-    expect(sources[6][1]).toContain('projectPublicationCoordinator.startProject');
-    expect(sources[6][1]).not.toMatch(/latestPublicationRevision|publicationDrain|authoritativeGapRecovery/);
+    expect(sources[7][1]).toContain('projectPublicationCoordinator.startProject');
+    expect(sources[7][1]).not.toMatch(/latestPublicationRevision|publicationDrain|authoritativeGapRecovery/);
   });
 });

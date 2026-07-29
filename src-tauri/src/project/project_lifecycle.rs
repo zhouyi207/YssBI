@@ -1,0 +1,1411 @@
+use crate::node_system::document::OperationId;
+use crate::project::{
+    DATABASE_DIR, EVENTS_DIR, FUNCTIONS_DIR, GLOBAL_VARIABLES_FILE, NormalizedProjectRoot,
+    PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
+    ProjectFilesystemTransaction, ProjectInstanceId, ProjectRootBinding, ProjectRootIdentity,
+    ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
+    StagedFilesystemMutation, WORKSHEETS_DIR, metadata_is_redirect, read_secure_project_file,
+};
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+
+pub struct PreparedProjectCopy {
+    pub metadata_path: PathBuf,
+    pub prepared_activation: PreparedProjectActivation,
+}
+
+impl std::fmt::Debug for PreparedProjectCopy {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreparedProjectCopy")
+            .field("metadata_path", &self.metadata_path)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug)]
+pub struct CreatedProject {
+    pub metadata_path: PathBuf,
+    pub project_name: String,
+}
+
+#[derive(Debug)]
+pub struct ProjectDeletionResult {
+    pub deleted_root: NormalizedProjectRoot,
+    pub tombstone_path: PathBuf,
+    pub tombstone_identity: ProjectRootIdentity,
+    pub cleared_project_instance_id: Option<ProjectInstanceId>,
+    pub cleanup_pending: bool,
+}
+
+pub struct PreparedProjectDeletion {
+    deleted_root: NormalizedProjectRoot,
+    tombstone_path: PathBuf,
+    tombstone_identity: ProjectRootIdentity,
+    post_tombstone_failed: bool,
+    active_project_instance_id: Option<ProjectInstanceId>,
+    activation: Option<crate::project::ProjectActivationToken>,
+    lifecycle: Option<ProjectRootLifecycleGuard>,
+    run_drain: Option<crate::node_system::runtime::ProjectRunDrainGuard>,
+}
+
+impl PreparedProjectDeletion {
+    pub fn recovery_path(&self) -> &Path {
+        &self.tombstone_path
+    }
+
+    pub fn recovery_identity(&self) -> &ProjectRootIdentity {
+        &self.tombstone_identity
+    }
+
+    pub fn post_tombstone_failed(&self) -> bool {
+        self.post_tombstone_failed
+    }
+}
+
+impl Drop for PreparedProjectDeletion {
+    fn drop(&mut self) {
+        self.run_drain.take();
+        self.lifecycle.take();
+        self.activation.take();
+    }
+}
+
+struct DestinationRootGuard {
+    root: PathBuf,
+    remove_on_drop: bool,
+}
+
+impl DestinationRootGuard {
+    fn ensure(root: &Path) -> Result<Self, ProjectFilesystemError> {
+        let remove_on_drop = !root.exists();
+        if remove_on_drop {
+            std::fs::create_dir_all(root).map_err(prepare_error)?;
+        }
+        Ok(Self {
+            root: root.to_path_buf(),
+            remove_on_drop,
+        })
+    }
+
+    fn disarm(&mut self) {
+        self.remove_on_drop = false;
+    }
+}
+
+impl Drop for DestinationRootGuard {
+    fn drop(&mut self) {
+        if self.remove_on_drop {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+}
+
+impl ProjectState {
+    pub fn save_project_as_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        destination: &Path,
+        operation_id: OperationId,
+    ) -> Result<PreparedProjectCopy, ProjectFilesystemError> {
+        let session = self.capture_project_session()?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err(stale("save-as project instance is stale"));
+        }
+        let basis_before = self
+            .capture_prepared_authority_basis(&session.root)?
+            .ok_or_else(|| stale("save-as source authority is no longer active"))?;
+        let (_, _, _, authority) = self.coherent_project_read_snapshot(&session)?;
+        let authority_basis = self
+            .capture_prepared_authority_basis(&session.root)?
+            .filter(|basis| basis == &basis_before)
+            .ok_or_else(|| stale("save-as authority changed during snapshot capture"))?;
+        let destination_binding = ProjectRootBinding::for_destination(destination)?;
+        let destination_root = destination_binding.normalized().clone();
+        if session.root == destination_root {
+            return Err(invalid_root(
+                destination,
+                "save-as destination equals the source project",
+            ));
+        }
+        validate_destination_policy(destination_root.as_path())?;
+
+        let lease = self
+            .filesystem()
+            .acquire_many([session.root.clone(), destination_root.clone()])?;
+        self.validate_project_session(&session)?;
+        if self.capture_prepared_authority_basis(&session.root)? != Some(authority_basis.clone()) {
+            return Err(stale(
+                "save-as authority changed while waiting for root leases",
+            ));
+        }
+        validate_destination_policy(destination_root.as_path())?;
+        let mut root_guard = DestinationRootGuard::ensure(destination_root.as_path())?;
+        let destination_binding = destination_binding.bind_existing()?;
+        let mutations = copy_mutations(session.root.as_path(), &authority)?;
+        let context = lifecycle_context(
+            ProjectSession {
+                instance_id: session.instance_id.clone(),
+                root: destination_root.clone(),
+            },
+            operation_id,
+            self,
+        );
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context,
+            lease,
+            mutations,
+            validate_project_copy_file,
+        )?;
+        self.validate_project_session(&session)?;
+        destination_binding.revalidate()?;
+        let committed = prepared.commit()?;
+        destination_binding.revalidate()?;
+        self.validate_project_session(&session)?;
+        if self.capture_prepared_authority_basis(&session.root)? != Some(authority_basis.clone()) {
+            return Err(stale(
+                "save-as authority changed before destination publication",
+            ));
+        }
+        let activation_data = self.read_activation_data(&destination_root)?;
+        let prepared_activation = PreparedProjectActivation::from_data(
+            Some(destination_root.clone()),
+            activation_data,
+            Some(authority_basis),
+            false,
+        );
+        committed.finalize();
+        root_guard.disarm();
+        Ok(PreparedProjectCopy {
+            metadata_path: destination_root.as_path().join(PROJECT_METADATA_FILE),
+            prepared_activation,
+        })
+    }
+
+    pub fn create_project_transaction(
+        &self,
+        name: &str,
+        destination: &Path,
+        operation_id: OperationId,
+    ) -> Result<CreatedProject, ProjectFilesystemError> {
+        let project_name = crate::project::normalize_project_name(name);
+        let destination_binding = ProjectRootBinding::for_destination(destination)?;
+        let destination_root = destination_binding.normalized().clone();
+        validate_destination_policy(destination_root.as_path())?;
+        let lease = self.filesystem().acquire(destination_root.clone())?;
+        validate_destination_policy(destination_root.as_path())?;
+        let mut root_guard = DestinationRootGuard::ensure(destination_root.as_path())?;
+        let destination_binding = destination_binding.bind_existing()?;
+        let mut data = ProjectData::new();
+        data.metadata.project_name = project_name.clone();
+        data.update_metadata();
+        let context = lifecycle_context(
+            ProjectSession {
+                instance_id: ProjectInstanceId::new(),
+                root: destination_root.clone(),
+            },
+            operation_id,
+            self,
+        );
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context,
+            lease,
+            new_project_mutations(&data)?,
+            validate_project_copy_file,
+        )?;
+        destination_binding.revalidate()?;
+        let committed = prepared.commit()?;
+        destination_binding.revalidate()?;
+        committed.finalize();
+        root_guard.disarm();
+        Ok(CreatedProject {
+            metadata_path: destination_root.as_path().join(PROJECT_METADATA_FILE),
+            project_name,
+        })
+    }
+
+    pub fn prepare_project_deletion(
+        &self,
+        root: &Path,
+        expected_root_identity: Option<&ProjectRootIdentity>,
+        expected_active_instance_id: Option<&ProjectInstanceId>,
+        operation_id: OperationId,
+    ) -> Result<PreparedProjectDeletion, ProjectFilesystemError> {
+        let root_binding = ProjectRootBinding::for_existing(root)?;
+        if expected_root_identity.is_some_and(|expected| root_binding.identity() != Some(expected))
+        {
+            return Err(stale("registered project root identity changed"));
+        }
+        let normalized = root_binding.normalized().clone();
+        let activation = self.project_activation.acquire();
+        let mut lifecycle = self.filesystem().begin_root_lifecycle(normalized.clone())?;
+        root_binding.revalidate()?;
+        validate_deletion_root(&normalized)?;
+        let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
+        let run_snapshot = active.as_ref().map(|_| self.current_run_registry());
+        lifecycle.release_initial_and_drain();
+        let run_drain = run_snapshot
+            .as_ref()
+            .map(|(runs, session_id)| runs.begin_drain(session_id));
+        lifecycle.acquire_final()?;
+        root_binding.revalidate()?;
+        validate_deletion_root(&normalized)?;
+        let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
+        let tombstone_path = deletion_tombstone_path(normalized.as_path(), operation_id)?;
+        let original_identity = root_binding.identity().cloned().ok_or_else(|| {
+            invalid_root(
+                normalized.as_path(),
+                "existing root binding has no native identity",
+            )
+        })?;
+        let cleared_project_instance_id =
+            active.as_ref().map(|session| session.instance_id.clone());
+        let cleared_activation = cleared_project_instance_id
+            .as_ref()
+            .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false));
+        root_binding.revalidate()?;
+        std::fs::rename(normalized.as_path(), &tombstone_path).map_err(|error| {
+            ProjectFilesystemError::TransactionCommitFailed {
+                message: format!("failed to atomically tombstone project root: {error}"),
+            }
+        })?;
+        let post_tombstone_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if let Some(cleared) = cleared_activation {
+                let published = self
+                    .publish_project_activation_without_test_hooks(cleared)
+                    .map_err(|_| ())?;
+                published.dispose();
+            }
+            #[cfg(test)]
+            run_after_tombstone_rename_hook();
+            Ok::<(), ()>(())
+        }))
+        .map_or(true, |result| result.is_err());
+        Ok(PreparedProjectDeletion {
+            deleted_root: normalized,
+            tombstone_path,
+            tombstone_identity: original_identity,
+            post_tombstone_failed,
+            active_project_instance_id: cleared_project_instance_id,
+            activation: Some(activation),
+            lifecycle: Some(lifecycle),
+            run_drain,
+        })
+    }
+
+    pub fn commit_project_deletion(
+        &self,
+        prepared: PreparedProjectDeletion,
+    ) -> ProjectDeletionResult {
+        let cleared_project_instance_id = prepared.active_project_instance_id.clone();
+        ProjectDeletionResult {
+            deleted_root: prepared.deleted_root.clone(),
+            tombstone_path: prepared.tombstone_path.clone(),
+            tombstone_identity: prepared.tombstone_identity.clone(),
+            cleared_project_instance_id,
+            cleanup_pending: true,
+        }
+    }
+
+    pub fn delete_project_transaction(
+        &self,
+        root: &Path,
+        expected_root_identity: Option<&ProjectRootIdentity>,
+        expected_active_instance_id: Option<&ProjectInstanceId>,
+        operation_id: OperationId,
+    ) -> Result<ProjectDeletionResult, ProjectFilesystemError> {
+        let prepared = self.prepare_project_deletion(
+            root,
+            expected_root_identity,
+            expected_active_instance_id,
+            operation_id,
+        )?;
+        Ok(self.commit_project_deletion(prepared))
+    }
+}
+
+fn deletion_tombstone_path(
+    root: &Path,
+    operation_id: OperationId,
+) -> Result<PathBuf, ProjectFilesystemError> {
+    let parent = root
+        .parent()
+        .ok_or_else(|| invalid_root(root, "project root has no parent"))?;
+    let name = root
+        .file_name()
+        .ok_or_else(|| invalid_root(root, "project root has no final component"))?
+        .to_string_lossy();
+    let tombstone = parent.join(format!(".{name}.yssbi-deleting-{operation_id}"));
+    if tombstone.exists() {
+        return Err(invalid_root(
+            &tombstone,
+            "project deletion tombstone already exists",
+        ));
+    }
+    Ok(tombstone)
+}
+
+#[cfg(test)]
+static AFTER_TOMBSTONE_RENAME_HOOK: std::sync::Mutex<
+    Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+> = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) fn set_after_tombstone_rename_hook(
+    hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+) {
+    *AFTER_TOMBSTONE_RENAME_HOOK.lock().unwrap() = hook;
+}
+
+#[cfg(test)]
+fn run_after_tombstone_rename_hook() {
+    let hook = AFTER_TOMBSTONE_RENAME_HOOK.lock().unwrap().clone();
+    if let Some(hook) = hook {
+        hook();
+    }
+}
+
+fn lifecycle_context(
+    session: ProjectSession,
+    operation_id: OperationId,
+    state: &ProjectState,
+) -> ProjectTransactionContext {
+    ProjectTransactionContext {
+        session,
+        operation_id,
+        affected_resources: Vec::new(),
+        expected_revisions: BTreeMap::new(),
+        expected_absent_resources: BTreeSet::new(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    }
+}
+
+fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
+    if !root.exists() {
+        let parent = root
+            .parent()
+            .ok_or_else(|| invalid_root(root, "destination has no parent"))?;
+        let metadata = std::fs::symlink_metadata(parent).map_err(prepare_error)?;
+        if metadata_is_redirect(&metadata) || !metadata.is_dir() {
+            return Err(invalid_root(
+                root,
+                "destination parent is not a real directory",
+            ));
+        }
+        return Ok(());
+    }
+    let metadata = std::fs::symlink_metadata(root).map_err(prepare_error)?;
+    if metadata_is_redirect(&metadata) || !metadata.is_dir() {
+        return Err(invalid_root(root, "destination is not a real directory"));
+    }
+    let mut entries = std::fs::read_dir(root).map_err(prepare_error)?;
+    if entries.next().transpose().map_err(prepare_error)?.is_some() {
+        return Err(invalid_root(root, "destination directory must be empty"));
+    }
+    Ok(())
+}
+
+fn validate_deletion_root(root: &NormalizedProjectRoot) -> Result<(), ProjectFilesystemError> {
+    let metadata = std::fs::symlink_metadata(root.as_path()).map_err(prepare_error)?;
+    if metadata_is_redirect(&metadata) || !metadata.is_dir() {
+        return Err(invalid_root(
+            root.as_path(),
+            "project root is not a real directory",
+        ));
+    }
+    let manifest = root.as_path().join(PROJECT_METADATA_FILE);
+    let metadata = std::fs::symlink_metadata(&manifest).map_err(prepare_error)?;
+    if metadata_is_redirect(&metadata) || !metadata.is_file() {
+        return Err(invalid_root(
+            root.as_path(),
+            "project manifest is not a regular file",
+        ));
+    }
+    Ok(())
+}
+
+fn active_session_for_deletion(
+    state: &ProjectState,
+    root: &NormalizedProjectRoot,
+    expected: Option<&ProjectInstanceId>,
+) -> Result<Option<ProjectSession>, ProjectFilesystemError> {
+    let current = state.capture_project_session().ok();
+    let active = current.filter(|session| &session.root == root);
+    match (active, expected) {
+        (Some(session), Some(expected)) if &session.instance_id == expected => Ok(Some(session)),
+        (Some(_), _) => Err(stale("active project identity does not authorize deletion")),
+        (None, Some(_)) => Err(stale(
+            "expected active project is no longer active at this root",
+        )),
+        (None, None) => Ok(None),
+    }
+}
+
+fn new_project_mutations(
+    data: &ProjectData,
+) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
+    Ok(vec![
+        create_directory(EVENTS_DIR),
+        create_directory(FUNCTIONS_DIR),
+        create_directory(WORKSHEETS_DIR),
+        create_directory(DATABASE_DIR),
+        write_mutation(
+            PROJECT_METADATA_FILE,
+            crate::project::serialize_project_manifest(data).map_err(prepare_error)?,
+        ),
+        write_mutation(
+            GLOBAL_VARIABLES_FILE,
+            crate::project::serialize_global_variables(data).map_err(prepare_error)?,
+        ),
+    ])
+}
+
+fn copy_mutations(
+    source: &Path,
+    authority: &ProjectData,
+) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
+    let mut directories = BTreeSet::from([
+        PathBuf::from(EVENTS_DIR),
+        PathBuf::from(FUNCTIONS_DIR),
+        PathBuf::from(WORKSHEETS_DIR),
+        PathBuf::from(DATABASE_DIR),
+    ]);
+    let mut files = BTreeMap::new();
+    collect_source_files(source, source, &mut directories, &mut files)?;
+    files.remove(Path::new(PROJECT_METADATA_FILE));
+    files.remove(Path::new(GLOBAL_VARIABLES_FILE));
+    files.retain(|path, _| !path.starts_with(WORKSHEETS_DIR));
+    files.insert(
+        PathBuf::from(PROJECT_METADATA_FILE),
+        crate::project::serialize_project_manifest(authority).map_err(prepare_error)?,
+    );
+    files.insert(
+        PathBuf::from(GLOBAL_VARIABLES_FILE),
+        crate::project::serialize_global_variables(authority).map_err(prepare_error)?,
+    );
+    for graph_path in authority.graphs.keys() {
+        let (path, contents) = crate::project::serialize_graph_document(authority, graph_path)
+            .map_err(prepare_error)?;
+        files.insert(path, contents);
+    }
+    for worksheet in authority.worksheets.values() {
+        let (path, contents) =
+            crate::project::serialize_worksheet(worksheet).map_err(prepare_error)?;
+        files.insert(path, contents);
+    }
+    let mut mutations = directories
+        .into_iter()
+        .map(|relative_path| StagedFilesystemMutation::CreateDirectory { relative_path })
+        .collect::<Vec<_>>();
+    mutations.extend(files.into_iter().map(|(relative_path, contents)| {
+        StagedFilesystemMutation::Write {
+            relative_path,
+            contents,
+        }
+    }));
+    Ok(mutations)
+}
+
+fn collect_source_files(
+    source_root: &Path,
+    directory: &Path,
+    directories: &mut BTreeSet<PathBuf>,
+    files: &mut BTreeMap<PathBuf, Vec<u8>>,
+) -> Result<(), ProjectFilesystemError> {
+    for entry in std::fs::read_dir(directory).map_err(prepare_error)? {
+        let entry = entry.map_err(prepare_error)?;
+        let relative = entry
+            .path()
+            .strip_prefix(source_root)
+            .map_err(prepare_error)?
+            .to_path_buf();
+        if relative.starts_with(".yssbi-transaction") {
+            continue;
+        }
+        let metadata = std::fs::symlink_metadata(entry.path()).map_err(prepare_error)?;
+        if metadata_is_redirect(&metadata) {
+            return Err(prepare_error(format!(
+                "project copy source '{}' is a redirect",
+                relative.display()
+            )));
+        }
+        if metadata.is_dir() {
+            directories.insert(relative);
+            collect_source_files(source_root, &entry.path(), directories, files)?;
+        } else if metadata.is_file() {
+            let contents =
+                read_secure_project_file(source_root, &relative).map_err(prepare_error)?;
+            files.insert(relative, contents);
+        } else {
+            return Err(prepare_error(format!(
+                "project copy source '{}' is not a regular file",
+                relative.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {
+    if path == Path::new(PROJECT_METADATA_FILE) {
+        return serde_json::from_slice::<crate::project::ProjectManifest>(contents)
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+    }
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("yssbi-event" | "yssbi-function") => {
+            serde_json::from_slice::<crate::project::GraphDocument>(contents)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        Some("yssbi-vars") => {
+            serde_json::from_slice::<crate::project::GlobalVariablesDocument>(contents)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        Some("yssbi-worksheet") => {
+            serde_json::from_slice::<crate::project::WorksheetDocument>(contents)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn create_directory(path: impl Into<PathBuf>) -> StagedFilesystemMutation {
+    StagedFilesystemMutation::CreateDirectory {
+        relative_path: path.into(),
+    }
+}
+
+fn write_mutation(path: impl Into<PathBuf>, contents: Vec<u8>) -> StagedFilesystemMutation {
+    StagedFilesystemMutation::Write {
+        relative_path: path.into(),
+        contents,
+    }
+}
+
+fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectFilesystemError {
+    ProjectFilesystemError::InvalidRoot {
+        path: path.as_ref().to_path_buf(),
+        message: message.into(),
+    }
+}
+
+fn stale(message: impl Into<String>) -> ProjectFilesystemError {
+    ProjectFilesystemError::StaleProjectLifecycle {
+        message: message.into(),
+    }
+}
+
+fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
+    ProjectFilesystemError::TransactionPrepareFailed {
+        message: error.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::value::{DataType, DataValue};
+    use crate::project::{
+        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
+        ProjectFilesystemFaultPoint, WorksheetDocument, fixtures, load_project_from_file,
+        set_project_filesystem_fault,
+    };
+    use crate::variable::VariableScope;
+    use std::sync::{Arc, Barrier};
+    use std::time::Duration;
+
+    fn root(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "yssbi-project-lifecycle-{label}-{}",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    #[cfg(windows)]
+    fn link_directory(link: &Path, target: &Path) {
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                link.to_string_lossy().as_ref(),
+                target.to_string_lossy().as_ref(),
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+    }
+
+    #[cfg(unix)]
+    fn link_directory(link: &Path, target: &Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    fn active_state(label: &str) -> (ProjectState, PathBuf, ProjectInstanceId) {
+        let root = root(label);
+        std::fs::create_dir_all(&root).unwrap();
+        let mut data = ProjectData::new();
+        data.metadata.project_name = label.into();
+        fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+        let instance_id = state.capture_project_session().unwrap().instance_id;
+        (state, root, instance_id)
+    }
+
+    #[test]
+    fn save_as_rejects_redirect_root_before_target_write() {
+        let (state, source, instance_id) = active_state("save-as-redirect-source");
+        let target = root("save-as-redirect-target");
+        let redirect = root("save-as-redirect-link");
+        std::fs::create_dir_all(&target).unwrap();
+        link_directory(&redirect, &target);
+
+        let error = state
+            .save_project_as_transaction(&instance_id, &redirect, OperationId::new())
+            .unwrap_err();
+
+        assert_eq!(error.code(), "invalid_project_root");
+        assert!(std::fs::read_dir(&target).unwrap().next().is_none());
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(redirect);
+        let _ = std::fs::remove_dir_all(target);
+    }
+
+    #[test]
+    fn create_project_rejects_redirect_root_before_target_write() {
+        let state = ProjectState::new();
+        let target = root("create-redirect-target");
+        let redirect = root("create-redirect-link");
+        std::fs::create_dir_all(&target).unwrap();
+        link_directory(&redirect, &target);
+
+        let error = state
+            .create_project_transaction("Redirected", &redirect, OperationId::new())
+            .unwrap_err();
+
+        assert_eq!(error.code(), "invalid_project_root");
+        assert!(std::fs::read_dir(&target).unwrap().next().is_none());
+        let _ = std::fs::remove_dir_all(redirect);
+        let _ = std::fs::remove_dir_all(target);
+    }
+
+    #[test]
+    fn delete_project_rejects_redirect_root_before_target_recycle() {
+        let target = root("delete-redirect-target");
+        let redirect = root("delete-redirect-link");
+        std::fs::create_dir_all(&target).unwrap();
+        fixtures::write_project(&ProjectData::new(), target.to_string_lossy().as_ref()).unwrap();
+        link_directory(&redirect, &target);
+        let state = ProjectState::new();
+
+        let error = state
+            .delete_project_transaction(&redirect, None, None, OperationId::new())
+            .unwrap_err();
+
+        assert_eq!(error.code(), "invalid_project_root");
+        assert!(target.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        let _ = std::fs::remove_dir_all(redirect);
+        let _ = std::fs::remove_dir_all(target);
+    }
+
+    #[test]
+    fn inactive_registered_identity_cannot_delete_same_path_replacement() {
+        let project_root = root("inactive-replacement");
+        std::fs::create_dir_all(&project_root).unwrap();
+        fixtures::write_project(&ProjectData::new(), project_root.to_string_lossy().as_ref())
+            .unwrap();
+        let registered_identity = ProjectRootBinding::for_existing(&project_root)
+            .unwrap()
+            .identity()
+            .unwrap()
+            .clone();
+        std::fs::remove_dir_all(&project_root).unwrap();
+        std::fs::create_dir_all(&project_root).unwrap();
+        fixtures::write_project(&ProjectData::new(), project_root.to_string_lossy().as_ref())
+            .unwrap();
+
+        let error = ProjectState::new()
+            .delete_project_transaction(
+                &project_root,
+                Some(&registered_identity),
+                None,
+                OperationId::new(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert!(project_root.join(PROJECT_METADATA_FILE).is_file());
+        let _ = std::fs::remove_dir_all(project_root);
+    }
+
+    #[test]
+    fn save_as_reverse_root_order_cannot_deadlock() {
+        let path_a = root("reverse-a");
+        let path_b = root("reverse-b");
+        std::fs::create_dir_all(&path_a).unwrap();
+        std::fs::create_dir_all(&path_b).unwrap();
+        let root_a = NormalizedProjectRoot::from_project_path(&path_a).unwrap();
+        let root_b = NormalizedProjectRoot::from_project_path(&path_b).unwrap();
+        let coordinator = crate::project::ProjectFilesystemCoordinator::default();
+        let state_a = ProjectState::with_shared_filesystem_for_test(coordinator.clone());
+        let state_b = ProjectState::with_shared_filesystem_for_test(coordinator.clone());
+        state_a.activate_project_fixture(path_a.to_string_lossy().into_owned(), ProjectData::new());
+        state_b.activate_project_fixture(path_b.to_string_lossy().into_owned(), ProjectData::new());
+        let instance_a = state_a.capture_project_session().unwrap().instance_id;
+        let instance_b = state_b.capture_project_session().unwrap().instance_id;
+        let held = coordinator.acquire(root_a.clone()).unwrap();
+        let acquire_attempts = coordinator.observe_acquire_many_attempts();
+        let barrier = Arc::new(Barrier::new(3));
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+
+        let first = {
+            let barrier = Arc::clone(&barrier);
+            let done = done_tx.clone();
+            let destination = path_b.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                done.send(state_a.save_project_as_transaction(
+                    &instance_a,
+                    &destination,
+                    OperationId::new(),
+                ))
+                .unwrap();
+            })
+        };
+        let second = {
+            let barrier = Arc::clone(&barrier);
+            let done = done_tx.clone();
+            let destination = path_a.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                done.send(state_b.save_project_as_transaction(
+                    &instance_b,
+                    &destination,
+                    OperationId::new(),
+                ))
+                .unwrap();
+            })
+        };
+
+        barrier.wait();
+        let expected = vec![root_a.clone(), root_b.clone()];
+        assert_eq!(
+            acquire_attempts
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            acquire_attempts
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap(),
+            expected
+        );
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(held);
+        let _first_result = done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let _second_result = done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        first.join().unwrap();
+        second.join().unwrap();
+        assert_eq!(
+            coordinator.lifecycle_state_for_test(&root_a),
+            (false, false, 0)
+        );
+        assert_eq!(
+            coordinator.lifecycle_state_for_test(&root_b),
+            (false, false, 0)
+        );
+        drop(
+            coordinator
+                .acquire_many([root_b.clone(), root_a.clone()])
+                .unwrap(),
+        );
+        let _ = std::fs::remove_dir_all(path_a);
+        let _ = std::fs::remove_dir_all(path_b);
+    }
+
+    #[test]
+    fn save_as_rechecks_destination_emptiness_under_both_leases() {
+        let (state, source, instance_id) = active_state("save-as-policy");
+        let destination = root("save-as-policy-destination");
+        std::fs::create_dir_all(&destination).unwrap();
+        let normalized = NormalizedProjectRoot::from_project_path(&destination).unwrap();
+        let held = state.filesystem().acquire(normalized).unwrap();
+        let worker_state = state.clone();
+        let worker_destination = destination.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            done_tx
+                .send(worker_state.save_project_as_transaction(
+                    &instance_id,
+                    &worker_destination,
+                    OperationId::new(),
+                ))
+                .unwrap();
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        std::fs::write(destination.join("appeared.txt"), b"owned by another writer").unwrap();
+        drop(held);
+
+        let error = done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(error.code(), "invalid_project_root");
+        assert_eq!(
+            std::fs::read(destination.join("appeared.txt")).unwrap(),
+            b"owned by another writer"
+        );
+        worker.join().unwrap();
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn save_as_builds_destination_from_one_authoritative_snapshot_and_publishes_after_commit() {
+        let (state, source, instance_id) = active_state("save-as-authority");
+        let graph_path = GraphResourcePath::new("events/Authority.yssbi-event").unwrap();
+        let mut authority = state.get_data().unwrap();
+        authority.metadata.project_name = "Authoritative Copy".into();
+        authority.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Authority", GraphDocumentKind::Event),
+        );
+        let variable = crate::variable::VariableInstance {
+            id: crate::variable::VariableId::new(),
+            name: "authoritative_global".into(),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(42),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Global,
+            tags: Vec::new(),
+        };
+        authority.variables.insert(variable.id, variable);
+        *state.project_data.write().unwrap() = authority;
+        let destination = root("save-as-authority-destination");
+
+        let prepared = state
+            .save_project_as_transaction(&instance_id, &destination, OperationId::new())
+            .unwrap();
+
+        assert_eq!(
+            state.capture_project_session().unwrap().instance_id,
+            instance_id,
+            "save-as must not publish before destination commit completes"
+        );
+        let committed =
+            load_project_from_file(prepared.metadata_path.to_string_lossy().as_ref()).unwrap();
+        assert_eq!(committed.metadata.project_name, "Authoritative Copy");
+        assert!(
+            committed
+                .variables
+                .values()
+                .any(|value| value.name == "authoritative_global")
+        );
+        assert!(destination.join(graph_path.as_str()).is_file());
+        state
+            .activate_prepared_project(prepared.prepared_activation)
+            .unwrap();
+        assert_eq!(
+            state.capture_project_session().unwrap().root,
+            NormalizedProjectRoot::from_project_path(&destination).unwrap()
+        );
+        let source_disk = load_project_from_file(source.to_string_lossy().as_ref()).unwrap();
+        assert_eq!(source_disk.metadata.project_name, "save-as-authority");
+        assert!(
+            source_disk.variables.is_empty(),
+            "save-as flushed its source"
+        );
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn failed_save_as_leaves_source_session_and_destination_unchanged() {
+        let (state, source, instance_id) = active_state("save-as-failure");
+        let destination = root("save-as-failure-destination");
+        std::fs::create_dir_all(&destination).unwrap();
+        let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let before_path = state.get_path();
+        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
+
+        let result =
+            state.save_project_as_transaction(&instance_id, &destination, OperationId::new());
+
+        set_project_filesystem_fault(None);
+        assert!(result.is_err());
+        assert_eq!(state.get_path(), before_path);
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            before_data
+        );
+        assert!(std::fs::read_dir(&destination).unwrap().next().is_none());
+        assert_eq!(
+            state.capture_project_session().unwrap().instance_id,
+            instance_id
+        );
+        let _ = std::fs::remove_dir_all(source);
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn create_project_rechecks_destination_policy_under_lease() {
+        let state = ProjectState::new();
+        let destination = root("create-policy");
+        std::fs::create_dir_all(&destination).unwrap();
+        let normalized = NormalizedProjectRoot::from_project_path(&destination).unwrap();
+        let held = state.filesystem().acquire(normalized).unwrap();
+        let worker_state = state.clone();
+        let worker_destination = destination.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            done_tx
+                .send(worker_state.create_project_transaction(
+                    "Created",
+                    &worker_destination,
+                    OperationId::new(),
+                ))
+                .unwrap();
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        std::fs::write(destination.join("appeared.txt"), b"do not overwrite").unwrap();
+        drop(held);
+
+        let error = done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(error.code(), "invalid_project_root");
+        assert_eq!(
+            std::fs::read(destination.join("appeared.txt")).unwrap(),
+            b"do not overwrite"
+        );
+        assert!(
+            !destination
+                .join(crate::project::PROJECT_METADATA_FILE)
+                .exists()
+        );
+        worker.join().unwrap();
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn registered_project_deletion_excludes_index_load_save_rename_and_worksheet_operations() {
+        let (state, root, instance_id) = active_state("delete-exclusion");
+        let load_path = GraphResourcePath::new("events/Load.yssbi-event").unwrap();
+        let rename_path = GraphResourcePath::new("events/Rename.yssbi-event").unwrap();
+        state
+            .insert_graph(
+                load_path.clone(),
+                GraphResourceDocument::new("Load", GraphDocumentKind::Event),
+            )
+            .unwrap();
+        state
+            .insert_graph(
+                rename_path.clone(),
+                GraphResourceDocument::new("Rename", GraphDocumentKind::Event),
+            )
+            .unwrap();
+        let worksheet = WorksheetDocument::new("Sheet", "database");
+        state
+            .project_data
+            .write()
+            .unwrap()
+            .worksheets
+            .insert(worksheet.id.clone(), worksheet.clone());
+        state.initialize_worksheet_revision_for_test(&worksheet.id);
+        let data = state.get_data().unwrap();
+        fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &load_path).unwrap();
+        fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &rename_path).unwrap();
+        fixtures::write_worksheet(&root, &worksheet).unwrap();
+        state
+            .unload_graph_resource_for_lifecycle(&instance_id, &load_path, 1)
+            .unwrap();
+
+        let destination = std::env::temp_dir().join(format!(
+            "yssbi-project-lifecycle-delete-exclusion-copy-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&destination).unwrap();
+        let destination_root = NormalizedProjectRoot::from_project_path(&destination).unwrap();
+        let held_destination = state
+            .filesystem()
+            .acquire(destination_root.clone())
+            .unwrap();
+        let ordinary_waiting = state.filesystem().observe_next_wait();
+        let ordinary_coordinator = state.filesystem().clone();
+        let source_root = NormalizedProjectRoot::from_project_path(&root).unwrap();
+        let source_root_for_diagnostics = source_root.clone();
+        let (ordinary_done_tx, ordinary_done_rx) = std::sync::mpsc::channel();
+        let ordinary = std::thread::spawn(move || {
+            let lease = ordinary_coordinator
+                .acquire_many([source_root, destination_root])
+                .unwrap();
+            ordinary_done_tx.send(()).unwrap();
+            drop(lease);
+        });
+        ordinary_waiting
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+
+        let deletion_draining = state.filesystem().observe_next_lifecycle_drain();
+        let delete_state = state.clone();
+        let delete_root = root.clone();
+        let delete_instance = instance_id.clone();
+        let (delete_done_tx, delete_done_rx) = std::sync::mpsc::channel();
+        let deletion = std::thread::spawn(move || {
+            let result = delete_state.delete_project_transaction(
+                &delete_root,
+                None,
+                Some(&delete_instance),
+                OperationId::new(),
+            );
+            delete_done_tx.send(result).unwrap();
+        });
+        if deletion_draining
+            .recv_timeout(Duration::from_secs(2))
+            .is_err()
+        {
+            if let Ok(result) = delete_done_rx.try_recv() {
+                panic!("deletion returned before drain checkpoint: {result:?}");
+            }
+            panic!(
+                "deletion blocked before drain checkpoint: {:?}",
+                state
+                    .filesystem()
+                    .lifecycle_state_for_test(&source_root_for_diagnostics)
+            );
+        }
+
+        let assert_rejected = |result: Result<(), ProjectFilesystemError>| {
+            assert_eq!(
+                result.unwrap_err().code(),
+                "project_lifecycle_admission_closed"
+            );
+        };
+        assert_rejected(state.read_project_index(&instance_id).map(|_| ()));
+        assert_rejected(
+            state
+                .load_graph_projection(&instance_id, &load_path, 2, "en-US")
+                .map(|_| ()),
+        );
+        assert_rejected(
+            state
+                .flush_project_documents(&instance_id, OperationId::new())
+                .map(|_| ()),
+        );
+        assert_rejected(
+            state
+                .rename_graph_resource_transaction(
+                    &instance_id,
+                    &rename_path,
+                    crate::node_system::document::ResourceRevision::INITIAL,
+                    "Renamed",
+                    1,
+                    OperationId::new(),
+                )
+                .map(|_| ()),
+        );
+        assert_rejected(
+            state
+                .save_worksheet_document(&instance_id, worksheet, OperationId::new())
+                .map(|_| ()),
+        );
+
+        assert!(!deletion.is_finished());
+        drop(held_destination);
+        ordinary_done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap();
+        ordinary.join().unwrap();
+        let result = delete_done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        deletion.join().unwrap();
+        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
+        assert!(!root.exists());
+        let _ = std::fs::remove_dir_all(destination);
+    }
+
+    #[test]
+    fn rename_to_first_bind_failure_becomes_committed_recovery_without_path_touch() {
+        let (state, project_root, instance_id) = active_state("delete-first-bind-replacement");
+        let root_binding = ProjectRootBinding::for_existing(&project_root).unwrap();
+        let normalized = root_binding.normalized().clone();
+        let original_identity = root_binding.identity().unwrap().clone();
+        let operation_id = OperationId::new();
+        let name = project_root.file_name().unwrap().to_string_lossy();
+        let tombstone = project_root
+            .parent()
+            .unwrap()
+            .join(format!(".{name}.yssbi-deleting-{operation_id}"));
+        let external_recovery = tombstone.with_extension("external-recovery");
+        let tombstone_for_hook = tombstone.clone();
+        let recovery_for_hook = external_recovery.clone();
+        set_after_tombstone_rename_hook(Some(Arc::new(move || {
+            std::fs::rename(&tombstone_for_hook, &recovery_for_hook).unwrap();
+        })));
+
+        let prepared = state
+            .prepare_project_deletion(
+                &project_root,
+                Some(&original_identity),
+                Some(&instance_id),
+                operation_id,
+            )
+            .unwrap();
+        set_after_tombstone_rename_hook(None);
+
+        assert_eq!(prepared.recovery_identity(), &original_identity);
+        assert_eq!(prepared.recovery_path().file_name(), tombstone.file_name());
+        assert!(!prepared.post_tombstone_failed());
+        let result = state.commit_project_deletion(prepared);
+        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
+        assert!(!tombstone.exists());
+        assert!(external_recovery.join(PROJECT_METADATA_FILE).is_file());
+        assert!(state.capture_project_session().is_err());
+        assert_eq!(
+            state.filesystem().lifecycle_state_for_test(&normalized),
+            (false, false, 0)
+        );
+        let _ = std::fs::remove_dir_all(tombstone);
+        let _ = std::fs::remove_dir_all(external_recovery);
+    }
+
+    #[test]
+    fn post_tombstone_panic_becomes_total_boundary_and_releases_all_ownership() {
+        let (state, project_root, instance_id) = active_state("delete-post-tombstone-panic");
+        let binding = ProjectRootBinding::for_existing(&project_root).unwrap();
+        let normalized = binding.normalized().clone();
+        let identity = binding.identity().unwrap().clone();
+        let operation_id = OperationId::new();
+        let name = project_root.file_name().unwrap().to_string_lossy();
+        let tombstone = project_root
+            .parent()
+            .unwrap()
+            .join(format!(".{name}.yssbi-deleting-{operation_id}"));
+        set_after_tombstone_rename_hook(Some(Arc::new(|| panic!("post-tombstone panic"))));
+
+        let prepared = state
+            .prepare_project_deletion(
+                &project_root,
+                Some(&identity),
+                Some(&instance_id),
+                operation_id,
+            )
+            .unwrap();
+        set_after_tombstone_rename_hook(None);
+
+        assert!(prepared.post_tombstone_failed());
+        drop(prepared);
+        assert!(state.capture_project_session().is_err());
+        assert!(tombstone.join(PROJECT_METADATA_FILE).is_file());
+        assert_eq!(
+            state.filesystem().lifecycle_state_for_test(&normalized),
+            (false, false, 0)
+        );
+        drop(state.filesystem().acquire(normalized).unwrap());
+        let _ = std::fs::remove_dir_all(tombstone);
+    }
+
+    #[test]
+    fn tombstone_replacement_is_never_rolled_back_or_recycled() {
+        let (state, project_root, instance_id) = active_state("delete-tombstone-replacement");
+        let identity = ProjectRootBinding::for_existing(&project_root)
+            .unwrap()
+            .identity()
+            .unwrap()
+            .clone();
+        let prepared = state
+            .prepare_project_deletion(
+                &project_root,
+                Some(&identity),
+                Some(&instance_id),
+                OperationId::new(),
+            )
+            .unwrap();
+        let tombstone = prepared.tombstone_path.clone();
+        let tombstone_identity = prepared.tombstone_identity.clone();
+        let recovery = tombstone.with_extension("external-recovery");
+        std::fs::rename(&tombstone, &recovery).unwrap();
+        std::fs::create_dir_all(&tombstone).unwrap();
+        std::fs::write(tombstone.join("replacement.txt"), b"unrelated").unwrap();
+
+        drop(prepared);
+        assert_eq!(
+            std::fs::read(tombstone.join("replacement.txt")).unwrap(),
+            b"unrelated"
+        );
+        assert_eq!(
+            ProjectRootBinding::for_existing(&recovery)
+                .unwrap()
+                .identity(),
+            Some(&tombstone_identity)
+        );
+        assert!(!project_root.exists());
+        assert!(state.capture_project_session().is_err());
+        let _ = std::fs::remove_dir_all(tombstone);
+        let _ = std::fs::remove_dir_all(recovery);
+    }
+
+    #[test]
+    fn prepared_delete_owns_activation_until_recovery_object_is_released() {
+        let (state, project_root, instance_id) = active_state("delete-activation-owner");
+        let identity = ProjectRootBinding::for_existing(&project_root)
+            .unwrap()
+            .identity()
+            .unwrap()
+            .clone();
+        let prepared = state
+            .prepare_project_deletion(
+                &project_root,
+                Some(&identity),
+                Some(&instance_id),
+                OperationId::new(),
+            )
+            .unwrap();
+        let worker_state = state.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            done_tx.send(worker_state.clear_project()).unwrap();
+        });
+
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        assert!(state.capture_project_session().is_err());
+        drop(prepared);
+        done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        worker.join().unwrap();
+        assert!(state.capture_project_session().is_err());
+        let _ = std::fs::remove_dir_all(project_root);
+    }
+
+    #[test]
+    fn prepared_delete_never_auto_rolls_back_committed_tombstone() {
+        let (state, project_root, instance_id) = active_state("delete-rollback");
+        let identity = ProjectRootBinding::for_existing(&project_root)
+            .unwrap()
+            .identity()
+            .unwrap()
+            .clone();
+        let prepared = state
+            .prepare_project_deletion(
+                &project_root,
+                Some(&identity),
+                Some(&instance_id),
+                OperationId::new(),
+            )
+            .unwrap();
+
+        let tombstone = prepared.recovery_path().to_path_buf();
+        assert!(!project_root.exists());
+        assert!(state.capture_project_session().is_err());
+        drop(prepared);
+
+        assert!(!project_root.exists());
+        assert!(tombstone.join(PROJECT_METADATA_FILE).is_file());
+        assert!(state.capture_project_session().is_err());
+        let _ = std::fs::remove_dir_all(tombstone);
+    }
+
+    #[test]
+    fn deletion_clear_returns_explicit_cleanup_pending_without_path_touch() {
+        let (state, project_root, instance_id) = active_state("delete-recycle-failure");
+        let identity = ProjectRootBinding::for_existing(&project_root)
+            .unwrap()
+            .identity()
+            .unwrap()
+            .clone();
+        let result = state
+            .delete_project_transaction(
+                &project_root,
+                Some(&identity),
+                Some(&instance_id),
+                OperationId::new(),
+            )
+            .unwrap();
+
+        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
+        assert!(result.cleanup_pending);
+        assert!(result.tombstone_path.is_dir());
+        assert!(state.capture_project_session().is_err());
+        let _ = std::fs::remove_dir_all(result.tombstone_path);
+    }
+
+    #[test]
+    fn active_project_deletion_drains_then_clears_before_registry_removal_event() {
+        let (state, root, instance_id) = active_state("delete-drain");
+        let (runs, session_id) = {
+            let store = state.project_store.read().unwrap();
+            (Arc::clone(&store.runs), store.project_session_id.clone())
+        };
+        let run = runs
+            .track_pre_run(
+                session_id,
+                crate::node_system::runtime::CancellationToken::new(),
+            )
+            .unwrap();
+        let worker_state = state.clone();
+        let worker_root = root.clone();
+        let expected = instance_id.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            done_tx
+                .send(worker_state.delete_project_transaction(
+                    &worker_root,
+                    None,
+                    Some(&expected),
+                    OperationId::new(),
+                ))
+                .unwrap();
+        });
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        assert_eq!(
+            state.capture_project_session().unwrap().instance_id,
+            instance_id
+        );
+        drop(run);
+
+        let result = done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
+        assert!(state.capture_project_session().is_err());
+        assert!(!root.exists());
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn stale_active_identity_cannot_delete_replacement_project() {
+        let (state, root, stale_instance_id) = active_state("delete-stale");
+        let mut replacement = ProjectData::new();
+        replacement.metadata.project_name = "Replacement".into();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), replacement);
+        let replacement_session = state.capture_project_session().unwrap();
+
+        let error = state
+            .delete_project_transaction(&root, None, Some(&stale_instance_id), OperationId::new())
+            .unwrap_err();
+
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert!(root.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert_eq!(
+            state.capture_project_session().unwrap().instance_id,
+            replacement_session.instance_id
+        );
+        assert_eq!(
+            state.get_data().unwrap().metadata.project_name,
+            "Replacement"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+}

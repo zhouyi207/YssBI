@@ -10,6 +10,7 @@ pub mod project_error;
 
 pub mod project_activation;
 pub mod project_io;
+pub mod project_lifecycle;
 pub mod project_metadata;
 pub mod project_picker_task;
 pub mod project_reads;
@@ -19,6 +20,7 @@ pub mod project_session;
 pub mod project_state;
 pub mod project_state_database;
 pub mod project_writers;
+pub mod resource_mutations;
 
 pub mod project_state_variable;
 pub mod project_store;
@@ -39,6 +41,7 @@ pub use project_error::*;
 
 pub use project_activation::*;
 pub use project_io::*;
+pub use project_lifecycle::*;
 pub use project_metadata::*;
 pub use project_picker_task::*;
 pub use project_registry::*;

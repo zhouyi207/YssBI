@@ -164,7 +164,7 @@ fn narrow_graph_move_patch_preserves_unrelated_concurrent_mutation() {
 fn rename_environment_failure_never_changes_filesystem_targets() {
     let (state, root) = state_with_project_path("rename-environment-failure");
     let source = state
-        .create_graph_resource("Before", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Before", GraphDocumentKind::Event)
         .unwrap();
     let source_file = root.join(source.as_str());
     let source_before = std::fs::read(&source_file).unwrap();
@@ -172,7 +172,8 @@ fn rename_environment_failure_never_changes_filesystem_targets() {
     insert_uncached_duckdb_declaration(&state, "database/missing.duckdb");
 
     crate::project::set_project_filesystem_rollback_fault(true);
-    let result = state.rename_graph_resource(&state.project_instance_id(), &source, "After");
+    let result =
+        state.rename_graph_resource_fixture(&state.project_instance_id(), &source, "After");
     crate::project::set_project_filesystem_rollback_fault(false);
 
     assert!(result.is_err());
@@ -385,7 +386,7 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
     );
     assert_eq!(
         state
-            .rename_graph_resource(&state.project_instance_id(), &graph, "Blocked")
+            .rename_graph_resource_fixture(&state.project_instance_id(), &graph, "Blocked")
             .unwrap_err()
             .code(),
         "project_recovery_required"
@@ -744,7 +745,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
 fn rename_remains_committed_when_project_replacement_runs_during_receipt_completion() {
     let (state, root) = state_with_project_path("rename-replacement-after-publication");
     let source = state
-        .create_graph_resource("Before", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Before", GraphDocumentKind::Event)
         .unwrap();
     let target = GraphResourcePath::new("events/After.yssbi-event").unwrap();
     let replacement_state = state.clone();
@@ -757,7 +758,7 @@ fn rename_remains_committed_when_project_replacement_runs_during_receipt_complet
     let project_instance_id = state.project_instance_id();
 
     let result = state
-        .rename_graph_resource(&project_instance_id, &source, "After")
+        .rename_graph_resource_fixture(&project_instance_id, &source, "After")
         .unwrap();
 
     assert!(receipt_completed.load(std::sync::atomic::Ordering::Acquire));
@@ -830,7 +831,7 @@ fn rename_rejects_concurrent_referenced_graph_and_variable_changes() {
     let project_instance_id = state.project_instance_id();
 
     let error = state
-        .rename_graph_resource(&project_instance_id, &source, "Renamed")
+        .rename_graph_resource_fixture(&project_instance_id, &source, "Renamed")
         .unwrap_err();
 
     assert_eq!(error.code(), "resource_revision_conflict");
@@ -1928,7 +1929,7 @@ fn normalized_graph_lifecycle_routes_every_insert_through_project_state() {
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
 
     let created = state
-        .create_graph_resource("Lifecycle", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Lifecycle", GraphDocumentKind::Event)
         .unwrap();
     assert!(!state.get_data().unwrap().graphs.contains_key(&created));
     let loaded = load_graph(&state, &created).unwrap();
@@ -1936,16 +1937,16 @@ fn normalized_graph_lifecycle_routes_every_insert_through_project_state() {
     crate::project::fixtures::write_state_graph(&state, &created).unwrap();
     state.unload_graph_resource(&created);
 
-    let duplicated = state.duplicate_graph_resource(&created).unwrap();
+    let duplicated = state.duplicate_graph_resource_fixture(&created).unwrap();
     assert_ne!(duplicated, created);
     assert!(!state.get_data().unwrap().graphs.contains_key(&duplicated));
     let project_instance_id = state.project_instance_id();
     let renamed = state
-        .rename_graph_resource(&project_instance_id, &duplicated, "Lifecycle Copy Renamed")
+        .rename_graph_resource_fixture(&project_instance_id, &duplicated, "Lifecycle Copy Renamed")
         .unwrap();
     assert_ne!(renamed, duplicated);
-    state.remove_graph_resource(&created).unwrap();
-    state.remove_graph_resource(&renamed).unwrap();
+    state.remove_graph_resource_fixture(&created).unwrap();
+    state.remove_graph_resource_fixture(&renamed).unwrap();
 
     let index = crate::project::read_project_index(root.to_string_lossy().as_ref()).unwrap();
     assert!(index.graphs.is_empty());
@@ -1964,10 +1965,10 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
     let state = ProjectState::new();
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
     let caller = state
-        .create_graph_resource("Caller", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Caller", GraphDocumentKind::Event)
         .unwrap();
     let function = state
-        .create_graph_resource("Callee", GraphDocumentKind::Function)
+        .create_graph_resource_fixture("Callee", GraphDocumentKind::Function)
         .unwrap();
     load_graph(&state, &caller).unwrap();
     load_graph(&state, &function).unwrap();
@@ -2006,7 +2007,7 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
             ),
         )
         .unwrap();
-    let duplicated = state.duplicate_graph_resource(&function).unwrap();
+    let duplicated = state.duplicate_graph_resource_fixture(&function).unwrap();
     let duplicate = load_graph(&state, &duplicated).unwrap();
     for shell in duplicate.document.nodes.values().filter(|node| {
         matches!(
@@ -2030,7 +2031,7 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         .document
         .revision;
     let renamed = state
-        .rename_graph_resource(&project_instance_id, &function, "Renamed Callee")
+        .rename_graph_resource_fixture(&project_instance_id, &function, "Renamed Callee")
         .unwrap();
     assert_eq!(renamed.publication.moves.len(), 1);
     assert_eq!(renamed.publication.moves[0].from, function.as_str());
@@ -2103,12 +2104,12 @@ fn unloaded_rename_captures_source_revision_without_panicking() {
     crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let source = state
-        .create_graph_resource("Unloaded", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Unloaded", GraphDocumentKind::Event)
         .unwrap();
     assert!(!state.get_data().unwrap().graphs.contains_key(&source));
 
     let renamed = state
-        .rename_graph_resource(&state.project_instance_id(), &source, "Renamed Unloaded")
+        .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Renamed Unloaded")
         .unwrap();
 
     assert_eq!(renamed.publication.moves[0].from, source.as_str());
@@ -2132,10 +2133,10 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
     crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let source = state
-        .create_graph_resource("History Source", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("History Source", GraphDocumentKind::Event)
         .unwrap();
     let caller = state
-        .create_graph_resource("History Caller", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("History Caller", GraphDocumentKind::Event)
         .unwrap();
     load_graph(&state, &source).unwrap();
     load_graph(&state, &caller).unwrap();
@@ -2181,7 +2182,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
     crate::project::fixtures::write_state_graph(&state, &source).unwrap();
 
     let renamed = state
-        .rename_graph_resource(&state.project_instance_id(), &source, "History Renamed")
+        .rename_graph_resource_fixture(&state.project_instance_id(), &source, "History Renamed")
         .unwrap();
     let target = renamed.path.clone();
     let target_revision = renamed
@@ -2262,10 +2263,10 @@ fn concurrent_history_append_during_rename_undo_rolls_back_disk_without_moving_h
     crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let source = state
-        .create_graph_resource("Move Head", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Move Head", GraphDocumentKind::Event)
         .unwrap();
     let renamed = state
-        .rename_graph_resource(&state.project_instance_id(), &source, "Moved Head")
+        .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Moved Head")
         .unwrap();
     let target = renamed.path.clone();
     let target_revision = renamed.publication.deltas[0].to_revision;
@@ -2302,10 +2303,10 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
     crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let source = state
-        .create_graph_resource("Unloaded Callee", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Unloaded Callee", GraphDocumentKind::Event)
         .unwrap();
     let caller = state
-        .create_graph_resource("Unloaded Caller", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Unloaded Caller", GraphDocumentKind::Event)
         .unwrap();
     load_graph(&state, &caller).unwrap();
     let mut reference = node("yssbi.test.reference");
@@ -2332,7 +2333,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
     state.unload_graph_resource(&caller).unwrap();
 
     let renamed = state
-        .rename_graph_resource(&state.project_instance_id(), &source, "Renamed Callee")
+        .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Renamed Callee")
         .unwrap();
     let target = renamed.path.clone();
     let caller_delta = renamed
@@ -2419,10 +2420,10 @@ fn unloaded_rename_undo_redo_restores_disk_identity() {
     crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
         .unwrap();
     let source = state
-        .create_graph_resource("Unloaded History", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Unloaded History", GraphDocumentKind::Event)
         .unwrap();
     let renamed = state
-        .rename_graph_resource(
+        .rename_graph_resource_fixture(
             &state.project_instance_id(),
             &source,
             "Unloaded History Renamed",
@@ -2531,10 +2532,10 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
     let state = ProjectState::new();
     state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
     let event = state
-        .create_graph_resource("Loading Caller", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Loading Caller", GraphDocumentKind::Event)
         .unwrap();
     let old_function = state
-        .create_graph_resource("Loading Callee", GraphDocumentKind::Function)
+        .create_graph_resource_fixture("Loading Callee", GraphDocumentKind::Function)
         .unwrap();
     load_graph(&state, &event).unwrap();
 
@@ -3139,11 +3140,11 @@ fn project_execution_publishes_persisted_function_plans() {
     let state = ProjectState::new();
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
     let event = state
-        .create_graph_resource("Main", GraphDocumentKind::Event)
+        .create_graph_resource_fixture("Main", GraphDocumentKind::Event)
         .unwrap();
     load_graph(&state, &event).unwrap();
     let function = state
-        .create_graph_resource("Helper", GraphDocumentKind::Function)
+        .create_graph_resource_fixture("Helper", GraphDocumentKind::Function)
         .unwrap();
     let begin = state.get_data().unwrap().graphs[&event]
         .document

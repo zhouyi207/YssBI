@@ -133,39 +133,8 @@ struct GraphRenameDiskPlan {
     referenced_graphs_after: BTreeMap<GraphResourcePath, GraphResourceDocument>,
 }
 
-pub struct GraphRenameResult {
-    pub path: GraphResourcePath,
-    pub publication: crate::event::ResourceMutationResultDto,
-}
-
-impl std::ops::Deref for GraphRenameResult {
-    type Target = GraphResourcePath;
-
-    fn deref(&self) -> &Self::Target {
-        &self.path
-    }
-}
-
-impl PartialEq<GraphResourcePath> for GraphRenameResult {
-    fn eq(&self, other: &GraphResourcePath) -> bool {
-        self.path == *other
-    }
-}
-
-impl std::fmt::Debug for GraphRenameResult {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("GraphRenameResult")
-            .field("path", &self.path)
-            .field(
-                "publication_revision",
-                &self.publication.publication_revision,
-            )
-            .finish()
-    }
-}
-
 struct CommittedResourceMutation {
+    operation_id: crate::node_system::document::OperationId,
     project_instance_id: String,
     publication_revision: u64,
     moves: Vec<crate::event::ResourceMoveDto>,
@@ -350,7 +319,14 @@ pub(super) fn validate_context_revisions(
                 .or(Some(path.0.as_ref()))
                 .and_then(|id| uuid::Uuid::parse_str(id).ok())
                 .map(crate::variable::VariableId::from)
-                .and_then(|id| variable_revisions.get(&id).copied()),
+                .and_then(|id| {
+                    data.variables.get(&id).map(|_| {
+                        variable_revisions
+                            .get(&id)
+                            .copied()
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+                    })
+                }),
             ResourceKey::Worksheet(path) => worksheet_revisions.get(path.0.as_ref()).copied(),
         };
         if actual != Some(*expected) {
@@ -392,10 +368,76 @@ pub(super) fn validate_context_revisions(
     Ok(())
 }
 
-fn graph_move_deltas(
+fn canonical_graph_lifecycle_events(
     context: &ProjectTransactionContext,
     patch: &ResourceDocumentPatch,
 ) -> Vec<crate::node_system::document::ResourceDeltaEvent> {
+    let graph_key = |path: &GraphResourcePath| {
+        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+            path.as_str().into(),
+        ))
+    };
+    let lifecycle_state = |path: &GraphResourcePath, revision| {
+        crate::node_system::document::GraphResourceLifecycleState {
+            revision,
+            path: path.as_str().into(),
+            kind: match path
+                .kind()
+                .expect("validated graph resource path must have a kind")
+            {
+                crate::project::GraphDocumentKind::Event => {
+                    crate::node_system::document::GraphResourceLifecycleKind::Event
+                }
+                crate::project::GraphDocumentKind::Function => {
+                    crate::node_system::document::GraphResourceLifecycleKind::Function
+                }
+            },
+        }
+    };
+    let lifecycle_delta = |path: &GraphResourcePath, revision, before, after| {
+        crate::node_system::document::ResourceDeltaEvent {
+            resource: graph_key(path),
+            from_revision: revision,
+            to_revision: revision.next(),
+            caused_by: Some(context.operation_id),
+            payload: crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(
+                crate::node_system::document::GraphResourceLifecyclePatch { before, after },
+            ),
+        }
+    };
+    match patch {
+        ResourceDocumentPatch::InsertGraph { path, resource } => {
+            let revision = resource.document.revision;
+            return vec![lifecycle_delta(
+                path,
+                revision,
+                None,
+                Some(lifecycle_state(path, revision)),
+            )];
+        }
+        ResourceDocumentPatch::UnloadGraph { path } => {
+            let revision = context.expected_revisions[&graph_key(path)];
+            return vec![lifecycle_delta(
+                path,
+                revision,
+                None,
+                Some(lifecycle_state(path, revision)),
+            )];
+        }
+        ResourceDocumentPatch::RemoveGraph { path, revision } => {
+            let revision = *revision;
+            return vec![lifecycle_delta(
+                path,
+                revision,
+                Some(lifecycle_state(path, revision)),
+                None,
+            )];
+        }
+        ResourceDocumentPatch::MoveGraph { .. } => {}
+        ResourceDocumentPatch::PatchVariables { .. }
+        | ResourceDocumentPatch::UpsertWorksheet { .. }
+        | ResourceDocumentPatch::RemoveWorksheet { .. } => return Vec::new(),
+    }
     let ResourceDocumentPatch::MoveGraph {
         from,
         to,
@@ -405,12 +447,7 @@ fn graph_move_deltas(
         ..
     } = patch
     else {
-        return Vec::new();
-    };
-    let graph_key = |path: &GraphResourcePath| {
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            path.as_str().into(),
-        ))
+        unreachable!("non-move graph lifecycle patches returned above")
     };
     let graph_move_patch = || {
         crate::node_system::document::ResourceDocumentPatch::GraphResourceMove(
@@ -463,7 +500,8 @@ fn patch_projection_paths(patch: &ResourceDocumentPatch) -> Vec<String> {
     let mut paths = std::collections::BTreeSet::new();
     match patch {
         ResourceDocumentPatch::InsertGraph { path, .. }
-        | ResourceDocumentPatch::RemoveGraph { path } => {
+        | ResourceDocumentPatch::RemoveGraph { path, .. }
+        | ResourceDocumentPatch::UnloadGraph { path } => {
             paths.insert(path.as_str().to_string());
         }
         ResourceDocumentPatch::MoveGraph {
@@ -594,10 +632,12 @@ pub struct ProjectState {
     project_path: Arc<RwLock<Option<String>>>,
     pub project_store: Arc<RwLock<ProjectStore>>,
     pub(super) history: Arc<RwLock<ProjectHistory>>,
-    pub(super) project_activation: Arc<Mutex<()>>,
+    pub(super) project_activation: crate::project::ProjectActivationCoordinator,
     pub(super) mutation_publication: Arc<Mutex<MutationPublication>>,
     filesystem: ProjectFilesystemCoordinator,
     graph_lifecycle: GraphLifecycleRegistry,
+    pub(super) resource_operations:
+        Arc<Mutex<crate::project::resource_mutations::ResourceOperationLedger>>,
     recovery_marker: crate::project::ProjectRecoveryMarker,
     activation_generation: Arc<std::sync::atomic::AtomicU64>,
     activation_identity: Arc<RwLock<ProjectionEnvironmentExpectation>>,
@@ -666,6 +706,7 @@ impl Default for ProjectState {
 impl CommittedResourceMutation {
     fn complete(self, locale: &str) -> crate::event::ResourceMutationResultDto {
         let CommittedResourceMutation {
+            operation_id,
             project_instance_id,
             publication_revision,
             moves,
@@ -685,6 +726,7 @@ impl CommittedResourceMutation {
 
         match projection_replacements {
             Ok(projection_replacements) => crate::event::ResourceMutationResultDto {
+                operation_id,
                 project_instance_id,
                 publication_revision,
                 moves,
@@ -701,6 +743,7 @@ impl CommittedResourceMutation {
                     "committed resource mutation projection completion failed: {error}"
                 );
                 crate::event::ResourceMutationResultDto {
+                    operation_id,
                     project_instance_id,
                     publication_revision,
                     moves,
@@ -719,6 +762,17 @@ impl CommittedResourceMutation {
 
 impl ProjectState {
     pub fn new() -> Self {
+        Self::with_filesystem(ProjectFilesystemCoordinator::default())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_shared_filesystem_for_test(
+        filesystem: ProjectFilesystemCoordinator,
+    ) -> Self {
+        Self::with_filesystem(filesystem)
+    }
+
+    fn with_filesystem(filesystem: ProjectFilesystemCoordinator) -> Self {
         let publication = MutationPublication::default();
         let store = ProjectStore::default();
         let activation_identity = ProjectionEnvironmentExpectation {
@@ -733,10 +787,15 @@ impl ProjectState {
             project_path: Arc::new(RwLock::new(None)),
             project_store: Arc::new(RwLock::new(store)),
             history: Arc::new(RwLock::new(ProjectHistory::default())),
-            project_activation: Arc::new(Mutex::new(())),
+            project_activation: crate::project::ProjectActivationCoordinator::default(),
             mutation_publication: Arc::new(Mutex::new(publication)),
-            filesystem: ProjectFilesystemCoordinator::default(),
+            filesystem,
             graph_lifecycle: GraphLifecycleRegistry::default(),
+            resource_operations: Arc::new(Mutex::new(
+                crate::project::resource_mutations::ResourceOperationLedger::new(
+                    activation_identity.project_instance_id.clone(),
+                ),
+            )),
             recovery_marker: crate::project::ProjectRecoveryMarker::default(),
             activation_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activation_identity: Arc::new(RwLock::new(activation_identity)),
@@ -1456,6 +1515,21 @@ impl ProjectState {
         &self,
         prepared: PreparedProjectActivation,
     ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
+        self.publish_project_activation_with_test_hooks(prepared, true)
+    }
+
+    pub(super) fn publish_project_activation_without_test_hooks(
+        &self,
+        prepared: PreparedProjectActivation,
+    ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
+        self.publish_project_activation_with_test_hooks(prepared, false)
+    }
+
+    fn publish_project_activation_with_test_hooks(
+        &self,
+        prepared: PreparedProjectActivation,
+        run_test_hooks: bool,
+    ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
         let PreparedProjectActivation {
             session_root: project_root,
             data,
@@ -1485,6 +1559,11 @@ impl ProjectState {
                 Ok(guard) => (guard, false),
                 Err(error) => (error.into_inner(), true),
             };
+            let (mut resource_operations, resource_operations_recovered) =
+                match self.resource_operations.lock() {
+                    Ok(guard) => (guard, false),
+                    Err(error) => (error.into_inner(), true),
+                };
             let (mut current_path, path_recovered) = match self.project_path.write() {
                 Ok(guard) => (guard, false),
                 Err(error) => (error.into_inner(), true),
@@ -1537,9 +1616,12 @@ impl ProjectState {
             }
 
             let generation = ActivationGenerationTransition::begin(&self.activation_generation)?;
-            precommit_panic = self.run_activation_publication_panic_test_hook();
+            precommit_panic = run_test_hooks
+                .then(|| self.run_activation_publication_panic_test_hook())
+                .flatten();
 
             if precommit_panic.is_none() {
+                resource_operations.reset_for_project(next_instance_id.clone());
                 let previous_publication_id = publication.reset_to(next_publication_id);
                 garbage = Some(ActivationGarbage {
                     _publication_project_instance_id: previous_publication_id,
@@ -1564,11 +1646,16 @@ impl ProjectState {
                     _history: std::mem::take(&mut *history),
                 });
 
-                postcommit_panic = self.run_activation_store_replaced_test_hook();
+                postcommit_panic = run_test_hooks
+                    .then(|| self.run_activation_store_replaced_test_hook())
+                    .flatten();
                 generation.complete();
 
                 if publication_recovered {
                     self.mutation_publication.clear_poison();
+                }
+                if resource_operations_recovered {
+                    self.resource_operations.clear_poison();
                 }
                 if path_recovered {
                     self.project_path.clear_poison();
@@ -1608,9 +1695,12 @@ impl ProjectState {
         if let Some(payload) = precommit_panic {
             std::panic::resume_unwind(payload);
         }
+        let garbage = garbage.ok_or_else(|| ProjectFilesystemError::TransactionCommitFailed {
+            message: "activation commit did not retain previous authority".into(),
+        })?;
         Ok(PublishedProjectActivation {
             instance_id: next_instance_id,
-            garbage: garbage.expect("successful activation commit must retain old authority"),
+            garbage,
             postcommit_panic,
         })
     }
@@ -1721,14 +1811,6 @@ impl ProjectState {
         ))
     }
 
-    pub(crate) fn project_payload(&self) -> Result<(ProjectSession, ProjectData), String> {
-        let session = self
-            .capture_project_session()
-            .map_err(|error| error.to_string())?;
-        let data = self.project_data.read().unwrap().clone();
-        Ok((session, data))
-    }
-
     pub fn invalidate_graph_runtime(&self) {}
 
     pub fn recompile_graphs_for_variable(&self, _variable_id: &crate::variable::VariableId) {}
@@ -1821,7 +1903,7 @@ impl ProjectState {
             .unwrap_or_else(|| self.capture_projection_environment_for_session(&context.session))
             .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         let projection_paths = patch_projection_paths(&patch);
-        let deltas = graph_move_deltas(context, &patch);
+        let deltas = canonical_graph_lifecycle_events(context, &patch);
         let moves = match &patch {
             ResourceDocumentPatch::MoveGraph {
                 from, to, moved, ..
@@ -1915,9 +1997,20 @@ impl ProjectState {
                     graph_revisions.insert(path.clone(), resource.document.revision);
                     Self::insert_graph_locked(&mut data, path, resource);
                 }
-                ResourceDocumentPatch::RemoveGraph { path } => {
+                ResourceDocumentPatch::RemoveGraph { path, .. } => {
                     data.graphs.remove(&path);
                     graph_revisions.remove(&path);
+                    data.variables.retain(|_, variable| {
+                        !variable_scope_references_path(&variable.scope, path.as_str())
+                    });
+                    variable_revisions.retain(|id, _| data.variables.contains_key(id));
+                }
+                ResourceDocumentPatch::UnloadGraph { path } => {
+                    data.graphs.remove(&path);
+                    data.variables.retain(|_, variable| {
+                        !variable_scope_references_path(&variable.scope, path.as_str())
+                    });
+                    variable_revisions.retain(|id, _| data.variables.contains_key(id));
                 }
                 ResourceDocumentPatch::MoveGraph {
                     from,
@@ -1989,9 +2082,20 @@ impl ProjectState {
                     })?;
             } else if let Some(transaction) = move_history {
                 history.record_committed_transaction(transaction);
-            } else if !deltas.is_empty() {
+            } else if deltas.iter().any(|delta| {
+                !matches!(
+                    &delta.payload,
+                    crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(_)
+                )
+            }) {
                 let changes = deltas
                     .iter()
+                    .filter(|delta| {
+                        !matches!(
+                            &delta.payload,
+                            crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(_)
+                        )
+                    })
                     .map(|delta| crate::node_system::document::ResourcePatch {
                         resource: delta.resource.clone(),
                         before_revision: delta.from_revision,
@@ -2017,6 +2121,7 @@ impl ProjectState {
                 .clone();
             let publication_revision = publication.allocate_resource_revision();
             CommittedResourceMutation {
+                operation_id: context.operation_id,
                 project_instance_id: publication.project_instance_id.clone(),
                 publication_revision,
                 moves,
@@ -2239,22 +2344,7 @@ impl ProjectState {
         Ok((publication, document))
     }
 
-    fn allocate_graph_path(
-        &self,
-        name: &str,
-        kind: crate::project::GraphDocumentKind,
-    ) -> Result<(GraphResourcePath, String), String> {
-        let (session, data) = self.project_payload()?;
-        let _filesystem_lease = self
-            .filesystem()
-            .acquire(session.root.clone())
-            .map_err(|error| error.to_string())?;
-        self.validate_project_session(&session)
-            .map_err(|error| error.to_string())?;
-        Self::allocate_graph_path_from_snapshot(session.root.as_path().to_str(), &data, name, kind)
-    }
-
-    fn allocate_graph_path_from_snapshot(
+    pub(super) fn allocate_graph_path_from_snapshot(
         project_path: Option<&str>,
         data: &ProjectData,
         name: &str,
@@ -2317,86 +2407,6 @@ impl ProjectState {
         unreachable!("graph path allocation always finds a suffix")
     }
 
-    pub fn create_graph_resource(
-        &self,
-        name: &str,
-        kind: crate::project::GraphDocumentKind,
-    ) -> Result<GraphResourcePath, String> {
-        let session = self
-            .capture_project_session()
-            .map_err(|error| error.to_string())?;
-        let (graph_path, name) = self.allocate_graph_path(name, kind)?;
-        let mut resource = GraphResourceDocument::new(name, kind);
-        let shell_types: &[(&str, f64)] = match kind {
-            crate::project::GraphDocumentKind::Event => &[("yssbi.project.event.begin", 120.0)],
-            crate::project::GraphDocumentKind::Function => &[
-                ("yssbi.project.function.entry", 120.0),
-                ("yssbi.project.function.return", 560.0),
-            ],
-        };
-        let mut shell_nodes = Vec::new();
-        for (node_type, x) in shell_types {
-            let node = crate::node_system::document::DocumentNode {
-                id: crate::node_system::document::NodeId::new(),
-                node_type: crate::node_system::protocol::NodeTypeId::new(*node_type)
-                    .map_err(|error| error.to_string())?,
-                position: crate::node_system::document::NodePosition { x: *x, y: 160.0 },
-                parameters: if matches!(kind, crate::project::GraphDocumentKind::Function) {
-                    [(
-                        crate::node_system::protocol::ParameterKey::new("function")
-                            .map_err(|error| error.to_string())?,
-                        serde_json::Value::String(graph_path.as_str().to_string()),
-                    )]
-                    .into_iter()
-                    .collect()
-                } else {
-                    crate::node_system::document::ParameterValues::new()
-                },
-                user_label: None,
-            };
-            shell_nodes.push(node.id);
-            resource.document.nodes.insert(node.id, node);
-        }
-        if let [entry, returned] = shell_nodes.as_slice() {
-            let connection_id = crate::node_system::document::ConnectionId::new();
-            resource.document.connections.insert(
-                connection_id,
-                crate::node_system::document::DocumentConnection {
-                    id: connection_id,
-                    output: crate::node_system::document::PortAddress::declared(
-                        *entry,
-                        crate::node_system::protocol::PortKey::new("then")
-                            .map_err(|error| error.to_string())?,
-                    ),
-                    input: crate::node_system::document::PortAddress::declared(
-                        *returned,
-                        crate::node_system::protocol::PortKey::new("enter")
-                            .map_err(|error| error.to_string())?,
-                    ),
-                    order: None,
-                },
-            );
-        }
-        self.insert_graph(graph_path.clone(), resource)
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = self.save_graph_document(
-            &session.instance_id,
-            &graph_path,
-            crate::node_system::document::ResourceRevision::INITIAL,
-            crate::node_system::document::OperationId::new(),
-        ) {
-            self.project_data
-                .write()
-                .unwrap()
-                .graphs
-                .remove(&graph_path);
-            return Err(error.to_string());
-        }
-        self.unload_graph_resource(&graph_path)
-            .map_err(|error| error.to_string())?;
-        Ok(graph_path)
-    }
-
     pub fn unload_graph_resource(
         &self,
         graph_path: &GraphResourcePath,
@@ -2420,62 +2430,21 @@ impl ProjectState {
         Ok(())
     }
 
-    pub fn remove_graph_resource(&self, graph_path: &GraphResourcePath) -> Result<(), String> {
-        let (session, data) = self.project_payload()?;
-        let _filesystem_lease = self
-            .filesystem()
-            .acquire(session.root.clone())
-            .map_err(|error| error.to_string())?;
-        self.validate_project_session(&session)
-            .map_err(|error| error.to_string())?;
-        let removed = crate::project::remove_project_graph_from_file(
-            session.root.as_path().to_string_lossy().as_ref(),
-            graph_path,
-        )
-        .map_err(|error| error.to_string())?;
-        let loaded = data.graphs.contains_key(graph_path);
-        if !loaded && removed.is_none() {
-            return Err(format!("graph '{}' not found", graph_path));
-        }
-        self.unload_graph_resource(graph_path)
-            .map_err(|error| error.to_string())?;
-        Ok(())
-    }
-
-    pub fn duplicate_graph_resource(
+    pub(super) fn rename_graph_resource_transaction_impl(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-    ) -> Result<GraphResourcePath, String> {
-        let session = self
-            .capture_project_session()
-            .map_err(|error| error.to_string())?;
-        let _filesystem_lease = self
-            .filesystem()
-            .acquire(session.root.clone())
-            .map_err(|error| error.to_string())?;
-        self.validate_project_session(&session)
-            .map_err(|error| error.to_string())?;
-        let (path, resource) = crate::project::duplicate_project_graph_file(
-            session.root.as_path().to_string_lossy().as_ref(),
-            graph_path,
-        )
-        .map_err(|error| error.to_string())?;
-        self.insert_graph(path.clone(), resource)
-            .map_err(|error| error.to_string())?;
-        self.unload_graph_resource(&path)
-            .map_err(|error| error.to_string())?;
-        Ok(path)
-    }
-
-    pub fn rename_graph_resource(
-        &self,
-        expected_project_instance_id: &str,
-        graph_path: &GraphResourcePath,
+        expected_revision: crate::node_system::document::ResourceRevision,
         new_name: &str,
-    ) -> Result<GraphRenameResult, ProjectFilesystemError> {
+        lifecycle_token: u64,
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        let mut ownership_lease =
-            self.register_graph_rename(expected_project_instance_id, graph_path)?;
+        let mut ownership_lease = self.acquire_graph_rename_ownership(
+            expected_project_instance_id,
+            graph_path,
+            lifecycle_token,
+        )?;
 
         let ownership = ownership_lease.operation.clone();
         let root = ownership.session.root.clone();
@@ -2483,22 +2452,48 @@ impl ProjectState {
         let filesystem_lease = self.filesystem().acquire(root.clone())?;
         self.validate_graph_lifecycle_operation(&ownership)?;
 
-        let (loaded_source, loaded_metadata) = {
+        let (loaded_source, loaded_source_variables, loaded_metadata) = {
             let data = self.project_data.read().unwrap();
             (
                 data.graphs.get(graph_path).cloned(),
+                data.variables
+                    .iter()
+                    .filter(|(_, variable)| {
+                        variable_scope_references_path(&variable.scope, graph_path.as_str())
+                    })
+                    .map(|(id, variable)| (*id, variable.clone()))
+                    .collect::<std::collections::HashMap<_, _>>(),
                 data.graphs
                     .iter()
                     .map(|(path, resource)| (path.clone(), resource.name.clone(), resource.kind))
                     .collect::<Vec<_>>(),
             )
         };
+        let source_was_loaded = loaded_source.is_some();
 
         let source_result = loaded_source.map_or_else(
-            || load_project_graph_from_file(&project_path, graph_path),
-            Ok,
+            || {
+                crate::project::project_io::load_project_graph_document_from_file(
+                    &project_path,
+                    graph_path,
+                )
+                .map(|document| {
+                    let mut graph = document.document;
+                    graph.revision = document.revision;
+                    (
+                        GraphResourceDocument {
+                            name: document.name,
+                            kind: document.kind,
+                            document: graph,
+                            function: document.function,
+                        },
+                        document.local_variables,
+                    )
+                })
+            },
+            |resource| Ok((resource, loaded_source_variables)),
         );
-        let mut moved = match source_result {
+        let (mut moved, mut moved_local_variables) = match source_result {
             Ok(resource) => resource,
             Err(error) => {
                 self.validate_graph_lifecycle_operation(&ownership)?;
@@ -2528,18 +2523,31 @@ impl ProjectState {
         };
         let moved_before = moved.clone();
         let source_revision = moved.document.revision;
+        if source_revision != expected_revision {
+            return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                message: format!("revision for '{}' changed", graph_path),
+            });
+        }
         moved.name = unique_name;
         moved.document.revision = source_revision.next();
-        crate::project::project_io::remap_graph_document_references(
+        crate::project::resource_mutations::remap_graph_document_references(
             &mut moved.document,
             graph_path.as_str(),
             target.as_str(),
         );
+        for variable in moved_local_variables.values_mut() {
+            crate::project::resource_mutations::remap_variable_scope_path(
+                &mut variable.scope,
+                graph_path.as_str(),
+                target.as_str(),
+            );
+        }
 
         let mut referenced_graphs_before = BTreeMap::new();
         let mut referenced_graphs = BTreeMap::new();
         let mut referenced_variables_before = BTreeMap::new();
         let mut referenced_variables = BTreeMap::new();
+        let mut loaded_referenced_local_variables = BTreeMap::new();
         let mut expected_revisions = BTreeMap::new();
         let mut affected_resources = Vec::new();
         {
@@ -2559,7 +2567,7 @@ impl ProjectState {
                     continue;
                 }
                 let mut changed = resource.clone();
-                crate::project::project_io::remap_graph_document_references(
+                crate::project::resource_mutations::remap_graph_document_references(
                     &mut changed.document,
                     graph_path.as_str(),
                     target.as_str(),
@@ -2573,12 +2581,24 @@ impl ProjectState {
                 referenced_graphs_before.insert(path.clone(), resource.clone());
                 referenced_graphs.insert(path.clone(), changed);
             }
+            for path in referenced_graphs.keys() {
+                loaded_referenced_local_variables.insert(
+                    path.clone(),
+                    data.variables
+                        .iter()
+                        .filter(|(_, variable)| {
+                            variable_scope_references_path(&variable.scope, path.as_str())
+                        })
+                        .map(|(id, variable)| (*id, variable.clone()))
+                        .collect::<std::collections::HashMap<_, _>>(),
+                );
+            }
             for (id, variable) in &data.variables {
                 if !variable_scope_references_path(&variable.scope, graph_path.as_str()) {
                     continue;
                 }
                 let mut changed = variable.clone();
-                crate::project::project_io::remap_variable_scope_path(
+                crate::project::resource_mutations::remap_variable_scope_path(
                     &mut changed.scope,
                     graph_path.as_str(),
                     target.as_str(),
@@ -2598,10 +2618,12 @@ impl ProjectState {
                 referenced_variables.insert(*id, changed);
             }
         }
-        let moved_local_variables = referenced_variables
-            .iter()
-            .map(|(id, variable)| (*id, variable.clone()))
-            .collect();
+        if source_was_loaded {
+            moved_local_variables = referenced_variables
+                .iter()
+                .map(|(id, variable)| (*id, variable.clone()))
+                .collect();
+        }
         let loaded_referenced_graphs = referenced_graphs.keys().cloned().collect();
         let known_graph_revisions = self.graph_revisions.read().unwrap().clone();
         let disk_plan = match Self::graph_rename_mutations(
@@ -2633,7 +2655,7 @@ impl ProjectState {
                 instance_id: ownership.session.instance_id.clone(),
                 root: root.clone(),
             },
-            operation_id: crate::node_system::document::OperationId::new(),
+            operation_id,
             affected_resources,
             expected_revisions,
             expected_absent_resources: [ResourceKey::Graph(
@@ -2643,7 +2665,26 @@ impl ProjectState {
             .collect(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
-        let mutations = disk_plan.mutations;
+        let mut mutations = disk_plan.mutations;
+        for path in &loaded_referenced_graphs {
+            let resource = referenced_graphs
+                .get(path)
+                .expect("loaded referenced graph remains in the rename patch");
+            let local_variables = loaded_referenced_local_variables
+                .remove(path)
+                .unwrap_or_default();
+            let contents = crate::project::project_io::serialize_graph_resource_document(
+                resource,
+                local_variables,
+            )
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?;
+            mutations.push(StagedFilesystemMutation::Write {
+                relative_path: path.as_str().into(),
+                contents,
+            });
+        }
         self.validate_graph_lifecycle_operation(&ownership)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
             context.clone(),
@@ -2667,11 +2708,26 @@ impl ProjectState {
         let projection_environment = self
             .capture_projection_environment_for_session(&context.session)
             .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        #[cfg(test)]
+        crate::project::resource_mutations::run_resource_mutation_test_hook(
+            crate::project::resource_mutations::ResourceMutationTestPoint::Prepared,
+            Some(&target),
+        );
         let committed = prepared.commit()?;
+        #[cfg(test)]
+        crate::project::resource_mutations::run_resource_mutation_test_hook(
+            crate::project::resource_mutations::ResourceMutationTestPoint::Committed,
+            Some(&target),
+        );
         #[cfg(test)]
         if let Some(checkpoint) = self.graph_rename_io_checkpoint.read().unwrap().clone() {
             checkpoint();
         }
+        #[cfg(test)]
+        crate::project::resource_mutations::run_resource_mutation_test_hook(
+            crate::project::resource_mutations::ResourceMutationTestPoint::BeforePublication,
+            Some(&target),
+        );
         let publication = self
             .validate_graph_lifecycle_operation(&ownership)
             .and_then(|_| {
@@ -2695,10 +2751,7 @@ impl ProjectState {
         match publication {
             Ok(result) => {
                 committed.finalize();
-                Ok(GraphRenameResult {
-                    path: target,
-                    publication: result,
-                })
+                Ok(result)
             }
             Err(error) => match committed.rollback() {
                 Ok(()) => Err(error),
@@ -2740,13 +2793,13 @@ impl ProjectState {
             let before: crate::project::project_io::GraphDocument =
                 serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
             let mut after = before.clone();
-            let mut changed = crate::project::project_io::remap_graph_document_references(
+            let mut changed = crate::project::resource_mutations::remap_graph_document_references(
                 &mut after.document,
                 source.as_str(),
                 target.as_str(),
             );
             for variable in after.local_variables.values_mut() {
-                changed = crate::project::project_io::remap_variable_scope_path(
+                changed = crate::project::resource_mutations::remap_variable_scope_path(
                     &mut variable.scope,
                     source.as_str(),
                     target.as_str(),
@@ -2795,7 +2848,7 @@ impl ProjectState {
                 .variables
                 .values_mut()
                 .fold(false, |changed, variable| {
-                    crate::project::project_io::remap_variable_scope_path(
+                    crate::project::resource_mutations::remap_variable_scope_path(
                         &mut variable.scope,
                         source.as_str(),
                         target.as_str(),
@@ -2823,14 +2876,15 @@ impl ProjectState {
         Ok(plan)
     }
 
-    fn register_graph_rename(
+    fn acquire_graph_rename_ownership(
         &self,
-        expected_project_instance_id: &str,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
+        lifecycle_token: u64,
     ) -> Result<GraphRenameOwnershipLease, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != expected_project_instance_id {
+        if publication.project_instance_id != expected_project_instance_id.as_str() {
             return Err(ProjectFilesystemError::StaleProjectLifecycle {
                 message: format!(
                     "graph '{}' belongs to a different project instance",
@@ -2838,9 +2892,10 @@ impl ProjectState {
                 ),
             });
         }
-        let guard = self.graph_lifecycle.allocate_and_register(
+        let guard = self.graph_lifecycle.register(
             &session,
             graph_path,
+            lifecycle_token,
             GraphLifecycleIntent::Rename,
         )?;
         drop(publication);
@@ -2900,6 +2955,12 @@ impl ProjectState {
         operation: &GraphLifecycleOperation,
         guard: &mut crate::project::GraphLifecycleGuard,
         resource: GraphResourceDocument,
+        local_variables: Option<
+            std::collections::HashMap<
+                crate::variable::VariableId,
+                crate::variable::VariableInstance,
+            >,
+        >,
         include_projection: bool,
     ) -> Result<CommittedGraphLoad, ProjectFilesystemError> {
         self.ensure_project_operational()?;
@@ -2932,11 +2993,21 @@ impl ProjectState {
         let revision = resource.document.revision;
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
+        let mut variable_revisions = self.variable_revisions.write().unwrap();
         let inserted =
             Self::insert_graph_locked(&mut data, operation.owner.graph_path.clone(), resource);
         graph_revisions.insert(operation.owner.graph_path.clone(), revision);
+        if let Some(local_variables) = local_variables {
+            for (id, variable) in local_variables {
+                data.variables.insert(id, variable);
+                variable_revisions
+                    .entry(id)
+                    .or_insert(crate::node_system::document::ResourceRevision::INITIAL);
+            }
+        }
         lifecycle.commit_guard(guard, GraphLifecycleIntent::Load)?;
         publication.advance_authority_generation();
+        drop(variable_revisions);
         drop(graph_revisions);
         drop(data);
         drop(lifecycle);
@@ -2991,12 +3062,18 @@ impl ProjectState {
             if let Some(before_commit) = before_commit {
                 before_commit()?;
             }
-            return self.complete_graph_load(&operation, &mut guard, graph, include_projection);
+            return self.complete_graph_load(
+                &operation,
+                &mut guard,
+                graph,
+                None,
+                include_projection,
+            );
         }
 
         let filesystem_lease = self.filesystem().acquire(operation.session.root.clone())?;
         self.validate_graph_lifecycle_operation(&operation)?;
-        let loaded = load_project_graph_from_file(
+        let loaded = crate::project::project_io::load_project_graph_document_from_file(
             operation.session.root.as_path().to_string_lossy().as_ref(),
             &operation.owner.graph_path,
         );
@@ -3007,11 +3084,25 @@ impl ProjectState {
             });
         }
         let loaded = loaded.expect("checked graph read result");
+        let mut graph = loaded.document;
+        graph.revision = loaded.revision;
+        let resource = GraphResourceDocument {
+            name: loaded.name,
+            kind: loaded.kind,
+            document: graph,
+            function: loaded.function,
+        };
         drop(filesystem_lease);
         if let Some(before_commit) = before_commit {
             before_commit()?;
         }
-        self.complete_graph_load(&operation, &mut guard, loaded, include_projection)
+        self.complete_graph_load(
+            &operation,
+            &mut guard,
+            resource,
+            Some(loaded.local_variables),
+            include_projection,
+        )
     }
 
     #[cfg(test)]
@@ -3435,6 +3526,7 @@ impl ProjectState {
             .clone();
         let publication_revision = publication.allocate_resource_revision();
         Ok(CommittedResourceMutation {
+            operation_id: request.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
             publication_revision,
             moves: Vec::new(),
@@ -3571,6 +3663,7 @@ impl ProjectState {
             .clone();
         let publication_revision = publication.allocate_resource_revision();
         Ok(CommittedResourceMutation {
+            operation_id: request.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
             publication_revision,
             moves: Vec::new(),
@@ -3811,6 +3904,7 @@ impl ProjectState {
                 .clone();
             let publication_revision = publication.allocate_resource_revision();
             Ok(CommittedResourceMutation {
+                operation_id: request.operation_id,
                 project_instance_id: publication.project_instance_id.clone(),
                 publication_revision,
                 moves: Vec::new(),
@@ -4716,6 +4810,7 @@ impl ProjectState {
                 .clone();
             let publication_revision = publication.allocate_resource_revision();
             let resource_mutation = Some(CommittedResourceMutation {
+                operation_id: transaction.caused_by,
                 project_instance_id: publication.project_instance_id.clone(),
                 publication_revision,
                 moves: Vec::new(),

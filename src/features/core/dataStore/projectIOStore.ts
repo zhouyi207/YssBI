@@ -13,6 +13,8 @@ import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 
 import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
+import { resetFunctionSignatureCoordinator } from '@/features/application/editorMutation/functionSignatureCoordinator';
+import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
@@ -24,9 +26,37 @@ import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 import {
   applyVariableCatalogFromIndex,
   variableCatalogToResourceMetas,
+  variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
 import { resetClientProjectState } from './projectClientReset';
+import { useGraphMetaStore } from './graphMetaStore';
+import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useViewportStore } from '@/features/core/viewport';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction';
+import { useEditStateStore } from './editStateStore';
+import { useColumnStatsStore } from './columnStatsStore';
+import { useColumnDistributionStore } from './columnDistributionStore';
+import { useDatasetOverviewStore } from './datasetOverviewStore';
+import {
+  buildAuthoritativeProjectLoadPlan,
+  defaultAuthoritativeProjectLoadPlanDependencies,
+  type AuthoritativeProjectLoadPlanDependencies,
+  type PreparedAuthoritativeProjectLoad,
+} from './authoritativeProjectLoadPlan';
+export type {
+  AuthoritativeProjectLoadPlanDependencies,
+  PreparedAuthoritativeProjectLoad,
+} from './authoritativeProjectLoadPlan';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import {
+  assertCurrentProjectIdentity,
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/services/project/projectIdentity';
 import { useHistoryStore } from '@/features/core/history';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
@@ -67,14 +97,16 @@ function normalizeVariables(
 }
 
 function buildResourceIndex(params: {
-  graphs: Array<{ path: string; name: string; type: 'event' | 'function' }>;
+  graphs: Array<{ path: string; name: string; type: 'event' | 'function'; revision?: number }>;
   worksheets: Array<{ id: string; name: string; databaseId: string; chartType: import('@/shared/types/domain/worksheet').WorksheetChartType }>;
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
 }): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = [];
   for (const graph of params.graphs) {
-    resources.push(buildGraphResourceMeta(graph.type, graph.path, graph.name));
+    resources.push(buildGraphResourceMeta(graph.type, graph.path, graph.name, {
+      revision: graph.revision ?? 0,
+    }));
   }
   for (const worksheet of params.worksheets) {
     resources.push({
@@ -133,11 +165,16 @@ async function refreshProjectResourceIndex(): Promise<boolean> {
 }
 
 async function refreshProjectResourceIndexOnce(): Promise<boolean> {
+  const identity = captureProjectIdentity();
   try {
-    const index = await ProjectService.getProjectIndex();
-    if (index.projectInstanceId !== useProjectIOStore.getState().projectInstanceId) return false;
+    const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
+    if (!isCurrentProjectIdentity(identity)) return false;
+    if (index.projectInstanceId !== identity.projectInstanceId) return false;
     const variableCatalog = applyVariableCatalogFromIndex(index.variables);
-    useVariableStore.getState().setVariables(variableCatalog);
+    useVariableStore.getState().setVariableSnapshot(
+      variableCatalog,
+      variableRevisionsFromIndex(index.variables),
+    );
 
     const graphOrder = index.graphs.map((graph) => graph.path);
 
@@ -168,6 +205,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     reconcileOpenLayoutTabsWithResources();
     return true;
   } catch (err) {
+    if (!isCurrentProjectIdentity(identity)) return false;
     const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
     logger.sys.error('Failed to refresh resource index: ' + errorMessage, 'ProjectIOStore');
     useProjectIOStore.setState({ error: errorMessage });
@@ -180,6 +218,113 @@ function applyDatabasesFromRaw(raw: Record<string, unknown>): Record<string, Dat
   const normalized = normalizeDatabases(raw, useDatabaseStore.getState().databases);
   useDatabaseStore.getState().setDatabases(normalized);
   return normalized;
+}
+
+export async function prepareAuthoritativeProjectLoad(
+  identity: ProjectIdentitySnapshot,
+  dependencyOverrides: Partial<AuthoritativeProjectLoadPlanDependencies> = {},
+): Promise<PreparedAuthoritativeProjectLoad> {
+  const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+  assertCurrentProjectIdentity(identity);
+  const { databases } = await ProjectService.getDatabasesVariables(identity.projectInstanceId);
+  assertCurrentProjectIdentity(identity);
+  const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
+  assertCurrentProjectIdentity(identity);
+  if (index.projectInstanceId !== identity.projectInstanceId) {
+    throw new Error('Project index identity does not match the requested project');
+  }
+  return buildAuthoritativeProjectLoadPlan(
+    { path, databases, index },
+    {
+      databases: useDatabaseStore.getState().databases,
+      layoutNodes: useLayoutStore.getState().nodes,
+      editorTabs: useEditorTabStore.getState().snapshotMemento(),
+      recentEditorGroupIds: useLayoutStore.getState().recentEditorGroupIds,
+    },
+    {
+      ...defaultAuthoritativeProjectLoadPlanDependencies,
+      validateCoordinatorStart: (projectInstanceId, publicationRevision) => {
+        projectPublicationCoordinator.validateProjectStart(projectInstanceId, publicationRevision);
+      },
+      ...dependencyOverrides,
+    },
+  );
+}
+
+function commitProjectLoadStep(label: string, assignment: () => void): void {
+  try {
+    assignment();
+  } catch (error) {
+    try {
+      logger.sys.error(
+        `Project load commit listener failed at '${label}': ${formatErrorMessage(error)}`,
+        'ProjectIOStore',
+      );
+    } catch {
+      // Commit completion must not depend on diagnostics infrastructure.
+    }
+  }
+}
+
+export function commitPreparedAuthoritativeProjectLoad(
+  prepared: PreparedAuthoritativeProjectLoad,
+): ProjectData {
+  projectPublicationCoordinator.startProject(
+    prepared.index.projectInstanceId,
+    prepared.index.publicationRevision,
+  );
+  commitProjectLoadStep('graph projection coordinator', resetGraphProjectionCoordinator);
+  loadGraphInFlight.clear();
+  commitProjectLoadStep('function signature coordinator', resetFunctionSignatureCoordinator);
+  commitProjectLoadStep('history coordinator', resetHistoryCoordinator);
+
+  commitProjectLoadStep('layout', () => useLayoutStore.setState({
+    nodes: prepared.storeState.layout.nodes,
+    activeEditorGroupId: prepared.storeState.layout.activeEditorGroupId,
+    recentEditorGroupIds: prepared.storeState.layout.recentEditorGroupIds,
+  }));
+  commitProjectLoadStep('editor tabs', () => useEditorTabStore.setState(
+    prepared.storeState.layout.tabs,
+  ));
+  commitProjectLoadStep('viewport', () => useViewportStore.setState({ viewports: {} }));
+  commitProjectLoadStep('graph interaction', () => useGraphInteractionStore.setState({
+    positionOverrides: {},
+  }));
+  commitProjectLoadStep('edit state', () => useEditStateStore.setState({ editStateByDatabase: {} }));
+  commitProjectLoadStep('column stats', () => useColumnStatsStore.setState({ statsByDatabase: {} }));
+  commitProjectLoadStep('column distribution', () => useColumnDistributionStore.setState({
+    distByDatabase: {},
+  }));
+  commitProjectLoadStep('dataset overview', () => useDatasetOverviewStore.setState({
+    overviewByDatabase: {},
+  }));
+  commitProjectLoadStep('database', () => useDatabaseStore.setState({
+    databases: prepared.storeState.databases,
+  }));
+  commitProjectLoadStep('variable', () => useVariableStore.setState({
+    variables: prepared.storeState.variables,
+    revisions: prepared.storeState.variableRevisions,
+  }));
+  commitProjectLoadStep('worksheet', () => useWorksheetStore.setState({
+    index: prepared.storeState.worksheetIndex,
+    documents: {},
+  }));
+  commitProjectLoadStep('documents', () => useDocumentStateStore.setState({ documents: {} }));
+  commitProjectLoadStep('resources', () => useResourceStore.setState({
+    resources: prepared.storeState.resources,
+    graphOrder: prepared.storeState.graphOrder,
+  }));
+  commitProjectLoadStep('function metadata', () => useGraphMetaStore.setState({
+    graphs: prepared.storeState.graphMeta,
+  }));
+  commitProjectLoadStep('graph session', () => useGraphSessionStore.setState({ focusedSession: null }));
+  commitProjectLoadStep('graph data', () => useGraphDataStore.setState({ graphEntities: {} }));
+  commitProjectLoadStep('history', () => useHistoryStore.setState(prepared.storeState.history));
+  commitProjectLoadStep('project IO', () => useProjectIOStore.setState(prepared.storeState.projectIO));
+  commitProjectLoadStep('completion log', () => {
+    logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
+  });
+  return prepared.projectData;
 }
 
 /** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
@@ -211,68 +356,16 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     }
 
     // 不因 Loading 提前返回，避免与 ProjectLoaded 事件 handler 竞态导致 importGraph 误判失败
+    const identity = captureProjectIdentity();
     loadProjectInFlight = (async () => {
       set({ status: LoadStatus.Loading, error: null });
 
       try {
-        const path = await ProjectService.getProjectPath();
-
-        // Drop residue from any previously loaded project before hydrating new
-        // values. Backend authoritatively cleared its in-memory state already.
-        resetGraphProjectionCoordinator();
-        loadGraphInFlight.clear();
-        resetClientProjectState();
-        set({ projectInstanceId: null });
-        useGraphDataStore.setState({ graphEntities: {} });
-
-        const { databases } = await ProjectService.getDatabasesVariables();
-        const normalizedDatabases = applyDatabasesFromRaw(databases as Record<string, unknown>);
-
-        const index = await ProjectService.getProjectIndex();
-        set({ projectInstanceId: index.projectInstanceId });
-        const normalizedVariables = applyVariableCatalogFromIndex(index.variables);
-        useVariableStore.getState().setVariables(normalizedVariables);
-
-        const graphOrder = index.graphs.map((graph) => graph.path);
-        const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
-            id: ws.id,
-            name: ws.name,
-            databaseId: ws.databaseId,
-            chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
-          }));
-        useWorksheetStore.getState().setIndex(
-          worksheetIndex,
-        );
-
-        useResourceStore.getState().setSnapshot({
-          resources: buildResourceIndex({
-            graphs: index.graphs,
-            worksheets: worksheetIndex,
-            variables: normalizedVariables,
-            databases: normalizedDatabases,
-          }),
-          graphOrder,
-        });
-        hydrateFunctionSignaturesFromProjectIndex(index.graphs);
-        useHistoryStore.setState({
-          canUndo: index.history.canUndo,
-          canRedo: index.history.canRedo,
-        });
-        reconcileOpenLayoutTabsWithResources();
-        projectPublicationCoordinator.startProject(
-          index.projectInstanceId,
-          index.publicationRevision,
-        );
-
-        set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
-        logger.sys.info('Project loaded (index from Rust)', 'ProjectIOStore');
-        return {
-          variables: normalizedVariables,
-          databases,
-          graphs: {},
-          metadata: { exportTime: index.exportTime, appVersion: index.appVersion },
-        } as ProjectData;
+        const prepared = await prepareAuthoritativeProjectLoad(identity);
+        assertCurrentProjectIdentity(identity);
+        return commitPreparedAuthoritativeProjectLoad(prepared);
       } catch (err) {
+        if (!isCurrentProjectIdentity(identity)) return null;
         const errorMessage = formatErrorMessage(err, 'Failed to load project');
         set({ status: LoadStatus.Error, error: errorMessage });
         logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');

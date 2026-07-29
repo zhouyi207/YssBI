@@ -29,6 +29,10 @@ export interface ProjectLoadedPayload {
     path: string | null;
 }
 
+export interface ProjectLifecycleCommittedPayload {
+    result: import('@/shared/types/dto/project').LifecycleMutationResultDto;
+}
+
 export interface ProjectSavedPayload {
     result: import('@/shared/types/dto').ProjectSaveResultDto;
 }
@@ -46,6 +50,7 @@ export interface GraphDeletedPayload {
 }
 
 export interface ResourceChangedPayload {
+    projectInstanceId: string;
     id: string;
     kind: ResourceKind;
     source?: 'command' | 'watcher';
@@ -53,6 +58,7 @@ export interface ResourceChangedPayload {
 }
 
 export interface ProjectIndexInvalidatedPayload {
+    projectInstanceId: string;
     source: string;
     version: number;
 }
@@ -103,6 +109,7 @@ export interface DataFrameSchemaUpdatedPayload {
 }
 
 export interface GraphDeltaEventPayload {
+    projectInstanceId: string;
     delta: GraphDeltaDto;
 }
 
@@ -113,7 +120,7 @@ export interface ResourceMutationCommittedPayload {
 // ==================== Backend event typing ====================
 
 export type BackendEventType =
-    | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectSaved'
+    | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectLifecycleCommitted' | 'ProjectSaved'
     | 'EventUpdated' | 'EventDeleted'
     | 'FunctionUpdated' | 'FunctionDeleted'
     | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
@@ -124,6 +131,7 @@ export type BackendEventType =
 export interface BackendEventPayloadMap {
     ProjectLoaded: ProjectLoadedPayload;
     ProjectCleared: void;
+    ProjectLifecycleCommitted: ProjectLifecycleCommittedPayload;
     ProjectSaved: ProjectSavedPayload;
     EventUpdated: GraphUpdatedPayload;
     EventDeleted: GraphDeletedPayload;

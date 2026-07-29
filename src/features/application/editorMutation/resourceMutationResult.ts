@@ -19,6 +19,7 @@ import type {
   VariableDocumentPatchDto,
   WorksheetDeltaDto,
 } from '@/shared/types/dto/editorMutation';
+import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import {
   functionSignaturePins,
@@ -34,6 +35,7 @@ import type {
 } from './projectPublicationCoordinator';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import {
+  buildGraphResourceMeta,
   resourceKey,
   useDocumentStateStore,
   useResourceStore,
@@ -182,6 +184,9 @@ export function validateResourceMutationWireResult(
   result: ResourceMutationResultDto,
 ): string | undefined {
   if (!isRecord(result)) return 'resource mutation result is malformed';
+  if (typeof result.operationId !== 'string' || !result.operationId) {
+    return 'operation correlation is malformed';
+  }
   if (typeof result.projectInstanceId !== 'string' || !result.projectInstanceId) {
     return 'project instance identity is malformed';
   }
@@ -197,6 +202,9 @@ export function validateResourceMutationWireResult(
     && typeof move.name === 'string'
     && move.name.trim().length > 0)) return 'resource moves are malformed';
   if (!areResourceDeltasValid(result.deltas)) return 'resource deltas are malformed';
+  if (result.deltas.some((delta) => delta.causedBy !== null && delta.causedBy !== result.operationId)) {
+    return 'resource delta operation correlation is inconsistent';
+  }
   const worksheetError = validateWorksheetDeltas(result.worksheetDeltas);
   if (worksheetError) return worksheetError;
   if (!Array.isArray(result.projectionReplacements)) return 'projection replacements are malformed';
@@ -279,7 +287,9 @@ function prepareFunctionInstalls(deltas: ResourceDeltaDto[]): PreparedFunctionDe
 }
 
 function prepareVariableInstalls(deltas: ResourceDeltaDto[]): PreparedVariableDeltaInstall[] {
-  const variables = useVariableStore.getState().variables;
+  const variableState = useVariableStore.getState();
+  const variables = variableState.variables;
+  const revisions = variableState.revisions;
   const installs: PreparedVariableDeltaInstall[] = [];
   for (const delta of deltas) {
     if (delta.resource.kind !== 'variable' || delta.payload.kind !== 'variable') continue;
@@ -288,23 +298,28 @@ function prepareVariableInstalls(deltas: ResourceDeltaDto[]): PreparedVariableDe
     const patch = delta.payload.patch as VariableDocumentPatchDto;
     const before = patch.before == null
       ? null
-      : normalizeVariableFromBackend({
-        ...(patch.before as Record<string, unknown>),
-        revision: delta.fromRevision,
-      } as Parameters<typeof normalizeVariableFromBackend>[0]);
+      : normalizeVariableFromBackend(
+        patch.before as Parameters<typeof normalizeVariableFromBackend>[0],
+      );
     const after = patch.after == null
       ? null
-      : normalizeVariableFromBackend({
-        ...(patch.after as Record<string, unknown>),
-        revision: delta.toRevision,
-      } as Parameters<typeof normalizeVariableFromBackend>[0]);
+      : normalizeVariableFromBackend(
+        patch.after as Parameters<typeof normalizeVariableFromBackend>[0],
+      );
     if ((before === null) !== (current === null)
+      || (revisions[id] ?? 0) !== delta.fromRevision
       || (before && current && !sameValue(before, current))
       || (before && before.id !== id)
       || (after && after.id !== id)) {
       throw new Error(`variable delta for '${delta.resource.key}' is inconsistent`);
     }
-    installs.push({ id, before, after });
+    installs.push({
+      id,
+      before,
+      after,
+      fromRevision: delta.fromRevision,
+      toRevision: delta.toRevision,
+    });
   }
   return installs;
 }
@@ -358,6 +373,7 @@ function createPublicationAggregate(graphEntities: PreparedProjectPublication['g
     documents: structuredClone(useDocumentStateStore.getState().documents) as Record<ResourceKey, DocumentState>,
     graphMeta: structuredClone(useGraphMetaStore.getState().graphs),
     variables: structuredClone(useVariableStore.getState().variables),
+    variableRevisions: structuredClone(useVariableStore.getState().revisions),
     worksheetIndex: structuredClone(worksheet.index),
     worksheetDocuments: structuredClone(worksheet.documents),
     tabs: structuredClone(useEditorTabStore.getState().snapshotMemento()),
@@ -394,6 +410,56 @@ function remapAggregateViewports(
     if (viewports[destinationKey]) throw new Error(`move viewport destination '${destinationKey}' exists`);
     viewports[destinationKey] = viewports[key];
     delete viewports[key];
+  }
+}
+
+function graphLifecycleName(path: string, kind: 'event' | 'function'): string {
+  const filename = path.slice(path.lastIndexOf('/') + 1);
+  const suffix = kind === 'event' ? '.yssbi-event' : '.yssbi-function';
+  return filename.endsWith(suffix) ? filename.slice(0, -suffix.length) : filename;
+}
+
+function applyGraphLifecycleDeltasToAggregate(
+  aggregate: PublicationAggregate,
+  deltas: readonly ResourceDeltaDto[],
+): void {
+  for (const delta of deltas) {
+    if (delta.resource.kind !== 'graph'
+      || delta.payload.kind !== 'graph_resource_lifecycle') continue;
+    const { before, after } = delta.payload.patch;
+    const state = before ?? after;
+    if (!state) throw new Error(`graph lifecycle delta for '${delta.resource.key}' is empty`);
+    const key = resourceKey({ id: state.path, kind: state.kind });
+    const current = aggregate.resources[key];
+    if (before === null) {
+      if (current || aggregate.graphMeta[state.path]
+        || aggregate.graphOrder.includes(state.path)) {
+        throw new Error(`graph lifecycle insert target '${state.path}' already exists`);
+      }
+      const name = graphLifecycleName(state.path, state.kind);
+      aggregate.resources[key] = buildGraphResourceMeta(state.kind, state.path, name, {
+        revision: state.revision,
+        loaded: false,
+      });
+      aggregate.graphOrder.push(state.path);
+      aggregate.graphMeta[state.path] = { path: state.path, name, type: state.kind };
+      continue;
+    }
+    if (!current || current.revision !== before.revision || current.kind !== before.kind) {
+      throw new Error(`graph lifecycle remove source '${before.path}' is inconsistent`);
+    }
+    delete aggregate.resources[key];
+    aggregate.graphOrder = aggregate.graphOrder.filter((path) => path !== before.path);
+    delete aggregate.documents[key];
+    delete aggregate.graphMeta[before.path];
+    delete aggregate.graphEntities[before.path];
+    if (aggregate.focusedSession?.graphPath === before.path) aggregate.focusedSession = null;
+    removeTabFromMemento(aggregate.tabs, before.path);
+    for (const viewportKey of Object.keys(aggregate.viewports)) {
+      if (parseViewportScopeKey(viewportKey)?.graphPath === before.path) {
+        delete aggregate.viewports[viewportKey];
+      }
+    }
   }
 }
 
@@ -450,7 +516,7 @@ function applyMovesToAggregate(
 
 function markPreparedVariableScopeDirty(
   aggregate: PublicationAggregate,
-  scope: PreparedVariableDeltaInstall['scope'],
+  scope: Variable['scope'],
 ): void {
   const graphPath = scope.type === 'event'
     ? scope.eventPath
@@ -475,11 +541,30 @@ function applyWorksheetDeltasToAggregate(
   for (const delta of deltas) {
     const { id } = delta;
     const existing = aggregate.worksheetDocuments[id] ?? null;
+    const key = resourceKey({ id, kind: 'worksheet' });
     if (!sameValue(existing, delta.before)) {
-      throw new Error(`worksheet delta for '${id}' is inconsistent`);
+      const documentState = aggregate.documents[key];
+      if (existing === null
+        || delta.before === null
+        || delta.after === null
+        || documentState?.dirty !== true
+        || existing.revision !== delta.before.revision) {
+        throw new Error(`worksheet delta for '${id}' is inconsistent`);
+      }
+      const preserved = { ...existing, revision: delta.after.revision };
+      aggregate.worksheetDocuments[id] = preserved;
+      const entry = worksheetIndexEntry(preserved);
+      aggregate.worksheetIndex = aggregate.worksheetIndex.some((candidate) => candidate.id === id)
+        ? aggregate.worksheetIndex.map((candidate) => candidate.id === id ? entry : candidate)
+        : [...aggregate.worksheetIndex, entry];
+      const resource = aggregate.resources[key];
+      if (resource) {
+        aggregate.resources[key] = { ...resource, name: preserved.name, hasDirtyDocument: true };
+      }
+      installs.push({ id, before: delta.before, after: delta.after });
+      continue;
     }
     installs.push({ id, before: delta.before, after: delta.after });
-    const key = resourceKey({ id, kind: 'worksheet' });
     if (delta.after) {
       aggregate.worksheetDocuments[id] = structuredClone(delta.after);
       const entry = worksheetIndexEntry(delta.after);
@@ -575,6 +660,7 @@ export function prepareSynchronousPublicationCommit(
   for (const move of context.moves) delete graphEntities[move.from];
   const aggregate = createPublicationAggregate(graphEntities);
   applyMovesToAggregate(aggregate, context.moves);
+  applyGraphLifecycleDeltasToAggregate(aggregate, result.deltas);
 
   const functionInstalls = prepareFunctionInstalls(result.deltas);
   for (const install of functionInstalls) {
@@ -591,6 +677,7 @@ export function prepareSynchronousPublicationCommit(
   const variableInstalls = prepareVariableInstalls(result.deltas);
   for (const install of variableInstalls) {
     if (install.before) markPreparedVariableScopeDirty(aggregate, install.before.scope);
+    aggregate.variableRevisions[install.id] = install.toRevision;
     if (install.after) {
       aggregate.variables[install.id] = install.after;
       markPreparedVariableScopeDirty(aggregate, install.after.scope);
@@ -635,6 +722,7 @@ export function prepareSynchronousPublicationCommit(
       documents: aggregate.documents,
       graphMeta: aggregate.graphMeta,
       variables: aggregate.variables,
+      variableRevisions: aggregate.variableRevisions,
       worksheetIndex: aggregate.worksheetIndex,
       worksheetDocuments: aggregate.worksheetDocuments,
       tabs: aggregate.tabs,
@@ -653,7 +741,10 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
   });
   useDocumentStateStore.setState({ documents: plan.storeState.documents });
   useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
-  useVariableStore.setState({ variables: plan.storeState.variables });
+  useVariableStore.setState({
+    variables: plan.storeState.variables,
+    revisions: plan.storeState.variableRevisions,
+  });
   useWorksheetStore.setState({
     index: plan.storeState.worksheetIndex,
     documents: plan.storeState.worksheetDocuments,

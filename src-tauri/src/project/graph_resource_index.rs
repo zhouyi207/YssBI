@@ -80,8 +80,16 @@ fn collect_kind_files(
     files: &mut Vec<(String, GraphDocumentKind)>,
 ) -> Result<(), ProjectError> {
     let graph_dir = root.join(dir);
-    if !graph_dir.exists() {
-        return Ok(());
+    let metadata = match std::fs::symlink_metadata(&graph_dir) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if crate::project::metadata_is_redirect(&metadata) || !metadata.is_dir() {
+        return Err(ProjectError::InvalidProjectFormat(format!(
+            "graph directory '{}' is not a real directory",
+            graph_dir.display()
+        )));
     }
     collect_kind_files_recursive(root, &graph_dir, extension, kind, files)
 }
@@ -95,17 +103,24 @@ fn collect_kind_files_recursive(
 ) -> Result<(), ProjectError> {
     for entry in std::fs::read_dir(directory)? {
         let path = entry?.path();
-        if path.is_dir() {
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if crate::project::metadata_is_redirect(&metadata) {
+            return Err(ProjectError::InvalidProjectFormat(format!(
+                "graph resource path '{}' is a redirect",
+                path.display()
+            )));
+        }
+        if metadata.is_dir() {
             collect_kind_files_recursive(root, &path, extension, kind, files)?;
-        } else if is_graph_file(&path, extension) {
+        } else if is_graph_file(&path, &metadata, extension) {
             files.push((relative_slash_path(root, &path)?, kind));
         }
     }
     Ok(())
 }
 
-fn is_graph_file(path: &Path, extension: &str) -> bool {
-    path.is_file()
+fn is_graph_file(path: &Path, metadata: &std::fs::Metadata, extension: &str) -> bool {
+    metadata.is_file()
         && path
             .extension()
             .and_then(|value| value.to_str())
@@ -117,4 +132,95 @@ fn relative_slash_path(root: &Path, path: &Path) -> Result<String, ProjectError>
     path.strip_prefix(root)
         .map(|relative| relative.to_string_lossy().replace('\\', "/"))
         .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scan_graph_resource_index;
+
+    struct TestTree {
+        root: std::path::PathBuf,
+        outside: std::path::PathBuf,
+    }
+
+    impl TestTree {
+        fn new(label: &str) -> Self {
+            let base = std::env::temp_dir().join(format!(
+                "yssbi-graph-discovery-{label}-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let root = base.join("project");
+            let outside = base.join("outside");
+            std::fs::create_dir_all(root.join("events")).unwrap();
+            std::fs::create_dir_all(&outside).unwrap();
+            Self { root, outside }
+        }
+    }
+
+    impl Drop for TestTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(self.root.parent().expect("test project has a parent"));
+        }
+    }
+
+    #[cfg(windows)]
+    fn link_directory(link: &std::path::Path, target: &std::path::Path) {
+        let command = format!(
+            "New-Item -ItemType Junction -Path '{}' -Target '{}' | Out-Null",
+            link.display(),
+            target.display()
+        );
+        let status = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                command.as_str(),
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to create test junction");
+    }
+
+    #[cfg(unix)]
+    fn link_directory(link: &std::path::Path, target: &std::path::Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn link_file(link: &std::path::Path, target: &std::path::Path) {
+        std::os::windows::fs::symlink_file(target, link).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn link_file(link: &std::path::Path, target: &std::path::Path) {
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    #[test]
+    fn graph_discovery_rejects_external_file_redirect() {
+        let tree = TestTree::new("external-file");
+        let outside = tree.outside.join("External.yssbi-event");
+        std::fs::write(&outside, b"{}").unwrap();
+        link_file(&tree.root.join("events/External.yssbi-event"), &outside);
+
+        assert!(scan_graph_resource_index(&tree.root).is_err());
+    }
+
+    #[test]
+    fn graph_discovery_rejects_external_directory_redirect() {
+        let tree = TestTree::new("external-directory");
+        std::fs::write(tree.outside.join("External.yssbi-event"), b"{}").unwrap();
+        link_directory(&tree.root.join("events/External"), &tree.outside);
+
+        assert!(scan_graph_resource_index(&tree.root).is_err());
+    }
+
+    #[test]
+    fn graph_discovery_rejects_directory_redirect_loop() {
+        let tree = TestTree::new("directory-loop");
+        link_directory(&tree.root.join("events/loop"), &tree.root.join("events"));
+
+        assert!(scan_graph_resource_index(&tree.root).is_err());
+    }
 }

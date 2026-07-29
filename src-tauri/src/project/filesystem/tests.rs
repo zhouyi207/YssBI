@@ -290,6 +290,77 @@ fn lease_set_releases_roots_in_reverse_order() {
 }
 
 #[test]
+fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
+    let temporary = TestDirectory::new("filesystem-lifecycle-close");
+    let root = normalized(temporary.path().join("project"));
+    let coordinator = ProjectFilesystemCoordinator::default();
+
+    let mut lifecycle = coordinator.begin_root_lifecycle(root.clone()).unwrap();
+    let error = coordinator.acquire(root.clone()).err().unwrap();
+    assert_eq!(error.code(), "project_lifecycle_admission_closed");
+
+    lifecycle.release_initial_and_drain();
+    lifecycle.acquire_final().unwrap();
+    assert!(lifecycle.holds_lease());
+    assert_eq!(
+        coordinator.acquire(root.clone()).err().unwrap().code(),
+        "project_lifecycle_admission_closed"
+    );
+
+    drop(lifecycle);
+    drop(coordinator.acquire(root).unwrap());
+}
+
+#[test]
+fn lifecycle_drain_waits_for_previously_admitted_multi_root_operation() {
+    let temporary = TestDirectory::new("filesystem-lifecycle-drain");
+    let root_a = normalized(temporary.path().join("a"));
+    let root_b = normalized(temporary.path().join("b"));
+    let coordinator = ProjectFilesystemCoordinator::default();
+    let held_b = coordinator.acquire(root_b.clone()).unwrap();
+    let admitted_waiting = coordinator.observe_next_wait();
+    let (ordinary_done_tx, ordinary_done_rx) = mpsc::channel();
+
+    let ordinary_coordinator = coordinator.clone();
+    let ordinary_a = root_a.clone();
+    let ordinary = std::thread::spawn(move || {
+        let lease = ordinary_coordinator
+            .acquire_many([ordinary_a, root_b])
+            .unwrap();
+        ordinary_done_tx.send(()).unwrap();
+        drop(lease);
+    });
+    admitted_waiting
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap();
+
+    let mut lifecycle = coordinator.begin_root_lifecycle(root_a.clone()).unwrap();
+    assert_eq!(
+        coordinator.acquire(root_a.clone()).err().unwrap().code(),
+        "project_lifecycle_admission_closed"
+    );
+    let (drained_tx, drained_rx) = mpsc::channel();
+    let drain = std::thread::spawn(move || {
+        lifecycle.release_initial_and_drain();
+        drained_tx.send(()).unwrap();
+        lifecycle
+    });
+
+    assert!(drained_rx.recv_timeout(Duration::from_millis(100)).is_err());
+    drop(held_b);
+    ordinary_done_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap();
+    ordinary.join().unwrap();
+    drained_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+
+    let mut lifecycle = drain.join().unwrap();
+    lifecycle.acquire_final().unwrap();
+    assert!(lifecycle.holds_lease());
+    drop(lifecycle);
+}
+
+#[test]
 fn prepare_serializes_every_document_before_touching_live_files() {
     let temporary = TestDirectory::new("transaction-prepare-atomic");
     std::fs::write(temporary.path().join("first.json"), br#"{"live":1}"#).unwrap();

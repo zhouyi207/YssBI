@@ -17,6 +17,16 @@ import type { ProjectRecordRow } from "@/shared/types/dto/project";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 import { uiStore } from "@/features/core/ui/UIStore";
+import {
+  ProjectLifecycleProtocolError,
+  applyProjectLifecycleReceipt,
+  claimProjectLifecycleInitiatorSettlement,
+  recoverProjectLifecycleDirectFailure,
+  registerPendingProjectLifecycleOperation,
+  type PendingProjectLifecycleOperation,
+  type ProjectLifecycleReceiptSettlement,
+} from '@/features/application/projectLifecycleReceipt';
+import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 
 export interface ManagedProject {
   id: string;
@@ -52,6 +62,15 @@ function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
 async function listManagedProjects(): Promise<ManagedProject[]> {
   const rows = await ProjectService.listRegisteredProjects();
   return rows.map(rowToManagedProject);
+}
+
+function managedProjectsFromSettlement(
+  settlement: ProjectLifecycleReceiptSettlement,
+): ManagedProject[] {
+  if (!settlement.registryProjects) {
+    throw new Error('Lifecycle settlement omitted registry projection');
+  }
+  return settlement.registryProjects.map(rowToManagedProject);
 }
 
 export function useProjectPicker() {
@@ -221,8 +240,13 @@ export function useProjectPicker() {
   }, [handlePickerTaskCancelled, t]);
 
   const createProject = useCallback(async (name: string, path: string) => {
-    setBusy("new");
+    let pending: PendingProjectLifecycleOperation | undefined;
     try {
+      pending = registerPendingProjectLifecycleOperation({
+        kind: 'create',
+        expectsActiveProject: false,
+      });
+      setBusy("new");
       await runWithProjectPickerProgress(
         {
           initial: {
@@ -231,17 +255,45 @@ export function useProjectPicker() {
           },
         },
         async ({ update }) => {
-          const row = await ProjectService.createProject(name, path);
+          let settlement: ProjectLifecycleReceiptSettlement;
+          try {
+            const result = await ProjectService.createProject(name, path, pending!.operationId);
+            if (!pending!.isCurrent()) return;
+            settlement = await applyProjectLifecycleReceipt(
+              result,
+              'direct',
+              createProjectLifecycleReceiptDependencies(),
+            );
+          } catch (error) {
+            if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) throw error;
+            const recovered = await recoverProjectLifecycleDirectFailure(pending!.operationId);
+            if (!recovered) throw error;
+            settlement = recovered;
+          }
+          if (settlement.status === 'stale' || !pending!.isCurrent()) return;
+          const claimed = claimProjectLifecycleInitiatorSettlement(pending!.operationId);
+          if (!claimed) return;
+          setProjects(managedProjectsFromSettlement(claimed));
           markProjectPickerProgressDone(t, update);
-          setProjects((previous) => [
-            rowToManagedProject(row),
-            ...previous.filter((project) => project.id !== row.id),
-          ]);
-          uiStore.showToast(t("projectPicker.createSuccess", { name: row.name }), "success");
+          const result = claimed.result;
+          if (result.outcome === 'committed' && result.record) {
+            uiStore.showToast(
+              t("projectPicker.createSuccess", { name: result.record.name }),
+              "success",
+            );
+          } else {
+            uiStore.showToast(
+              `${t("projectPicker.createSuccess", { name })}: ${result.recovery?.action ?? result.outcome}`,
+              "warning",
+            );
+          }
         },
       );
+    } catch (error) {
+      if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
+      if (!pending || pending.isCurrent()) uiStore.showToast(formatErrorMessage(error), "error");
     } finally {
-      setBusy("idle");
+      if (!pending || pending.isCurrent()) setBusy("idle");
     }
   }, [t]);
 
@@ -318,11 +370,56 @@ export function useProjectPicker() {
 
   const deleteProjectFiles = useCallback((id: string) => {
     return (async () => {
+      let pending: PendingProjectLifecycleOperation | undefined;
       try {
-        await ProjectService.deleteRegisteredProjectFiles(id);
-        setProjects((previous) => previous.filter((project) => project.id !== id));
-        uiStore.showToast(t("projectPicker.deleteProjectConfirm.success"), "success");
+        const active = id === currentProjectId;
+        pending = registerPendingProjectLifecycleOperation({
+          kind: 'delete',
+          expectsActiveProject: active,
+        });
+        let settlement: ProjectLifecycleReceiptSettlement;
+        try {
+          const result = await ProjectService.deleteRegisteredProjectFiles(
+            id,
+            active ? pending.projectInstanceId : null,
+            pending.operationId,
+          );
+          if (!pending.isCurrent()) return;
+          settlement = await applyProjectLifecycleReceipt(
+            result,
+            'direct',
+            createProjectLifecycleReceiptDependencies(),
+          );
+        } catch (error) {
+          if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) throw error;
+          const recovered = await recoverProjectLifecycleDirectFailure(pending.operationId);
+          if (!recovered) throw error;
+          settlement = recovered;
+        }
+        if (settlement.status === 'stale' || !pending.isCurrent()) return;
+        const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
+        if (!claimed) return;
+        setProjects(managedProjectsFromSettlement(claimed));
+        const result = claimed.result;
+        if (active
+          && result.kind === 'registryCleanup'
+          && result.outcome === 'registryFailed') {
+          uiStore.showToast(
+            `${t("projectPicker.deleteProjectConfirm.failed")}: ${result.recovery?.action ?? result.outcome}`,
+            "error",
+          );
+          return;
+        }
+        const requiresRecovery = result.outcome !== 'committed';
+        uiStore.showToast(
+          requiresRecovery
+            ? `${t("projectPicker.deleteProjectConfirm.success")} (${result.recovery?.action ?? result.outcome})`
+            : t("projectPicker.deleteProjectConfirm.success"),
+          requiresRecovery ? "warning" : "success",
+        );
       } catch (error) {
+        if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
+        if (pending && !pending.isCurrent()) return;
         uiStore.showToast(
           `${t("projectPicker.deleteProjectConfirm.failed")}: ${formatErrorMessage(error)}`,
           "error",
@@ -330,7 +427,7 @@ export function useProjectPicker() {
         throw error;
       }
     })();
-  }, [t]);
+  }, [currentProjectId, t]);
 
   const toggleFavorite = useCallback((id: string) => {
     void (async () => {

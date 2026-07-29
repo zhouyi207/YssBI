@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -59,55 +59,18 @@ pub fn ensure_worksheets_dir(root: &Path) -> Result<(), ProjectError> {
     Ok(())
 }
 
-/// Hoists nested worksheet files under `worksheets/` to the directory root.
-pub fn flatten_worksheet_layout(root: &Path) -> Result<bool, ProjectError> {
-    let dir = root.join(WORKSHEETS_DIR);
-    if !dir.is_dir() {
-        return Ok(false);
-    }
-
-    let mut nested_paths = Vec::new();
-    collect_nested_worksheet_files(&dir, &mut nested_paths)?;
-    if nested_paths.is_empty() {
-        return Ok(false);
-    }
-
-    let mut changed = false;
-    for nested_path in nested_paths {
-        let document = read_worksheet_document_path(nested_path.as_path())?;
-        let file_name = unique_worksheet_file_name(dir.as_path(), &document.name, None);
-        let target_path = dir.join(&file_name);
-        if nested_path == target_path {
-            continue;
-        }
-        std::fs::rename(&nested_path, &target_path)?;
-        changed = true;
-    }
-
-    if changed {
-        remove_empty_worksheet_subdirs(&dir)?;
-    }
-
-    Ok(changed)
-}
-
 pub fn read_worksheet_index_entries(
     root: &Path,
 ) -> Result<Vec<ProjectWorksheetIndexEntry>, ProjectError> {
-    let dir = root.join(WORKSHEETS_DIR);
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut entries = Vec::new();
-    for path in list_worksheet_files(root)? {
-        let document = read_worksheet_document_path(path.as_path())?;
-        entries.push(ProjectWorksheetIndexEntry {
+    let mut entries = scan_worksheet_documents(root)?
+        .into_iter()
+        .map(|(_, document)| ProjectWorksheetIndexEntry {
             id: document.id,
             name: document.name,
             database_id: document.database_id,
             chart_type: document.chart_type,
-        });
-    }
+        })
+        .collect::<Vec<_>>();
     entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(entries)
 }
@@ -123,16 +86,12 @@ pub(crate) fn load_worksheet_from_root_readonly(
     root: &Path,
     worksheet_id: &str,
 ) -> Result<WorksheetDocument, ProjectError> {
-    for path in list_worksheet_files(root)? {
-        let document = read_worksheet_document_path(path.as_path())?;
-        if document.id == worksheet_id {
-            return Ok(document);
-        }
-    }
-    Err(ProjectError::InvalidProjectFormat(format!(
-        "worksheet '{}' not found",
-        worksheet_id
-    )))
+    scan_worksheet_documents(root)?
+        .into_iter()
+        .find_map(|(_, document)| (document.id == worksheet_id).then_some(document))
+        .ok_or_else(|| {
+            ProjectError::InvalidProjectFormat(format!("worksheet '{worksheet_id}' not found"))
+        })
 }
 
 pub fn serialize_worksheet(
@@ -146,181 +105,135 @@ pub fn existing_worksheet_names(
     root: &Path,
     excluded_id: Option<&str>,
 ) -> Result<Vec<String>, ProjectError> {
-    flatten_worksheet_layout(root)?;
     let mut names = HashSet::new();
-    for entry in read_worksheet_index_entries(root)? {
-        if excluded_id.map(|id| id == entry.id).unwrap_or(false) {
+    for (_, document) in scan_worksheet_documents(root)? {
+        if excluded_id.is_some_and(|id| id == document.id) {
             continue;
         }
-        names.insert(entry.name);
+        names.insert(document.name);
     }
-    let mut out: Vec<String> = names.into_iter().collect();
+    let mut out = names.into_iter().collect::<Vec<_>>();
     out.sort();
     Ok(out)
 }
 
 pub(crate) fn load_worksheets_from_root(
     root: &Path,
-) -> Result<std::collections::HashMap<String, WorksheetDocument>, ProjectError> {
-    let worksheets_dir = root.join(WORKSHEETS_DIR);
-    if !worksheets_dir.exists() {
-        return Ok(std::collections::HashMap::new());
-    }
-    let mut paths = Vec::new();
-    collect_all_worksheet_files(&worksheets_dir, &mut paths)?;
-    paths.sort();
-    paths
+) -> Result<HashMap<String, WorksheetDocument>, ProjectError> {
+    Ok(scan_worksheet_documents(root)?
         .into_iter()
-        .map(|path| {
-            read_worksheet_document_path(&path).map(|document| (document.id.clone(), document))
-        })
-        .collect()
-}
-
-fn list_worksheet_files(root: &Path) -> Result<Vec<PathBuf>, ProjectError> {
-    let dir = root.join(WORKSHEETS_DIR);
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut paths = Vec::new();
-    for entry in std::fs::read_dir(&dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && is_worksheet_file(path.as_path()) {
-            paths.push(path);
-        }
-    }
-    paths.sort_by_key(|path| {
-        path.file_name()
-            .map(|name| name.to_string_lossy().to_lowercase())
-            .unwrap_or_default()
-    });
-    Ok(paths)
-}
-
-fn collect_nested_worksheet_files(
-    worksheets_dir: &Path,
-    nested_paths: &mut Vec<PathBuf>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(worksheets_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_all_worksheet_files(path.as_path(), nested_paths)?;
-        }
-    }
-    Ok(())
-}
-
-fn collect_all_worksheet_files(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_all_worksheet_files(path.as_path(), paths)?;
-        } else if is_worksheet_file(path.as_path()) {
-            paths.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn remove_empty_worksheet_subdirs(dir: &Path) -> Result<(), ProjectError> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    let entries: Vec<_> = std::fs::read_dir(dir)?.collect();
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            remove_empty_worksheet_subdirs(&path)?;
-            if std::fs::read_dir(&path)?.next().is_none() {
-                std::fs::remove_dir(path)?;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn is_worksheet_file(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case(WORKSHEET_EXTENSION))
-            .unwrap_or(false)
-}
-
-fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, ProjectError> {
-    read_json(path)
+        .map(|(_, document)| (document.id.clone(), document))
+        .collect())
 }
 
 pub fn worksheet_absolute_path(
     root: &Path,
     worksheet_id: &str,
 ) -> Result<Option<PathBuf>, ProjectError> {
-    for path in list_worksheet_files(root)? {
-        let document = read_worksheet_document_path(path.as_path())?;
-        if document.id == worksheet_id {
-            return Ok(Some(path));
-        }
-    }
-    Ok(None)
+    Ok(scan_worksheet_documents(root)?
+        .into_iter()
+        .find_map(|(path, document)| (document.id == worksheet_id).then_some(path)))
 }
 
-fn unique_worksheet_file_name(
-    dir: &Path,
-    worksheet_name: &str,
-    existing_path: Option<&Path>,
-) -> String {
-    let stem = sanitize_file_stem(worksheet_name);
-    for index in 0.. {
-        let candidate = if index == 0 {
-            format!("{stem}.{WORKSHEET_EXTENSION}")
-        } else {
-            format!("{stem} {index}.{WORKSHEET_EXTENSION}")
-        };
-        let candidate_path = dir.join(&candidate);
-        if existing_path
-            .map(|path| path == candidate_path.as_path())
-            .unwrap_or(false)
-            || !candidate_path.exists()
-        {
-            return candidate;
-        }
+fn scan_worksheet_documents(
+    root: &Path,
+) -> Result<Vec<(PathBuf, WorksheetDocument)>, ProjectError> {
+    let worksheets_dir = root.join(WORKSHEETS_DIR);
+    let metadata = match std::fs::symlink_metadata(&worksheets_dir) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(ProjectError::Io(error)),
+    };
+    reject_redirect(&worksheets_dir, &metadata)?;
+    if !metadata.is_dir() {
+        return Err(invalid_layout(
+            &worksheets_dir,
+            "worksheet root is not a directory",
+        ));
     }
-    unreachable!("unique worksheet file name loop should always return")
+
+    let mut documents = Vec::new();
+    walk_worksheet_directory(&worksheets_dir, &worksheets_dir, &mut documents)?;
+    documents.sort_by(|(left, _), (right, _)| left.cmp(right));
+    Ok(documents)
+}
+
+fn walk_worksheet_directory(
+    worksheets_dir: &Path,
+    directory: &Path,
+    documents: &mut Vec<(PathBuf, WorksheetDocument)>,
+) -> Result<(), ProjectError> {
+    for entry in std::fs::read_dir(directory)? {
+        let path = entry?.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        reject_redirect(&path, &metadata)?;
+        if metadata.is_dir() {
+            walk_worksheet_directory(worksheets_dir, &path, documents)?;
+            continue;
+        }
+        if !metadata.is_file() || !has_worksheet_extension(&path) {
+            continue;
+        }
+
+        let relative = path
+            .strip_prefix(worksheets_dir)
+            .map_err(|_| invalid_layout(&path, "worksheet path escaped its root"))?;
+        if relative
+            .parent()
+            .is_some_and(|parent| !parent.as_os_str().is_empty())
+        {
+            return Err(invalid_layout(
+                &path,
+                "nested worksheet files are not supported",
+            ));
+        }
+        let document = read_worksheet_document_path(&path)?;
+        let expected = PathBuf::from(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
+        if relative != expected {
+            return Err(invalid_layout(
+                &path,
+                "worksheet filename must be its stable document ID",
+            ));
+        }
+        documents.push((path, document));
+    }
+    Ok(())
+}
+
+fn reject_redirect(path: &Path, metadata: &std::fs::Metadata) -> Result<(), ProjectError> {
+    let mut is_redirect = metadata.file_type().is_symlink();
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        is_redirect |= metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0;
+    }
+    if is_redirect {
+        return Err(invalid_layout(
+            path,
+            "worksheet redirects/reparse points are forbidden",
+        ));
+    }
+    Ok(())
+}
+
+fn invalid_layout(path: &Path, reason: &str) -> ProjectError {
+    ProjectError::InvalidProjectFormat(format!("{reason}: '{}'", path.display()))
+}
+
+fn has_worksheet_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case(WORKSHEET_EXTENSION))
+}
+
+fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, ProjectError> {
+    let content = std::fs::read_to_string(path).map_err(ProjectError::Io)?;
+    serde_json::from_str(&content).map_err(ProjectError::Deserialize)
 }
 
 pub(crate) fn worksheet_relative_path(document: &WorksheetDocument) -> PathBuf {
     PathBuf::from(WORKSHEETS_DIR).join(format!("{}.{}", document.id, WORKSHEET_EXTENSION))
-}
-
-fn sanitize_file_stem(name: &str) -> String {
-    let sanitized: String = name
-        .trim()
-        .chars()
-        .map(|ch| {
-            if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
-            {
-                '_'
-            } else {
-                ch
-            }
-        })
-        .collect();
-    let sanitized = sanitized.trim_matches([' ', '.']).trim();
-    if sanitized.is_empty() {
-        "Untitled Worksheet".to_string()
-    } else {
-        sanitized.to_string()
-    }
-}
-
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ProjectError> {
-    let content = std::fs::read_to_string(path).map_err(ProjectError::Io)?;
-    serde_json::from_str(&content).map_err(ProjectError::Deserialize)
 }
 
 #[cfg(test)]
@@ -333,53 +246,150 @@ mod tests {
         path
     }
 
+    fn write_document_at(path: &Path, document: &WorksheetDocument) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, serde_json::to_vec_pretty(document).unwrap()).unwrap();
+    }
+
+    fn assert_all_read_entries_reject(root: &Path, worksheet_id: &str) {
+        assert!(load_worksheets_from_root(root).is_err());
+        assert!(read_worksheet_index_entries(root).is_err());
+        assert!(load_worksheet_from_file(root, worksheet_id).is_err());
+    }
+
     #[test]
-    fn flatten_worksheet_layout_hoists_nested_files() {
+    fn canonical_id_path_is_shared_by_activation_index_and_direct_load() {
         let root = temp_project_dir();
-        let document = WorksheetDocument::new("Nested Sheet", "db-1");
+        let document = WorksheetDocument::new("Root Sheet", "db-1");
         crate::project::fixtures::write_worksheet(root.as_path(), &document).unwrap();
+        let canonical = root.join(worksheet_relative_path(&document));
 
-        let nested_dir = root.join(WORKSHEETS_DIR).join("Sub");
-        std::fs::create_dir_all(&nested_dir).unwrap();
-        let flat_file = root
-            .join(WORKSHEETS_DIR)
-            .join(format!("Nested Sheet.{WORKSHEET_EXTENSION}"));
-        let nested_file = nested_dir.join(format!("Nested Sheet.{WORKSHEET_EXTENSION}"));
-        std::fs::rename(&flat_file, &nested_file).unwrap();
-
-        flatten_worksheet_layout(root.as_path()).unwrap();
-
-        assert!(
-            root.join(WORKSHEETS_DIR)
-                .join(format!("Nested Sheet.{WORKSHEET_EXTENSION}"))
-                .is_file()
+        assert!(canonical.is_file());
+        let expected_file_name = format!("{}.{}", document.id, WORKSHEET_EXTENSION);
+        assert_eq!(
+            canonical.file_name().and_then(|name| name.to_str()),
+            Some(expected_file_name.as_str())
         );
-        assert!(!nested_file.exists());
-        assert!(!nested_dir.exists());
-
+        assert_eq!(
+            load_worksheets_from_root(root.as_path())
+                .unwrap()
+                .get(&document.id),
+            Some(&document)
+        );
         let entries = read_worksheet_index_entries(root.as_path()).unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].name, "Nested Sheet");
+        assert_eq!(entries[0].id, document.id);
+        assert_eq!(
+            load_worksheet_from_file(root.as_path(), &document.id).unwrap(),
+            document
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn save_worksheet_writes_to_worksheets_root() {
+    fn legacy_name_based_worksheet_is_rejected_by_every_read_entry() {
         let root = temp_project_dir();
-        let document = WorksheetDocument::new("Root Sheet", "db-1");
-        crate::project::fixtures::write_worksheet(root.as_path(), &document).unwrap();
-
-        let path = root
+        let document = WorksheetDocument::new("Legacy Name", "db-1");
+        let legacy = root
             .join(WORKSHEETS_DIR)
-            .join(format!("Root Sheet.{WORKSHEET_EXTENSION}"));
-        assert!(path.is_file());
-        assert_eq!(
-            path.parent()
-                .and_then(|parent| parent.file_name())
-                .and_then(|name| name.to_str()),
-            Some(WORKSHEETS_DIR)
-        );
+            .join(format!("Legacy Name.{WORKSHEET_EXTENSION}"));
+        write_document_at(&legacy, &document);
+
+        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert!(legacy.is_file(), "read paths must not migrate legacy files");
+        assert!(!root.join(worksheet_relative_path(&document)).exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn nested_canonical_worksheet_is_rejected_without_flattening() {
+        let root = temp_project_dir();
+        let document = WorksheetDocument::new("Nested", "db-1");
+        let nested = root
+            .join(WORKSHEETS_DIR)
+            .join("nested")
+            .join(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
+        write_document_at(&nested, &document);
+
+        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert!(nested.is_file(), "read paths must not flatten nested files");
+        assert!(!root.join(worksheet_relative_path(&document)).exists());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_file_symlink_is_rejected_by_every_read_entry_before_reading() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_project_dir();
+        let external_root = temp_project_dir();
+        let document = WorksheetDocument::new("External", "db-1");
+        let external = external_root.join(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
+        write_document_at(&external, &document);
+        let link = root.join(worksheet_relative_path(&document));
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        symlink(&external, &link).unwrap();
+
+        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert!(external.is_file());
+
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(external_root);
+    }
+
+    #[cfg(windows)]
+    fn create_test_junction(link: &Path, target: &Path) -> bool {
+        std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                link.to_string_lossy().as_ref(),
+                target.to_string_lossy().as_ref(),
+            ])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn external_directory_junction_is_rejected_by_every_read_entry_before_reading() {
+        let root = temp_project_dir();
+        let external_root = temp_project_dir();
+        let document = WorksheetDocument::new("External", "db-1");
+        crate::project::fixtures::write_worksheet(external_root.as_path(), &document).unwrap();
+        let worksheets = root.join(WORKSHEETS_DIR);
+        std::fs::create_dir_all(&worksheets).unwrap();
+        if !create_test_junction(
+            &worksheets.join("external"),
+            &external_root.join(WORKSHEETS_DIR),
+        ) {
+            eprintln!("skipping junction assertion: Windows junction creation is unavailable");
+            return;
+        }
+
+        assert_all_read_entries_reject(root.as_path(), &document.id);
+
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(external_root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn directory_junction_loop_is_rejected_by_every_read_entry_without_recursing() {
+        let root = temp_project_dir();
+        let worksheets = root.join(WORKSHEETS_DIR);
+        std::fs::create_dir_all(&worksheets).unwrap();
+        if !create_test_junction(&worksheets.join("loop"), &worksheets) {
+            eprintln!("skipping junction assertion: Windows junction creation is unavailable");
+            return;
+        }
+
+        assert_all_read_entries_reject(root.as_path(), "missing");
 
         let _ = std::fs::remove_dir_all(root);
     }

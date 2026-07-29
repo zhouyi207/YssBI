@@ -1,7 +1,10 @@
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import {
+  assertCurrentProjectIdentity,
+  captureProjectCommandIdentity,
+  isCurrentProjectIdentity,
+} from '@/services/project/projectIdentity';
 
 export interface ProjectCommandContext {
   projectInstanceId: string;
@@ -17,33 +20,20 @@ export interface GraphSaveCommandContext extends ProjectCommandContext {
   expectedRevision: number;
 }
 
-export function captureProjectCommandContext(): ProjectCommandContext {
-  const projectInstanceId = useProjectIOStore.getState().projectInstanceId;
-  if (!projectInstanceId) {
-    throw new Error('No active project identity');
-  }
-  const lifecycle = projectPublicationCoordinator.captureCommandLifecycle();
-  if (lifecycle.projectInstanceId !== projectInstanceId) {
-    throw new Error('Project identity does not match publication lifecycle');
-  }
-  const operationId = crypto.randomUUID();
-  const isCurrent = () => (
-    useProjectIOStore.getState().projectInstanceId === projectInstanceId
-    && projectPublicationCoordinator.ownsCommandLifecycle(projectInstanceId, lifecycle.epoch)
-  );
+export function captureProjectCommandContext(
+  requestedOperationId: string = crypto.randomUUID(),
+): ProjectCommandContext {
+  const identity = captureProjectCommandIdentity();
+  const operationId = requestedOperationId;
+  const isCurrent = () => isCurrentProjectIdentity(identity);
   return {
-    projectInstanceId,
-    projectEpoch: lifecycle.epoch,
-    publicationRevision: lifecycle.publicationRevision,
+    projectInstanceId: identity.projectInstanceId,
+    projectEpoch: identity.epoch,
+    publicationRevision: identity.publicationRevision,
     operationId,
-    operationPendingKey: `${projectInstanceId}:${operationId}`,
+    operationPendingKey: `${identity.projectInstanceId}:${operationId}`,
     isCurrent,
-    assertCurrent: () => {
-      if (useProjectIOStore.getState().projectInstanceId !== projectInstanceId) {
-        throw new Error('Project command completion is stale');
-      }
-      projectPublicationCoordinator.assertCommandLifecycle(projectInstanceId, lifecycle.epoch);
-    },
+    assertCurrent: () => assertCurrentProjectIdentity(identity),
   };
 }
 

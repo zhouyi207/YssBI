@@ -21,6 +21,7 @@ describe('FunctionMutationService', () => {
       },
     };
     const result: ResourceMutationResultDto = {
+      operationId: request.operationId,
       projectInstanceId: '00000000-0000-0000-0000-000000000601',
       publicationRevision: 6,
       moves: [],
@@ -32,12 +33,14 @@ describe('FunctionMutationService', () => {
     vi.mocked(invoke).mockResolvedValue(result);
 
     await expect(FunctionMutationService.updateSignature(
+      '00000000-0000-0000-0000-000000000601',
       'functions/Compute.yssbi-function',
       'zh-CN',
       request,
     )).resolves.toBe(result);
 
     expect(invoke).toHaveBeenCalledWith('update_function_signature', {
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
       functionPath: 'functions/Compute.yssbi-function',
       locale: 'zh-CN',
       request,

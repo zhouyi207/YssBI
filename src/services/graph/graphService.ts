@@ -1,13 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Graph } from "@/shared/types/domain";
 import type {
-    FunctionCallSiteDTO,
-    GraphInstanceDTO,
     ProjectSaveResultDto,
     ResourceMutationResultDto,
 } from "@/shared/types/dto";
 
-import { toFrontendGraph } from "@/services/project/projectService";
 import { logger } from '@/utils/appLogger';
 
 
@@ -23,11 +19,19 @@ export class GraphService {
      * @param graphName - Event 的名称
      * @returns graph path（`events/…`）
      */
-    static async createEvent(graphName: string): Promise<string> {
+    static async createEvent(
+        projectInstanceId: string,
+        graphName: string,
+        operationId: string,
+    ): Promise<ResourceMutationResultDto> {
         try {
-            const graphPath = await invoke<string>("create_event", { graphName });
-            logger.graph.info(`Event '${graphName}' created with path: ${graphPath}`, 'GraphService');
-            return graphPath;
+            const result = await invoke<ResourceMutationResultDto>("create_event", {
+                projectInstanceId,
+                graphName,
+                operationId,
+            });
+            logger.graph.info(`Event '${graphName}' created`, 'GraphService');
+            return result;
         } catch (error) {
             logger.graph.error(`Error creating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
@@ -39,11 +43,19 @@ export class GraphService {
      * @param graphName - Function 的名称
      * @returns graph path（`functions/…`）
      */
-    static async createFunction(graphName: string): Promise<string> {
+    static async createFunction(
+        projectInstanceId: string,
+        graphName: string,
+        operationId: string,
+    ): Promise<ResourceMutationResultDto> {
         try {
-            const graphPath = await invoke<string>("create_function", { graphName });
-            logger.graph.info(`Function '${graphName}' created with path: ${graphPath}`, 'GraphService');
-            return graphPath;
+            const result = await invoke<ResourceMutationResultDto>("create_function", {
+                projectInstanceId,
+                graphName,
+                operationId,
+            });
+            logger.graph.info(`Function '${graphName}' created`, 'GraphService');
+            return result;
         } catch (error) {
             logger.graph.error(`Error creating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
@@ -54,46 +66,27 @@ export class GraphService {
      * 删除 Graph (Event/Function)
      * @param graphPath - Graph 路径
      */
-    static async removeGraph(graphPath: string): Promise<void> {
+    static async removeGraph(
+        projectInstanceId: string,
+        graphPath: string,
+        expectedRevision: number,
+        operationId: string,
+    ): Promise<ResourceMutationResultDto> {
         try {
-            await invoke("remove_graph", { graphPath });
+            const result = await invoke<ResourceMutationResultDto>("remove_graph", {
+                projectInstanceId,
+                graphPath,
+                expectedRevision,
+                operationId,
+            });
             logger.graph.info(`Graph '${graphPath}' removed successfully`, 'GraphService');
+            return result;
         } catch (error) {
             logger.graph.error(`Error removing graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
             throw error;
         }
     }
 
-
-
-    static async getFunctionCallSites(functionPath: string): Promise<FunctionCallSiteDTO[]> {
-        return invoke<FunctionCallSiteDTO[]>("get_function_call_sites", { functionPath });
-    }
-
-    static async updateCallFunctionTarget(
-        graphPath: string,
-        nodeId: string,
-        functionPath: string,
-    ): Promise<void> {
-        try {
-            await invoke("update_call_function_target", { graphPath, nodeId, functionPath });
-            logger.graph.info(
-                `Call node '${nodeId}' rebound to function '${functionPath}'`,
-                'GraphService',
-            );
-        } catch (error) {
-            logger.graph.error(
-                `Error rebinding Call Function target: ${error instanceof Error ? error.message : String(error)}`,
-                'GraphService',
-            );
-            throw error;
-        }
-    }
-
-    static async purgeFunctionCallSites(functionPath: string): Promise<Graph[]> {
-        const graphs = await invoke<GraphInstanceDTO[]>("purge_function_call_sites", { functionPath });
-        return graphs.map(toFrontendGraph);
-    }
 
     static async unloadProjectGraph(
         graphPath: string,
@@ -117,21 +110,37 @@ export class GraphService {
         });
     }
 
-    static async duplicateGraph(graphPath: string): Promise<string> {
-        const newPath = await invoke<string>("duplicate_graph", { graphPath });
-        logger.graph.info(`Graph '${graphPath}' duplicated to '${newPath}'`, 'GraphService');
-        return newPath;
+    static async duplicateGraph(
+        projectInstanceId: string,
+        graphPath: string,
+        expectedRevision: number,
+        operationId: string,
+    ): Promise<ResourceMutationResultDto> {
+        const result = await invoke<ResourceMutationResultDto>("duplicate_graph", {
+            projectInstanceId,
+            graphPath,
+            expectedRevision,
+            operationId,
+        });
+        logger.graph.info(`Graph '${graphPath}' duplicated`, 'GraphService');
+        return result;
     }
 
     static async renameGraphResource(
         projectInstanceId: string,
         graphPath: string,
+        expectedRevision: number,
         newName: string,
+        lifecycleToken: number,
+        operationId: string,
     ): Promise<ResourceMutationResultDto> {
         return invoke<ResourceMutationResultDto>('rename_graph_resource', {
             projectInstanceId,
             graphPath,
+            expectedRevision,
             newName,
+            lifecycleToken,
+            operationId,
         });
     }
 }

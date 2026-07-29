@@ -12,6 +12,7 @@ import { EventHandler } from '../types';
 import {
     ProjectLoadedHandler,
     ProjectClearedHandler,
+    ProjectLifecycleCommittedHandler,
     ProjectSavedHandler,
 } from './ProjectEventHandler';
 import {
@@ -47,6 +48,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         // Project
         new ProjectLoadedHandler() as EventHandler<unknown>,
         new ProjectClearedHandler() as EventHandler<unknown>,
+        new ProjectLifecycleCommittedHandler() as EventHandler<unknown>,
         new ProjectSavedHandler() as EventHandler<unknown>,
         
         // Event

@@ -1,8 +1,15 @@
 // src/features/core/sync/handlers/ProjectEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
+import { ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
 import { useProjectIOStore } from '@/features/core/dataStore';
+import {
+    applyProjectLifecycleReceipt,
+    type ProjectLifecycleReceiptDependencies,
+} from '@/features/application/projectLifecycleReceipt';
+import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+import { logger } from '@/utils/appLogger';
 
 export class ProjectLoadedHandler extends BaseEventHandler<ProjectLoadedPayload> {
     eventType = 'ProjectLoaded';
@@ -34,6 +41,32 @@ export class ProjectClearedHandler extends BaseEventHandler<void> {
         );
         
         callbacks?.onProjectCleared?.();
+    }
+}
+
+export class ProjectLifecycleCommittedHandler extends BaseEventHandler<ProjectLifecycleCommittedPayload> {
+    eventType = 'ProjectLifecycleCommitted';
+
+    constructor(
+        callbacks?: EventCallbacks,
+        private readonly dependencies?: ProjectLifecycleReceiptDependencies,
+    ) {
+        super(callbacks);
+    }
+
+    handle(payload: ProjectLifecycleCommittedPayload, callbacks?: EventCallbacks): void {
+        void applyProjectLifecycleReceipt(
+            payload.result,
+            'event',
+            this.dependencies ?? createProjectLifecycleReceiptDependencies(
+                (callbacks ?? this.callbacks)?.onProjectCleared,
+            ),
+        ).catch((error) => {
+            logger.sys.error(
+                `Project lifecycle event failed: ${formatErrorMessage(error)}`,
+                'ProjectLifecycleCommittedHandler',
+            );
+        });
     }
 }
 

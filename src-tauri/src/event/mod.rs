@@ -33,10 +33,16 @@ pub enum Event {
 }
 
 /// 发送项目事件到前端
+pub fn emit_project_event_result(app_handle: &AppHandle, event: &Event) -> Result<(), String> {
+    app_handle
+        .emit("project-event", event)
+        .map_err(|error| error.to_string())
+}
+
 pub fn emit_project_event(app_handle: &AppHandle, event: Event) {
     use tauri_plugin_log::log::error;
-    if let Err(e) = app_handle.emit("project-event", &event) {
-        error!("Failed to emit project event: {}", e);
+    if let Err(error) = emit_project_event_result(app_handle, &event) {
+        error!("Failed to emit project event: {error}");
     }
 }
 

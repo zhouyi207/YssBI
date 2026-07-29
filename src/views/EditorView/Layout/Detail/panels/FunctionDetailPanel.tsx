@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
-import type { FunctionCallSiteDTO } from '@/shared/types/dto';
+
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
-import { FunctionCallSitesSection } from '../shared/FunctionCallSitesSection';
+
 import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
 
 interface FunctionDetailPanelProps {
@@ -13,16 +13,14 @@ interface FunctionDetailPanelProps {
     inputs?: FunctionPinSpec[];
     outputs?: FunctionPinSpec[];
   };
-  callSites?: FunctionCallSiteDTO[];
-  callSitesLoading?: boolean;
+
   onRename: (name: string) => void;
   onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
 
 export function FunctionDetailPanel({
   fn,
-  callSites = [],
-  callSitesLoading = false,
+
   onRename,
   onSignatureChange,
 }: FunctionDetailPanelProps) {
@@ -52,7 +50,7 @@ export function FunctionDetailPanel({
         pins={fn.outputs ?? []}
         onChange={(outputs) => onSignatureChange({ outputs })}
       />
-      <FunctionCallSitesSection callSites={callSites} loading={callSitesLoading} />
+
     </DetailPanelShell>
   );
 }
