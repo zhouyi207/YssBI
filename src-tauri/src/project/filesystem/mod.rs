@@ -1,4 +1,5 @@
 mod coordinator;
+mod lifecycle_io;
 mod root;
 mod transaction;
 #[cfg(windows)]
@@ -7,6 +8,10 @@ mod windows_path_identity;
 pub use crate::project::project_error::ProjectFilesystemError;
 pub use coordinator::{
     ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet, ProjectRootLifecycleGuard,
+};
+pub(crate) use lifecycle_io::{
+    ensure_directory, read_project_source_tree, remove_directory_if_created, rename_project_root,
+    validate_deletion_root, validate_destination_policy,
 };
 pub use root::{NormalizedProjectRoot, ProjectRootBinding, ProjectRootIdentity};
 pub use transaction::{

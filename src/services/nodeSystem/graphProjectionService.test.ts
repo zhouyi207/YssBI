@@ -20,8 +20,11 @@ describe('GraphProjectionService', () => {
       projectInstanceId: 'project-instance-1',
     });
 
-    await expect(GraphProjectionService.hydrateGraph('functions/main', 'en-US')).resolves.toBe(projection);
+    await expect(
+      GraphProjectionService.hydrateGraph('project-instance-1', 'functions/main', 'en-US'),
+    ).resolves.toBe(projection);
     expect(invoke).toHaveBeenLastCalledWith('hydrate_editor_graph', {
+      projectInstanceId: 'project-instance-1',
       graphPath: 'functions/main',
       locale: 'en-US',
     });

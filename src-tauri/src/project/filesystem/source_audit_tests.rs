@@ -21,37 +21,85 @@ fn production_source(source: &str) -> String {
         let attributed = &remaining[offset + marker.len()..];
         let item_start = attributed.len() - attributed.trim_start().len();
         let item = &attributed[item_start..];
-        let semicolon = item.find(';');
-        let opening = item.find('{');
-        if semicolon.is_some_and(|end| opening.is_none_or(|brace| end < brace)) {
-            remaining = &item[semicolon.unwrap() + 1..];
-            continue;
-        }
-        let Some(opening) = opening else {
-            break;
-        };
-        let mut depth = 0_u32;
-        let mut item_end = None;
-        for (index, byte) in item.as_bytes().iter().enumerate().skip(opening) {
-            match byte {
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        item_end = Some(index + 1);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        let Some(item_end) = item_end else {
+        let Some(item_end) = rust_item_end(item) else {
             break;
         };
         remaining = &item[item_end..];
     }
     production.push_str(remaining);
     production
+}
+
+fn rust_item_end(item: &str) -> Option<usize> {
+    let bytes = item.as_bytes();
+    let opening = item.find('{');
+    let semicolon = item.find(';');
+    if semicolon.is_some_and(|end| opening.is_none_or(|brace| end < brace)) {
+        return semicolon.map(|end| end + 1);
+    }
+    let opening = opening?;
+    let mut depth = 0_u32;
+    let mut index = opening;
+    let mut string = false;
+    let mut character = false;
+    let mut line_comment = false;
+    let mut block_comment = 0_u32;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let next = bytes.get(index + 1).copied();
+        if line_comment {
+            line_comment = byte != b'\n';
+        } else if block_comment > 0 {
+            if byte == b'/' && next == Some(b'*') {
+                block_comment += 1;
+                index += 1;
+            } else if byte == b'*' && next == Some(b'/') {
+                block_comment -= 1;
+                index += 1;
+            }
+        } else if string {
+            if byte == b'\\' {
+                index += 1;
+            } else if byte == b'"' {
+                string = false;
+            }
+        } else if character {
+            if byte == b'\\' {
+                index += 1;
+            } else if byte == b'\'' {
+                character = false;
+            }
+        } else if byte == b'/' && next == Some(b'/') {
+            line_comment = true;
+            index += 1;
+        } else if byte == b'/' && next == Some(b'*') {
+            block_comment = 1;
+            index += 1;
+        } else {
+            match byte {
+                b'"' => string = true,
+                b'\'' if looks_like_char_literal(bytes, index) => character = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(index + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+fn looks_like_char_literal(bytes: &[u8], index: usize) -> bool {
+    match bytes.get(index + 1).copied() {
+        Some(b'\\') => bytes.get(index + 3) == Some(&b'\''),
+        Some(_) => bytes.get(index + 2) == Some(&b'\''),
+        None => false,
+    }
 }
 
 #[test]
@@ -86,6 +134,23 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         "project/graph_resource_index.rs",
         "project/worksheet_io.rs",
     ];
+    let duckdb_files = [
+        "application/database.rs",
+        "database/duckdb_analytics.rs",
+        "database/duckdb_reader.rs",
+        "database/excel_reader.rs",
+        "project/project_state_database.rs",
+        "tabular/dataframe_io.rs",
+    ];
+    let non_project_files = [
+        "application/bayes.rs",
+        "julia/worker.rs",
+        "log/log_manager.rs",
+        "project/project_registry.rs",
+        "sci/backends/julia/bayes/fit.rs",
+        "sci/backends/julia/time_series/acf_pacf.rs",
+        "window_state/mod.rs",
+    ];
     let write_patterns = [
         "std::fs::write",
         "std::fs::rename",
@@ -111,7 +176,11 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
 
     let mut offenders = Vec::new();
     for file in files {
-        let relative = file.strip_prefix(&source_root).unwrap().to_string_lossy().replace('\\', "/");
+        let relative = file
+            .strip_prefix(&source_root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         if relative.ends_with("_tests.rs") || relative.ends_with("production_tests.rs") {
             continue;
         }
@@ -124,19 +193,16 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
             }
         }
 
-        if !relative.starts_with("project/") && !relative.starts_with("commands/") {
-            continue;
-        }
-        if relative == "project/project_registry.rs" {
-            continue;
-        }
-        if relative.starts_with("project/filesystem/") {
+        if project_io_is_allowed(&relative, &duckdb_files, &non_project_files) {
             continue;
         }
         if read_only_scanners.contains(&relative.as_str()) {
             for pattern in write_patterns {
-                if production.contains(pattern) {
-                    offenders.push(format!("{relative}: read-only scanner contains {pattern}"));
+                if let Some(offset) = production.find(pattern) {
+                    let line = production[..offset].lines().count() + 1;
+                    offenders.push(format!(
+                        "{relative}:{line}: read-only scanner contains {pattern}"
+                    ));
                 }
             }
             continue;
@@ -148,6 +214,17 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         }
     }
 
+    assert!(!project_io_is_allowed(
+        "application/unapproved_project_writer.rs",
+        &duckdb_files,
+        &non_project_files,
+    ));
+    assert!(project_io_is_allowed(
+        "database/duckdb_reader.rs",
+        &duckdb_files,
+        &non_project_files,
+    ));
+
     offenders.sort();
     offenders.dedup();
     assert!(
@@ -155,4 +232,14 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         "production project filesystem ownership violations:\n{}",
         offenders.join("\n")
     );
+}
+
+fn project_io_is_allowed(
+    relative: &str,
+    duckdb_files: &[&str],
+    non_project_files: &[&str],
+) -> bool {
+    relative.starts_with("project/filesystem/")
+        || duckdb_files.contains(&relative)
+        || non_project_files.contains(&relative)
 }

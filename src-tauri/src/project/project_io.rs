@@ -234,7 +234,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     std::fs::create_dir_all(root.join(EVENTS_DIR))?;
     std::fs::create_dir_all(root.join(FUNCTIONS_DIR))?;
     ensure_worksheets_dir(root)?;
-    ensure_project_database_dir(root)?;
+    std::fs::create_dir_all(root.join(DATABASE_DIR))?;
 
     let global_variables = project_data
         .variables
@@ -802,6 +802,7 @@ pub(crate) fn find_graph_document_path(
     Ok(None)
 }
 
+#[cfg(test)]
 fn unique_graph_file_name(
     dir: &Path,
     graph_name: &str,
@@ -827,6 +828,7 @@ fn unique_graph_file_name(
     unreachable!("unique file name loop should always return")
 }
 
+#[cfg(test)]
 fn sanitize_file_stem(name: &str) -> String {
     let sanitized: String = name
         .trim()
@@ -848,7 +850,8 @@ fn sanitize_file_stem(name: &str) -> String {
     }
 }
 
-/// Hoists nested graph files under `events/` and `functions/` to each kind's root directory.
+/// Test-fixture helper for exercising legacy nested graph layouts.
+#[cfg(test)]
 pub fn flatten_graph_layout(root: &Path) -> Result<bool, ProjectError> {
     let mut changed = false;
     changed |= flatten_kind_graph_layout(root, EVENTS_DIR, EVENT_EXTENSION)?;
@@ -860,6 +863,7 @@ pub fn flatten_graph_layout(root: &Path) -> Result<bool, ProjectError> {
     Ok(changed)
 }
 
+#[cfg(test)]
 fn flatten_kind_graph_layout(
     root: &Path,
     dir: &str,
@@ -896,6 +900,7 @@ fn flatten_kind_graph_layout(
     Ok(changed)
 }
 
+#[cfg(test)]
 fn collect_nested_graph_files(
     graph_dir: &Path,
     extension: &str,
@@ -911,6 +916,7 @@ fn collect_nested_graph_files(
     Ok(())
 }
 
+#[cfg(test)]
 fn collect_all_graph_files(
     dir: &Path,
     extension: &str,
@@ -934,6 +940,7 @@ fn collect_all_graph_files(
     Ok(())
 }
 
+#[cfg(test)]
 fn remove_empty_graph_subdirs(dir: &Path) -> Result<(), ProjectError> {
     if !dir.is_dir() {
         return Ok(());
@@ -968,11 +975,6 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> 
     }
     let json = serde_json::to_string(value).map_err(ProjectError::Serialize)?;
     std::fs::write(path, json)?;
-    Ok(())
-}
-
-pub fn ensure_project_database_dir(root: &Path) -> Result<(), ProjectError> {
-    std::fs::create_dir_all(root.join(DATABASE_DIR))?;
     Ok(())
 }
 

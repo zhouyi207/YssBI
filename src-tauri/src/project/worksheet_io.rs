@@ -54,6 +54,7 @@ impl WorksheetDocument {
     }
 }
 
+#[cfg(test)]
 pub fn ensure_worksheets_dir(root: &Path) -> Result<(), ProjectError> {
     std::fs::create_dir_all(root.join(WORKSHEETS_DIR))?;
     Ok(())

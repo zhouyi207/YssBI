@@ -162,8 +162,8 @@ fn load_excel_via_duckdb(
 fn prepare_duckdb_ingest_paths(
     session: &ProjectSession,
 ) -> Result<(String, String, PathBuf, String), String> {
-    crate::project::ensure_project_database_dir(session.root.as_path())
-        .map_err(|e| e.to_string())?;
+    crate::project::ensure_directory(&session.root.as_path().join(crate::project::DATABASE_DIR))
+        .map_err(|error| error.to_string())?;
 
     let id = format!("db-{}", Uuid::new_v4());
     let table = id.clone();

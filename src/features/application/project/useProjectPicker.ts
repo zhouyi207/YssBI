@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { useProjectIOStore } from "@/features/core/dataStore";
+import { loadActivatedProject, useProjectIOStore } from "@/features/core/dataStore";
 import {
   applyCleanupProgressEvent,
   applyScanProgressEvent,
@@ -76,7 +76,7 @@ function managedProjectsFromSettlement(
 export function useProjectPicker() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const loadProject = useProjectIOStore((state) => state.loadProject);
+
   const currentPath = useProjectIOStore((state) => state.currentPath);
   const [projects, setProjects] = useState<ManagedProject[]>([]);
   const [busy, setBusy] = useState<BusyState>("idle");
@@ -312,7 +312,7 @@ export function useProjectPicker() {
           const result = await ProjectService.loadProjectToState(path);
           updateOpenProjectProgressStage(t, update, "loadingData");
           const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
-          const projectData = await loadProject();
+          const projectData = await loadActivatedProject(result);
           if (!projectData) {
             const loadError = useProjectIOStore.getState().error;
             throw new Error(formatErrorMessage(loadError, "加载项目数据失败"));
@@ -331,7 +331,7 @@ export function useProjectPicker() {
     } finally {
       setBusy("idle");
     }
-  }, [navigate, loadProject, t]);
+  }, [navigate, t]);
 
   const importProjectFromDisk = useCallback(async () => {
     const path = await ProjectService.pickProjectMetadataFile();

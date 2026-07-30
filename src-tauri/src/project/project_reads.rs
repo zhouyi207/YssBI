@@ -177,6 +177,13 @@ mod tests {
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let expected = state.capture_project_session().unwrap().instance_id;
         let replacement_state = state.clone();
+        let replacement_root = crate::project::NormalizedProjectRoot::from_project_path(
+            std::path::Path::new("project-b"),
+        )
+        .unwrap()
+        .as_path()
+        .to_string_lossy()
+        .into_owned();
 
         let result = super::read_project_index_with(&state, &expected, move |root| {
             replacement_state.activate_project_fixture("project-b".into(), ProjectData::new());
@@ -198,7 +205,7 @@ mod tests {
         });
 
         assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
-        assert_eq!(state.get_path().as_deref(), Some("project-b"));
+        assert_eq!(state.get_path().as_deref(), Some(replacement_root.as_str()));
         assert!(
             nested_path.is_file(),
             "stale index read moved the nested graph"

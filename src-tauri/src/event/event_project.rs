@@ -2,6 +2,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectActivationResultDto {
+    pub path: String,
+    pub project_instance_id: String,
+    pub activation_revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GraphProjectionReplacementDto {
     pub graph_path: String,
     pub projection: crate::node_system::analysis::EditorGraphProjectionDto,
@@ -130,7 +138,7 @@ pub struct LifecycleMutationResultDto {
 pub enum EventProject {
     #[serde(rename_all = "camelCase")]
     ProjectLoaded {
-        path: Option<String>,
+        result: ProjectActivationResultDto,
     },
     ProjectCleared,
     #[serde(rename_all = "camelCase")]
@@ -156,6 +164,24 @@ pub enum EventProject {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_loaded_event_carries_identity_and_activation_revision() {
+        let result = ProjectActivationResultDto {
+            path: "D:/projects/demo".into(),
+            project_instance_id: "project-2".into(),
+            activation_revision: 7,
+        };
+        let event = crate::event::Event::Project(EventProject::ProjectLoaded {
+            result: result.clone(),
+        });
+
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(
+            value["payload"]["payload"]["result"],
+            serde_json::to_value(result).unwrap()
+        );
+    }
 
     #[test]
     fn lifecycle_committed_event_serializes_the_exact_direct_receipt() {

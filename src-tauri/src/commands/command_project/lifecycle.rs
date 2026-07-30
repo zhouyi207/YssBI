@@ -2,7 +2,8 @@ use crate::error::AppError;
 use crate::event::{
     Event, EventProject, LifecycleInvalidationDto, LifecycleMutationKindDto,
     LifecycleMutationOutcomeDto, LifecycleMutationPhaseDto, LifecycleMutationResultDto,
-    LifecycleRecoveryDto, emit_project_event, emit_project_event_result,
+    LifecycleRecoveryDto, ProjectActivationResultDto, emit_project_event,
+    emit_project_event_result,
 };
 
 use crate::frontend::FrontendError;
@@ -18,11 +19,8 @@ use std::future::Future;
 use std::path::Path;
 use tauri::{AppHandle, State};
 
-fn emit_project_loaded(app: &AppHandle, path: String) {
-    emit_project_event(
-        app,
-        Event::Project(EventProject::ProjectLoaded { path: Some(path) }),
-    );
+fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
+    emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
 }
 
 fn start_project_watcher(app: &AppHandle, watcher: &ProjectWatcherState, path: &str) {
@@ -38,7 +36,7 @@ pub fn load_project(
     state: State<ProjectState>,
     watcher: State<ProjectWatcherState>,
     path: String,
-) -> Result<(), FrontendError> {
+) -> Result<ProjectActivationResultDto, FrontendError> {
     log_app!(
         LogLevel::Info,
         "[command.load_project] Loading project from: {}",
@@ -50,7 +48,7 @@ pub fn load_project(
         message,
     })?;
 
-    state
+    let session = state
         .activate_project_from_path(std::path::Path::new(&path))
         .map_err(|error| FrontendError {
             code: "LOAD_PROJECT_FAILED".into(),
@@ -68,8 +66,13 @@ pub fn load_project(
     );
 
     start_project_watcher(&app, &watcher, &path);
-    emit_project_loaded(&app, path);
-    Ok(())
+    let result = ProjectActivationResultDto {
+        path,
+        project_instance_id: session.instance_id.to_string(),
+        activation_revision: state.activation_revision(),
+    };
+    emit_project_loaded(&app, result.clone());
+    Ok(result)
 }
 
 async fn save_project_as_workflow<Register, RegisterFuture, Activate, Emit>(

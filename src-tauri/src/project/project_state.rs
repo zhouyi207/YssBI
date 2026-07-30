@@ -1369,6 +1369,12 @@ impl ProjectState {
             .authority_generation
     }
 
+    pub(crate) fn activation_revision(&self) -> u64 {
+        self.activation_generation
+            .load(std::sync::atomic::Ordering::Acquire)
+            / 2
+    }
+
     #[cfg(test)]
     pub(crate) fn activation_generation_for_test(&self) -> u64 {
         self.activation_generation
@@ -2788,8 +2794,8 @@ impl ProjectState {
                 continue;
             }
             let relative_path = std::path::PathBuf::from(entry.path.as_str());
-            let contents =
-                std::fs::read(root.join(&relative_path)).map_err(|error| error.to_string())?;
+            let contents = crate::project::read_secure_project_file(root, &relative_path)
+                .map_err(|error| error.to_string())?;
             let before: crate::project::project_io::GraphDocument =
                 serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
             let mut after = before.clone();
@@ -2839,28 +2845,30 @@ impl ProjectState {
             });
         }
         let variables = std::path::PathBuf::from(crate::project::GLOBAL_VARIABLES_FILE);
-        if root.join(&variables).is_file() {
-            let contents =
-                std::fs::read(root.join(&variables)).map_err(|error| error.to_string())?;
-            let mut document: crate::project::project_io::GlobalVariablesDocument =
-                serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
-            let changed = document
-                .variables
-                .values_mut()
-                .fold(false, |changed, variable| {
-                    crate::project::resource_mutations::remap_variable_scope_path(
-                        &mut variable.scope,
-                        source.as_str(),
-                        target.as_str(),
-                    ) || changed
-                });
-            if changed {
-                plan.mutations.push(StagedFilesystemMutation::Write {
-                    relative_path: variables,
-                    contents: serde_json::to_vec_pretty(&document)
-                        .map_err(|error| error.to_string())?,
-                });
+        match crate::project::read_secure_project_file(root, &variables) {
+            Ok(contents) => {
+                let mut document: crate::project::project_io::GlobalVariablesDocument =
+                    serde_json::from_slice(&contents).map_err(|error| error.to_string())?;
+                let changed = document
+                    .variables
+                    .values_mut()
+                    .fold(false, |changed, variable| {
+                        crate::project::resource_mutations::remap_variable_scope_path(
+                            &mut variable.scope,
+                            source.as_str(),
+                            target.as_str(),
+                        ) || changed
+                    });
+                if changed {
+                    plan.mutations.push(StagedFilesystemMutation::Write {
+                        relative_path: variables,
+                        contents: serde_json::to_vec_pretty(&document)
+                            .map_err(|error| error.to_string())?,
+                    });
+                }
             }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
         }
         plan.mutations.push(StagedFilesystemMutation::Write {
             relative_path: target.as_str().into(),

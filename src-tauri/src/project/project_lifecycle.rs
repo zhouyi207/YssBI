@@ -4,7 +4,9 @@ use crate::project::{
     PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectInstanceId, ProjectRootBinding, ProjectRootIdentity,
     ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
-    StagedFilesystemMutation, WORKSHEETS_DIR, metadata_is_redirect, read_secure_project_file,
+    StagedFilesystemMutation, WORKSHEETS_DIR, ensure_directory, read_project_source_tree,
+    remove_directory_if_created, rename_project_root, validate_deletion_root,
+    validate_destination_policy,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -78,13 +80,9 @@ struct DestinationRootGuard {
 
 impl DestinationRootGuard {
     fn ensure(root: &Path) -> Result<Self, ProjectFilesystemError> {
-        let remove_on_drop = !root.exists();
-        if remove_on_drop {
-            std::fs::create_dir_all(root).map_err(prepare_error)?;
-        }
         Ok(Self {
             root: root.to_path_buf(),
-            remove_on_drop,
+            remove_on_drop: ensure_directory(root)?,
         })
     }
 
@@ -95,9 +93,7 @@ impl DestinationRootGuard {
 
 impl Drop for DestinationRootGuard {
     fn drop(&mut self) {
-        if self.remove_on_drop {
-            let _ = std::fs::remove_dir_all(&self.root);
-        }
+        remove_directory_if_created(&self.root, self.remove_on_drop);
     }
 }
 
@@ -264,11 +260,7 @@ impl ProjectState {
             .as_ref()
             .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false));
         root_binding.revalidate()?;
-        std::fs::rename(normalized.as_path(), &tombstone_path).map_err(|error| {
-            ProjectFilesystemError::TransactionCommitFailed {
-                message: format!("failed to atomically tombstone project root: {error}"),
-            }
-        })?;
+        rename_project_root(normalized.as_path(), &tombstone_path)?;
         let post_tombstone_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if let Some(cleared) = cleared_activation {
                 let published = self
@@ -380,50 +372,6 @@ fn lifecycle_context(
     }
 }
 
-fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
-    if !root.exists() {
-        let parent = root
-            .parent()
-            .ok_or_else(|| invalid_root(root, "destination has no parent"))?;
-        let metadata = std::fs::symlink_metadata(parent).map_err(prepare_error)?;
-        if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-            return Err(invalid_root(
-                root,
-                "destination parent is not a real directory",
-            ));
-        }
-        return Ok(());
-    }
-    let metadata = std::fs::symlink_metadata(root).map_err(prepare_error)?;
-    if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-        return Err(invalid_root(root, "destination is not a real directory"));
-    }
-    let mut entries = std::fs::read_dir(root).map_err(prepare_error)?;
-    if entries.next().transpose().map_err(prepare_error)?.is_some() {
-        return Err(invalid_root(root, "destination directory must be empty"));
-    }
-    Ok(())
-}
-
-fn validate_deletion_root(root: &NormalizedProjectRoot) -> Result<(), ProjectFilesystemError> {
-    let metadata = std::fs::symlink_metadata(root.as_path()).map_err(prepare_error)?;
-    if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-        return Err(invalid_root(
-            root.as_path(),
-            "project root is not a real directory",
-        ));
-    }
-    let manifest = root.as_path().join(PROJECT_METADATA_FILE);
-    let metadata = std::fs::symlink_metadata(&manifest).map_err(prepare_error)?;
-    if metadata_is_redirect(&metadata) || !metadata.is_file() {
-        return Err(invalid_root(
-            root.as_path(),
-            "project manifest is not a regular file",
-        ));
-    }
-    Ok(())
-}
-
 fn active_session_for_deletion(
     state: &ProjectState,
     root: &NormalizedProjectRoot,
@@ -464,14 +412,15 @@ fn copy_mutations(
     source: &Path,
     authority: &ProjectData,
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
-    let mut directories = BTreeSet::from([
+    let source_tree = read_project_source_tree(source)?;
+    let mut directories = source_tree.directories;
+    directories.extend([
         PathBuf::from(EVENTS_DIR),
         PathBuf::from(FUNCTIONS_DIR),
         PathBuf::from(WORKSHEETS_DIR),
         PathBuf::from(DATABASE_DIR),
     ]);
-    let mut files = BTreeMap::new();
-    collect_source_files(source, source, &mut directories, &mut files)?;
+    let mut files = source_tree.files;
     files.remove(Path::new(PROJECT_METADATA_FILE));
     files.remove(Path::new(GLOBAL_VARIABLES_FILE));
     files.retain(|path, _| !path.starts_with(WORKSHEETS_DIR));
@@ -504,46 +453,6 @@ fn copy_mutations(
         }
     }));
     Ok(mutations)
-}
-
-fn collect_source_files(
-    source_root: &Path,
-    directory: &Path,
-    directories: &mut BTreeSet<PathBuf>,
-    files: &mut BTreeMap<PathBuf, Vec<u8>>,
-) -> Result<(), ProjectFilesystemError> {
-    for entry in std::fs::read_dir(directory).map_err(prepare_error)? {
-        let entry = entry.map_err(prepare_error)?;
-        let relative = entry
-            .path()
-            .strip_prefix(source_root)
-            .map_err(prepare_error)?
-            .to_path_buf();
-        if relative.starts_with(".yssbi-transaction") {
-            continue;
-        }
-        let metadata = std::fs::symlink_metadata(entry.path()).map_err(prepare_error)?;
-        if metadata_is_redirect(&metadata) {
-            return Err(prepare_error(format!(
-                "project copy source '{}' is a redirect",
-                relative.display()
-            )));
-        }
-        if metadata.is_dir() {
-            directories.insert(relative);
-            collect_source_files(source_root, &entry.path(), directories, files)?;
-        } else if metadata.is_file() {
-            let contents =
-                read_secure_project_file(source_root, &relative).map_err(prepare_error)?;
-            files.insert(relative, contents);
-        } else {
-            return Err(prepare_error(format!(
-                "project copy source '{}' is not a regular file",
-                relative.display()
-            )));
-        }
-    }
-    Ok(())
 }
 
 fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {

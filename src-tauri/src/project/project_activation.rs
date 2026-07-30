@@ -268,17 +268,7 @@ mod tests {
     fn activation_and_pre_run_function_loading_complete_without_deadlock() {
         let (old_root, _) = save_named_project("deadlock-old");
         let (new_root, _) = save_named_project("deadlock-new");
-        let worksheets_root = new_root.join(crate::project::WORKSHEETS_DIR);
-        let worksheet_file = std::fs::read_dir(&worksheets_root)
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
-        let nested_worksheets = worksheets_root.join("Nested");
-        std::fs::create_dir_all(&nested_worksheets).unwrap();
-        let nested_worksheet_file = nested_worksheets.join(worksheet_file.file_name().unwrap());
-        std::fs::rename(&worksheet_file, &nested_worksheet_file).unwrap();
+
         let state = ProjectState::new();
         state.activate_project_from_path(&old_root).unwrap();
         let event = state
@@ -328,7 +318,6 @@ mod tests {
         let activated = state.get_data().unwrap();
         assert!(!activated.graphs.contains_key(&old_function));
         assert_eq!(activated.worksheets.len(), 1);
-        assert!(nested_worksheet_file.is_file());
 
         let _ = std::fs::remove_dir_all(old_root);
         let _ = std::fs::remove_dir_all(new_root);

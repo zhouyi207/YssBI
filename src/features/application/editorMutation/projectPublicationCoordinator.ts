@@ -199,6 +199,7 @@ interface ProjectPublicationState {
   projectInstanceId: string | null;
   epoch: number;
   appliedRevision: number;
+  activationRevision: number;
   appliedFingerprint?: string;
   phase: 'idle' | 'applying' | 'recovering';
   pendingByRevision: Map<number, PendingPublication>;
@@ -228,6 +229,7 @@ export class ProjectPublicationCoordinator {
     projectInstanceId: null,
     epoch: 0,
     appliedRevision: 0,
+    activationRevision: 0,
     phase: 'idle',
     pendingByRevision: new Map(),
   };
@@ -251,6 +253,22 @@ export class ProjectPublicationCoordinator {
     this.state.projectInstanceId = projectInstanceId;
     this.state.appliedRevision = appliedRevision;
   }
+
+  acceptProjectActivation(projectInstanceId: string, activationRevision: number): boolean {
+    if (!projectInstanceId
+      || !Number.isSafeInteger(activationRevision)
+      || activationRevision <= 0) {
+      throw protocolError('project activation identity is malformed');
+    }
+    if (activationRevision < this.state.activationRevision) return false;
+    if (activationRevision === this.state.activationRevision) {
+      return this.state.projectInstanceId === projectInstanceId;
+    }
+    this.startProject(projectInstanceId, 0);
+    this.state.activationRevision = activationRevision;
+    return true;
+  }
+
 
   cancelProject(): void {
     this.state.epoch += 1;

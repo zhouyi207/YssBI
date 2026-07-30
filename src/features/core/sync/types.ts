@@ -26,7 +26,11 @@ export interface NestedEvent {
 // ==================== 事件 Payload 类型 ====================
 
 export interface ProjectLoadedPayload {
-    path: string | null;
+    result: {
+        path: string;
+        projectInstanceId: string;
+        activationRevision: number;
+    };
 }
 
 export interface ProjectLifecycleCommittedPayload {

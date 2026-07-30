@@ -5,9 +5,9 @@ use yssbi_lib::database::{
     DatabaseAccess, DatabaseState, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
     query_page_to_dataframe, write_display_name,
 };
+use yssbi_lib::node_system::document::OperationId;
 use yssbi_lib::project::{
-    ProjectData, ProjectState, discover_databases_from_root, ensure_project_database_dir,
-    project_duckdb_abs,
+    ProjectState, discover_databases_from_root, project_duckdb_abs,
 };
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
@@ -16,7 +16,9 @@ fn setup_iris_duckdb_project() -> (PathBuf, String) {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ensure_project_database_dir(&project_root).expect("database dir");
+    ProjectState::new()
+        .create_project_transaction("Database test", &project_root, OperationId::new())
+        .expect("create project fixture");
 
     let db_id = "db-test-iris";
     let duckdb_path = project_duckdb_abs(&project_root);
@@ -91,18 +93,13 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
 fn test_project_reload_discovers_duckdb_from_directory() {
     let (project_root, db_id) = setup_iris_duckdb_project();
     let state = ProjectState::new();
-    let mut project_data = ProjectData::new();
-    project_data.databases =
-        discover_databases_from_root(project_root.as_path()).expect("discover");
-    assert_eq!(project_data.databases.len(), 1);
+    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
+    assert_eq!(databases.len(), 1);
     assert_eq!(
-        project_data
-            .databases
-            .get(&db_id)
-            .and_then(|d| d.name.as_deref()),
+        databases.get(&db_id).and_then(|d| d.name.as_deref()),
         Some("iris")
     );
-    state.activate_loaded_project(project_root.to_string_lossy().into_owned(), project_data);
+    state.activate_project_from_path(&project_root).unwrap();
 
     let mut store = state.project_store.write().unwrap();
     let db = store.databases.get_mut(&db_id).expect("database in store");
@@ -122,7 +119,9 @@ fn test_single_project_duckdb_multiple_tables() {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ensure_project_database_dir(&project_root).expect("database dir");
+    ProjectState::new()
+        .create_project_transaction("Multi database test", &project_root, OperationId::new())
+        .expect("create project fixture");
     let duckdb_path = project_duckdb_abs(&project_root);
     let csv = PathBuf::from("tests/data/iris.csv");
 
@@ -239,10 +238,7 @@ fn test_edit_save_persists_to_duckdb() {
 
     let (project_root, db_id) = setup_iris_duckdb_project();
     let state = ProjectState::new();
-    let mut project_data = ProjectData::new();
-    project_data.databases =
-        discover_databases_from_root(project_root.as_path()).expect("discover");
-    state.activate_loaded_project(project_root.to_string_lossy().into_owned(), project_data);
+    state.activate_project_from_path(&project_root).unwrap();
 
     state
         .with_database_mut(&db_id, |db| {

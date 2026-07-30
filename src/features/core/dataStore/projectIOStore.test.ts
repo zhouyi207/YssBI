@@ -6,6 +6,7 @@ import { LoadStatus } from '@/shared/types/ui/common';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 import {
+  loadActivatedProject,
   prepareAuthoritativeProjectLoad,
   useProjectIOStore,
   type AuthoritativeProjectLoadPlanDependencies,
@@ -290,6 +291,93 @@ describe('useProjectIOStore snapshot paths', () => {
     await expect(preparation).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     expect(ProjectService.getDatabasesVariables).not.toHaveBeenCalled();
     expect(ProjectService.getProjectIndex).not.toHaveBeenCalled();
+  });
+
+  it('establishes a new identity owner before first activation hydration', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000701';
+    projectPublicationCoordinator.cancelProject();
+    vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/first.yssbi');
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 2,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'First',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    const activation = {
+      path: '/tmp/first.yssbi',
+      projectInstanceId,
+      activationRevision: 1001,
+    };
+    const direct = loadActivatedProject(activation);
+    const event = loadActivatedProject(activation);
+    await expect(Promise.all([direct, event])).resolves.toEqual([
+      expect.any(Object),
+      expect.any(Object),
+    ]);
+
+    expect(ProjectService.getProjectPath).toHaveBeenCalledTimes(1);
+    expect(ProjectService.getProjectIndex).toHaveBeenCalledWith(projectInstanceId);
+    expect(projectPublicationCoordinator.getSnapshotForTests()).toMatchObject({
+      projectInstanceId,
+      appliedRevision: 2,
+    });
+    expect(useProjectIOStore.getState().projectInstanceId).toBe(projectInstanceId);
+  });
+
+  it('does not let an old in-flight hydration absorb a replacement activation', async () => {
+    const oldId = '00000000-0000-0000-0000-000000000702';
+    const newId = '00000000-0000-0000-0000-000000000703';
+    projectPublicationCoordinator.startProject(oldId, 0);
+    const oldPath = deferred<string | null>();
+    vi.mocked(ProjectService.getProjectPath).mockImplementation((projectInstanceId) => (
+      projectInstanceId === oldId ? oldPath.promise : Promise.resolve('/tmp/new.yssbi')
+    ));
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockImplementation(async (projectInstanceId) => ({
+      projectInstanceId,
+      publicationRevision: projectInstanceId === newId ? 5 : 1,
+      history: { canUndo: false, canRedo: false },
+      projectName: projectInstanceId === newId ? 'New' : 'Old',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    }));
+
+    const oldLoad = useProjectIOStore.getState().loadProject();
+    await vi.waitFor(() => expect(ProjectService.getProjectPath).toHaveBeenCalledWith(oldId));
+    const newLoad = loadActivatedProject({
+      path: '/tmp/new.yssbi',
+      projectInstanceId: newId,
+      activationRevision: 1002,
+    });
+
+    await expect(newLoad).resolves.not.toBeNull();
+    const callsAfterNewActivation = vi.mocked(ProjectService.getProjectPath).mock.calls.length;
+    await expect(loadActivatedProject({
+      path: '/tmp/old.yssbi',
+      projectInstanceId: oldId,
+      activationRevision: 1001,
+    })).resolves.toBeNull();
+    expect(ProjectService.getProjectPath).toHaveBeenCalledTimes(callsAfterNewActivation);
+    oldPath.resolve('/tmp/old.yssbi');
+    await expect(oldLoad).resolves.toBeNull();
+    expect(projectPublicationCoordinator.getSnapshotForTests()).toMatchObject({
+      projectInstanceId: newId,
+      appliedRevision: 5,
+    });
+    expect(useProjectIOStore.getState()).toMatchObject({
+      projectInstanceId: newId,
+      currentPath: expect.stringContaining('new.yssbi'),
+    });
   });
 
   it('loadProject hydrates index and clears graph bodies', async () => {

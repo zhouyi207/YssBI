@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { LoadStatus } from '@/shared/types/ui/common';
 import type { ProjectData, Variable } from '@/shared/types';
-import { ProjectService } from '@/services/project/projectService';
+import {
+  ProjectService,
+  type ProjectActivationResult,
+} from '@/services/project/projectService';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { logger } from '@/utils/appLogger';
 
@@ -327,8 +330,57 @@ export function commitPreparedAuthoritativeProjectLoad(
   return prepared.projectData;
 }
 
-/** 合并并发 load，避免 ProjectLoaded / 多窗口 / 初始化同时触发多路 get_project_* invoke */
-let loadProjectInFlight: Promise<ProjectData | null> | null = null;
+/** Identity-keyed hydration prevents an old in-flight load from absorbing a replacement project. */
+let loadProjectInFlight: {
+  key: string;
+  promise: Promise<ProjectData | null>;
+} | null = null;
+
+function identityKey(identity: ProjectIdentitySnapshot): string {
+  return `${identity.projectInstanceId}:${identity.epoch}`;
+}
+
+async function loadProjectForIdentity(
+  identity: ProjectIdentitySnapshot,
+): Promise<ProjectData | null> {
+  const key = identityKey(identity);
+  if (loadProjectInFlight?.key === key) return loadProjectInFlight.promise;
+
+  const entry = {
+    key,
+    promise: Promise.resolve<ProjectData | null>(null),
+  };
+  entry.promise = (async () => {
+    useProjectIOStore.setState({ status: LoadStatus.Loading, error: null });
+    try {
+      const prepared = await prepareAuthoritativeProjectLoad(identity);
+      assertCurrentProjectIdentity(identity);
+      return commitPreparedAuthoritativeProjectLoad(prepared);
+    } catch (err) {
+      if (!isCurrentProjectIdentity(identity)) return null;
+      const errorMessage = formatErrorMessage(err, 'Failed to load project');
+      useProjectIOStore.setState({ status: LoadStatus.Error, error: errorMessage });
+      logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
+      return null;
+    } finally {
+      if (loadProjectInFlight === entry) loadProjectInFlight = null;
+    }
+  })();
+  loadProjectInFlight = entry;
+  return entry.promise;
+}
+
+export function loadActivatedProject(
+  activation: ProjectActivationResult,
+): Promise<ProjectData | null> {
+  if (!projectPublicationCoordinator.acceptProjectActivation(
+    activation.projectInstanceId,
+    activation.activationRevision,
+  )) {
+    return Promise.resolve(null);
+  }
+  return loadProjectForIdentity(captureProjectIdentity());
+}
 
 interface GraphLoadInFlight {
   lifecycleToken: number;
@@ -350,33 +402,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
 
   setCurrentPath: (path) => set({ currentPath: path ? formatDisplayPath(path) : null }),
 
-  loadProject: async () => {
-    if (loadProjectInFlight) {
-      return loadProjectInFlight;
-    }
-
-    // 不因 Loading 提前返回，避免与 ProjectLoaded 事件 handler 竞态导致 importGraph 误判失败
-    const identity = captureProjectIdentity();
-    loadProjectInFlight = (async () => {
-      set({ status: LoadStatus.Loading, error: null });
-
-      try {
-        const prepared = await prepareAuthoritativeProjectLoad(identity);
-        assertCurrentProjectIdentity(identity);
-        return commitPreparedAuthoritativeProjectLoad(prepared);
-      } catch (err) {
-        if (!isCurrentProjectIdentity(identity)) return null;
-        const errorMessage = formatErrorMessage(err, 'Failed to load project');
-        set({ status: LoadStatus.Error, error: errorMessage });
-        logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
-        return null;
-      } finally {
-        loadProjectInFlight = null;
-      }
-    })();
-
-    return loadProjectInFlight;
-  },
+  loadProject: async () => loadProjectForIdentity(captureProjectIdentity()),
 
   refreshResourceIndex: refreshProjectResourceIndex,
 

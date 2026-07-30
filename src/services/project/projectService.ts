@@ -65,6 +65,12 @@ export interface ProjectVariableIndexRow {
   ownerGraphKind?: 'event' | 'function' | null;
 }
 
+export interface ProjectActivationResult {
+  path: string;
+  projectInstanceId: string;
+  activationRevision: number;
+}
+
 export interface ProjectIndexRow {
   projectInstanceId: string;
   projectName: string;
@@ -240,10 +246,7 @@ export class ProjectService {
      * 从文件加载项目到状态管理器
      * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
-    static async loadProjectToState(path: string): Promise<{
-        path: string;
-        projectInstanceId: string;
-    }> {
+    static async loadProjectToState(path: string): Promise<ProjectActivationResult> {
         return await invoke("load_project", { path });
     }
 

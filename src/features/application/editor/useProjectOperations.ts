@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { resolveActiveProjectPath, useProjectIOStore } from '@/features/core/dataStore';
+import {
+  loadActivatedProject,
+  resolveActiveProjectPath,
+} from '@/features/core/dataStore';
 import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
@@ -174,9 +177,9 @@ export function useProjectOperations() {
       const path = await ProjectService.pickProjectMetadataFile();
       if (!path) return;
 
-      await ProjectService.loadProjectToState(path);
+      const activation = await ProjectService.loadProjectToState(path);
 
-      const projectData = await useProjectIOStore.getState().loadProject();
+      const projectData = await loadActivatedProject(activation);
       if (!projectData) {
         uiStore.showToast("加载项目失败", "error", 3000);
         return;

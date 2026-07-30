@@ -222,9 +222,15 @@ describe('mutation and history services', () => {
     vi.mocked(invoke).mockResolvedValue(response);
 
     await expect(
-      FunctionMutationService.updateSignature(graphPath, 'zh-CN', request),
+      FunctionMutationService.updateSignature(
+        '00000000-0000-0000-0000-000000000601',
+        graphPath,
+        'zh-CN',
+        request,
+      ),
     ).resolves.toBe(response);
     expect(invoke).toHaveBeenCalledWith('update_function_signature', {
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
       functionPath: graphPath,
       locale: 'zh-CN',
       request,

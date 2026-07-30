@@ -2,7 +2,7 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
-import { useProjectIOStore } from '@/features/core/dataStore';
+import { loadActivatedProject, useProjectIOStore } from '@/features/core/dataStore';
 import {
     applyProjectLifecycleReceipt,
     type ProjectLifecycleReceiptDependencies,
@@ -15,11 +15,10 @@ export class ProjectLoadedHandler extends BaseEventHandler<ProjectLoadedPayload>
     eventType = 'ProjectLoaded';
     
     handle(payload: ProjectLoadedPayload, callbacks?: EventCallbacks): void {
-        this.log('Project loaded:', payload.path);
-        
-        // 前端只传路径，后端负责加载；收到事件后从后端按当前分阶段加载流程同步状态。
-        useProjectIOStore.getState().loadProject().then((data) => {
-            if (data) callbacks?.onProjectLoaded?.(data, payload.path);
+        this.log('Project loaded:', payload.result.path);
+
+        loadActivatedProject(payload.result).then((data) => {
+            if (data) callbacks?.onProjectLoaded?.(data, payload.result.path);
         });
     }
 }

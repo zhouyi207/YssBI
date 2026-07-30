@@ -153,6 +153,21 @@ describe('projectFilesystemContract', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('binds project activation direct and event wires to the backend identity', () => {
+    const service = readFileSync(resolve('src/services/project/projectService.ts'), 'utf8');
+    const command = readFileSync(
+      resolve('src-tauri/src/commands/command_project/lifecycle.rs'),
+      'utf8',
+    );
+    const event = readFileSync(resolve('src-tauri/src/event/event_project.rs'), 'utf8');
+
+    expect(service).toContain('Promise<ProjectActivationResult>');
+    expect(command).toContain('Result<ProjectActivationResultDto, FrontendError>');
+    expect(command).toContain('project_instance_id: session.instance_id.to_string()');
+    expect(command).toContain('activation_revision: state.activation_revision()');
+    expect(event).toContain('ProjectLoaded {\n        result: ProjectActivationResultDto');
+  });
+
   it('contains no optional projectInstanceId in active-project service contracts', () => {
     const offenders = productionSources(resolve('src/services')).flatMap(({ path, source }) => {
       const matches = source.match(/projectInstanceId\s*\?\s*:\s*string|projectInstanceId\s*:\s*string\s*\|\s*(?:null|undefined)|projectInstanceId\s*=\s*[^,;)]+/g) ?? [];
