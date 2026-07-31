@@ -26,10 +26,15 @@ pub use lowering::{
     LoweringError, NodeImplementation, NodeLowerer, RelationalInputBinding, RelationalNodeFragment,
     ScalarFragment,
 };
+#[cfg(test)]
+pub(crate) use pipeline::compile_snapshot_invocations;
 pub use pipeline::{
-    CompilationSnapshot, CompileResult, CompilerRegistry, GraphCompiler, RegistryNode,
-    RegistryNodeBehavior, ResourceSnapshot,
+    CompilationSnapshot, CompileResult, CompilerAnalysis, CompilerRegistry, CompilerSemanticGraph,
+    GraphCompiler, PublishedCompileAnalysis, RegistryNode, RegistryNodeBehavior, ResourceSnapshot,
 };
+
+pub type ProjectCompileCoordinator =
+    CompileCoordinator<PublishedCompileAnalysis, crate::node_system::plan::ExecutionPlan>;
 pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,

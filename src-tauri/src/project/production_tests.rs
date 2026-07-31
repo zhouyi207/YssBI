@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::document::{
     DocumentNode, EditorGraphMutationDto, GraphDocumentOperation, GraphDocumentPatch,
-    GraphRevision, HistoryMutation, MutationConflict, MutationRequest, OperationId,
+    GraphMutation, GraphRevision, HistoryMutation, MutationConflict, MutationRequest, OperationId,
     ParameterValues, ResourceKey,
 };
 use crate::node_system::protocol::NodeTypeId;
@@ -1561,7 +1561,10 @@ fn projection_environment_capture_is_activation_ordered_and_coherent() {
         }
         Err(error) => assert!(error.contains("stale_project_lifecycle")),
     }
-    assert_eq!(state.get_path().as_deref(), Some(path_b.as_str()));
+    let current_root =
+        NormalizedProjectRoot::from_project_path(state.get_path().as_deref().unwrap()).unwrap();
+    let expected_root = NormalizedProjectRoot::from_project_path(&path_b).unwrap();
+    assert_eq!(current_root, expected_root);
     let data = state.get_data().unwrap();
     assert!(data.databases.contains_key("b"));
     assert!(!data.databases.contains_key("a"));
@@ -1808,14 +1811,17 @@ fn committed_resource_observer_and_response_serialize_identically() {
 }
 
 #[test]
-fn committed_results_use_commit_snapshot_during_interleaving() {
+fn committed_graph_source_is_rejected_after_interleaved_undo() {
     let state = state_with_empty_graph();
     let (projection_started_tx, projection_started_rx) = std::sync::mpsc::channel();
     let (release_projection_tx, release_projection_rx) = std::sync::mpsc::channel();
     let release_projection_rx = std::sync::Mutex::new(release_projection_rx);
+    let first_projection = std::sync::atomic::AtomicBool::new(true);
     state.set_projection_test_hook(std::sync::Arc::new(move || {
-        projection_started_tx.send(()).unwrap();
-        release_projection_rx.lock().unwrap().recv().unwrap();
+        if first_projection.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            projection_started_tx.send(()).unwrap();
+            release_projection_rx.lock().unwrap().recv().unwrap();
+        }
         Ok(())
     }));
     let mutation_state = state.clone();
@@ -1841,17 +1847,9 @@ fn committed_results_use_commit_snapshot_during_interleaving() {
         )
         .unwrap();
     release_projection_tx.send(()).unwrap();
-    let result = mutation.join().unwrap().unwrap();
+    let error = mutation.join().unwrap().unwrap_err();
 
-    assert_eq!(result.delta.to_revision, GraphRevision::new(1));
-    assert_eq!(result.projection_replacement.projection.source_revision, 1);
-    assert_eq!(
-        result.history,
-        crate::node_system::document::HistoryStatusDto {
-            can_undo: true,
-            can_redo: false,
-        }
-    );
+    assert!(matches!(error, MutationConflict::Projection(_)));
     assert_eq!(
         state.history_status(),
         crate::node_system::document::HistoryStatusDto {
@@ -3258,11 +3256,14 @@ fn production_relational_backend_executes_project_dataframe_source() {
                 rows: 2,
             },
         ]),
+        fragment_roots: Box::new([]),
+        bridge_inputs: Box::new([]),
+        requested_fragment_outputs: Box::new([]),
         roots: Box::new([crate::node_system::plan::RelationalOperatorIndex::new(1)]),
         pushdown_hints: Box::new([]),
     };
 
-    let result = ProductionRelationalBackend
+    let result = crate::node_system::runtime::ProductionRelationalBackend::default()
         .execute(&context, &plan, &[], &[])
         .unwrap();
     let crate::node_system::runtime::RuntimeValue::Scalar(
@@ -3394,7 +3395,7 @@ fn production_resource_snapshot_supplies_plot_sink() {
 
 #[test]
 fn project_execution_refuses_blocking_analysis() {
-    let state = state_with_empty_graph();
+    let (state, root) = active_state_with_empty_graph("blocking-analysis");
     let invalid = node("yssbi.test.missing");
     let patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: invalid }]);
     state
@@ -3414,6 +3415,7 @@ fn project_execution_refuses_blocking_analysis() {
         .unwrap_err();
     assert!(error.contains("blocking diagnostics"));
     assert!(error.contains("compiler.node.unknown"));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -4171,16 +4173,24 @@ fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
-#[test]
-fn project_execution_runs_valid_plan_through_run_executor() {
-    let state = state_with_empty_graph();
+fn active_state_with_empty_graph(label: &str) -> (ProjectState, std::path::PathBuf) {
+    let (state, root) = state_with_project_path(label);
+    state
+        .insert_graph(
+            graph_path(),
+            GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    (state, root)
+}
+
+fn active_state_with_valid_constant_graph(label: &str) -> (ProjectState, std::path::PathBuf) {
+    let (state, root) = active_state_with_empty_graph(label);
     let mut constant = node("yssbi.constant.int64");
     constant.parameters.insert(
         crate::node_system::protocol::ParameterKey::new("value").unwrap(),
         serde_json::json!(7),
     );
-    let patch =
-        GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: constant }]);
     state
         .apply_graph_patch(
             &graph_path(),
@@ -4188,13 +4198,773 @@ fn project_execution_runs_valid_plan_through_run_executor() {
                 ResourceKey::Graph(document_path()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
-                patch,
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: constant,
+                }]),
+            ),
+        )
+        .unwrap();
+    (state, root)
+}
+
+#[test]
+fn projection_and_execution_reuse_one_compile_product() {
+    let (state, root) = active_state_with_valid_constant_graph("projection-execution-reuse");
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    state
+        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        1
+    );
+    let (analysis_id, plan_id) = state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_eq!(plan_id, Some(analysis_id));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn execution_and_projection_reuse_one_compile_product() {
+    let (state, root) = active_state_with_valid_constant_graph("execution-projection-reuse");
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    state
+        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        1
+    );
+    let (analysis_id, plan_id) = state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_eq!(plan_id, Some(analysis_id));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn blocking_recompile_clears_published_execution_plan() {
+    let (state, root) = active_state_with_valid_constant_graph("blocking-recompile");
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let (valid_compile_id, valid_plan_id) =
+        state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_eq!(valid_plan_id, Some(valid_compile_id));
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.test.missing"),
+                }]),
             ),
         )
         .unwrap();
 
+    assert!(!coordinator.contains_slot_for_test(&document_path()));
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let (blocking_compile_id, blocking_plan_id) =
+        state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_ne!(blocking_compile_id, valid_compile_id);
+    assert_eq!(blocking_plan_id, None);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn stale_compile_cannot_restore_an_older_plan() {
+    let (state, root) = active_state_with_valid_constant_graph("stale-compile-plan");
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let (first_compile_id, first_plan_id) =
+        state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_eq!(first_plan_id, Some(first_compile_id));
+
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+        .unwrap();
+
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+    let stale_state = state.clone();
+    let stale = std::thread::spawn(move || stale_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(2),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+        .unwrap();
+
+    assert!(!coordinator.contains_slot_for_test(&document_path()));
+    release_gate_tx.send(()).unwrap();
+    let stale_error = stale.join().unwrap().unwrap_err();
+    assert!(stale_error.contains("stale_project_lifecycle"));
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let (current_compile_id, current_plan_id) =
+        state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_ne!(current_compile_id, first_compile_id);
+    assert_eq!(current_plan_id, Some(current_compile_id));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn graph_unload_invalidates_compile_slot() {
+    let (state, root) = active_state_with_valid_constant_graph("unload-compile-slot");
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+
+    state.unload_graph_resource(&graph_path()).unwrap();
+
+    assert!(!coordinator.contains_slot_for_test(&document_path()));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn function_body_mutations_invalidate_other_graph_compile_slots() {
+    for entry in ["mutation", "patch"] {
+        let (state, function_path, caller_path, _) =
+            function_state_with_caller(&format!("FunctionBody{entry}"));
+        state.graph_projection(&caller_path, "en-US").unwrap();
+        let coordinator = state.compile_coordinator.read().unwrap().clone();
+        let caller_document_path =
+            crate::node_system::document::GraphResourcePath(caller_path.as_str().into());
+        assert!(coordinator.contains_slot_for_test(&caller_document_path));
+        let function_document_path =
+            crate::node_system::document::GraphResourcePath(function_path.as_str().into());
+
+        let request_resource = ResourceKey::Graph(function_document_path);
+        if entry == "mutation" {
+            state
+                .apply_graph_mutation(
+                    &function_path,
+                    MutationRequest::new(
+                        request_resource,
+                        GraphRevision::INITIAL,
+                        OperationId::new(),
+                        GraphMutation::CreateNode {
+                            node: node("yssbi.constant.int64"),
+                        },
+                    ),
+                )
+                .unwrap();
+        } else {
+            state
+                .apply_graph_patch(
+                    &function_path,
+                    MutationRequest::new(
+                        request_resource,
+                        GraphRevision::INITIAL,
+                        OperationId::new(),
+                        GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                            node: node("yssbi.constant.int64"),
+                        }]),
+                    ),
+                )
+                .unwrap();
+        }
+
+        assert!(
+            !coordinator.contains_slot_for_test(&caller_document_path),
+            "{entry} left a dependent caller compile slot published"
+        );
+    }
+}
+
+#[test]
+fn project_replacement_detaches_old_compile_generation() {
+    let (state, root) = active_state_with_valid_constant_graph("replace-compile-generation");
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let detached = state.compile_coordinator.read().unwrap().clone();
+    assert!(detached.contains_slot_for_test(&document_path()));
+
+    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
+
+    let current = state.compile_coordinator.read().unwrap().clone();
+    assert!(!std::sync::Arc::ptr_eq(&detached, &current));
+    assert!(!detached.contains_slot_for_test(&document_path()));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn committed_graph_mutation_rejects_environment_from_older_authority_generation() {
+    let state = state_with_empty_graph();
+    let (capture_paused_tx, capture_paused_rx) = std::sync::mpsc::channel();
+    let (release_capture_tx, release_capture_rx) = std::sync::mpsc::channel();
+    let release_capture_rx = std::sync::Mutex::new(release_capture_rx);
+    let capture_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let capture_count_for_hook = std::sync::Arc::clone(&capture_count);
+    state.set_projection_environment_after_path_data_test_hook(std::sync::Arc::new(move || {
+        if capture_count_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
+            capture_paused_tx.send(()).unwrap();
+            release_capture_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let mutation_state = state.clone();
+    let mutation = std::thread::spawn(move || {
+        mutation_state.apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+    });
+    capture_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    state
+        .insert_graph(
+            GraphResourcePath::new("events/Unrelated.yssbi-event").unwrap(),
+            GraphResourceDocument::new("Unrelated", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    release_capture_tx.send(()).unwrap();
+
+    match mutation.join().unwrap() {
+        Ok(_) => {
+            assert_eq!(capture_count.load(std::sync::atomic::Ordering::Acquire), 2);
+            assert_eq!(
+                state.get_data().unwrap().graphs[&graph_path()]
+                    .document
+                    .revision,
+                GraphRevision::new(1)
+            );
+        }
+        Err(MutationConflict::Projection(_)) => {
+            assert_eq!(
+                state.get_data().unwrap().graphs[&graph_path()]
+                    .document
+                    .revision,
+                GraphRevision::INITIAL
+            );
+        }
+        Err(error) => panic!("unexpected mutation error: {error}"),
+    }
+}
+
+#[test]
+fn graph_projection_retries_when_authority_changes_during_metadata_capture() {
+    let (state, root) = active_state_with_valid_constant_graph("graph-projection-capture");
+    let capture_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let capture_count_for_hook = std::sync::Arc::clone(&capture_count);
+    let (capture_paused_tx, capture_paused_rx) = std::sync::mpsc::channel();
+    let (release_capture_tx, release_capture_rx) = std::sync::mpsc::channel();
+    let release_capture_rx = std::sync::Mutex::new(release_capture_rx);
+    state.set_projection_environment_after_path_data_test_hook(std::sync::Arc::new(move || {
+        if capture_count_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
+            capture_paused_tx.send(()).unwrap();
+            release_capture_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let projection_state = state.clone();
+    let projection =
+        std::thread::spawn(move || projection_state.graph_projection(&graph_path(), "en-US"));
+    capture_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    {
+        let mut publication = state.mutation_publication.lock().unwrap();
+        let mut data = state.project_data.write().unwrap();
+        data.graphs
+            .get_mut(&graph_path())
+            .unwrap()
+            .document
+            .revision = GraphRevision::new(2);
+        publication.advance_authority_generation();
+    }
+    release_capture_tx.send(()).unwrap();
+
+    let projection = projection.join().unwrap().unwrap();
+    assert_eq!(projection.source_revision, 2);
+    assert_eq!(capture_count.load(std::sync::atomic::Ordering::Acquire), 2);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn committed_source_cannot_rebind_after_authority_generation_aba() {
+    let (state, function_path, caller_path, resource) =
+        function_state_with_caller("CompileSourceAba");
+    let authority_state = state.clone();
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        let mut publication = authority_state.mutation_publication.lock().unwrap();
+        publication.advance_authority_generation();
+        publication.advance_authority_generation();
+    }));
+
+    let result = state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                resource,
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+
+    assert_eq!(
+        result.projection_status,
+        crate::event::ProjectionStatusDto::Incomplete {
+            invalidated_graph_paths: vec![
+                caller_path.as_str().to_string(),
+                function_path.as_str().to_string(),
+            ],
+        }
+    );
+    assert!(result.projection_replacements.is_empty());
+}
+
+#[test]
+fn compile_capture_retries_when_authority_changes_during_metadata_capture() {
+    let (state, root) = active_state_with_valid_constant_graph("compile-capture-generation");
+    let capture_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let capture_count_for_hook = std::sync::Arc::clone(&capture_count);
+    let (capture_paused_tx, capture_paused_rx) = std::sync::mpsc::channel();
+    let (release_capture_tx, release_capture_rx) = std::sync::mpsc::channel();
+    let release_capture_rx = std::sync::Mutex::new(release_capture_rx);
+    state.set_compile_capture_after_environment_test_hook(std::sync::Arc::new(move || {
+        if capture_count_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel) == 0 {
+            capture_paused_tx.send(()).unwrap();
+            release_capture_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let execution_state = state.clone();
+    let execution = std::thread::spawn(move || {
+        execution_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+    });
+    capture_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    {
+        let mut publication = state.mutation_publication.lock().unwrap();
+        let mut data = state.project_data.write().unwrap();
+        let graph = data.graphs.get_mut(&graph_path()).unwrap();
+        graph.document.revision = GraphRevision::new(2);
+        publication.advance_authority_generation();
+    }
+    release_capture_tx.send(()).unwrap();
+
+    execution.join().unwrap().unwrap();
+    assert_eq!(capture_count.load(std::sync::atomic::Ordering::Acquire), 2);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn publish_gate_rejects_authority_generation_change() {
+    let (state, root) = active_state_with_valid_constant_graph("compile-publish-gate");
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let projection_state = state.clone();
+    let projection =
+        std::thread::spawn(move || projection_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    state
+        .mutation_publication
+        .lock()
+        .unwrap()
+        .advance_authority_generation();
+    release_gate_tx.send(()).unwrap();
+
+    let error = projection.join().unwrap().unwrap_err();
+    assert!(error.contains("stale_project_lifecycle"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn fast_path_gate_rejects_authority_generation_change() {
+    let (state, root) = active_state_with_valid_constant_graph("compile-fast-path-gate");
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let projection_state = state.clone();
+    let projection =
+        std::thread::spawn(move || projection_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    state
+        .mutation_publication
+        .lock()
+        .unwrap()
+        .advance_authority_generation();
+    release_gate_tx.send(()).unwrap();
+
+    let error = projection.join().unwrap().unwrap_err();
+    assert!(error.contains("stale_project_lifecycle"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn coalesced_waiter_terminates_when_authority_generation_changes() {
+    let (state, root) = active_state_with_valid_constant_graph("coalesced-stale-termination");
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let first_state = state.clone();
+    let first = std::thread::spawn(move || first_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    let (waiter_paused_tx, waiter_paused_rx) = std::sync::mpsc::channel();
+    let (release_waiter_tx, release_waiter_rx) = std::sync::mpsc::channel();
+    let release_waiter_rx = std::sync::Mutex::new(release_waiter_rx);
+    state.set_compile_coalesced_before_wait_test_hook(std::sync::Arc::new(move || {
+        waiter_paused_tx.send(()).unwrap();
+        release_waiter_rx.lock().unwrap().recv().unwrap();
+    }));
+    let second_state = state.clone();
+    let second = std::thread::spawn(move || second_state.graph_projection(&graph_path(), "en-US"));
+    waiter_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    state
+        .mutation_publication
+        .lock()
+        .unwrap()
+        .advance_authority_generation();
+    release_waiter_tx.send(()).unwrap();
+    release_gate_tx.send(()).unwrap();
+
+    for result in [first.join().unwrap(), second.join().unwrap()] {
+        let error = result.unwrap_err();
+        assert!(error.contains("stale_project_lifecycle"));
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn different_basis_request_compiles_after_authoritative_invalidation() {
+    let (state, root) = active_state_with_valid_constant_graph("pending-latest-publication");
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let active_state = state.clone();
+    let active = std::thread::spawn(move || active_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+        .unwrap();
+    let latest = state.graph_projection(&graph_path(), "en-US").unwrap();
+    assert_eq!(latest.source_revision, 2);
+
+    release_gate_tx.send(()).unwrap();
+    let active_error = active.join().unwrap().unwrap_err();
+    assert!(active_error.contains("stale_project_lifecycle"));
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        2
+    );
+    let (analysis_id, plan_id) = state.published_compile_ids_for_test(&graph_path()).unwrap();
+    assert_eq!(plan_id, Some(analysis_id));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn execution_rejects_function_body_change_after_main_plan_before_run() {
+    let (state, root) = active_state_with_valid_constant_graph("execution-authority-gate");
+    let function_path = GraphResourcePath::new("functions/Authority.yssbi-function").unwrap();
+    state
+        .insert_graph(
+            function_path.clone(),
+            GraphResourceDocument::new("Authority", GraphDocumentKind::Function),
+        )
+        .unwrap();
+
+    let (plan_ready_tx, plan_ready_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_execution_before_final_gate_test_hook(std::sync::Arc::new(move || {
+        plan_ready_tx.send(()).unwrap();
+        release_rx.lock().unwrap().recv().unwrap();
+    }));
+    let run_entered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let run_entered_for_hook = std::sync::Arc::clone(&run_entered);
+    state.set_execution_before_run_test_hook(std::sync::Arc::new(move || {
+        run_entered_for_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+
+    let executing_state = state.clone();
+    let execution = std::thread::spawn(move || {
+        executing_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+    });
+    plan_ready_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    state
+        .apply_graph_patch(
+            &function_path,
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    function_path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+        .unwrap();
+    release_tx.send(()).unwrap();
+
+    let error = execution.join().unwrap().unwrap_err();
+    assert!(error.contains("stale"), "unexpected error: {error}");
+    assert!(!run_entered.load(std::sync::atomic::Ordering::Acquire));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn function_resource_version_changes_with_graph_body() {
+    let function_path = GraphResourcePath::new("functions/Fingerprint.yssbi-function").unwrap();
+    let mut data = ProjectData::new();
+    data.graphs.insert(
+        function_path.clone(),
+        GraphResourceDocument::new("Fingerprint", GraphDocumentKind::Function),
+    );
+    let key = crate::node_system::analysis::ResourceKey::new(function_path.as_str());
+    let before = compile_resources_from_data(&data, Default::default())
+        .unwrap()
+        .versions[&key]
+        .clone();
+    let graph = data.graphs.get_mut(&function_path).unwrap();
+    graph.document.revision = GraphRevision::new(1);
+    let body_node = node("yssbi.constant.int64");
+    graph.document.nodes.insert(body_node.id, body_node);
+    let after = compile_resources_from_data(&data, Default::default())
+        .unwrap()
+        .versions[&key]
+        .clone();
+
+    assert_ne!(before, after);
+}
+
+#[test]
+fn database_resource_version_changes_with_resolved_column_type() {
+    let declaration = crate::database::DatabaseDecl {
+        id: "main".into(),
+        engine: crate::database::DatabaseEngine::InMemory {
+            name: "main".into(),
+        },
+        schema_version: 1,
+        required: true,
+        name: Some("Main".into()),
+    };
+    let mut data = ProjectData::new();
+    data.databases.insert("main".into(), declaration);
+    let resource = crate::node_system::plan::ResourceId::new("databases/main").unwrap();
+    let key = crate::node_system::analysis::ResourceKey::new("databases/main");
+    let schema = |dtype: &str| {
+        std::collections::BTreeMap::from([(
+            resource.clone(),
+            vec![crate::schema::ColumnInfoDTO {
+                name: "value".into(),
+                dtype: dtype.into(),
+            }],
+        )])
+    };
+
+    let int_version = compile_resources_from_data(&data, schema("Int64"))
+        .unwrap()
+        .versions[&key]
+        .clone();
+    let string_version = compile_resources_from_data(&data, schema("String"))
+        .unwrap()
+        .versions[&key]
+        .clone();
+
+    assert_ne!(int_version, string_version);
+}
+
+#[test]
+fn project_execution_runs_valid_plan_through_run_executor() {
+    let (state, root) = active_state_with_valid_constant_graph("valid-plan-execution");
     let result = state
         .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
         .unwrap();
     assert!(result.run_id.get() > 0);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_execute_graph_runs_builtin_dataframe_source_limit() {
+    use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
+    use crate::node_system::protocol::{ParameterKey, PortKey, Value};
+    use crate::node_system::runtime::{ProductionRelationalObserver, RuntimeValue};
+
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-project-relational-e2e-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(root.join("database")).unwrap();
+    let duckdb = root.join("database/project.duckdb");
+    let mut dataframe = polars::df!("value" => [11_i64, 22, 33, 44]).unwrap();
+    crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+
+    let mut project_data = ProjectData::new();
+    project_data.databases.insert(
+        "main".into(),
+        crate::database::DatabaseDecl {
+            id: "main".into(),
+            engine: crate::database::DatabaseEngine::DuckDb {
+                path: "database/project.duckdb".into(),
+                table: "main".into(),
+            },
+            schema_version: 1,
+            required: true,
+            name: Some("Main".into()),
+        },
+    );
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project_data);
+
+    let mut source = node("yssbi.dataframe.source.get");
+    source.parameters.insert(
+        ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    );
+    let mut limit = node("yssbi.dataframe.limit");
+    let result_name = format!("node.{}.result", limit.id);
+    limit
+        .parameters
+        .insert(ParameterKey::new("rows").unwrap(), serde_json::json!(2));
+    let connection_id = ConnectionId::new();
+    let connection = DocumentConnection {
+        id: connection_id,
+        output: PortAddress::declared(source.id, PortKey::new("dataframe").unwrap()),
+        input: PortAddress::declared(limit.id, PortKey::new("source").unwrap()),
+        order: None,
+    };
+    let mut graph = GraphResourceDocument::new("Relational", GraphDocumentKind::Event);
+    graph.document.nodes.insert(source.id, source);
+    graph.document.nodes.insert(limit.id, limit);
+    graph.document.connections.insert(connection_id, connection);
+    let path = GraphResourcePath::new("events/Relational.yssbi-event").unwrap();
+    state.insert_graph(path.clone(), graph).unwrap();
+
+    let observer = std::sync::Arc::new(ProductionRelationalObserver::default());
+    state.set_production_relational_observer(std::sync::Arc::clone(&observer));
+
+    let result = state
+        .execute_graph(&path, &NOOP_RUN_EVENT_SINK)
+        .expect("authoritative relational graph executes");
+
+    let observation = observer.snapshot();
+    assert_eq!(observation.relational_islands, Some(1));
+    assert_eq!(observation.backend_invocations, 1);
+    assert_eq!(observation.materialization_bridges, Some(0));
+    assert_eq!(observation.bridge_inputs, vec![0]);
+    assert_eq!(observation.scan_limits, vec![Some(2)]);
+    assert_eq!(
+        result.values.get(result_name.as_str()),
+        Some(&RuntimeValue::Scalar(Value::Object(
+            [(
+                "value".into(),
+                Value::List(vec![Value::Integer(11), Value::Integer(22)]),
+            )]
+            .into_iter()
+            .collect(),
+        )))
+    );
+
+    drop(state);
+    std::fs::remove_dir_all(root).unwrap();
 }

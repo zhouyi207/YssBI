@@ -203,18 +203,53 @@ pub fn materialize_bridge(
     value: RuntimeValue,
     cancellation: &CancellationToken,
 ) -> Result<RuntimeValue, RelationalError> {
+    materialize_bridge_inner(
+        bridge,
+        value,
+        cancellation,
+        #[cfg(test)]
+        None,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn materialize_bridge_with_checkpoint(
+    bridge: MaterializationBridge,
+    value: RuntimeValue,
+    cancellation: &CancellationToken,
+    checkpoint: &dyn Fn(&CancellationToken),
+) -> Result<RuntimeValue, RelationalError> {
+    materialize_bridge_inner(bridge, value, cancellation, Some(checkpoint))
+}
+
+fn materialize_bridge_inner(
+    bridge: MaterializationBridge,
+    value: RuntimeValue,
+    cancellation: &CancellationToken,
+    #[cfg(test)] checkpoint: Option<&dyn Fn(&CancellationToken)>,
+) -> Result<RuntimeValue, RelationalError> {
     cancellation.check().map_err(RelationalError::from)?;
     if bridge == MaterializationBridge::Stream {
         return match value {
             RuntimeValue::Stream(stream) => Ok(RuntimeValue::Stream(stream)),
             value => Ok(RuntimeValue::Stream(StreamValue::from_values(
-                into_values(value, cancellation)?,
+                into_values(
+                    value,
+                    cancellation,
+                    #[cfg(test)]
+                    checkpoint,
+                )?,
                 cancellation.clone(),
             )?)),
         };
     }
 
-    let values = into_values(value, cancellation)?;
+    let values = into_values(
+        value,
+        cancellation,
+        #[cfg(test)]
+        checkpoint,
+    )?;
     let kind = match bridge {
         MaterializationBridge::Stream => unreachable!(),
         MaterializationBridge::Buffer => ArtifactKind::Buffered,
@@ -228,6 +263,7 @@ pub fn materialize_bridge(
 fn into_values(
     value: RuntimeValue,
     cancellation: &CancellationToken,
+    #[cfg(test)] checkpoint: Option<&dyn Fn(&CancellationToken)>,
 ) -> Result<Vec<crate::node_system::protocol::Value>, RelationalError> {
     match value {
         RuntimeValue::Scalar(value) => Ok(vec![value]),
@@ -237,7 +273,13 @@ fn into_values(
             loop {
                 cancellation.check().map_err(RelationalError::from)?;
                 match stream.recv() {
-                    Ok(value) => values.push(value),
+                    Ok(value) => {
+                        values.push(value);
+                        #[cfg(test)]
+                        if let Some(checkpoint) = checkpoint {
+                            checkpoint(cancellation);
+                        }
+                    }
                     Err(StreamReceiveError::Closed) => return Ok(values),
                     Err(StreamReceiveError::Cancelled) => {
                         return Err(RelationalError::new("bridge materialization was cancelled"));

@@ -114,6 +114,27 @@ impl ArtifactStore {
         basis: CompilationBasis<GraphRevision>,
         snapshot: ArtifactSnapshot,
     ) -> ArtifactDescriptor {
+        self.insert_with_result_source_holds(run_id, correlation, basis, snapshot, 0)
+    }
+
+    pub(crate) fn insert_retained_result_source(
+        &self,
+        run_id: RunId,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        snapshot: ArtifactSnapshot,
+    ) -> ArtifactDescriptor {
+        self.insert_with_result_source_holds(run_id, correlation, basis, snapshot, 1)
+    }
+
+    fn insert_with_result_source_holds(
+        &self,
+        run_id: RunId,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        snapshot: ArtifactSnapshot,
+        result_source_holds: usize,
+    ) -> ArtifactDescriptor {
         let artifact_id = ArtifactId::new(self.inner.next_id.fetch_add(1, Ordering::Relaxed) + 1);
         let descriptor = ArtifactDescriptor {
             artifact_id,
@@ -130,7 +151,7 @@ impl ArtifactStore {
             ArtifactEntry {
                 run_id,
                 run_owned: true,
-                result_source_holds: 0,
+                result_source_holds,
                 descriptor: descriptor.clone(),
                 snapshot: Arc::new(snapshot),
             },
@@ -267,6 +288,32 @@ mod tests {
             &[Value::Integer(2), Value::Integer(3)]
         );
         assert_eq!(page.total_count, 3);
+    }
+
+    #[test]
+    fn retained_insert_survives_immediate_run_cleanup() {
+        let store = ArtifactStore::new();
+        let run_id = RunId::new(2);
+        let (correlation, basis) = context(run_id);
+        let descriptor = store.insert_retained_result_source(
+            run_id,
+            correlation,
+            basis,
+            ArtifactSnapshot::Value(Value::Integer(41)),
+        );
+
+        store.cleanup_run(run_id);
+
+        assert_eq!(
+            store.descriptor(descriptor.artifact_id),
+            Some(descriptor.clone())
+        );
+        assert_eq!(
+            store.snapshot(descriptor.artifact_id).as_deref(),
+            Some(&ArtifactSnapshot::Value(Value::Integer(41)))
+        );
+        assert!(store.release(descriptor.artifact_id));
+        assert!(store.descriptor(descriptor.artifact_id).is_none());
     }
 
     #[test]

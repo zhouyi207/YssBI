@@ -8,7 +8,7 @@ use crate::node_system::plan::{
     ResourceKind, StructuredControlRegion,
 };
 use crate::node_system::registry::RegistryFingerprint;
-use polars::prelude::DataFrame;
+use polars::prelude::{Column, DataFrame};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
@@ -247,6 +247,18 @@ fn variable_reads_stay_on_the_snapshot() {
         cloned.data_value,
         crate::graph::value::DataValue::Int64(1)
     ));
+}
+
+#[test]
+fn project_database_scan_applies_limit_before_protocol_materialization() {
+    let dataframe =
+        DataFrame::new(4, vec![Column::new("value".into(), &[1_i64, 2, 3, 4])]).unwrap();
+    let database = ProjectDatabaseSnapshot::Loaded(Arc::new(dataframe));
+
+    let scan = database.load_bounded(Some(2)).unwrap();
+
+    assert_eq!(scan.applied_limit, Some(2));
+    assert_eq!(scan.dataframe.height(), 2);
 }
 
 #[test]

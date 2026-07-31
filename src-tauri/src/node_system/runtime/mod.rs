@@ -11,6 +11,8 @@ mod function_plan;
 mod kernel;
 mod kernels;
 mod parameters;
+mod production_relational;
+mod production_relational_value;
 mod project_resource;
 mod project_run;
 mod relational;
@@ -40,8 +42,11 @@ pub use kernels::{
 pub use parameters::{
     CompiledParameterRegistrationError, CompiledParameterStore, CompiledParameterTypeError,
 };
+pub use production_relational::ProductionRelationalBackend;
+#[cfg(test)]
+pub(crate) use production_relational::ProductionRelationalObserver;
 pub use project_resource::{
-    ProjectDatabaseSnapshot, ProjectResourceLease, ProjectResourceProvider,
+    ProjectDataFrameScan, ProjectDatabaseSnapshot, ProjectResourceLease, ProjectResourceProvider,
     ProjectResourceSnapshot, ProjectResourceValue, ProjectResourceVersionFingerprint,
     ProjectVariableAccess, VariableWriteEffect,
 };
@@ -57,6 +62,7 @@ pub use relational::{
 pub use resource::{
     ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,
 };
+pub(crate) use result_store::PendingResultSource;
 pub use result_store::{ResultSourceDescriptor, ResultSourceId, ResultSourcePage, ResultStore};
 pub use run::{
     ActivationId, Artifact, ArtifactKind, CancellationToken, FrameId, RunError, RunResult,

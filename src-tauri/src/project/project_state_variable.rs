@@ -63,6 +63,7 @@ impl ProjectState {
             Self::publish_variable_cache(&mut store, &id, cache);
         }
         publication.advance_authority_generation();
+        self.invalidate_all_compile_products();
         Ok(())
     }
 
@@ -113,6 +114,7 @@ impl ProjectState {
         Self::publish_variable_cache(&mut store, &id, cache);
         revisions.insert(id, crate::node_system::document::ResourceRevision::INITIAL);
         publication.advance_authority_generation();
+        self.invalidate_all_compile_products();
         Ok(committed)
     }
 
@@ -131,13 +133,7 @@ impl ProjectState {
             revisions.remove(variable_id);
             remove_variable_cache(&mut store, variable_id);
             publication.advance_authority_generation();
-        }
-        drop(revisions);
-        drop(store);
-        drop(data);
-        drop(publication);
-        if removed.is_some() {
-            self.recompile_graphs_for_variable(variable_id);
+            self.invalidate_all_compile_products();
         }
         Ok(removed)
     }
@@ -215,10 +211,7 @@ impl ProjectState {
         data.variables.insert(*variable_id, updated.clone());
         Self::publish_variable_cache(&mut store, variable_id, cache);
         publication.advance_authority_generation();
-        drop(store);
-        drop(data);
-        drop(publication);
-        self.recompile_graphs_for_variable(variable_id);
+        self.invalidate_all_compile_products();
         Ok(Some(updated))
     }
 }

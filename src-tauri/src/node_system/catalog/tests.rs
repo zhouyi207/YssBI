@@ -13,7 +13,8 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::KernelHandle;
 use crate::node_system::protocol::{
-    I18nKey, ManagedNodeRole, NodeScope, NodeTypeId, PortInstances, TypeExpr,
+    ConnectionsPerPort, I18nKey, ManagedNodeRole, NodeScope, NodeTypeId, OutputProduction,
+    PortDirection, PortInstances, PortKind, TypeExpr,
 };
 use crate::node_system::registry::{I18nManifest, StructuralNodeRole};
 use crate::node_system::runtime::build_builtin_kernel_registry;
@@ -361,10 +362,86 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
         }));
     }
 
+    let branch_protocol = &registry
+        .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
+        .unwrap()
+        .protocol;
+    for (key, direction) in [
+        ("then_source", PortDirection::Input),
+        ("else_source", PortDirection::Input),
+        ("result", PortDirection::Output),
+    ] {
+        let port = branch_protocol
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == key)
+            .unwrap_or_else(|| panic!("branch must declare stable {key} result members"));
+        assert_eq!(port.direction, direction);
+        assert_eq!(port.kind, PortKind::Data);
+        assert_eq!(
+            port.instances,
+            PortInstances::UserCreated { min: 0, max: None }
+        );
+        assert_eq!(port.connections, ConnectionsPerPort::Single);
+        assert_eq!(
+            port.input_binding.is_some(),
+            direction == PortDirection::Input
+        );
+        assert_eq!(
+            port.production,
+            (direction == PortDirection::Output).then_some(OutputProduction::FullyMaterialized)
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(&branch_protocol.interface).unwrap()["member_groups"],
+        serde_json::json!([{
+            "templates": ["then_source", "else_source", "result"],
+            "min": 0,
+            "max": null
+        }])
+    );
+
     let loop_protocol = &registry
         .get(&NodeTypeId::new("yssbi.control.loop").unwrap())
         .unwrap()
         .protocol;
+    for (key, direction) in [
+        ("initial_source", PortDirection::Input),
+        ("body_input", PortDirection::Output),
+        ("next_source", PortDirection::Input),
+        ("result", PortDirection::Output),
+    ] {
+        let port = loop_protocol
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == key)
+            .unwrap_or_else(|| panic!("loop must declare stable {key} carried members"));
+        assert_eq!(port.direction, direction);
+        assert_eq!(port.kind, PortKind::Data);
+        assert_eq!(
+            port.instances,
+            PortInstances::UserCreated { min: 0, max: None }
+        );
+        assert_eq!(port.connections, ConnectionsPerPort::Single);
+        assert_eq!(
+            port.input_binding.is_some(),
+            direction == PortDirection::Input
+        );
+        assert_eq!(
+            port.production,
+            (direction == PortDirection::Output).then_some(OutputProduction::FullyMaterialized)
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(&loop_protocol.interface).unwrap()["member_groups"],
+        serde_json::json!([{
+            "templates": ["initial_source", "body_input", "next_source", "result"],
+            "min": 1,
+            "max": null
+        }])
+    );
     assert!(
         loop_protocol
             .interface
@@ -374,19 +451,60 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
     );
     assert!(
         loop_protocol
-            .interface
-            .ports
+            .parameters
+            .parameters
             .iter()
-            .any(|port| port.key.as_str() == "carried"
-                && matches!(port.instances, PortInstances::UserCreated { .. }))
+            .any(|parameter| parameter.key.as_str() == "max_iterations")
     );
     assert!(
         loop_protocol
             .parameters
             .parameters
             .iter()
-            .any(|parameter| parameter.key.as_str() == "max_iterations")
+            .all(|parameter| parameter.key.as_str() != "carried")
     );
+
+    for id in ["yssbi.control.do", "yssbi.control.sleep"] {
+        let protocol = &registry
+            .get(&NodeTypeId::new(id).unwrap())
+            .unwrap()
+            .protocol;
+        for (key, direction) in [
+            ("effect_in", PortDirection::Input),
+            ("effect_out", PortDirection::Output),
+        ] {
+            let port = protocol
+                .interface
+                .ports
+                .iter()
+                .find(|port| port.key.as_str() == key)
+                .unwrap_or_else(|| panic!("{id} must declare stable {key}"));
+            assert_eq!(port.direction, direction);
+            assert_eq!(port.kind, PortKind::Effect);
+            assert_eq!(port.value_type, TypeExpr::Unknown);
+            assert_eq!(port.instances, PortInstances::Declared);
+            assert_eq!(
+                port.connections,
+                if direction == PortDirection::Input {
+                    ConnectionsPerPort::Single
+                } else {
+                    ConnectionsPerPort::Multiple {
+                        max: None,
+                        ordered: false,
+                    }
+                }
+            );
+            assert!(port.input_binding.is_none());
+            assert!(port.consumption.is_none());
+            assert!(port.production.is_none());
+            assert!(port.schema.is_none());
+        }
+    }
+
+    let (_, catalog) = build_builtin_provider();
+    catalog
+        .validate(&registry.catalog_manifest().i18n, &BTreeSet::new())
+        .expect("control protocol localization must remain complete");
 }
 
 #[test]
@@ -668,7 +786,7 @@ fn legacy_production_catalog_has_complete_stable_manifest_coverage() {
 
     assert_eq!(
         manifest.len(),
-        147,
+        148,
         "legacy NodeDefinition manifest changed"
     );
     assert_eq!(
@@ -760,6 +878,14 @@ fn every_leaf_has_a_protocol_lowerer_and_production_kernel() {
                 .is_some(),
             "leaf node '{node_id}' has no protocol lowerer",
         );
+        if matches!(
+            node_id.as_str(),
+            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit"
+        ) {
+            // These nodes lower to relational fragments, frozen by the focused
+            // dataframe catalog contract rather than the native kernel registry.
+            continue;
+        }
         let handle = match node_id.as_str() {
             "yssbi.logic.equal" => "yssbi.compare.equal",
             "yssbi.logic.not_equal" => "yssbi.compare.not_equal",

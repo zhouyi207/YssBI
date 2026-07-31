@@ -1,15 +1,16 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompileId, ProjectSessionId, ResourceKey, ResourceVersion, SpanEvent, SpanKind, TraceSink,
+    CompileId, NOOP_TRACE_SINK, ProjectSessionId, ResourceKey, ResourceVersion, SpanEvent,
+    SpanKind, TraceSink,
 };
 use crate::node_system::document::{
-    DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition,
-    PortAddress,
+    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument,
+    GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, KernelHandle, MaterializationBridge,
-    PlanResult, RelationalBackendId, RelationalFragmentId, RelationalOperator,
-    RelationalOperatorIndex, ResourceAccess, ResourceId, ResourceKind,
+    PlanResult, RelationalBackendId, RelationalBridgeInput, RelationalFragmentId,
+    RelationalOperator, RelationalOperatorIndex, ResourceAccess, ResourceId, ResourceKind,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -142,10 +143,14 @@ fn valid_constant_graph_produces_plan_with_same_basis() {
     let registry = registry();
     let result = GraphCompiler::new(&registry, &Resources)
         .compile(&document(NodeTypeId::new("yssbi.test.constant").unwrap()));
+    let semantic = result
+        .semantic
+        .expect("valid graph should retain its semantic graph");
     let plan = result.plan.expect("valid graph should lower");
     assert!(result.analysis.diagnostics.is_empty());
     assert_eq!(plan.operations.len(), 1);
-    assert_eq!(plan.provenance.basis, result.analysis.basis);
+    assert_eq!(semantic.basis, result.analysis.basis);
+    assert_eq!(plan.provenance.basis, semantic.basis);
 }
 
 #[test]
@@ -204,6 +209,7 @@ fn unknown_node_returns_analysis_without_plan() {
     let registry = registry();
     let result = GraphCompiler::new(&registry, &Resources)
         .compile(&document(NodeTypeId::new("yssbi.test.missing").unwrap()));
+    assert!(result.semantic.is_none());
     assert!(result.plan.is_none());
     assert_eq!(
         result.analysis.diagnostics[0].code.as_str(),
@@ -476,17 +482,33 @@ fn test_protocol(
 }
 
 fn graph_with_nodes(nodes: &[(u128, &str)]) -> GraphDocument {
+    graph_with_node_types(
+        nodes
+            .iter()
+            .map(|(node, node_type)| (*node, format!("yssbi.test.{node_type}"))),
+    )
+}
+
+fn builtin_graph_with_nodes(nodes: &[(u128, &str)]) -> GraphDocument {
+    graph_with_node_types(
+        nodes
+            .iter()
+            .map(|(node, node_type)| (*node, (*node_type).to_owned())),
+    )
+}
+
+fn graph_with_node_types(nodes: impl IntoIterator<Item = (u128, String)>) -> GraphDocument {
     GraphDocument {
         revision: crate::node_system::document::GraphRevision::new(11),
         nodes: nodes
-            .iter()
+            .into_iter()
             .map(|(id, node_type)| {
-                let id = node_id(*id);
+                let id = node_id(id);
                 (
                     id,
                     DocumentNode {
                         id,
-                        node_type: NodeTypeId::new(format!("yssbi.test.{node_type}")).unwrap(),
+                        node_type: NodeTypeId::new(node_type).unwrap(),
                         position: NodePosition { x: 0.0, y: 0.0 },
                         parameters: BTreeMap::new(),
                         user_label: None,
@@ -508,15 +530,73 @@ fn connect(
     target_node: u128,
     target_port: &str,
 ) {
+    connect_addresses(
+        graph,
+        id,
+        PortAddress::declared(node_id(source_node), key(source_port)),
+        PortAddress::declared(node_id(target_node), key(target_port)),
+    );
+}
+
+fn connect_addresses(graph: &mut GraphDocument, id: u128, output: PortAddress, input: PortAddress) {
     let id = crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(id));
     graph.connections.insert(
         id,
         DocumentConnection {
             id,
-            output: PortAddress::declared(node_id(source_node), key(source_port)),
-            input: PortAddress::declared(node_id(target_node), key(target_port)),
+            output,
+            input,
             order: None,
         },
+    );
+}
+
+fn bind_member_port(
+    graph: &mut GraphDocument,
+    node: u128,
+    template: &str,
+    instance: u128,
+    order: &str,
+) -> PortAddress {
+    let address = PortAddress::instance(
+        node_id(node),
+        key(template),
+        PortInstanceId::from_uuid(Uuid::from_u128(instance)),
+    );
+    graph.port_bindings.insert(
+        address.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey(order.into()),
+        },
+    );
+    address
+}
+
+struct FailingLowerer;
+
+impl NodeLowerer for FailingLowerer {
+    fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        Err(LoweringError::new("expected lowering failure"))
+    }
+}
+
+#[test]
+fn lowering_diagnostic_clears_semantic_and_plan() {
+    let protocol = test_protocol("lowering_failure", vec![], vec![], vec![]);
+    let node_type = protocol.type_id.clone();
+    let registry = TestRegistry::new(vec![protocol]).with_lowerer(&node_type, FailingLowerer);
+
+    let result = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph_with_nodes(&[(1, "lowering_failure")]));
+
+    assert!(result.semantic.is_none());
+    assert!(result.plan.is_none());
+    assert!(
+        result
+            .analysis
+            .diagnostics
+            .iter()
+            .any(|diagnostic| { diagnostic.code.as_str() == "compiler.lowering.failed" })
     );
 }
 
@@ -642,7 +722,14 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     let source = test_protocol("plan_relation_source", vec![source_output], vec![], vec![]);
     let mut sink_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
     sink_input.consumption = Some(InputConsumption::Streaming);
-    let sink = test_protocol("plan_relation_sink", vec![sink_input], vec![], vec![]);
+    let mut sink_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    sink_output.production = Some(OutputProduction::Streaming);
+    let sink = test_protocol(
+        "plan_relation_sink",
+        vec![sink_input, sink_output],
+        vec![],
+        vec![],
+    );
     let source_type = source.type_id.clone();
     let sink_type = sink.type_id.clone();
     let backend = RelationalBackendId::new("test.relational").unwrap();
@@ -700,25 +787,47 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
         .expect("relational graph should lower");
 
     assert_eq!(plan.relational_subplans.len(), 1);
-    assert!(
-        !plan.relational_subplans[0]
-            .compiled_plan
-            .operators
-            .is_empty()
+    let subplan = &plan.relational_subplans[0];
+    assert_eq!(subplan.compiled_plan.fragment_order.len(), 2);
+    assert_eq!(subplan.compiled_plan.roots.len(), 1);
+    assert!(subplan.materialization_bridges.is_empty());
+
+    assert_eq!(
+        plan.operations.len(),
+        1,
+        "one operation must own the island"
     );
-    for operation in &plan.operations {
-        if let crate::node_system::plan::PlannedKernel::Relational(index) = &operation.kernel {
-            assert!(index.index() < plan.relational_subplans.len());
-        } else {
-            assert!(
-                matches!(
-                    &operation.kernel,
-                    crate::node_system::plan::PlannedKernel::Relational(_)
-                ),
-                "relational fragment should become a relational operation"
-            );
-        }
-    }
+    let operation = &plan.operations[0];
+    assert!(matches!(
+        operation.kernel,
+        crate::node_system::plan::PlannedKernel::Relational(index) if index.index() == 0
+    ));
+    assert!(
+        operation.inputs.is_empty(),
+        "the source makes the island self-contained"
+    );
+    assert_eq!(operation.outputs.len(), 1, "only the sink root is exposed");
+    assert_eq!(operation.outputs[0].production, OutputProduction::Streaming);
+    assert!(
+        plan.value_dependencies.is_empty(),
+        "an internal fragment edge must not make the island depend on itself"
+    );
+    assert!(matches!(
+        plan.root_region,
+        crate::node_system::plan::StructuredControlRegion::Sequence(ref steps)
+            if matches!(steps.as_ref(), [crate::node_system::plan::ControlStep::Operation(index)] if index.index() == 0)
+    ));
+
+    let mut reversed = graph_with_nodes(&[(2, "plan_relation_sink"), (1, "plan_relation_source")]);
+    connect(&mut reversed, 10, 1, "out", 2, "in");
+    let reversed_plan = GraphCompiler::new(&registry, &Resources)
+        .compile(&reversed)
+        .plan
+        .expect("reordered relational graph should lower");
+    assert_eq!(reversed_plan.operations, plan.operations);
+    assert_eq!(reversed_plan.value_dependencies, plan.value_dependencies);
+    assert_eq!(reversed_plan.root_region, plan.root_region);
+    assert_eq!(reversed_plan.relational_subplans, plan.relational_subplans);
 }
 
 #[test]
@@ -780,7 +889,13 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
     let source = test_protocol("plan_bridge_source", vec![source_output], vec![], vec![]);
     let mut sink_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
     sink_input.consumption = Some(InputConsumption::FullyMaterialized);
-    let sink = test_protocol("plan_bridge_sink", vec![sink_input], vec![], vec![]);
+    let sink_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    let sink = test_protocol(
+        "plan_bridge_sink",
+        vec![sink_input, sink_output],
+        vec![],
+        vec![],
+    );
     let source_type = source.type_id.clone();
     let sink_type = sink.type_id.clone();
     let backend = RelationalBackendId::new("test.relational").unwrap();
@@ -839,6 +954,526 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
         .collect::<Vec<_>>();
     assert_eq!(bridges.len(), 1);
     assert_eq!(bridges[0].bridge, MaterializationBridge::Collect);
+    let bridge = bridges[0].clone();
+    let producer = &plan.relational_subplans[bridge.producer_subplan.index()];
+    assert_eq!(
+        producer.compiled_plan.requested_fragment_outputs.as_ref(),
+        &[bridge.producer_fragment.clone()]
+    );
+    let consumer = &plan.relational_subplans[bridge.consumer_subplan.index()];
+    assert_eq!(
+        consumer.compiled_plan.bridge_inputs.as_ref(),
+        &[RelationalBridgeInput {
+            operator: RelationalOperatorIndex::new(0),
+            bridge,
+        }]
+    );
+}
+
+#[derive(Clone, Copy)]
+enum FixtureInsertionOrder {
+    Forward,
+    Reverse,
+}
+
+fn in_fixture_order<T>(mut values: Vec<T>, order: FixtureInsertionOrder) -> Vec<T> {
+    if matches!(order, FixtureInsertionOrder::Reverse) {
+        values.reverse();
+    }
+    values
+}
+
+fn insert_tracked<K: Clone + Ord, V>(
+    map: &mut BTreeMap<K, V>,
+    trace: &mut Vec<K>,
+    key: K,
+    value: V,
+) {
+    trace.push(key.clone());
+    assert!(map.insert(key, value).is_none());
+}
+
+struct DeterminismFixture {
+    document: GraphDocument,
+    node_insertions: Vec<NodeId>,
+    connection_insertions: Vec<ConnectionId>,
+    parameter_insertions: Vec<ParameterKey>,
+    port_binding_insertions: Vec<PortAddress>,
+    input_state_insertions: Vec<PortAddress>,
+}
+
+fn determinism_protocols() -> Vec<NodeProtocol> {
+    let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    source_output.production = Some(OutputProduction::Streaming);
+    let source = test_protocol(
+        "determinism_relation_source",
+        vec![source_output],
+        vec![],
+        vec![],
+    );
+
+    let mut middle_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
+    middle_input.consumption = Some(InputConsumption::Streaming);
+    let mut middle_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    middle_output.production = Some(OutputProduction::Streaming);
+    let middle = test_protocol(
+        "determinism_relation_middle",
+        vec![middle_input, middle_output],
+        vec![],
+        vec![],
+    );
+
+    let mut sink_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
+    sink_input.consumption = Some(InputConsumption::FullyMaterialized);
+    let sink_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    let sink = test_protocol(
+        "determinism_relation_sink",
+        vec![sink_input, sink_output],
+        vec![],
+        vec![],
+    );
+
+    let mut dynamic_input = data_port("values", PortDirection::Input, TypeExpr::Unknown, None);
+    dynamic_input.instances = PortInstances::UserCreated {
+        min: 0,
+        max: Some(2),
+    };
+    let mut inputs = test_protocol("determinism_inputs", vec![dynamic_input], vec![], vec![]);
+    inputs.parameters = ParameterSchema::new(vec![
+        ParameterSpec {
+            key: ParameterKey::new("alpha").unwrap(),
+            title_key: I18nKey::new("parameters.alpha.title").unwrap(),
+            description_key: None,
+            value_type: TypeExpr::Unknown,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Auto,
+        },
+        ParameterSpec {
+            key: ParameterKey::new("beta").unwrap(),
+            title_key: I18nKey::new("parameters.beta.title").unwrap(),
+            description_key: None,
+            value_type: TypeExpr::Unknown,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Auto,
+        },
+    ])
+    .unwrap();
+
+    vec![source, middle, sink, inputs]
+}
+
+fn determinism_registry(protocols: Vec<NodeProtocol>) -> TestRegistry {
+    let source_type = protocols[0].type_id.clone();
+    let middle_type = protocols[1].type_id.clone();
+    let sink_type = protocols[2].type_id.clone();
+    let backend = RelationalBackendId::new("test.relational").unwrap();
+
+    TestRegistry::new(protocols)
+        .with_lowerer(
+            &source_type,
+            FragmentLowerer {
+                fragment: LoweredKernel::Relational(RelationalNodeFragment {
+                    backend: backend.clone(),
+                    fragment: relational::RelationalFragment {
+                        id: RelationalFragmentId::new("determinism-source").unwrap(),
+                        operators: Box::new([RelationalOperator::Source {
+                            resource: ResourceId::new("database.source").unwrap(),
+                            relation: "items".into(),
+                        }]),
+                        root: RelationalOperatorIndex::new(0),
+                    },
+                    inputs: Box::new([]),
+                    metadata: FragmentMetadata::default(),
+                }),
+            },
+        )
+        .with_lowerer(
+            &middle_type,
+            FragmentLowerer {
+                fragment: LoweredKernel::Relational(RelationalNodeFragment {
+                    backend: backend.clone(),
+                    fragment: relational::RelationalFragment {
+                        id: RelationalFragmentId::new("determinism-middle").unwrap(),
+                        operators: Box::new([
+                            RelationalOperator::Input {
+                                name: "input".into(),
+                            },
+                            RelationalOperator::Limit {
+                                input: RelationalOperatorIndex::new(0),
+                                rows: 10,
+                            },
+                        ]),
+                        root: RelationalOperatorIndex::new(1),
+                    },
+                    inputs: Box::new([RelationalInputBinding {
+                        port: PortAddress::declared(node_id(2), key("in")),
+                        operator: RelationalOperatorIndex::new(0),
+                    }]),
+                    metadata: FragmentMetadata::default(),
+                }),
+            },
+        )
+        .with_lowerer(
+            &sink_type,
+            FragmentLowerer {
+                fragment: LoweredKernel::Relational(RelationalNodeFragment {
+                    backend,
+                    fragment: relational::RelationalFragment {
+                        id: RelationalFragmentId::new("determinism-sink").unwrap(),
+                        operators: Box::new([RelationalOperator::Input {
+                            name: "input".into(),
+                        }]),
+                        root: RelationalOperatorIndex::new(0),
+                    },
+                    inputs: Box::new([RelationalInputBinding {
+                        port: PortAddress::declared(node_id(3), key("in")),
+                        operator: RelationalOperatorIndex::new(0),
+                    }]),
+                    metadata: FragmentMetadata::default(),
+                }),
+            },
+        )
+}
+
+fn determinism_fixture(order: FixtureInsertionOrder) -> DeterminismFixture {
+    let mut parameters = BTreeMap::new();
+    let mut parameter_insertions = Vec::new();
+    for (key, value) in in_fixture_order(
+        vec![
+            (ParameterKey::new("alpha").unwrap(), serde_json::json!(1)),
+            (ParameterKey::new("beta").unwrap(), serde_json::json!(2)),
+        ],
+        order,
+    ) {
+        insert_tracked(&mut parameters, &mut parameter_insertions, key, value);
+    }
+
+    let node_entries = vec![
+        (1, "determinism_relation_source", BTreeMap::new()),
+        (2, "determinism_relation_middle", BTreeMap::new()),
+        (3, "determinism_relation_sink", BTreeMap::new()),
+        (4, "determinism_inputs", parameters),
+    ];
+    let mut nodes = BTreeMap::new();
+    let mut node_insertions = Vec::new();
+    for (id, node_type, parameters) in in_fixture_order(node_entries, order) {
+        let id = node_id(id);
+        insert_tracked(
+            &mut nodes,
+            &mut node_insertions,
+            id,
+            DocumentNode {
+                id,
+                node_type: NodeTypeId::new(format!("yssbi.test.{node_type}")).unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters,
+                user_label: None,
+            },
+        );
+    }
+
+    let dynamic_ports = vec![
+        PortAddress::instance(
+            node_id(4),
+            key("values"),
+            PortInstanceId::from_uuid(Uuid::from_u128(40)),
+        ),
+        PortAddress::instance(
+            node_id(4),
+            key("values"),
+            PortInstanceId::from_uuid(Uuid::from_u128(41)),
+        ),
+    ];
+    let connection_entries = vec![
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(10)),
+            output: PortAddress::declared(node_id(1), key("out")),
+            input: PortAddress::declared(node_id(2), key("in")),
+            order: None,
+        },
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(11)),
+            output: PortAddress::declared(node_id(2), key("out")),
+            input: PortAddress::declared(node_id(3), key("in")),
+            order: None,
+        },
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(12)),
+            output: PortAddress::declared(node_id(1), key("out")),
+            input: dynamic_ports[0].clone(),
+            order: None,
+        },
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(13)),
+            output: PortAddress::declared(node_id(1), key("out")),
+            input: dynamic_ports[1].clone(),
+            order: None,
+        },
+    ];
+    let mut connections = BTreeMap::new();
+    let mut connection_insertions = Vec::new();
+    for connection in in_fixture_order(connection_entries, order) {
+        insert_tracked(
+            &mut connections,
+            &mut connection_insertions,
+            connection.id,
+            connection,
+        );
+    }
+
+    let binding_entries = vec![
+        (
+            dynamic_ports[0].clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey("a".into()),
+            },
+        ),
+        (
+            dynamic_ports[1].clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey("b".into()),
+            },
+        ),
+    ];
+    let mut port_bindings = BTreeMap::new();
+    let mut port_binding_insertions = Vec::new();
+    for (address, binding) in in_fixture_order(binding_entries, order) {
+        insert_tracked(
+            &mut port_bindings,
+            &mut port_binding_insertions,
+            address,
+            binding,
+        );
+    }
+
+    let state_entries = vec![
+        (
+            dynamic_ports[0].clone(),
+            InputState {
+                literal_override: None,
+            },
+        ),
+        (
+            dynamic_ports[1].clone(),
+            InputState {
+                literal_override: None,
+            },
+        ),
+    ];
+    let mut input_states = BTreeMap::new();
+    let mut input_state_insertions = Vec::new();
+    for (address, state) in in_fixture_order(state_entries, order) {
+        insert_tracked(
+            &mut input_states,
+            &mut input_state_insertions,
+            address,
+            state,
+        );
+    }
+
+    DeterminismFixture {
+        document: GraphDocument {
+            revision: crate::node_system::document::GraphRevision::new(19),
+            nodes,
+            port_bindings,
+            connections,
+            input_states,
+        },
+        node_insertions,
+        connection_insertions,
+        parameter_insertions,
+        port_binding_insertions,
+        input_state_insertions,
+    }
+}
+
+fn assert_reversed_insertions<T: std::fmt::Debug + PartialEq>(forward: &[T], reverse: &[T]) {
+    assert!(
+        forward.len() >= 2,
+        "fixture container must have multiple entries"
+    );
+    assert_eq!(
+        forward.iter().rev().collect::<Vec<_>>(),
+        reverse.iter().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn semantically_identical_documents_serialize_identically() {
+    let forward = determinism_fixture(FixtureInsertionOrder::Forward);
+    let reverse = determinism_fixture(FixtureInsertionOrder::Reverse);
+
+    assert_reversed_insertions(&forward.node_insertions, &reverse.node_insertions);
+    assert_reversed_insertions(
+        &forward.connection_insertions,
+        &reverse.connection_insertions,
+    );
+    assert_reversed_insertions(&forward.parameter_insertions, &reverse.parameter_insertions);
+    assert_reversed_insertions(
+        &forward.port_binding_insertions,
+        &reverse.port_binding_insertions,
+    );
+    assert_reversed_insertions(
+        &forward.input_state_insertions,
+        &reverse.input_state_insertions,
+    );
+    assert_eq!(forward.document, reverse.document);
+
+    let registry = determinism_registry(determinism_protocols());
+    let compiler = GraphCompiler::new(&registry, &Resources).with_observability(
+        ProjectSessionId::new("determinism-session"),
+        &NOOP_TRACE_SINK,
+    );
+    let graph_path = GraphResourcePath("events/determinism".into());
+    let compile_id = CompileId::new(73);
+    let forward_snapshot =
+        compiler.snapshot_with_compile_id(compile_id, graph_path.clone(), &forward.document);
+    let reverse_snapshot =
+        compiler.snapshot_with_compile_id(compile_id, graph_path, &reverse.document);
+
+    assert_eq!(forward_snapshot.provenance, reverse_snapshot.provenance);
+    let forward_result = compiler
+        .compile_snapshot(&forward_snapshot, &CompileCancellationToken::new())
+        .expect("forward fixture should compile");
+    let reverse_result = compiler
+        .compile_snapshot(&reverse_snapshot, &CompileCancellationToken::new())
+        .expect("reverse fixture should compile");
+
+    assert_eq!(
+        forward_result.analysis.diagnostics.as_ref(),
+        reverse_result.analysis.diagnostics.as_ref()
+    );
+    assert!(
+        forward_result.analysis.diagnostics.is_empty(),
+        "fixture diagnostics: {:#?}",
+        forward_result.analysis.diagnostics
+    );
+    assert_eq!(forward_result.analysis.nodes.len(), 4);
+    assert_eq!(
+        forward_result.analysis.nodes.as_ref(),
+        reverse_result.analysis.nodes.as_ref()
+    );
+    assert_eq!(forward_result.analysis.resolved_interfaces.len(), 4);
+    assert_eq!(
+        forward_result.analysis.resolved_interfaces.as_ref(),
+        reverse_result.analysis.resolved_interfaces.as_ref()
+    );
+    assert_eq!(forward_result.analysis.partial_types.len(), 7);
+    assert_eq!(
+        forward_result.analysis.partial_types,
+        reverse_result.analysis.partial_types
+    );
+    assert!(
+        forward_result.analysis.partial_schemas.is_empty(),
+        "fixture protocols intentionally declare no schema expressions"
+    );
+    assert_eq!(
+        forward_result.analysis.partial_schemas,
+        reverse_result.analysis.partial_schemas
+    );
+    assert_eq!(
+        serde_json::to_vec(&forward_result.analysis).unwrap(),
+        serde_json::to_vec(&reverse_result.analysis).unwrap()
+    );
+
+    let forward_semantic = forward_result
+        .semantic
+        .expect("forward fixture should produce a semantic graph");
+    let reverse_semantic = reverse_result
+        .semantic
+        .expect("reverse fixture should produce a semantic graph");
+    assert_eq!(
+        forward_semantic.dependencies.as_ref(),
+        reverse_semantic.dependencies.as_ref()
+    );
+    assert_eq!(forward_semantic.dependencies.len(), 4);
+    assert_eq!(
+        serde_json::to_vec(&forward_semantic).unwrap(),
+        serde_json::to_vec(&reverse_semantic).unwrap()
+    );
+
+    let forward_plan = forward_result
+        .plan
+        .expect("forward fixture should produce an execution plan");
+    let reverse_plan = reverse_result
+        .plan
+        .expect("reverse fixture should produce an execution plan");
+    assert_eq!(forward_plan.operations.len(), 3);
+    assert_eq!(
+        forward_plan.operations.as_ref(),
+        reverse_plan.operations.as_ref()
+    );
+    assert_eq!(
+        forward_plan.relational_subplans.as_ref(),
+        reverse_plan.relational_subplans.as_ref()
+    );
+    assert_eq!(forward_plan.relational_subplans.len(), 2);
+    assert!(
+        forward_plan
+            .relational_subplans
+            .iter()
+            .any(|subplan| subplan.compiled_plan.fragment_order.len() > 1)
+    );
+    assert!(
+        forward_plan
+            .relational_subplans
+            .iter()
+            .all(|subplan| !subplan.compiled_plan.fragment_roots.is_empty())
+    );
+    assert!(
+        forward_plan
+            .relational_subplans
+            .iter()
+            .any(|subplan| !subplan.compiled_plan.bridge_inputs.is_empty())
+    );
+    assert!(
+        forward_plan
+            .relational_subplans
+            .iter()
+            .any(|subplan| !subplan.materialization_bridges.is_empty())
+    );
+    assert!(
+        forward_plan
+            .relational_subplans
+            .iter()
+            .any(|subplan| { !subplan.compiled_plan.requested_fragment_outputs.is_empty() })
+    );
+    for (forward_subplan, reverse_subplan) in forward_plan
+        .relational_subplans
+        .iter()
+        .zip(reverse_plan.relational_subplans.iter())
+    {
+        assert_eq!(
+            forward_subplan.compiled_plan.fragment_order,
+            reverse_subplan.compiled_plan.fragment_order
+        );
+        assert_eq!(
+            forward_subplan.compiled_plan.fragment_roots,
+            reverse_subplan.compiled_plan.fragment_roots
+        );
+        assert_eq!(
+            forward_subplan.compiled_plan.roots,
+            reverse_subplan.compiled_plan.roots
+        );
+        assert_eq!(
+            forward_subplan.compiled_plan.bridge_inputs,
+            reverse_subplan.compiled_plan.bridge_inputs
+        );
+        assert_eq!(
+            forward_subplan.materialization_bridges,
+            reverse_subplan.materialization_bridges
+        );
+        assert_eq!(
+            forward_subplan.compiled_plan.requested_fragment_outputs,
+            reverse_subplan.compiled_plan.requested_fragment_outputs
+        );
+    }
+    assert_eq!(
+        serde_json::to_vec(&forward_plan).unwrap(),
+        serde_json::to_vec(&reverse_plan).unwrap()
+    );
 }
 
 #[test]
@@ -1447,115 +2082,396 @@ fn sequence_builds_an_ordered_control_region() {
     )));
 }
 
+fn operation_index_for_node(
+    plan: &crate::node_system::plan::ExecutionPlan,
+    node: u128,
+) -> crate::node_system::plan::OperationIndex {
+    crate::node_system::plan::OperationIndex::new(
+        plan.operations
+            .iter()
+            .position(|operation| operation.source_node_id == node_id(node))
+            .expect("built-in operation must be present") as u32,
+    )
+}
+
+fn region_contains_operation(
+    region: &crate::node_system::plan::StructuredControlRegion,
+    expected: crate::node_system::plan::OperationIndex,
+) -> bool {
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+    match region {
+        StructuredControlRegion::Sequence(steps) => steps.iter().any(|step| match step {
+            ControlStep::Operation(operation) => *operation == expected,
+            ControlStep::Region(region) => region_contains_operation(region, expected),
+        }),
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            region_contains_operation(then_region, expected)
+                || region_contains_operation(else_region, expected)
+        }
+        StructuredControlRegion::Loop { body, .. } => region_contains_operation(body, expected),
+        StructuredControlRegion::Call { .. } => false,
+    }
+}
+
 #[test]
 fn branch_builds_exclusive_true_and_false_regions() {
-    use crate::node_system::plan::StructuredControlRegion;
-    let source = test_protocol(
-        "condition_source",
-        vec![data_port(
-            "out",
-            PortDirection::Output,
-            TypeExpr::Unknown,
-            None,
-        )],
-        vec![],
-        vec![],
-    );
-    let branch = structural_protocol(
-        "branch",
-        vec![
-            data_port("condition", PortDirection::Input, TypeExpr::Unknown, None),
-            control_port("true", PortDirection::Output),
-            control_port("false", PortDirection::Output),
-        ],
-        vec![],
-    );
-    let true_leaf = test_protocol(
-        "true_leaf",
-        vec![control_port("enter", PortDirection::Input)],
-        vec![],
-        vec![],
-    );
-    let false_leaf = test_protocol(
-        "false_leaf",
-        vec![control_port("enter", PortDirection::Input)],
-        vec![],
-        vec![],
-    );
-    let branch_type = branch.type_id.clone();
-    let registry = TestRegistry::new(vec![source, branch, true_leaf, false_leaf])
-        .structural(&branch_type, StructuralNodeRole::Branch);
-    let mut graph = graph_with_nodes(&[
-        (1, "condition_source"),
-        (2, "branch"),
-        (3, "true_leaf"),
-        (4, "false_leaf"),
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.int64"),
+        (3, "yssbi.constant.int64"),
+        (4, "yssbi.control.branch"),
+        (5, "yssbi.control.do"),
+        (6, "yssbi.control.do"),
+        (7, "yssbi.control.merge"),
+        (8, "yssbi.debug.view"),
     ]);
-    connect(&mut graph, 10, 1, "out", 2, "condition");
-    connect(&mut graph, 11, 2, "true", 3, "enter");
-    connect(&mut graph, 12, 2, "false", 4, "enter");
+    let then_source = bind_member_port(&mut graph, 4, "then_source", 40, "z");
+    let else_source = bind_member_port(&mut graph, 4, "else_source", 40, "a");
+    let result_port = bind_member_port(&mut graph, 4, "result", 40, "m");
+    let merge_true = bind_member_port(&mut graph, 7, "enter", 70, "z");
+    let merge_false = bind_member_port(&mut graph, 7, "enter", 71, "a");
+
+    connect(&mut graph, 100, 1, "value", 4, "condition");
+    connect_addresses(
+        &mut graph,
+        101,
+        PortAddress::declared(node_id(2), key("value")),
+        then_source,
+    );
+    connect_addresses(
+        &mut graph,
+        102,
+        PortAddress::declared(node_id(3), key("value")),
+        else_source,
+    );
+    connect_addresses(
+        &mut graph,
+        103,
+        result_port,
+        PortAddress::declared(node_id(8), key("data")),
+    );
+    connect(&mut graph, 104, 4, "true", 5, "enter");
+    connect_addresses(
+        &mut graph,
+        105,
+        PortAddress::declared(node_id(5), key("then")),
+        merge_true,
+    );
+    connect(&mut graph, 106, 4, "false", 6, "enter");
+    connect_addresses(
+        &mut graph,
+        107,
+        PortAddress::declared(node_id(6), key("then")),
+        merge_false,
+    );
+    connect(&mut graph, 108, 7, "then", 8, "enter");
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("branch diagnostics: {:?}", result.analysis.diagnostics));
+    let then_operation = operation_index_for_node(&plan, 5);
+    let else_operation = operation_index_for_node(&plan, 6);
+    let continuation = operation_index_for_node(&plan, 8);
+    let then_output = plan.operations[operation_index_for_node(&plan, 2).index()].outputs[0].value;
+    let else_output = plan.operations[operation_index_for_node(&plan, 3).index()].outputs[0].value;
+    let continuation_input = plan.operations[continuation.index()].inputs[0].value;
+    let then_binding_source = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.source == then_output)
+        .expect("then constant must feed its exact member")
+        .destination;
+    let else_binding_source = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.source == else_output)
+        .expect("else constant must feed its exact member")
+        .destination;
+    let branch_destination = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.destination == continuation_input)
+        .expect("branch result must feed the continuation")
+        .source;
+
+    let root_steps = match &plan.root_region {
+        StructuredControlRegion::Sequence(steps) => steps,
+        other => panic!("expected root sequence, got {other:?}"),
+    };
+    let (branch_index, branch_region) = root_steps
+        .iter()
+        .enumerate()
+        .find_map(|(index, step)| match step {
+            ControlStep::Region(region)
+                if matches!(region.as_ref(), StructuredControlRegion::If { .. }) =>
+            {
+                Some((index, region.as_ref()))
+            }
+            _ => None,
+        })
+        .expect("root sequence must contain Branch");
+    let StructuredControlRegion::If {
+        then_region,
+        else_region,
+        results,
+        ..
+    } = branch_region
+    else {
+        unreachable!()
+    };
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].destination, branch_destination);
+    assert_eq!(results[0].then_source, then_binding_source);
+    assert_eq!(results[0].else_source, else_binding_source);
+    assert!(region_contains_operation(then_region, then_operation));
+    assert!(!region_contains_operation(then_region, else_operation));
+    assert!(region_contains_operation(else_region, else_operation));
+    assert!(!region_contains_operation(else_region, then_operation));
+    assert!(!region_contains_operation(then_region, continuation));
+    assert!(!region_contains_operation(else_region, continuation));
+    assert!(root_steps[branch_index + 1..].iter().any(
+        |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation)
+    ));
+}
+
+#[test]
+fn nested_branch_with_one_terminating_arm_blocks_unstructured_continuation() {
+    use crate::node_system::catalog::build_builtin_registry;
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.bool"),
+        (3, "yssbi.control.branch"),
+        (4, "yssbi.control.branch"),
+        (5, "yssbi.control.merge"),
+        (6, "yssbi.control.do"),
+    ]);
+    let merge_inner_true = bind_member_port(&mut graph, 5, "enter", 50, "z");
+    let merge_outer_false = bind_member_port(&mut graph, 5, "enter", 51, "a");
+    connect(&mut graph, 100, 1, "value", 3, "condition");
+    connect(&mut graph, 101, 2, "value", 4, "condition");
+    connect(&mut graph, 102, 3, "true", 4, "enter");
+    connect_addresses(
+        &mut graph,
+        103,
+        PortAddress::declared(node_id(4), key("true")),
+        merge_inner_true,
+    );
+    connect_addresses(
+        &mut graph,
+        104,
+        PortAddress::declared(node_id(3), key("false")),
+        merge_outer_false,
+    );
+    connect(&mut graph, 105, 5, "then", 6, "enter");
 
     let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
 
-    let plan = result.plan.expect("branch should produce a plan");
-    assert_eq!(plan.operations.len(), 3);
-    assert!(contains_region(&plan.root_region, &|region| matches!(
-        region,
-        StructuredControlRegion::If { then_region, else_region, .. }
-            if matches!(then_region.as_ref(), StructuredControlRegion::Sequence(steps) if steps.len() == 1)
-                && matches!(else_region.as_ref(), StructuredControlRegion::Sequence(steps) if steps.len() == 1)
-    )));
+    assert!(
+        result.plan.is_none(),
+        "must not unconditionally execute node A"
+    );
+    assert!(result.analysis.has_blocking_errors());
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.control.unstructured_continuation"
+            && diagnostic.primary
+                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(3))
+    }));
+}
+
+#[test]
+fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
+    use crate::node_system::catalog::build_builtin_registry;
+
+    let registry = build_builtin_registry();
+    let mut branch = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.int64"),
+        (3, "yssbi.constant.int64"),
+        (4, "yssbi.control.branch"),
+    ]);
+    let then_source = bind_member_port(&mut branch, 4, "then_source", 40, "z");
+    let else_source = bind_member_port(&mut branch, 4, "else_source", 41, "a");
+    bind_member_port(&mut branch, 4, "result", 41, "m");
+    connect(&mut branch, 100, 1, "value", 4, "condition");
+    connect_addresses(
+        &mut branch,
+        101,
+        PortAddress::declared(node_id(2), key("value")),
+        then_source,
+    );
+    connect_addresses(
+        &mut branch,
+        102,
+        PortAddress::declared(node_id(3), key("value")),
+        else_source,
+    );
+
+    let branch_result = GraphCompiler::new(&registry, &Resources).compile(&branch);
+    assert!(branch_result.plan.is_none());
+    assert!(branch_result.semantic.is_none());
+    assert!(branch_result.analysis.has_blocking_errors());
+    assert!(branch_result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.control.member_group_identity_ambiguous"
+            && diagnostic.severity == crate::node_system::analysis::DiagnosticSeverity::Error
+            && diagnostic.primary
+                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(4))
+    }));
+
+    let mut incomplete_branch = branch.clone();
+    incomplete_branch.port_bindings.retain(|address, _| {
+        matches!(
+            &address.port,
+            crate::node_system::document::PortRef::Instance { template, .. }
+                if template.as_str() == "then_source"
+        )
+    });
+    incomplete_branch
+        .connections
+        .remove(&ConnectionId::from_uuid(Uuid::from_u128(102)));
+    let incomplete_result = GraphCompiler::new(&registry, &Resources).compile(&incomplete_branch);
+    assert!(incomplete_result.plan.is_none());
+    assert!(
+        incomplete_result
+            .analysis
+            .diagnostics
+            .iter()
+            .any(|diagnostic| {
+                diagnostic.code.as_str() == "compiler.control.member_group_incomplete"
+                    && diagnostic.primary
+                        == crate::node_system::analysis::DiagnosticLocation::Node(node_id(4))
+            })
+    );
+
+    let mut loop_graph =
+        builtin_graph_with_nodes(&[(5, "yssbi.constant.bool"), (6, "yssbi.control.loop")]);
+    set_parameters(
+        &mut loop_graph,
+        6,
+        &[("max_iterations", serde_json::json!(3))],
+    );
+    connect(&mut loop_graph, 103, 5, "value", 6, "condition");
+
+    let loop_result = GraphCompiler::new(&registry, &Resources).compile(&loop_graph);
+    assert!(loop_result.plan.is_none());
+    assert!(loop_result.analysis.has_blocking_errors());
+    assert!(loop_result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.control.member_group_count_invalid"
+            && diagnostic.primary
+                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(6))
+    }));
 }
 
 #[test]
 fn loop_uses_explicit_condition_limit_and_carried_bindings() {
+    use crate::node_system::catalog::build_builtin_registry;
     use crate::node_system::plan::StructuredControlRegion;
-    let source = test_protocol(
-        "loop_condition",
-        vec![data_port(
-            "out",
-            PortDirection::Output,
-            TypeExpr::Unknown,
-            None,
-        )],
-        vec![],
-        vec![],
-    );
-    let loop_node = structural_protocol(
-        "loop",
-        vec![
-            data_port("condition", PortDirection::Input, TypeExpr::Unknown, None),
-            control_port("body", PortDirection::Output),
-        ],
-        vec![parameter("max_iterations"), parameter("carried")],
-    );
-    let body = test_protocol(
-        "loop_body",
-        vec![control_port("enter", PortDirection::Input)],
-        vec![],
-        vec![],
-    );
-    let loop_type = loop_node.type_id.clone();
-    let registry = TestRegistry::new(vec![source, loop_node, body])
-        .structural(&loop_type, StructuralNodeRole::Loop);
-    let mut graph = graph_with_nodes(&[(1, "loop_condition"), (2, "loop"), (3, "loop_body")]);
-    set_parameters(
-        &mut graph,
-        2,
-        &[
-            ("max_iterations", serde_json::json!(7)),
-            ("carried", serde_json::json!([])),
-        ],
-    );
-    connect(&mut graph, 10, 1, "out", 2, "condition");
-    connect(&mut graph, 11, 2, "body", 3, "enter");
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.int64"),
+        (3, "yssbi.constant.int64"),
+        (4, "yssbi.constant.int64"),
+        (5, "yssbi.constant.int64"),
+        (6, "yssbi.control.loop"),
+        (7, "yssbi.control.do"),
+        (8, "yssbi.control.do"),
+    ]);
+    set_parameters(&mut graph, 6, &[("max_iterations", serde_json::json!(7))]);
+    let mut members = BTreeMap::new();
+    for (instance, order) in [(61, "z"), (60, "a")] {
+        let initial = bind_member_port(&mut graph, 6, "initial_source", instance, order);
+        let body_input = bind_member_port(&mut graph, 6, "body_input", instance, order);
+        let next = bind_member_port(&mut graph, 6, "next_source", instance, order);
+        let result = bind_member_port(&mut graph, 6, "result", instance, order);
+        members.insert(instance, (initial, body_input, next, result));
+    }
+    connect(&mut graph, 100, 1, "value", 6, "condition");
+    for (connection, source, instance) in [(101, 2, 60), (102, 3, 61)] {
+        connect_addresses(
+            &mut graph,
+            connection,
+            PortAddress::declared(node_id(source), key("value")),
+            members[&instance].0.clone(),
+        );
+    }
+    for (connection, source, instance) in [(103, 4, 60), (104, 5, 61)] {
+        connect_addresses(
+            &mut graph,
+            connection,
+            PortAddress::declared(node_id(source), key("value")),
+            members[&instance].2.clone(),
+        );
+    }
+    connect(&mut graph, 105, 6, "body", 7, "enter");
+    connect(&mut graph, 106, 6, "then", 8, "enter");
 
     let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
-
-    let plan = result.plan.expect("explicit loop should produce a plan");
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("loop diagnostics: {:?}", result.analysis.diagnostics));
+    let carried = match &plan.root_region {
+        region
+            if contains_region(region, &|candidate| {
+                matches!(candidate, StructuredControlRegion::Loop { .. })
+            }) =>
+        {
+            fn find(
+                region: &StructuredControlRegion,
+            ) -> Option<&[crate::node_system::plan::LoopCarriedBinding]> {
+                use crate::node_system::plan::ControlStep;
+                match region {
+                    StructuredControlRegion::Loop { carried, .. } => Some(carried),
+                    StructuredControlRegion::Sequence(steps) => {
+                        steps.iter().find_map(|step| match step {
+                            ControlStep::Region(region) => find(region),
+                            ControlStep::Operation(_) => None,
+                        })
+                    }
+                    StructuredControlRegion::If {
+                        then_region,
+                        else_region,
+                        ..
+                    } => find(then_region).or_else(|| find(else_region)),
+                    StructuredControlRegion::Call { .. } => None,
+                }
+            }
+            find(region).unwrap()
+        }
+        _ => panic!("plan must contain Loop"),
+    };
+    assert_eq!(carried.len(), 2);
+    for (binding, initial_node, next_node) in [(carried[0], 2, 4), (carried[1], 3, 5)] {
+        let initial_output =
+            plan.operations[operation_index_for_node(&plan, initial_node).index()].outputs[0].value;
+        let next_output =
+            plan.operations[operation_index_for_node(&plan, next_node).index()].outputs[0].value;
+        assert!(plan.value_dependencies.iter().any(|dependency| {
+            dependency.source == initial_output && dependency.destination == binding.initial_source
+        }));
+        assert!(plan.value_dependencies.iter().any(|dependency| {
+            dependency.source == next_output && dependency.destination == binding.next_source
+        }));
+        assert_ne!(binding.body_input, binding.result);
+        assert_ne!(binding.initial_source, binding.next_source);
+    }
     assert!(contains_region(&plan.root_region, &|region| matches!(
         region,
-        StructuredControlRegion::Loop { max_iterations: 7, carried, .. } if carried.is_empty()
+        StructuredControlRegion::Loop {
+            max_iterations: 7,
+            ..
+        }
     )));
 }
 

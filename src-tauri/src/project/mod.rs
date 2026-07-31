@@ -1,5 +1,6 @@
 //! 项目管理模块
 
+mod compile_publication;
 pub mod filesystem;
 pub mod graph_lifecycle;
 pub mod graph_resource_index;

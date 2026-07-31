@@ -711,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn load_returns_projection_from_its_owned_committed_snapshot() {
+    fn load_rejects_owned_projection_snapshot_after_project_replacement() {
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
         let root = std::env::temp_dir().join(format!(
             "yssbi-lifecycle-projection-{}",
@@ -742,11 +742,11 @@ mod tests {
             Ok(())
         }));
 
-        let projection = state
+        let error = state
             .load_graph_projection(&project_instance_id, &graph_path, 1, "en-US")
-            .unwrap();
+            .unwrap_err();
 
-        assert_eq!(projection.source_revision, 0);
+        assert!(error.to_string().contains("stale_project_lifecycle"));
         assert_eq!(
             state.get_data().unwrap().graphs[&graph_path]
                 .document

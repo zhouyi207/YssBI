@@ -120,7 +120,7 @@ pub fn get_database_rows(
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, AppError> {
-    let page = state.with_database_mut(&id, |db| {
+    let page = state.with_database_snapshot(&id, |db| {
         db.query_page_with_rowids(offset, limit)
             .map_err(|e| format!("Failed to query database page: {}", e))
     })?;
@@ -140,7 +140,7 @@ pub async fn get_column_stats(
     let state = state.inner().clone();
     let stats = run_on_blocking_pool(move || {
         state
-            .with_database_mut(&id, |db| {
+            .with_database_snapshot(&id, |db| {
                 db.compute_column_stats().map_err(|e| e.to_string())
             })
             .map_err(AppError::from)
@@ -158,7 +158,7 @@ pub async fn get_column_distribution(
     let state = state.inner().clone();
     let dists = run_on_blocking_pool(move || {
         state
-            .with_database_mut(&id, |db| {
+            .with_database_snapshot(&id, |db| {
                 db.compute_column_distributions().map_err(|e| e.to_string())
             })
             .map_err(AppError::from)
@@ -176,7 +176,7 @@ pub async fn get_dataset_overview(
     let state = state.inner().clone();
     let overview = run_on_blocking_pool(move || {
         state
-            .with_database_mut(&id, |db| {
+            .with_database_snapshot(&id, |db| {
                 db.compute_dataset_overview().map_err(|e| e.to_string())
             })
             .map_err(AppError::from)
@@ -314,6 +314,6 @@ pub fn get_edit_state(
     state: State<ProjectState>,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_mut(&id, |db| Ok(db.edit_state()))?;
+    let edit_state = state.with_database_snapshot(&id, |db| Ok(db.edit_state()))?;
     serde_json::to_value(edit_state).map_err(AppError::internal)
 }

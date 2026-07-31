@@ -5,7 +5,7 @@ use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::registry::RegistryFingerprint;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompileCancelled;
@@ -115,7 +115,19 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
             cancellation: CompileCancellationToken::new(),
         };
         if let Some(active) = &self.active {
+            if active.basis == task.basis && !active.cancellation.is_cancelled() {
+                return ScheduleOutcome::Coalesced {
+                    compile_id: active.compile_id,
+                };
+            }
             active.cancellation.cancel();
+            if let Some(pending) = &self.pending {
+                if pending.basis == task.basis {
+                    return ScheduleOutcome::Coalesced {
+                        compile_id: pending.compile_id,
+                    };
+                }
+            }
             if let Some(replaced) = self.pending.replace(task) {
                 replaced.cancellation.cancel();
             }
@@ -177,6 +189,49 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
         self.published_plan.as_ref()
     }
 
+    fn cancel_work(&mut self) {
+        if let Some(active) = self.active.take() {
+            active.cancellation.cancel();
+        }
+        if let Some(pending) = self.pending.take() {
+            pending.cancellation.cancel();
+        }
+        self.published_analysis = None;
+        self.published_plan = None;
+    }
+
+    fn has_task(&self, basis: &CompilationBasis<GraphRevision>, compile_id: CompileId) -> bool {
+        self.active
+            .iter()
+            .chain(self.pending.iter())
+            .any(|task| task.compile_id == compile_id && &task.basis == basis)
+    }
+
+    fn current_products(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)>
+    where
+        Analysis: Clone,
+        Plan: Clone,
+    {
+        let analysis = self
+            .published_analysis
+            .as_ref()
+            .filter(|analysis| &analysis.graph_path == graph_path && &analysis.basis == basis)?;
+        let plan = self
+            .published_plan
+            .as_ref()
+            .filter(|plan| {
+                plan.graph_path == analysis.graph_path
+                    && plan.basis == analysis.basis
+                    && plan.compile_id == analysis.compile_id
+            })
+            .cloned();
+        Some((analysis.clone(), plan))
+    }
+
     fn classify(
         &self,
         task: &CompilationTask,
@@ -198,6 +253,7 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
 pub struct CompileCoordinator<Analysis, Plan> {
     next_compile_id: AtomicU64,
     slots: Mutex<BTreeMap<GraphResourcePath, CompilationSlot<Analysis, Plan>>>,
+    changed: Condvar,
 }
 
 impl<Analysis, Plan> Default for CompileCoordinator<Analysis, Plan> {
@@ -205,6 +261,7 @@ impl<Analysis, Plan> Default for CompileCoordinator<Analysis, Plan> {
         Self {
             next_compile_id: AtomicU64::new(1),
             slots: Mutex::new(BTreeMap::new()),
+            changed: Condvar::new(),
         }
     }
 }
@@ -220,12 +277,15 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
         basis: CompilationBasis<GraphRevision>,
     ) -> ScheduleOutcome {
         let compile_id = CompileId::new(self.next_compile_id.fetch_add(1, Ordering::Relaxed));
-        self.slots
+        let outcome = self
+            .slots
             .lock()
             .expect("compile coordinator lock poisoned")
             .entry(graph_path.clone())
             .or_insert_with(|| CompilationSlot::new(graph_path))
-            .request(compile_id, basis)
+            .request(compile_id, basis);
+        self.changed.notify_all();
+        outcome
     }
 
     pub fn finish(
@@ -233,11 +293,14 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
         graph_path: &GraphResourcePath,
         compile_id: CompileId,
     ) -> Option<CompilationTask> {
-        self.slots
+        let next = self
+            .slots
             .lock()
             .expect("compile coordinator lock poisoned")
             .get_mut(graph_path)
-            .and_then(|slot| slot.finish(compile_id))
+            .and_then(|slot| slot.finish(compile_id));
+        self.changed.notify_all();
+        next
     }
 
     pub fn publish(
@@ -246,21 +309,99 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
         current_basis: &CompilationBasis<GraphRevision>,
         products: CompileProducts<Analysis, Plan>,
     ) -> PublishReport {
+        let report = {
+            let mut slots = self
+                .slots
+                .lock()
+                .expect("compile coordinator lock poisoned");
+            match slots.get_mut(&task.graph_path) {
+                Some(slot) => slot.publish(task, current_basis, products),
+                None => PublishReport {
+                    analysis: PublishOutcome::Cancelled,
+                    plan: products
+                        .plan
+                        .as_ref()
+                        .filter(|_| !products.has_blocking_diagnostics)
+                        .map(|_| PublishOutcome::Cancelled),
+                },
+            }
+        };
+        self.changed.notify_all();
+        report
+    }
+
+    pub fn invalidate(&self, graph_path: &GraphResourcePath) {
+        if let Some(mut slot) = self
+            .slots
+            .lock()
+            .expect("compile coordinator lock poisoned")
+            .remove(graph_path)
+        {
+            slot.cancel_work();
+        }
+        self.changed.notify_all();
+    }
+
+    pub fn invalidate_all(&self) {
         let mut slots = self
             .slots
             .lock()
             .expect("compile coordinator lock poisoned");
-        let Some(slot) = slots.get_mut(&task.graph_path) else {
-            return PublishReport {
-                analysis: PublishOutcome::Cancelled,
-                plan: products
-                    .plan
-                    .as_ref()
-                    .filter(|_| !products.has_blocking_diagnostics)
-                    .map(|_| PublishOutcome::Cancelled),
-            };
-        };
-        slot.publish(task, current_basis, products)
+        for slot in slots.values_mut() {
+            slot.cancel_work();
+        }
+        slots.clear();
+        drop(slots);
+        self.changed.notify_all();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains_slot_for_test(&self, graph_path: &GraphResourcePath) -> bool {
+        self.slots
+            .lock()
+            .expect("compile coordinator lock poisoned")
+            .contains_key(graph_path)
+    }
+}
+
+impl<Analysis: Clone, Plan: Clone> CompileCoordinator<Analysis, Plan> {
+    pub fn get_current(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        self.slots
+            .lock()
+            .expect("compile coordinator lock poisoned")
+            .get(graph_path)
+            .and_then(|slot| slot.current_products(graph_path, basis))
+    }
+
+    pub fn wait_for_current(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        compile_id: CompileId,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        let mut slots = self
+            .slots
+            .lock()
+            .expect("compile coordinator lock poisoned");
+        loop {
+            let slot = slots.get(graph_path)?;
+            if let Some(products) = slot.current_products(graph_path, basis) {
+                if products.0.compile_id == compile_id {
+                    return Some(products);
+                }
+            }
+            if !slot.has_task(basis, compile_id) {
+                return None;
+            }
+            slots = self
+                .changed
+                .wait(slots)
+                .expect("compile coordinator lock poisoned while waiting");
+        }
     }
 }
 
@@ -280,6 +421,9 @@ pub fn compilation_basis(
 mod tests {
     use super::*;
     use crate::node_system::analysis::{ResourceKey, ResourceVersion};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     fn path() -> GraphResourcePath {
         GraphResourcePath("events/main".into())
@@ -413,5 +557,254 @@ mod tests {
         }
 
         assert_eq!(observed_at, Some(3));
+    }
+
+    #[test]
+    fn matching_published_products_are_reused_by_exact_basis() {
+        let coordinator = CompileCoordinator::<String, String>::new();
+        let current = basis(1, 1, "1");
+        let task = started(coordinator.request(path(), current.clone()));
+        coordinator.publish(
+            &task,
+            &current,
+            CompileProducts {
+                analysis: "analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("plan".into()),
+            },
+        );
+
+        let (analysis, plan) = coordinator.get_current(&path(), &current).unwrap();
+        assert_eq!(analysis.compile_id, task.compile_id);
+        assert_eq!(analysis.payload, "analysis");
+        assert_eq!(plan.unwrap().payload, "plan");
+        assert!(
+            coordinator
+                .get_current(&path(), &basis(1, 2, "1"))
+                .is_none()
+        );
+        assert!(
+            coordinator
+                .get_current(&path(), &basis(1, 1, "2"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn same_active_basis_joins_without_cancelling_or_duplicating_work() {
+        let coordinator = CompileCoordinator::<(), ()>::new();
+        let current = basis(1, 1, "1");
+        let active = started(coordinator.request(path(), current.clone()));
+
+        let joined_id = match coordinator.request(path(), current) {
+            ScheduleOutcome::Coalesced { compile_id } => compile_id,
+            ScheduleOutcome::Start(_) => panic!("same-basis request must join active work"),
+        };
+
+        assert_eq!(joined_id, active.compile_id);
+        assert!(!active.cancellation.is_cancelled());
+        assert!(coordinator.finish(&path(), active.compile_id).is_none());
+    }
+
+    #[test]
+    fn latest_different_basis_replaces_exactly_one_pending_task() {
+        let coordinator = CompileCoordinator::<(), ()>::new();
+        let active = started(coordinator.request(path(), basis(1, 1, "1")));
+        let replaced_id = match coordinator.request(path(), basis(2, 1, "1")) {
+            ScheduleOutcome::Coalesced { compile_id } => compile_id,
+            ScheduleOutcome::Start(_) => panic!("different basis must wait behind active work"),
+        };
+        let latest_basis = basis(3, 1, "1");
+        let latest_id = match coordinator.request(path(), latest_basis.clone()) {
+            ScheduleOutcome::Coalesced { compile_id } => compile_id,
+            ScheduleOutcome::Start(_) => panic!("latest basis must replace pending work"),
+        };
+        let joined_latest_id = match coordinator.request(path(), latest_basis.clone()) {
+            ScheduleOutcome::Coalesced { compile_id } => compile_id,
+            ScheduleOutcome::Start(_) => panic!("same pending basis must join pending work"),
+        };
+
+        assert!(active.cancellation.is_cancelled());
+        assert_ne!(replaced_id, latest_id);
+        assert_eq!(joined_latest_id, latest_id);
+        let promoted = coordinator.finish(&path(), active.compile_id).unwrap();
+        assert_eq!(promoted.compile_id, latest_id);
+        assert_eq!(promoted.basis, latest_basis);
+    }
+
+    #[test]
+    fn waiter_wakes_when_matching_products_publish() {
+        let coordinator = Arc::new(CompileCoordinator::<String, String>::new());
+        let current = basis(1, 1, "1");
+        let task = started(coordinator.request(path(), current.clone()));
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiter = Arc::clone(&coordinator);
+        let waiter_basis = current.clone();
+        let compile_id = task.compile_id;
+        let handle = thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            result_tx
+                .send(waiter.wait_for_current(&path(), &waiter_basis, compile_id))
+                .unwrap();
+        });
+
+        ready_rx.recv().unwrap();
+        coordinator.publish(
+            &task,
+            &current,
+            CompileProducts {
+                analysis: "analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("plan".into()),
+            },
+        );
+
+        let published = result_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("waiter did not wake after publish")
+            .unwrap();
+        assert_eq!(published.0.compile_id, compile_id);
+        assert_eq!(published.1.unwrap().payload, "plan");
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn waiter_wakes_and_returns_none_when_its_slot_is_invalidated() {
+        let coordinator = Arc::new(CompileCoordinator::<String, String>::new());
+        let current = basis(1, 1, "1");
+        let task = started(coordinator.request(path(), current.clone()));
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let waiter = Arc::clone(&coordinator);
+        let compile_id = task.compile_id;
+        let handle = thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            result_tx
+                .send(waiter.wait_for_current(&path(), &current, compile_id))
+                .unwrap();
+        });
+
+        ready_rx.recv().unwrap();
+        coordinator.invalidate(&path());
+
+        assert!(
+            result_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("waiter did not wake after invalidation")
+                .is_none()
+        );
+        assert!(task.cancellation.is_cancelled());
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn graph_invalidation_cancels_work_clears_products_and_rejects_stale_workers() {
+        let coordinator = CompileCoordinator::<String, String>::new();
+        let current = basis(1, 1, "1");
+        let stale = started(coordinator.request(path(), current.clone()));
+        coordinator.publish(
+            &stale,
+            &current,
+            CompileProducts {
+                analysis: "stale analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("stale plan".into()),
+            },
+        );
+
+        coordinator.invalidate(&path());
+        assert!(stale.cancellation.is_cancelled());
+        assert!(coordinator.get_current(&path(), &current).is_none());
+
+        let replacement = started(coordinator.request(path(), current.clone()));
+        coordinator.publish(
+            &replacement,
+            &current,
+            CompileProducts {
+                analysis: "replacement analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("replacement plan".into()),
+            },
+        );
+        let stale_report = coordinator.publish(
+            &stale,
+            &current,
+            CompileProducts {
+                analysis: "restored stale analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("restored stale plan".into()),
+            },
+        );
+
+        assert_eq!(stale_report.analysis, PublishOutcome::Cancelled);
+        let products = coordinator.get_current(&path(), &current).unwrap();
+        assert_eq!(products.0.compile_id, replacement.compile_id);
+        assert_eq!(products.1.unwrap().payload, "replacement plan");
+    }
+
+    #[test]
+    fn all_invalidation_cancels_every_graph_and_clears_products() {
+        let coordinator = CompileCoordinator::<String, String>::new();
+        let other_path = GraphResourcePath("functions/other".into());
+        let current = basis(1, 1, "1");
+        let first = started(coordinator.request(path(), current.clone()));
+        let second = started(coordinator.request(other_path.clone(), current.clone()));
+        for task in [&first, &second] {
+            coordinator.publish(
+                task,
+                &current,
+                CompileProducts {
+                    analysis: "analysis".into(),
+                    has_blocking_diagnostics: false,
+                    plan: Some("plan".into()),
+                },
+            );
+        }
+
+        coordinator.invalidate_all();
+
+        assert!(first.cancellation.is_cancelled());
+        assert!(second.cancellation.is_cancelled());
+        assert!(coordinator.get_current(&path(), &current).is_none());
+        assert!(coordinator.get_current(&other_path, &current).is_none());
+    }
+
+    #[test]
+    fn stale_completion_cannot_restore_plan_after_newer_blocking_publication() {
+        let coordinator = CompileCoordinator::<String, String>::new();
+        let old_basis = basis(1, 1, "1");
+        let old = started(coordinator.request(path(), old_basis.clone()));
+        let new_basis = basis(2, 1, "1");
+        let new_id = match coordinator.request(path(), new_basis.clone()) {
+            ScheduleOutcome::Coalesced { compile_id } => compile_id,
+            ScheduleOutcome::Start(_) => panic!("new basis must wait behind active work"),
+        };
+        let new = coordinator.finish(&path(), old.compile_id).unwrap();
+        assert_eq!(new.compile_id, new_id);
+        coordinator.publish(
+            &new,
+            &new_basis,
+            CompileProducts {
+                analysis: "blocking analysis".into(),
+                has_blocking_diagnostics: true,
+                plan: Some("must be cleared".into()),
+            },
+        );
+
+        let stale_report = coordinator.publish(
+            &old,
+            &old_basis,
+            CompileProducts {
+                analysis: "old analysis".into(),
+                has_blocking_diagnostics: false,
+                plan: Some("old plan".into()),
+            },
+        );
+
+        assert_eq!(stale_report.analysis, PublishOutcome::Cancelled);
+        let current = coordinator.get_current(&path(), &new_basis).unwrap();
+        assert_eq!(current.0.compile_id, new_id);
+        assert!(current.1.is_none());
     }
 }

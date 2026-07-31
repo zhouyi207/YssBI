@@ -1,10 +1,14 @@
+#[cfg(not(test))]
+use super::materialize_bridge;
 use super::relational::RunRelationalBackends;
+#[cfg(test)]
+use super::relational::materialize_bridge_with_checkpoint;
 use super::{
     ActivationId, CancellationToken, CompiledParameterStore, FrameId, KernelContext,
-    KernelRegistry, NOOP_RUN_EVENT_SINK, ProjectRunRegistry, RelationalBackendProvider,
-    RelationalContext, RelationalInput, ResourceErrorKind, ResourceProvider, ResultStore, RunError,
-    RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
-    materialize_bridge,
+    KernelRegistry, NOOP_RUN_EVENT_SINK, PendingResultSource, ProjectRunRegistry,
+    RelationalBackendProvider, RelationalContext, RelationalInput, ResourceErrorKind,
+    ResourceProvider, ResultSourceDescriptor, ResultStore, RunError, RunErrorCode, RunEvent,
+    RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RunId, SpanEvent, SpanKind, SpanStatus,
@@ -22,6 +26,25 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const DEFAULT_RECURSION_LIMIT: usize = 64;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_PARENT_CALL_ID: AtomicU64 = AtomicU64::new(1);
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SchedulerCheckpoint {
+    BridgeMaterialization,
+    BridgeCollectionStarted,
+    ResultSourceStaged,
+    FinalResultPublication,
+}
+
+enum PendingSourceEvent {
+    ValueReady { value_index: u32 },
+    ResultReady,
+}
+
+struct PendingSourcePublication {
+    source: PendingResultSource,
+    event: PendingSourceEvent,
+}
 
 pub trait FunctionPlanProvider: Send + Sync {
     fn get_plan(&self, handle: &FunctionPlanHandle)
@@ -43,6 +66,9 @@ pub struct RunExecutor<'a> {
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
     results: Option<&'a ResultStore>,
+    #[cfg(test)]
+    checkpoint:
+        Option<Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>>,
 }
 
 impl<'a> RunExecutor<'a> {
@@ -62,6 +88,8 @@ impl<'a> RunExecutor<'a> {
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
             results: None,
+            #[cfg(test)]
+            checkpoint: None,
         }
     }
 
@@ -100,6 +128,26 @@ impl<'a> RunExecutor<'a> {
         self
     }
 
+    #[cfg(test)]
+    pub(crate) fn with_test_checkpoint(
+        mut self,
+        checkpoint: Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>,
+    ) -> Self {
+        self.checkpoint = Some(checkpoint);
+        self
+    }
+
+    #[cfg(test)]
+    fn run_test_checkpoint(
+        &self,
+        checkpoint: SchedulerCheckpoint,
+        cancellation: &CancellationToken,
+    ) {
+        if let Some(hook) = &self.checkpoint {
+            hook(checkpoint, cancellation);
+        }
+    }
+
     pub fn run(
         &self,
         plan: &ExecutionPlan,
@@ -124,26 +172,38 @@ impl<'a> RunExecutor<'a> {
             SpanStatus::Started,
             correlation.clone(),
         ));
-        let result = self.run_root(plan, cancellation, run_id, correlation.clone());
-        if let (Some(results), Ok(run_result)) = (self.results, &result) {
-            for (name, value) in &run_result.values {
-                if let Some(descriptor) = results.publish_runtime_value(
-                    run_id,
-                    correlation.clone(),
-                    plan.provenance.basis.clone(),
-                    name.clone(),
-                    value,
-                ) {
-                    self.record_event(
-                        plan,
-                        correlation.clone(),
-                        RunEventKind::ResultReady {
-                            name: name.clone(),
-                            source_id: descriptor.source_id,
-                        },
-                    );
-                }
-            }
+        let execution = self.run_root(plan, cancellation.clone(), run_id, correlation.clone());
+        let (mut result, mut pending_sources) = match execution {
+            Ok((run_result, pending_sources)) => (Ok(run_result), pending_sources),
+            Err(error) => (Err(error), Vec::new()),
+        };
+        if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
+            && let Err(error) = self.stage_result_sources(
+                results,
+                plan,
+                &correlation,
+                run_result,
+                &cancellation,
+                &mut pending_sources,
+            )
+        {
+            result = Err(error);
+            pending_sources.clear();
+        }
+        #[cfg(test)]
+        if result.is_ok() {
+            self.run_test_checkpoint(SchedulerCheckpoint::FinalResultPublication, &cancellation);
+        }
+        if result.is_ok()
+            && let Err(error) = cancellation.check()
+        {
+            result = Err(error);
+            pending_sources.clear();
+        }
+        if result.is_ok()
+            && let Some(results) = self.results
+        {
+            self.commit_result_sources(results, run_id, pending_sources);
         }
         let status = run_status(&result);
         self.trace.record(SpanEvent::new(
@@ -162,9 +222,81 @@ impl<'a> RunExecutor<'a> {
         };
         self.record_event(plan, correlation, event);
         if let Some(results) = self.results {
+            if result.is_err() {
+                results.release_run_sources(run_id);
+            }
             results.cleanup_run(run_id);
         }
         result
+    }
+
+    fn stage_result_sources(
+        &self,
+        results: &ResultStore,
+        plan: &ExecutionPlan,
+        correlation: &CorrelationContext,
+        run_result: &RunResult,
+        cancellation: &CancellationToken,
+        pending_sources: &mut Vec<PendingSourcePublication>,
+    ) -> Result<(), RunError> {
+        for (name, value) in &run_result.values {
+            if let Some(source) = results.prepare_runtime_value(
+                correlation.clone(),
+                plan.provenance.basis.clone(),
+                name.clone(),
+                value,
+            ) {
+                pending_sources.push(PendingSourcePublication {
+                    source,
+                    event: PendingSourceEvent::ResultReady,
+                });
+                #[cfg(test)]
+                self.run_test_checkpoint(SchedulerCheckpoint::ResultSourceStaged, cancellation);
+            }
+            cancellation.check()?;
+        }
+        Ok(())
+    }
+
+    fn commit_result_sources(
+        &self,
+        results: &ResultStore,
+        run_id: RunId,
+        pending_sources: Vec<PendingSourcePublication>,
+    ) {
+        let (sources, events): (Vec<_>, Vec<_>) = pending_sources
+            .into_iter()
+            .map(|pending| (pending.source, pending.event))
+            .unzip();
+        let descriptors = results.commit_batch(run_id, sources);
+        for (event, descriptor) in events.into_iter().zip(descriptors) {
+            let Some(descriptor) = descriptor else {
+                continue;
+            };
+            self.record_source_event(descriptor, event);
+        }
+    }
+
+    fn record_source_event(&self, descriptor: ResultSourceDescriptor, event: PendingSourceEvent) {
+        let ResultSourceDescriptor {
+            source_id,
+            name,
+            correlation,
+            basis,
+            ..
+        } = descriptor;
+        let kind = match event {
+            PendingSourceEvent::ValueReady { value_index } => RunEventKind::ValueReady {
+                value_index,
+                source_id,
+            },
+            PendingSourceEvent::ResultReady => RunEventKind::ResultReady { name, source_id },
+        };
+        self.events.record(RunEvent {
+            correlation,
+            basis,
+            kind,
+        });
     }
 
     fn run_root(
@@ -173,7 +305,7 @@ impl<'a> RunExecutor<'a> {
         cancellation: CancellationToken,
         run_id: RunId,
         correlation: CorrelationContext,
-    ) -> Result<RunResult, RunError> {
+    ) -> Result<(RunResult, Vec<PendingSourcePublication>), RunError> {
         plan.validate()
             .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
         cancellation.check()?;
@@ -203,14 +335,18 @@ impl<'a> RunExecutor<'a> {
             for result in &plan.results {
                 values.insert(result.name.clone(), frame.value(result.value)?.clone());
             }
-            Ok(RunResult {
-                run_id,
-                provenance: plan.provenance.clone(),
-                correlation,
-                values,
-                committed_variable_ids: Box::new([]),
-                resource_mutation: None,
-            })
+            let pending_sources = std::mem::take(&mut frame.pending_sources);
+            Ok((
+                RunResult {
+                    run_id,
+                    provenance: plan.provenance.clone(),
+                    correlation,
+                    values,
+                    committed_variable_ids: Box::new([]),
+                    resource_mutation: None,
+                },
+                pending_sources,
+            ))
         })();
         frame.close_streams();
         result
@@ -401,6 +537,9 @@ impl<'a> RunExecutor<'a> {
                                 callee_frame.value(binding.source)?.clone(),
                             )?;
                         }
+                        frame
+                            .pending_sources
+                            .append(&mut callee_frame.pending_sources);
                         Ok(())
                     })();
                     if result.is_err() {
@@ -694,21 +833,18 @@ impl<'a> RunExecutor<'a> {
                 if let Some(results) = self.results {
                     for output in &operation.outputs {
                         let value = frame.value(output.value)?;
-                        if let Some(descriptor) = results.publish_runtime_value(
-                            run_id,
+                        if let Some(source) = results.prepare_runtime_value(
                             correlation.clone(),
                             plan.provenance.basis.clone(),
                             format!("value:{}", output.value.index()),
                             value,
                         ) {
-                            self.record_event(
-                                plan,
-                                correlation.clone(),
-                                RunEventKind::ValueReady {
+                            frame.pending_sources.push(PendingSourcePublication {
+                                source,
+                                event: PendingSourceEvent::ValueReady {
                                     value_index: output.value.index() as u32,
-                                    source_id: descriptor.source_id,
                                 },
-                            );
+                            });
                         }
                     }
                 }
@@ -804,6 +940,12 @@ impl<'a> RunExecutor<'a> {
                 let subplan = &plan.relational_subplans[index.index()];
                 let mut bridge_inputs = Vec::with_capacity(subplan.materialization_bridges.len());
                 for bridge in &subplan.materialization_bridges {
+                    #[cfg(test)]
+                    self.run_test_checkpoint(
+                        SchedulerCheckpoint::BridgeMaterialization,
+                        cancellation,
+                    );
+                    cancellation.check()?;
                     let value = frame
                         .relational_fragment(
                             activation_id,
@@ -811,10 +953,30 @@ impl<'a> RunExecutor<'a> {
                             &bridge.producer_fragment,
                         )?
                         .clone();
+                    #[cfg(test)]
+                    let value = materialize_bridge_with_checkpoint(
+                        bridge.bridge,
+                        value,
+                        cancellation,
+                        &|cancellation| {
+                            self.run_test_checkpoint(
+                                SchedulerCheckpoint::BridgeCollectionStarted,
+                                cancellation,
+                            );
+                        },
+                    );
+                    #[cfg(not(test))]
+                    let value = materialize_bridge(bridge.bridge, value, cancellation);
+                    let value = match value {
+                        Ok(value) => value,
+                        Err(error) => {
+                            cancellation.check()?;
+                            return Err(RunError::BridgeFailed(error.0));
+                        }
+                    };
                     bridge_inputs.push(RelationalInput {
                         bridge: bridge.clone(),
-                        value: materialize_bridge(bridge.bridge, value, cancellation)
-                            .map_err(|error| RunError::BridgeFailed(error.0))?,
+                        value,
                     });
                 }
                 let backend = relational_backends
@@ -886,6 +1048,7 @@ struct Frame {
     attempted: BTreeSet<MemoKey>,
     completed: BTreeSet<MemoKey>,
     completion_counts: BTreeMap<OperationIndex, usize>,
+    pending_sources: Vec<PendingSourcePublication>,
 }
 
 impl Frame {
@@ -897,6 +1060,7 @@ impl Frame {
             attempted: BTreeSet::new(),
             completed: BTreeSet::new(),
             completion_counts: BTreeMap::new(),
+            pending_sources: Vec::new(),
         }
     }
 

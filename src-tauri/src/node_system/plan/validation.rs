@@ -10,6 +10,7 @@ impl ExecutionPlan {
         let value_count = self.value_count as usize;
         let mut produced_values = BTreeSet::new();
         let mut value_producers = vec![BTreeSet::new(); value_count];
+        let mut relational_owners = BTreeMap::new();
 
         for (operation, planned) in self.operations.iter().enumerate() {
             if let PlannedKernel::Relational(index) = planned.kernel {
@@ -19,6 +20,18 @@ impl ExecutionPlan {
                     index.index(),
                     relational_count,
                 );
+                if index.index() < relational_count {
+                    let operation = OperationIndex::new(operation as u32);
+                    if let Some(first) = relational_owners.get(&index).copied() {
+                        errors.push(PlanValidationError::DuplicateRelationalSubplanOwner {
+                            subplan: index,
+                            first,
+                            duplicate: operation,
+                        });
+                    } else {
+                        relational_owners.insert(index, operation);
+                    }
+                }
             }
             for input in &planned.inputs {
                 check_value(&mut errors, "operation input", input.value, value_count);
@@ -35,6 +48,26 @@ impl ExecutionPlan {
                         });
                     }
                 }
+            }
+        }
+
+        for (subplan, relational) in self.relational_subplans.iter().enumerate() {
+            let subplan = RelationalSubplanIndex::new(subplan as u32);
+            let Some(owner) = relational_owners.get(&subplan).copied() else {
+                errors.push(PlanValidationError::UnownedRelationalSubplan(subplan));
+                continue;
+            };
+            let output_count = self.operations[owner.index()].outputs.len();
+            let root_count = relational.compiled_plan.roots.len();
+            if output_count != root_count {
+                errors.push(
+                    PlanValidationError::RelationalOwnerOutputRootCardinalityMismatch {
+                        subplan,
+                        owner,
+                        output_count,
+                        root_count,
+                    },
+                );
             }
         }
 
@@ -108,7 +141,21 @@ impl ExecutionPlan {
             errors.push(PlanValidationError::EffectDependencyCycle);
         }
 
-        validate_region(&self.root_region, &mut errors, operation_count, value_count);
+        let control_value_sources = self
+            .value_sources
+            .iter()
+            .filter_map(|source| match source {
+                PlanValueSource::ControlProduced(value) => Some(*value),
+                PlanValueSource::ExternalInput(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        validate_region(
+            &self.root_region,
+            &mut errors,
+            operation_count,
+            value_count,
+            &control_value_sources,
+        );
         validate_relational_subplans(self, &mut errors);
         validate_resources(self, &mut errors);
 
@@ -138,12 +185,13 @@ impl ExecutionPlan {
 fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValidationError>) {
     let subplan_count = plan.relational_subplans.len();
     let mut bridges = BTreeSet::new();
+    let mut all_fragments = BTreeSet::new();
     for (subplan_index, subplan) in plan.relational_subplans.iter().enumerate() {
         let compiled = &subplan.compiled_plan;
         let operator_count = compiled.operators.len();
         let mut fragments = BTreeSet::new();
         for fragment in &compiled.fragment_order {
-            if !fragments.insert(fragment.clone()) {
+            if !fragments.insert(fragment.clone()) || !all_fragments.insert(fragment.clone()) {
                 errors.push(PlanValidationError::DuplicateRelationalFragment(
                     fragment.clone(),
                 ));
@@ -165,20 +213,50 @@ fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValid
                 }
             }
         }
+        let mut rooted_fragments = BTreeSet::new();
+        for root in &compiled.fragment_roots {
+            check_index(
+                errors,
+                "relational fragment root",
+                root.operator.index(),
+                operator_count,
+            );
+            if !fragments.contains(&root.fragment) {
+                errors.push(PlanValidationError::RelationalFragmentRootUnexpected(
+                    root.fragment.clone(),
+                ));
+            } else if !rooted_fragments.insert(root.fragment.clone()) {
+                errors.push(PlanValidationError::RelationalFragmentRootDuplicate(
+                    root.fragment.clone(),
+                ));
+            }
+        }
+        for fragment in fragments.difference(&rooted_fragments) {
+            errors.push(PlanValidationError::RelationalFragmentRootMissing(
+                fragment.clone(),
+            ));
+        }
+        let mut requested_fragment_outputs = BTreeSet::new();
+        for fragment in &compiled.requested_fragment_outputs {
+            if !fragments.contains(fragment) {
+                errors.push(PlanValidationError::RelationalFragmentOutputUnexpected(
+                    fragment.clone(),
+                ));
+            }
+            if !requested_fragment_outputs.insert(fragment.clone()) {
+                errors.push(PlanValidationError::RelationalFragmentOutputDuplicate(
+                    fragment.clone(),
+                ));
+            }
+        }
         for root in &compiled.roots {
             check_index(errors, "relational root", root.index(), operator_count);
         }
-        for hint in &compiled.pushdown_hints {
-            let source = match hint {
-                RelationalPushdownHint::Projection { source, .. }
-                | RelationalPushdownHint::Limit { source, .. } => *source,
-            };
-            check_index(
-                errors,
-                "relational pushdown source",
-                source.index(),
-                operator_count,
-            );
+        let inferred_pushdown_hints = infer_relational_pushdown_hints(&compiled.operators);
+        if compiled.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
+            errors.push(PlanValidationError::RelationalPushdownHintsMismatch {
+                subplan: RelationalSubplanIndex::new(subplan_index as u32),
+            });
         }
         for bridge in &subplan.materialization_bridges {
             check_index(
@@ -204,15 +282,22 @@ fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValid
                     bridge.consumer_subplan,
                 ));
             }
-            if bridge.producer_subplan.index() < subplan_count
-                && !plan.relational_subplans[bridge.producer_subplan.index()]
-                    .compiled_plan
-                    .fragment_order
+            if bridge.producer_subplan.index() < subplan_count {
+                let producer =
+                    &plan.relational_subplans[bridge.producer_subplan.index()].compiled_plan;
+                if !producer.fragment_order.contains(&bridge.producer_fragment) {
+                    errors.push(PlanValidationError::BridgeFragmentMissing(
+                        bridge.producer_fragment.clone(),
+                    ));
+                } else if !producer
+                    .requested_fragment_outputs
                     .contains(&bridge.producer_fragment)
-            {
-                errors.push(PlanValidationError::BridgeFragmentMissing(
-                    bridge.producer_fragment.clone(),
-                ));
+                {
+                    errors.push(PlanValidationError::BridgeProducerOutputNotRequested {
+                        producer_subplan: bridge.producer_subplan,
+                        fragment: bridge.producer_fragment.clone(),
+                    });
+                }
             }
             if !fragments.contains(&bridge.consumer_fragment) {
                 errors.push(PlanValidationError::BridgeFragmentMissing(
@@ -227,6 +312,64 @@ fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValid
             );
             if !bridges.insert(key) {
                 errors.push(PlanValidationError::DuplicateMaterializationBridge);
+            }
+        }
+
+        let subplan_index = RelationalSubplanIndex::new(subplan_index as u32);
+        let mut bound_operators = BTreeSet::new();
+        let mut bound_bridges = Vec::new();
+        for binding in &compiled.bridge_inputs {
+            if binding.operator.index() >= operator_count {
+                errors.push(
+                    PlanValidationError::RelationalBridgeInputOperatorOutOfBounds {
+                        subplan: subplan_index,
+                        operator: binding.operator,
+                        operator_count,
+                    },
+                );
+            } else if !matches!(
+                compiled.operators[binding.operator.index()],
+                RelationalOperator::Input { .. }
+            ) {
+                errors.push(PlanValidationError::RelationalBridgeInputOperatorNotInput {
+                    subplan: subplan_index,
+                    operator: binding.operator,
+                });
+            }
+            if !bound_operators.insert(binding.operator) {
+                errors.push(
+                    PlanValidationError::DuplicateRelationalBridgeInputOperator {
+                        subplan: subplan_index,
+                        operator: binding.operator,
+                    },
+                );
+            }
+            if !subplan.materialization_bridges.contains(&binding.bridge) {
+                errors.push(PlanValidationError::RelationalBridgeInputBridgeUndeclared {
+                    subplan: subplan_index,
+                    operator: binding.operator,
+                    bridge: binding.bridge.clone(),
+                });
+            }
+            if bound_bridges.contains(&&binding.bridge) {
+                errors.push(PlanValidationError::DuplicateRelationalBridgeInputBridge {
+                    subplan: subplan_index,
+                    bridge: binding.bridge.clone(),
+                });
+            } else {
+                bound_bridges.push(&binding.bridge);
+            }
+        }
+        for bridge in &subplan.materialization_bridges {
+            if !compiled
+                .bridge_inputs
+                .iter()
+                .any(|binding| binding.bridge == *bridge)
+            {
+                errors.push(PlanValidationError::RelationalBridgeInputMissing {
+                    subplan: subplan_index,
+                    bridge: bridge.clone(),
+                });
             }
         }
     }
@@ -361,6 +504,7 @@ fn validate_region(
     errors: &mut Vec<PlanValidationError>,
     operation_count: usize,
     value_count: usize,
+    control_value_sources: &BTreeSet<ValueRef>,
 ) {
     match region {
         StructuredControlRegion::Sequence(steps) => {
@@ -369,9 +513,13 @@ fn validate_region(
                     ControlStep::Operation(index) => {
                         check_operation(errors, "control step", *index, operation_count)
                     }
-                    ControlStep::Region(region) => {
-                        validate_region(region, errors, operation_count, value_count)
-                    }
+                    ControlStep::Region(region) => validate_region(
+                        region,
+                        errors,
+                        operation_count,
+                        value_count,
+                        control_value_sources,
+                    ),
                 }
             }
         }
@@ -382,8 +530,21 @@ fn validate_region(
             results,
         } => {
             check_value(errors, "if condition", *condition, value_count);
-            validate_region(then_region, errors, operation_count, value_count);
-            validate_region(else_region, errors, operation_count, value_count);
+            validate_region(
+                then_region,
+                errors,
+                operation_count,
+                value_count,
+                control_value_sources,
+            );
+            validate_region(
+                else_region,
+                errors,
+                operation_count,
+                value_count,
+                control_value_sources,
+            );
+            let mut destinations = BTreeSet::new();
             for binding in results {
                 check_value(
                     errors,
@@ -403,6 +564,24 @@ fn validate_region(
                     binding.else_source,
                     value_count,
                 );
+                if !destinations.insert(binding.destination) {
+                    errors.push(PlanValidationError::DuplicateBranchResultDestination(
+                        binding.destination,
+                    ));
+                }
+                if binding.destination == binding.then_source
+                    || binding.destination == binding.else_source
+                    || binding.then_source == binding.else_source
+                {
+                    errors.push(PlanValidationError::InvalidBranchResultRoles(*binding));
+                }
+                require_control_value_source(
+                    errors,
+                    "branch result destination",
+                    binding.destination,
+                    value_count,
+                    control_value_sources,
+                );
             }
         }
         StructuredControlRegion::Loop {
@@ -411,11 +590,22 @@ fn validate_region(
             continue_condition,
             max_iterations,
         } => {
-            validate_region(body, errors, operation_count, value_count);
+            validate_region(
+                body,
+                errors,
+                operation_count,
+                value_count,
+                control_value_sources,
+            );
             check_value(errors, "loop condition", *continue_condition, value_count);
             if *max_iterations == 0 {
                 errors.push(PlanValidationError::ZeroLoopIterationLimit);
             }
+            if carried.is_empty() {
+                errors.push(PlanValidationError::MissingLoopCarriedBinding);
+            }
+            let mut body_inputs = BTreeSet::new();
+            let mut results = BTreeSet::new();
             for binding in carried {
                 check_value(errors, "loop body input", binding.body_input, value_count);
                 check_value(
@@ -426,6 +616,39 @@ fn validate_region(
                 );
                 check_value(errors, "loop next source", binding.next_source, value_count);
                 check_value(errors, "loop result", binding.result, value_count);
+                if !body_inputs.insert(binding.body_input) {
+                    errors.push(PlanValidationError::DuplicateLoopBodyInputDestination(
+                        binding.body_input,
+                    ));
+                }
+                if !results.insert(binding.result) {
+                    errors.push(PlanValidationError::DuplicateLoopResultDestination(
+                        binding.result,
+                    ));
+                }
+                let roles = [
+                    binding.body_input,
+                    binding.initial_source,
+                    binding.next_source,
+                    binding.result,
+                ];
+                if roles.iter().copied().collect::<BTreeSet<_>>().len() != roles.len() {
+                    errors.push(PlanValidationError::InvalidLoopCarriedRoles(*binding));
+                }
+                require_control_value_source(
+                    errors,
+                    "loop body input destination",
+                    binding.body_input,
+                    value_count,
+                    control_value_sources,
+                );
+                require_control_value_source(
+                    errors,
+                    "loop result destination",
+                    binding.result,
+                    value_count,
+                    control_value_sources,
+                );
             }
         }
         StructuredControlRegion::Call {
@@ -438,6 +661,18 @@ fn validate_region(
                 validate_binding(errors, "call result", binding, value_count);
             }
         }
+    }
+}
+
+fn require_control_value_source(
+    errors: &mut Vec<PlanValidationError>,
+    context: &'static str,
+    value: ValueRef,
+    value_count: usize,
+    control_value_sources: &BTreeSet<ValueRef>,
+) {
+    if value.index() < value_count && !control_value_sources.contains(&value) {
+        errors.push(PlanValidationError::MissingStructuredControlValueSource { context, value });
     }
 }
 
@@ -531,6 +766,16 @@ pub enum PlanValidationError {
         operation: OperationIndex,
     },
     ZeroLoopIterationLimit,
+    DuplicateBranchResultDestination(ValueRef),
+    InvalidBranchResultRoles(BranchResultBinding),
+    MissingLoopCarriedBinding,
+    DuplicateLoopBodyInputDestination(ValueRef),
+    DuplicateLoopResultDestination(ValueRef),
+    InvalidLoopCarriedRoles(LoopCarriedBinding),
+    MissingStructuredControlValueSource {
+        context: &'static str,
+        value: ValueRef,
+    },
     InvalidResultName(Box<str>),
     DuplicateResultName(Box<str>),
     MissingResultSource(ValueRef),
@@ -538,6 +783,26 @@ pub enum PlanValidationError {
     ConflictingResourceRequirement(ResourceId),
     EmptyRelationalSubplan(RelationalSubplanIndex),
     DuplicateRelationalFragment(RelationalFragmentId),
+    RelationalFragmentRootMissing(RelationalFragmentId),
+    RelationalFragmentRootUnexpected(RelationalFragmentId),
+    RelationalFragmentRootDuplicate(RelationalFragmentId),
+    RelationalFragmentOutputUnexpected(RelationalFragmentId),
+    RelationalFragmentOutputDuplicate(RelationalFragmentId),
+    DuplicateRelationalSubplanOwner {
+        subplan: RelationalSubplanIndex,
+        first: OperationIndex,
+        duplicate: OperationIndex,
+    },
+    UnownedRelationalSubplan(RelationalSubplanIndex),
+    RelationalOwnerOutputRootCardinalityMismatch {
+        subplan: RelationalSubplanIndex,
+        owner: OperationIndex,
+        output_count: usize,
+        root_count: usize,
+    },
+    RelationalPushdownHintsMismatch {
+        subplan: RelationalSubplanIndex,
+    },
     InvalidRelationalOperatorInput {
         subplan: RelationalSubplanIndex,
         operator: RelationalOperatorIndex,
@@ -549,5 +814,35 @@ pub enum PlanValidationError {
     },
     BridgeWithinSubplan(RelationalSubplanIndex),
     BridgeFragmentMissing(RelationalFragmentId),
+    BridgeProducerOutputNotRequested {
+        producer_subplan: RelationalSubplanIndex,
+        fragment: RelationalFragmentId,
+    },
+    RelationalBridgeInputOperatorOutOfBounds {
+        subplan: RelationalSubplanIndex,
+        operator: RelationalOperatorIndex,
+        operator_count: usize,
+    },
+    RelationalBridgeInputOperatorNotInput {
+        subplan: RelationalSubplanIndex,
+        operator: RelationalOperatorIndex,
+    },
+    DuplicateRelationalBridgeInputOperator {
+        subplan: RelationalSubplanIndex,
+        operator: RelationalOperatorIndex,
+    },
+    RelationalBridgeInputBridgeUndeclared {
+        subplan: RelationalSubplanIndex,
+        operator: RelationalOperatorIndex,
+        bridge: PlannedMaterializationBridge,
+    },
+    DuplicateRelationalBridgeInputBridge {
+        subplan: RelationalSubplanIndex,
+        bridge: PlannedMaterializationBridge,
+    },
+    RelationalBridgeInputMissing {
+        subplan: RelationalSubplanIndex,
+        bridge: PlannedMaterializationBridge,
+    },
     DuplicateMaterializationBridge,
 }

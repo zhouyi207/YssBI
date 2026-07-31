@@ -729,7 +729,6 @@ impl ProjectState {
                 }
             };
         committed.finalize();
-        self.recompile_graphs_for_variable(&staged.variable.id);
         Ok(GlobalVariableMutationResult {
             variable: staged.variable,
             result: save,
@@ -806,6 +805,7 @@ impl ProjectState {
         }
         let history = history.status();
         let publication_revision = publication.allocate_resource_revision();
+        self.invalidate_all_compile_products();
         let history_patch = staged
             .history_patch
             .as_ref()

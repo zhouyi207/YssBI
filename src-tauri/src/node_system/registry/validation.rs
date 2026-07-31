@@ -302,6 +302,7 @@ fn validate_node(
         protocol.interface.type_parameters.to_vec(),
         protocol.interface.type_constraints.to_vec(),
     )
+    .and_then(|interface| interface.with_member_groups(protocol.interface.member_groups.to_vec()))
     .map_err(|e| fail(e.to_string()))?;
     let ports: BTreeMap<_, _> = protocol
         .interface

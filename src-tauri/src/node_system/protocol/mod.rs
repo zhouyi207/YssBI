@@ -13,8 +13,8 @@ pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     ExecutionSemantics, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
     NodeCatalogProtocol, NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction,
-    PortDirection, PortEditorSpec, PortInstances, PortKind, PortSpec, ProtocolError, Purity,
-    StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
+    PortDirection, PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec, PortSpec,
+    ProtocolError, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterSchema,

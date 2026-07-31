@@ -15,6 +15,28 @@ use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use serde::Serialize;
 use uuid::Uuid;
 
+#[cfg(test)]
+static DATABASE_EXTERNAL_IO_TEST_HOOK: std::sync::Mutex<
+    Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+> = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) fn set_database_external_io_test_hook(
+    hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+) {
+    *DATABASE_EXTERNAL_IO_TEST_HOOK.lock().unwrap() = hook;
+}
+
+#[cfg(test)]
+fn run_database_external_io_test_hook() {
+    if let Some(hook) = DATABASE_EXTERNAL_IO_TEST_HOOK.lock().unwrap().clone() {
+        hook();
+    }
+}
+
+#[cfg(not(test))]
+fn run_database_external_io_test_hook() {}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadDatabaseResult {
@@ -333,15 +355,14 @@ pub fn rename_database(state: &ProjectState, id: &str, name: &str) -> Result<(),
         }
     }
 
-    let engine = state
-        .database_snapshot_for_session(&session, id)?
-        .decl
-        .engine;
+    let (token, instance) = state.database_snapshot_for_session(&session, id)?;
+    let engine = instance.decl.engine;
     if let Some((relative_path, table)) = engine.duckdb_table() {
         let abs = session.root.as_path().join(relative_path);
         write_display_name(&abs, table, name)?;
     }
-    state.commit_database_name(&session, id, name)
+    run_database_external_io_test_hook();
+    state.commit_database_name(&session, &token, id, name)
 }
 
 pub fn remove_duckdb_table_if_needed(

@@ -322,6 +322,12 @@ impl ProjectVariableAccess for SnapshotVariableAccess {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ProjectDataFrameScan {
+    pub dataframe: Arc<DataFrame>,
+    pub applied_limit: Option<usize>,
+}
+
 #[derive(Clone)]
 pub enum ProjectDatabaseSnapshot {
     Loaded(Arc<DataFrame>),
@@ -330,16 +336,36 @@ pub enum ProjectDatabaseSnapshot {
 
 impl ProjectDatabaseSnapshot {
     pub fn load(&self) -> Result<Arc<DataFrame>, Box<str>> {
+        self.load_bounded(None).map(|scan| scan.dataframe)
+    }
+
+    pub fn load_bounded(&self, limit: Option<usize>) -> Result<ProjectDataFrameScan, Box<str>> {
         match self {
-            Self::Loaded(dataframe) => Ok(Arc::clone(dataframe)),
+            Self::Loaded(dataframe) => {
+                let dataframe = match limit {
+                    Some(limit) => Arc::new(dataframe.head(Some(limit))),
+                    None => Arc::clone(dataframe),
+                };
+                Ok(ProjectDataFrameScan {
+                    dataframe,
+                    applied_limit: limit,
+                })
+            }
             Self::DuckDb { path, table } => {
-                let sql = format!("SELECT * FROM {}", crate::database::duckdb_table_sql(table));
+                let table_sql = crate::database::duckdb_table_sql(table);
+                let sql = match limit {
+                    Some(limit) => format!("SELECT * FROM {table_sql} LIMIT {limit}"),
+                    None => format!("SELECT * FROM {table_sql}"),
+                };
                 crate::database::query_to_dataframe_for_table(
                     std::path::Path::new(path.as_ref()),
                     &sql,
                     Some(table.as_ref()),
                 )
-                .map(Arc::new)
+                .map(|dataframe| ProjectDataFrameScan {
+                    dataframe: Arc::new(dataframe),
+                    applied_limit: limit,
+                })
                 .map_err(Into::into)
             }
         }
@@ -386,6 +412,16 @@ impl ProjectResourceLease {
     pub fn load_dataframe(&self) -> Result<Option<Arc<DataFrame>>, Box<str>> {
         match &self.value {
             ProjectResourceValue::Database(database) => database.load().map(Some),
+            ProjectResourceValue::Variable(_) | ProjectResourceValue::PlotSink(_) => Ok(None),
+        }
+    }
+
+    pub fn scan_dataframe(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Option<ProjectDataFrameScan>, Box<str>> {
+        match &self.value {
+            ProjectResourceValue::Database(database) => database.load_bounded(limit).map(Some),
             ProjectResourceValue::Variable(_) | ProjectResourceValue::PlotSink(_) => Ok(None),
         }
     }

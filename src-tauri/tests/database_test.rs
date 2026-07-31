@@ -6,9 +6,7 @@ use yssbi_lib::database::{
     query_page_to_dataframe, write_display_name,
 };
 use yssbi_lib::node_system::document::OperationId;
-use yssbi_lib::project::{
-    ProjectState, discover_databases_from_root, project_duckdb_abs,
-};
+use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
     let project_root = PathBuf::from(format!(

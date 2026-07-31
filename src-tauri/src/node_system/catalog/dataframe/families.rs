@@ -3,6 +3,7 @@
 #[derive(Clone, Copy)]
 pub(super) enum InterfaceKind {
     DataframeSource,
+    Limit,
     Decompose,
     Combine,
     Filter,
@@ -36,6 +37,7 @@ pub(super) struct NodeSpec {
 #[cfg(test)]
 pub const LEGACY_NODE_IDS: &[(&str, &str)] = &[
     ("Get DataFrame", "yssbi.dataframe.source.get"),
+    ("Limit DataFrame", "yssbi.dataframe.limit"),
     ("Decompose DataFrame", "yssbi.dataframe.decompose"),
     ("Combine DataFrame", "yssbi.dataframe.combine"),
     ("Filter DataFrame", "yssbi.dataframe.filter"),
@@ -95,6 +97,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["data frame", "table", "source"],
         &["数据框", "表", "数据源"],
         InterfaceKind::DataframeSource,
+    ),
+    spec(
+        "Limit DataFrame",
+        "yssbi.dataframe.limit",
+        "Limit DataFrame",
+        "限制数据框行数",
+        &["limit", "take rows", "head"],
+        &["限制", "选取行", "前几行"],
+        InterfaceKind::Limit,
     ),
     spec(
         "Decompose DataFrame",

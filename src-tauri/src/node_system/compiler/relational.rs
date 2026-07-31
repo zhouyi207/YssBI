@@ -1,7 +1,8 @@
 use crate::node_system::plan::{
     CompiledRelationalPlan, MaterializationBridge, PlannedMaterializationBridge,
-    RelationalBackendId, RelationalFragmentId, RelationalOperator, RelationalOperatorIndex,
-    RelationalPushdownHint, RelationalSubplan, RelationalSubplanIndex,
+    RelationalBackendId, RelationalBridgeInput, RelationalFragmentId, RelationalFragmentRoot,
+    RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint, RelationalSubplan,
+    RelationalSubplanIndex, infer_relational_pushdown_hints,
 };
 use crate::node_system::protocol::{InputConsumption, OutputProduction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -67,19 +68,22 @@ impl RelationalPlanner {
 
         let mut subplan_by_component = BTreeMap::new();
         let mut subplans = Vec::with_capacity(fragments_by_component.len());
+        let mut boundary_inputs_by_subplan = Vec::with_capacity(fragments_by_component.len());
         for component in &component_order {
             let index = RelationalSubplanIndex::new(subplans.len() as u32);
             subplan_by_component.insert(component.clone(), index);
+            let (compiled_plan, boundary_inputs) = compile_component(
+                &fragments_by_component[component],
+                &fragments_by_id,
+                connections,
+                &component_by_fragment,
+            )?;
             subplans.push(RelationalSubplan {
                 backend: self.backend.clone(),
-                compiled_plan: compile_component(
-                    &fragments_by_component[component],
-                    &fragments_by_id,
-                    connections,
-                    &component_by_fragment,
-                )?,
+                compiled_plan,
                 materialization_bridges: Box::new([]),
             });
+            boundary_inputs_by_subplan.push(boundary_inputs);
         }
 
         let mut ordered_connections = connections.iter().collect::<Vec<_>>();
@@ -90,27 +94,60 @@ impl RelationalPlanner {
                 right.consumer_input,
             ))
         });
-        let bridges = ordered_connections
+        let planned_bridges = ordered_connections
             .into_iter()
             .filter_map(|connection| {
                 let producer_component = &component_by_fragment[&connection.producer];
                 let consumer_component = &component_by_fragment[&connection.consumer];
-                (producer_component != consumer_component).then(|| PlannedMaterializationBridge {
-                    producer_fragment: connection.producer.clone(),
-                    consumer_fragment: connection.consumer.clone(),
-                    producer_subplan: subplan_by_component[producer_component],
-                    consumer_subplan: subplan_by_component[consumer_component],
-                    bridge: materialization_bridge(connection.production, connection.consumption),
+                (producer_component != consumer_component).then(|| {
+                    (
+                        connection,
+                        PlannedMaterializationBridge {
+                            producer_fragment: connection.producer.clone(),
+                            consumer_fragment: connection.consumer.clone(),
+                            producer_subplan: subplan_by_component[producer_component],
+                            consumer_subplan: subplan_by_component[consumer_component],
+                            bridge: materialization_bridge(
+                                connection.production,
+                                connection.consumption,
+                            ),
+                        },
+                    )
                 })
             })
             .collect::<Vec<_>>();
+        let bridges = planned_bridges
+            .iter()
+            .map(|(_, bridge)| bridge.clone())
+            .collect::<Vec<_>>();
 
+        let mut requested_outputs_by_producer = vec![BTreeSet::new(); subplans.len()];
         let mut bridges_by_consumer = vec![Vec::new(); subplans.len()];
-        for bridge in &bridges {
+        let mut input_bridges_by_consumer = vec![Vec::new(); subplans.len()];
+        for (connection, bridge) in &planned_bridges {
+            requested_outputs_by_producer[bridge.producer_subplan.index()]
+                .insert(bridge.producer_fragment.clone());
             bridges_by_consumer[bridge.consumer_subplan.index()].push(bridge.clone());
+            let operator = boundary_inputs_by_subplan[bridge.consumer_subplan.index()]
+                [&(connection.consumer.clone(), connection.consumer_input)];
+            input_bridges_by_consumer[bridge.consumer_subplan.index()].push(
+                RelationalBridgeInput {
+                    operator,
+                    bridge: bridge.clone(),
+                },
+            );
         }
-        for (subplan, bridges) in subplans.iter_mut().zip(bridges_by_consumer) {
+        for (subplan, requested_outputs) in subplans.iter_mut().zip(requested_outputs_by_producer) {
+            subplan.compiled_plan.requested_fragment_outputs =
+                requested_outputs.into_iter().collect();
+        }
+        for ((subplan, bridges), input_bridges) in subplans
+            .iter_mut()
+            .zip(bridges_by_consumer)
+            .zip(input_bridges_by_consumer)
+        {
             subplan.materialization_bridges = bridges.into_boxed_slice();
+            subplan.compiled_plan.bridge_inputs = input_bridges.into_boxed_slice();
         }
 
         Ok(RelationalPlanningResult {
@@ -312,7 +349,13 @@ fn compile_component(
     fragments: &BTreeMap<RelationalFragmentId, &RelationalFragment>,
     connections: &[RelationalConnection],
     components: &BTreeMap<RelationalFragmentId, RelationalFragmentId>,
-) -> Result<CompiledRelationalPlan, RelationalPlanningError> {
+) -> Result<
+    (
+        CompiledRelationalPlan,
+        BTreeMap<(RelationalFragmentId, RelationalOperatorIndex), RelationalOperatorIndex>,
+    ),
+    RelationalPlanningError,
+> {
     let component = &components[&fragment_ids[0]];
     let bindings = connections
         .iter()
@@ -325,6 +368,7 @@ fn compile_component(
         .collect::<BTreeMap<_, _>>();
     let mut operators = Vec::new();
     let mut roots = BTreeMap::<RelationalFragmentId, RelationalOperatorIndex>::new();
+    let mut boundary_inputs = BTreeMap::new();
 
     for id in fragment_ids {
         let fragment = fragments[id];
@@ -347,6 +391,13 @@ fn compile_component(
             let index = RelationalOperatorIndex::new(operators.len() as u32);
             operators.push(compiled);
             remapped.push(index);
+            if matches!(operator, RelationalOperator::Input { .. })
+                && bindings
+                    .get(&(id.clone(), local_index))
+                    .is_some_and(|connection| &components[&connection.producer] != component)
+            {
+                boundary_inputs.insert((id.clone(), local_index), index);
+            }
         }
         roots.insert(id.clone(), remapped[fragment.root.index()]);
     }
@@ -364,12 +415,25 @@ fn compile_component(
         .collect::<Vec<_>>();
     let pushdown_hints = infer_pushdown_hints(&operators);
 
-    Ok(CompiledRelationalPlan {
-        fragment_order: fragment_ids.to_vec().into_boxed_slice(),
-        operators: operators.into_boxed_slice(),
-        roots: exposed_roots.into_boxed_slice(),
-        pushdown_hints: pushdown_hints.into_boxed_slice(),
-    })
+    let fragment_roots = fragment_ids
+        .iter()
+        .map(|fragment| RelationalFragmentRoot {
+            fragment: fragment.clone(),
+            operator: roots[fragment],
+        })
+        .collect::<Vec<_>>();
+    Ok((
+        CompiledRelationalPlan {
+            fragment_order: fragment_ids.to_vec().into_boxed_slice(),
+            operators: operators.into_boxed_slice(),
+            fragment_roots: fragment_roots.into_boxed_slice(),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
+            roots: exposed_roots.into_boxed_slice(),
+            pushdown_hints: pushdown_hints.into_boxed_slice(),
+        },
+        boundary_inputs,
+    ))
 }
 
 fn remap_operator(
@@ -407,49 +471,7 @@ fn remap_operator(
 }
 
 fn infer_pushdown_hints(operators: &[RelationalOperator]) -> Vec<RelationalPushdownHint> {
-    let mut hints = Vec::new();
-    for operator in operators {
-        match operator {
-            RelationalOperator::Project { input, columns }
-                if matches!(
-                    operators.get(input.index()),
-                    Some(RelationalOperator::Source { .. })
-                ) && columns.iter().all(|column| {
-                    matches!(
-                        &column.expression,
-                        crate::node_system::plan::RelationalExpression::Column(_)
-                    )
-                }) =>
-            {
-                let names = columns
-                    .iter()
-                    .filter_map(|column| match &column.expression {
-                        crate::node_system::plan::RelationalExpression::Column(name) => {
-                            Some(name.clone())
-                        }
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-                hints.push(RelationalPushdownHint::Projection {
-                    source: *input,
-                    columns: names.into_boxed_slice(),
-                });
-            }
-            RelationalOperator::Limit { input, rows }
-                if matches!(
-                    operators.get(input.index()),
-                    Some(RelationalOperator::Source { .. })
-                ) =>
-            {
-                hints.push(RelationalPushdownHint::Limit {
-                    source: *input,
-                    rows: *rows,
-                });
-            }
-            _ => {}
-        }
-    }
-    hints
+    infer_relational_pushdown_hints(operators)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -641,6 +663,43 @@ mod tests {
             result.subplans[1].compiled_plan.operators[0],
             RelationalOperator::Input { .. }
         ));
+    }
+
+    #[test]
+    fn requests_cross_island_producer_fragment_outputs_once() {
+        let fragments = [
+            source("producer"),
+            input_limit("consumer-a"),
+            input_limit("consumer-b"),
+        ];
+        let mut first = connection("producer", "consumer-a");
+        first.consumption = InputConsumption::FullyMaterialized;
+        let mut second = connection("producer", "consumer-b");
+        second.consumption = InputConsumption::FullyMaterialized;
+
+        let result = RelationalPlanner::new(backend())
+            .plan(&fragments, &[second, first])
+            .unwrap();
+
+        assert_eq!(
+            result.subplans[0]
+                .compiled_plan
+                .requested_fragment_outputs
+                .as_ref(),
+            &[fragment_id("producer")]
+        );
+        assert!(
+            result.subplans[1]
+                .compiled_plan
+                .requested_fragment_outputs
+                .is_empty()
+        );
+        assert!(
+            result.subplans[2]
+                .compiled_plan
+                .requested_fragment_outputs
+                .is_empty()
+        );
     }
 
     #[test]

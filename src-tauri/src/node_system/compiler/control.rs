@@ -1,14 +1,14 @@
-use crate::node_system::document::{NodeId, PortAddress, PortRef};
+use crate::node_system::document::{NodeId, PortAddress, PortInstanceId, PortRef};
 use crate::node_system::plan::{
     BranchResultBinding, ControlStep, FunctionPlanHandle, LoopCarriedBinding, OperationIndex,
     RegionValueBinding, StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::{
-    ManagedNodeRole, NodeProtocol, ParameterKey, PortDirection, PortKind,
+    ManagedNodeRole, NodeProtocol, ParameterKey, PortDirection, PortKind, PortMemberGroupSpec,
 };
 use crate::node_system::registry::StructuralNodeRole;
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub(crate) struct ControlNode<'a> {
     pub node_id: NodeId,
@@ -75,15 +75,6 @@ pub(crate) fn validate_structural_contract(
                 "false",
                 PortDirection::Output,
             );
-            validate_binding_parameter(
-                &mut issues,
-                node_id,
-                protocol,
-                parameters,
-                "results",
-                &["destination", "then_source", "else_source"],
-                false,
-            );
         }
         StructuralNodeRole::Loop => {
             require_data_port(
@@ -108,15 +99,6 @@ pub(crate) fn validate_structural_contract(
                     "loop requires a positive integer max_iterations parameter",
                 )),
             }
-            validate_binding_parameter(
-                &mut issues,
-                node_id,
-                protocol,
-                parameters,
-                "carried",
-                &["body_input", "initial_source", "next_source", "result"],
-                true,
-            );
         }
         StructuralNodeRole::Call => {
             if call_target(parameters).is_none() {
@@ -182,6 +164,12 @@ pub(crate) fn build_control_region(
 ) -> Result<StructuredControlRegion, ControlIssue> {
     let mut builder = RegionBuilder::new(nodes, edges)?;
     builder.build()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum FlowNode {
+    Node(NodeId),
+    Exit,
 }
 
 struct RegionBuilder<'a> {
@@ -277,6 +265,17 @@ impl<'a> RegionBuilder<'a> {
     }
 
     fn walk(&mut self, node_id: NodeId) -> Result<StructuredControlRegion, ControlIssue> {
+        self.walk_stopping_before(node_id, None)
+    }
+
+    fn walk_stopping_before(
+        &mut self,
+        node_id: NodeId,
+        stop: Option<NodeId>,
+    ) -> Result<StructuredControlRegion, ControlIssue> {
+        if stop == Some(node_id) {
+            return Ok(empty_region());
+        }
         if self.active.contains(&node_id) {
             return Err(issue(
                 node_id,
@@ -308,28 +307,40 @@ impl<'a> RegionBuilder<'a> {
                 })?;
                 let mut steps = vec![ControlStep::Operation(operation)];
                 for successor in self.successors(node_id, None) {
-                    append_region(&mut steps, self.walk(successor)?);
+                    append_region(&mut steps, self.walk_stopping_before(successor, stop)?);
                 }
                 Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
             }
             Some(StructuralNodeRole::Sequence) => {
                 let mut steps = Vec::new();
                 for successor in self.successors(node_id, Some("then")) {
-                    append_region(&mut steps, self.walk(successor)?);
+                    append_region(&mut steps, self.walk_stopping_before(successor, stop)?);
                 }
                 Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
             }
             Some(StructuralNodeRole::Branch) => {
                 let condition = self.value_for_key(node_id, "condition")?;
-                let then_region = self.single_region(node_id, "true")?;
-                let else_region = self.single_region(node_id, "false")?;
+                let continuation = self.branch_continuation(node_id)?;
+                let then_region =
+                    self.single_region_stopping_before(node_id, "true", continuation.or(stop))?;
+                let else_region =
+                    self.single_region_stopping_before(node_id, "false", continuation.or(stop))?;
                 let results = self.branch_results(node_id)?;
-                Ok(StructuredControlRegion::If {
+                let branch = StructuredControlRegion::If {
                     condition,
                     then_region: Box::new(then_region),
                     else_region: Box::new(else_region),
                     results: results.into_boxed_slice(),
-                })
+                };
+                match continuation {
+                    Some(continuation) if Some(continuation) != stop => {
+                        let continuation = self.walk_stopping_before(continuation, stop)?;
+                        let mut steps = vec![ControlStep::Region(Box::new(branch))];
+                        append_region(&mut steps, continuation);
+                        Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
+                    }
+                    _ => Ok(branch),
+                }
             }
             Some(StructuralNodeRole::Loop) => {
                 let condition = self.value_for_key(node_id, "condition")?;
@@ -350,7 +361,7 @@ impl<'a> RegionBuilder<'a> {
                     continue_condition: condition,
                     max_iterations,
                 };
-                self.with_continuation(node_id, loop_region, &["then", "completed", "exit"])
+                self.with_continuation(node_id, loop_region, &["then", "completed", "exit"], stop)
             }
             Some(StructuralNodeRole::Call) => {
                 let target = FunctionPlanHandle::new(
@@ -376,12 +387,12 @@ impl<'a> RegionBuilder<'a> {
                     arguments: arguments.into_boxed_slice(),
                     results: results.into_boxed_slice(),
                 };
-                self.with_continuation(node_id, call, &["then", "completed", "exit"])
+                self.with_continuation(node_id, call, &["then", "completed", "exit"], stop)
             }
             Some(StructuralNodeRole::EventBegin | StructuralNodeRole::FunctionEntry) => {
                 let mut steps = Vec::new();
                 for successor in self.successors(node_id, None) {
-                    append_region(&mut steps, self.walk(successor)?);
+                    append_region(&mut steps, self.walk_stopping_before(successor, stop)?);
                 }
                 Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
             }
@@ -406,11 +417,12 @@ impl<'a> RegionBuilder<'a> {
         node_id: NodeId,
         region: StructuredControlRegion,
         keys: &[&str],
+        stop: Option<NodeId>,
     ) -> Result<StructuredControlRegion, ControlIssue> {
         let mut steps = vec![ControlStep::Region(Box::new(region))];
         for key in keys {
             for successor in self.successors(node_id, Some(key)) {
-                append_region(&mut steps, self.walk(successor)?);
+                append_region(&mut steps, self.walk_stopping_before(successor, stop)?);
             }
         }
         Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
@@ -421,16 +433,134 @@ impl<'a> RegionBuilder<'a> {
         node_id: NodeId,
         key: &str,
     ) -> Result<StructuredControlRegion, ControlIssue> {
+        self.single_region_stopping_before(node_id, key, None)
+    }
+
+    fn single_region_stopping_before(
+        &mut self,
+        node_id: NodeId,
+        key: &str,
+        stop: Option<NodeId>,
+    ) -> Result<StructuredControlRegion, ControlIssue> {
         let successors = self.successors(node_id, Some(key));
         match successors.as_slice() {
             [] => Ok(empty_region()),
-            [successor] => self.walk(*successor),
+            [successor] => self.walk_stopping_before(*successor, stop),
             _ => Err(issue(
                 node_id,
                 "compiler.control.ambiguous_output",
                 "structural output has multiple successors",
             )),
         }
+    }
+
+    fn branch_continuation(&self, node_id: NodeId) -> Result<Option<NodeId>, ControlIssue> {
+        let then_start = self.branch_arm_start(node_id, "true")?;
+        let else_start = self.branch_arm_start(node_id, "false")?;
+        let graph = self.normal_flow_graph()?;
+        let post_dominators = post_dominators(&graph).ok_or_else(|| {
+            issue(
+                node_id,
+                "compiler.control.cycle",
+                "normal control flow must reach a structural exit",
+            )
+        })?;
+        let then_post_dominators = &post_dominators[&then_start];
+        let else_post_dominators = &post_dominators[&else_start];
+        let common = then_post_dominators
+            .intersection(else_post_dominators)
+            .copied()
+            .filter(|candidate| *candidate != FlowNode::Exit)
+            .collect::<BTreeSet<_>>();
+        let immediate = common
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                !common
+                    .iter()
+                    .copied()
+                    .any(|other| other != *candidate && post_dominators[&other].contains(candidate))
+            })
+            .collect::<Vec<_>>();
+        match immediate.as_slice() {
+            [FlowNode::Node(continuation)] => Ok(Some(*continuation)),
+            [] => {
+                let then_reachable = reachable_flow_nodes(&graph, then_start);
+                let else_reachable = reachable_flow_nodes(&graph, else_start);
+                if then_reachable
+                    .intersection(&else_reachable)
+                    .any(|candidate| *candidate != FlowNode::Exit)
+                {
+                    Err(issue(
+                        node_id,
+                        "compiler.control.unstructured_continuation",
+                        "branch arms share reachable nodes that do not post-dominate every arm path",
+                    ))
+                } else {
+                    Ok(None)
+                }
+            }
+            _ => Err(issue(
+                node_id,
+                "compiler.control.branch.continuation_ambiguous",
+                "branch arms have multiple incomparable immediate post-dominators",
+            )),
+        }
+    }
+
+    fn branch_arm_start(&self, node_id: NodeId, key: &str) -> Result<FlowNode, ControlIssue> {
+        match self.successors(node_id, Some(key)).as_slice() {
+            [] => Ok(FlowNode::Exit),
+            [successor] => Ok(FlowNode::Node(*successor)),
+            _ => Err(issue(
+                node_id,
+                "compiler.control.ambiguous_output",
+                "branch arm has multiple successors",
+            )),
+        }
+    }
+
+    fn normal_flow_graph(&self) -> Result<BTreeMap<FlowNode, BTreeSet<FlowNode>>, ControlIssue> {
+        let mut graph = BTreeMap::new();
+        graph.insert(FlowNode::Exit, BTreeSet::new());
+        for &node_id in self.nodes.keys() {
+            let node = &self.nodes[&node_id];
+            let mut successors = match node.role {
+                Some(StructuralNodeRole::Branch) => {
+                    let mut successors = BTreeSet::new();
+                    successors.insert(self.branch_arm_start(node_id, "true")?);
+                    successors.insert(self.branch_arm_start(node_id, "false")?);
+                    successors
+                }
+                Some(StructuralNodeRole::Loop) => self
+                    .successors_for_keys(node_id, &["then", "completed", "exit"])
+                    .into_iter()
+                    .map(FlowNode::Node)
+                    .collect(),
+                Some(StructuralNodeRole::Call) => self
+                    .successors_for_keys(node_id, &["then", "completed", "exit"])
+                    .into_iter()
+                    .map(FlowNode::Node)
+                    .collect(),
+                Some(StructuralNodeRole::FunctionReturn) => BTreeSet::new(),
+                _ => self
+                    .successors(node_id, None)
+                    .into_iter()
+                    .map(FlowNode::Node)
+                    .collect(),
+            };
+            if successors.is_empty() {
+                successors.insert(FlowNode::Exit);
+            }
+            graph.insert(FlowNode::Node(node_id), successors);
+        }
+        Ok(graph)
+    }
+
+    fn successors_for_keys(&self, node_id: NodeId, keys: &[&str]) -> BTreeSet<NodeId> {
+        keys.iter()
+            .flat_map(|key| self.successors(node_id, Some(key)))
+            .collect()
     }
 
     fn successors(&self, node_id: NodeId, key: Option<&str>) -> Vec<NodeId> {
@@ -470,7 +600,7 @@ impl<'a> RegionBuilder<'a> {
         })
     }
 
-    fn resolve_value(&self, node_id: NodeId, value: &Value) -> Result<ValueRef, ControlIssue> {
+    fn resolve_call_value(&self, node_id: NodeId, value: &Value) -> Result<ValueRef, ControlIssue> {
         if let Some(index) = value.as_u64().and_then(|value| u32::try_from(value).ok()) {
             return Ok(ValueRef::new(index));
         }
@@ -488,44 +618,185 @@ impl<'a> RegionBuilder<'a> {
     }
 
     fn branch_results(&self, node_id: NodeId) -> Result<Vec<BranchResultBinding>, ControlIssue> {
-        let Some(items) = parameter(self.nodes[&node_id].parameters, "results") else {
-            return Ok(Vec::new());
-        };
-        items
-            .as_array()
-            .unwrap_or(&Vec::new())
+        self.grouped_values(
+            node_id,
+            &[
+                ("then_source", PortDirection::Input),
+                ("else_source", PortDirection::Input),
+                ("result", PortDirection::Output),
+            ],
+        )?
+        .into_iter()
+        .map(|values| {
+            Ok(BranchResultBinding {
+                destination: values["result"],
+                then_source: values["then_source"],
+                else_source: values["else_source"],
+            })
+        })
+        .collect()
+    }
+
+    fn loop_carried(&self, node_id: NodeId) -> Result<Vec<LoopCarriedBinding>, ControlIssue> {
+        self.grouped_values(
+            node_id,
+            &[
+                ("initial_source", PortDirection::Input),
+                ("body_input", PortDirection::Output),
+                ("next_source", PortDirection::Input),
+                ("result", PortDirection::Output),
+            ],
+        )?
+        .into_iter()
+        .map(|values| {
+            Ok(LoopCarriedBinding {
+                body_input: values["body_input"],
+                initial_source: values["initial_source"],
+                next_source: values["next_source"],
+                result: values["result"],
+            })
+        })
+        .collect()
+    }
+
+    fn grouped_values(
+        &self,
+        node_id: NodeId,
+        expected: &[(&str, PortDirection)],
+    ) -> Result<Vec<BTreeMap<Box<str>, ValueRef>>, ControlIssue> {
+        let node = &self.nodes[&node_id];
+        let expected_keys = expected
             .iter()
-            .map(|item| {
-                Ok(BranchResultBinding {
-                    destination: self.resolve_value(node_id, &item["destination"])?,
-                    then_source: self.resolve_value(node_id, &item["then_source"])?,
-                    else_source: self.resolve_value(node_id, &item["else_source"])?,
-                })
+            .map(|(key, _)| *key)
+            .collect::<BTreeSet<_>>();
+        let groups = node
+            .protocol
+            .interface
+            .member_groups
+            .iter()
+            .filter(|group| {
+                group.templates.len() == expected_keys.len()
+                    && group
+                        .templates
+                        .iter()
+                        .all(|template| expected_keys.contains(template.as_str()))
+            })
+            .collect::<Vec<_>>();
+        let group = match groups.as_slice() {
+            [group] => *group,
+            [] => {
+                return Err(issue(
+                    node_id,
+                    "compiler.control.member_group_missing",
+                    "structural node is missing its required port member group contract",
+                ));
+            }
+            _ => {
+                return Err(issue(
+                    node_id,
+                    "compiler.control.member_group_ambiguous",
+                    "structural node has multiple matching port member group contracts",
+                ));
+            }
+        };
+        self.validate_group_directions(node_id, group, expected)?;
+
+        let mut present = BTreeMap::<PortInstanceId, BTreeSet<&str>>::new();
+        for address in node.values.keys() {
+            let PortRef::Instance {
+                template,
+                instance_id,
+            } = &address.port
+            else {
+                continue;
+            };
+            if group.templates.contains(template) {
+                present
+                    .entry(*instance_id)
+                    .or_default()
+                    .insert(template.as_str());
+            }
+        }
+        let partial = present
+            .iter()
+            .filter(|(_, templates)| !templates.is_superset(&expected_keys))
+            .collect::<Vec<_>>();
+        if !partial.is_empty() {
+            let union = partial
+                .iter()
+                .flat_map(|(_, templates)| templates.iter().copied())
+                .collect::<BTreeSet<_>>();
+            let (code, detail) = if partial.len() > 1 && union == expected_keys {
+                (
+                    "compiler.control.member_group_identity_ambiguous",
+                    "grouped endpoints are split across incompatible shared instance IDs",
+                )
+            } else {
+                (
+                    "compiler.control.member_group_incomplete",
+                    "a shared instance ID is missing one or more grouped endpoints",
+                )
+            };
+            return Err(issue(node_id, code, detail));
+        }
+        let complete_instances = present.keys().copied().collect::<BTreeSet<_>>();
+        if complete_instances.len() < group.min as usize
+            || group
+                .max
+                .is_some_and(|max| complete_instances.len() > max as usize)
+        {
+            return Err(issue(
+                node_id,
+                "compiler.control.member_group_count_invalid",
+                "complete structural member count is outside the protocol bounds",
+            ));
+        }
+
+        complete_instances
+            .into_iter()
+            .map(|instance_id| {
+                let mut values = BTreeMap::new();
+                for (key, _) in expected {
+                    let template = group
+                        .templates
+                        .iter()
+                        .find(|template| template.as_str() == *key)
+                        .expect("matching group contains every expected template");
+                    let address = PortAddress::instance(node_id, template.clone(), instance_id);
+                    let value = node.values[&address];
+                    values.insert(Box::<str>::from(*key), value);
+                }
+                Ok(values)
             })
             .collect()
     }
 
-    fn loop_carried(&self, node_id: NodeId) -> Result<Vec<LoopCarriedBinding>, ControlIssue> {
-        let items = parameter(self.nodes[&node_id].parameters, "carried")
-            .and_then(Value::as_array)
-            .ok_or_else(|| {
-                issue(
+    fn validate_group_directions(
+        &self,
+        node_id: NodeId,
+        group: &PortMemberGroupSpec,
+        expected: &[(&str, PortDirection)],
+    ) -> Result<(), ControlIssue> {
+        let protocol = self.nodes[&node_id].protocol;
+        for (key, direction) in expected {
+            let valid = group
+                .templates
+                .iter()
+                .any(|template| template.as_str() == *key)
+                && protocol.interface.ports.iter().any(|port| {
+                    port.key.as_str() == *key
+                        && port.kind == PortKind::Data
+                        && port.direction == *direction
+                });
+            if !valid {
+                return Err(issue(
                     node_id,
-                    "compiler.control.loop.carried_required",
-                    "loop carried bindings are missing",
-                )
-            })?;
-        items
-            .iter()
-            .map(|item| {
-                Ok(LoopCarriedBinding {
-                    body_input: self.resolve_value(node_id, &item["body_input"])?,
-                    initial_source: self.resolve_value(node_id, &item["initial_source"])?,
-                    next_source: self.resolve_value(node_id, &item["next_source"])?,
-                    result: self.resolve_value(node_id, &item["result"])?,
-                })
-            })
-            .collect()
+                    "compiler.control.member_group_direction_invalid",
+                    &format!("grouped endpoint {key} has the wrong data direction"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn call_bindings(
@@ -540,8 +811,8 @@ impl<'a> RegionBuilder<'a> {
                 .iter()
                 .map(|item| {
                     Ok(RegionValueBinding {
-                        destination: self.resolve_value(node_id, &item["destination"])?,
-                        source: self.resolve_value(node_id, &item["source"])?,
+                        destination: self.resolve_call_value(node_id, &item["destination"])?,
+                        source: self.resolve_call_value(node_id, &item["source"])?,
                     })
                 })
                 .collect();
@@ -560,6 +831,75 @@ impl<'a> RegionBuilder<'a> {
             })
             .collect())
     }
+}
+
+fn reachable_flow_nodes(
+    graph: &BTreeMap<FlowNode, BTreeSet<FlowNode>>,
+    start: FlowNode,
+) -> BTreeSet<FlowNode> {
+    let mut reachable = BTreeSet::new();
+    let mut pending = VecDeque::from([start]);
+    while let Some(node) = pending.pop_front() {
+        if !reachable.insert(node) {
+            continue;
+        }
+        pending.extend(graph.get(&node).into_iter().flatten().copied());
+    }
+    reachable
+}
+
+fn post_dominators(
+    graph: &BTreeMap<FlowNode, BTreeSet<FlowNode>>,
+) -> Option<BTreeMap<FlowNode, BTreeSet<FlowNode>>> {
+    let mut reverse = BTreeMap::<FlowNode, BTreeSet<FlowNode>>::new();
+    for (&node, successors) in graph {
+        reverse.entry(node).or_default();
+        for &successor in successors {
+            reverse.entry(successor).or_default().insert(node);
+        }
+    }
+    let can_reach_exit = reachable_flow_nodes(&reverse, FlowNode::Exit);
+    if can_reach_exit.len() != graph.len() {
+        return None;
+    }
+
+    let vertices = graph.keys().copied().collect::<BTreeSet<_>>();
+    let mut sets = graph
+        .keys()
+        .copied()
+        .map(|node| {
+            let initial = if node == FlowNode::Exit {
+                BTreeSet::from([FlowNode::Exit])
+            } else {
+                vertices.clone()
+            };
+            (node, initial)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let iteration_limit = vertices.len().saturating_mul(vertices.len()).max(1);
+    for _ in 0..iteration_limit {
+        let mut changed = false;
+        let previous = sets.clone();
+        for (&node, successors) in graph {
+            if node == FlowNode::Exit {
+                continue;
+            }
+            let mut successor_sets = successors.iter().map(|successor| &previous[successor]);
+            let mut next = successor_sets.next()?.clone();
+            for successor_set in successor_sets {
+                next = next.intersection(successor_set).copied().collect();
+            }
+            next.insert(node);
+            if sets[&node] != next {
+                sets.insert(node, next);
+                changed = true;
+            }
+        }
+        if !changed {
+            return Some(sets);
+        }
+    }
+    None
 }
 
 fn validate_binding_parameter(

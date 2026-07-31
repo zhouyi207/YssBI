@@ -1,12 +1,13 @@
 use super::materialization::ProjectedMemberRef;
 use super::*;
+use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
 use crate::node_system::compiler::{
     LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
 };
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy, I18nKey,
-    NodeCategoryId, NodeScope, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
-    ProviderId, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
+    NodeCategoryId, NodeScope, NodeTypeId, ParameterKey, PortDirection, PortInstances, PortKey,
+    PortKind, ProviderId, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
@@ -176,6 +177,73 @@ fn editor_mutation_node(id: NodeId) -> DocumentNode {
         position: NodePosition { x: 1.0, y: 2.0 },
         parameters: ParameterValues::new(),
         user_label: None,
+    }
+}
+
+fn builtin_control_node(id: NodeId, node_type: &str) -> DocumentNode {
+    DocumentNode {
+        id,
+        node_type: NodeTypeId::new(node_type).unwrap(),
+        position: NodePosition { x: 1.0, y: 2.0 },
+        parameters: ParameterValues::new(),
+        user_label: None,
+    }
+}
+
+fn builtin_registry_with_branch_group_max(max: u16) -> NodeRegistry {
+    let (mut provider, _) = build_builtin_provider();
+    let branch = provider
+        .nodes
+        .iter_mut()
+        .find(|node| node.protocol.type_id.as_str() == "yssbi.control.branch")
+        .unwrap();
+    Arc::make_mut(&mut branch.protocol).interface.member_groups[0].max = Some(max);
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(provider).unwrap();
+    builder.freeze().unwrap()
+}
+
+fn bind_user_port(
+    document: &mut GraphDocument,
+    node_id: NodeId,
+    template: &str,
+    instance_id: PortInstanceId,
+) {
+    document
+        .bind_port(
+            PortAddress::instance(node_id, PortKey::new(template).unwrap(), instance_id),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey(instance_id.to_string().into()),
+            },
+        )
+        .unwrap();
+}
+
+fn grouped_binding_addresses(patch: &GraphDocumentPatch) -> Vec<PortAddress> {
+    patch
+        .operations
+        .iter()
+        .filter_map(|operation| match operation {
+            GraphDocumentOperation::InsertPortBinding {
+                address,
+                binding: DynamicPortBinding::UserCreated { .. },
+            } => Some(address.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn instance_identity(address: &PortAddress) -> PortInstanceId {
+    match &address.port {
+        PortRef::Instance { instance_id, .. } => *instance_id,
+        PortRef::Declared { .. } => panic!("expected instance address"),
+    }
+}
+
+fn instance_template(address: &PortAddress) -> &str {
+    match &address.port {
+        PortRef::Instance { template, .. } => template.as_str(),
+        PortRef::Declared { .. } => panic!("expected instance address"),
     }
 }
 
@@ -396,6 +464,311 @@ fn create_node_materializes_required_user_created_ports() {
     assert_eq!(bindings.len(), 2);
     assert!(bindings.iter().all(|address| address.node_id == node_id));
     assert_ne!(bindings[0], bindings[1]);
+}
+
+#[test]
+fn builtin_loop_create_materializes_one_complete_carried_member() {
+    let registry = build_builtin_registry();
+    let mut parameters = ParameterValues::new();
+    parameters.insert(ParameterKey::new("max_iterations").unwrap(), json!(100));
+    let patch = EditorGraphMutationDto::CreateNode {
+        node_type_id: NodeTypeId::new("yssbi.control.loop").unwrap(),
+        position: NodePosition { x: 1.0, y: 2.0 },
+        parameters,
+        user_label: None,
+    }
+    .into_patch(
+        &graph_path("events/grouped-loop"),
+        &GraphDocument::default(),
+        &registry,
+    )
+    .unwrap();
+
+    let addresses = grouped_binding_addresses(&patch);
+    assert_eq!(addresses.len(), 4);
+    assert_eq!(
+        addresses
+            .iter()
+            .map(|address| instance_template(address))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["body_input", "initial_source", "next_source", "result"])
+    );
+    assert_eq!(
+        addresses
+            .iter()
+            .map(instance_identity)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        1,
+        "one carried member must share one identity across all templates"
+    );
+}
+
+#[test]
+fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
+    let registry = build_builtin_registry();
+    let path = graph_path("events/grouped-branch");
+    let owner = node_id(905);
+    let templates = ["then_source", "else_source", "result"];
+
+    for requested in templates {
+        let mut document = GraphDocument::default();
+        document
+            .create_node(builtin_control_node(owner, "yssbi.control.branch"))
+            .unwrap();
+        let patch = EditorGraphMutationDto::AddPortInstance {
+            node_id: owner,
+            template: PortKey::new(requested).unwrap(),
+            order: Some(OrderKey("member".into())),
+        }
+        .into_patch(&path, &document, &registry)
+        .unwrap();
+        let addresses = grouped_binding_addresses(&patch);
+        assert_eq!(addresses.len(), 3);
+        assert_eq!(
+            addresses
+                .iter()
+                .map(|address| instance_template(address))
+                .collect::<BTreeSet<_>>(),
+            templates.into_iter().collect()
+        );
+        assert_eq!(
+            addresses
+                .iter()
+                .map(instance_identity)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            1
+        );
+    }
+
+    let mut document = GraphDocument::default();
+    document
+        .create_node(builtin_control_node(owner, "yssbi.control.branch"))
+        .unwrap();
+    let first = EditorGraphMutationDto::AddPortInstance {
+        node_id: owner,
+        template: PortKey::new("result").unwrap(),
+        order: Some(OrderKey("z".into())),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    let first_id = instance_identity(&grouped_binding_addresses(&first)[0]);
+    let mut reversed = first.operations.to_vec();
+    reversed.reverse();
+    document
+        .apply_patch(&GraphDocumentPatch::new(reversed))
+        .unwrap();
+
+    let second = EditorGraphMutationDto::AddPortInstance {
+        node_id: owner,
+        template: PortKey::new("then_source").unwrap(),
+        order: Some(OrderKey("a".into())),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    let second_id = instance_identity(&grouped_binding_addresses(&second)[0]);
+    assert_ne!(first_id, second_id);
+    document.apply_patch(&second).unwrap();
+
+    let mut by_identity = BTreeMap::<PortInstanceId, BTreeSet<&str>>::new();
+    for address in document.port_bindings.keys() {
+        by_identity
+            .entry(instance_identity(address))
+            .or_default()
+            .insert(instance_template(address));
+    }
+    assert_eq!(by_identity.len(), 2);
+    assert!(
+        by_identity
+            .values()
+            .all(|members| { members == &templates.into_iter().collect::<BTreeSet<_>>() })
+    );
+}
+
+#[test]
+fn removing_any_group_member_atomically_removes_the_complete_member() {
+    let registry = build_builtin_registry();
+    let path = graph_path("events/grouped-remove");
+    let owner = node_id(906);
+    let source = node_id(907);
+    let sink = node_id(908);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(builtin_control_node(owner, "yssbi.control.branch"))
+        .unwrap();
+    document.create_node(node(source)).unwrap();
+    document.create_node(node(sink)).unwrap();
+
+    for order in ["first", "second"] {
+        let patch = EditorGraphMutationDto::AddPortInstance {
+            node_id: owner,
+            template: PortKey::new("else_source").unwrap(),
+            order: Some(OrderKey(order.into())),
+        }
+        .into_patch(&path, &document, &registry)
+        .unwrap();
+        document.apply_patch(&patch).unwrap();
+    }
+    let removed_id = document
+        .port_bindings
+        .keys()
+        .map(instance_identity)
+        .min()
+        .unwrap();
+    let grouped =
+        |template| PortAddress::instance(owner, PortKey::new(template).unwrap(), removed_id);
+    let then_source = grouped("then_source");
+    let else_source = grouped("else_source");
+    let result = grouped("result");
+    document
+        .connect(declared(source, "output"), then_source.clone(), None)
+        .unwrap();
+    document
+        .connect(declared(source, "output_2"), else_source.clone(), None)
+        .unwrap();
+    document
+        .connect(result.clone(), declared(sink, "input"), None)
+        .unwrap();
+    document
+        .set_literal(then_source.clone(), Some(json!(1)))
+        .unwrap();
+    document
+        .set_literal(else_source.clone(), Some(json!(2)))
+        .unwrap();
+    let before = document.clone();
+
+    let patch = EditorGraphMutationDto::RemovePortInstance {
+        address: else_source.into(),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&patch).unwrap();
+
+    assert!(document.port_bindings.keys().all(|address| {
+        !matches!(&address.port, PortRef::Instance { instance_id, .. } if *instance_id == removed_id)
+    }));
+    assert!(document.input_states.keys().all(|address| {
+        !matches!(&address.port, PortRef::Instance { instance_id, .. } if *instance_id == removed_id)
+    }));
+    assert!(document.connections.values().all(|connection| {
+        instance_identity_if_present(&connection.output) != Some(removed_id)
+            && instance_identity_if_present(&connection.input) != Some(removed_id)
+    }));
+    assert_eq!(document.port_bindings.len(), 3);
+
+    document.apply_patch(&patch.inverse()).unwrap();
+    assert_graph_content_eq(&document, &before);
+}
+
+fn instance_identity_if_present(address: &PortAddress) -> Option<PortInstanceId> {
+    match &address.port {
+        PortRef::Instance { instance_id, .. } => Some(*instance_id),
+        PortRef::Declared { .. } => None,
+    }
+}
+
+#[test]
+fn loop_partial_member_does_not_inflate_complete_count_or_block_repair() {
+    let registry = build_builtin_registry();
+    let path = graph_path("events/partial-loop");
+    let owner = node_id(909);
+    let complete_id = instance_id(910);
+    let partial_id = instance_id(911);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(builtin_control_node(owner, "yssbi.control.loop"))
+        .unwrap();
+    for template in ["initial_source", "body_input", "next_source", "result"] {
+        bind_user_port(&mut document, owner, template, complete_id);
+    }
+    bind_user_port(&mut document, owner, "initial_source", partial_id);
+
+    assert!(
+        EditorGraphMutationDto::RemovePortInstance {
+            address: PortAddress::instance(owner, PortKey::new("result").unwrap(), complete_id,)
+                .into(),
+        }
+        .into_patch(&path, &document, &registry)
+        .is_err(),
+        "the only complete member must satisfy Loop min=1"
+    );
+
+    let remove_partial = EditorGraphMutationDto::RemovePortInstance {
+        address: PortAddress::instance(owner, PortKey::new("initial_source").unwrap(), partial_id)
+            .into(),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&remove_partial).unwrap();
+    assert!(
+        document
+            .port_bindings
+            .keys()
+            .all(|address| { instance_identity_if_present(address) != Some(partial_id) })
+    );
+    assert_eq!(
+        document
+            .port_bindings
+            .keys()
+            .filter(|address| instance_identity_if_present(address) == Some(complete_id))
+            .count(),
+        4
+    );
+}
+
+#[test]
+fn loop_with_only_a_partial_member_can_remove_it_below_group_minimum() {
+    let registry = build_builtin_registry();
+    let path = graph_path("events/partial-only-loop");
+    let owner = node_id(912);
+    let partial_id = instance_id(913);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(builtin_control_node(owner, "yssbi.control.loop"))
+        .unwrap();
+    bind_user_port(&mut document, owner, "next_source", partial_id);
+
+    let patch = EditorGraphMutationDto::RemovePortInstance {
+        address: PortAddress::instance(owner, PortKey::new("next_source").unwrap(), partial_id)
+            .into(),
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&patch).unwrap();
+    assert!(document.port_bindings.is_empty());
+}
+
+#[test]
+fn partial_member_does_not_consume_group_maximum() {
+    let registry = builtin_registry_with_branch_group_max(1);
+    let path = graph_path("events/partial-max");
+    let owner = node_id(914);
+    let partial_id = instance_id(915);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(builtin_control_node(owner, "yssbi.control.branch"))
+        .unwrap();
+    bind_user_port(&mut document, owner, "then_source", partial_id);
+
+    let complete = EditorGraphMutationDto::AddPortInstance {
+        node_id: owner,
+        template: PortKey::new("result").unwrap(),
+        order: None,
+    }
+    .into_patch(&path, &document, &registry)
+    .unwrap();
+    document.apply_patch(&complete).unwrap();
+    assert!(
+        EditorGraphMutationDto::AddPortInstance {
+            node_id: owner,
+            template: PortKey::new("else_source").unwrap(),
+            order: None,
+        }
+        .into_patch(&path, &document, &registry)
+        .is_err(),
+        "the newly added complete member must consume max=1"
+    );
 }
 
 #[test]

@@ -252,7 +252,7 @@ pub fn get_plot_column_pair(
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, AppError> {
     state
-        .with_database_mut(&database_id, |db| {
+        .with_database_snapshot(&database_id, |db| {
             compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
         })
         .map_err(AppError::from)

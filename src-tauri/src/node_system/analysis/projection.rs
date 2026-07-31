@@ -4,7 +4,7 @@ use super::{
 };
 use crate::node_system::document::{
     ConnectionId, EffectiveInputBinding, GraphDocument, GraphRevision, NodeId, PortAddress,
-    PortAddressDto,
+    PortAddressDto, port_member_group_state,
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, ParameterEditorSpec, PortDirection, PortEditorSpec, PortInstances,
@@ -415,24 +415,52 @@ impl EditorGraphProjectionDto {
                             .ports
                             .iter()
                             .filter_map(|port| {
-                                let spec = protocol?
+                                let protocol = protocol?;
+                                let spec = protocol
                                     .interface
                                     .ports
                                     .iter()
                                     .find(|spec| spec.key == port.template)?;
                                 let orphan = port.status == ResolvedPortStatus::Orphan;
                                 let instance_kind = project_instance_kind(&spec.instances);
-                                let instance_count = interface
-                                    .ports
-                                    .iter()
-                                    .filter(|candidate| candidate.template == port.template)
-                                    .filter(|candidate| candidate.address.is_instance())
-                                    .count();
+                                let group =
+                                    protocol.interface.member_group_for_template(&port.template);
+                                let (minimum, instance_count, member_complete) =
+                                    if let Some(group) = group {
+                                        let state = port_member_group_state(
+                                            node.id,
+                                            group,
+                                            document.port_bindings.iter(),
+                                        );
+                                        (
+                                            group.min,
+                                            state.complete_count(),
+                                            state.address_is_complete(&port.address),
+                                        )
+                                    } else {
+                                        (
+                                            match &spec.instances {
+                                                PortInstances::UserCreated { min, .. } => *min,
+                                                _ => 0,
+                                            },
+                                            interface
+                                                .ports
+                                                .iter()
+                                                .filter(|candidate| {
+                                                    candidate.template == port.template
+                                                })
+                                                .filter(|candidate| candidate.address.is_instance())
+                                                .count(),
+                                            true,
+                                        )
+                                    };
                                 let can_remove = can_remove_port(
                                     &port.address,
                                     orphan,
                                     &spec.instances,
+                                    minimum,
                                     instance_count,
+                                    member_complete,
                                 );
                                 let connections = project_connection_capability(
                                     document,
@@ -760,7 +788,9 @@ fn can_remove_port(
     address: &PortAddress,
     orphan: bool,
     instances: &PortInstances,
+    minimum: u16,
     instance_count: usize,
+    member_complete: bool,
 ) -> bool {
     if !address.is_instance() {
         return false;
@@ -768,7 +798,8 @@ fn can_remove_port(
     if orphan {
         return true;
     }
-    matches!(instances, PortInstances::UserCreated { min, .. } if instance_count > *min as usize)
+    matches!(instances, PortInstances::UserCreated { .. })
+        && (!member_complete || instance_count > usize::from(minimum))
 }
 
 fn project_connection_capability(
@@ -977,9 +1008,11 @@ mod tests {
     use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
     use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
     use crate::node_system::document::{
-        DocumentConnection, DocumentNode, InputState, NodePosition, OrderKey,
+        DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+        FunctionParameterId, GraphResourcePath, InputState, LastKnownPortMetadata, NodePosition,
+        OrderKey, PortInstanceId,
     };
-    use crate::node_system::protocol::{NodeTypeId, PortKey};
+    use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
     use crate::node_system::registry::RegistryFingerprint;
     use serde_json::json;
     use uuid::Uuid;
@@ -1286,6 +1319,195 @@ mod tests {
 
         assert_ne!(current.connections[0].input, old_input);
         assert_eq!(current.connections, next.connections);
+    }
+
+    #[test]
+    fn grouped_port_removal_capability_distinguishes_complete_and_partial_members() {
+        let registry = build_builtin_registry();
+        let (_, catalog) = build_builtin_provider();
+        let loop_id = NodeId::from_uuid(Uuid::from_u128(20));
+        let complete_id = PortInstanceId::from_uuid(Uuid::from_u128(21));
+        let partial_id = PortInstanceId::from_uuid(Uuid::from_u128(22));
+        let mut parameters = BTreeMap::new();
+        parameters.insert(ParameterKey::new("max_iterations").unwrap(), json!(100));
+        let mut document = GraphDocument::default();
+        document
+            .create_node(DocumentNode {
+                id: loop_id,
+                node_type: NodeTypeId::new("yssbi.control.loop").unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters,
+                user_label: None,
+            })
+            .unwrap();
+        for (template, instance_id) in [
+            ("initial_source", complete_id),
+            ("body_input", complete_id),
+            ("next_source", complete_id),
+            ("result", complete_id),
+            ("initial_source", partial_id),
+        ] {
+            document
+                .bind_port(
+                    PortAddress::instance(loop_id, PortKey::new(template).unwrap(), instance_id),
+                    DynamicPortBinding::UserCreated {
+                        order: OrderKey(instance_id.to_string().into()),
+                    },
+                )
+                .unwrap();
+        }
+        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+            .compile(&document)
+            .analysis;
+        let projection = EditorGraphProjectionDto::from_sources(
+            "events/grouped-capability",
+            &analysis,
+            &document,
+            &registry,
+            &catalog.localization("en-US"),
+        )
+        .unwrap();
+        let loop_node = projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id.as_ref() == loop_id.to_string())
+            .unwrap();
+
+        for port in &loop_node.ports {
+            let PortAddressDto::Instance { instance_id, .. } = &port.address else {
+                continue;
+            };
+            if instance_id.as_ref() == complete_id.to_string() {
+                assert!(!port.can_remove, "complete member must preserve Loop min=1");
+            } else if instance_id.as_ref() == partial_id.to_string() {
+                assert!(port.can_remove, "partial endpoints must remain removable");
+            }
+        }
+    }
+
+    #[test]
+    fn grouped_port_capability_ignores_non_user_created_siblings() {
+        let registry = build_builtin_registry();
+        let (_, catalog) = build_builtin_provider();
+        let loop_id = NodeId::from_uuid(Uuid::from_u128(30));
+        let complete_id = PortInstanceId::from_uuid(Uuid::from_u128(31));
+        let mixed_id = PortInstanceId::from_uuid(Uuid::from_u128(32));
+        let mut parameters = BTreeMap::new();
+        parameters.insert(ParameterKey::new("max_iterations").unwrap(), json!(100));
+        let mut document = GraphDocument::default();
+        document
+            .create_node(DocumentNode {
+                id: loop_id,
+                node_type: NodeTypeId::new("yssbi.control.loop").unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters,
+                user_label: None,
+            })
+            .unwrap();
+        for template in ["initial_source", "body_input", "next_source", "result"] {
+            document
+                .bind_port(
+                    PortAddress::instance(loop_id, PortKey::new(template).unwrap(), complete_id),
+                    DynamicPortBinding::UserCreated {
+                        order: OrderKey("complete".into()),
+                    },
+                )
+                .unwrap();
+        }
+        let locator = || DynamicMemberLocator::FunctionParameter {
+            function: GraphResourcePath("functions/mixed".into()),
+            parameter: FunctionParameterId("value".into()),
+        };
+        for (template, binding) in [
+            (
+                "initial_source",
+                DynamicPortBinding::UserCreated {
+                    order: OrderKey("partial".into()),
+                },
+            ),
+            (
+                "body_input",
+                DynamicPortBinding::Resolved {
+                    origin: locator(),
+                    order: OrderKey("resolved-body".into()),
+                },
+            ),
+            (
+                "next_source",
+                DynamicPortBinding::Orphan {
+                    origin: locator(),
+                    order: OrderKey("orphan-next".into()),
+                    last_known: LastKnownPortMetadata {
+                        label: "Next".into(),
+                    },
+                },
+            ),
+            (
+                "result",
+                DynamicPortBinding::Resolved {
+                    origin: locator(),
+                    order: OrderKey("resolved-result".into()),
+                },
+            ),
+        ] {
+            document
+                .bind_port(
+                    PortAddress::instance(loop_id, PortKey::new(template).unwrap(), mixed_id),
+                    binding,
+                )
+                .unwrap();
+        }
+
+        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+            .compile(&document)
+            .analysis;
+        let projection = EditorGraphProjectionDto::from_sources(
+            "events/mixed-binding-capability",
+            &analysis,
+            &document,
+            &registry,
+            &catalog.localization("en-US"),
+        )
+        .unwrap();
+        let loop_node = projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id.as_ref() == loop_id.to_string())
+            .unwrap();
+        let mut saw_partial_user_created = false;
+        let mut saw_orphan = false;
+
+        for port in &loop_node.ports {
+            let PortAddressDto::Instance {
+                template_key,
+                instance_id,
+                ..
+            } = &port.address
+            else {
+                continue;
+            };
+            if instance_id.as_ref() == complete_id.to_string() {
+                assert!(
+                    !port.can_remove,
+                    "non-user siblings must not inflate complete_count"
+                );
+            } else if instance_id.as_ref() == mixed_id.to_string() {
+                if template_key.as_ref() == "initial_source" {
+                    saw_partial_user_created = true;
+                    assert!(!port.orphan);
+                    assert!(
+                        port.can_remove,
+                        "partial UserCreated endpoint must be removable"
+                    );
+                } else {
+                    saw_orphan = true;
+                    assert!(port.orphan);
+                    assert!(port.can_remove, "orphan endpoints keep the UI removal rule");
+                }
+            }
+        }
+        assert!(saw_partial_user_created);
+        assert!(saw_orphan);
     }
 
     #[test]

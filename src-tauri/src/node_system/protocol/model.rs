@@ -126,6 +126,8 @@ pub struct NodeInterfaceProtocol {
     pub ports: Box<[PortSpec]>,
     pub type_parameters: Box<[TypeParameterId]>,
     pub type_constraints: Box<[TypeConstraint]>,
+    #[serde(default)]
+    pub member_groups: Box<[PortMemberGroupSpec]>,
 }
 
 impl NodeInterfaceProtocol {
@@ -151,8 +153,31 @@ impl NodeInterfaceProtocol {
             ports: ports.into_boxed_slice(),
             type_parameters: type_parameters.into_boxed_slice(),
             type_constraints: type_constraints.into_boxed_slice(),
+            member_groups: Box::new([]),
         })
     }
+
+    pub fn with_member_groups(
+        mut self,
+        member_groups: Vec<PortMemberGroupSpec>,
+    ) -> Result<Self, ProtocolError> {
+        validate_member_groups(&self.ports, &member_groups)?;
+        self.member_groups = member_groups.into_boxed_slice();
+        Ok(self)
+    }
+
+    pub fn member_group_for_template(&self, template: &PortKey) -> Option<&PortMemberGroupSpec> {
+        self.member_groups
+            .iter()
+            .find(|group| group.templates.contains(template))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortMemberGroupSpec {
+    pub templates: Box<[PortKey]>,
+    pub min: u16,
+    pub max: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -294,6 +319,7 @@ pub enum ProtocolError {
     DuplicatePortKey(PortKey),
     DuplicateTypeParameter(TypeParameterId),
     InvalidPortContract { key: PortKey, reason: &'static str },
+    InvalidPortMemberGroup(&'static str),
     InvalidExecutionSemantics(&'static str),
 }
 
@@ -305,6 +331,9 @@ impl std::fmt::Display for ProtocolError {
             Self::DuplicateTypeParameter(id) => write!(f, "duplicate type parameter '{id}'"),
             Self::InvalidPortContract { key, reason } => {
                 write!(f, "invalid port contract '{key}': {reason}")
+            }
+            Self::InvalidPortMemberGroup(reason) => {
+                write!(f, "invalid port member group: {reason}")
             }
             Self::InvalidExecutionSemantics(reason) => {
                 write!(f, "invalid execution semantics: {reason}")
@@ -328,6 +357,46 @@ fn invalid_port(key: &PortKey, reason: &'static str) -> ProtocolError {
         key: key.clone(),
         reason,
     }
+}
+
+fn validate_member_groups(
+    ports: &[PortSpec],
+    member_groups: &[PortMemberGroupSpec],
+) -> Result<(), ProtocolError> {
+    let mut grouped_templates = BTreeSet::new();
+    for group in member_groups {
+        if group.templates.len() < 2 {
+            return Err(ProtocolError::InvalidPortMemberGroup(
+                "a member group requires at least two templates",
+            ));
+        }
+        if group.max.is_some_and(|max| group.min > max) {
+            return Err(ProtocolError::InvalidPortMemberGroup(
+                "member minimum exceeds maximum",
+            ));
+        }
+        for template in &group.templates {
+            if !grouped_templates.insert(template.clone()) {
+                return Err(ProtocolError::InvalidPortMemberGroup(
+                    "a template may belong to only one member group",
+                ));
+            }
+            let Some(port) = ports.iter().find(|port| &port.key == template) else {
+                return Err(ProtocolError::InvalidPortMemberGroup(
+                    "member group references an unknown template",
+                ));
+            };
+            if !matches!(
+                port.instances,
+                PortInstances::UserCreated { min: 0, max: None }
+            ) {
+                return Err(ProtocolError::InvalidPortMemberGroup(
+                    "group templates must be unbounded user-created ports with zero per-template minimum",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {

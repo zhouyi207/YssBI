@@ -30,6 +30,10 @@ type ProjectionEnvironmentCaptureTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type MutationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
+type CompilePublicationTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
+type ExecutionTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
 type VariableStagingTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -38,6 +42,12 @@ type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
+
+enum CompileProductInvalidation {
+    None,
+    Graphs(Vec<GraphResourcePath>),
+    All,
+}
 
 struct ActivationGarbage {
     _publication_project_instance_id: String,
@@ -55,6 +65,7 @@ struct ActivationGarbage {
     >,
     _worksheet_revisions:
         std::collections::HashMap<String, crate::node_system::document::ResourceRevision>,
+    _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectionEnvironmentExpectation,
     _recovery_message: Option<String>,
     _history: ProjectHistory,
@@ -82,25 +93,44 @@ impl PublishedProjectActivation {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ProjectionEnvironmentExpectation {
-    project_instance_id: ProjectInstanceId,
+pub(super) struct ProjectionEnvironmentExpectation {
+    pub(super) project_instance_id: ProjectInstanceId,
     project_root: Option<NormalizedProjectRoot>,
-    project_session_id: crate::node_system::analysis::ProjectSessionId,
+    pub(super) project_session_id: crate::node_system::analysis::ProjectSessionId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ProjectionEnvironmentAuthorityBasis {
+    pub(super) project_instance_id: String,
+    pub(super) authority_generation: u64,
 }
 
 #[derive(Clone)]
 pub(super) struct ProjectionEnvironmentSnapshot {
-    registry: Arc<crate::node_system::registry::NodeRegistry>,
-    catalog: Arc<crate::node_system::catalog::BuiltinCatalog>,
-    pub(super) database_schemas: BTreeMap<crate::node_system::plan::ResourceId, Vec<Box<str>>>,
+    pub(super) authority: ProjectionEnvironmentAuthorityBasis,
+    pub(super) registry: Arc<crate::node_system::registry::NodeRegistry>,
+    pub(super) catalog: Arc<crate::node_system::catalog::BuiltinCatalog>,
+    pub(super) project_session_id: crate::node_system::analysis::ProjectSessionId,
+    pub(super) database_schemas:
+        BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
     #[cfg(test)]
     projection_test_hook: Option<ProjectionTestHook>,
 }
 
+impl ProjectionEnvironmentSnapshot {
+    pub(super) fn matches_publication(&self, publication: &MutationPublication) -> bool {
+        self.authority.project_instance_id == publication.project_instance_id
+            && self.authority.authority_generation == publication.authority_generation()
+    }
+}
+
 #[derive(Clone)]
-struct ProjectionSourceSnapshot {
-    data: ProjectData,
-    environment: ProjectionEnvironmentSnapshot,
+pub(super) struct ProjectionSourceSnapshot {
+    pub(super) state: ProjectState,
+    pub(super) data: ProjectData,
+    pub(super) environment: ProjectionEnvironmentSnapshot,
+    pub(super) project_instance_id: String,
+    pub(super) authority_generation: u64,
 }
 
 struct CommittedGraphLoad {
@@ -525,6 +555,60 @@ fn patch_projection_paths(patch: &ResourceDocumentPatch) -> Vec<String> {
     paths.into_iter().collect()
 }
 
+fn compile_product_invalidation_for_resource_patch(
+    patch: &ResourceDocumentPatch,
+    data: &ProjectData,
+) -> CompileProductInvalidation {
+    match patch {
+        ResourceDocumentPatch::InsertGraph { path, resource } => {
+            if resource.kind == crate::project::GraphDocumentKind::Function {
+                CompileProductInvalidation::All
+            } else {
+                CompileProductInvalidation::Graphs(vec![path.clone()])
+            }
+        }
+        ResourceDocumentPatch::RemoveGraph { path, .. }
+        | ResourceDocumentPatch::UnloadGraph { path } => {
+            let removes_function = data.graphs.get(path).is_some_and(|resource| {
+                resource.kind == crate::project::GraphDocumentKind::Function
+            });
+            let removes_variables = data
+                .variables
+                .values()
+                .any(|variable| variable_scope_references_path(&variable.scope, path.as_str()));
+            if removes_function || removes_variables {
+                CompileProductInvalidation::All
+            } else {
+                CompileProductInvalidation::Graphs(vec![path.clone()])
+            }
+        }
+        ResourceDocumentPatch::MoveGraph {
+            from,
+            to,
+            moved,
+            referenced_graphs,
+            referenced_variables,
+            ..
+        } => {
+            if moved.kind == crate::project::GraphDocumentKind::Function
+                || !referenced_variables.is_empty()
+                || referenced_graphs
+                    .values()
+                    .any(|resource| resource.kind == crate::project::GraphDocumentKind::Function)
+            {
+                CompileProductInvalidation::All
+            } else {
+                let mut paths = vec![from.clone(), to.clone()];
+                paths.extend(referenced_graphs.keys().cloned());
+                CompileProductInvalidation::Graphs(paths)
+            }
+        }
+        ResourceDocumentPatch::PatchVariables { .. } => CompileProductInvalidation::All,
+        ResourceDocumentPatch::UpsertWorksheet { .. }
+        | ResourceDocumentPatch::RemoveWorksheet { .. } => CompileProductInvalidation::None,
+    }
+}
+
 fn affected_projection_paths(
     deltas: &[crate::node_system::document::ResourceDeltaEvent],
     data: &ProjectData,
@@ -597,27 +681,12 @@ impl ProjectionSourceSnapshot {
             .get(graph_path)
             .map(|graph| graph.document.clone())
             .ok_or_else(|| format!("graph '{}' not loaded", graph_path))?;
-        let resources = compile_resources_from_projection_snapshot(self)?;
-        let compiler = GraphCompiler::with_resolvers(
-            self.environment.registry.as_ref(),
-            &resources,
-            resources.schema_resolvers(),
-            crate::node_system::compiler::build_builtin_interface_resolvers(),
-        );
-        let snapshot = compiler.snapshot(
-            crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
-            &document,
-        );
-        let analysis = compiler
-            .compile_snapshot(
-                &snapshot,
-                &crate::node_system::compiler::CompileCancellationToken::new(),
-            )
-            .map_err(|error| error.to_string())?
-            .analysis;
+        let (analysis, _) = self
+            .state
+            .get_or_compile_current_from_source(graph_path, self)?;
         EditorGraphProjectionDto::from_sources(
             graph_path.as_str(),
-            &analysis,
+            &analysis.payload.analysis,
             &document,
             self.environment.registry.as_ref(),
             &self.environment.catalog.localization(locale),
@@ -634,6 +703,8 @@ pub struct ProjectState {
     pub(super) history: Arc<RwLock<ProjectHistory>>,
     pub(super) project_activation: crate::project::ProjectActivationCoordinator,
     pub(super) mutation_publication: Arc<Mutex<MutationPublication>>,
+    pub(super) compile_coordinator:
+        Arc<RwLock<Arc<crate::node_system::compiler::ProjectCompileCoordinator>>>,
     filesystem: ProjectFilesystemCoordinator,
     graph_lifecycle: GraphLifecycleRegistry,
     pub(super) resource_operations:
@@ -660,6 +731,7 @@ pub struct ProjectState {
     pub(super) worksheet_revisions: Arc<
         RwLock<std::collections::HashMap<String, crate::node_system::document::ResourceRevision>>,
     >,
+    pub(super) database_authority_revisions: Arc<RwLock<std::collections::HashMap<String, u64>>>,
 
     #[cfg(test)]
     graph_rename_io_checkpoint: Arc<RwLock<Option<Arc<dyn Fn() + Send + Sync>>>>,
@@ -670,6 +742,9 @@ pub struct ProjectState {
     function_load_checkpoint: Arc<
         RwLock<Option<Arc<dyn Fn(&crate::node_system::runtime::CancellationToken) + Send + Sync>>>,
     >,
+    #[cfg(test)]
+    production_relational_observer:
+        Arc<RwLock<Option<Arc<crate::node_system::runtime::ProductionRelationalObserver>>>>,
     #[cfg(test)]
     projection_test_hook: Arc<RwLock<Option<ProjectionTestHook>>>,
     #[cfg(test)]
@@ -683,6 +758,16 @@ pub struct ProjectState {
         Arc<RwLock<Option<ProjectionEnvironmentCaptureTestHook>>>,
     #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
+    #[cfg(test)]
+    compile_capture_after_environment_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
+    #[cfg(test)]
+    compile_before_authority_gate_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
+    #[cfg(test)]
+    compile_coalesced_before_wait_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
+    #[cfg(test)]
+    execution_before_final_gate_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
+    #[cfg(test)]
+    execution_before_run_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
     #[cfg(test)]
     variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
     #[cfg(test)]
@@ -789,6 +874,9 @@ impl ProjectState {
             history: Arc::new(RwLock::new(ProjectHistory::default())),
             project_activation: crate::project::ProjectActivationCoordinator::default(),
             mutation_publication: Arc::new(Mutex::new(publication)),
+            compile_coordinator: Arc::new(RwLock::new(Arc::new(
+                crate::node_system::compiler::ProjectCompileCoordinator::new(),
+            ))),
             filesystem,
             graph_lifecycle: GraphLifecycleRegistry::default(),
             resource_operations: Arc::new(Mutex::new(
@@ -802,6 +890,7 @@ impl ProjectState {
             graph_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             variable_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             worksheet_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            database_authority_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
 
             #[cfg(test)]
             graph_rename_io_checkpoint: Arc::new(RwLock::new(None)),
@@ -810,6 +899,8 @@ impl ProjectState {
 
             #[cfg(test)]
             function_load_checkpoint: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            production_relational_observer: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             projection_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -820,6 +911,16 @@ impl ProjectState {
             projection_environment_after_path_data_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            compile_capture_after_environment_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            compile_before_authority_gate_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            compile_coalesced_before_wait_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            execution_before_final_gate_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            execution_before_run_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             variable_staging_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -891,7 +992,9 @@ impl ProjectState {
         self.history.read().unwrap().status()
     }
 
-    fn current_projection_environment_expectation(&self) -> ProjectionEnvironmentExpectation {
+    pub(super) fn current_projection_environment_expectation(
+        &self,
+    ) -> ProjectionEnvironmentExpectation {
         self.activation_identity.read().unwrap().clone()
     }
 
@@ -945,19 +1048,27 @@ impl ProjectState {
         self.capture_projection_environment(&expected)
     }
 
-    fn capture_projection_environment(
+    pub(super) fn capture_projection_environment(
         &self,
         expected: &ProjectionEnvironmentExpectation,
     ) -> Result<ProjectionEnvironmentSnapshot, String> {
         use crate::node_system::plan::ResourceId;
         use std::sync::atomic::Ordering;
 
+        let mut capture_attempts = 0;
         loop {
             let generation_before = self.activation_generation.load(Ordering::Acquire);
             if generation_before % 2 != 0 {
                 std::thread::yield_now();
                 continue;
             }
+            if capture_attempts == 3 {
+                return Err(
+                    "stale_project_lifecycle: authority changed repeatedly during projection environment capture"
+                        .into(),
+                );
+            }
+            capture_attempts += 1;
 
             let path = self.project_path.read().unwrap();
             #[cfg(test)]
@@ -969,11 +1080,25 @@ impl ProjectState {
             {
                 hook();
             }
-            let data = self.project_data.read().unwrap();
             let project_path = path.clone();
-            let databases = data.databases.clone();
-            drop(data);
             drop(path);
+            let (authority, databases) = {
+                let publication = self.mutation_publication.lock().unwrap();
+                if publication.project_instance_id != expected.project_instance_id.as_str() {
+                    return Err(
+                        "stale_project_lifecycle: project changed before projection environment authority capture"
+                            .into(),
+                    );
+                }
+                let data = self.project_data.read().unwrap();
+                (
+                    ProjectionEnvironmentAuthorityBasis {
+                        project_instance_id: publication.project_instance_id.clone(),
+                        authority_generation: publication.authority_generation(),
+                    },
+                    data.databases.clone(),
+                )
+            };
             self.run_projection_environment_after_path_data_test_hook();
 
             let project_root = project_path
@@ -991,15 +1116,16 @@ impl ProjectState {
                             return None;
                         }
                         let columns = match &database.state {
-                            DatabaseState::DuckDb { columns, .. } => columns
-                                .iter()
-                                .map(|column| Box::<str>::from(column.name.as_str()))
-                                .collect(),
-                            DatabaseState::Loaded { dataframe, .. } => dataframe
-                                .get_column_names()
-                                .into_iter()
-                                .map(|name| Box::<str>::from(name.as_str()))
-                                .collect(),
+                            DatabaseState::DuckDb { columns, .. } => {
+                                crate::application::database_schema::column_info_from_duckdb(
+                                    columns,
+                                )
+                            }
+                            DatabaseState::Loaded { dataframe, .. } => {
+                                crate::application::database_schema::column_info_from_schema(
+                                    dataframe.schema().as_ref(),
+                                )
+                            }
                             DatabaseState::Failed { .. } => return None,
                         };
                         Some((id.clone(), columns))
@@ -1048,11 +1174,9 @@ impl ProjectState {
                     Ok(metadata) => {
                         database_schemas.insert(
                             id.clone(),
-                            metadata
-                                .columns
-                                .into_iter()
-                                .map(|column| column.name.into())
-                                .collect(),
+                            crate::application::database_schema::column_info_from_duckdb(
+                                &metadata.columns,
+                            ),
                         );
                     }
                     Err(error) => {
@@ -1076,6 +1200,14 @@ impl ProjectState {
                     "stale_project_lifecycle: projection metadata identity mismatch".into(),
                 );
             }
+            let authority_is_current = {
+                let publication = self.mutation_publication.lock().unwrap();
+                authority.project_instance_id == publication.project_instance_id
+                    && authority.authority_generation == publication.authority_generation()
+            };
+            if !authority_is_current {
+                continue;
+            }
             if let Some(error) = metadata_error {
                 return Err(error);
             }
@@ -1089,8 +1221,10 @@ impl ProjectState {
                 })
                 .collect::<Result<_, _>>()?;
             return Ok(ProjectionEnvironmentSnapshot {
+                authority,
                 registry,
                 catalog,
+                project_session_id,
                 database_schemas,
                 #[cfg(test)]
                 projection_test_hook: self.projection_test_hook.read().unwrap().clone(),
@@ -1098,13 +1232,19 @@ impl ProjectState {
         }
     }
 
-    fn projection_source_snapshot(
+    pub(super) fn projection_source_snapshot(
+        &self,
         data: &ProjectData,
         environment: ProjectionEnvironmentSnapshot,
+        project_instance_id: String,
+        authority_generation: u64,
     ) -> ProjectionSourceSnapshot {
         ProjectionSourceSnapshot {
+            state: self.clone(),
             data: data.clone(),
             environment,
+            project_instance_id,
+            authority_generation,
         }
     }
 
@@ -1216,6 +1356,14 @@ impl ProjectState {
     pub(super) fn run_activation_final_rebuild_test_hook(&self) {}
 
     #[cfg(test)]
+    pub(crate) fn set_production_relational_observer(
+        &self,
+        observer: Arc<crate::node_system::runtime::ProductionRelationalObserver>,
+    ) {
+        *self.production_relational_observer.write().unwrap() = Some(observer);
+    }
+
+    #[cfg(test)]
     pub(crate) fn set_projection_test_hook(&self, hook: ProjectionTestHook) {
         *self.projection_test_hook.write().unwrap() = Some(hook);
     }
@@ -1274,6 +1422,119 @@ impl ProjectState {
     pub(super) fn set_mutation_publication_test_hook(&self, hook: MutationPublicationTestHook) {
         *self.mutation_publication_test_hook.write().unwrap() = Some(hook);
     }
+
+    #[cfg(test)]
+    pub(super) fn set_compile_capture_after_environment_test_hook(
+        &self,
+        hook: CompilePublicationTestHook,
+    ) {
+        *self
+            .compile_capture_after_environment_test_hook
+            .write()
+            .unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_compile_before_authority_gate_test_hook(
+        &self,
+        hook: CompilePublicationTestHook,
+    ) {
+        *self
+            .compile_before_authority_gate_test_hook
+            .write()
+            .unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_compile_capture_after_environment_test_hook(&self) {
+        if let Some(hook) = self
+            .compile_capture_after_environment_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_compile_capture_after_environment_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn run_compile_before_authority_gate_test_hook(&self) {
+        if let Some(hook) = self
+            .compile_before_authority_gate_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_compile_before_authority_gate_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn set_compile_coalesced_before_wait_test_hook(
+        &self,
+        hook: CompilePublicationTestHook,
+    ) {
+        *self
+            .compile_coalesced_before_wait_test_hook
+            .write()
+            .unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_compile_coalesced_before_wait_test_hook(&self) {
+        if let Some(hook) = self
+            .compile_coalesced_before_wait_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_compile_coalesced_before_wait_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn set_execution_before_final_gate_test_hook(&self, hook: ExecutionTestHook) {
+        *self.execution_before_final_gate_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    fn run_execution_before_final_gate_test_hook(&self) {
+        if let Some(hook) = self
+            .execution_before_final_gate_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_execution_before_final_gate_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn set_execution_before_run_test_hook(&self, hook: ExecutionTestHook) {
+        *self.execution_before_run_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    fn run_execution_before_run_test_hook(&self) {
+        if let Some(hook) = self.execution_before_run_test_hook.read().unwrap().clone() {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_execution_before_run_test_hook(&self) {}
 
     #[cfg(test)]
     pub(crate) fn append_history_head_for_test(&self) {
@@ -1556,6 +1817,8 @@ impl ProjectState {
             project_root: project_root.clone(),
             project_session_id: store.project_session_id.clone(),
         };
+        let database_authority_revisions =
+            data.databases.keys().cloned().map(|id| (id, 0)).collect();
         let precommit_panic;
         let postcommit_panic;
         let mut garbage = None;
@@ -1583,6 +1846,11 @@ impl ProjectState {
                 Ok(guard) => (guard, false),
                 Err(error) => (error.into_inner(), true),
             };
+            let (mut current_database_authority_revisions, database_authority_revisions_recovered) =
+                match self.database_authority_revisions.write() {
+                    Ok(guard) => (guard, false),
+                    Err(error) => (error.into_inner(), true),
+                };
             let (mut current_graph_revisions, graph_revisions_recovered) =
                 match self.graph_revisions.write() {
                     Ok(guard) => (guard, false),
@@ -1635,6 +1903,10 @@ impl ProjectState {
                     _lifecycle: lifecycle.take_state(),
                     _data: std::mem::replace(&mut *current_data, data),
                     _store: std::mem::replace(&mut *current_store, store),
+                    _database_authority_revisions: std::mem::replace(
+                        &mut *current_database_authority_revisions,
+                        database_authority_revisions,
+                    ),
                     _graph_revisions: std::mem::replace(
                         &mut *current_graph_revisions,
                         graph_revisions,
@@ -1651,6 +1923,7 @@ impl ProjectState {
                     _recovery_message: std::mem::take(&mut *recovery),
                     _history: std::mem::take(&mut *history),
                 });
+                self.replace_compile_coordinator_generation();
 
                 postcommit_panic = run_test_hooks
                     .then(|| self.run_activation_store_replaced_test_hook())
@@ -1674,6 +1947,9 @@ impl ProjectState {
                 }
                 if store_recovered {
                     self.project_store.clear_poison();
+                }
+                if database_authority_revisions_recovered {
+                    self.database_authority_revisions.clear_poison();
                 }
                 if graph_revisions_recovered {
                     self.graph_revisions.clear_poison();
@@ -1817,9 +2093,53 @@ impl ProjectState {
         ))
     }
 
-    pub fn invalidate_graph_runtime(&self) {}
+    fn invalidate_graph_compile_products(&self, graph_path: &GraphResourcePath) {
+        let coordinator = self.compile_coordinator.read().unwrap().clone();
+        coordinator.invalidate(&crate::node_system::document::GraphResourcePath(
+            graph_path.as_str().into(),
+        ));
+    }
 
-    pub fn recompile_graphs_for_variable(&self, _variable_id: &crate::variable::VariableId) {}
+    fn invalidate_graph_body_compile_products(
+        &self,
+        graph_path: &GraphResourcePath,
+        kind: crate::project::GraphDocumentKind,
+    ) {
+        match kind {
+            crate::project::GraphDocumentKind::Event => {
+                self.invalidate_graph_compile_products(graph_path)
+            }
+            crate::project::GraphDocumentKind::Function => self.invalidate_all_compile_products(),
+        }
+    }
+
+    pub(super) fn invalidate_all_compile_products(&self) {
+        let coordinator = self.compile_coordinator.read().unwrap().clone();
+        coordinator.invalidate_all();
+    }
+
+    fn apply_compile_product_invalidation(&self, invalidation: CompileProductInvalidation) {
+        match invalidation {
+            CompileProductInvalidation::None => {}
+            CompileProductInvalidation::Graphs(paths) => {
+                for path in paths {
+                    self.invalidate_graph_compile_products(&path);
+                }
+            }
+            CompileProductInvalidation::All => self.invalidate_all_compile_products(),
+        }
+    }
+
+    fn replace_compile_coordinator_generation(&self) {
+        let detached = {
+            let mut current = self.compile_coordinator.write().unwrap();
+            std::mem::replace(
+                &mut *current,
+                Arc::new(crate::node_system::compiler::ProjectCompileCoordinator::new()),
+            )
+        };
+        detached.invalidate_all();
+    }
 
     pub fn build_schema_provider(&self) -> crate::graph::core::SchemaProvider {
         let store = Arc::clone(&self.project_store);
@@ -1853,9 +2173,15 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         self.ensure_project_operational()?;
+        let invalidation = if resource.kind == crate::project::GraphDocumentKind::Function {
+            CompileProductInvalidation::All
+        } else {
+            CompileProductInvalidation::Graphs(vec![path.clone()])
+        };
         let inserted = Self::insert_graph_locked(&mut data, path.clone(), resource);
         graph_revisions.insert(path, revision);
         publication.advance_authority_generation();
+        self.apply_compile_product_invalidation(invalidation);
         Ok(inserted)
     }
 
@@ -1967,6 +2293,11 @@ impl ProjectState {
                     message: "project instance changed before patch publication".into(),
                 });
             }
+            if !projection_environment.matches_publication(&publication) {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "projection environment changed before patch publication".into(),
+                });
+            }
             let mut lifecycle = self.graph_lifecycle.boundary();
             let mut data = self.project_data.write().unwrap();
             let mut graph_revisions = self.graph_revisions.write().unwrap();
@@ -1981,6 +2312,8 @@ impl ProjectState {
                 &variable_revisions,
                 &worksheet_revisions,
             )?;
+            let compile_invalidation =
+                compile_product_invalidation_for_resource_patch(&patch, &data);
             if let Some((undo, expected_history_id)) = &history_head {
                 let current = if *undo {
                     history.next_undo()
@@ -2118,14 +2451,20 @@ impl ProjectState {
                 );
             }
             let history = history.status();
-            let projection_source = Self::projection_source_snapshot(&data, projection_environment);
+            let publication_revision = publication.allocate_resource_revision();
+            self.apply_compile_product_invalidation(compile_invalidation);
+            let projection_source = self.projection_source_snapshot(
+                &data,
+                projection_environment,
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+            );
             #[cfg(test)]
             let completion_test_hook = self
                 .committed_resource_completion_test_hook
                 .read()
                 .unwrap()
                 .clone();
-            let publication_revision = publication.allocate_resource_revision();
             CommittedResourceMutation {
                 operation_id: context.operation_id,
                 project_instance_id: publication.project_instance_id.clone(),
@@ -2422,7 +2761,8 @@ impl ProjectState {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         self.ensure_project_operational()?;
-        data.graphs.remove(graph_path);
+        let removed = data.graphs.remove(graph_path);
+        let variable_count = data.variables.len();
         data.variables.retain(|_, variable| match &variable.scope {
             crate::variable::VariableScope::Global => true,
             crate::variable::VariableScope::Event { event_path } => event_path != graph_path_text,
@@ -2433,6 +2773,15 @@ impl ProjectState {
         self.graph_revisions.write().unwrap().remove(graph_path);
         self.history.write().unwrap().clear();
         publication.advance_authority_generation();
+        if removed
+            .as_ref()
+            .is_some_and(|resource| resource.kind == crate::project::GraphDocumentKind::Function)
+            || data.variables.len() != variable_count
+        {
+            self.invalidate_all_compile_products();
+        } else {
+            self.invalidate_graph_compile_products(graph_path);
+        }
         Ok(())
     }
 
@@ -2995,10 +3344,24 @@ impl ProjectState {
         {
             return Err(operation.stale_error());
         }
+        if projection_environment
+            .as_ref()
+            .is_some_and(|environment| !environment.matches_publication(&publication))
+        {
+            return Err(ProjectFilesystemError::TransactionPrepareFailed {
+                message:
+                    "stale_project_lifecycle: projection environment changed before graph load commit"
+                        .into(),
+            });
+        }
         let mut lifecycle = self.graph_lifecycle.boundary();
         lifecycle.validate(&operation.owner)?;
         self.ensure_project_operational()?;
         let revision = resource.document.revision;
+        let invalidate_all = resource.kind == crate::project::GraphDocumentKind::Function
+            || local_variables
+                .as_ref()
+                .is_some_and(|variables| !variables.is_empty());
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
@@ -3015,21 +3378,25 @@ impl ProjectState {
         }
         lifecycle.commit_guard(guard, GraphLifecycleIntent::Load)?;
         publication.advance_authority_generation();
+        if invalidate_all {
+            self.invalidate_all_compile_products();
+        } else {
+            self.invalidate_graph_compile_products(&operation.owner.graph_path);
+        }
+        let projection_source = include_projection.then(|| {
+            self.projection_source_snapshot(
+                &data,
+                projection_environment.expect("projection environment was captured"),
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+            )
+        });
         drop(variable_revisions);
         drop(graph_revisions);
         drop(data);
         drop(lifecycle);
         drop(path);
         drop(publication);
-        let projection_source = if include_projection {
-            let data = self.project_data.read().unwrap();
-            Some(Self::projection_source_snapshot(
-                &data,
-                projection_environment.expect("projection environment was captured"),
-            ))
-        } else {
-            None
-        };
         #[cfg(not(test))]
         drop(inserted);
         Ok(CommittedGraphLoad {
@@ -3186,7 +3553,8 @@ impl ProjectState {
         self.ensure_project_operational()?;
         let graph_path_text = graph_path.as_str();
         let mut data = self.project_data.write().unwrap();
-        let graph_removed = data.graphs.remove(graph_path).is_some();
+        let removed = data.graphs.remove(graph_path);
+        let graph_removed = removed.is_some();
         let variable_count = data.variables.len();
         data.variables.retain(|_, variable| match &variable.scope {
             crate::variable::VariableScope::Global => true,
@@ -3198,9 +3566,19 @@ impl ProjectState {
         self.graph_revisions.write().unwrap().remove(graph_path);
         self.history.write().unwrap().clear();
         lifecycle.commit_guard(&mut guard, GraphLifecycleIntent::Unload)?;
-        let changed = graph_removed || data.variables.len() != variable_count;
+        let variables_removed = data.variables.len() != variable_count;
+        let changed = graph_removed || variables_removed;
         if changed {
             publication.advance_authority_generation();
+            if variables_removed
+                || removed.as_ref().is_some_and(|resource| {
+                    resource.kind == crate::project::GraphDocumentKind::Function
+                })
+            {
+                self.invalidate_all_compile_products();
+            } else {
+                self.invalidate_graph_compile_products(graph_path);
+            }
         }
         Ok(changed)
     }
@@ -3330,6 +3708,7 @@ impl ProjectState {
             }
         }
         publication.advance_authority_generation();
+        self.invalidate_graph_body_compile_products(graph_path, resource.kind);
         Ok(event)
     }
 
@@ -3366,6 +3745,12 @@ impl ProjectState {
                 "stale_project_lifecycle: project changed before graph authority commit".into(),
             ));
         }
+        if !projection_environment.matches_publication(&publication) {
+            return Err(MutationConflict::Projection(
+                "stale_project_lifecycle: projection environment changed before graph authority commit"
+                    .into(),
+            ));
+        }
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         self.ensure_mutation_operational()?;
@@ -3382,6 +3767,7 @@ impl ProjectState {
                 current_revision: resource.document.revision,
             });
         }
+        let graph_kind = resource.kind;
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
@@ -3418,9 +3804,15 @@ impl ProjectState {
             .expect("graph remains loaded")
             .document = updated;
         graph_revisions.insert(graph_path.clone(), to_revision);
-        let projection_source = Self::projection_source_snapshot(&data, projection_environment);
         let history = history.status();
         publication.advance_authority_generation();
+        self.invalidate_graph_body_compile_products(graph_path, graph_kind);
+        let projection_source = self.projection_source_snapshot(
+            &data,
+            projection_environment,
+            publication.project_instance_id.clone(),
+            publication.authority_generation(),
+        );
         Ok(CommittedGraphMutation {
             delta: GraphDeltaEvent {
                 graph_path: crate::node_system::document::GraphResourcePath(
@@ -3474,6 +3866,12 @@ impl ProjectState {
                 "stale_project_lifecycle: project changed before signature authority commit".into(),
             ));
         }
+        if !projection_environment.matches_publication(&publication) {
+            return Err(MutationConflict::Projection(
+                "stale_project_lifecycle: projection environment changed before signature authority commit"
+                    .into(),
+            ));
+        }
         let mut data = self.project_data.write().unwrap();
         self.ensure_mutation_operational()?;
         let function = data
@@ -3525,14 +3923,20 @@ impl ProjectState {
             payload: crate::node_system::document::ResourceDocumentPatch::Function(request.payload),
         }];
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
-        let projection_source = Self::projection_source_snapshot(&data, projection_environment);
+        let publication_revision = publication.allocate_resource_revision();
+        self.invalidate_all_compile_products();
+        let projection_source = self.projection_source_snapshot(
+            &data,
+            projection_environment,
+            publication.project_instance_id.clone(),
+            publication.authority_generation(),
+        );
         #[cfg(test)]
         let completion_test_hook = self
             .committed_resource_completion_test_hook
             .read()
             .unwrap()
             .clone();
-        let publication_revision = publication.allocate_resource_revision();
         Ok(CommittedResourceMutation {
             operation_id: request.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
@@ -3611,6 +4015,12 @@ impl ProjectState {
                 "stale_project_lifecycle: project changed before history authority commit".into(),
             ));
         }
+        if !projection_environment.matches_publication(&publication) {
+            return Err(MutationConflict::Projection(
+                "stale_project_lifecycle: projection environment changed before history authority commit"
+                    .into(),
+            ));
+        }
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
@@ -3662,14 +4072,20 @@ impl ProjectState {
             graph_revisions.insert(path.clone(), graph.document.revision);
         }
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
-        let projection_source = Self::projection_source_snapshot(&data, projection_environment);
+        let publication_revision = publication.allocate_resource_revision();
+        self.invalidate_all_compile_products();
+        let projection_source = self.projection_source_snapshot(
+            &data,
+            projection_environment,
+            publication.project_instance_id.clone(),
+            publication.authority_generation(),
+        );
         #[cfg(test)]
         let completion_test_hook = self
             .committed_resource_completion_test_hook
             .read()
             .unwrap()
             .clone();
-        let publication_revision = publication.allocate_resource_revision();
         Ok(CommittedResourceMutation {
             operation_id: request.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
@@ -3826,6 +4242,11 @@ impl ProjectState {
                     "project changed before durable history authority commit".into(),
                 ));
             }
+            if !projection_environment.matches_publication(&publication) {
+                return Err(MutationConflict::History(
+                    "projection environment changed before durable history authority commit".into(),
+                ));
+            }
             let mut data = self.project_data.write().unwrap();
             let mut store = self.project_store.write().unwrap();
             let graph_revisions = self.graph_revisions.read().unwrap();
@@ -3903,14 +4324,20 @@ impl ProjectState {
             let history_status = next_history.status();
             *self.history.write().unwrap() = next_history;
             drop(store);
-            let projection_source = Self::projection_source_snapshot(&data, projection_environment);
+            let publication_revision = publication.allocate_resource_revision();
+            self.invalidate_all_compile_products();
+            let projection_source = self.projection_source_snapshot(
+                &data,
+                projection_environment,
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+            );
             #[cfg(test)]
             let completion_test_hook = self
                 .committed_resource_completion_test_hook
                 .read()
                 .unwrap()
                 .clone();
-            let publication_revision = publication.allocate_resource_revision();
             Ok(CommittedResourceMutation {
                 operation_id: request.operation_id,
                 project_instance_id: publication.project_instance_id.clone(),
@@ -4184,25 +4611,8 @@ impl ProjectState {
     ) -> Result<EditorGraphProjectionDto, String> {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
-        let projection_expectation = self.current_projection_environment_expectation();
-        let projection_environment =
-            self.capture_projection_environment(&projection_expectation)?;
-        let source = {
-            let publication = self.mutation_publication.lock().unwrap();
-            if publication.project_instance_id
-                != projection_expectation.project_instance_id.as_str()
-            {
-                return Err(
-                    "stale_project_lifecycle: project changed before graph projection".into(),
-                );
-            }
-            let data = self.project_data.read().unwrap();
-            if !data.graphs.contains_key(graph_path) {
-                return Err(format!("graph '{}' not loaded", graph_path));
-            }
-            Self::projection_source_snapshot(&data, projection_environment)
-        };
-        source.graph_projection(graph_path, locale)
+        self.capture_projection_source(graph_path)?
+            .graph_projection(graph_path, locale)
     }
 
     #[cfg(test)]
@@ -4340,6 +4750,76 @@ impl ProjectState {
             .release_run_sources(run_id))
     }
 
+    fn capture_execution_snapshot(
+        &self,
+        graph_path: &GraphResourcePath,
+        compilation: &super::compile_publication::CurrentCompilation,
+    ) -> Result<ExecutionSnapshot, String> {
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != compilation.authority.project_instance_id
+            || publication.authority_generation() != compilation.authority.authority_generation
+        {
+            return Err(
+                "stale_project_lifecycle: execution authority changed before snapshot".into(),
+            );
+        }
+        let data = self.project_data.read().unwrap().clone();
+        let variable_revisions = self.variable_revisions.read().unwrap().clone();
+        let store = self.project_store.read().unwrap();
+        let database_instances = store.databases.clone();
+        let registry = Arc::clone(&store.node_registry);
+        let kernels = Arc::clone(&store.kernels);
+        let functions = Arc::clone(&store.function_plans);
+        let results = store.results.clone();
+        let runs = Arc::clone(&store.runs);
+        let session_id = store.project_session_id.clone();
+        drop(store);
+        let identity = self.current_projection_environment_expectation();
+        if !self.execution_authority_matches(&publication, &compilation.authority)
+            || session_id != compilation.authority.project_session_id
+        {
+            return Err(
+                "stale_project_lifecycle: execution authority changed before snapshot".into(),
+            );
+        }
+        let document = data
+            .graphs
+            .get(graph_path)
+            .map(|graph| graph.document.clone())
+            .ok_or_else(|| format!("graph '{}' not loaded", graph_path))?;
+        let function_documents = data
+            .graphs
+            .iter()
+            .filter(|(_, graph)| graph.function.is_some())
+            .map(|(path, graph)| (path.clone(), graph.document.clone()))
+            .collect();
+        Ok(ExecutionSnapshot {
+            document,
+            function_documents,
+            data,
+            database_instances,
+            variable_revisions,
+            project_root: identity.project_root,
+            database_schemas: compilation.source.environment.database_schemas.clone(),
+            registry,
+            kernels,
+            functions,
+            results,
+            runs,
+            session_id,
+        })
+    }
+
+    fn validate_execution_authority(
+        &self,
+        authority: &super::compile_publication::ExecutionAuthorityToken,
+    ) -> Result<(), String> {
+        let publication = self.mutation_publication.lock().unwrap();
+        self.execution_authority_matches(&publication, authority)
+            .then_some(())
+            .ok_or_else(|| "stale_project_lifecycle: execution authority changed before run".into())
+    }
+
     pub fn execute_graph(
         &self,
         graph_path: &GraphResourcePath,
@@ -4347,132 +4827,94 @@ impl ProjectState {
     ) -> Result<crate::node_system::runtime::RunResult, String> {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
-        let (registry, kernels, functions, results, runs, session_id) = {
-            let store = self.project_store.read().unwrap();
-            (
-                Arc::clone(&store.node_registry),
-                Arc::clone(&store.kernels),
-                Arc::clone(&store.function_plans),
-                store.results.clone(),
-                Arc::clone(&store.runs),
-                store.project_session_id.clone(),
-            )
-        };
         let cancellation = crate::node_system::runtime::CancellationToken::new();
-        let _pre_run = runs
-            .track_pre_run(session_id.clone(), cancellation.clone())
-            .map_err(|error| error.to_string())?;
         self.load_function_resources(&cancellation)?;
-        let (document, variables, databases) = {
-            let data = self.project_data.read().unwrap();
-            let document = data
-                .graphs
-                .get(graph_path)
-                .map(|graph| graph.document.clone())
-                .ok_or_else(|| format!("graph '{}' not loaded", graph_path))?;
-            (document, data.variables.clone(), data.databases.clone())
-        };
+        let compilation = self.get_or_compile_current(graph_path)?;
+        let plan = compilation
+            .plan
+            .as_ref()
+            .map(|projection| projection.payload.clone())
+            .ok_or_else(|| {
+                let codes = compilation
+                    .analysis
+                    .payload
+                    .analysis
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("execution refused because graph has blocking diagnostics: {codes}")
+            })?;
+        cancellation.check().map_err(|error| error.to_string())?;
+        let execution = self.capture_execution_snapshot(graph_path, &compilation)?;
+        let compile_resources =
+            compile_resources_from_data(&execution.data, execution.database_schemas.clone())?;
+        if compile_resources.versions != compilation.authority.basis.resource_versions {
+            return Err("stale_project_lifecycle: execution resource basis changed".into());
+        }
+        let resource_snapshot = snapshot_execution_resources(&execution, compile_resources)?;
         let compile_cancellation =
             crate::node_system::compiler::CompileCancellationToken::from_shared(
                 cancellation.shared_flag(),
             );
-        let resource_snapshot = snapshot_project_resources(self, variables, databases)?;
         let mut compiled_parameters = crate::node_system::runtime::CompiledParameterStore::new();
         let function_generation = publish_function_plans(
-            self,
-            registry.as_ref(),
-            functions.as_ref(),
+            &execution.function_documents,
+            execution.registry.as_ref(),
+            execution.functions.as_ref(),
             &resource_snapshot.compile,
-            session_id.clone(),
+            execution.session_id.clone(),
             &compile_cancellation,
             &mut compiled_parameters,
         )?;
-        let compiler = GraphCompiler::with_resolvers(
-            registry.as_ref(),
-            &resource_snapshot.compile,
-            resource_snapshot.compile.schema_resolvers(),
-            crate::node_system::compiler::build_builtin_interface_resolvers(),
-        )
-        .with_observability(
-            session_id.clone(),
-            &crate::node_system::analysis::NOOP_TRACE_SINK,
-        );
-        let snapshot = compiler.snapshot(
-            crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
-            &document,
-        );
-        let result = compiler
-            .compile_snapshot(&snapshot, &compile_cancellation)
-            .map_err(|error| error.to_string())?;
-        cancellation.check().map_err(|error| error.to_string())?;
-        let plan = result.plan.ok_or_else(|| {
-            let codes = result
-                .analysis
-                .diagnostics
-                .iter()
-                .map(|diagnostic| diagnostic.code.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("execution refused because graph has blocking diagnostics: {codes}")
-        })?;
-        let (current_revision, current_variables, current_databases) = {
-            let data = self.project_data.read().unwrap();
-            let revision = data
-                .graphs
-                .get(graph_path)
-                .map(|graph| graph.document.revision)
-                .ok_or_else(|| format!("graph '{}' was unloaded during compilation", graph_path))?;
-            (revision, data.variables.clone(), data.databases.clone())
-        };
-        if current_revision != plan.provenance.basis.graph_revision {
-            return Err("execution refused because compiled plan is stale".into());
-        }
-        let (current_session_id, current_registry) = {
-            let store = self.project_store.read().unwrap();
-            (
-                store.project_session_id.clone(),
-                store.node_registry.fingerprint().clone(),
-            )
-        };
-        if current_session_id != session_id {
-            return Err(
-                "execution refused because project session changed during compilation".into(),
-            );
-        }
-        if current_registry != plan.provenance.basis.registry_fingerprint {
-            return Err("execution refused because compiled registry is stale".into());
-        }
-        let current_resources =
-            snapshot_project_resources(self, current_variables, current_databases)?;
-        if current_resources.compile.versions != plan.provenance.basis.resource_versions {
-            return Err("execution refused because compiled resources are stale".into());
+        #[cfg(test)]
+        let production_relational_observer =
+            self.production_relational_observer.read().unwrap().clone();
+        #[cfg(test)]
+        if let Some(observer) = &production_relational_observer {
+            observer.observe_plan(&plan);
         }
         let resources =
             crate::node_system::runtime::ProjectResourceProvider::new(resource_snapshot.runtime);
-        build_run_parameters(&mut compiled_parameters, &document, &plan)?;
+        build_run_parameters(&mut compiled_parameters, &execution.document, &plan)?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
+        #[cfg(test)]
+        let production_relational_backend = production_relational_observer
+            .map(crate::node_system::runtime::ProductionRelationalBackend::with_observer)
+            .unwrap_or_default();
+        #[cfg(not(test))]
+        let production_relational_backend =
+            crate::node_system::runtime::ProductionRelationalBackend::default();
         relational_backends
             .register(
                 crate::node_system::plan::RelationalBackendId::new("relational.default")
                     .map_err(|error| error.to_string())?,
-                ProductionRelationalBackend,
+                production_relational_backend,
             )
             .map_err(|error| error.to_string())?;
+        self.run_execution_before_final_gate_test_hook();
+        self.validate_execution_authority(&compilation.authority)?;
+        let _pre_run = execution
+            .runs
+            .track_pre_run(execution.session_id.clone(), cancellation.clone())
+            .map_err(|error| error.to_string())?;
+        self.run_execution_before_run_test_hook();
         let mut result = crate::node_system::runtime::RunExecutor::new(
-            kernels.as_ref(),
+            execution.kernels.as_ref(),
             &resources,
             &function_generation,
         )
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
-        .with_run_registry(runs.as_ref())
+        .with_run_registry(execution.runs.as_ref())
         .with_event_sink(events)
-        .with_result_store(&results)
+        .with_result_store(&execution.results)
         .run(&plan, cancellation)
         .map_err(|error| error.to_string())?;
         let effects = resources.snapshot().variable_effects();
         let committed = self
-            .commit_variable_effects(&session_id, effects)
+            .commit_variable_effects(&execution.session_id, effects)
             .map_err(|error| error.to_string())?;
         result.committed_variable_ids = committed.variable_ids;
         result.resource_mutation = committed.resource_mutation;
@@ -4768,6 +5210,11 @@ impl ProjectState {
                     "project changed before variable authority commit",
                 ));
             }
+            if !projection_environment.matches_publication(&publication) {
+                return Err(variable_effect_persistence_error(
+                    "projection environment changed before variable authority commit",
+                ));
+            }
             let mut data = self.project_data.write().unwrap();
             let mut store = self.project_store.write().unwrap();
             if &store.project_session_id != expected_session_id {
@@ -4809,14 +5256,20 @@ impl ProjectState {
             let history_status = next_history.status();
             *self.history.write().unwrap() = next_history;
             drop(store);
-            let projection_source = Self::projection_source_snapshot(&data, projection_environment);
+            let publication_revision = publication.allocate_resource_revision();
+            self.invalidate_all_compile_products();
+            let projection_source = self.projection_source_snapshot(
+                &data,
+                projection_environment,
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+            );
             #[cfg(test)]
             let completion_test_hook = self
                 .committed_resource_completion_test_hook
                 .read()
                 .unwrap()
                 .clone();
-            let publication_revision = publication.allocate_resource_revision();
             let resource_mutation = Some(CommittedResourceMutation {
                 operation_id: transaction.caused_by,
                 project_instance_id: publication.project_instance_id.clone(),
@@ -5114,17 +5567,18 @@ impl std::fmt::Display for VariableEffectCommitError {
 }
 
 #[derive(Clone)]
-struct CompileResourceSnapshot {
-    versions: crate::node_system::analysis::ResourceVersionSet,
+pub(super) struct CompileResourceSnapshot {
+    pub(super) versions: crate::node_system::analysis::ResourceVersionSet,
     functions: BTreeMap<
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
     >,
-    database_schemas: BTreeMap<crate::node_system::plan::ResourceId, Vec<Box<str>>>,
+    database_schemas:
+        BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
 
 impl CompileResourceSnapshot {
-    fn schema_resolvers(&self) -> crate::node_system::compiler::SchemaResolverSet {
+    pub(super) fn schema_resolvers(&self) -> crate::node_system::compiler::SchemaResolverSet {
         let mut resolvers = crate::node_system::compiler::SchemaResolverSet::new();
         resolvers.insert(
             crate::node_system::protocol::SchemaResolverId::new(
@@ -5140,7 +5594,7 @@ impl CompileResourceSnapshot {
 }
 
 struct ProjectDatabaseSchemaResolver {
-    schemas: BTreeMap<crate::node_system::plan::ResourceId, Vec<Box<str>>>,
+    schemas: BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
 
 impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResolver {
@@ -5174,10 +5628,9 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
             crate::node_system::protocol::SchemaExpr::Input(
                 crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
             ),
-            fields
-                .iter()
-                .cloned()
-                .map(crate::node_system::protocol::SchemaColumnRef),
+            fields.iter().map(|column| {
+                crate::node_system::protocol::SchemaColumnRef(column.name.clone().into())
+            }),
         ))
     }
 }
@@ -5193,367 +5646,6 @@ impl ResourceSnapshot for CompileResourceSnapshot {
     ) -> Option<&crate::node_system::document::FunctionDocument> {
         self.functions.get(path)
     }
-}
-
-pub(super) struct ProductionRelationalBackend;
-
-impl crate::node_system::runtime::RelationalBackend for ProductionRelationalBackend {
-    fn execute(
-        &self,
-        context: &crate::node_system::runtime::RelationalContext<'_>,
-        plan: &crate::node_system::plan::CompiledRelationalPlan,
-        operation_inputs: &[crate::node_system::runtime::RuntimeValue],
-        _bridge_inputs: &[crate::node_system::runtime::RelationalInput],
-    ) -> Result<
-        crate::node_system::runtime::RelationalExecution,
-        crate::node_system::runtime::RelationalError,
-    > {
-        use crate::node_system::plan::RelationalOperator;
-        use crate::node_system::runtime::RuntimeValue;
-        let mut values = Vec::with_capacity(plan.operators.len());
-        let mut next_input = 0;
-        for operator in plan.operators.iter() {
-            context
-                .cancellation
-                .check()
-                .map_err(crate::node_system::runtime::RelationalError::from)?;
-            let value = match operator {
-                RelationalOperator::Input { .. } => {
-                    let value = operation_inputs.get(next_input).cloned().ok_or_else(|| {
-                        crate::node_system::runtime::RelationalError::new(
-                            "relational input is missing",
-                        )
-                    })?;
-                    next_input += 1;
-                    value
-                }
-                RelationalOperator::Source { resource, .. } => {
-                    let lease = context
-                        .resources
-                        .get(resource)
-                        .and_then(|lease| {
-                            lease
-                                .as_any()
-                                .downcast_ref::<crate::node_system::runtime::ProjectResourceLease>()
-                        })
-                        .ok_or_else(|| {
-                            crate::node_system::runtime::RelationalError::new(format!(
-                                "relational source '{}' is unavailable",
-                                resource.as_str()
-                            ))
-                        })?;
-                    let dataframe = lease
-                        .load_dataframe()
-                        .map_err(crate::node_system::runtime::RelationalError::new)?
-                        .ok_or_else(|| {
-                            crate::node_system::runtime::RelationalError::new(format!(
-                                "relational source '{}' is unavailable",
-                                resource.as_str()
-                            ))
-                        })?;
-                    RuntimeValue::Scalar(
-                        crate::node_system::runtime::dataframe_to_protocol_value(
-                            dataframe.as_ref(),
-                        )
-                        .map_err(|error| {
-                            crate::node_system::runtime::RelationalError::new(error.to_string())
-                        })?,
-                    )
-                }
-                RelationalOperator::Project { input, columns } => {
-                    let source = relational_scalar(&values, input.index())?;
-                    let mut projected = BTreeMap::new();
-                    for column in columns.iter() {
-                        projected.insert(
-                            column.name.clone(),
-                            relational_expression(&column.expression, source)?,
-                        );
-                    }
-                    RuntimeValue::Scalar(crate::node_system::protocol::Value::Object(projected))
-                }
-                RelationalOperator::Filter { input, predicate } => {
-                    let source = relational_scalar(&values, input.index())?;
-                    let mask = relational_expression(predicate, source)?;
-                    RuntimeValue::Scalar(relational_filter(source, &mask)?)
-                }
-                RelationalOperator::Rename { input, columns } => {
-                    let mut source = relational_object(relational_scalar(&values, input.index())?)?;
-                    for rename in columns.iter() {
-                        if let Some(value) = source.remove(rename.from.as_ref()) {
-                            source.insert(rename.to.clone(), value);
-                        }
-                    }
-                    RuntimeValue::Scalar(crate::node_system::protocol::Value::Object(source))
-                }
-                RelationalOperator::Limit { input, rows } => {
-                    let source = relational_object(relational_scalar(&values, input.index())?)?;
-                    let limited = source
-                        .into_iter()
-                        .map(|(name, value)| {
-                            let value = match value {
-                                crate::node_system::protocol::Value::List(mut values) => {
-                                    values.truncate(*rows as usize);
-                                    crate::node_system::protocol::Value::List(values)
-                                }
-                                value => value,
-                            };
-                            (name, value)
-                        })
-                        .collect();
-                    RuntimeValue::Scalar(crate::node_system::protocol::Value::Object(limited))
-                }
-                RelationalOperator::Union { inputs, all: _ } => {
-                    let mut combined =
-                        BTreeMap::<Box<str>, Vec<crate::node_system::protocol::Value>>::new();
-                    for input in inputs.iter() {
-                        for (name, value) in
-                            relational_object(relational_scalar(&values, input.index())?)?
-                        {
-                            let crate::node_system::protocol::Value::List(column) = value else {
-                                return Err(crate::node_system::runtime::RelationalError::new(
-                                    "union expects dataframe columns",
-                                ));
-                            };
-                            combined.entry(name).or_default().extend(column);
-                        }
-                    }
-                    RuntimeValue::Scalar(crate::node_system::protocol::Value::Object(
-                        combined
-                            .into_iter()
-                            .map(|(name, values)| {
-                                (name, crate::node_system::protocol::Value::List(values))
-                            })
-                            .collect(),
-                    ))
-                }
-            };
-            values.push(value);
-        }
-        let outputs = plan
-            .roots
-            .iter()
-            .map(|root| values[root.index()].clone())
-            .collect();
-        Ok(crate::node_system::runtime::RelationalExecution {
-            outputs,
-            fragment_outputs: BTreeMap::new(),
-        })
-    }
-}
-
-fn relational_scalar(
-    values: &[crate::node_system::runtime::RuntimeValue],
-    index: usize,
-) -> Result<&crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    match values.get(index) {
-        Some(crate::node_system::runtime::RuntimeValue::Scalar(value)) => Ok(value),
-        _ => Err(crate::node_system::runtime::RelationalError::new(
-            "relational operator input is not materialized",
-        )),
-    }
-}
-
-fn relational_object(
-    value: &crate::node_system::protocol::Value,
-) -> Result<
-    BTreeMap<Box<str>, crate::node_system::protocol::Value>,
-    crate::node_system::runtime::RelationalError,
-> {
-    match value {
-        crate::node_system::protocol::Value::Object(value) => Ok(value.clone()),
-        _ => Err(crate::node_system::runtime::RelationalError::new(
-            "relational value is not a dataframe",
-        )),
-    }
-}
-
-fn relational_expression(
-    expression: &crate::node_system::plan::RelationalExpression,
-    dataframe: &crate::node_system::protocol::Value,
-) -> Result<crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    use crate::node_system::plan::{RelationalExpression as Expr, RelationalLiteral as Literal};
-    use crate::node_system::protocol::Value;
-    match expression {
-        Expr::Column(name) => relational_object(dataframe)?
-            .remove(name.as_ref())
-            .ok_or_else(|| {
-                crate::node_system::runtime::RelationalError::new(format!(
-                    "column '{name}' was not found"
-                ))
-            }),
-        Expr::Literal(value) => Ok(match value {
-            Literal::Null => Value::Null,
-            Literal::Boolean(value) => Value::Bool(*value),
-            Literal::Integer(value) => Value::Integer(*value),
-            Literal::String(value) => Value::String(value.clone()),
-        }),
-        Expr::Equal(left, right) => relational_compare(left, right, dataframe, |a, b| a == b),
-        Expr::NotEqual(left, right) => relational_compare(left, right, dataframe, |a, b| a != b),
-        Expr::LessThan(left, right) => {
-            relational_numeric_compare(left, right, dataframe, |a, b| a < b)
-        }
-        Expr::LessThanOrEqual(left, right) => {
-            relational_numeric_compare(left, right, dataframe, |a, b| a <= b)
-        }
-        Expr::GreaterThan(left, right) => {
-            relational_numeric_compare(left, right, dataframe, |a, b| a > b)
-        }
-        Expr::GreaterThanOrEqual(left, right) => {
-            relational_numeric_compare(left, right, dataframe, |a, b| a >= b)
-        }
-        Expr::And(expressions) | Expr::Or(expressions) => {
-            let is_and = matches!(expression, Expr::And(_));
-            let mut masks = expressions
-                .iter()
-                .map(|expression| relational_expression(expression, dataframe));
-            let first = masks.next().transpose()?.unwrap_or(Value::Bool(is_and));
-            masks.try_fold(first, |left, right| {
-                relational_bool_combine(&left, &right?, is_and)
-            })
-        }
-        Expr::Not(expression) => match relational_expression(expression, dataframe)? {
-            Value::Bool(value) => Ok(Value::Bool(!value)),
-            Value::List(values) => Ok(Value::List(
-                values
-                    .into_iter()
-                    .map(|value| match value {
-                        Value::Bool(value) => Value::Bool(!value),
-                        _ => Value::Bool(false),
-                    })
-                    .collect(),
-            )),
-            _ => Err(crate::node_system::runtime::RelationalError::new(
-                "not expects boolean values",
-            )),
-        },
-        Expr::IsNull(expression) => match relational_expression(expression, dataframe)? {
-            Value::List(values) => Ok(Value::List(
-                values
-                    .into_iter()
-                    .map(|value| Value::Bool(matches!(value, Value::Null)))
-                    .collect(),
-            )),
-            value => Ok(Value::Bool(matches!(value, Value::Null))),
-        },
-    }
-}
-
-fn relational_expand(
-    value: crate::node_system::protocol::Value,
-    len: usize,
-) -> Vec<crate::node_system::protocol::Value> {
-    match value {
-        crate::node_system::protocol::Value::List(values) => values,
-        value => vec![value; len],
-    }
-}
-
-fn relational_compare(
-    left: &crate::node_system::plan::RelationalExpression,
-    right: &crate::node_system::plan::RelationalExpression,
-    dataframe: &crate::node_system::protocol::Value,
-    compare: impl Fn(&crate::node_system::protocol::Value, &crate::node_system::protocol::Value) -> bool,
-) -> Result<crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    let left = relational_expression(left, dataframe)?;
-    let right = relational_expression(right, dataframe)?;
-    let len = match (&left, &right) {
-        (crate::node_system::protocol::Value::List(values), _)
-        | (_, crate::node_system::protocol::Value::List(values)) => values.len(),
-        _ => 1,
-    };
-    Ok(crate::node_system::protocol::Value::List(
-        relational_expand(left, len)
-            .iter()
-            .zip(relational_expand(right, len).iter())
-            .map(|(left, right)| crate::node_system::protocol::Value::Bool(compare(left, right)))
-            .collect(),
-    ))
-}
-
-fn relational_number(value: &crate::node_system::protocol::Value) -> Option<f64> {
-    match value {
-        crate::node_system::protocol::Value::Integer(value) => Some(*value as f64),
-        crate::node_system::protocol::Value::Unsigned(value) => Some(*value as f64),
-        crate::node_system::protocol::Value::Decimal(value) => value.as_str().parse().ok(),
-        _ => None,
-    }
-}
-
-fn relational_numeric_compare(
-    left: &crate::node_system::plan::RelationalExpression,
-    right: &crate::node_system::plan::RelationalExpression,
-    dataframe: &crate::node_system::protocol::Value,
-    compare: impl Fn(f64, f64) -> bool,
-) -> Result<crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    relational_compare(left, right, dataframe, |left, right| {
-        relational_number(left)
-            .zip(relational_number(right))
-            .is_some_and(|(left, right)| compare(left, right))
-    })
-}
-
-fn relational_bool_combine(
-    left: &crate::node_system::protocol::Value,
-    right: &crate::node_system::protocol::Value,
-    and: bool,
-) -> Result<crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    let values = |value: &crate::node_system::protocol::Value| match value {
-        crate::node_system::protocol::Value::List(values) => values.clone(),
-        value => vec![value.clone()],
-    };
-    let left = values(left);
-    let right = values(right);
-    let len = left.len().max(right.len());
-    Ok(crate::node_system::protocol::Value::List(
-        (0..len)
-            .map(|index| {
-                let left = matches!(
-                    left.get(index % left.len()),
-                    Some(crate::node_system::protocol::Value::Bool(true))
-                );
-                let right = matches!(
-                    right.get(index % right.len()),
-                    Some(crate::node_system::protocol::Value::Bool(true))
-                );
-                crate::node_system::protocol::Value::Bool(if and {
-                    left && right
-                } else {
-                    left || right
-                })
-            })
-            .collect(),
-    ))
-}
-
-fn relational_filter(
-    dataframe: &crate::node_system::protocol::Value,
-    mask: &crate::node_system::protocol::Value,
-) -> Result<crate::node_system::protocol::Value, crate::node_system::runtime::RelationalError> {
-    let crate::node_system::protocol::Value::List(mask) = mask else {
-        return Err(crate::node_system::runtime::RelationalError::new(
-            "filter predicate is not a boolean series",
-        ));
-    };
-    Ok(crate::node_system::protocol::Value::Object(
-        relational_object(dataframe)?
-            .into_iter()
-            .map(|(name, value)| {
-                let values = match value {
-                    crate::node_system::protocol::Value::List(values) => values,
-                    value => vec![value],
-                };
-                let filtered = values
-                    .into_iter()
-                    .zip(mask)
-                    .filter_map(|(value, keep)| {
-                        matches!(keep, crate::node_system::protocol::Value::Bool(true))
-                            .then_some(value)
-                    })
-                    .collect();
-                (name, crate::node_system::protocol::Value::List(filtered))
-            })
-            .collect(),
-    ))
 }
 
 pub(super) struct ProductionPlotSink;
@@ -5573,13 +5665,45 @@ pub(super) struct ProductionResourceSnapshots {
     pub(super) runtime: crate::node_system::runtime::ProjectResourceSnapshot,
 }
 
-fn compile_resources_from_projection_snapshot(
+struct ExecutionSnapshot {
+    document: crate::node_system::document::GraphDocument,
+    function_documents: Vec<(
+        GraphResourcePath,
+        crate::node_system::document::GraphDocument,
+    )>,
+    data: ProjectData,
+    database_instances: std::collections::HashMap<String, crate::database::DatabaseInstance>,
+    variable_revisions: std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::node_system::document::ResourceRevision,
+    >,
+    project_root: Option<NormalizedProjectRoot>,
+    database_schemas:
+        BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
+    registry: Arc<crate::node_system::registry::NodeRegistry>,
+    kernels: Arc<crate::node_system::runtime::KernelRegistry>,
+    functions: Arc<crate::node_system::runtime::FunctionPlanStore>,
+    results: crate::node_system::runtime::ResultStore,
+    runs: Arc<crate::node_system::runtime::ProjectRunRegistry>,
+    session_id: crate::node_system::analysis::ProjectSessionId,
+}
+
+pub(super) fn compile_resources_from_projection_snapshot(
     source: &ProjectionSourceSnapshot,
+) -> Result<CompileResourceSnapshot, String> {
+    compile_resources_from_data(&source.data, source.environment.database_schemas.clone())
+}
+
+pub(super) fn compile_resources_from_data(
+    data: &ProjectData,
+    database_schemas: BTreeMap<
+        crate::node_system::plan::ResourceId,
+        Vec<crate::schema::ColumnInfoDTO>,
+    >,
 ) -> Result<CompileResourceSnapshot, String> {
     use crate::node_system::analysis::{ResourceKey as AnalysisResourceKey, ResourceVersion};
 
-    let functions = source
-        .data
+    let functions = data
         .graphs
         .iter()
         .filter_map(|(path, graph)| {
@@ -5593,13 +5717,21 @@ fn compile_resources_from_projection_snapshot(
         .collect::<BTreeMap<_, _>>();
     let mut versions = crate::node_system::analysis::ResourceVersionSet::new();
     for (path, function) in &functions {
-        let version = serde_json::to_string(function).map_err(|error| error.to_string())?;
+        let graph_path =
+            GraphResourcePath::new(path.0.as_ref()).map_err(|error| error.to_string())?;
+        let graph_document = &data
+            .graphs
+            .get(&graph_path)
+            .ok_or_else(|| format!("function '{}' graph is not loaded", graph_path))?
+            .document;
+        let version = serde_json::to_string(&(function, graph_document))
+            .map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
             ResourceVersion::new(version),
         );
     }
-    for (id, variable) in &source.data.variables {
+    for (id, variable) in &data.variables {
         let key = format!("variables/{id}");
         let version = serde_json::to_string(variable).map_err(|error| error.to_string())?;
         versions.insert(
@@ -5607,16 +5739,22 @@ fn compile_resources_from_projection_snapshot(
             ResourceVersion::new(version),
         );
     }
-    for (id, declaration) in &source.data.databases {
+    for (id, declaration) in &data.databases {
         let key = format!("databases/{id}");
-        let version = serde_json::to_string(declaration).map_err(|error| error.to_string())?;
+        let resource = crate::node_system::plan::ResourceId::new(key.as_str())
+            .map_err(|error| error.to_string())?;
+        let schema = database_schemas
+            .get(&resource)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let version =
+            serde_json::to_string(&(declaration, schema)).map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(key.as_str()),
             ResourceVersion::new(version),
         );
     }
 
-    let database_schemas = source.environment.database_schemas.clone();
     Ok(CompileResourceSnapshot {
         versions,
         functions,
@@ -5624,6 +5762,60 @@ fn compile_resources_from_projection_snapshot(
     })
 }
 
+fn snapshot_execution_resources(
+    snapshot: &ExecutionSnapshot,
+    compile: CompileResourceSnapshot,
+) -> Result<ProductionResourceSnapshots, String> {
+    use crate::node_system::plan::ResourceId;
+
+    let mut runtime = crate::node_system::runtime::ProjectResourceSnapshot::new(
+        snapshot.session_id.clone(),
+        compile.versions.clone(),
+    )
+    .with_plot_sink(Arc::new(ProductionPlotSink));
+    for (id, variable) in &snapshot.data.variables {
+        runtime = runtime.with_variable_revision(
+            ResourceId::new(format!("variables/{id}")).map_err(|error| error.to_string())?,
+            Arc::new(variable.clone()),
+            snapshot
+                .variable_revisions
+                .get(id)
+                .copied()
+                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
+        );
+    }
+    for (id, instance) in &snapshot.database_instances {
+        if !snapshot.data.databases.contains_key(id) {
+            continue;
+        }
+        let resource =
+            ResourceId::new(format!("databases/{id}")).map_err(|error| error.to_string())?;
+        match &instance.state {
+            DatabaseState::Loaded { dataframe, .. } => {
+                runtime = runtime.with_database(resource, Arc::clone(dataframe));
+            }
+            DatabaseState::DuckDb { .. } => {
+                let crate::database::DatabaseEngine::DuckDb { path, table } = &instance.decl.engine
+                else {
+                    return Err(format!("database '{id}' runtime/declaration mismatch"));
+                };
+                let root = snapshot
+                    .project_root
+                    .as_ref()
+                    .ok_or_else(|| format!("database '{id}' requires an active project path"))?;
+                runtime = runtime.with_duckdb_database(
+                    resource,
+                    root.as_path().join(path).to_string_lossy().into_owned(),
+                    table.clone(),
+                );
+            }
+            DatabaseState::Failed { .. } => {}
+        }
+    }
+    Ok(ProductionResourceSnapshots { compile, runtime })
+}
+
+#[cfg(test)]
 pub(super) fn snapshot_project_resources(
     state: &ProjectState,
     variables: std::collections::HashMap<
@@ -5644,11 +5836,9 @@ pub(super) fn snapshot_project_resources(
                 DatabaseState::Loaded { dataframe, .. } => Some((
                     id.clone(),
                     Arc::clone(dataframe),
-                    dataframe
-                        .get_column_names()
-                        .into_iter()
-                        .map(|name| Box::<str>::from(name.as_str()))
-                        .collect::<Vec<_>>(),
+                    crate::application::database_schema::column_info_from_schema(
+                        dataframe.schema().as_ref(),
+                    ),
                 )),
                 _ => None,
             })
@@ -5733,11 +5923,7 @@ pub(super) fn snapshot_project_resources(
             ResourceId::new(format!("databases/{id}")).map_err(|error| error.to_string())?;
         database_schemas.insert(
             resource.clone(),
-            metadata
-                .columns
-                .into_iter()
-                .map(|column| column.name.into())
-                .collect(),
+            crate::application::database_schema::column_info_from_duckdb(&metadata.columns),
         );
         runtime =
             runtime.with_duckdb_database(resource, absolute.to_string_lossy().into_owned(), table);
@@ -5868,7 +6054,10 @@ fn replace_project_documents(
 }
 
 fn publish_function_plans(
-    state: &ProjectState,
+    functions: &[(
+        GraphResourcePath,
+        crate::node_system::document::GraphDocument,
+    )],
     registry: &crate::node_system::registry::NodeRegistry,
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
@@ -5876,15 +6065,6 @@ fn publish_function_plans(
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
 ) -> Result<crate::node_system::runtime::FunctionPlanGeneration, String> {
-    let functions = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .iter()
-        .filter(|(_, graph)| graph.function.is_some())
-        .map(|(path, graph)| (path.clone(), graph.document.clone()))
-        .collect::<Vec<_>>();
     let compiler = GraphCompiler::with_resolvers(
         registry,
         resources,
@@ -5895,7 +6075,7 @@ fn publish_function_plans(
     let mut entries = Vec::with_capacity(functions.len());
     for (path, document) in functions {
         let document_path = crate::node_system::document::GraphResourcePath(path.as_str().into());
-        let snapshot = compiler.snapshot(document_path.clone(), &document);
+        let snapshot = compiler.snapshot(document_path.clone(), document);
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
             .map_err(|error| error.to_string())?;

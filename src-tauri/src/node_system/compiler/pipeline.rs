@@ -24,7 +24,7 @@ use crate::node_system::document::{
     PortAddress, PortRef,
 };
 use crate::node_system::plan::{
-    CompiledParameterHandle, CompiledResourceRequirement,
+    CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
     EffectDependency as PlannedEffectDependency, ExecutionPlan, KernelHandle, OperationIndex,
     PlanResult, PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation, PlannedOutput,
     RelationalBackendId, RelationalFragmentId, RelationalSubplanIndex, ResourceAccess, ResourceId,
@@ -52,7 +52,7 @@ pub type CompilerAnalysis = AnalysisSnapshot<
     crate::node_system::protocol::SchemaExpr,
 >;
 
-type SemanticGraph = ValidatedSemanticGraph<
+pub type CompilerSemanticGraph = ValidatedSemanticGraph<
     GraphRevision,
     NodeId,
     PortAddress,
@@ -154,9 +154,16 @@ pub struct CompilationSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublishedCompileAnalysis {
+    pub analysis: CompilerAnalysis,
+    pub semantic: Option<CompilerSemanticGraph>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompileResult {
     pub analysis: CompilerAnalysis,
     pub interface_projection: ValidatedInterfaceProjection,
+    pub semantic: Option<CompilerSemanticGraph>,
     pub plan: Option<ExecutionPlan>,
 }
 
@@ -170,6 +177,13 @@ pub struct GraphCompiler<'a, R, S> {
 }
 
 static NEXT_ADHOC_COMPILE_ID: AtomicU64 = AtomicU64::new(1);
+#[cfg(test)]
+static COMPILE_SNAPSHOT_INVOCATIONS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+pub(crate) fn compile_snapshot_invocations() -> u64 {
+    COMPILE_SNAPSHOT_INVOCATIONS.load(Ordering::Relaxed)
+}
 
 impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
     pub fn new(registry: &'a R, resources: &'a S) -> Self {
@@ -290,6 +304,8 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         snapshot: &CompilationSnapshot,
         cancellation: &CompileCancellationToken,
     ) -> Result<CompileResult, CompileCancelled> {
+        #[cfg(test)]
+        COMPILE_SNAPSHOT_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
         let correlation = CorrelationContext::compile(&snapshot.provenance);
         self.trace.record(SpanEvent::new(
             SpanKind::Analysis,
@@ -342,6 +358,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             return Ok(CompileResult {
                 analysis,
                 interface_projection,
+                semantic: None,
                 plan: None,
             });
         }
@@ -366,6 +383,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 return Ok(CompileResult {
                     analysis,
                     interface_projection,
+                    semantic: None,
                     plan: None,
                 });
             }
@@ -380,7 +398,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             SpanStatus::Started,
             correlation.clone(),
         ));
-        let plan = match lower_graph(
+        let (semantic, plan) = match lower_graph(
             self.registry,
             &semantic,
             snapshot.provenance.clone(),
@@ -392,7 +410,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Succeeded,
                     correlation.clone(),
                 ));
-                Some(plan)
+                (Some(semantic), Some(plan))
             }
             Err(LowerGraphFailure::Cancelled(error)) => {
                 self.trace.record(SpanEvent::new(
@@ -409,12 +427,13 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Failed,
                     correlation.clone(),
                 ));
-                None
+                (None, None)
             }
         };
         Ok(CompileResult {
             analysis,
             interface_projection,
+            semantic,
             plan,
         })
     }
@@ -1076,7 +1095,7 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn semantic_graph(&self) -> SemanticGraph {
+    fn semantic_graph(&self) -> CompilerSemanticGraph {
         let nodes = self
             .nodes
             .iter()
@@ -1162,10 +1181,18 @@ impl From<CompilerDiagnostic> for LowerGraphFailure {
 struct PendingOperation {
     node_id: NodeId,
     node_type_id: NodeTypeId,
+    has_control_or_effect_ports: bool,
     kernel: PendingKernel,
+    input_ports: Box<[PortAddress]>,
     inputs: Box<[PlannedInput]>,
+    output_ports: Box<[PortAddress]>,
     outputs: Box<[PlannedOutput]>,
     parameters: CompiledParameterHandle,
+}
+
+enum PendingOperationGroup {
+    Native(PendingOperation),
+    Relational(RelationalSubplanIndex),
 }
 
 enum PendingKernel {
@@ -1181,7 +1208,7 @@ struct PendingRelationalFragment {
 
 fn lower_graph<R: CompilerRegistry>(
     registry: &R,
-    graph: &SemanticGraph,
+    graph: &CompilerSemanticGraph,
     provenance: CompileProvenance,
     cancellation: &CompileCancellationToken,
 ) -> Result<ExecutionPlan, LowerGraphFailure> {
@@ -1450,8 +1477,24 @@ fn lower_graph<R: CompilerRegistry>(
         pending_operations.push(PendingOperation {
             node_id: node.node_id,
             node_type_id: node.node_type_id.clone(),
+            has_control_or_effect_ports: resolved
+                .protocol
+                .interface
+                .ports
+                .iter()
+                .any(|port| port.kind != PortKind::Data),
             kernel,
+            input_ports: inputs
+                .into_iter()
+                .map(|(address, _)| address)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             inputs: planned_inputs.into_boxed_slice(),
+            output_ports: outputs
+                .into_iter()
+                .map(|(address, _)| address)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             outputs: planned_outputs.into_boxed_slice(),
             parameters: lowered.parameters,
         });
@@ -1571,7 +1614,7 @@ fn lower_graph<R: CompilerRegistry>(
         }
         relational_fragments.push(pending.fragment.clone());
     }
-    let (relational_subplans, subplan_by_fragment) = if let Some(backend) = relational_backend {
+    let (mut relational_subplans, subplan_by_fragment) = if let Some(backend) = relational_backend {
         let planning = RelationalPlanner::new(backend)
             .plan(&relational_fragments, &relational_connections)
             .map_err(|error| {
@@ -1602,31 +1645,212 @@ fn lower_graph<R: CompilerRegistry>(
         )
     };
 
-    let operations = pending_operations
-        .into_iter()
-        .map(|pending| {
-            let kernel = match pending.kernel {
-                PendingKernel::Native(handle) => PlannedKernel::Native(handle),
-                PendingKernel::Relational(fragment) => PlannedKernel::Relational(
-                    subplan_by_fragment.get(&fragment).copied().ok_or_else(|| {
-                        diagnostic(
-                            "compiler.relational.fragment_unplanned",
-                            DiagnosticLocation::Node(pending.node_id),
-                            fragment.as_str().to_string(),
-                        )
-                    })?,
-                ),
-            };
-            Ok(PlannedOperation {
-                source_node_id: pending.node_id,
-                source_node_type_id: pending.node_type_id,
-                kernel,
-                inputs: pending.inputs,
-                outputs: pending.outputs,
-                params: pending.parameters,
-            })
+    let subplan_by_node = relational_by_node
+        .iter()
+        .map(|(node_id, pending)| {
+            subplan_by_fragment
+                .get(&pending.fragment.id)
+                .copied()
+                .map(|subplan| (*node_id, subplan))
+                .ok_or_else(|| {
+                    diagnostic(
+                        "compiler.relational.fragment_unplanned",
+                        DiagnosticLocation::Node(*node_id),
+                        pending.fragment.id.as_str().to_string(),
+                    )
+                })
         })
-        .collect::<Result<Vec<_>, CompilerDiagnostic>>()?;
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    let mut internal_inputs = BTreeSet::new();
+    let mut internal_outputs = BTreeSet::new();
+    let mut external_outputs = BTreeSet::new();
+    let mut internal_value_dependencies = BTreeSet::new();
+    for dependency in graph.dependencies.iter() {
+        let SemanticDependency::Value(edge) = dependency else {
+            continue;
+        };
+        let producer = subplan_by_node.get(&edge.source.node_id);
+        let consumer = subplan_by_node.get(&edge.target.node_id);
+        if producer.is_some() && producer == consumer {
+            internal_inputs.insert(edge.target.clone());
+            internal_outputs.insert(edge.source.clone());
+            internal_value_dependencies
+                .insert((port_values[&edge.source], port_values[&edge.target]));
+        } else if producer.is_some() {
+            external_outputs.insert(edge.source.clone());
+        }
+    }
+    value_dependencies.retain(|dependency| {
+        !internal_value_dependencies.contains(&(dependency.source, dependency.destination))
+    });
+
+    let result_values = results
+        .values()
+        .map(|result| result.value)
+        .collect::<BTreeSet<_>>();
+    let mut groups = BTreeMap::<RelationalSubplanIndex, Vec<PendingOperation>>::new();
+    let mut group_order = Vec::new();
+    for pending in pending_operations {
+        match &pending.kernel {
+            PendingKernel::Native(_) => group_order.push(PendingOperationGroup::Native(pending)),
+            PendingKernel::Relational(fragment) => {
+                let subplan = subplan_by_fragment.get(fragment).copied().ok_or_else(|| {
+                    diagnostic(
+                        "compiler.relational.fragment_unplanned",
+                        DiagnosticLocation::Node(pending.node_id),
+                        fragment.as_str().to_string(),
+                    )
+                })?;
+                if !groups.contains_key(&subplan) {
+                    group_order.push(PendingOperationGroup::Relational(subplan));
+                }
+                groups.entry(subplan).or_default().push(pending);
+            }
+        }
+    }
+
+    let mut operations = Vec::with_capacity(group_order.len());
+    operation_by_node.clear();
+    for group in group_order {
+        let operation_index = OperationIndex::new(operations.len() as u32);
+        match group {
+            PendingOperationGroup::Native(pending) => {
+                let PendingKernel::Native(handle) = pending.kernel else {
+                    unreachable!("native operation group")
+                };
+                operation_by_node.insert(pending.node_id, operation_index);
+                operations.push(PlannedOperation {
+                    source_node_id: pending.node_id,
+                    source_node_type_id: pending.node_type_id,
+                    kernel: PlannedKernel::Native(handle),
+                    inputs: pending.inputs,
+                    outputs: pending.outputs,
+                    params: pending.parameters,
+                });
+            }
+            PendingOperationGroup::Relational(subplan_index) => {
+                let mut members = groups
+                    .remove(&subplan_index)
+                    .expect("relational group was registered");
+                let fragment_order = &relational_subplans[subplan_index.index()]
+                    .compiled_plan
+                    .fragment_order;
+                members.sort_by_key(|pending| match &pending.kernel {
+                    PendingKernel::Relational(fragment) => fragment_order
+                        .iter()
+                        .position(|candidate| candidate == fragment)
+                        .expect("planned fragment belongs to its subplan"),
+                    PendingKernel::Native(_) => unreachable!("relational operation group"),
+                });
+                if members.len() > 1
+                    && members
+                        .iter()
+                        .any(|member| member.has_control_or_effect_ports)
+                {
+                    return Err(diagnostic(
+                        "compiler.relational.control_region_merge",
+                        DiagnosticLocation::Graph,
+                        "a relational island cannot merge multiple nodes with control or effect ports"
+                            .to_string(),
+                    )
+                    .into());
+                }
+                let representative = members
+                    .first()
+                    .expect("relational subplan has at least one fragment");
+                let source_node_id = representative.node_id;
+                let source_node_type_id = representative.node_type_id.clone();
+                let params = representative.parameters.clone();
+                let mut inputs = Vec::new();
+                let mut outputs_by_fragment = BTreeMap::new();
+                for member in &members {
+                    operation_by_node.insert(member.node_id, operation_index);
+                    for (port, input) in member.input_ports.iter().zip(member.inputs.iter()) {
+                        if !internal_inputs.contains(port) {
+                            inputs.push(input.clone());
+                        }
+                    }
+                    let PendingKernel::Relational(fragment) = &member.kernel else {
+                        unreachable!("relational operation group")
+                    };
+                    let outputs = member
+                        .output_ports
+                        .iter()
+                        .zip(member.outputs.iter())
+                        .filter(|(port, output)| {
+                            !internal_outputs.contains(*port)
+                                || external_outputs.contains(*port)
+                                || result_values.contains(&output.value)
+                        })
+                        .map(|(_, output)| output.clone())
+                        .collect::<Vec<_>>();
+                    if !outputs.is_empty() {
+                        outputs_by_fragment.insert(fragment.clone(), outputs);
+                    }
+                }
+                let fragment_roots = relational_subplans[subplan_index.index()]
+                    .compiled_plan
+                    .fragment_roots
+                    .iter()
+                    .map(|root| (root.fragment.clone(), root.operator))
+                    .collect::<BTreeMap<_, _>>();
+                let mut outputs = Vec::new();
+                let mut backend_roots = Vec::new();
+                for fragment in fragment_order {
+                    if let Some(fragment_outputs) = outputs_by_fragment.remove(fragment) {
+                        let operator = fragment_roots.get(fragment).copied().ok_or_else(|| {
+                            diagnostic(
+                                "compiler.relational.output_binding",
+                                DiagnosticLocation::Node(source_node_id),
+                                format!("missing compiled root for fragment {}", fragment.as_str()),
+                            )
+                        })?;
+                        for output in fragment_outputs {
+                            outputs.push(output);
+                            backend_roots.push(operator);
+                        }
+                    }
+                }
+                relational_subplans[subplan_index.index()]
+                    .compiled_plan
+                    .roots = backend_roots.into_boxed_slice();
+                operations.push(PlannedOperation {
+                    source_node_id,
+                    source_node_type_id,
+                    kernel: PlannedKernel::Relational(subplan_index),
+                    inputs: inputs.into_boxed_slice(),
+                    outputs: outputs.into_boxed_slice(),
+                    params,
+                });
+            }
+        }
+    }
+
+    effect_dependencies.clear();
+    for dependency in graph.dependencies.iter() {
+        let SemanticDependency::Effect(edge) = dependency else {
+            continue;
+        };
+        let Some(&before) = operation_by_node.get(&edge.predecessor) else {
+            return Err(diagnostic(
+                "compiler.plan.effect_producer_missing",
+                DiagnosticLocation::Node(edge.predecessor),
+                edge.effect_key.to_string(),
+            )
+            .into());
+        };
+        let Some(&after) = operation_by_node.get(&edge.successor) else {
+            return Err(diagnostic(
+                "compiler.plan.effect_consumer_missing",
+                DiagnosticLocation::Node(edge.successor),
+                edge.effect_key.to_string(),
+            )
+            .into());
+        };
+        effect_dependencies.push(PlannedEffectDependency { before, after });
+    }
+    effect_dependencies.sort_by_key(|dependency| (dependency.before, dependency.after));
+    effect_dependencies.dedup();
 
     cancellation.checkpoint()?;
     let control_nodes = graph
@@ -1674,7 +1898,7 @@ fn lower_graph<R: CompilerRegistry>(
         })
         .collect();
     cancellation.checkpoint()?;
-    let root_region = build_control_region(control_nodes, control_edges).map_err(|issue| {
+    let mut root_region = build_control_region(control_nodes, control_edges).map_err(|issue| {
         diagnostic(
             issue.code,
             issue
@@ -1684,6 +1908,7 @@ fn lower_graph<R: CompilerRegistry>(
             issue.detail,
         )
     })?;
+    deduplicate_region_operations(&mut root_region);
     collect_control_value_sources(&root_region, &mut value_sources);
     debug_assert_eq!(provenance.basis, graph.basis);
     let plan = ExecutionPlan {
@@ -1713,6 +1938,34 @@ fn lower_graph<R: CompilerRegistry>(
         )
     })?;
     Ok(plan)
+}
+
+fn deduplicate_region_operations(region: &mut StructuredControlRegion) {
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            let mut seen = BTreeSet::new();
+            let mut deduplicated = Vec::with_capacity(steps.len());
+            for mut step in std::mem::take(steps).into_vec() {
+                match &mut step {
+                    ControlStep::Operation(operation) if !seen.insert(*operation) => continue,
+                    ControlStep::Region(child) => deduplicate_region_operations(child),
+                    ControlStep::Operation(_) => {}
+                }
+                deduplicated.push(step);
+            }
+            *steps = deduplicated.into_boxed_slice();
+        }
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            deduplicate_region_operations(then_region);
+            deduplicate_region_operations(else_region);
+        }
+        StructuredControlRegion::Loop { body, .. } => deduplicate_region_operations(body),
+        StructuredControlRegion::Call { .. } => {}
+    }
 }
 
 fn collect_control_value_sources(

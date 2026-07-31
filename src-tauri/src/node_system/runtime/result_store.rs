@@ -47,6 +47,14 @@ pub struct ResultSourcePage {
     pub values: Box<[Value]>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PendingResultSource {
+    correlation: CorrelationContext,
+    basis: CompilationBasis<GraphRevision>,
+    name: Box<str>,
+    snapshot: ArtifactSnapshot,
+}
+
 #[derive(Clone)]
 struct ResultSourceEntry {
     run_id: RunId,
@@ -98,6 +106,127 @@ impl ResultStore {
         &self.artifacts
     }
 
+    fn prepare_snapshot(
+        &self,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        name: impl Into<Box<str>>,
+        snapshot: ArtifactSnapshot,
+    ) -> PendingResultSource {
+        PendingResultSource {
+            correlation,
+            basis,
+            name: name.into(),
+            snapshot,
+        }
+    }
+
+    pub(crate) fn prepare_runtime_value(
+        &self,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        name: impl Into<Box<str>>,
+        value: &RuntimeValue,
+    ) -> Option<PendingResultSource> {
+        let snapshot = match value {
+            RuntimeValue::Scalar(value) => ArtifactSnapshot::Value(value.clone()),
+            RuntimeValue::Artifact(artifact) => {
+                ArtifactSnapshot::Sequence(artifact.values().to_vec().into_boxed_slice())
+            }
+            RuntimeValue::Stream(_) => return None,
+        };
+        Some(self.prepare_snapshot(correlation, basis, name, snapshot))
+    }
+
+    pub(crate) fn commit_batch(
+        &self,
+        run_id: RunId,
+        pending: Vec<PendingResultSource>,
+    ) -> Vec<Option<ResultSourceDescriptor>> {
+        let prepared = pending
+            .into_iter()
+            .map(|pending| {
+                let PendingResultSource {
+                    correlation,
+                    basis,
+                    name,
+                    snapshot,
+                } = pending;
+                let artifact = self.artifacts.insert_retained_result_source(
+                    run_id,
+                    correlation.clone(),
+                    basis.clone(),
+                    snapshot,
+                );
+                (correlation, basis, name, artifact)
+            })
+            .collect::<Vec<_>>();
+        if prepared.is_empty() {
+            return Vec::new();
+        }
+
+        let (committed, evicted) = {
+            let mut registry = self.registry();
+            let first_id = self
+                .inner
+                .next_id
+                .fetch_add(prepared.len() as u64, Ordering::Relaxed)
+                + 1;
+            let descriptors = prepared
+                .into_iter()
+                .enumerate()
+                .map(
+                    |(offset, (correlation, basis, name, artifact))| ResultSourceDescriptor {
+                        source_id: ResultSourceId::new(first_id + offset as u64),
+                        artifact_id: artifact.artifact_id,
+                        name,
+                        kind: artifact.kind,
+                        total_count: artifact.total_count,
+                        correlation,
+                        basis,
+                    },
+                )
+                .collect::<Vec<_>>();
+            for descriptor in &descriptors {
+                registry.sources.insert(
+                    descriptor.source_id,
+                    ResultSourceEntry {
+                        run_id,
+                        descriptor: descriptor.clone(),
+                    },
+                );
+            }
+            let mut evicted = Vec::new();
+            while registry.sources.len() > self.inner.max_sources {
+                let source_id = *registry
+                    .sources
+                    .keys()
+                    .next()
+                    .expect("over-capacity registry is not empty");
+                evicted.push(
+                    registry
+                        .sources
+                        .remove(&source_id)
+                        .expect("oldest source must exist"),
+                );
+            }
+            let committed = descriptors
+                .into_iter()
+                .map(|descriptor| {
+                    registry
+                        .sources
+                        .contains_key(&descriptor.source_id)
+                        .then_some(descriptor)
+                })
+                .collect();
+            (committed, evicted)
+        };
+        for entry in evicted {
+            self.artifacts.release(entry.descriptor.artifact_id);
+        }
+        committed
+    }
+
     pub fn publish_snapshot(
         &self,
         run_id: RunId,
@@ -106,41 +235,11 @@ impl ResultStore {
         name: impl Into<Box<str>>,
         snapshot: ArtifactSnapshot,
     ) -> ResultSourceDescriptor {
-        let artifact = self
-            .artifacts
-            .insert(run_id, correlation.clone(), basis.clone(), snapshot);
-        let retained = self.artifacts.retain_result_source(artifact.artifact_id);
-        debug_assert!(retained, "newly inserted artifact must be retainable");
-        let source_id = ResultSourceId::new(self.inner.next_id.fetch_add(1, Ordering::Relaxed) + 1);
-        let descriptor = ResultSourceDescriptor {
-            source_id,
-            artifact_id: artifact.artifact_id,
-            name: name.into(),
-            kind: artifact.kind,
-            total_count: artifact.total_count,
-            correlation,
-            basis,
-        };
-        let evicted = {
-            let mut registry = self.registry();
-            registry.sources.insert(
-                source_id,
-                ResultSourceEntry {
-                    run_id,
-                    descriptor: descriptor.clone(),
-                },
-            );
-            if registry.sources.len() > self.inner.max_sources {
-                let oldest = registry.sources.keys().next().copied();
-                oldest.and_then(|source_id| registry.sources.remove(&source_id))
-            } else {
-                None
-            }
-        };
-        if let Some(entry) = evicted {
-            self.artifacts.release(entry.descriptor.artifact_id);
-        }
-        descriptor
+        let pending = self.prepare_snapshot(correlation, basis, name, snapshot);
+        self.commit_batch(run_id, vec![pending])
+            .pop()
+            .flatten()
+            .expect("single result source commit must remain within capacity")
     }
 
     pub fn publish_runtime_value(
@@ -151,14 +250,8 @@ impl ResultStore {
         name: impl Into<Box<str>>,
         value: &RuntimeValue,
     ) -> Option<ResultSourceDescriptor> {
-        let snapshot = match value {
-            RuntimeValue::Scalar(value) => ArtifactSnapshot::Value(value.clone()),
-            RuntimeValue::Artifact(artifact) => {
-                ArtifactSnapshot::Sequence(artifact.values().to_vec().into_boxed_slice())
-            }
-            RuntimeValue::Stream(_) => return None,
-        };
-        Some(self.publish_snapshot(run_id, correlation, basis, name, snapshot))
+        let pending = self.prepare_runtime_value(correlation, basis, name, value)?;
+        self.commit_batch(run_id, vec![pending]).pop().flatten()
     }
 
     pub fn descriptor(&self, source_id: ResultSourceId) -> Option<ResultSourceDescriptor> {
@@ -291,6 +384,59 @@ mod tests {
         );
         assert!(store.release(descriptor.source_id));
         assert!(store.descriptor(descriptor.source_id).is_none());
+    }
+
+    #[test]
+    fn prepared_runtime_values_commit_as_an_ordered_atomic_batch() {
+        let store = ResultStore::with_capacity(2);
+        let old_run_id = RunId::new(13);
+        let (old_correlation, old_basis) = context(old_run_id);
+        let old = store.publish_snapshot(
+            old_run_id,
+            old_correlation,
+            old_basis,
+            "old",
+            ArtifactSnapshot::Value(Value::Integer(0)),
+        );
+        store.cleanup_run(old_run_id);
+
+        let run_id = RunId::new(14);
+        let (correlation, basis) = context(run_id);
+        let first = store
+            .prepare_runtime_value(
+                correlation.clone(),
+                basis.clone(),
+                "first",
+                &RuntimeValue::from(Value::Integer(1)),
+            )
+            .unwrap();
+        let second = store
+            .prepare_runtime_value(
+                correlation,
+                basis,
+                "second",
+                &RuntimeValue::from(Value::Integer(2)),
+            )
+            .unwrap();
+
+        assert_eq!(store.source_count(), 1);
+        assert_eq!(store.descriptor(old.source_id), Some(old.clone()));
+        let committed = store
+            .commit_batch(run_id, vec![first, second])
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            committed
+                .iter()
+                .map(|descriptor| (descriptor.source_id.get(), descriptor.name.as_ref()))
+                .collect::<Vec<_>>(),
+            vec![(2, "first"), (3, "second")]
+        );
+        assert!(store.descriptor(old.source_id).is_none());
+        assert!(store.artifacts().descriptor(old.artifact_id).is_none());
+        assert_eq!(store.source_count(), 2);
     }
 
     #[test]

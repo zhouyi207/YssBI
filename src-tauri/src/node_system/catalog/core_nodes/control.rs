@@ -24,7 +24,12 @@ fn register_do(fragment: &mut ProviderFragment) {
     add_port_messages(
         fragment,
         ID,
-        &[("enter", "Enter", "进入"), ("then", "Then", "然后")],
+        &[
+            ("enter", "Enter", "进入"),
+            ("effect_in", "Effect In", "副作用输入"),
+            ("then", "Then", "然后"),
+            ("effect_out", "Effect Out", "副作用输出"),
+        ],
     );
     fragment.nodes.push(leaf(
         protocol(
@@ -32,7 +37,9 @@ fn register_do(fragment: &mut ProviderFragment) {
             "control",
             vec![
                 control_port(ID, "enter", PortDirection::Input, PortInstances::Declared),
+                effect_port(ID, "effect_in", PortDirection::Input),
                 control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
+                effect_port(ID, "effect_out", PortDirection::Output),
             ],
             vec![],
             vec![],
@@ -104,8 +111,10 @@ fn register_sleep(fragment: &mut ProviderFragment) {
         ID,
         &[
             ("enter", "Enter", "进入"),
+            ("effect_in", "Effect In", "副作用输入"),
             ("duration", "Duration (seconds)", "时长（秒）"),
             ("then", "Then", "然后"),
+            ("effect_out", "Effect Out", "副作用输出"),
         ],
     );
     let mut duration = data_port(
@@ -127,8 +136,10 @@ fn register_sleep(fragment: &mut ProviderFragment) {
             "control",
             vec![
                 control_port(ID, "enter", PortDirection::Input, PortInstances::Declared),
+                effect_port(ID, "effect_in", PortDirection::Input),
                 duration,
                 control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
+                effect_port(ID, "effect_out", PortDirection::Output),
             ],
             vec![],
             vec![],
@@ -137,4 +148,28 @@ fn register_sleep(fragment: &mut ProviderFragment) {
         ),
         ID,
     ));
+}
+
+fn effect_port(node_id: &'static str, key: &'static str, direction: PortDirection) -> PortSpec {
+    PortSpec {
+        key: semantic(key, PortKey::new),
+        label_key: port_key(node_id, key),
+        direction,
+        kind: PortKind::Effect,
+        value_type: TypeExpr::Unknown,
+        instances: PortInstances::Declared,
+        connections: if direction == PortDirection::Input {
+            ConnectionsPerPort::Single
+        } else {
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            }
+        },
+        input_binding: None,
+        consumption: None,
+        production: None,
+        editor: PortEditorSpec::Default,
+        schema: None,
+    }
 }

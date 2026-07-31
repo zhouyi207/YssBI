@@ -61,10 +61,33 @@ fn branch_protocol() -> NodeProtocol {
                 TypeExpr::Concrete(sid("core.bool", TypeId::new)),
                 PortInstances::Declared,
             ),
+            data_port(
+                "then_source",
+                PortDirection::Input,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
+            data_port(
+                "else_source",
+                PortDirection::Input,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
             control_port("true", PortDirection::Output, PortInstances::Declared),
             control_port("false", PortDirection::Output, PortInstances::Declared),
+            data_port(
+                "result",
+                PortDirection::Output,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
         ],
         vec![],
+        vec![member_group(
+            &["then_source", "else_source", "result"],
+            0,
+            None,
+        )],
     )
 }
 
@@ -79,6 +102,7 @@ fn sequence_protocol() -> NodeProtocol {
                 PortInstances::UserCreated { min: 1, max: None },
             ),
         ],
+        vec![],
         vec![],
     )
 }
@@ -95,34 +119,49 @@ fn loop_protocol() -> NodeProtocol {
                 PortInstances::Declared,
             ),
             data_port(
-                "carried",
+                "initial_source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
-                PortInstances::UserCreated { min: 1, max: None },
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
+            data_port(
+                "next_source",
+                PortDirection::Input,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
+            data_port(
+                "body_input",
+                PortDirection::Output,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
+            ),
+            data_port(
+                "result",
+                PortDirection::Output,
+                TypeExpr::Unknown,
+                PortInstances::UserCreated { min: 0, max: None },
             ),
             control_port("body", PortDirection::Output, PortInstances::Declared),
             control_port("then", PortDirection::Output, PortInstances::Declared),
         ],
-        vec![
-            parameter(
-                "max_iterations",
-                TypeExpr::Concrete(sid("core.int64", TypeId::new)),
-                ParameterEditorSpec::Number,
-                vec![
-                    ParameterConstraint::Required,
-                    ParameterConstraint::IntegerRange {
-                        min: Some(1),
-                        max: None,
-                    },
-                ],
-            ),
-            parameter(
-                "carried",
-                TypeExpr::Unknown,
-                ParameterEditorSpec::Hidden,
-                vec![ParameterConstraint::Required],
-            ),
-        ],
+        vec![parameter(
+            "max_iterations",
+            TypeExpr::Concrete(sid("core.int64", TypeId::new)),
+            ParameterEditorSpec::Number,
+            vec![
+                ParameterConstraint::Required,
+                ParameterConstraint::IntegerRange {
+                    min: Some(1),
+                    max: None,
+                },
+            ],
+        )],
+        vec![member_group(
+            &["initial_source", "body_input", "next_source", "result"],
+            1,
+            None,
+        )],
     )
 }
 
@@ -130,6 +169,7 @@ fn protocol(
     id: &'static str,
     ports: Vec<PortSpec>,
     parameters: Vec<ParameterSpec>,
+    member_groups: Vec<PortMemberGroupSpec>,
 ) -> NodeProtocol {
     NodeProtocol {
         type_id: sid(id, NodeTypeId::new),
@@ -150,6 +190,7 @@ fn protocol(
             hidden: false,
         },
         interface: NodeInterfaceProtocol::new(ports, vec![], vec![])
+            .and_then(|interface| interface.with_member_groups(member_groups))
             .expect("built-in control interface"),
         parameters: ParameterSchema::new(parameters).expect("built-in control parameters"),
         execution: ExecutionSemantics {
@@ -212,6 +253,17 @@ fn port(
     }
 }
 
+fn member_group(templates: &[&'static str], min: u16, max: Option<u16>) -> PortMemberGroupSpec {
+    PortMemberGroupSpec {
+        templates: templates
+            .iter()
+            .map(|template| sid(*template, PortKey::new))
+            .collect(),
+        min,
+        max,
+    }
+}
+
 fn parameter(
     key: &'static str,
     value_type: TypeExpr,
@@ -236,7 +288,11 @@ fn parameter(
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
         ("ports.body.label", "Body", "循环体"),
-        ("ports.carried.label", "Carried Value", "循环携带值"),
+        ("ports.then_source.label", "Then Source", "真分支来源"),
+        ("ports.else_source.label", "Else Source", "假分支来源"),
+        ("ports.initial_source.label", "Initial Source", "初始来源"),
+        ("ports.next_source.label", "Next Source", "下一值来源"),
+        ("ports.body_input.label", "Body Input", "循环体输入"),
         (
             "parameters.max_iterations.title",
             "Maximum Iterations",
@@ -246,16 +302,6 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "parameters.max_iterations.description",
             "Positive safety limit for loop iterations.",
             "循环迭代次数的正整数安全上限。",
-        ),
-        (
-            "parameters.carried.title",
-            "Carried Bindings",
-            "循环携带绑定",
-        ),
-        (
-            "parameters.carried.description",
-            "Explicit bindings for loop-carried values.",
-            "循环携带值的显式绑定。",
         ),
     ] {
         out.push(("en-US", key, Text(en)));

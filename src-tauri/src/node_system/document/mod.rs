@@ -27,6 +27,7 @@ pub use materialization::{
     CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,
     CompilationResourceVersion, CompilationResourceVersions, MaterializationAuthorization,
 };
+pub(crate) use model::port_member_group_state;
 pub use model::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     EffectiveInputBinding, FunctionParameterId, GraphDocument, GraphResourcePath, InputState,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, SpanEvent, SpanKind,
-    SpanStatus, TraceSink,
+    CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
+    ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink,
 };
 use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::plan::*;
@@ -93,6 +93,34 @@ impl TraceSink for RecordingTrace {
     fn record(&self, event: SpanEvent) {
         self.0.lock().unwrap().push(event);
     }
+}
+
+#[derive(Default)]
+struct RecordingRunEvents(Mutex<Vec<RunEvent>>);
+
+impl RunEventSink for RecordingRunEvents {
+    fn record(&self, event: RunEvent) {
+        self.0.lock().unwrap().push(event);
+    }
+}
+
+fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
+    let events = events.0.lock().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == RunEventKind::RunCancelled)
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.kind != RunEventKind::RunCompleted)
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+    );
 }
 
 struct NoFunctions;
@@ -787,6 +815,12 @@ fn relational_subplan(
             operators: Box::new([RelationalOperator::Input {
                 name: fragment.into(),
             }]),
+            fragment_roots: Box::new([crate::node_system::plan::RelationalFragmentRoot {
+                fragment: id(fragment, RelationalFragmentId::new),
+                operator: RelationalOperatorIndex::new(0),
+            }]),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(0)]),
             pushdown_hints: Box::new([]),
         },
@@ -824,6 +858,186 @@ impl RelationalBackend for RecordingRelationalBackend {
             )]),
         })
     }
+}
+
+fn assert_production_source_cancellation(
+    target: super::production_relational::ProductionRelationalCheckpoint,
+    expected_checkpoints: &[super::production_relational::ProductionRelationalCheckpoint],
+    expected_scan_limits: &[Option<usize>],
+) {
+    use polars::prelude::{Column, DataFrame};
+
+    let resource = id("databases/main", ResourceId::new);
+    let dataframe = DataFrame::new(2, vec![Column::new("value".into(), &[1_i64, 2])]).unwrap();
+    let resource_versions = BTreeMap::from([(
+        ResourceKey::new(resource.as_str()),
+        ResourceVersion::new("1"),
+    )]);
+    let provider = ProjectResourceProvider::new(
+        ProjectResourceSnapshot::new(
+            ProjectSessionId::new("test-session"),
+            resource_versions.clone(),
+        )
+        .with_database(resource.clone(), Arc::new(dataframe)),
+    );
+    let scan_limits = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let observed_for_hook = Arc::clone(&observed);
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("production", RelationalBackendId::new),
+            ProductionRelationalBackend::recording_scan_limits(Arc::clone(&scan_limits))
+                .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+                    observed_for_hook.lock().unwrap().push(checkpoint);
+                    if checkpoint == target {
+                        cancellation.cancel();
+                    }
+                })),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.provenance.basis.resource_versions = resource_versions;
+    execution_plan.resources = Box::new([CompiledResourceRequirement {
+        resource: resource.clone(),
+        kind: ResourceKind::DatabaseConnection,
+        access: ResourceAccess::Shared,
+        optional: false,
+    }]);
+    let source_fragment = id("source", RelationalFragmentId::new);
+    execution_plan.relational_subplans = Box::new([RelationalSubplan {
+        backend: id("production", RelationalBackendId::new),
+        compiled_plan: CompiledRelationalPlan {
+            fragment_order: Box::new([source_fragment.clone()]),
+            operators: Box::new([RelationalOperator::Source {
+                resource,
+                relation: "main".into(),
+            }]),
+            fragment_roots: Box::new([RelationalFragmentRoot {
+                fragment: source_fragment,
+                operator: RelationalOperatorIndex::new(0),
+            }]),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
+            roots: Box::new([RelationalOperatorIndex::new(0)]),
+            pushdown_hints: Box::new([]),
+        },
+        materialization_bridges: Box::new([]),
+    }]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        value: ValueRef::new(0),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_eq!(observed.lock().unwrap().as_slice(), expected_checkpoints);
+    assert_eq!(scan_limits.lock().unwrap().as_slice(), expected_scan_limits);
+    assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 0);
+}
+
+#[test]
+fn cancellation_at_production_source_scan_stops_before_scan_and_publication() {
+    use super::production_relational::ProductionRelationalCheckpoint;
+
+    assert_production_source_cancellation(
+        ProductionRelationalCheckpoint::SourceScan,
+        &[
+            ProductionRelationalCheckpoint::OperatorEvaluation,
+            ProductionRelationalCheckpoint::SourceScan,
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn cancellation_at_production_operator_evaluation_stops_before_dependencies_and_publication() {
+    use super::production_relational::ProductionRelationalCheckpoint;
+
+    assert_production_source_cancellation(
+        ProductionRelationalCheckpoint::OperatorEvaluation,
+        &[ProductionRelationalCheckpoint::OperatorEvaluation],
+        &[],
+    );
+}
+
+#[test]
+fn cancellation_at_production_result_materialization_prevents_publication_and_completion() {
+    use super::production_relational::ProductionRelationalCheckpoint;
+
+    assert_production_source_cancellation(
+        ProductionRelationalCheckpoint::ResultMaterialization,
+        &[
+            ProductionRelationalCheckpoint::OperatorEvaluation,
+            ProductionRelationalCheckpoint::SourceScan,
+            ProductionRelationalCheckpoint::ResultMaterialization,
+        ],
+        &[None],
+    );
+}
+
+#[test]
+fn invalid_pushdown_plan_is_rejected_before_relational_backend_execution() {
+    let executions = Arc::new(Mutex::new(Vec::new()));
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("production", RelationalBackendId::new),
+            RecordingRelationalBackend {
+                executions: Arc::clone(&executions),
+            },
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let mut subplan = relational_subplan("production", "source", Box::new([]));
+    subplan.compiled_plan.operators = Box::new([
+        RelationalOperator::Source {
+            resource: id("database.main", ResourceId::new),
+            relation: "items".into(),
+        },
+        RelationalOperator::Filter {
+            input: RelationalOperatorIndex::new(0),
+            predicate: RelationalExpression::Literal(RelationalLiteral::Boolean(true)),
+        },
+        RelationalOperator::Limit {
+            input: RelationalOperatorIndex::new(1),
+            rows: 25,
+        },
+    ]);
+    subplan.compiled_plan.pushdown_hints = Box::new([RelationalPushdownHint::Limit {
+        source: RelationalOperatorIndex::new(0),
+        rows: 25,
+    }]);
+    execution_plan.relational_subplans = Box::new([subplan]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+    assert!(executions.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -864,6 +1078,394 @@ fn relational_operation_executes_compiled_subplan_by_index() {
     );
 }
 
+fn exact_bridge_scheduler_fixture() -> (KernelRegistry, RelationalBackendRegistry, ExecutionPlan) {
+    let backend = id("production", RelationalBackendId::new);
+    let producer_decoy = id("producer-decoy", RelationalFragmentId::new);
+    let producer_exact = id("producer-exact", RelationalFragmentId::new);
+    let consumer = id("consumer", RelationalFragmentId::new);
+    let decoy_bridge = PlannedMaterializationBridge {
+        producer_fragment: producer_decoy.clone(),
+        consumer_fragment: consumer.clone(),
+        producer_subplan: RelationalSubplanIndex::new(0),
+        consumer_subplan: RelationalSubplanIndex::new(1),
+        bridge: MaterializationBridge::Collect,
+    };
+    let exact_bridge = PlannedMaterializationBridge {
+        producer_fragment: producer_exact.clone(),
+        consumer_fragment: consumer.clone(),
+        producer_subplan: RelationalSubplanIndex::new(0),
+        consumer_subplan: RelationalSubplanIndex::new(1),
+        bridge: MaterializationBridge::Collect,
+    };
+
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("bridge_values", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![Value::Integer(13).into(), Value::Integer(41).into()])
+            }),
+        )
+        .unwrap();
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(backend.clone(), ProductionRelationalBackend::default())
+        .unwrap();
+
+    let source = operation("bridge_values", &[], &[0, 1]);
+    let mut producer_operation = relational_operation(0, &[2, 3]);
+    producer_operation.inputs = Box::new([
+        PlannedInput {
+            value: ValueRef::new(0),
+            consumption: InputConsumption::FullyMaterialized,
+        },
+        PlannedInput {
+            value: ValueRef::new(1),
+            consumption: InputConsumption::FullyMaterialized,
+        },
+    ]);
+    let consumer_operation = relational_operation(1, &[4]);
+    let mut execution_plan = plan(
+        vec![source, producer_operation, consumer_operation],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
+    );
+    execution_plan.relational_subplans = Box::new([
+        RelationalSubplan {
+            backend: backend.clone(),
+            compiled_plan: CompiledRelationalPlan {
+                fragment_order: Box::new([producer_decoy.clone(), producer_exact.clone()]),
+                operators: Box::new([
+                    RelationalOperator::Input {
+                        name: "same-name".into(),
+                    },
+                    RelationalOperator::Input {
+                        name: "same-name".into(),
+                    },
+                ]),
+                fragment_roots: Box::new([
+                    RelationalFragmentRoot {
+                        fragment: producer_decoy.clone(),
+                        operator: RelationalOperatorIndex::new(0),
+                    },
+                    RelationalFragmentRoot {
+                        fragment: producer_exact.clone(),
+                        operator: RelationalOperatorIndex::new(1),
+                    },
+                ]),
+                bridge_inputs: Box::new([]),
+                requested_fragment_outputs: Box::new([producer_decoy, producer_exact]),
+                roots: Box::new([
+                    RelationalOperatorIndex::new(0),
+                    RelationalOperatorIndex::new(1),
+                ]),
+                pushdown_hints: Box::new([]),
+            },
+            materialization_bridges: Box::new([]),
+        },
+        RelationalSubplan {
+            backend,
+            compiled_plan: CompiledRelationalPlan {
+                fragment_order: Box::new([consumer.clone()]),
+                operators: Box::new([
+                    RelationalOperator::Input {
+                        name: "same-name".into(),
+                    },
+                    RelationalOperator::Input {
+                        name: "same-name".into(),
+                    },
+                ]),
+                fragment_roots: Box::new([RelationalFragmentRoot {
+                    fragment: consumer,
+                    operator: RelationalOperatorIndex::new(0),
+                }]),
+                bridge_inputs: Box::new([
+                    RelationalBridgeInput {
+                        operator: RelationalOperatorIndex::new(0),
+                        bridge: exact_bridge.clone(),
+                    },
+                    RelationalBridgeInput {
+                        operator: RelationalOperatorIndex::new(1),
+                        bridge: decoy_bridge.clone(),
+                    },
+                ]),
+                requested_fragment_outputs: Box::new([]),
+                roots: Box::new([RelationalOperatorIndex::new(0)]),
+                pushdown_hints: Box::new([]),
+            },
+            materialization_bridges: Box::new([decoy_bridge, exact_bridge]),
+        },
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        value: ValueRef::new(4),
+    }]);
+    (kernels, relational, execution_plan)
+}
+
+#[test]
+fn scheduler_publishes_and_consumes_exact_relational_fragment_bridges() {
+    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    let RuntimeValue::Artifact(value) = &result.values["result"] else {
+        panic!("consumer output must be a materialized bridge artifact");
+    };
+    assert_eq!(value.kind(), ArtifactKind::Collected);
+    assert_eq!(value.values(), &[Value::Integer(41)]);
+}
+
+#[test]
+fn cancellation_at_exact_bridge_materialization_cleans_results_without_completion() {
+    use super::scheduler::SchedulerCheckpoint;
+
+    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let observed_for_hook = Arc::clone(&observed);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+            observed_for_hook.lock().unwrap().push(checkpoint);
+            if checkpoint == SchedulerCheckpoint::BridgeMaterialization {
+                cancellation.cancel();
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_eq!(
+        observed.lock().unwrap().as_slice(),
+        &[SchedulerCheckpoint::BridgeMaterialization]
+    );
+    assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 0);
+}
+
+#[test]
+fn cancellation_during_exact_bridge_stream_collection_is_cancelled() {
+    use super::scheduler::SchedulerCheckpoint;
+
+    let cancellation = CancellationToken::new();
+    let stream = StreamValue::from_values([Value::Integer(41)], cancellation.clone()).unwrap();
+    let (mut kernels, relational, mut execution_plan) = exact_bridge_scheduler_fixture();
+    kernels
+        .register(
+            id("bridge_stream", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                Ok(vec![
+                    Value::Integer(13).into(),
+                    RuntimeValue::Stream(stream.clone()),
+                ])
+            }),
+        )
+        .unwrap();
+    execution_plan.operations[0].kernel =
+        PlannedKernel::Native(id("bridge_stream", KernelHandle::new));
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let collected = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&collected);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+            if checkpoint == SchedulerCheckpoint::BridgeCollectionStarted {
+                observed.fetch_add(1, Ordering::SeqCst);
+                cancellation.cancel();
+            }
+        }))
+        .run(&execution_plan, cancellation)
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_eq!(collected.load(Ordering::SeqCst), 1);
+    assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 0);
+}
+
+#[test]
+fn cancellation_after_first_multi_result_source_is_staged_publishes_nothing() {
+    use super::scheduler::SchedulerCheckpoint;
+
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("pair", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![
+                    RuntimeValue::from(Value::Integer(1)),
+                    RuntimeValue::from(Value::Integer(2)),
+                ])
+            }),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("pair", &[], &[0, 1])],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([
+        PlanResult {
+            name: "first".into(),
+            value: ValueRef::new(0),
+        },
+        PlanResult {
+            name: "second".into(),
+            value: ValueRef::new(1),
+        },
+    ]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::with_capacity(1);
+    let old_run_id = RunId::new(90_001);
+    let old_correlation =
+        CorrelationContext::compile(&execution_plan.provenance).for_run(old_run_id, None);
+    let old_descriptor = results.publish_snapshot(
+        old_run_id,
+        old_correlation,
+        execution_plan.provenance.basis.clone(),
+        "committed",
+        ArtifactSnapshot::Value(Value::String("keep".into())),
+    );
+    let old_value = results.value(old_descriptor.source_id).unwrap();
+    let staged = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&staged);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+            if checkpoint == SchedulerCheckpoint::ResultSourceStaged
+                && observed.fetch_add(1, Ordering::SeqCst) == 0
+            {
+                cancellation.cancel();
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_eq!(staged.load(Ordering::SeqCst), 1);
+    assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(
+        results.descriptor(old_descriptor.source_id),
+        Some(old_descriptor.clone())
+    );
+    assert_eq!(results.value(old_descriptor.source_id), Some(old_value));
+}
+
+#[test]
+fn cancellation_after_value_ready_preserves_an_older_committed_source() {
+    let cancellation = CancellationToken::new();
+    let kernel_cancellation = cancellation.clone();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("value", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("cancel", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                kernel_cancellation.cancel();
+                Ok(Vec::new())
+            }),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("value", &[], &[0]), operation("cancel", &[], &[])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::with_capacity(1);
+    let old_run_id = RunId::new(90_002);
+    let old_correlation =
+        CorrelationContext::compile(&execution_plan.provenance).for_run(old_run_id, None);
+    let old_descriptor = results.publish_snapshot(
+        old_run_id,
+        old_correlation,
+        execution_plan.provenance.basis.clone(),
+        "committed",
+        ArtifactSnapshot::Value(Value::String("keep".into())),
+    );
+    let old_value = results.value(old_descriptor.source_id).unwrap();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, cancellation)
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_cancelled_without_completion(&events);
+    assert!(
+        events
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::ValueReady { .. }))
+    );
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(
+        results.descriptor(old_descriptor.source_id),
+        Some(old_descriptor.clone())
+    );
+    assert_eq!(results.value(old_descriptor.source_id), Some(old_value));
+}
+
+#[test]
+fn cancellation_before_final_result_publication_cleans_results_without_completion() {
+    use super::scheduler::SchedulerCheckpoint;
+
+    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let final_checkpoints = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&final_checkpoints);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+            if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+                observed.fetch_add(1, Ordering::SeqCst);
+                cancellation.cancel();
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert_eq!(final_checkpoints.load(Ordering::SeqCst), 1);
+    assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 0);
+}
+
 #[test]
 fn materialization_bridges_preserve_their_explicit_semantics() {
     let token = CancellationToken::new();
@@ -886,6 +1488,69 @@ fn materialization_bridges_preserve_their_explicit_semantics() {
         assert_eq!(artifact.kind(), expected);
         assert_eq!(artifact.values(), &[Value::Integer(7)]);
     }
+
+    let producer = id("producer", RelationalFragmentId::new);
+    let decoy_producer = id("decoy-producer", RelationalFragmentId::new);
+    let consumer = id("consumer", RelationalFragmentId::new);
+    let expected_bridge = PlannedMaterializationBridge {
+        producer_fragment: producer,
+        consumer_fragment: consumer.clone(),
+        producer_subplan: RelationalSubplanIndex::new(0),
+        consumer_subplan: RelationalSubplanIndex::new(1),
+        bridge: MaterializationBridge::Collect,
+    };
+    let decoy_bridge = PlannedMaterializationBridge {
+        producer_fragment: decoy_producer,
+        consumer_fragment: consumer.clone(),
+        producer_subplan: RelationalSubplanIndex::new(2),
+        consumer_subplan: RelationalSubplanIndex::new(1),
+        bridge: MaterializationBridge::Collect,
+    };
+    let plan = CompiledRelationalPlan {
+        fragment_order: Box::new([consumer.clone()]),
+        operators: Box::new([RelationalOperator::Input {
+            name: "ambiguous-display-name".into(),
+        }]),
+        fragment_roots: Box::new([RelationalFragmentRoot {
+            fragment: consumer,
+            operator: RelationalOperatorIndex::new(0),
+        }]),
+        bridge_inputs: Box::new([RelationalBridgeInput {
+            operator: RelationalOperatorIndex::new(0),
+            bridge: expected_bridge.clone(),
+        }]),
+        requested_fragment_outputs: Box::new([]),
+        roots: Box::new([RelationalOperatorIndex::new(0)]),
+        pushdown_hints: Box::new([]),
+    };
+    let resources = RunResourceSet::acquire(&[], &no_resources()).unwrap();
+    let context = RelationalContext {
+        run_id: RunId::new(1),
+        resources: &resources,
+        cancellation: &token,
+    };
+    let execution = ProductionRelationalBackend::default()
+        .execute(
+            &context,
+            &plan,
+            &[RuntimeValue::from(Value::Integer(99))],
+            &[
+                RelationalInput {
+                    bridge: decoy_bridge,
+                    value: RuntimeValue::from(Value::Integer(13)),
+                },
+                RelationalInput {
+                    bridge: expected_bridge,
+                    value: RuntimeValue::from(Value::Integer(41)),
+                },
+            ],
+        )
+        .unwrap();
+
+    assert_eq!(
+        execution.outputs,
+        vec![RuntimeValue::from(Value::Integer(41))]
+    );
 }
 
 #[test]

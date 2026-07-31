@@ -823,7 +823,7 @@ fn materialize_input_table(
     let columns = required_input_columns(spec);
     let column_refs = columns.iter().map(String::as_str).collect::<Vec<_>>();
     project_state
-        .with_database_mut(&spec.dataset.source_id, |database| {
+        .with_database_snapshot(&spec.dataset.source_id, |database| {
             database
                 .load_columns(&column_refs)
                 .map_err(|error| error.to_string())

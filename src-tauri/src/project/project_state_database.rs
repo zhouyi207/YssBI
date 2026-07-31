@@ -3,6 +3,14 @@ use crate::database::*;
 use crate::project::{ProjectFilesystemLeaseSet, ProjectSession};
 use polars::prelude::*;
 
+#[derive(Clone)]
+pub(crate) struct DatabaseAuthorityToken {
+    project_instance_id: String,
+    project_session_id: crate::node_system::analysis::ProjectSessionId,
+    database_id: String,
+    database_revision: u64,
+}
+
 /// let preview = project_state
 ///    .access_database("sales", DatabaseAccess::Preview)?;
 impl ProjectState {
@@ -22,18 +30,36 @@ impl ProjectState {
         database.access(access)
     }
 
+    /// Runs and commits an authoritative database mutation.
+    ///
+    /// The closure operates on a detached instance without project locks. A
+    /// successful result is published through the central database commit path.
     pub fn with_database_mut<F, R>(&self, id: &str, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
+    {
+        self.with_database_writer(id, |database, _| f(database))
+    }
+
+    /// Runs a read/query operation against a detached database snapshot.
+    ///
+    /// Mutations to the snapshot are discarded. This API is crate-visible so
+    /// external mutation callers use `with_database_mut` and its commit path.
+    pub(crate) fn with_database_snapshot<F, R>(&self, id: &str, f: F) -> Result<R, String>
     where
         F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
     {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
-        let mut store = self.project_store.write().unwrap();
-        let db = store
+        let mut database = self
+            .project_store
+            .read()
+            .unwrap()
             .databases
-            .get_mut(id)
+            .get(id)
+            .cloned()
             .ok_or_else(|| "Database not found".to_string())?;
-        f(db)
+        f(&mut database)
     }
 
     pub fn with_database_writer<F, R>(&self, id: &str, f: F) -> Result<R, String>
@@ -41,9 +67,9 @@ impl ProjectState {
         F: FnOnce(&mut DatabaseInstance, &ProjectSession) -> Result<R, String>,
     {
         let (session, _lease) = self.acquire_database_write_lease()?;
-        let mut instance = self.database_snapshot_for_session(&session, id)?;
+        let (token, mut instance) = self.database_snapshot_for_session(&session, id)?;
         let result = f(&mut instance, &session)?;
-        self.commit_database_instance(&session, id, instance)?;
+        self.commit_database_instance(&session, &token, instance)?;
         Ok(result)
     }
 
@@ -68,36 +94,93 @@ impl ProjectState {
         &self,
         session: &ProjectSession,
         id: &str,
-    ) -> Result<DatabaseInstance, String> {
+    ) -> Result<(DatabaseAuthorityToken, DatabaseInstance), String> {
         self.validate_project_session(session)
             .map_err(|error| format!("{}: {error}", error.code()))?;
-        self.project_store
-            .read()
-            .unwrap()
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != session.instance_id.as_str() {
+            return Err("stale_project_lifecycle: project instance changed".into());
+        }
+        let data = self.project_data.read().unwrap();
+        let store = self.project_store.read().unwrap();
+        let revisions = self.database_authority_revisions.read().unwrap();
+        if !data.databases.contains_key(id) {
+            return Err("Database not found".into());
+        }
+        let instance = store
             .databases
             .get(id)
             .cloned()
-            .ok_or_else(|| "Database not found".to_string())
+            .ok_or_else(|| "Database not found".to_string())?;
+        let database_revision = revisions
+            .get(id)
+            .copied()
+            .ok_or_else(|| "stale_project_lifecycle: database authority is missing".to_string())?;
+        Ok((
+            DatabaseAuthorityToken {
+                project_instance_id: publication.project_instance_id.clone(),
+                project_session_id: store.project_session_id.clone(),
+                database_id: id.to_string(),
+                database_revision,
+            },
+            instance,
+        ))
+    }
+
+    fn validate_database_authority(
+        publication: &super::project_state::MutationPublication,
+        session: &ProjectSession,
+        current_session_id: &crate::node_system::analysis::ProjectSessionId,
+        revisions: &std::collections::HashMap<String, u64>,
+        token: &DatabaseAuthorityToken,
+        id: &str,
+    ) -> Result<(), String> {
+        if publication.project_instance_id != session.instance_id.as_str()
+            || publication.project_instance_id != token.project_instance_id
+            || current_session_id != &token.project_session_id
+            || token.database_id != id
+            || revisions.get(id).copied() != Some(token.database_revision)
+        {
+            return Err("stale_project_lifecycle: database authority conflict".into());
+        }
+        Ok(())
+    }
+
+    fn advance_database_authority(
+        publication: &mut super::project_state::MutationPublication,
+        revisions: &mut std::collections::HashMap<String, u64>,
+        id: &str,
+    ) {
+        publication.advance_authority_generation();
+        revisions.insert(id.to_string(), publication.authority_generation());
     }
 
     pub(crate) fn commit_database_instance(
         &self,
         session: &ProjectSession,
-        id: &str,
+        token: &DatabaseAuthorityToken,
         instance: DatabaseInstance,
     ) -> Result<(), String> {
+        let id = token.database_id.as_str();
         let mut publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != session.instance_id.as_str() {
-            return Err("stale_project_lifecycle: project instance changed".into());
-        }
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
+        let mut revisions = self.database_authority_revisions.write().unwrap();
+        Self::validate_database_authority(
+            &publication,
+            session,
+            &store.project_session_id,
+            &revisions,
+            token,
+            id,
+        )?;
         if !data.databases.contains_key(id) || !store.databases.contains_key(id) {
             return Err("Database not found".into());
         }
         data.databases.insert(id.to_string(), instance.decl.clone());
         store.databases.insert(id.to_string(), instance);
-        publication.advance_authority_generation();
+        Self::advance_database_authority(&mut publication, &mut revisions, id);
+        self.invalidate_all_compile_products();
         Ok(())
     }
 
@@ -114,10 +197,11 @@ impl ProjectState {
         let id = decl.id.clone();
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
+        let mut revisions = self.database_authority_revisions.write().unwrap();
         data.databases.insert(id.clone(), decl);
-        store.databases.insert(id, instance);
-        publication.advance_authority_generation();
-        self.invalidate_graph_runtime();
+        store.databases.insert(id.clone(), instance);
+        Self::advance_database_authority(&mut publication, &mut revisions, &id);
+        self.invalidate_all_compile_products();
         Ok(())
     }
 
@@ -129,49 +213,67 @@ impl ProjectState {
     pub(crate) fn commit_database_name(
         &self,
         session: &ProjectSession,
+        token: &DatabaseAuthorityToken,
         id: &str,
         name: &str,
     ) -> Result<(), String> {
         let mut publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != session.instance_id.as_str() {
-            return Err("stale_project_lifecycle: project instance changed".into());
-        }
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
+        let mut revisions = self.database_authority_revisions.write().unwrap();
+        Self::validate_database_authority(
+            &publication,
+            session,
+            &store.project_session_id,
+            &revisions,
+            token,
+            id,
+        )?;
         let declaration = data.databases.get_mut(id).ok_or("Database not found")?;
         let instance = store.databases.get_mut(id).ok_or("Database not found")?;
         declaration.name = Some(name.to_string());
         instance.decl.name = Some(name.to_string());
-        publication.advance_authority_generation();
-        self.invalidate_graph_runtime();
+        Self::advance_database_authority(&mut publication, &mut revisions, id);
+        self.invalidate_all_compile_products();
         Ok(())
     }
 
     pub fn delete_database(&self, id: &str) -> Result<(), String> {
         let (session, _lease) = self.acquire_database_write_lease()?;
-        let engine = self
-            .project_data
-            .read()
-            .unwrap()
-            .databases
-            .get(id)
-            .map(|decl| decl.engine.clone())
-            .ok_or("Database not found")?;
+        let (token, instance) = self.database_snapshot_for_session(&session, id)?;
         crate::application::database::remove_duckdb_table_if_needed(
-            &engine,
+            &instance.decl.engine,
             Some(session.root.as_path()),
         )?;
+        self.commit_database_delete(&session, &token, id)
+    }
 
+    pub(crate) fn commit_database_delete(
+        &self,
+        session: &ProjectSession,
+        token: &DatabaseAuthorityToken,
+        id: &str,
+    ) -> Result<(), String> {
         let mut publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != session.instance_id.as_str() {
-            return Err("stale_project_lifecycle: project instance changed".into());
-        }
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
+        let mut revisions = self.database_authority_revisions.write().unwrap();
+        Self::validate_database_authority(
+            &publication,
+            session,
+            &store.project_session_id,
+            &revisions,
+            token,
+            id,
+        )?;
+        if !data.databases.contains_key(id) || !store.databases.contains_key(id) {
+            return Err("Database not found".into());
+        }
         data.databases.remove(id);
         store.databases.remove(id);
         publication.advance_authority_generation();
-        self.invalidate_graph_runtime();
+        revisions.remove(id);
+        self.invalidate_all_compile_products();
         Ok(())
     }
 }
@@ -293,6 +395,163 @@ mod tests {
     }
 
     #[test]
+    fn database_mutation_commits_authority_and_errors_have_zero_effects() {
+        let root = project_root("authoritative-mutation");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        let database_id = "writer";
+        state
+            .add_database(DatabaseInstance {
+                decl: DatabaseDecl {
+                    id: database_id.into(),
+                    engine: DatabaseEngine::InMemory {
+                        name: "writer".into(),
+                    },
+                    schema_version: 1,
+                    required: false,
+                    name: Some("Before".into()),
+                },
+                state: DatabaseState::Failed {
+                    error: "fixture".into(),
+                },
+            })
+            .unwrap();
+        let graph_path =
+            crate::project::GraphResourcePath::new("events/DatabaseWriter.yssbi-event").unwrap();
+        state
+            .insert_graph(
+                graph_path.clone(),
+                crate::project::GraphResourceDocument::new(
+                    "Database Writer",
+                    crate::project::GraphDocumentKind::Event,
+                ),
+            )
+            .unwrap();
+        state.graph_projection(&graph_path, "en-US").unwrap();
+        let coordinator = state.compile_coordinator.read().unwrap().clone();
+        let document_path =
+            crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        assert!(coordinator.contains_slot_for_test(&document_path));
+        let generation = state.authority_generation_for_test();
+
+        let closure_had_no_store_lock = state
+            .with_database_mut(database_id, |database| {
+                let store_lock = state.project_store.try_write();
+                let lock_available = store_lock.is_ok();
+                drop(store_lock);
+                database.decl.name = Some("Committed".into());
+                Ok(lock_available)
+            })
+            .unwrap();
+
+        assert!(closure_had_no_store_lock);
+        assert_eq!(
+            state.project_store.read().unwrap().databases[database_id]
+                .decl
+                .name
+                .as_deref(),
+            Some("Committed")
+        );
+        assert_eq!(
+            state.get_data().unwrap().databases[database_id]
+                .name
+                .as_deref(),
+            Some("Committed")
+        );
+        assert_eq!(state.authority_generation_for_test(), generation + 1);
+        assert!(!coordinator.contains_slot_for_test(&document_path));
+
+        state.graph_projection(&graph_path, "en-US").unwrap();
+        let generation = state.authority_generation_for_test();
+        let error = state
+            .with_database_mut(database_id, |database| {
+                database.decl.name = Some("Rejected".into());
+                Err::<(), _>("reject mutation".into())
+            })
+            .unwrap_err();
+        assert_eq!(error, "reject mutation");
+        assert_eq!(
+            state.project_store.read().unwrap().databases[database_id]
+                .decl
+                .name
+                .as_deref(),
+            Some("Committed")
+        );
+        assert_eq!(state.authority_generation_for_test(), generation);
+        assert!(coordinator.contains_slot_for_test(&document_path));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn database_snapshot_access_cannot_mutate_authority_or_invalidate_compiles() {
+        let root = project_root("snapshot-access");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        let database_id = "snapshot";
+        state
+            .add_database(DatabaseInstance {
+                decl: DatabaseDecl {
+                    id: database_id.into(),
+                    engine: DatabaseEngine::InMemory {
+                        name: "snapshot".into(),
+                    },
+                    schema_version: 1,
+                    required: false,
+                    name: Some("Authoritative".into()),
+                },
+                state: DatabaseState::Failed {
+                    error: "fixture".into(),
+                },
+            })
+            .unwrap();
+        let graph_path =
+            crate::project::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event").unwrap();
+        state
+            .insert_graph(
+                graph_path.clone(),
+                crate::project::GraphResourceDocument::new(
+                    "Database Snapshot",
+                    crate::project::GraphDocumentKind::Event,
+                ),
+            )
+            .unwrap();
+        state.graph_projection(&graph_path, "en-US").unwrap();
+        let coordinator = state.compile_coordinator.read().unwrap().clone();
+        let document_path =
+            crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        assert!(coordinator.contains_slot_for_test(&document_path));
+        let generation = state.authority_generation_for_test();
+
+        let closure_had_no_store_lock = state
+            .with_database_snapshot(database_id, |database| {
+                let store_lock = state.project_store.try_write();
+                let lock_available = store_lock.is_ok();
+                drop(store_lock);
+                database.decl.name = Some("Local only".into());
+                Ok(lock_available)
+            })
+            .unwrap();
+        state
+            .with_database_snapshot(database_id, |database| {
+                assert_eq!(database.decl.name.as_deref(), Some("Authoritative"));
+                Ok(())
+            })
+            .unwrap();
+
+        assert!(closure_had_no_store_lock);
+        assert_eq!(
+            state.project_store.read().unwrap().databases[database_id]
+                .decl
+                .name
+                .as_deref(),
+            Some("Authoritative")
+        );
+        assert_eq!(state.authority_generation_for_test(), generation);
+        assert!(coordinator.contains_slot_for_test(&document_path));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn duckdb_import_rename_edit_save_and_delete_advance_central_authority() {
         let root = project_root("central-writers");
         let csv = root.join("writer.csv");
@@ -357,6 +616,238 @@ mod tests {
                 .contains_key(&imported.id)
         );
 
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn add_in_memory_database(state: &ProjectState, id: &str, name: &str) {
+        state
+            .add_database(DatabaseInstance {
+                decl: DatabaseDecl {
+                    id: id.into(),
+                    engine: DatabaseEngine::InMemory { name: id.into() },
+                    schema_version: 1,
+                    required: false,
+                    name: Some(name.into()),
+                },
+                state: DatabaseState::Failed {
+                    error: "fixture".into(),
+                },
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn unrelated_authority_change_does_not_conflict_database_commit() {
+        let root = project_root("resource-cas-unrelated");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        add_in_memory_database(&state, "writer", "Initial");
+        let session = state.capture_project_session().unwrap();
+        let (token, _) = state
+            .database_snapshot_for_session(&session, "writer")
+            .unwrap();
+
+        state
+            .insert_graph(
+                crate::project::GraphResourcePath::new("events/Unrelated.yssbi-event").unwrap(),
+                crate::project::GraphResourceDocument::new(
+                    "Unrelated",
+                    crate::project::GraphDocumentKind::Event,
+                ),
+            )
+            .unwrap();
+        let generation_after_unrelated = state.authority_generation_for_test();
+
+        state
+            .commit_database_name(&session, &token, "writer", "Committed")
+            .unwrap();
+
+        assert_eq!(
+            state.project_store.read().unwrap().databases["writer"]
+                .decl
+                .name
+                .as_deref(),
+            Some("Committed")
+        );
+        assert_eq!(
+            state.authority_generation_for_test(),
+            generation_after_unrelated + 1
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rename_remains_consistent_across_unrelated_authority_change_after_io() {
+        let root = project_root("rename-unrelated-authority");
+        let csv = root.join("rename.csv");
+        std::fs::write(&csv, "value\n1\n").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        let imported = crate::application::database::load_database(
+            &state,
+            crate::schema::DatabaseEngineDTO::Csv {
+                path: csv.to_string_lossy().into_owned(),
+                delimiter: ',',
+                has_header: true,
+                infer_schema_length: None,
+            },
+        )
+        .unwrap();
+        let (duckdb_path, table) = {
+            let store = state.project_store.read().unwrap();
+            let database = &store.databases[&imported.id];
+            let DatabaseState::DuckDb {
+                duckdb_path, table, ..
+            } = &database.state
+            else {
+                panic!("imported database should be DuckDB-backed")
+            };
+            (std::path::PathBuf::from(duckdb_path), table.clone())
+        };
+        let (io_done_tx, io_done_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let resume_rx = std::sync::Mutex::new(resume_rx);
+        crate::application::database::set_database_external_io_test_hook(Some(Arc::new(
+            move || {
+                io_done_tx.send(()).unwrap();
+                resume_rx.lock().unwrap().recv().unwrap();
+            },
+        )));
+
+        let rename_state = state.clone();
+        let rename_id = imported.id.clone();
+        let rename = std::thread::spawn(move || {
+            crate::application::database::rename_database(&rename_state, &rename_id, "Renamed")
+        });
+        io_done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        state
+            .insert_graph(
+                crate::project::GraphResourcePath::new("events/UnrelatedRename.yssbi-event")
+                    .unwrap(),
+                crate::project::GraphResourceDocument::new(
+                    "Unrelated Rename",
+                    crate::project::GraphDocumentKind::Event,
+                ),
+            )
+            .unwrap();
+        resume_tx.send(()).unwrap();
+        let rename = rename.join().unwrap();
+        crate::application::database::set_database_external_io_test_hook(None);
+
+        rename.unwrap();
+        assert_eq!(
+            state.project_store.read().unwrap().databases[&imported.id]
+                .decl
+                .name
+                .as_deref(),
+            Some("Renamed")
+        );
+        assert_eq!(
+            crate::database::read_display_name(&duckdb_path, &table).as_deref(),
+            Some("Renamed")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_database_writer_cannot_overwrite_newer_authority() {
+        let root = project_root("writer-cas");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        add_in_memory_database(&state, "writer", "Initial");
+        let session = state.capture_project_session().unwrap();
+        let (snapshot_ready_tx, snapshot_ready_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        let stale_state = state.clone();
+        let stale_session = session.clone();
+        let stale = std::thread::spawn(move || {
+            let (token, mut instance) = stale_state
+                .database_snapshot_for_session(&stale_session, "writer")
+                .unwrap();
+            snapshot_ready_tx.send(()).unwrap();
+            resume_rx.recv().unwrap();
+            instance.decl.name = Some("Stale A".into());
+            stale_state.commit_database_instance(&stale_session, &token, instance)
+        });
+        snapshot_ready_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        state
+            .with_database_mut("writer", |database| {
+                database.decl.name = Some("Committed B".into());
+                Ok(())
+            })
+            .unwrap();
+        let generation_after_b = state.authority_generation_for_test();
+        resume_tx.send(()).unwrap();
+
+        let error = stale.join().unwrap().unwrap_err();
+        assert!(error.contains("conflict") || error.contains("stale"));
+        assert_eq!(state.authority_generation_for_test(), generation_after_b);
+        assert_eq!(
+            state.project_store.read().unwrap().databases["writer"]
+                .decl
+                .name
+                .as_deref(),
+            Some("Committed B")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn database_rename_and_delete_share_authority_token_cas() {
+        let root = project_root("rename-delete-cas");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        add_in_memory_database(&state, "writer", "Initial");
+        let session = state.capture_project_session().unwrap();
+
+        let (rename_token, _) = state
+            .database_snapshot_for_session(&session, "writer")
+            .unwrap();
+        state
+            .with_database_mut("writer", |database| {
+                database.decl.name = Some("New Authority".into());
+                Ok(())
+            })
+            .unwrap();
+        let generation = state.authority_generation_for_test();
+        assert!(
+            state
+                .commit_database_name(&session, &rename_token, "writer", "Stale Rename")
+                .unwrap_err()
+                .contains("stale")
+        );
+        assert_eq!(state.authority_generation_for_test(), generation);
+
+        let (delete_token, _) = state
+            .database_snapshot_for_session(&session, "writer")
+            .unwrap();
+        state
+            .with_database_mut("writer", |database| {
+                database.decl.required = true;
+                Ok(())
+            })
+            .unwrap();
+        let generation = state.authority_generation_for_test();
+        assert!(
+            state
+                .commit_database_delete(&session, &delete_token, "writer")
+                .unwrap_err()
+                .contains("stale")
+        );
+        assert_eq!(state.authority_generation_for_test(), generation);
+        assert!(
+            state
+                .project_store
+                .read()
+                .unwrap()
+                .databases
+                .contains_key("writer")
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 }

@@ -7,8 +7,18 @@ mod families;
 
 use super::builtin::{ProviderFragment, iid, leaf, sid};
 use super::localization::{Aliases, Message, Text};
+use crate::node_system::compiler::{
+    FragmentMetadata, FragmentResult, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
+    NodeImplementation, NodeLowerer, RelationalInputBinding, RelationalNodeFragment,
+};
+use crate::node_system::document::PortRef;
+use crate::node_system::plan::{
+    CompiledParameterHandle, RelationalBackendId, RelationalFragmentId, RelationalOperator,
+    RelationalOperatorIndex, ResourceId,
+};
 use crate::node_system::protocol::*;
-use crate::node_system::registry::{CategoryRegistration, TypeRegistration};
+use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
+use std::sync::Arc;
 
 #[cfg(test)]
 pub use families::LEGACY_NODE_IDS;
@@ -25,7 +35,7 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
         .iter()
         .map(|spec| {
             add_node_messages(&mut messages, spec);
-            leaf(protocol(spec), spec.kernel)
+            registered_node(spec)
         })
         .collect();
 
@@ -40,6 +50,21 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
         nodes,
         messages,
         ..ProviderFragment::default()
+    }
+}
+
+fn registered_node(spec: &NodeSpec) -> RegisteredNode {
+    let protocol = protocol(spec);
+    match spec.interface {
+        InterfaceKind::DataframeSource => RegisteredNode::leaf(
+            Arc::new(protocol),
+            Arc::new(NodeImplementation::new(SourceLowerer)),
+        ),
+        InterfaceKind::Limit => RegisteredNode::leaf(
+            Arc::new(protocol),
+            Arc::new(NodeImplementation::new(LimitLowerer)),
+        ),
+        _ => leaf(protocol, spec.kernel),
     }
 }
 
@@ -76,12 +101,23 @@ fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
     use InterfaceKind::*;
     match kind {
         DataframeSource => (
-            vec![data_output(
+            vec![streaming_output(
                 "dataframe",
                 dataframe_type(),
                 Some(derived_schema(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, vec![])),
             )],
             vec![resource_parameter("dataframe")],
+        ),
+        Limit => (
+            vec![
+                streaming_input("source", dataframe_type(), None),
+                streaming_output(
+                    "result",
+                    dataframe_type(),
+                    Some(SchemaExpr::Input(port_key("source"))),
+                ),
+            ],
+            vec![bounded_positive_integer_parameter("rows", 100, 1_000_000)],
         ),
         Decompose => (
             vec![
@@ -236,6 +272,16 @@ fn data_input(key: &'static str, value_type: TypeExpr, schema: Option<SchemaExpr
     )
 }
 
+fn streaming_input(
+    key: &'static str,
+    value_type: TypeExpr,
+    schema: Option<SchemaExpr>,
+) -> PortSpec {
+    let mut spec = data_input(key, value_type, schema);
+    spec.consumption = Some(InputConsumption::Streaming);
+    spec
+}
+
 fn scalar_input(key: &'static str, type_id: &'static str) -> PortSpec {
     data_input(key, concrete(type_id), None)
 }
@@ -258,6 +304,16 @@ fn data_output(key: &'static str, value_type: TypeExpr, schema: Option<SchemaExp
         PortInstances::Declared,
         schema,
     )
+}
+
+fn streaming_output(
+    key: &'static str,
+    value_type: TypeExpr,
+    schema: Option<SchemaExpr>,
+) -> PortSpec {
+    let mut spec = data_output(key, value_type, schema);
+    spec.production = Some(OutputProduction::Streaming);
+    spec
 }
 
 fn derived_output(key: &'static str, value_type: TypeExpr, resolver: &'static str) -> PortSpec {
@@ -356,6 +412,15 @@ fn positive_integer_parameter(key: &'static str, default: i64) -> ParameterSpec 
     )
 }
 
+fn bounded_positive_integer_parameter(key: &'static str, default: i64, max: i64) -> ParameterSpec {
+    let mut spec = positive_integer_parameter(key, default);
+    spec.constraints = vec![ParameterConstraint::IntegerRange {
+        min: Some(1),
+        max: Some(max),
+    }];
+    spec
+}
+
 fn parameter(
     key: &'static str,
     value_type: TypeExpr,
@@ -408,6 +473,7 @@ fn dataframe_categories() -> Vec<CategoryRegistration> {
 fn category(kind: InterfaceKind) -> &'static str {
     match kind {
         InterfaceKind::DataframeSource
+        | InterfaceKind::Limit
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
         | InterfaceKind::Filter => "dataframe",
@@ -417,6 +483,110 @@ fn category(kind: InterfaceKind) -> &'static str {
         InterfaceKind::PanelAlign | InterfaceKind::PanelDifference => "dataframe.panel",
         _ => "dataframe.series",
     }
+}
+
+struct SourceLowerer;
+
+impl NodeLowerer for SourceLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let resource = context
+            .parameters
+            .get(&ParameterKey::new("dataframe").expect("static parameter key"))
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                LoweringError::new("source parameter 'dataframe' must be a resource id")
+            })?;
+        let resource =
+            ResourceId::new(resource).map_err(|error| LoweringError::new(error.to_string()))?;
+        let relation = resource.as_str().into();
+        relational_node(
+            context,
+            vec![RelationalOperator::Source { resource, relation }],
+            RelationalOperatorIndex::new(0),
+            Box::new([]),
+            FragmentMetadata::default(),
+        )
+    }
+}
+
+struct LimitLowerer;
+
+impl NodeLowerer for LimitLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let rows = context
+            .parameters
+            .get(&ParameterKey::new("rows").expect("static parameter key"))
+            .and_then(serde_json::Value::as_u64)
+            .filter(|rows| (1..=1_000_000).contains(rows))
+            .ok_or_else(|| {
+                LoweringError::new("limit parameter 'rows' must be between 1 and 1000000")
+            })?;
+        let input = context
+            .inputs
+            .iter()
+            .find(|(address, _)| {
+                matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
+            })
+            .map(|(address, _)| address.clone())
+            .ok_or_else(|| LoweringError::new("limit input 'source' was not materialized"))?;
+        let result = context
+            .outputs
+            .iter()
+            .find(|(address, _)| {
+                matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
+            })
+            .map(|(address, _)| address.clone())
+            .ok_or_else(|| LoweringError::new("limit output 'result' was not materialized"))?;
+        relational_node(
+            context,
+            vec![
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Limit {
+                    input: RelationalOperatorIndex::new(0),
+                    rows,
+                },
+            ],
+            RelationalOperatorIndex::new(1),
+            Box::new([RelationalInputBinding {
+                port: input,
+                operator: RelationalOperatorIndex::new(0),
+            }]),
+            FragmentMetadata {
+                results: Box::new([FragmentResult {
+                    name: format!("node.{}.result", context.node_id).into(),
+                    output: result,
+                }]),
+                ..FragmentMetadata::default()
+            },
+        )
+    }
+}
+
+fn relational_node(
+    context: &LoweringContext<'_>,
+    operators: Vec<RelationalOperator>,
+    root: RelationalOperatorIndex,
+    inputs: Box<[RelationalInputBinding]>,
+    metadata: FragmentMetadata,
+) -> Result<LoweredNode, LoweringError> {
+    Ok(LoweredNode {
+        kernel: LoweredKernel::Relational(RelationalNodeFragment {
+            backend: RelationalBackendId::new("relational.default")
+                .map_err(|error| LoweringError::new(error.to_string()))?,
+            fragment: crate::node_system::compiler::relational::RelationalFragment {
+                id: RelationalFragmentId::new(format!("node.{}", context.node_id))
+                    .map_err(|error| LoweringError::new(error.to_string()))?,
+                operators: operators.into_boxed_slice(),
+                root,
+            },
+            inputs,
+            metadata,
+        }),
+        parameters: CompiledParameterHandle::new(format!("node.{}", context.node_id))
+            .map_err(|error| LoweringError::new(error.to_string()))?,
+    })
 }
 
 fn dataframe_type() -> TypeExpr {
@@ -534,6 +704,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         "frequency",
         "order",
         "window",
+        "rows",
     ] {
         let title = leak(format!("parameters.{key}.title"));
         let description = leak(format!("parameters.{key}.description"));

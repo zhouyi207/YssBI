@@ -21,7 +21,21 @@ pub struct AnalysisSnapshot<
     pub basis: CompilationBasis<GraphRevision>,
     pub nodes: Box<[AnalyzedNode<NodeId, ParameterValue>]>,
     pub resolved_interfaces: Box<[ResolvedInterface<NodeId, PortAddress>]>,
+    #[serde(
+        with = "ordered_map_entries",
+        bound(
+            serialize = "TypeFact: Serialize",
+            deserialize = "TypeFact: Deserialize<'de>"
+        )
+    )]
     pub partial_types: TypeFacts<PortAddress, TypeFact>,
+    #[serde(
+        with = "ordered_map_entries",
+        bound(
+            serialize = "SchemaFact: Serialize",
+            deserialize = "SchemaFact: Deserialize<'de>"
+        )
+    )]
     pub partial_schemas: SchemaFacts<PortAddress, SchemaFact>,
     pub diagnostics: Box<[NodeDiagnostic<NodeId, PortAddress, ConnectionId, ResourceIdentity>]>,
 }
@@ -61,6 +75,36 @@ pub enum ValidationError {
     BasisMismatch,
 }
 
+mod ordered_map_entries {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S, K, V>(values: &BTreeMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        K: Serialize,
+        V: Serialize,
+    {
+        values.iter().collect::<Vec<_>>().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, K, V>(deserializer: D) -> Result<BTreeMap<K, V>, D::Error>
+    where
+        D: Deserializer<'de>,
+        K: Deserialize<'de> + Ord,
+        V: Deserialize<'de>,
+    {
+        let entries = Vec::<(K, V)>::deserialize(deserializer)?;
+        let mut values = BTreeMap::new();
+        for (key, value) in entries {
+            if values.insert(key, value).is_some() {
+                return Err(serde::de::Error::custom("duplicate ordered map key"));
+            }
+        }
+        Ok(values)
+    }
+}
+
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -78,6 +122,132 @@ impl std::fmt::Display for ValidationError {
 }
 
 impl std::error::Error for ValidationError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node_system::analysis::{ResourceVersion, ResourceVersionSet};
+    use crate::node_system::document::{ConnectionId, GraphRevision, NodeId, PortAddress};
+    use crate::node_system::protocol::{SchemaExpr, TypeExpr, TypeId};
+    use crate::node_system::registry::RegistryFingerprint;
+    use uuid::Uuid;
+
+    type TestSnapshot = AnalysisSnapshot<
+        GraphRevision,
+        NodeId,
+        PortAddress,
+        ConnectionId,
+        Box<str>,
+        serde_json::Value,
+        TypeExpr,
+        SchemaExpr,
+    >;
+
+    fn address(node: u128, port: &str) -> PortAddress {
+        PortAddress::declared(
+            NodeId::from_uuid(Uuid::from_u128(node)),
+            PortKey::new(port).unwrap(),
+        )
+    }
+
+    fn snapshot() -> TestSnapshot {
+        let first = address(1, "first");
+        let second = address(2, "second");
+        let mut partial_types = BTreeMap::new();
+        partial_types.insert(
+            second.clone(),
+            TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+        );
+        partial_types.insert(
+            first.clone(),
+            TypeExpr::Concrete(TypeId::new("core.integer").unwrap()),
+        );
+        let mut partial_schemas = BTreeMap::new();
+        partial_schemas.insert(second, SchemaExpr::Input(PortKey::new("source_b").unwrap()));
+        partial_schemas.insert(first, SchemaExpr::Input(PortKey::new("source_a").unwrap()));
+
+        AnalysisSnapshot {
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(5),
+                registry_fingerprint: RegistryFingerprint::from_bytes([3; 32]),
+                resource_versions: ResourceVersionSet::from([(
+                    crate::node_system::analysis::ResourceKey::new("resource.test"),
+                    ResourceVersion::new("1"),
+                )]),
+            },
+            nodes: Box::new([]),
+            resolved_interfaces: Box::new([]),
+            partial_types,
+            partial_schemas,
+            diagnostics: Box::new([]),
+        }
+    }
+
+    fn json_entry<K: Serialize, V: Serialize>(key: &K, value: &V) -> serde_json::Value {
+        serde_json::Value::Array(vec![
+            serde_json::to_value(key).unwrap(),
+            serde_json::to_value(value).unwrap(),
+        ])
+    }
+
+    #[test]
+    fn partial_fact_maps_serialize_as_ordered_entry_arrays() {
+        let snapshot = snapshot();
+        let first = address(1, "first");
+        let second = address(2, "second");
+        let json = serde_json::to_value(&snapshot).unwrap();
+
+        assert_eq!(
+            json["partial_types"],
+            serde_json::Value::Array(vec![
+                json_entry(
+                    &first,
+                    &TypeExpr::Concrete(TypeId::new("core.integer").unwrap()),
+                ),
+                json_entry(
+                    &second,
+                    &TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+                ),
+            ])
+        );
+        assert_eq!(
+            json["partial_schemas"],
+            serde_json::Value::Array(vec![
+                json_entry(
+                    &first,
+                    &SchemaExpr::Input(PortKey::new("source_a").unwrap()),
+                ),
+                json_entry(
+                    &second,
+                    &SchemaExpr::Input(PortKey::new("source_b").unwrap()),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn partial_fact_map_json_roundtrips() {
+        let snapshot = snapshot();
+        let encoded = serde_json::to_vec(&snapshot).unwrap();
+        let decoded: TestSnapshot = serde_json::from_slice(&encoded).unwrap();
+
+        assert_eq!(decoded, snapshot);
+    }
+
+    #[test]
+    fn partial_fact_map_json_rejects_duplicate_keys() {
+        let mut json = serde_json::to_value(snapshot()).unwrap();
+        let duplicate = json["partial_types"][0].clone();
+        json["partial_types"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+
+        let error = serde_json::from_value::<TestSnapshot>(json).unwrap_err();
+
+        assert_eq!(error.to_string(), "duplicate ordered map key");
+    }
+}
 
 impl<
     GraphRevision: PartialEq,

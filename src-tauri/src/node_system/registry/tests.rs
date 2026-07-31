@@ -95,6 +95,46 @@ fn error(provider: ProviderRegistration) -> RegistryValidationError {
     }
 }
 
+fn provider_with_member_groups(groups: serde_json::Value) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    let node = Arc::make_mut(&mut provider.nodes[0].protocol);
+    node.interface.ports = [
+        ("first", PortInstances::UserCreated { min: 0, max: None }),
+        ("second", PortInstances::UserCreated { min: 0, max: None }),
+        ("third", PortInstances::UserCreated { min: 0, max: None }),
+        ("declared", PortInstances::Declared),
+    ]
+    .into_iter()
+    .map(|(key, instances)| PortSpec {
+        key: id(key),
+        label_key: id(&format!("nodes.test.{key}")),
+        direction: PortDirection::Input,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Unknown,
+        instances,
+        connections: ConnectionsPerPort::Single,
+        input_binding: Some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Allowed,
+            default_value: None,
+        }),
+        consumption: Some(InputConsumption::FullyMaterialized),
+        production: None,
+        editor: PortEditorSpec::Default,
+        schema: None,
+    })
+    .collect();
+    provider.i18n.keys.extend([
+        id("nodes.test.first"),
+        id("nodes.test.second"),
+        id("nodes.test.third"),
+        id("nodes.test.declared"),
+    ]);
+    let mut interface = serde_json::to_value(&node.interface).unwrap();
+    interface["member_groups"] = groups;
+    node.interface = serde_json::from_value(interface).unwrap();
+    provider
+}
+
 #[test]
 fn freezes_immutable_indexes_and_manifests() {
     let mut builder = NodeRegistryBuilder::new();
@@ -105,6 +145,33 @@ fn freezes_immutable_indexes_and_manifests() {
     assert!(registry.categories().get(&id("test")).is_some());
     assert_eq!(registry.catalog_manifest().node_protocols.len(), 1);
     assert_eq!(registry.fingerprint().as_bytes().len(), 32);
+}
+
+#[test]
+fn rejects_incomplete_or_invalid_port_member_groups() {
+    for groups in [
+        serde_json::json!([{"templates": ["first"], "min": 0, "max": null}]),
+        serde_json::json!([{"templates": ["first", "missing"], "min": 0, "max": null}]),
+        serde_json::json!([{"templates": ["first", "declared"], "min": 0, "max": null}]),
+        serde_json::json!([{"templates": ["first", "second"], "min": 2, "max": 1}]),
+    ] {
+        assert!(matches!(
+            error(provider_with_member_groups(groups)),
+            RegistryValidationError::InvalidNode { .. }
+        ));
+    }
+}
+
+#[test]
+fn rejects_templates_repeated_across_port_member_groups() {
+    let groups = serde_json::json!([
+        {"templates": ["first", "second"], "min": 0, "max": null},
+        {"templates": ["second", "third"], "min": 0, "max": null}
+    ]);
+    assert!(matches!(
+        error(provider_with_member_groups(groups)),
+        RegistryValidationError::InvalidNode { .. }
+    ));
 }
 
 #[test]
@@ -313,6 +380,28 @@ fn fingerprints_are_canonical_and_protocol_sensitive() {
     assert_ne!(
         first.catalog_manifest().node_protocols,
         changed.catalog_manifest().node_protocols
+    );
+}
+
+#[test]
+fn port_member_groups_change_protocol_fingerprint() {
+    fn frozen(provider: ProviderRegistration) -> NodeRegistry {
+        let mut builder = NodeRegistryBuilder::new();
+        builder.register_provider(provider).unwrap();
+        builder.freeze().unwrap()
+    }
+
+    let without_group = frozen(provider_with_member_groups(serde_json::json!([])));
+    let with_group = frozen(provider_with_member_groups(serde_json::json!([{
+        "templates": ["first", "second"],
+        "min": 0,
+        "max": null
+    }])));
+
+    assert_ne!(without_group.fingerprint(), with_group.fingerprint());
+    assert_ne!(
+        without_group.catalog_manifest().node_protocols,
+        with_group.catalog_manifest().node_protocols
     );
 }
 
