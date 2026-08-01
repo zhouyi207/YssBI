@@ -33,8 +33,12 @@ pub use builtin::{
 pub use execution_event::{
     NOOP_RUN_EVENT_SINK, NoopRunEventSink, RunErrorCode, RunEvent, RunEventKind, RunEventSink,
 };
-pub use function_plan::{FunctionPlanGeneration, FunctionPlanStore, FunctionPlanStoreError};
-pub use kernel::{Kernel, KernelContext, KernelError, KernelRegistrationError, KernelRegistry};
+pub use function_plan::{
+    FunctionPlanGeneration, FunctionPlanStore, FunctionPlanStoreError, PublishedFunctionPlan,
+};
+pub use kernel::{
+    Kernel, KernelContext, KernelError, KernelErrorKind, KernelRegistrationError, KernelRegistry,
+};
 pub use kernels::{
     ConvertParameters, ConvertTarget, DataframeKernelParameters, PlotKind, PlotPublishError,
     PlotSink, PlotSinkResource, StatisticsKernelParameters, dataframe_to_protocol_value,
@@ -45,6 +49,8 @@ pub use parameters::{
 pub use production_relational::ProductionRelationalBackend;
 #[cfg(test)]
 pub(crate) use production_relational::ProductionRelationalObserver;
+#[cfg(test)]
+pub(crate) use project_resource::ProjectResourceLeaseObserver;
 pub use project_resource::{
     ProjectDataFrameScan, ProjectDatabaseSnapshot, ProjectResourceLease, ProjectResourceProvider,
     ProjectResourceSnapshot, ProjectResourceValue, ProjectResourceVersionFingerprint,

@@ -84,6 +84,7 @@ impl ProjectRunRegistry {
                 cancellation.cancel();
             }
         }
+        self.drained.notify_all();
         while runs.active.contains_key(project) || runs.preparing.contains_key(project) {
             runs = self
                 .drained
@@ -108,6 +109,20 @@ impl ProjectRunRegistry {
             .values()
             .map(BTreeMap::len)
             .sum()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn wait_until_draining_for_test(
+        &self,
+        project: &ProjectSessionId,
+        timeout: std::time::Duration,
+    ) -> bool {
+        let runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        let (runs, _) = self
+            .drained
+            .wait_timeout_while(runs, timeout, |runs| !runs.draining.contains_key(project))
+            .unwrap_or_else(|error| error.into_inner());
+        runs.draining.contains_key(project)
     }
 
     #[cfg(test)]
@@ -224,7 +239,6 @@ impl std::error::Error for ProjectRunRegistrationError {}
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use std::time::Duration;
 
     #[test]
     fn nested_drain_guards_keep_admission_closed_until_last_drop() {
@@ -269,6 +283,16 @@ mod tests {
     }
 
     #[test]
+    fn wait_until_draining_for_test_times_out_when_project_is_not_draining() {
+        let registry = ProjectRunRegistry::new();
+        let session = ProjectSessionId::new("not-draining");
+
+        assert!(
+            !registry.wait_until_draining_for_test(&session, std::time::Duration::from_millis(10),)
+        );
+    }
+
+    #[test]
     fn project_drain_cancels_graph_compiler_with_the_pre_run_token() {
         struct EmptyResources;
 
@@ -288,23 +312,20 @@ mod tests {
         let lease = registry
             .track_pre_run(session.clone(), cancellation.clone())
             .unwrap();
-        let drained = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (drained_tx, drained_rx) = std::sync::mpsc::channel();
         let worker_registry = Arc::clone(&registry);
         let worker_session = session.clone();
-        let worker_drained = Arc::clone(&drained);
         let worker = std::thread::spawn(move || {
             worker_registry.cancel_and_drain(&worker_session);
-            worker_drained.store(true, std::sync::atomic::Ordering::SeqCst);
+            drained_tx.send(()).unwrap();
         });
 
-        for _ in 0..100 {
-            if cancellation.is_cancelled() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        assert!(
+            registry.wait_until_draining_for_test(&session, std::time::Duration::from_secs(5),),
+            "project run registry must enter draining"
+        );
         assert!(cancellation.is_cancelled());
-        assert!(!drained.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(drained_rx.try_recv().is_err());
 
         let (provider, _) = crate::node_system::catalog::build_builtin_provider();
         let mut registry_builder = crate::node_system::registry::NodeRegistryBuilder::new();
@@ -323,7 +344,9 @@ mod tests {
         );
 
         drop(lease);
+        drained_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("project drain must finish after the pre-run lease drops");
         worker.join().unwrap();
-        assert!(drained.load(std::sync::atomic::Ordering::SeqCst));
     }
 }

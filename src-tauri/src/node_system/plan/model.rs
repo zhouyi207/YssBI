@@ -1,7 +1,8 @@
 use crate::node_system::analysis::CompileProvenance;
-use crate::node_system::document::NodeId;
+use crate::node_system::document::{FunctionParameterId, NodeId};
 use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 
 macro_rules! index_type {
@@ -108,6 +109,13 @@ impl PlanValueSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FunctionPlanAbi {
+    pub provenance: CompileProvenance,
+    pub parameters: BTreeMap<FunctionParameterId, ValueRef>,
+    pub results: BTreeMap<FunctionParameterId, ValueRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedOperation {
     pub source_node_id: NodeId,
     pub source_node_type_id: NodeTypeId,
@@ -164,8 +172,8 @@ pub enum StructuredControlRegion {
     },
     Call {
         target: FunctionPlanHandle,
-        arguments: Box<[RegionValueBinding]>,
-        results: Box<[RegionValueBinding]>,
+        arguments: Box<[CallArgumentBinding]>,
+        results: Box<[CallResultBinding]>,
     },
 }
 
@@ -176,9 +184,15 @@ pub enum ControlStep {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RegionValueBinding {
-    pub destination: ValueRef,
-    pub source: ValueRef,
+pub struct CallArgumentBinding {
+    pub caller_source: ValueRef,
+    pub callee_destination: ValueRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallResultBinding {
+    pub callee_source: ValueRef,
+    pub caller_destination: ValueRef,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

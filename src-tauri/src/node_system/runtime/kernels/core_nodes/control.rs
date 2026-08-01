@@ -49,7 +49,7 @@ impl Kernel for SleepKernel {
         let deadline = Instant::now() + Duration::from_secs_f64(seconds);
         loop {
             if context.cancellation.is_cancelled() {
-                return Err(KernelError::new("Sleep was cancelled"));
+                return Err(KernelError::cancelled("Sleep was cancelled"));
             }
             let now = Instant::now();
             if now >= deadline {

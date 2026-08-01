@@ -4,13 +4,15 @@ use crate::node_system::analysis::{
     SpanKind, TraceSink,
 };
 use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument,
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature, GraphDocument,
     GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
 };
 use crate::node_system::plan::{
-    CompiledParameterHandle, CompiledResourceRequirement, KernelHandle, MaterializationBridge,
-    PlanResult, RelationalBackendId, RelationalBridgeInput, RelationalFragmentId,
-    RelationalOperator, RelationalOperatorIndex, ResourceAccess, ResourceId, ResourceKind,
+    CallArgumentBinding, CallResultBinding, CompiledParameterHandle, CompiledResourceRequirement,
+    ControlStep, KernelHandle, MaterializationBridge, PlanResult, RelationalBackendId,
+    RelationalBridgeInput, RelationalFragmentId, RelationalOperator, RelationalOperatorIndex,
+    ResourceAccess, ResourceId, ResourceKind,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -549,6 +551,33 @@ fn connect_addresses(graph: &mut GraphDocument, id: u128, output: PortAddress, i
             order: None,
         },
     );
+}
+
+fn bind_resolved_function_port(
+    graph: &mut GraphDocument,
+    node: u128,
+    template: &str,
+    instance: u128,
+    order: &str,
+    function: &GraphResourcePath,
+    parameter: &FunctionParameterId,
+) -> PortAddress {
+    let address = PortAddress::instance(
+        node_id(node),
+        key(template),
+        PortInstanceId::from_uuid(Uuid::from_u128(instance)),
+    );
+    graph.port_bindings.insert(
+        address.clone(),
+        DynamicPortBinding::Resolved {
+            origin: DynamicMemberLocator::FunctionParameter {
+                function: function.clone(),
+                parameter: parameter.clone(),
+            },
+            order: OrderKey(order.into()),
+        },
+    );
+    address
 }
 
 fn bind_member_port(
@@ -1997,18 +2026,6 @@ fn control_port(name: &str, direction: PortDirection) -> PortSpec {
     }
 }
 
-fn parameter(name: &str) -> ParameterSpec {
-    ParameterSpec {
-        key: ParameterKey::new(name).unwrap(),
-        title_key: I18nKey::new(format!("parameters.{name}.title")).unwrap(),
-        description_key: None,
-        value_type: TypeExpr::Unknown,
-        default_value: None,
-        constraints: vec![],
-        editor: ParameterEditorSpec::Auto,
-    }
-}
-
 fn structural_protocol(
     name: &str,
     ports: Vec<PortSpec>,
@@ -2115,6 +2132,47 @@ fn region_contains_operation(
         StructuredControlRegion::Loop { body, .. } => region_contains_operation(body, expected),
         StructuredControlRegion::Call { .. } => false,
     }
+}
+
+#[test]
+fn builtin_multi_output_sequence_outside_branch_keeps_walker_order() {
+    use crate::node_system::catalog::build_builtin_registry;
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.control.sequence"),
+        (2, "yssbi.control.do"),
+        (3, "yssbi.control.do"),
+    ]);
+    let first = bind_member_port(&mut graph, 1, "then", 10, "a");
+    let second = bind_member_port(&mut graph, 1, "then", 11, "z");
+    connect_addresses(
+        &mut graph,
+        100,
+        first,
+        PortAddress::declared(node_id(2), key("enter")),
+    );
+    connect_addresses(
+        &mut graph,
+        101,
+        second,
+        PortAddress::declared(node_id(3), key("enter")),
+    );
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("sequence diagnostics: {:?}", result.analysis.diagnostics));
+
+    assert_eq!(plan.operations.len(), 2);
+    assert!(region_contains_operation(
+        &plan.root_region,
+        operation_index_for_node(&plan, 2)
+    ));
+    assert!(region_contains_operation(
+        &plan.root_region,
+        operation_index_for_node(&plan, 3)
+    ));
 }
 
 #[test]
@@ -2287,6 +2345,339 @@ fn nested_branch_with_one_terminating_arm_blocks_unstructured_continuation() {
             && diagnostic.primary
                 == crate::node_system::analysis::DiagnosticLocation::Node(node_id(3))
     }));
+}
+
+#[test]
+fn branch_postdom_uses_last_walker_successor_for_multi_output_sequence() {
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.control.branch"),
+        (3, "yssbi.control.sequence"),
+        (4, "yssbi.control.do"),
+        (5, "yssbi.control.merge"),
+        (6, "yssbi.control.do"),
+    ]);
+    let sequence_first = bind_member_port(&mut graph, 3, "then", 30, "a");
+    let sequence_second = bind_member_port(&mut graph, 3, "then", 31, "z");
+    let merge_true = bind_member_port(&mut graph, 5, "enter", 50, "a");
+    let merge_false = bind_member_port(&mut graph, 5, "enter", 51, "z");
+    connect(&mut graph, 100, 1, "value", 2, "condition");
+    connect(&mut graph, 101, 2, "true", 3, "enter");
+    connect_addresses(
+        &mut graph,
+        102,
+        sequence_first,
+        PortAddress::declared(node_id(4), key("enter")),
+    );
+    connect_addresses(&mut graph, 103, sequence_second, merge_true);
+    connect_addresses(
+        &mut graph,
+        104,
+        PortAddress::declared(node_id(2), key("false")),
+        merge_false,
+    );
+    connect(&mut graph, 105, 5, "then", 6, "enter");
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("sequence diagnostics: {:?}", result.analysis.diagnostics));
+    let first = operation_index_for_node(&plan, 4);
+    let continuation = operation_index_for_node(&plan, 6);
+    let root_steps = match &plan.root_region {
+        StructuredControlRegion::Sequence(steps) => steps,
+        other => panic!("expected root sequence, got {other:?}"),
+    };
+    let (branch_index, branch) = root_steps
+        .iter()
+        .enumerate()
+        .find_map(|(index, step)| match step {
+            ControlStep::Region(region)
+                if matches!(region.as_ref(), StructuredControlRegion::If { .. }) =>
+            {
+                Some((index, region.as_ref()))
+            }
+            _ => None,
+        })
+        .expect("Branch region");
+    let StructuredControlRegion::If {
+        then_region,
+        else_region,
+        ..
+    } = branch
+    else {
+        unreachable!()
+    };
+    assert!(region_contains_operation(then_region, first));
+    assert!(!region_contains_operation(else_region, first));
+    assert!(!region_contains_operation(then_region, continuation));
+    assert!(!region_contains_operation(else_region, continuation));
+    assert!(root_steps[branch_index + 1..].iter().any(
+        |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation)
+    ));
+}
+
+#[test]
+fn branch_continuation_allows_multi_output_sequence_suffix_after_merge() {
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.control.branch"),
+        (3, "yssbi.control.do"),
+        (4, "yssbi.control.do"),
+        (5, "yssbi.control.merge"),
+        (6, "yssbi.control.sequence"),
+        (7, "yssbi.control.do"),
+        (8, "yssbi.control.do"),
+    ]);
+    let merge_true = bind_member_port(&mut graph, 5, "enter", 50, "a");
+    let merge_false = bind_member_port(&mut graph, 5, "enter", 51, "z");
+    let suffix_first = bind_member_port(&mut graph, 6, "then", 60, "a");
+    let suffix_second = bind_member_port(&mut graph, 6, "then", 61, "z");
+    connect(&mut graph, 100, 1, "value", 2, "condition");
+    connect(&mut graph, 101, 2, "true", 3, "enter");
+    connect(&mut graph, 102, 2, "false", 4, "enter");
+    connect_addresses(
+        &mut graph,
+        103,
+        PortAddress::declared(node_id(3), key("then")),
+        merge_true,
+    );
+    connect_addresses(
+        &mut graph,
+        104,
+        PortAddress::declared(node_id(4), key("then")),
+        merge_false,
+    );
+    connect(&mut graph, 105, 5, "then", 6, "enter");
+    connect_addresses(
+        &mut graph,
+        106,
+        suffix_first,
+        PortAddress::declared(node_id(7), key("enter")),
+    );
+    connect_addresses(
+        &mut graph,
+        107,
+        suffix_second,
+        PortAddress::declared(node_id(8), key("enter")),
+    );
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("suffix diagnostics: {:?}", result.analysis.diagnostics));
+    let first = operation_index_for_node(&plan, 7);
+    let second = operation_index_for_node(&plan, 8);
+    let root_steps = match &plan.root_region {
+        StructuredControlRegion::Sequence(steps) => steps,
+        other => panic!("expected root sequence, got {other:?}"),
+    };
+    let branch_index = root_steps
+        .iter()
+        .position(|step| matches!(step, ControlStep::Region(region) if matches!(region.as_ref(), StructuredControlRegion::If { .. })))
+        .expect("Branch region");
+    let suffix = &root_steps[branch_index + 1..];
+    let first_index = suffix
+        .iter()
+        .position(|step| matches!(step, ControlStep::Operation(operation) if *operation == first))
+        .expect("first suffix operation");
+    let second_index = suffix
+        .iter()
+        .position(|step| matches!(step, ControlStep::Operation(operation) if *operation == second))
+        .expect("second suffix operation");
+    assert!(first_index < second_index);
+}
+
+#[test]
+fn nested_branch_postdom_stops_before_outer_multi_output_sequence_suffix() {
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.bool"),
+        (3, "yssbi.control.branch"),
+        (4, "yssbi.control.branch"),
+        (5, "yssbi.control.merge"),
+        (6, "yssbi.control.merge"),
+        (7, "yssbi.control.sequence"),
+        (8, "yssbi.control.do"),
+        (9, "yssbi.control.do"),
+    ]);
+    let inner_true = bind_member_port(&mut graph, 5, "enter", 50, "a");
+    let inner_false = bind_member_port(&mut graph, 5, "enter", 51, "z");
+    let outer_true = bind_member_port(&mut graph, 6, "enter", 60, "a");
+    let outer_false = bind_member_port(&mut graph, 6, "enter", 61, "z");
+    let suffix_first = bind_member_port(&mut graph, 7, "then", 70, "a");
+    let suffix_second = bind_member_port(&mut graph, 7, "then", 71, "z");
+    connect(&mut graph, 100, 1, "value", 3, "condition");
+    connect(&mut graph, 101, 2, "value", 4, "condition");
+    connect(&mut graph, 102, 3, "true", 4, "enter");
+    connect_addresses(
+        &mut graph,
+        103,
+        PortAddress::declared(node_id(4), key("true")),
+        inner_true,
+    );
+    connect_addresses(
+        &mut graph,
+        104,
+        PortAddress::declared(node_id(4), key("false")),
+        inner_false,
+    );
+    connect_addresses(
+        &mut graph,
+        105,
+        PortAddress::declared(node_id(5), key("then")),
+        outer_true,
+    );
+    connect_addresses(
+        &mut graph,
+        106,
+        PortAddress::declared(node_id(3), key("false")),
+        outer_false,
+    );
+    connect(&mut graph, 107, 6, "then", 7, "enter");
+    connect_addresses(
+        &mut graph,
+        108,
+        suffix_first,
+        PortAddress::declared(node_id(8), key("enter")),
+    );
+    connect_addresses(
+        &mut graph,
+        109,
+        suffix_second,
+        PortAddress::declared(node_id(9), key("enter")),
+    );
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result.plan.unwrap_or_else(|| {
+        panic!(
+            "nested suffix diagnostics: {:?}",
+            result.analysis.diagnostics
+        )
+    });
+    let first = operation_index_for_node(&plan, 8);
+    let second = operation_index_for_node(&plan, 9);
+    let root_steps = match &plan.root_region {
+        StructuredControlRegion::Sequence(steps) => steps,
+        other => panic!("expected root sequence, got {other:?}"),
+    };
+    let branch_index = root_steps
+        .iter()
+        .position(|step| matches!(step, ControlStep::Region(region) if matches!(region.as_ref(), StructuredControlRegion::If { .. })))
+        .expect("outer Branch region");
+    assert!(
+        root_steps[branch_index + 1..]
+            .iter()
+            .any(|step| matches!(step, ControlStep::Operation(operation) if *operation == first))
+    );
+    assert!(
+        root_steps[branch_index + 1..]
+            .iter()
+            .any(|step| matches!(step, ControlStep::Operation(operation) if *operation == second))
+    );
+}
+
+#[test]
+fn nested_complete_diamond_uses_the_true_common_continuation() {
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.constant.bool"),
+        (3, "yssbi.control.branch"),
+        (4, "yssbi.control.branch"),
+        (5, "yssbi.control.merge"),
+        (6, "yssbi.control.merge"),
+        (7, "yssbi.control.do"),
+    ]);
+    let inner_true = bind_member_port(&mut graph, 5, "enter", 50, "z");
+    let inner_false = bind_member_port(&mut graph, 5, "enter", 51, "a");
+    let outer_true = bind_member_port(&mut graph, 6, "enter", 60, "z");
+    let outer_false = bind_member_port(&mut graph, 6, "enter", 61, "a");
+    connect(&mut graph, 100, 1, "value", 3, "condition");
+    connect(&mut graph, 101, 2, "value", 4, "condition");
+    connect(&mut graph, 102, 3, "true", 4, "enter");
+    connect_addresses(
+        &mut graph,
+        103,
+        PortAddress::declared(node_id(4), key("true")),
+        inner_true,
+    );
+    connect_addresses(
+        &mut graph,
+        104,
+        PortAddress::declared(node_id(4), key("false")),
+        inner_false,
+    );
+    connect_addresses(
+        &mut graph,
+        105,
+        PortAddress::declared(node_id(5), key("then")),
+        outer_true,
+    );
+    connect_addresses(
+        &mut graph,
+        106,
+        PortAddress::declared(node_id(3), key("false")),
+        outer_false,
+    );
+    connect(&mut graph, 107, 6, "then", 7, "enter");
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result.plan.unwrap_or_else(|| {
+        panic!(
+            "nested diamond diagnostics: {:?}",
+            result.analysis.diagnostics
+        )
+    });
+    let continuation = operation_index_for_node(&plan, 7);
+    let root_steps = match &plan.root_region {
+        StructuredControlRegion::Sequence(steps) => steps,
+        other => panic!("expected root sequence, got {other:?}"),
+    };
+    let (outer_index, outer) = root_steps
+        .iter()
+        .enumerate()
+        .find_map(|(index, step)| match step {
+            ControlStep::Region(region)
+                if matches!(region.as_ref(), StructuredControlRegion::If { .. }) =>
+            {
+                Some((index, region.as_ref()))
+            }
+            _ => None,
+        })
+        .expect("outer Branch must be top-level");
+    let StructuredControlRegion::If {
+        then_region,
+        else_region,
+        ..
+    } = outer
+    else {
+        unreachable!()
+    };
+    assert!(contains_region(then_region, &|region| matches!(
+        region,
+        StructuredControlRegion::If { .. }
+    )));
+    assert!(!region_contains_operation(then_region, continuation));
+    assert!(!region_contains_operation(else_region, continuation));
+    assert!(root_steps[outer_index + 1..].iter().any(
+        |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation)
+    ));
 }
 
 #[test]
@@ -2476,60 +2867,589 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
 }
 
 #[test]
-fn call_parses_target_and_region_value_bindings() {
+fn call_binds_exact_function_locators_across_different_value_layouts() {
+    use crate::node_system::catalog::build_builtin_registry;
     use crate::node_system::plan::StructuredControlRegion;
-    let source = test_protocol(
-        "call_source",
-        vec![data_port(
-            "out",
-            PortDirection::Output,
-            TypeExpr::Unknown,
-            None,
-        )],
-        vec![],
-        vec![],
-    );
-    let call = structural_protocol(
-        "call",
-        vec![
-            data_port("argument", PortDirection::Input, TypeExpr::Unknown, None),
-            data_port("result", PortDirection::Output, TypeExpr::Unknown, None),
-        ],
-        vec![
-            parameter("target"),
-            parameter("arguments"),
-            parameter("results"),
-        ],
-    );
-    let call_type = call.type_id.clone();
-    let registry =
-        TestRegistry::new(vec![source, call]).structural(&call_type, StructuralNodeRole::Call);
-    let mut graph = graph_with_nodes(&[(1, "call_source"), (2, "call")]);
+
+    struct FunctionResources {
+        path: GraphResourcePath,
+        function: FunctionDocument,
+        graph: GraphDocument,
+    }
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::from([(
+                ResourceKey::new(self.path.0.as_ref()),
+                ResourceVersion::new("function-v1"),
+            )])
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            (path == &self.path).then_some(&self.function)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.path).then_some(&self.graph)
+        }
+    }
+
+    let registry = build_builtin_registry();
+    let function_path = GraphResourcePath("functions/exact-layout".into());
+    let parameter_id = FunctionParameterId("amount".into());
+    let return_id = FunctionParameterId("return".into());
+    let function = FunctionDocument::new(FunctionSignature {
+        parameters: vec![FunctionParameter {
+            id: parameter_id.clone(),
+            name: "Amount".into(),
+            type_name: "int64".into(),
+        }],
+        return_type: Some("int64".into()),
+    });
+
+    let mut callee = builtin_graph_with_nodes(&[
+        (20, "yssbi.project.function.entry"),
+        (30, "yssbi.project.function.return"),
+    ]);
     set_parameters(
-        &mut graph,
-        2,
-        &[
-            ("target", serde_json::json!("functions/test")),
-            (
-                "arguments",
-                serde_json::json!([{"destination": "argument", "source": "argument"}]),
-            ),
-            (
-                "results",
-                serde_json::json!([{"destination": "result", "source": "result"}]),
-            ),
-        ],
+        &mut callee,
+        20,
+        &[("function", serde_json::json!(function_path.0.as_ref()))],
     );
-    connect(&mut graph, 10, 1, "out", 2, "argument");
+    set_parameters(
+        &mut callee,
+        30,
+        &[("function", serde_json::json!(function_path.0.as_ref()))],
+    );
+    let entry_parameter = bind_resolved_function_port(
+        &mut callee,
+        20,
+        "parameters",
+        200,
+        "z",
+        &function_path,
+        &parameter_id,
+    );
+    let return_result = bind_resolved_function_port(
+        &mut callee,
+        30,
+        "results",
+        300,
+        "a",
+        &function_path,
+        &return_id,
+    );
+    connect(&mut callee, 400, 20, "then", 30, "enter");
+    connect_addresses(
+        &mut callee,
+        401,
+        entry_parameter.clone(),
+        return_result.clone(),
+    );
 
-    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let resources = FunctionResources {
+        path: function_path.clone(),
+        function,
+        graph: callee.clone(),
+    };
+    let compiler = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    );
+    let callee_products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(function_path.clone(), &callee),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let callee_abi = callee_products
+        .function_abi
+        .expect("function compilation publishes Entry/Return ABI");
 
-    let plan = result.plan.expect("call should produce a plan");
-    assert!(contains_region(&plan.root_region, &|region| matches!(
-        region,
-        StructuredControlRegion::Call { target, arguments, results }
-            if target.as_str() == "functions/test" && arguments.len() == 1 && results.len() == 1
-    )));
+    let mut caller = builtin_graph_with_nodes(&[
+        (1, "yssbi.constant.int64"),
+        (10, "yssbi.project.function.call"),
+    ]);
+    set_parameters(
+        &mut caller,
+        10,
+        &[("target", serde_json::json!(function_path.0.as_ref()))],
+    );
+    let call_argument = bind_resolved_function_port(
+        &mut caller,
+        10,
+        "arguments",
+        100,
+        "z",
+        &function_path,
+        &parameter_id,
+    );
+    let call_result = bind_resolved_function_port(
+        &mut caller,
+        10,
+        "results",
+        101,
+        "a",
+        &function_path,
+        &return_id,
+    );
+    connect_addresses(
+        &mut caller,
+        500,
+        PortAddress::declared(node_id(1), key("value")),
+        call_argument.clone(),
+    );
+
+    let caller_products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(GraphResourcePath("events/caller".into()), &caller),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let plan = caller_products.plan.expect("caller should compile");
+    fn find_call(
+        region: &StructuredControlRegion,
+    ) -> Option<(CallArgumentBinding, CallResultBinding)> {
+        match region {
+            StructuredControlRegion::Sequence(steps) => steps.iter().find_map(|step| match step {
+                ControlStep::Operation(_) => None,
+                ControlStep::Region(region) => find_call(region),
+            }),
+            StructuredControlRegion::If {
+                then_region,
+                else_region,
+                ..
+            } => find_call(then_region).or_else(|| find_call(else_region)),
+            StructuredControlRegion::Loop { body, .. } => find_call(body),
+            StructuredControlRegion::Call {
+                arguments, results, ..
+            } => Some((arguments[0], results[0])),
+        }
+    }
+    let (argument, result) = find_call(&plan.root_region).expect("compiled Call region");
+
+    assert_eq!(
+        argument.callee_destination,
+        callee_abi.parameters[&parameter_id]
+    );
+    assert_eq!(result.callee_source, callee_abi.results[&return_id]);
+    assert_ne!(argument.caller_source, argument.callee_destination);
+    assert_ne!(result.caller_destination, result.callee_source);
+    assert_eq!(
+        plan.provenance.basis.resource_versions,
+        callee_abi.provenance.basis.resource_versions
+    );
+    assert_eq!(call_result.node_id, node_id(10));
+
+    let recursive_call_id = node_id(40);
+    let mut recursive = callee.clone();
+    recursive.nodes.insert(
+        recursive_call_id,
+        DocumentNode {
+            id: recursive_call_id,
+            node_type: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::from([(
+                ParameterKey::new("target").unwrap(),
+                serde_json::json!(function_path.0.as_ref()),
+            )]),
+            user_label: None,
+        },
+    );
+    let recursive_argument = bind_resolved_function_port(
+        &mut recursive,
+        40,
+        "arguments",
+        410,
+        "a",
+        &function_path,
+        &parameter_id,
+    );
+    let recursive_result = bind_resolved_function_port(
+        &mut recursive,
+        40,
+        "results",
+        411,
+        "b",
+        &function_path,
+        &return_id,
+    );
+    recursive.connections.clear();
+    connect(&mut recursive, 420, 20, "then", 40, "enter");
+    connect(&mut recursive, 421, 40, "then", 30, "enter");
+    connect_addresses(
+        &mut recursive,
+        422,
+        entry_parameter.clone(),
+        recursive_argument,
+    );
+    connect_addresses(&mut recursive, 423, recursive_result, return_result.clone());
+    let recursive_resources = FunctionResources {
+        path: function_path.clone(),
+        function: resources.function.clone(),
+        graph: recursive.clone(),
+    };
+    let recursive_compiler = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &recursive_resources,
+        build_builtin_interface_resolvers(),
+    );
+    let recursive_products = recursive_compiler
+        .compile_snapshot(
+            &recursive_compiler.snapshot(
+                GraphResourcePath("events/self-recursive-caller".into()),
+                &caller,
+            ),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    assert!(
+        recursive_products.plan.is_some(),
+        "self-recursive ABI analysis must stay bounded"
+    );
+
+    struct MutualResources {
+        functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+        graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+    }
+    impl ResourceSnapshot for MutualResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            self.graphs
+                .keys()
+                .map(|path| {
+                    (
+                        ResourceKey::new(path.0.clone()),
+                        ResourceVersion::new("mutual-v1"),
+                    )
+                })
+                .collect()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            self.functions.get(path)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            self.graphs.get(path)
+        }
+    }
+    let path_a = GraphResourcePath("functions/mutual-a".into());
+    let path_b = GraphResourcePath("functions/mutual-b".into());
+    let retarget = |own: &GraphResourcePath, target: &GraphResourcePath| {
+        let mut graph = recursive.clone();
+        for node in graph.nodes.values_mut() {
+            if let Some(value) = node
+                .parameters
+                .get_mut(&ParameterKey::new("function").unwrap())
+            {
+                *value = serde_json::json!(own.0.as_ref());
+            }
+            if let Some(value) = node
+                .parameters
+                .get_mut(&ParameterKey::new("target").unwrap())
+            {
+                *value = serde_json::json!(target.0.as_ref());
+            }
+        }
+        for (address, binding) in &mut graph.port_bindings {
+            let (DynamicPortBinding::Resolved { origin, .. }
+            | DynamicPortBinding::Orphan { origin, .. }) = binding
+            else {
+                continue;
+            };
+            let DynamicMemberLocator::FunctionParameter { function, .. } = origin else {
+                continue;
+            };
+            *function = if address.node_id == recursive_call_id {
+                target.clone()
+            } else {
+                own.clone()
+            };
+        }
+        graph
+    };
+    let mutual_resources = MutualResources {
+        functions: BTreeMap::from([
+            (path_a.clone(), resources.function.clone()),
+            (path_b.clone(), resources.function.clone()),
+        ]),
+        graphs: BTreeMap::from([
+            (path_a.clone(), retarget(&path_a, &path_b)),
+            (path_b.clone(), retarget(&path_b, &path_a)),
+        ]),
+    };
+    let mutual_compiler = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &mutual_resources,
+        build_builtin_interface_resolvers(),
+    );
+    let mutual_products = mutual_compiler
+        .compile_snapshot(
+            &mutual_compiler.snapshot(path_a.clone(), &mutual_resources.graphs[&path_a]),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    assert!(
+        mutual_products.plan.is_some(),
+        "mutual ABI analysis must stay bounded"
+    );
+
+    let return_address = return_result.clone();
+    for (missing, address) in [
+        ("entry", entry_parameter.clone()),
+        ("return", return_result.clone()),
+    ] {
+        let mut malformed = callee.clone();
+        malformed.port_bindings.remove(&address);
+        malformed.connections.clear();
+        if missing == "entry" {
+            let constant = node_id(10);
+            malformed.nodes.insert(
+                constant,
+                DocumentNode {
+                    id: constant,
+                    node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: BTreeMap::new(),
+                    user_label: None,
+                },
+            );
+            connect_addresses(
+                &mut malformed,
+                402,
+                PortAddress::declared(constant, key("value")),
+                return_address.clone(),
+            );
+        }
+        let resources = FunctionResources {
+            path: function_path.clone(),
+            function: resources.function.clone(),
+            graph: malformed.clone(),
+        };
+        let compiler = GraphCompiler::with_interface_resolvers(
+            &registry,
+            &resources,
+            build_builtin_interface_resolvers(),
+        );
+        let products = compiler
+            .compile_snapshot(
+                &compiler.snapshot(function_path.clone(), &malformed),
+                &CompileCancellationToken::new(),
+            )
+            .unwrap();
+        assert!(products.plan.is_none(), "missing {missing} ABI must block");
+        let codes = products
+            .analysis
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            codes.contains(&"compiler.function.abi.member_missing"),
+            "missing {missing} ABI diagnostics: {codes:?}"
+        );
+    }
+
+    let compile_function_codes = |graph: GraphDocument| {
+        let resources = FunctionResources {
+            path: function_path.clone(),
+            function: resources.function.clone(),
+            graph: graph.clone(),
+        };
+        let compiler = GraphCompiler::with_interface_resolvers(
+            &registry,
+            &resources,
+            build_builtin_interface_resolvers(),
+        );
+        compiler
+            .compile_snapshot(
+                &compiler.snapshot(function_path.clone(), &graph),
+                &CompileCancellationToken::new(),
+            )
+            .unwrap()
+            .analysis
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+
+    let mut unexpected = callee.clone();
+    let DynamicPortBinding::Resolved { origin, .. } = unexpected
+        .port_bindings
+        .get_mut(&entry_parameter)
+        .expect("entry binding")
+    else {
+        unreachable!()
+    };
+    *origin = DynamicMemberLocator::FunctionParameter {
+        function: function_path.clone(),
+        parameter: FunctionParameterId("unexpected".into()),
+    };
+    assert!(
+        compile_function_codes(unexpected)
+            .iter()
+            .any(|code| code == "compiler.function.abi.member_unexpected")
+    );
+
+    let mut duplicate = callee.clone();
+    let duplicate_address = PortAddress::instance(
+        node_id(20),
+        key("parameters"),
+        PortInstanceId::from_uuid(Uuid::from_u128(201)),
+    );
+    duplicate.port_bindings.insert(
+        duplicate_address,
+        duplicate.port_bindings[&entry_parameter].clone(),
+    );
+    assert!(
+        compile_function_codes(duplicate)
+            .iter()
+            .any(|code| code == "compiler.function.abi.member_duplicate")
+    );
+
+    let mut wrong_template = callee.clone();
+    let binding = wrong_template
+        .port_bindings
+        .remove(&entry_parameter)
+        .expect("entry binding");
+    wrong_template.port_bindings.insert(
+        PortAddress::instance(
+            node_id(20),
+            key("wrong_parameters"),
+            PortInstanceId::from_uuid(Uuid::from_u128(202)),
+        ),
+        binding,
+    );
+    assert!(
+        compile_function_codes(wrong_template)
+            .iter()
+            .any(|code| code == "compiler.function.abi.endpoint_invalid")
+    );
+
+    let mut missing_call_argument = caller.clone();
+    missing_call_argument.port_bindings.remove(&call_argument);
+    missing_call_argument.connections.clear();
+    let products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(
+                GraphResourcePath("events/missing-call-member".into()),
+                &missing_call_argument,
+            ),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let codes = products
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    assert!(products.plan.is_none());
+    assert!(
+        codes.contains(&"compiler.control.call.member_missing"),
+        "missing Call member diagnostics: {codes:?}"
+    );
+
+    let mut extra_call_argument = caller.clone();
+    bind_resolved_function_port(
+        &mut extra_call_argument,
+        10,
+        "arguments",
+        102,
+        "extra",
+        &function_path,
+        &FunctionParameterId("unexpected".into()),
+    );
+    let products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(
+                GraphResourcePath("events/extra-call-member".into()),
+                &extra_call_argument,
+            ),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let codes = products
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    assert!(products.plan.is_none());
+    assert!(
+        codes.contains(&"compiler.control.call.member_unexpected"),
+        "extra Call member diagnostics: {codes:?}"
+    );
+}
+
+#[test]
+fn function_abi_rejects_wrong_dynamic_member_direction() {
+    struct FunctionResources {
+        path: GraphResourcePath,
+        function: FunctionDocument,
+    }
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::new()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            (path == &self.path).then_some(&self.function)
+        }
+    }
+
+    let mut parameters = data_port("parameters", PortDirection::Input, TypeExpr::Unknown, None);
+    parameters.instances = PortInstances::UserCreated { min: 0, max: None };
+    let mut entry = structural_protocol(
+        "wrong_direction_entry",
+        vec![control_port("then", PortDirection::Output), parameters],
+        vec![],
+    );
+    entry.managed_role = Some(ManagedNodeRole::FunctionEntry);
+    entry.scope = NodeScope::Function;
+    let entry_type = entry.type_id.clone();
+    let mut return_node = structural_protocol(
+        "wrong_direction_return",
+        vec![control_port("enter", PortDirection::Input)],
+        vec![],
+    );
+    return_node.managed_role = Some(ManagedNodeRole::FunctionReturn);
+    return_node.scope = NodeScope::Function;
+    let return_type = return_node.type_id.clone();
+    let registry = TestRegistry::new(vec![entry, return_node])
+        .structural(&entry_type, StructuralNodeRole::FunctionEntry)
+        .structural(&return_type, StructuralNodeRole::FunctionReturn);
+    let path = GraphResourcePath("functions/wrong-direction".into());
+    let parameter = FunctionParameterId("amount".into());
+    let resources = FunctionResources {
+        path: path.clone(),
+        function: FunctionDocument::new(FunctionSignature {
+            parameters: vec![FunctionParameter {
+                id: parameter.clone(),
+                name: "Amount".into(),
+                type_name: "int64".into(),
+            }],
+            return_type: None,
+        }),
+    };
+    let mut graph =
+        graph_with_nodes(&[(1, "wrong_direction_entry"), (2, "wrong_direction_return")]);
+    bind_resolved_function_port(&mut graph, 1, "parameters", 10, "a", &path, &parameter);
+    connect(&mut graph, 11, 1, "then", 2, "enter");
+
+    let compiler = GraphCompiler::new(&registry, &resources);
+    let products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(path, &graph),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+
+    assert!(products.plan.is_none());
+    assert!(products.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.function.abi.endpoint_invalid"
+    }));
 }
 
 #[test]

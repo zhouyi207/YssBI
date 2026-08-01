@@ -69,7 +69,7 @@ impl<K: Kernel> Kernel for RecordingKernel<K> {
                 outcome: result
                     .as_ref()
                     .map(|values| values.clone())
-                    .map_err(|error| error.0.clone()),
+                    .map_err(|error| error.message().into()),
             });
         result
     }
@@ -182,10 +182,10 @@ pub fn tracked_requirement(name: &str) -> CompiledResourceRequirement {
 pub struct NoFunctionPlans;
 
 impl FunctionPlanProvider for NoFunctionPlans {
-    fn get_plan(
+    fn get_function(
         &self,
         _: &FunctionPlanHandle,
-    ) -> Result<Option<Arc<crate::node_system::plan::ExecutionPlan>>, Box<str>> {
+    ) -> Result<Option<Arc<crate::node_system::runtime::PublishedFunctionPlan>>, Box<str>> {
         Ok(None)
     }
 }

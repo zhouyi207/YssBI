@@ -11,6 +11,8 @@ use polars::prelude::DataFrame;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,20 +142,72 @@ fn append_component(output: &mut String, value: &str) {
     output.push_str(value);
 }
 
+#[cfg(test)]
+#[derive(Clone, Default)]
+pub(crate) struct ProjectResourceLeaseObserver {
+    counts: Arc<ProjectResourceLeaseCounts>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ProjectResourceLeaseCounts {
+    acquired: AtomicUsize,
+    dropped: AtomicUsize,
+    active: AtomicUsize,
+}
+
+#[cfg(test)]
+impl ProjectResourceLeaseObserver {
+    pub(crate) fn acquired(&self) -> usize {
+        self.counts.acquired.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn dropped(&self) -> usize {
+        self.counts.dropped.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn active(&self) -> usize {
+        self.counts.active.load(Ordering::SeqCst)
+    }
+
+    fn observe_acquired(&self) {
+        self.counts.acquired.fetch_add(1, Ordering::SeqCst);
+        self.counts.active.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn observe_dropped(&self) {
+        self.counts.dropped.fetch_add(1, Ordering::SeqCst);
+        self.counts.active.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 #[derive(Clone)]
 pub struct ProjectResourceProvider {
     snapshot: Arc<ProjectResourceSnapshot>,
+    #[cfg(test)]
+    lease_observer: Option<ProjectResourceLeaseObserver>,
 }
 
 impl ProjectResourceProvider {
     pub fn new(snapshot: ProjectResourceSnapshot) -> Self {
         Self {
             snapshot: Arc::new(snapshot),
+            #[cfg(test)]
+            lease_observer: None,
         }
     }
 
     pub fn from_shared(snapshot: Arc<ProjectResourceSnapshot>) -> Self {
-        Self { snapshot }
+        Self {
+            snapshot,
+            #[cfg(test)]
+            lease_observer: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_lease_observer(&mut self, observer: ProjectResourceLeaseObserver) {
+        self.lease_observer = Some(observer);
     }
 
     pub fn snapshot(&self) -> &ProjectResourceSnapshot {
@@ -258,9 +312,15 @@ impl ResourceProvider for ProjectResourceProvider {
                 requirement.kind
             ))
         })?;
+        #[cfg(test)]
+        if let Some(observer) = &self.lease_observer {
+            observer.observe_acquired();
+        }
         Ok(Box::new(ProjectResourceLease {
             resource: requirement.resource.clone(),
             value,
+            #[cfg(test)]
+            lease_observer: self.lease_observer.clone(),
         }))
     }
 }
@@ -381,6 +441,8 @@ pub enum ProjectResourceValue {
 pub struct ProjectResourceLease {
     resource: ResourceId,
     value: ProjectResourceValue,
+    #[cfg(test)]
+    lease_observer: Option<ProjectResourceLeaseObserver>,
 }
 
 impl ProjectResourceLease {
@@ -423,6 +485,15 @@ impl ProjectResourceLease {
         match &self.value {
             ProjectResourceValue::Database(database) => database.load_bounded(limit).map(Some),
             ProjectResourceValue::Variable(_) | ProjectResourceValue::PlotSink(_) => Ok(None),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Drop for ProjectResourceLease {
+    fn drop(&mut self) {
+        if let Some(observer) = &self.lease_observer {
+            observer.observe_dropped();
         }
     }
 }

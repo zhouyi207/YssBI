@@ -83,7 +83,7 @@ impl Kernel for StatisticsKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         let parameters = context.parameters::<StatisticsKernelParameters>()?;
         execute_operation(self.operation, self.api, parameters, inputs)
     }

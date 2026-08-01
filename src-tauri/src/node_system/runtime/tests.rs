@@ -3,7 +3,7 @@ use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
     ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink,
 };
-use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+use crate::node_system::document::{FunctionParameterId, GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction, Value};
 use crate::node_system::registry::RegistryFingerprint;
@@ -73,6 +73,28 @@ fn plan(
 
 struct FnKernel<F>(F);
 
+struct ErrorKernel {
+    cancel_token: bool,
+    cancelled_error: bool,
+}
+
+impl Kernel for ErrorKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        if self.cancel_token {
+            context.cancellation.cancel();
+        }
+        Err(if self.cancelled_error {
+            KernelError::cancelled("kernel cancelled")
+        } else {
+            KernelError::new("ordinary failure")
+        })
+    }
+}
+
 impl<F> Kernel for FnKernel<F>
 where
     F: for<'a> Fn(&'a [RuntimeValue]) -> Result<Vec<RuntimeValue>, KernelError> + Send + Sync,
@@ -126,9 +148,61 @@ fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
 struct NoFunctions;
 
 impl FunctionPlanProvider for NoFunctions {
-    fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
+    fn get_function(
+        &self,
+        _: &FunctionPlanHandle,
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>> {
         Ok(None)
     }
+}
+
+struct OneFunction(Arc<PublishedFunctionPlan>);
+
+impl FunctionPlanProvider for OneFunction {
+    fn get_function(
+        &self,
+        _: &FunctionPlanHandle,
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>> {
+        Ok(Some(Arc::clone(&self.0)))
+    }
+}
+
+fn published_function(
+    mut plan: ExecutionPlan,
+    target: &str,
+    parameters: &[u32],
+    results: &[u32],
+) -> Arc<PublishedFunctionPlan> {
+    plan.provenance.graph_path = GraphResourcePath(target.into());
+    let provenance = plan.provenance.clone();
+    let parameters = parameters
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            (
+                FunctionParameterId(format!("parameter-{index}").into()),
+                ValueRef::new(*value),
+            )
+        })
+        .collect();
+    let results = results
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            (
+                FunctionParameterId(format!("result-{index}").into()),
+                ValueRef::new(*value),
+            )
+        })
+        .collect();
+    Arc::new(PublishedFunctionPlan {
+        plan: Arc::new(plan),
+        abi: Arc::new(FunctionPlanAbi {
+            provenance,
+            parameters,
+            results,
+        }),
+    })
 }
 
 struct TrackingResources {
@@ -260,7 +334,7 @@ fn if_executes_only_selected_branch() {
             )
             .unwrap();
     }
-    let execution_plan = plan(
+    let mut execution_plan = plan(
         vec![
             operation("condition", &[], &[0]),
             operation("then", &[], &[1]),
@@ -285,6 +359,7 @@ fn if_executes_only_selected_branch() {
             })),
         ])),
     );
+    execution_plan.value_sources = Box::new([PlanValueSource::ControlProduced(ValueRef::new(3))]);
 
     RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -325,6 +400,63 @@ fn cancellation_stops_run_and_releases_resources() {
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(released.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn cancelled_kernel_error_maps_to_run_cancelled() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("cancelled_error", KernelHandle::new),
+            ErrorKernel {
+                cancel_token: false,
+                cancelled_error: true,
+            },
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("cancelled_error", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+}
+
+#[test]
+fn ordinary_kernel_error_is_not_hidden_by_simultaneous_token_cancellation() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("ordinary_error", KernelHandle::new),
+            ErrorKernel {
+                cancel_token: true,
+                cancelled_error: false,
+            },
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("ordinary_error", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        RunError::KernelFailed { message, .. } if message.as_ref() == "ordinary failure"
+    ));
 }
 
 #[test]
@@ -426,13 +558,6 @@ fn cleanup_spans_cover_success_failure_and_cancellation() {
 
 #[test]
 fn nested_call_spans_record_the_parent_call_and_callee_compile() {
-    struct OneFunction(Arc<ExecutionPlan>);
-    impl FunctionPlanProvider for OneFunction {
-        fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
-            Ok(Some(self.0.clone()))
-        }
-    }
-
     let mut callee = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
     callee.provenance.compile_id = CompileId::new(22);
     callee.provenance.graph_path = GraphResourcePath("functions/callee".into());
@@ -440,7 +565,7 @@ fn nested_call_spans_record_the_parent_call_and_callee_compile() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("callee", FunctionPlanHandle::new),
+            target: id("functions/callee", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
         },
@@ -451,7 +576,7 @@ fn nested_call_spans_record_the_parent_call_and_callee_compile() {
     RunExecutor::new(
         &KernelRegistry::new(),
         &no_resources(),
-        &OneFunction(Arc::new(callee)),
+        &OneFunction(published_function(callee, "functions/callee", &[], &[])),
     )
     .with_trace_sink(&trace)
     .run(&caller, CancellationToken::new())
@@ -548,6 +673,336 @@ fn loop_carries_values_through_fresh_activations() {
 }
 
 #[test]
+fn call_copies_values_across_different_caller_and_callee_layouts() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(41).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("increment", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Scalar(Value::Integer(value)) = &inputs[0] else {
+                    return Err(KernelError::new("expected integer"));
+                };
+                Ok(vec![Value::Integer(value + 1).into()])
+            }),
+        )
+        .unwrap();
+
+    let mut callee = plan(
+        vec![operation("increment", &[1], &[3])],
+        4,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(1))]);
+    let mut caller = plan(
+        vec![operation("source", &[], &[4])],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Call {
+                target: id("functions/callee", FunctionPlanHandle::new),
+                arguments: Box::new([CallArgumentBinding {
+                    caller_source: ValueRef::new(4),
+                    callee_destination: ValueRef::new(1),
+                }]),
+                results: Box::new([CallResultBinding {
+                    callee_source: ValueRef::new(3),
+                    caller_destination: ValueRef::new(0),
+                }]),
+            })),
+        ])),
+    );
+    caller.value_sources = Box::new([PlanValueSource::ControlProduced(ValueRef::new(0))]);
+    caller.results = Box::new([PlanResult {
+        name: "answer".into(),
+        value: ValueRef::new(0),
+    }]);
+
+    let function = published_function(callee, "functions/callee", &[1], &[3]);
+    let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
+        .run(&caller, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(
+        result.values["answer"],
+        RuntimeValue::from(Value::Integer(42))
+    );
+}
+
+#[test]
+fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("callee", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![])
+            }),
+        )
+        .unwrap();
+    let mut callee = plan(
+        vec![operation("callee", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    callee.provenance.graph_path = GraphResourcePath("functions/callee".into());
+    let mut stale_provenance = callee.provenance.clone();
+    stale_provenance.compile_id = CompileId::new(999);
+    let published = Arc::new(PublishedFunctionPlan {
+        plan: Arc::new(callee),
+        abi: Arc::new(FunctionPlanAbi {
+            provenance: stale_provenance,
+            parameters: BTreeMap::new(),
+            results: BTreeMap::new(),
+        }),
+    });
+    let caller = plan(
+        vec![],
+        0,
+        StructuredControlRegion::Call {
+            target: id("functions/callee", FunctionPlanHandle::new),
+            arguments: Box::new([]),
+            results: Box::new([]),
+        },
+    );
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &OneFunction(published))
+        .run(&caller, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::FunctionPlanFailed(_)));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
+    #[derive(Clone, Copy)]
+    enum InvalidCall {
+        MissingArgument,
+        MissingResult,
+        DuplicateCalleeArgument,
+        DuplicateCalleeResult,
+        DuplicateCallerResult,
+        OutOfBoundsParameter,
+        UnsourcedResult,
+    }
+
+    for case in [
+        InvalidCall::MissingArgument,
+        InvalidCall::MissingResult,
+        InvalidCall::DuplicateCalleeArgument,
+        InvalidCall::DuplicateCalleeResult,
+        InvalidCall::DuplicateCallerResult,
+        InvalidCall::OutOfBoundsParameter,
+        InvalidCall::UnsourcedResult,
+    ] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("source", KernelHandle::new),
+                FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+            )
+            .unwrap();
+        kernels
+            .register(
+                id("callee_preflight", KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    Ok(vec![Value::Integer(8).into()])
+                }),
+            )
+            .unwrap();
+
+        let mut callee = plan(
+            vec![operation("callee_preflight", &[], &[2])],
+            4,
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(
+                OperationIndex::new(0),
+            )])),
+        );
+        callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+        callee.resources = Box::new([CompiledResourceRequirement {
+            resource: id("external/callee", ResourceId::new),
+            kind: ResourceKind::ExternalArtifact,
+            access: ResourceAccess::Shared,
+            optional: false,
+        }]);
+        let mut published = published_function(callee, "functions/callee", &[0], &[2]);
+
+        let standard_argument = CallArgumentBinding {
+            caller_source: ValueRef::new(0),
+            callee_destination: ValueRef::new(0),
+        };
+        let standard_result = CallResultBinding {
+            callee_source: ValueRef::new(2),
+            caller_destination: ValueRef::new(1),
+        };
+        let (arguments, results) = match case {
+            InvalidCall::MissingArgument => (vec![], vec![standard_result]),
+            InvalidCall::MissingResult => (vec![standard_argument], vec![]),
+            InvalidCall::DuplicateCalleeArgument => (
+                vec![standard_argument, standard_argument],
+                vec![standard_result],
+            ),
+            InvalidCall::DuplicateCalleeResult => (
+                vec![standard_argument],
+                vec![
+                    standard_result,
+                    CallResultBinding {
+                        callee_source: ValueRef::new(2),
+                        caller_destination: ValueRef::new(3),
+                    },
+                ],
+            ),
+            InvalidCall::DuplicateCallerResult => (
+                vec![standard_argument],
+                vec![standard_result, standard_result],
+            ),
+            InvalidCall::OutOfBoundsParameter => {
+                let published_mut = Arc::make_mut(&mut published);
+                Arc::make_mut(&mut published_mut.abi).parameters =
+                    BTreeMap::from([(FunctionParameterId("parameter-0".into()), ValueRef::new(9))]);
+                (
+                    vec![CallArgumentBinding {
+                        caller_source: ValueRef::new(0),
+                        callee_destination: ValueRef::new(9),
+                    }],
+                    vec![standard_result],
+                )
+            }
+            InvalidCall::UnsourcedResult => {
+                let published_mut = Arc::make_mut(&mut published);
+                Arc::make_mut(&mut published_mut.abi).results =
+                    BTreeMap::from([(FunctionParameterId("result-0".into()), ValueRef::new(3))]);
+                (
+                    vec![standard_argument],
+                    vec![CallResultBinding {
+                        callee_source: ValueRef::new(3),
+                        caller_destination: ValueRef::new(1),
+                    }],
+                )
+            }
+        };
+        let mut caller = plan(
+            vec![operation("source", &[], &[0])],
+            4,
+            StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(0)),
+                ControlStep::Region(Box::new(StructuredControlRegion::Call {
+                    target: id("functions/callee", FunctionPlanHandle::new),
+                    arguments: arguments.into_boxed_slice(),
+                    results: results.into_boxed_slice(),
+                })),
+            ])),
+        );
+        let mut destinations = BTreeMap::new();
+        if !matches!(case, InvalidCall::MissingResult) {
+            destinations.insert(
+                ValueRef::new(1),
+                PlanValueSource::ControlProduced(ValueRef::new(1)),
+            );
+        }
+        if matches!(case, InvalidCall::DuplicateCalleeResult) {
+            destinations.insert(
+                ValueRef::new(3),
+                PlanValueSource::ControlProduced(ValueRef::new(3)),
+            );
+        }
+        caller.value_sources = destinations
+            .into_values()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let resources = no_resources();
+
+        let error = RunExecutor::new(&kernels, &resources, &OneFunction(published))
+            .run(&caller, CancellationToken::new())
+            .expect_err("invalid public Call bindings must fail preflight");
+
+        assert!(matches!(
+            error,
+            RunError::FunctionPlanFailed(_) | RunError::InvalidPlan(_)
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(resources.acquired.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[test]
+fn call_preflight_allows_reusing_one_caller_source_for_distinct_parameters() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("callee_fan_in", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![])
+            }),
+        )
+        .unwrap();
+    let mut callee = plan(
+        vec![operation("callee_fan_in", &[], &[])],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    callee.value_sources = Box::new([
+        PlanValueSource::ExternalInput(ValueRef::new(0)),
+        PlanValueSource::ExternalInput(ValueRef::new(1)),
+    ]);
+    let published = published_function(callee, "functions/callee", &[0, 1], &[]);
+    let caller = plan(
+        vec![operation("source", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Call {
+                target: id("functions/callee", FunctionPlanHandle::new),
+                arguments: Box::new([
+                    CallArgumentBinding {
+                        caller_source: ValueRef::new(0),
+                        callee_destination: ValueRef::new(0),
+                    },
+                    CallArgumentBinding {
+                        caller_source: ValueRef::new(0),
+                        callee_destination: ValueRef::new(1),
+                    },
+                ]),
+                results: Box::new([]),
+            })),
+        ])),
+    );
+
+    RunExecutor::new(&kernels, &no_resources(), &OneFunction(published))
+        .run(&caller, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn call_uses_an_independent_frame() {
     struct ContextKernel(Arc<Mutex<Vec<FrameId>>>);
     impl Kernel for ContextKernel {
@@ -558,12 +1013,6 @@ fn call_uses_an_independent_frame() {
         ) -> Result<Vec<RuntimeValue>, KernelError> {
             self.0.lock().unwrap().push(context.frame_id);
             Ok(vec![Value::Null.into()])
-        }
-    }
-    struct OneFunction(Arc<ExecutionPlan>);
-    impl FunctionPlanProvider for OneFunction {
-        fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
-            Ok(Some(self.0.clone()))
         }
     }
 
@@ -588,16 +1037,25 @@ fn call_uses_an_independent_frame() {
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                target: id("callee", FunctionPlanHandle::new),
+                target: id("functions/callee", FunctionPlanHandle::new),
                 arguments: Box::new([]),
                 results: Box::new([]),
             })),
         ])),
     );
 
-    RunExecutor::new(&kernels, &no_resources(), &OneFunction(callee))
-        .run(&caller, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(published_function(
+            Arc::unwrap_or_clone(callee),
+            "functions/callee",
+            &[],
+            &[],
+        )),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
 
     let frames = frames.lock().unwrap();
     assert_eq!(frames.len(), 2);
@@ -675,14 +1133,111 @@ fn duplicate_operation_in_one_activation_is_rejected() {
 }
 
 #[test]
+fn reversed_two_function_publication_is_equivalent_and_callable() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("function_a", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![])
+            }),
+        )
+        .unwrap();
+
+    let versions = BTreeMap::from([
+        (
+            ResourceKey::new("functions/a"),
+            ResourceVersion::new("a-v1"),
+        ),
+        (
+            ResourceKey::new("functions/b"),
+            ResourceVersion::new("b-v1"),
+        ),
+    ]);
+    let make_function = |path: &str, root_region: StructuredControlRegion, operations| {
+        let mut function = plan(operations, 0, root_region);
+        function.provenance.graph_path = GraphResourcePath(path.into());
+        function.provenance.basis.resource_versions = versions.clone();
+        let abi = FunctionPlanAbi {
+            provenance: function.provenance.clone(),
+            parameters: BTreeMap::new(),
+            results: BTreeMap::new(),
+        };
+        (Arc::new(function), Arc::new(abi))
+    };
+    let (plan_a, abi_a) = make_function(
+        "functions/a",
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+        vec![operation("function_a", &[], &[])],
+    );
+    let (plan_b, abi_b) = make_function(
+        "functions/b",
+        StructuredControlRegion::Call {
+            target: id("functions/a", FunctionPlanHandle::new),
+            arguments: Box::new([]),
+            results: Box::new([]),
+        },
+        vec![],
+    );
+    let entries = vec![
+        (
+            GraphResourcePath("functions/a".into()),
+            ResourceVersion::new("a-v1"),
+            plan_a,
+            abi_a,
+        ),
+        (
+            GraphResourcePath("functions/b".into()),
+            ResourceVersion::new("b-v1"),
+            plan_b,
+            abi_b,
+        ),
+    ];
+    let store = FunctionPlanStore::new(ProjectSessionId::new("test-session"), 64);
+    let forward = store
+        .generation(
+            RegistryFingerprint::from_bytes([1; 32]),
+            versions.clone(),
+            entries.clone(),
+        )
+        .unwrap();
+    let reverse = store
+        .generation(
+            RegistryFingerprint::from_bytes([1; 32]),
+            versions.clone(),
+            entries.into_iter().rev().collect(),
+        )
+        .unwrap();
+    let mut caller = plan(
+        vec![],
+        0,
+        StructuredControlRegion::Call {
+            target: id("functions/b", FunctionPlanHandle::new),
+            arguments: Box::new([]),
+            results: Box::new([]),
+        },
+    );
+    caller.provenance.basis.resource_versions = versions;
+
+    RunExecutor::new(&kernels, &no_resources(), &forward)
+        .run(&caller, CancellationToken::new())
+        .unwrap();
+    RunExecutor::new(&kernels, &no_resources(), &reverse)
+        .run(&caller, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(forward.plan_count(), reverse.plan_count());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
 fn recursive_calls_stop_at_the_configured_limit() {
-    struct RecursiveFunction(Arc<ExecutionPlan>);
-    impl FunctionPlanProvider for RecursiveFunction {
-        fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
-            Ok(Some(self.0.clone()))
-        }
-    }
-    let recursive = Arc::new(plan(
+    let recursive = plan(
         vec![],
         0,
         StructuredControlRegion::Call {
@@ -690,16 +1245,17 @@ fn recursive_calls_stop_at_the_configured_limit() {
             arguments: Box::new([]),
             results: Box::new([]),
         },
-    ));
+    );
+    let recursive = published_function(recursive, "recursive", &[], &[]);
     let resources = no_resources();
 
     let error = RunExecutor::new(
         &KernelRegistry::new(),
         &resources,
-        &RecursiveFunction(recursive.clone()),
+        &OneFunction(Arc::clone(&recursive)),
     )
     .with_recursion_limit(3)
-    .run(&recursive, CancellationToken::new())
+    .run(recursive.plan.as_ref(), CancellationToken::new())
     .unwrap_err();
 
     assert_eq!(
@@ -744,12 +1300,6 @@ fn kernel_failure_releases_resources_without_retry() {
 
 #[test]
 fn call_failure_releases_caller_and_callee_resources() {
-    struct OneFunction(Arc<ExecutionPlan>);
-    impl FunctionPlanProvider for OneFunction {
-        fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
-            Ok(Some(self.0.clone()))
-        }
-    }
     let mut callee = plan(
         vec![operation("missing", &[], &[0])],
         1,
@@ -762,7 +1312,7 @@ fn call_failure_releases_caller_and_callee_resources() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("callee", FunctionPlanHandle::new),
+            target: id("functions/callee", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
         },
@@ -774,7 +1324,7 @@ fn call_failure_releases_caller_and_callee_resources() {
     let error = RunExecutor::new(
         &KernelRegistry::new(),
         &resources,
-        &OneFunction(Arc::new(callee)),
+        &OneFunction(published_function(callee, "functions/callee", &[], &[])),
     )
     .run(&caller, CancellationToken::new())
     .unwrap_err();

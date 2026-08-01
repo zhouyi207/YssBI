@@ -67,7 +67,7 @@ impl Kernel for DataframeKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         let parameters = context.parameters::<DataframeKernelParameters>()?;
         use DataframeOperation::*;
         let outputs = match self.operation {
@@ -489,4 +489,51 @@ const fn registration(
     api: DataframeApi,
 ) -> (&'static str, DataframeOperation, DataframeApi) {
     (handle, operation, api)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node_system::analysis::RunId;
+    use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
+    use crate::node_system::runtime::{
+        ActivationId, CancellationToken, FrameId, KernelErrorKind, ResourceError, ResourceLease,
+        ResourceProvider, RunResourceSet,
+    };
+
+    struct NoResources;
+
+    impl ResourceProvider for NoResources {
+        fn acquire(
+            &self,
+            _: &CompiledResourceRequirement,
+        ) -> Result<Box<dyn ResourceLease>, ResourceError> {
+            unreachable!("cancelled dataframe kernel does not acquire resources")
+        }
+    }
+
+    #[test]
+    fn cancelled_dataframe_kernel_returns_structured_cancellation() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let resources = RunResourceSet::acquire(&[], &NoResources).unwrap();
+        let params = CompiledParameterHandle::new("cancelled.dataframe").unwrap();
+        let context = KernelContext {
+            run_id: RunId::new(1),
+            frame_id: FrameId::next(),
+            activation_id: ActivationId::next(),
+            params: &params,
+            compiled_parameters: None,
+            resources: &resources,
+            cancellation: &cancellation,
+        };
+        let kernel = DataframeKernel {
+            operation: DataframeOperation::IntegerRange,
+            api: DataframeApi::Tabular,
+        };
+
+        let error = kernel.execute(&context, &[]).unwrap_err();
+
+        assert_eq!(error.kind(), KernelErrorKind::Cancelled);
+    }
 }

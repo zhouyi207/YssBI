@@ -129,7 +129,7 @@ impl Kernel for PlotKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         let payload = match self.kind {
             PlotKind::Scatter => pair_payload(inputs, "Scatter")?,
             PlotKind::Line => pair_payload(inputs, "Line")?,
@@ -142,7 +142,7 @@ impl Kernel for PlotKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         let resource_id = ResourceId::new(PLOT_SINK).expect("plot sink resource id");
         let resource = context
             .resources

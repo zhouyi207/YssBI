@@ -4,8 +4,8 @@ use crate::node_system::analysis::{
 };
 use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::plan::{
-    CompiledResourceRequirement, ExecutionPlan, FunctionPlanHandle, ResourceAccess, ResourceId,
-    ResourceKind, StructuredControlRegion,
+    CompiledResourceRequirement, ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle,
+    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueRef,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use polars::prelude::{Column, DataFrame};
@@ -126,7 +126,10 @@ fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() 
 struct NoFunctions;
 
 impl FunctionPlanProvider for NoFunctions {
-    fn get_plan(&self, _: &FunctionPlanHandle) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
+    fn get_function(
+        &self,
+        _: &FunctionPlanHandle,
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>> {
         Ok(None)
     }
 }
@@ -287,6 +290,155 @@ fn project_resource_lease_owns_data_until_cleanup() {
 }
 
 #[test]
+fn function_plan_generation_rejects_stale_abi_provenance() {
+    let session = ProjectSessionId::new("project-a");
+    let registry = RegistryFingerprint::from_bytes([7; 32]);
+    let resource_versions = versions(&[("functions/shared", "4")]);
+    let plan = Arc::new(empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    ));
+    let mut stale_provenance = plan.provenance.clone();
+    stale_provenance.basis.resource_versions = versions(&[("functions/shared", "3")]);
+    let abi = Arc::new(FunctionPlanAbi {
+        provenance: stale_provenance,
+        parameters: BTreeMap::new(),
+        results: BTreeMap::new(),
+    });
+
+    let error = match FunctionPlanStore::new(session, 64).generation(
+        registry,
+        resource_versions,
+        vec![(
+            GraphResourcePath("functions/shared".into()),
+            ResourceVersion::new("4"),
+            plan,
+            abi,
+        )],
+    ) {
+        Ok(_) => panic!("stale ABI provenance must be rejected"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(error, FunctionPlanStoreError::InvalidBasis { .. }));
+    assert!(error.to_string().contains("ABI provenance"));
+}
+
+#[test]
+fn function_plan_generation_rejects_aliased_abi_members() {
+    use crate::node_system::document::FunctionParameterId;
+
+    let session = ProjectSessionId::new("project-a");
+    let registry = RegistryFingerprint::from_bytes([7; 32]);
+    let resource_versions = versions(&[("functions/shared", "4")]);
+    let mut plan = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    plan.value_count = 1;
+    let plan = Arc::new(plan);
+    let abi = Arc::new(FunctionPlanAbi {
+        provenance: plan.provenance.clone(),
+        parameters: BTreeMap::from([
+            (FunctionParameterId("left".into()), ValueRef::new(0)),
+            (FunctionParameterId("right".into()), ValueRef::new(0)),
+        ]),
+        results: BTreeMap::new(),
+    });
+
+    let result = FunctionPlanStore::new(session, 64).generation(
+        registry,
+        resource_versions,
+        vec![(
+            GraphResourcePath("functions/shared".into()),
+            ResourceVersion::new("4"),
+            plan,
+            abi,
+        )],
+    );
+
+    assert!(matches!(
+        result,
+        Err(FunctionPlanStoreError::InvalidBasis { .. })
+    ));
+}
+
+#[test]
+fn function_plan_generation_requires_initializable_parameters_and_sourced_results() {
+    use crate::node_system::document::FunctionParameterId;
+    use crate::node_system::plan::PlanValueSource;
+
+    let session = ProjectSessionId::new("project-a");
+    let registry = RegistryFingerprint::from_bytes([7; 32]);
+    let resource_versions = versions(&[("functions/shared", "4")]);
+    let generate = |plan: ExecutionPlan, abi: FunctionPlanAbi| {
+        FunctionPlanStore::new(session.clone(), 64).generation(
+            registry.clone(),
+            resource_versions.clone(),
+            vec![(
+                GraphResourcePath("functions/shared".into()),
+                ResourceVersion::new("4"),
+                Arc::new(plan),
+                Arc::new(abi),
+            )],
+        )
+    };
+
+    let mut unsourced_parameter = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    unsourced_parameter.value_count = 1;
+    let parameter_abi = FunctionPlanAbi {
+        provenance: unsourced_parameter.provenance.clone(),
+        parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        results: BTreeMap::new(),
+    };
+    assert!(matches!(
+        generate(unsourced_parameter, parameter_abi),
+        Err(FunctionPlanStoreError::InvalidBasis { .. })
+    ));
+
+    let mut unsourced_result = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    unsourced_result.value_count = 1;
+    let result_abi = FunctionPlanAbi {
+        provenance: unsourced_result.provenance.clone(),
+        parameters: BTreeMap::new(),
+        results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+    };
+    assert!(matches!(
+        generate(unsourced_result, result_abi),
+        Err(FunctionPlanStoreError::InvalidBasis { .. })
+    ));
+
+    let mut sourced = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    sourced.value_count = 1;
+    sourced.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+    let sourced_abi = FunctionPlanAbi {
+        provenance: sourced.provenance.clone(),
+        parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+    };
+    assert!(generate(sourced, sourced_abi).is_ok());
+}
+
+#[test]
 fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
@@ -301,6 +453,17 @@ fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
         thread::spawn(move || {
             let resource_versions = versions(&[("functions/shared", version)]);
             barrier.wait();
+            let plan = Arc::new(empty_plan(
+                &session,
+                "functions/shared",
+                &registry,
+                resource_versions.clone(),
+            ));
+            let abi = Arc::new(FunctionPlanAbi {
+                provenance: plan.provenance.clone(),
+                parameters: BTreeMap::new(),
+                results: BTreeMap::new(),
+            });
             let generation = store
                 .generation(
                     registry.clone(),
@@ -308,25 +471,23 @@ fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
                     vec![(
                         GraphResourcePath("functions/shared".into()),
                         ResourceVersion::new(version),
-                        Arc::new(empty_plan(
-                            &session,
-                            "functions/shared",
-                            &registry,
-                            resource_versions,
-                        )),
+                        plan,
+                        abi,
                     )],
                 )
                 .unwrap();
             for _ in 0..100 {
-                let plan = generation
-                    .get_plan(&function_handle("functions/shared"))
+                let function = generation
+                    .get_function(&function_handle("functions/shared"))
                     .unwrap()
                     .expect("the run-local generation stays complete");
                 assert_eq!(
-                    plan.provenance.basis.resource_versions[&ResourceKey::new("functions/shared")]
+                    function.plan.provenance.basis.resource_versions
+                        [&ResourceKey::new("functions/shared")]
                         .as_str(),
                     version
                 );
+                assert_eq!(function.abi.provenance, function.plan.provenance);
                 thread::yield_now();
             }
             assert_eq!(generation.recursion_limit(), 12);

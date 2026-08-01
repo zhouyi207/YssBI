@@ -7,18 +7,45 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KernelErrorKind {
+    Failed,
+    Cancelled,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KernelError(pub Box<str>);
+pub struct KernelError {
+    kind: KernelErrorKind,
+    message: Box<str>,
+}
 
 impl KernelError {
     pub fn new(message: impl Into<Box<str>>) -> Self {
-        Self(message.into())
+        Self {
+            kind: KernelErrorKind::Failed,
+            message: message.into(),
+        }
+    }
+
+    pub fn cancelled(message: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: KernelErrorKind::Cancelled,
+            message: message.into(),
+        }
+    }
+
+    pub fn kind(&self) -> KernelErrorKind {
+        self.kind
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }
 
 impl fmt::Display for KernelError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
+        formatter.write_str(&self.message)
     }
 }
 

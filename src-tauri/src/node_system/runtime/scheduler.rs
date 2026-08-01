@@ -5,18 +5,19 @@ use super::relational::RunRelationalBackends;
 use super::relational::materialize_bridge_with_checkpoint;
 use super::{
     ActivationId, CancellationToken, CompiledParameterStore, FrameId, KernelContext,
-    KernelRegistry, NOOP_RUN_EVENT_SINK, PendingResultSource, ProjectRunRegistry,
-    RelationalBackendProvider, RelationalContext, RelationalInput, ResourceErrorKind,
-    ResourceProvider, ResultSourceDescriptor, ResultStore, RunError, RunErrorCode, RunEvent,
-    RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
+    KernelErrorKind, KernelRegistry, NOOP_RUN_EVENT_SINK, PendingResultSource, ProjectRunRegistry,
+    PublishedFunctionPlan, RelationalBackendProvider, RelationalContext, RelationalInput,
+    ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore, RunError,
+    RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RunId, SpanEvent, SpanKind, SpanStatus,
     TraceSink,
 };
 use crate::node_system::plan::{
-    ControlStep, ExecutionPlan, FunctionPlanHandle, OperationIndex, PlannedKernel,
-    RelationalFragmentId, RelationalSubplanIndex, StructuredControlRegion, ValueRef,
+    CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan, FunctionPlanHandle,
+    OperationIndex, PlannedKernel, RelationalFragmentId, RelationalSubplanIndex,
+    StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -47,12 +48,115 @@ struct PendingSourcePublication {
 }
 
 pub trait FunctionPlanProvider: Send + Sync {
-    fn get_plan(&self, handle: &FunctionPlanHandle)
-    -> Result<Option<Arc<ExecutionPlan>>, Box<str>>;
+    fn get_function(
+        &self,
+        handle: &FunctionPlanHandle,
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>>;
 
     fn recursion_limit(&self) -> usize {
         DEFAULT_RECURSION_LIMIT
     }
+}
+
+fn validate_published_call(
+    caller: &ExecutionPlan,
+    target: &FunctionPlanHandle,
+    arguments: &[CallArgumentBinding],
+    results: &[CallResultBinding],
+    published: &PublishedFunctionPlan,
+) -> Result<(), RunError> {
+    let callee = published.plan.as_ref();
+    let abi = published.abi.as_ref();
+    let invalid = |message: String| RunError::FunctionPlanFailed(message.into());
+    let source_facts = callee
+        .validate_with_source_facts()
+        .map_err(|error| invalid(format!("function execution plan is invalid: {error}")))?;
+    if abi.provenance != callee.provenance {
+        return Err(invalid(
+            "function ABI provenance does not match its plan".into(),
+        ));
+    }
+    if callee.provenance.graph_path.0.as_ref() != target.as_str() {
+        return Err(invalid(
+            "function plan target does not match the Call target".into(),
+        ));
+    }
+    if callee.provenance.project_session_id != caller.provenance.project_session_id {
+        return Err(invalid("function plan project session is stale".into()));
+    }
+    if callee.provenance.basis.registry_fingerprint != caller.provenance.basis.registry_fingerprint
+    {
+        return Err(invalid(
+            "function plan Registry fingerprint is stale".into(),
+        ));
+    }
+    if callee.provenance.basis.resource_versions != caller.provenance.basis.resource_versions {
+        return Err(invalid("function plan resource versions are stale".into()));
+    }
+    let parameter_values = abi.parameters.values().copied().collect::<BTreeSet<_>>();
+    if parameter_values.len() != abi.parameters.len() {
+        return Err(invalid(
+            "function parameter ABI aliases frame values".into(),
+        ));
+    }
+    if parameter_values
+        .iter()
+        .any(|value| !source_facts.is_external_input(*value))
+    {
+        return Err(invalid(
+            "function parameter ABI is out of bounds or not ExternalInput".into(),
+        ));
+    }
+    let result_values = abi.results.values().copied().collect::<BTreeSet<_>>();
+    if result_values.len() != abi.results.len() {
+        return Err(invalid("function result ABI aliases frame values".into()));
+    }
+    if result_values
+        .iter()
+        .any(|value| !source_facts.is_statically_sourced(*value))
+    {
+        return Err(invalid(
+            "function result ABI is out of bounds or not statically producible".into(),
+        ));
+    }
+
+    let argument_destinations = arguments
+        .iter()
+        .map(|binding| binding.callee_destination)
+        .collect::<BTreeSet<_>>();
+    if argument_destinations.len() != arguments.len() {
+        return Err(invalid(
+            "Call has duplicate callee argument destinations".into(),
+        ));
+    }
+    if argument_destinations != parameter_values {
+        return Err(invalid(
+            "Call arguments do not exactly match the current function ABI".into(),
+        ));
+    }
+
+    let callee_result_sources = results
+        .iter()
+        .map(|binding| binding.callee_source)
+        .collect::<BTreeSet<_>>();
+    if callee_result_sources.len() != results.len() {
+        return Err(invalid("Call has duplicate callee result sources".into()));
+    }
+    if callee_result_sources != result_values {
+        return Err(invalid(
+            "Call results do not exactly match the current function ABI".into(),
+        ));
+    }
+    let caller_result_destinations = results
+        .iter()
+        .map(|binding| binding.caller_destination)
+        .collect::<BTreeSet<_>>();
+    if caller_result_destinations.len() != results.len() {
+        return Err(invalid(
+            "Call has duplicate caller result destinations".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub struct RunExecutor<'a> {
@@ -395,6 +499,7 @@ impl<'a> RunExecutor<'a> {
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         cancellation.check()?;
+        self.propagate_value_dependencies(plan, frame)?;
         match region {
             StructuredControlRegion::Sequence(steps) => self.execute_sequence(
                 run_id,
@@ -489,11 +594,13 @@ impl<'a> RunExecutor<'a> {
                         recursion_limit: self.recursion_limit,
                     });
                 }
-                let callee = self
+                let published = self
                     .functions
-                    .get_plan(target)
+                    .get_function(target)
                     .map_err(RunError::FunctionPlanFailed)?
                     .ok_or_else(|| RunError::FunctionPlanNotFound(target.as_str().into()))?;
+                validate_published_call(plan, target, arguments, results, &published)?;
+                let callee = Arc::clone(&published.plan);
                 let call_id =
                     ParentCallId::new(NEXT_PARENT_CALL_ID.fetch_add(1, Ordering::Relaxed));
                 let correlation =
@@ -517,8 +624,10 @@ impl<'a> RunExecutor<'a> {
                     let mut callee_frame = Frame::new(callee.value_count);
                     let result = (|| {
                         for binding in arguments {
-                            callee_frame
-                                .set(binding.destination, frame.value(binding.source)?.clone())?;
+                            callee_frame.set(
+                                binding.callee_destination,
+                                frame.value(binding.caller_source)?.clone(),
+                            )?;
                         }
                         self.execute_region(
                             run_id,
@@ -533,8 +642,8 @@ impl<'a> RunExecutor<'a> {
                         )?;
                         for binding in results {
                             frame.set(
-                                binding.destination,
-                                callee_frame.value(binding.source)?.clone(),
+                                binding.caller_destination,
+                                callee_frame.value(binding.callee_source)?.clone(),
                             )?;
                         }
                         frame
@@ -638,6 +747,7 @@ impl<'a> RunExecutor<'a> {
         cancellation: &CancellationToken,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
+        self.propagate_value_dependencies(plan, frame)?;
         let mut pending = BTreeSet::new();
         for operation in operations {
             if !activated.insert(*operation) || !pending.insert(*operation) {
@@ -673,7 +783,30 @@ impl<'a> RunExecutor<'a> {
                 cancellation,
                 parent_call,
             )?;
+            self.propagate_value_dependencies(plan, frame)?;
             pending.remove(&operation);
+        }
+        Ok(())
+    }
+
+    fn propagate_value_dependencies(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+    ) -> Result<(), RunError> {
+        let operation_outputs = plan
+            .operations
+            .iter()
+            .flat_map(|operation| operation.outputs.iter().map(|output| output.value))
+            .collect::<BTreeSet<_>>();
+        for _ in 0..=plan.value_dependencies.len() {
+            for dependency in &plan.value_dependencies {
+                if !operation_outputs.contains(&dependency.destination)
+                    && frame.has(dependency.source)
+                {
+                    frame.copy(dependency.source, dependency.destination)?;
+                }
+            }
         }
         Ok(())
     }
@@ -929,12 +1062,18 @@ impl<'a> RunExecutor<'a> {
                     resources,
                     cancellation,
                 };
-                kernel
-                    .execute(&context, &inputs)
-                    .map_err(|error| RunError::KernelFailed {
-                        operation: operation_index,
-                        message: error.0,
-                    })?
+                match kernel.execute(&context, &inputs) {
+                    Ok(outputs) => outputs,
+                    Err(error) if error.kind() == KernelErrorKind::Cancelled => {
+                        return Err(RunError::Cancelled);
+                    }
+                    Err(error) => {
+                        return Err(RunError::KernelFailed {
+                            operation: operation_index,
+                            message: error.message().into(),
+                        });
+                    }
+                }
             }
             PlannedKernel::Relational(index) => {
                 let subplan = &plan.relational_subplans[index.index()];

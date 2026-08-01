@@ -5,8 +5,9 @@ use super::control::{
 use super::coordinator::{CompileCancellationToken, CompileCancelled};
 use super::dependency::cyclic_value_dependencies;
 use super::dynamic_interface::{
-    DynamicInterfaceResolution, InterfaceResolverSet, ValidatedInterfaceProjection,
-    ValidatedNodeInterfaceProjection, materialize_dynamic_interface_with_resources,
+    DynamicInterfaceResolution, InterfaceResolverSet, ProjectedDynamicPortBinding,
+    ValidatedInterfaceProjection, ValidatedNodeInterfaceProjection,
+    materialize_dynamic_interface_with_resources,
 };
 use super::relational::{RelationalConnection, RelationalFragment, RelationalPlanner};
 use super::schema_analysis::{SchemaAnalyzer, SchemaResolverSet};
@@ -20,15 +21,15 @@ use crate::node_system::analysis::{
     ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,
 };
 use crate::node_system::document::{
-    ConnectionId, FunctionDocument, GraphDocument, GraphResourcePath, GraphRevision, NodeId,
-    PortAddress, PortRef,
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
+    GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress, PortRef,
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
-    EffectDependency as PlannedEffectDependency, ExecutionPlan, KernelHandle, OperationIndex,
-    PlanResult, PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation, PlannedOutput,
-    RelationalBackendId, RelationalFragmentId, RelationalSubplanIndex, ResourceAccess, ResourceId,
-    ResourceKind, StructuredControlRegion, ValueDependency, ValueRef,
+    EffectDependency as PlannedEffectDependency, ExecutionPlan, FunctionPlanAbi, KernelHandle,
+    OperationIndex, PlanResult, PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation,
+    PlannedOutput, RelationalBackendId, RelationalFragmentId, RelationalSubplanIndex,
+    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueDependency, ValueRef,
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId,
@@ -145,6 +146,10 @@ pub trait ResourceSnapshot {
     fn function_document(&self, _path: &GraphResourcePath) -> Option<&FunctionDocument> {
         None
     }
+
+    fn function_graph_document(&self, _path: &GraphResourcePath) -> Option<&GraphDocument> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -165,6 +170,7 @@ pub struct CompileResult {
     pub interface_projection: ValidatedInterfaceProjection,
     pub semantic: Option<CompilerSemanticGraph>,
     pub plan: Option<ExecutionPlan>,
+    pub function_abi: Option<FunctionPlanAbi>,
 }
 
 pub struct GraphCompiler<'a, R, S> {
@@ -360,6 +366,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 interface_projection,
                 semantic: None,
                 plan: None,
+                function_abi: None,
             });
         }
 
@@ -385,6 +392,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     interface_projection,
                     semantic: None,
                     plan: None,
+                    function_abi: None,
                 });
             }
         };
@@ -398,9 +406,43 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             SpanStatus::Started,
             correlation.clone(),
         ));
+        let function_abi = match derive_function_abi(
+            self.registry,
+            &semantic,
+            &interface_projection,
+            &snapshot.provenance,
+        ) {
+            Ok(abi) => abi,
+            Err(diagnostic) => {
+                analysis.diagnostics = append_diagnostic(analysis.diagnostics, diagnostic);
+                return Ok(CompileResult {
+                    analysis,
+                    interface_projection,
+                    semantic: None,
+                    plan: None,
+                    function_abi: None,
+                });
+            }
+        };
+        let function_abis = match self.function_abis_for_calls(&semantic, cancellation) {
+            Ok(abis) => abis,
+            Err(LowerGraphFailure::Cancelled(error)) => return Err(error),
+            Err(LowerGraphFailure::Diagnostic(diagnostic)) => {
+                analysis.diagnostics = append_diagnostic(analysis.diagnostics, diagnostic);
+                return Ok(CompileResult {
+                    analysis,
+                    interface_projection,
+                    semantic: None,
+                    plan: None,
+                    function_abi,
+                });
+            }
+        };
         let (semantic, plan) = match lower_graph(
             self.registry,
             &semantic,
+            &interface_projection,
+            &function_abis,
             snapshot.provenance.clone(),
             cancellation,
         ) {
@@ -435,7 +477,95 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             interface_projection,
             semantic,
             plan,
+            function_abi,
         })
+    }
+
+    fn function_abis_for_calls(
+        &self,
+        graph: &CompilerSemanticGraph,
+        cancellation: &CompileCancellationToken,
+    ) -> Result<BTreeMap<GraphResourcePath, FunctionPlanAbi>, LowerGraphFailure> {
+        let mut targets = BTreeSet::new();
+        for node in graph.nodes.iter() {
+            let resolved = resolve_for_lowering(self.registry, node)?;
+            if resolved.structural_role() != Some(StructuralNodeRole::Call) {
+                continue;
+            }
+            let Some(target) = function_target(&node.normalized_parameters) else {
+                continue;
+            };
+            targets.insert(GraphResourcePath(target.into()));
+        }
+
+        let mut abis = BTreeMap::new();
+        for target in targets {
+            cancellation.checkpoint()?;
+            let document = self
+                .resources
+                .function_graph_document(&target)
+                .ok_or_else(|| {
+                    diagnostic(
+                        "compiler.control.call.abi_missing",
+                        DiagnosticLocation::Graph,
+                        format!(
+                            "target function '{}' has no graph in the compilation snapshot",
+                            target.0
+                        ),
+                    )
+                })?;
+            let provenance = CompileProvenance {
+                project_session_id: self.project_session_id.clone(),
+                graph_path: target.clone(),
+                basis: CompilationBasis {
+                    graph_revision: document.revision,
+                    registry_fingerprint: self.registry.fingerprint().clone(),
+                    resource_versions: self.resources.versions(),
+                },
+                compile_id: CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed)),
+            };
+            let mut state = AnalysisState::new(document, target.clone(), provenance.basis.clone());
+            state.analyze(
+                self.registry,
+                &self.schema_resolvers,
+                &self.interface_resolvers,
+                self.resources,
+                cancellation,
+            )?;
+            let analysis = state.snapshot();
+            if analysis.has_blocking_errors() {
+                return Err(diagnostic(
+                    "compiler.control.call.abi_invalid",
+                    DiagnosticLocation::Graph,
+                    format!(
+                        "target function '{}' has blocking interface diagnostics",
+                        target.0
+                    ),
+                )
+                .into());
+            }
+            let interface_projection = state.interface_projection();
+            let semantic = analysis
+                .validated(state.semantic_graph())
+                .map_err(|error| {
+                    diagnostic(
+                        "compiler.control.call.abi_invalid",
+                        DiagnosticLocation::Graph,
+                        format!("target function '{}': {error}", target.0),
+                    )
+                })?;
+            let abi =
+                derive_function_abi(self.registry, &semantic, &interface_projection, &provenance)?
+                    .ok_or_else(|| {
+                        diagnostic(
+                            "compiler.control.call.abi_invalid",
+                            DiagnosticLocation::Graph,
+                            format!("target function '{}' has no Entry/Return ABI", target.0),
+                        )
+                    })?;
+            abis.insert(target, abi);
+        }
+        Ok(abis)
     }
 
     pub fn compile(&self, document: &GraphDocument) -> CompileResult {
@@ -548,6 +678,8 @@ impl<'a> AnalysisState<'a> {
             );
         }
         cancellation.checkpoint()?;
+        self.validate_function_abi_contract(resources);
+        self.validate_call_abi_contract(resources);
         self.validate_structural_control();
         cancellation.checkpoint()?;
         self.validate_connections();
@@ -562,6 +694,296 @@ impl<'a> AnalysisState<'a> {
         cancellation.checkpoint()?;
         self.diagnostics.sort_by_key(diagnostic_sort_key);
         Ok(())
+    }
+
+    fn validate_function_abi_contract(&mut self, resources: &dyn ResourceSnapshot) {
+        if !self.graph_path.0.starts_with("functions/") {
+            return;
+        }
+        let Some(function) = resources.function_document(&self.graph_path) else {
+            self.push(
+                "compiler.function.abi.signature_missing",
+                DiagnosticLocation::Graph,
+                format!(
+                    "function '{}' has no authoritative signature",
+                    self.graph_path.0
+                ),
+            );
+            return;
+        };
+        let expected_parameters = function
+            .signature
+            .parameters
+            .iter()
+            .map(|parameter| parameter.id.clone())
+            .collect::<BTreeSet<_>>();
+        let expected_results = function
+            .signature
+            .return_type
+            .as_ref()
+            .map(|_| FunctionParameterId("return".into()))
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        self.validate_function_abi_role(
+            StructuralNodeRole::FunctionEntry,
+            "parameters",
+            PortDirection::Output,
+            &expected_parameters,
+        );
+        self.validate_function_abi_role(
+            StructuralNodeRole::FunctionReturn,
+            "results",
+            PortDirection::Input,
+            &expected_results,
+        );
+    }
+
+    fn validate_function_abi_role(
+        &mut self,
+        role: StructuralNodeRole,
+        expected_template: &str,
+        expected_direction: PortDirection,
+        expected_ids: &BTreeSet<FunctionParameterId>,
+    ) {
+        let nodes = self
+            .nodes
+            .iter()
+            .filter_map(|(node_id, node)| {
+                (node.registry.structural_role() == Some(role)).then_some(*node_id)
+            })
+            .collect::<Vec<_>>();
+        if nodes.len() != 1 {
+            self.push(
+                "compiler.function.abi.managed_role_invalid",
+                DiagnosticLocation::Graph,
+                format!("function ABI requires exactly one {role:?} node"),
+            );
+            return;
+        }
+        let node_id = nodes[0];
+        let protocol = self.nodes[&node_id].registry.protocol;
+        let mut counts = BTreeMap::<FunctionParameterId, usize>::new();
+        let bindings = self
+            .document
+            .port_bindings
+            .iter()
+            .filter(|(address, _)| address.node_id == node_id)
+            .map(|(address, binding)| (address.clone(), binding.clone()))
+            .collect::<Vec<_>>();
+        for (address, binding) in bindings {
+            let origin = match binding {
+                DynamicPortBinding::Resolved { origin, .. }
+                | DynamicPortBinding::Orphan { origin, .. } => origin,
+                DynamicPortBinding::UserCreated { .. } => continue,
+            };
+            let DynamicMemberLocator::FunctionParameter {
+                function,
+                parameter,
+            } = origin
+            else {
+                self.push(
+                    "compiler.function.abi.locator_invalid",
+                    DiagnosticLocation::Port(address),
+                    "function ABI endpoint requires a FunctionParameter locator".into(),
+                );
+                continue;
+            };
+            let template = port_template(&address);
+            let spec = protocol
+                .interface
+                .ports
+                .iter()
+                .find(|spec| &spec.key == template);
+            if template.as_str() != expected_template
+                || spec.is_none_or(|spec| {
+                    spec.kind != PortKind::Data || spec.direction != expected_direction
+                })
+            {
+                self.push(
+                    "compiler.function.abi.endpoint_invalid",
+                    DiagnosticLocation::Port(address),
+                    format!(
+                        "{role:?} ABI endpoint must be {expected_template} Data {expected_direction:?}"
+                    ),
+                );
+                continue;
+            }
+            if function != self.graph_path {
+                self.push(
+                    "compiler.function.abi.locator_target_mismatch",
+                    DiagnosticLocation::Port(address),
+                    format!("ABI locator targets '{}'", function.0),
+                );
+                continue;
+            }
+            if !expected_ids.contains(&parameter) {
+                self.push(
+                    "compiler.function.abi.member_unexpected",
+                    DiagnosticLocation::Port(address),
+                    format!("unexpected ABI member '{}'", parameter.0),
+                );
+                continue;
+            }
+            *counts.entry(parameter).or_default() += 1;
+        }
+        for expected in expected_ids {
+            match counts.get(expected).copied().unwrap_or(0) {
+                0 => self.push(
+                    "compiler.function.abi.member_missing",
+                    DiagnosticLocation::Node(node_id),
+                    format!("missing ABI member '{}'", expected.0),
+                ),
+                1 => {}
+                _ => self.push(
+                    "compiler.function.abi.member_duplicate",
+                    DiagnosticLocation::Node(node_id),
+                    format!("duplicate ABI member '{}'", expected.0),
+                ),
+            }
+        }
+    }
+
+    fn validate_call_abi_contract(&mut self, resources: &dyn ResourceSnapshot) {
+        let call_nodes = self
+            .nodes
+            .iter()
+            .filter_map(|(node_id, node)| {
+                (node.registry.structural_role() == Some(StructuralNodeRole::Call))
+                    .then_some(*node_id)
+            })
+            .collect::<Vec<_>>();
+        for node_id in call_nodes {
+            let Some(target) = function_target(&self.nodes[&node_id].parameters) else {
+                continue;
+            };
+            let target = GraphResourcePath(target.into());
+            let Some(function) = resources.function_document(&target) else {
+                continue;
+            };
+            let expected_arguments = function
+                .signature
+                .parameters
+                .iter()
+                .map(|parameter| parameter.id.clone())
+                .collect::<BTreeSet<_>>();
+            let expected_results = function
+                .signature
+                .return_type
+                .as_ref()
+                .map(|_| FunctionParameterId("return".into()))
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            self.validate_call_abi_role(
+                node_id,
+                &target,
+                "arguments",
+                PortDirection::Input,
+                &expected_arguments,
+            );
+            self.validate_call_abi_role(
+                node_id,
+                &target,
+                "results",
+                PortDirection::Output,
+                &expected_results,
+            );
+        }
+    }
+
+    fn validate_call_abi_role(
+        &mut self,
+        node_id: NodeId,
+        target: &GraphResourcePath,
+        expected_template: &str,
+        expected_direction: PortDirection,
+        expected_ids: &BTreeSet<FunctionParameterId>,
+    ) {
+        let protocol = self.nodes[&node_id].registry.protocol.clone();
+        let bindings = self
+            .document
+            .port_bindings
+            .iter()
+            .filter(|(address, _)| {
+                address.node_id == node_id && port_template(address).as_str() == expected_template
+            })
+            .map(|(address, binding)| (address.clone(), binding.clone()))
+            .collect::<Vec<_>>();
+        let mut counts = BTreeMap::<FunctionParameterId, usize>::new();
+        for (address, binding) in bindings {
+            let origin = match binding {
+                DynamicPortBinding::Resolved { origin, .. }
+                | DynamicPortBinding::Orphan { origin, .. } => origin,
+                DynamicPortBinding::UserCreated { .. } => {
+                    self.push(
+                        "compiler.control.call.locator_invalid",
+                        DiagnosticLocation::Port(address),
+                        "Call ABI endpoint requires a FunctionParameter locator".into(),
+                    );
+                    continue;
+                }
+            };
+            let spec = protocol
+                .interface
+                .ports
+                .iter()
+                .find(|spec| spec.key.as_str() == expected_template);
+            if spec.is_none_or(|spec| {
+                spec.kind != PortKind::Data || spec.direction != expected_direction
+            }) {
+                self.push(
+                    "compiler.control.call.endpoint_invalid",
+                    DiagnosticLocation::Port(address),
+                    format!(
+                        "Call {expected_template} endpoint must be Data {expected_direction:?}"
+                    ),
+                );
+                continue;
+            }
+            let DynamicMemberLocator::FunctionParameter {
+                function,
+                parameter,
+            } = origin
+            else {
+                self.push(
+                    "compiler.control.call.locator_invalid",
+                    DiagnosticLocation::Port(address),
+                    "Call ABI endpoint requires a FunctionParameter locator".into(),
+                );
+                continue;
+            };
+            if &function != target {
+                self.push(
+                    "compiler.control.call.locator_target_mismatch",
+                    DiagnosticLocation::Port(address),
+                    format!("Call member locator targets '{}'", function.0),
+                );
+                continue;
+            }
+            if !expected_ids.contains(&parameter) {
+                self.push(
+                    "compiler.control.call.member_unexpected",
+                    DiagnosticLocation::Port(address),
+                    format!("unexpected Call member '{}'", parameter.0),
+                );
+                continue;
+            }
+            *counts.entry(parameter).or_default() += 1;
+        }
+        for expected in expected_ids {
+            match counts.get(expected).copied().unwrap_or(0) {
+                0 => self.push(
+                    "compiler.control.call.member_missing",
+                    DiagnosticLocation::Node(node_id),
+                    format!("missing Call member '{}'", expected.0),
+                ),
+                1 => {}
+                _ => self.push(
+                    "compiler.control.call.locator_duplicate",
+                    DiagnosticLocation::Node(node_id),
+                    format!("duplicate Call member '{}'", expected.0),
+                ),
+            }
+        }
     }
 
     fn validate_structural_control(&mut self) {
@@ -939,11 +1361,25 @@ impl<'a> AnalysisState<'a> {
             .connections
             .values()
             .filter(|connection| {
-                self.lookup_document_port(&connection.output)
-                    .is_some_and(|port| port.kind == PortKind::Data)
+                let Some(output) = self.lookup_document_port(&connection.output) else {
+                    return false;
+                };
+                let Some(input) = self.lookup_document_port(&connection.input) else {
+                    return false;
+                };
+                let is_loop_condition_feedback = connection.output.node_id
+                    == connection.input.node_id
+                    && output.template.as_str() == "body_input"
+                    && input.template.as_str() == "condition"
                     && self
-                        .lookup_document_port(&connection.input)
-                        .is_some_and(|port| port.kind == PortKind::Data)
+                        .nodes
+                        .get(&connection.output.node_id)
+                        .is_some_and(|node| {
+                            node.registry.structural_role() == Some(StructuralNodeRole::Loop)
+                        });
+                output.kind == PortKind::Data
+                    && input.kind == PortKind::Data
+                    && !is_loop_condition_feedback
             })
             .map(|connection| {
                 (
@@ -1206,15 +1642,110 @@ struct PendingRelationalFragment {
     inputs: BTreeMap<PortAddress, crate::node_system::plan::RelationalOperatorIndex>,
 }
 
+fn function_target(
+    parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+) -> Option<&str> {
+    ["target", "function_plan", "function"]
+        .into_iter()
+        .find_map(|name| {
+            parameters
+                .iter()
+                .find(|(key, _)| key.as_str() == name)
+                .and_then(|(_, value)| value.as_str())
+        })
+        .filter(|target| !target.is_empty() && target.trim() == *target)
+}
+
+fn allocate_port_values<R: CompilerRegistry>(
+    registry: &R,
+    graph: &CompilerSemanticGraph,
+) -> Result<(u32, BTreeMap<PortAddress, ValueRef>), CompilerDiagnostic> {
+    let mut next_value = 0u32;
+    let mut values = BTreeMap::new();
+    for node in graph.nodes.iter() {
+        let resolved = resolve_for_lowering(registry, node)?;
+        for port in node.ports.iter() {
+            if protocol_port(resolved.protocol, &port.address).kind == PortKind::Data {
+                values.insert(port.address.clone(), ValueRef::new(next_value));
+                next_value += 1;
+            }
+        }
+    }
+    Ok((next_value, values))
+}
+
+fn derive_function_abi<R: CompilerRegistry>(
+    registry: &R,
+    graph: &CompilerSemanticGraph,
+    projection: &ValidatedInterfaceProjection,
+    provenance: &CompileProvenance,
+) -> Result<Option<FunctionPlanAbi>, CompilerDiagnostic> {
+    if !provenance.graph_path.0.starts_with("functions/") {
+        return Ok(None);
+    }
+    let (_, values) = allocate_port_values(registry, graph)?;
+    let mut parameters = BTreeMap::new();
+    let mut results = BTreeMap::new();
+    for node in graph.nodes.iter() {
+        let resolved = resolve_for_lowering(registry, node)?;
+        let destination = match resolved.structural_role() {
+            Some(StructuralNodeRole::FunctionEntry) => &mut parameters,
+            Some(StructuralNodeRole::FunctionReturn) => &mut results,
+            _ => continue,
+        };
+        let Some(node_projection) = projection.nodes.get(&node.node_id) else {
+            continue;
+        };
+        for port in node.ports.iter() {
+            let Some(ProjectedDynamicPortBinding::Resolved { origin, .. }) =
+                node_projection.projected_bindings.get(&port.address)
+            else {
+                continue;
+            };
+            let DynamicMemberLocator::FunctionParameter {
+                function,
+                parameter,
+            } = origin
+            else {
+                continue;
+            };
+            if function != &provenance.graph_path {
+                return Err(diagnostic(
+                    "compiler.function.abi_target_mismatch",
+                    DiagnosticLocation::Port(port.address.clone()),
+                    format!(
+                        "function ABI member targets '{}' instead of '{}'",
+                        function.0, provenance.graph_path.0
+                    ),
+                ));
+            }
+            let value = values[&port.address];
+            if destination.insert(parameter.clone(), value).is_some() {
+                return Err(diagnostic(
+                    "compiler.function.abi_member_duplicate",
+                    DiagnosticLocation::Port(port.address.clone()),
+                    format!("duplicate function ABI member '{}'", parameter.0),
+                ));
+            }
+        }
+    }
+    Ok(Some(FunctionPlanAbi {
+        provenance: provenance.clone(),
+        parameters,
+        results,
+    }))
+}
+
 fn lower_graph<R: CompilerRegistry>(
     registry: &R,
     graph: &CompilerSemanticGraph,
+    interface_projection: &ValidatedInterfaceProjection,
+    function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     provenance: CompileProvenance,
     cancellation: &CompileCancellationToken,
 ) -> Result<ExecutionPlan, LowerGraphFailure> {
     cancellation.checkpoint()?;
-    let mut next_value = 0u32;
-    let mut port_values = BTreeMap::new();
+    let (next_value, port_values) = allocate_port_values(registry, graph)?;
     let mut production_by_port = BTreeMap::new();
     let mut consumption_by_port = BTreeMap::new();
     let mut structural_inputs = BTreeSet::new();
@@ -1227,9 +1758,7 @@ fn lower_graph<R: CompilerRegistry>(
         for port in node.ports.iter() {
             let spec = protocol_port(resolved.protocol, &port.address);
             if spec.kind == PortKind::Data {
-                let value = ValueRef::new(next_value);
-                port_values.insert(port.address.clone(), value);
-                next_value += 1;
+                let value = port_values[&port.address];
                 if let Some(role) = structural_role {
                     match spec.direction {
                         PortDirection::Input => {
@@ -1881,6 +2410,18 @@ fn lower_graph<R: CompilerRegistry>(
                                 .map(|value| (port.address.clone(), value))
                         })
                         .collect(),
+                    dynamic_members: interface_projection
+                        .nodes
+                        .get(&node.node_id)
+                        .into_iter()
+                        .flat_map(|projection| projection.projected_bindings.iter())
+                        .filter_map(|(address, binding)| match binding {
+                            ProjectedDynamicPortBinding::Resolved { origin, .. } => {
+                                Some((address.clone(), origin.clone()))
+                            }
+                            ProjectedDynamicPortBinding::Orphan { .. } => None,
+                        })
+                        .collect(),
                     operation: operation_by_node.get(&node.node_id).copied(),
                 },
             ))
@@ -1898,16 +2439,17 @@ fn lower_graph<R: CompilerRegistry>(
         })
         .collect();
     cancellation.checkpoint()?;
-    let mut root_region = build_control_region(control_nodes, control_edges).map_err(|issue| {
-        diagnostic(
-            issue.code,
-            issue
-                .node_id
-                .map(DiagnosticLocation::Node)
-                .unwrap_or(DiagnosticLocation::Graph),
-            issue.detail,
-        )
-    })?;
+    let mut root_region = build_control_region(control_nodes, control_edges, function_abis)
+        .map_err(|issue| {
+            diagnostic(
+                issue.code,
+                issue
+                    .node_id
+                    .map(DiagnosticLocation::Node)
+                    .unwrap_or(DiagnosticLocation::Graph),
+                issue.detail,
+            )
+        })?;
     deduplicate_region_operations(&mut root_region);
     collect_control_value_sources(&root_region, &mut value_sources);
     debug_assert_eq!(provenance.basis, graph.basis);
@@ -2005,7 +2547,7 @@ fn collect_control_value_sources(
             sources.extend(
                 results
                     .iter()
-                    .map(|binding| PlanValueSource::ControlProduced(binding.destination)),
+                    .map(|binding| PlanValueSource::ControlProduced(binding.caller_destination)),
             );
         }
     }

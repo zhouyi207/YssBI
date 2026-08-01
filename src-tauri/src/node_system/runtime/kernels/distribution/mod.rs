@@ -155,7 +155,7 @@ impl Kernel for DistributionKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         let mut rng = StdRng::from_entropy();
         let output = match self.kind {
             DistributionKind::Normal => sample_float(inputs, 3, "normal", |count| {
@@ -347,7 +347,7 @@ impl Kernel for DistributionKernel {
         context
             .cancellation
             .check()
-            .map_err(|error| KernelError::new(error.to_string()))?;
+            .map_err(|error| KernelError::cancelled(error.to_string()))?;
         Ok(vec![RuntimeValue::Scalar(output)])
     }
 }

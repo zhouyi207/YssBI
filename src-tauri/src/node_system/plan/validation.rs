@@ -2,8 +2,33 @@ use super::model::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[derive(Debug, Clone)]
+pub(crate) struct PlanSourceFacts {
+    external_inputs: BTreeSet<ValueRef>,
+    statically_sourced: Box<[bool]>,
+}
+
+impl PlanSourceFacts {
+    pub(crate) fn is_external_input(&self, value: ValueRef) -> bool {
+        self.external_inputs.contains(&value)
+    }
+
+    pub(crate) fn is_statically_sourced(&self, value: ValueRef) -> bool {
+        self.statically_sourced
+            .get(value.index())
+            .copied()
+            .unwrap_or(false)
+    }
+}
+
 impl ExecutionPlan {
     pub fn validate(&self) -> Result<(), PlanValidationErrors> {
+        self.validate_with_source_facts().map(|_| ())
+    }
+
+    pub(crate) fn validate_with_source_facts(
+        &self,
+    ) -> Result<PlanSourceFacts, PlanValidationErrors> {
         let mut errors = Vec::new();
         let operation_count = self.operations.len();
         let relational_count = self.relational_subplans.len();
@@ -72,11 +97,21 @@ impl ExecutionPlan {
         }
 
         let mut declared_sources = BTreeSet::new();
+        let mut external_inputs = BTreeSet::new();
+        let mut control_value_sources = BTreeSet::new();
         for source in &self.value_sources {
             let value = source.value();
             check_value(&mut errors, "plan value source", value, value_count);
             if value.index() < value_count && !declared_sources.insert(value) {
                 errors.push(PlanValidationError::DuplicateValueSource(value));
+            }
+            match source {
+                PlanValueSource::ExternalInput(value) => {
+                    external_inputs.insert(*value);
+                }
+                PlanValueSource::ControlProduced(value) => {
+                    control_value_sources.insert(*value);
+                }
             }
         }
 
@@ -141,20 +176,36 @@ impl ExecutionPlan {
             errors.push(PlanValidationError::EffectDependencyCycle);
         }
 
-        let control_value_sources = self
-            .value_sources
-            .iter()
-            .filter_map(|source| match source {
-                PlanValueSource::ControlProduced(value) => Some(*value),
-                PlanValueSource::ExternalInput(_) => None,
-            })
-            .collect::<BTreeSet<_>>();
+        let mut structured = StructuredControlFacts::default();
         validate_region(
             &self.root_region,
             &mut errors,
             operation_count,
             value_count,
+            &mut structured,
+        );
+        let source_roots = produced_values
+            .iter()
+            .chain(&external_inputs)
+            .copied()
+            .chain(structured.producers.keys().copied())
+            .collect::<BTreeSet<_>>();
+        let source_facts = PlanSourceFacts {
+            external_inputs: external_inputs.clone(),
+            statically_sourced: value_source_closure(
+                value_count,
+                &source_roots,
+                &self.value_dependencies,
+            )
+            .into_boxed_slice(),
+        };
+        validate_structured_control_facts(
+            &structured,
+            &produced_values,
+            &external_inputs,
             &control_value_sources,
+            &source_facts,
+            &mut errors,
         );
         validate_relational_subplans(self, &mut errors);
         validate_resources(self, &mut errors);
@@ -175,7 +226,7 @@ impl ExecutionPlan {
         }
 
         if errors.is_empty() {
-            Ok(())
+            Ok(source_facts)
         } else {
             Err(PlanValidationErrors(errors.into_boxed_slice()))
         }
@@ -499,12 +550,109 @@ fn has_directed_cycle(node_count: usize, edges: impl Iterator<Item = (usize, usi
     visited != node_count
 }
 
+#[derive(Default)]
+struct StructuredControlFacts {
+    producers: BTreeMap<ValueRef, &'static str>,
+    source_requirements: Vec<(&'static str, ValueRef)>,
+}
+
+impl StructuredControlFacts {
+    fn producer(
+        &mut self,
+        errors: &mut Vec<PlanValidationError>,
+        value: ValueRef,
+        value_count: usize,
+        kind: &'static str,
+    ) {
+        if value.index() >= value_count {
+            return;
+        }
+        if let Some(first) = self.producers.get(&value).copied() {
+            errors.push(PlanValidationError::DuplicateStructuredControlProducer {
+                value,
+                first,
+                duplicate: kind,
+            });
+        } else {
+            self.producers.insert(value, kind);
+        }
+    }
+
+    fn source(&mut self, context: &'static str, value: ValueRef) {
+        self.source_requirements.push((context, value));
+    }
+}
+
+fn validate_structured_control_facts(
+    facts: &StructuredControlFacts,
+    operation_outputs: &BTreeSet<ValueRef>,
+    external_inputs: &BTreeSet<ValueRef>,
+    control_declarations: &BTreeSet<ValueRef>,
+    source_facts: &PlanSourceFacts,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    let value_count = source_facts.statically_sourced.len();
+    for &value in control_declarations {
+        if value.index() >= value_count {
+            continue;
+        }
+        if operation_outputs.contains(&value) {
+            errors.push(PlanValidationError::ControlProducedConflictsWithOperationOutput(value));
+        }
+        if external_inputs.contains(&value) {
+            errors.push(PlanValidationError::ControlProducedConflictsWithExternalInput(value));
+        }
+        if !facts.producers.contains_key(&value) {
+            errors.push(PlanValidationError::OrphanControlProduced(value));
+        }
+    }
+    for (&value, &producer) in &facts.producers {
+        if !control_declarations.contains(&value) {
+            errors.push(PlanValidationError::MissingControlProducedDeclaration { value, producer });
+        }
+    }
+
+    for &(context, value) in &facts.source_requirements {
+        if value.index() < value_count && !source_facts.is_statically_sourced(value) {
+            errors.push(PlanValidationError::MissingStructuredBindingSource { context, value });
+        }
+    }
+}
+
+fn value_source_closure(
+    value_count: usize,
+    roots: &BTreeSet<ValueRef>,
+    dependencies: &[ValueDependency],
+) -> Vec<bool> {
+    let mut sourced = (0..value_count)
+        .map(|value| roots.contains(&ValueRef::new(value as u32)))
+        .collect::<Vec<_>>();
+    loop {
+        let mut changed = false;
+        for dependency in dependencies {
+            let source = dependency.source.index();
+            let destination = dependency.destination.index();
+            if source < value_count
+                && destination < value_count
+                && sourced[source]
+                && !sourced[destination]
+            {
+                sourced[destination] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return sourced;
+        }
+    }
+}
+
 fn validate_region(
     region: &StructuredControlRegion,
     errors: &mut Vec<PlanValidationError>,
     operation_count: usize,
     value_count: usize,
-    control_value_sources: &BTreeSet<ValueRef>,
+    facts: &mut StructuredControlFacts,
 ) {
     match region {
         StructuredControlRegion::Sequence(steps) => {
@@ -513,13 +661,9 @@ fn validate_region(
                     ControlStep::Operation(index) => {
                         check_operation(errors, "control step", *index, operation_count)
                     }
-                    ControlStep::Region(region) => validate_region(
-                        region,
-                        errors,
-                        operation_count,
-                        value_count,
-                        control_value_sources,
-                    ),
+                    ControlStep::Region(region) => {
+                        validate_region(region, errors, operation_count, value_count, facts)
+                    }
                 }
             }
         }
@@ -530,20 +674,9 @@ fn validate_region(
             results,
         } => {
             check_value(errors, "if condition", *condition, value_count);
-            validate_region(
-                then_region,
-                errors,
-                operation_count,
-                value_count,
-                control_value_sources,
-            );
-            validate_region(
-                else_region,
-                errors,
-                operation_count,
-                value_count,
-                control_value_sources,
-            );
+            validate_region(then_region, errors, operation_count, value_count, facts);
+            validate_region(else_region, errors, operation_count, value_count, facts);
+            facts.source("branch condition", *condition);
             let mut destinations = BTreeSet::new();
             for binding in results {
                 check_value(
@@ -575,13 +708,9 @@ fn validate_region(
                 {
                     errors.push(PlanValidationError::InvalidBranchResultRoles(*binding));
                 }
-                require_control_value_source(
-                    errors,
-                    "branch result destination",
-                    binding.destination,
-                    value_count,
-                    control_value_sources,
-                );
+                facts.producer(errors, binding.destination, value_count, "branch result");
+                facts.source("branch then source", binding.then_source);
+                facts.source("branch else source", binding.else_source);
             }
         }
         StructuredControlRegion::Loop {
@@ -590,14 +719,9 @@ fn validate_region(
             continue_condition,
             max_iterations,
         } => {
-            validate_region(
-                body,
-                errors,
-                operation_count,
-                value_count,
-                control_value_sources,
-            );
+            validate_region(body, errors, operation_count, value_count, facts);
             check_value(errors, "loop condition", *continue_condition, value_count);
+            facts.source("loop condition", *continue_condition);
             if *max_iterations == 0 {
                 errors.push(PlanValidationError::ZeroLoopIterationLimit);
             }
@@ -635,55 +759,40 @@ fn validate_region(
                 if roles.iter().copied().collect::<BTreeSet<_>>().len() != roles.len() {
                     errors.push(PlanValidationError::InvalidLoopCarriedRoles(*binding));
                 }
-                require_control_value_source(
-                    errors,
-                    "loop body input destination",
-                    binding.body_input,
-                    value_count,
-                    control_value_sources,
-                );
-                require_control_value_source(
-                    errors,
-                    "loop result destination",
-                    binding.result,
-                    value_count,
-                    control_value_sources,
-                );
+                facts.producer(errors, binding.body_input, value_count, "loop body input");
+                facts.producer(errors, binding.result, value_count, "loop result");
+                facts.source("loop initial source", binding.initial_source);
+                facts.source("loop next source", binding.next_source);
             }
         }
         StructuredControlRegion::Call {
             arguments, results, ..
         } => {
             for binding in arguments {
-                validate_binding(errors, "call argument", binding, value_count);
+                check_value(
+                    errors,
+                    "call argument source",
+                    binding.caller_source,
+                    value_count,
+                );
+                facts.source("call argument source", binding.caller_source);
             }
             for binding in results {
-                validate_binding(errors, "call result", binding, value_count);
+                check_value(
+                    errors,
+                    "call result destination",
+                    binding.caller_destination,
+                    value_count,
+                );
+                facts.producer(
+                    errors,
+                    binding.caller_destination,
+                    value_count,
+                    "call result",
+                );
             }
         }
     }
-}
-
-fn require_control_value_source(
-    errors: &mut Vec<PlanValidationError>,
-    context: &'static str,
-    value: ValueRef,
-    value_count: usize,
-    control_value_sources: &BTreeSet<ValueRef>,
-) {
-    if value.index() < value_count && !control_value_sources.contains(&value) {
-        errors.push(PlanValidationError::MissingStructuredControlValueSource { context, value });
-    }
-}
-
-fn validate_binding(
-    errors: &mut Vec<PlanValidationError>,
-    context: &'static str,
-    binding: &RegionValueBinding,
-    value_count: usize,
-) {
-    check_value(errors, context, binding.destination, value_count);
-    check_value(errors, context, binding.source, value_count);
 }
 
 fn check_operation(
@@ -772,7 +881,19 @@ pub enum PlanValidationError {
     DuplicateLoopBodyInputDestination(ValueRef),
     DuplicateLoopResultDestination(ValueRef),
     InvalidLoopCarriedRoles(LoopCarriedBinding),
-    MissingStructuredControlValueSource {
+    DuplicateStructuredControlProducer {
+        value: ValueRef,
+        first: &'static str,
+        duplicate: &'static str,
+    },
+    OrphanControlProduced(ValueRef),
+    MissingControlProducedDeclaration {
+        value: ValueRef,
+        producer: &'static str,
+    },
+    ControlProducedConflictsWithOperationOutput(ValueRef),
+    ControlProducedConflictsWithExternalInput(ValueRef),
+    MissingStructuredBindingSource {
         context: &'static str,
         value: ValueRef,
     },

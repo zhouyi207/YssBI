@@ -136,3 +136,5 @@ pub(crate) mod fixtures {
 
 #[cfg(test)]
 mod production_tests;
+#[cfg(test)]
+mod structured_control_production_tests;

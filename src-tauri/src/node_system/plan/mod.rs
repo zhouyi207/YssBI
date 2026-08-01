@@ -8,6 +8,7 @@ mod model;
 mod validation;
 
 pub use model::*;
+pub(crate) use validation::PlanSourceFacts;
 pub use validation::{PlanValidationError, PlanValidationErrors};
 
 #[cfg(test)]
@@ -71,13 +72,13 @@ mod tests {
                     then_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
                     else_region: Box::new(StructuredControlRegion::Call {
                         target: id("function.test", FunctionPlanHandle::new),
-                        arguments: Box::new([RegionValueBinding {
-                            destination: ValueRef::new(1),
-                            source: ValueRef::new(0),
+                        arguments: Box::new([CallArgumentBinding {
+                            caller_source: ValueRef::new(0),
+                            callee_destination: ValueRef::new(1),
                         }]),
-                        results: Box::new([RegionValueBinding {
-                            destination: ValueRef::new(7),
-                            source: ValueRef::new(0),
+                        results: Box::new([CallResultBinding {
+                            callee_source: ValueRef::new(0),
+                            caller_destination: ValueRef::new(7),
                         }]),
                     }),
                     results: Box::new([BranchResultBinding {
@@ -274,8 +275,148 @@ mod tests {
         missing_control_destination.value_sources = Box::new([]);
         assert!(has_error(
             &missing_control_destination,
-            "MissingStructuredControlValueSource"
+            "MissingControlProducedDeclaration"
         ));
+    }
+
+    #[test]
+    fn call_validation_treats_callee_refs_as_opaque_cross_frame_values() {
+        let mut plan = valid_plan();
+        let StructuredControlRegion::Sequence(steps) = &mut plan.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(branch) = &mut steps[1] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::If { else_region, .. } = branch.as_mut() else {
+            unreachable!()
+        };
+        let StructuredControlRegion::Call {
+            arguments, results, ..
+        } = else_region.as_mut()
+        else {
+            unreachable!()
+        };
+        arguments[0].callee_destination = ValueRef::new(1_000);
+        results[0].callee_source = ValueRef::new(2_000);
+
+        assert_eq!(plan.validate(), Ok(()));
+    }
+
+    #[test]
+    fn call_validation_keeps_caller_side_bounds_sources_and_producers() {
+        fn call_bindings(
+            plan: &mut ExecutionPlan,
+        ) -> (
+            &mut Box<[CallArgumentBinding]>,
+            &mut Box<[CallResultBinding]>,
+        ) {
+            let StructuredControlRegion::Sequence(steps) = &mut plan.root_region else {
+                unreachable!()
+            };
+            let ControlStep::Region(branch) = &mut steps[1] else {
+                unreachable!()
+            };
+            let StructuredControlRegion::If { else_region, .. } = branch.as_mut() else {
+                unreachable!()
+            };
+            let StructuredControlRegion::Call {
+                arguments, results, ..
+            } = else_region.as_mut()
+            else {
+                unreachable!()
+            };
+            (arguments, results)
+        }
+
+        let mut unsourced_argument = valid_plan();
+        unsourced_argument.value_count = 9;
+        call_bindings(&mut unsourced_argument).0[0].caller_source = ValueRef::new(8);
+        assert!(
+            unsourced_argument
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| {
+                    matches!(
+                        error,
+                        PlanValidationError::MissingStructuredBindingSource {
+                            context: "call argument source",
+                            value,
+                        } if *value == ValueRef::new(8)
+                    )
+                })
+        );
+
+        let mut out_of_bounds_result = valid_plan();
+        call_bindings(&mut out_of_bounds_result).1[0].caller_destination = ValueRef::new(99);
+        assert!(
+            out_of_bounds_result
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| {
+                    matches!(
+                        error,
+                        PlanValidationError::ValueOutOfBounds {
+                            context: "call result destination",
+                            value,
+                            ..
+                        } if *value == ValueRef::new(99)
+                    )
+                })
+        );
+
+        let mut undeclared_result = valid_plan();
+        undeclared_result.value_sources = undeclared_result
+            .value_sources
+            .into_vec()
+            .into_iter()
+            .filter(|source| *source != PlanValueSource::ControlProduced(ValueRef::new(7)))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        assert!(
+            undeclared_result
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| {
+                    matches!(
+                        error,
+                        PlanValidationError::MissingControlProducedDeclaration {
+                            value,
+                            producer: "call result",
+                        } if *value == ValueRef::new(7)
+                    )
+                })
+        );
+
+        let mut duplicate_result = valid_plan();
+        call_bindings(&mut duplicate_result).1[0].caller_destination = ValueRef::new(2);
+        assert!(
+            duplicate_result
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| {
+                    matches!(
+                        error,
+                        PlanValidationError::DuplicateStructuredControlProducer {
+                            value,
+                            first: "branch result",
+                            duplicate: "call result",
+                        } | PlanValidationError::DuplicateStructuredControlProducer {
+                            value,
+                            first: "call result",
+                            duplicate: "branch result",
+                        } if *value == ValueRef::new(2)
+                    )
+                })
+        );
     }
 
     #[test]
@@ -348,18 +489,26 @@ mod tests {
         let StructuredControlRegion::If { results, .. } = branch.as_mut() else {
             unreachable!()
         };
-        results[0].destination = ValueRef::new(0);
+        results[0].destination = ValueRef::new(1);
         for source in &mut operation_conflict.value_sources {
             if *source == PlanValueSource::ControlProduced(ValueRef::new(2)) {
-                *source = PlanValueSource::ControlProduced(ValueRef::new(0));
+                *source = PlanValueSource::ControlProduced(ValueRef::new(1));
             }
         }
         assert!(has_error(
             &operation_conflict,
-            "StructuredProducerConflictsWithOperationOutput"
+            "ControlProducedConflictsWithOperationOutput"
         ));
 
         let mut external_conflict = valid_plan();
+        external_conflict.value_count = 9;
+        external_conflict.value_sources = external_conflict
+            .value_sources
+            .into_vec()
+            .into_iter()
+            .chain([PlanValueSource::ExternalInput(ValueRef::new(8))])
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         let StructuredControlRegion::Sequence(steps) = &mut external_conflict.root_region else {
             unreachable!()
         };
@@ -369,15 +518,15 @@ mod tests {
         let StructuredControlRegion::If { results, .. } = branch.as_mut() else {
             unreachable!()
         };
-        results[0].destination = ValueRef::new(3);
+        results[0].destination = ValueRef::new(8);
         for source in &mut external_conflict.value_sources {
             if *source == PlanValueSource::ControlProduced(ValueRef::new(2)) {
-                *source = PlanValueSource::ControlProduced(ValueRef::new(3));
+                *source = PlanValueSource::ControlProduced(ValueRef::new(8));
             }
         }
         assert!(has_error(
             &external_conflict,
-            "StructuredProducerConflictsWithExternalInput"
+            "ControlProducedConflictsWithExternalInput"
         ));
 
         let mut undeclared_destination = valid_plan();
@@ -476,7 +625,7 @@ mod tests {
             OperationIndex::new(2),
         )]));
         plan.operations[0].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
-        plan.results[0].value = ValueRef::new(7);
+        plan.results[0].value = ValueRef::new(8);
 
         let errors = plan.validate().unwrap_err();
         assert!(errors.0.iter().any(|error| matches!(
@@ -1021,46 +1170,48 @@ mod tests {
 
     #[test]
     fn accepts_declared_external_and_control_produced_input_sources() {
-        for source in [
-            PlanValueSource::ExternalInput(ValueRef::new(7)),
-            PlanValueSource::ControlProduced(ValueRef::new(7)),
-        ] {
-            let mut plan = valid_plan();
-            plan.value_count = 8;
-            plan.value_sources = plan
-                .value_sources
-                .into_vec()
-                .into_iter()
-                .chain([source])
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            plan.operations[1].inputs = Box::new([PlannedInput {
-                value: ValueRef::new(7),
-                consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
-            }]);
-            plan.value_dependencies = Box::new([]);
+        let mut external = valid_plan();
+        external.value_count = 9;
+        external.value_sources = external
+            .value_sources
+            .into_vec()
+            .into_iter()
+            .chain([PlanValueSource::ExternalInput(ValueRef::new(8))])
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        external.operations[1].inputs = Box::new([PlannedInput {
+            value: ValueRef::new(8),
+            consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
+        }]);
+        external.value_dependencies = Box::new([]);
+        assert_eq!(external.validate(), Ok(()));
 
-            assert_eq!(plan.validate(), Ok(()));
-        }
+        let mut control_produced = valid_plan();
+        control_produced.operations[1].inputs = Box::new([PlannedInput {
+            value: ValueRef::new(7),
+            consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
+        }]);
+        control_produced.value_dependencies = Box::new([]);
+        assert_eq!(control_produced.validate(), Ok(()));
     }
 
     #[test]
     fn rejects_undeclared_dependency_root_as_input_source() {
         let mut plan = valid_plan();
-        plan.value_count = 9;
+        plan.value_count = 10;
         plan.operations[1].inputs = Box::new([PlannedInput {
-            value: ValueRef::new(8),
+            value: ValueRef::new(9),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
         }]);
         plan.value_dependencies = Box::new([ValueDependency {
-            source: ValueRef::new(7),
-            destination: ValueRef::new(8),
+            source: ValueRef::new(8),
+            destination: ValueRef::new(9),
         }]);
 
         assert!(plan.validate().unwrap_err().0.iter().any(|error| matches!(
             error,
             PlanValidationError::MissingInputSource { value, operation }
-                if *value == ValueRef::new(8) && *operation == OperationIndex::new(1)
+                if *value == ValueRef::new(9) && *operation == OperationIndex::new(1)
         )));
     }
 }

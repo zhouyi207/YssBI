@@ -3,9 +3,11 @@ use crate::node_system::analysis::{
     ProjectSessionId, ResourceKey, ResourceVersion, ResourceVersionSet,
 };
 use crate::node_system::document::GraphResourcePath;
-use crate::node_system::plan::{ExecutionPlan, FunctionPlanHandle};
+use crate::node_system::plan::{
+    ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle, PlanSourceFacts,
+};
 use crate::node_system::registry::RegistryFingerprint;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -32,23 +34,30 @@ impl FunctionPlanStore {
         &self,
         registry_fingerprint: RegistryFingerprint,
         resource_versions: ResourceVersionSet,
-        entries: Vec<(GraphResourcePath, ResourceVersion, Arc<ExecutionPlan>)>,
+        entries: Vec<(
+            GraphResourcePath,
+            ResourceVersion,
+            Arc<ExecutionPlan>,
+            Arc<FunctionPlanAbi>,
+        )>,
     ) -> Result<FunctionPlanGeneration, FunctionPlanStoreError> {
         let basis = FunctionPlanBasis {
             registry_fingerprint,
             resource_versions,
         };
         let mut plans = BTreeMap::new();
-        for (path, version, plan) in entries {
-            validate_plan(
+        for (path, version, plan, abi) in entries {
+            let source_facts = validate_plan(
                 &self.project_session_id,
                 &basis,
                 &path,
                 &version,
                 plan.as_ref(),
             )?;
+            validate_abi(&path, plan.as_ref(), abi.as_ref(), &source_facts)?;
             let key = FunctionPlanKey { path, version };
-            if plans.insert(key.clone(), plan).is_some() {
+            let published = Arc::new(PublishedFunctionPlan { plan, abi });
+            if plans.insert(key.clone(), published).is_some() {
                 return Err(FunctionPlanStoreError::Duplicate { path: key.path });
             }
         }
@@ -67,10 +76,16 @@ struct FunctionPlanBasis {
     resource_versions: ResourceVersionSet,
 }
 
+#[derive(Debug, Clone)]
+pub struct PublishedFunctionPlan {
+    pub plan: Arc<ExecutionPlan>,
+    pub abi: Arc<FunctionPlanAbi>,
+}
+
 pub struct FunctionPlanGeneration {
     project_session_id: ProjectSessionId,
     basis: FunctionPlanBasis,
-    plans: BTreeMap<FunctionPlanKey, Arc<ExecutionPlan>>,
+    plans: BTreeMap<FunctionPlanKey, Arc<PublishedFunctionPlan>>,
     recursion_limit: usize,
 }
 
@@ -79,10 +94,10 @@ impl FunctionPlanGeneration {
         self.plans.len()
     }
 
-    fn current_plan(
+    fn current_function(
         &self,
         path: &GraphResourcePath,
-    ) -> Result<Option<Arc<ExecutionPlan>>, FunctionPlanStoreError> {
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, FunctionPlanStoreError> {
         let key = ResourceKey::new(path.0.clone());
         let Some(version) = self.basis.resource_versions.get(&key) else {
             return Ok(None);
@@ -91,26 +106,32 @@ impl FunctionPlanGeneration {
             path: path.clone(),
             version: version.clone(),
         };
-        let Some(plan) = self.plans.get(&plan_key).cloned() else {
+        let Some(function) = self.plans.get(&plan_key).cloned() else {
             return Ok(None);
         };
-        validate_plan(
+        let source_facts = validate_plan(
             &self.project_session_id,
             &self.basis,
             path,
             version,
-            plan.as_ref(),
+            function.plan.as_ref(),
         )?;
-        Ok(Some(plan))
+        validate_abi(
+            path,
+            function.plan.as_ref(),
+            function.abi.as_ref(),
+            &source_facts,
+        )?;
+        Ok(Some(function))
     }
 }
 
 impl FunctionPlanProvider for FunctionPlanGeneration {
-    fn get_plan(
+    fn get_function(
         &self,
         handle: &FunctionPlanHandle,
-    ) -> Result<Option<Arc<ExecutionPlan>>, Box<str>> {
-        self.current_plan(&GraphResourcePath(handle.as_str().into()))
+    ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>> {
+        self.current_function(&GraphResourcePath(handle.as_str().into()))
             .map_err(|error| error.to_string().into())
     }
 
@@ -119,13 +140,76 @@ impl FunctionPlanProvider for FunctionPlanGeneration {
     }
 }
 
+fn validate_abi(
+    path: &GraphResourcePath,
+    plan: &ExecutionPlan,
+    abi: &FunctionPlanAbi,
+    source_facts: &PlanSourceFacts,
+) -> Result<(), FunctionPlanStoreError> {
+    if abi.provenance != plan.provenance {
+        return Err(FunctionPlanStoreError::InvalidBasis {
+            path: path.clone(),
+            message: "ABI provenance does not exactly match its plan".into(),
+        });
+    }
+    for (direction, members) in [("parameter", &abi.parameters), ("result", &abi.results)] {
+        let mut values = BTreeSet::new();
+        for value in members.values() {
+            if value.index() >= plan.value_count as usize {
+                return Err(FunctionPlanStoreError::InvalidBasis {
+                    path: path.clone(),
+                    message: format!("ABI value {} is outside the callee frame", value.index())
+                        .into(),
+                });
+            }
+            if !values.insert(*value) {
+                return Err(FunctionPlanStoreError::InvalidBasis {
+                    path: path.clone(),
+                    message: format!(
+                        "multiple ABI {direction} members alias value {}",
+                        value.index()
+                    )
+                    .into(),
+                });
+            }
+            let source_is_valid = match direction {
+                "parameter" => source_facts.is_external_input(*value),
+                "result" => source_facts.is_statically_sourced(*value),
+                _ => unreachable!(),
+            };
+            if !source_is_valid {
+                let requirement = if direction == "parameter" {
+                    "declared ExternalInput"
+                } else {
+                    "statically producible"
+                };
+                return Err(FunctionPlanStoreError::InvalidBasis {
+                    path: path.clone(),
+                    message: format!(
+                        "ABI {direction} value {} is not {requirement}",
+                        value.index()
+                    )
+                    .into(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_plan(
     project_session_id: &ProjectSessionId,
     current: &FunctionPlanBasis,
     path: &GraphResourcePath,
     version: &ResourceVersion,
     plan: &ExecutionPlan,
-) -> Result<(), FunctionPlanStoreError> {
+) -> Result<PlanSourceFacts, FunctionPlanStoreError> {
+    let source_facts = plan.validate_with_source_facts().map_err(|error| {
+        FunctionPlanStoreError::InvalidBasis {
+            path: path.clone(),
+            message: format!("execution plan is invalid: {error}").into(),
+        }
+    })?;
     if &plan.provenance.project_session_id != project_session_id {
         return Err(FunctionPlanStoreError::InvalidBasis {
             path: path.clone(),
@@ -157,7 +241,7 @@ fn validate_plan(
             message: "resource versions do not match the current basis".into(),
         });
     }
-    Ok(())
+    Ok(source_facts)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

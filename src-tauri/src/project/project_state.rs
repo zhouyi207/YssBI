@@ -746,6 +746,9 @@ pub struct ProjectState {
     production_relational_observer:
         Arc<RwLock<Option<Arc<crate::node_system::runtime::ProductionRelationalObserver>>>>,
     #[cfg(test)]
+    project_resource_lease_observer:
+        Arc<RwLock<Option<crate::node_system::runtime::ProjectResourceLeaseObserver>>>,
+    #[cfg(test)]
     projection_test_hook: Arc<RwLock<Option<ProjectionTestHook>>>,
     #[cfg(test)]
     committed_resource_completion_test_hook:
@@ -901,6 +904,8 @@ impl ProjectState {
             function_load_checkpoint: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             production_relational_observer: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            project_resource_lease_observer: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             projection_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1361,6 +1366,14 @@ impl ProjectState {
         observer: Arc<crate::node_system::runtime::ProductionRelationalObserver>,
     ) {
         *self.production_relational_observer.write().unwrap() = Some(observer);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_resource_lease_observer(
+        &self,
+        observer: crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) {
+        *self.project_resource_lease_observer.write().unwrap() = Some(observer);
     }
 
     #[cfg(test)]
@@ -4787,15 +4800,8 @@ impl ProjectState {
             .get(graph_path)
             .map(|graph| graph.document.clone())
             .ok_or_else(|| format!("graph '{}' not loaded", graph_path))?;
-        let function_documents = data
-            .graphs
-            .iter()
-            .filter(|(_, graph)| graph.function.is_some())
-            .map(|(path, graph)| (path.clone(), graph.document.clone()))
-            .collect();
         Ok(ExecutionSnapshot {
             document,
-            function_documents,
             data,
             database_instances,
             variable_revisions,
@@ -4860,7 +4866,6 @@ impl ProjectState {
             );
         let mut compiled_parameters = crate::node_system::runtime::CompiledParameterStore::new();
         let function_generation = publish_function_plans(
-            &execution.function_documents,
             execution.registry.as_ref(),
             execution.functions.as_ref(),
             &resource_snapshot.compile,
@@ -4875,8 +4880,16 @@ impl ProjectState {
         if let Some(observer) = &production_relational_observer {
             observer.observe_plan(&plan);
         }
+        #[cfg(test)]
+        let mut resources =
+            crate::node_system::runtime::ProjectResourceProvider::new(resource_snapshot.runtime);
+        #[cfg(not(test))]
         let resources =
             crate::node_system::runtime::ProjectResourceProvider::new(resource_snapshot.runtime);
+        #[cfg(test)]
+        if let Some(observer) = self.project_resource_lease_observer.read().unwrap().clone() {
+            resources.set_lease_observer(observer);
+        }
         build_run_parameters(&mut compiled_parameters, &execution.document, &plan)?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
         #[cfg(test)]
@@ -5573,6 +5586,10 @@ pub(super) struct CompileResourceSnapshot {
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
     >,
+    function_graphs: BTreeMap<
+        crate::node_system::document::GraphResourcePath,
+        crate::node_system::document::GraphDocument,
+    >,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
@@ -5646,6 +5663,13 @@ impl ResourceSnapshot for CompileResourceSnapshot {
     ) -> Option<&crate::node_system::document::FunctionDocument> {
         self.functions.get(path)
     }
+
+    fn function_graph_document(
+        &self,
+        path: &crate::node_system::document::GraphResourcePath,
+    ) -> Option<&crate::node_system::document::GraphDocument> {
+        self.function_graphs.get(path)
+    }
 }
 
 pub(super) struct ProductionPlotSink;
@@ -5667,10 +5691,6 @@ pub(super) struct ProductionResourceSnapshots {
 
 struct ExecutionSnapshot {
     document: crate::node_system::document::GraphDocument,
-    function_documents: Vec<(
-        GraphResourcePath,
-        crate::node_system::document::GraphDocument,
-    )>,
     data: ProjectData,
     database_instances: std::collections::HashMap<String, crate::database::DatabaseInstance>,
     variable_revisions: std::collections::HashMap<
@@ -5711,6 +5731,18 @@ pub(super) fn compile_resources_from_data(
                 (
                     crate::node_system::document::GraphResourcePath(path.as_str().into()),
                     function,
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    let function_graphs = data
+        .graphs
+        .iter()
+        .filter_map(|(path, graph)| {
+            graph.function.as_ref().map(|_| {
+                (
+                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                    graph.document.clone(),
                 )
             })
         })
@@ -5758,6 +5790,7 @@ pub(super) fn compile_resources_from_data(
     Ok(CompileResourceSnapshot {
         versions,
         functions,
+        function_graphs,
         database_schemas,
     })
 }
@@ -5846,24 +5879,41 @@ pub(super) fn snapshot_project_resources(
         (store.project_session_id.clone(), loaded)
     };
 
-    let function_resources = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .iter()
-        .filter_map(|(path, graph)| {
-            graph.function.clone().map(|function| {
-                (
-                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                    function,
-                )
+    let (function_resources, function_graphs) = {
+        let data = state.project_data.read().unwrap();
+        let resources = data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph.function.clone().map(|function| {
+                    (
+                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                        function,
+                    )
+                })
             })
-        })
-        .collect::<BTreeMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
+        let graphs = data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph.function.as_ref().map(|_| {
+                    (
+                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                        graph.document.clone(),
+                    )
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
+        (resources, graphs)
+    };
     let mut versions = crate::node_system::analysis::ResourceVersionSet::new();
     for (path, function) in &function_resources {
-        let version = serde_json::to_string(function).map_err(|error| error.to_string())?;
+        let graph = function_graphs
+            .get(path)
+            .ok_or_else(|| format!("function '{}' graph is not loaded", path.0))?;
+        let version =
+            serde_json::to_string(&(function, graph)).map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
             ResourceVersion::new(version),
@@ -5933,6 +5983,7 @@ pub(super) fn snapshot_project_resources(
         compile: CompileResourceSnapshot {
             versions,
             functions: function_resources,
+            function_graphs,
             database_schemas,
         },
         runtime,
@@ -6053,11 +6104,7 @@ fn replace_project_documents(
     }
 }
 
-fn publish_function_plans(
-    functions: &[(
-        GraphResourcePath,
-        crate::node_system::document::GraphDocument,
-    )],
+pub(super) fn publish_function_plans(
     registry: &crate::node_system::registry::NodeRegistry,
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
@@ -6072,13 +6119,18 @@ fn publish_function_plans(
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     )
     .with_observability(session_id, &crate::node_system::analysis::NOOP_TRACE_SINK);
-    let mut entries = Vec::with_capacity(functions.len());
-    for (path, document) in functions {
-        let document_path = crate::node_system::document::GraphResourcePath(path.as_str().into());
+    let mut entries = Vec::with_capacity(resources.function_graphs.len());
+    for (document_path, document) in &resources.function_graphs {
         let snapshot = compiler.snapshot(document_path.clone(), document);
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
             .map_err(|error| error.to_string())?;
+        let abi = products.function_abi.clone().ok_or_else(|| {
+            format!(
+                "function '{}' did not produce an Entry/Return ABI",
+                document_path.0
+            )
+        })?;
         let plan = products.plan.ok_or_else(|| {
             let diagnostics = products
                 .analysis
@@ -6089,17 +6141,22 @@ fn publish_function_plans(
                 .join(", ");
             format!(
                 "function '{}' has blocking diagnostics and cannot be published: {}",
-                path, diagnostics
+                document_path.0, diagnostics
             )
         })?;
         build_run_parameters(parameters, &document, &plan)?;
-        let resource_key = crate::node_system::analysis::ResourceKey::new(path.as_str());
+        let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.0.as_ref());
         let version = resources
             .versions
             .get(&resource_key)
             .cloned()
-            .ok_or_else(|| format!("function '{}' has no resource version", path))?;
-        entries.push((document_path, version, Arc::new(plan)));
+            .ok_or_else(|| format!("function '{}' has no resource version", document_path.0))?;
+        entries.push((
+            document_path.clone(),
+            version,
+            Arc::new(plan),
+            Arc::new(abi),
+        ));
     }
     store
         .generation(
@@ -6291,6 +6348,7 @@ mod run_parameter_tests {
         CompiledParameterHandle, ExecutionPlan, PlannedKernel, PlannedOperation,
     };
     use crate::node_system::protocol::{NodeTypeId, ParameterKey, Value};
+    use crate::project::GraphDocumentKind;
     use std::collections::BTreeMap;
 
     fn catalog_defaults(node_type: &NodeTypeId) -> BTreeMap<ParameterKey, serde_json::Value> {
@@ -6355,6 +6413,80 @@ mod run_parameter_tests {
     }
 
     #[test]
+    fn function_graph_replacement_changes_the_coherent_compile_resource_version() {
+        let path = GraphResourcePath::new("functions/replaced.yssbi-function").unwrap();
+        let analysis_path = crate::node_system::document::GraphResourcePath(path.as_str().into());
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            path.clone(),
+            GraphResourceDocument::new("Replaced", GraphDocumentKind::Function),
+        );
+        let first = compile_resources_from_data(&data, BTreeMap::new()).unwrap();
+        let first_version = first
+            .versions
+            .get(&crate::node_system::analysis::ResourceKey::new(
+                path.as_str(),
+            ))
+            .unwrap()
+            .clone();
+
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(91));
+        data.graphs.get_mut(&path).unwrap().document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: NodeTypeId::new("yssbi.project.function.entry").unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        );
+        let replaced = compile_resources_from_data(&data, BTreeMap::new()).unwrap();
+        let replaced_version = replaced
+            .versions
+            .get(&crate::node_system::analysis::ResourceKey::new(
+                path.as_str(),
+            ))
+            .unwrap();
+
+        assert_ne!(&first_version, replaced_version);
+        assert_eq!(
+            replaced
+                .function_graph_document(&analysis_path)
+                .unwrap()
+                .nodes
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn function_plan_publication_uses_only_the_compile_resource_snapshot() {
+        let registry = crate::node_system::catalog::build_builtin_registry();
+        let session = crate::node_system::analysis::ProjectSessionId::new("coherent-run");
+        let store = crate::node_system::runtime::FunctionPlanStore::new(session.clone(), 64);
+        let resources = CompileResourceSnapshot {
+            versions: crate::node_system::analysis::ResourceVersionSet::new(),
+            functions: BTreeMap::new(),
+            function_graphs: BTreeMap::new(),
+            database_schemas: BTreeMap::new(),
+        };
+        let mut parameters = crate::node_system::runtime::CompiledParameterStore::new();
+
+        let generation = publish_function_plans(
+            &registry,
+            &store,
+            &resources,
+            session,
+            &crate::node_system::compiler::CompileCancellationToken::new(),
+            &mut parameters,
+        )
+        .unwrap();
+
+        assert_eq!(generation.plan_count(), 0);
+    }
+
+    #[test]
     fn adf_catalog_regression_builds_the_production_kernel_parameter() {
         let node_type = NodeTypeId::new("yssbi.statistics.adf.test").unwrap();
         let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(1));
@@ -6407,10 +6539,13 @@ mod run_parameter_tests {
     struct NoFunctions;
 
     impl crate::node_system::runtime::FunctionPlanProvider for NoFunctions {
-        fn get_plan(
+        fn get_function(
             &self,
             _: &crate::node_system::plan::FunctionPlanHandle,
-        ) -> Result<Option<std::sync::Arc<ExecutionPlan>>, Box<str>> {
+        ) -> Result<
+            Option<std::sync::Arc<crate::node_system::runtime::PublishedFunctionPlan>>,
+            Box<str>,
+        > {
             Ok(None)
         }
     }

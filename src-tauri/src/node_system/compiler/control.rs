@@ -1,7 +1,9 @@
-use crate::node_system::document::{NodeId, PortAddress, PortInstanceId, PortRef};
+use crate::node_system::document::{
+    DynamicMemberLocator, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
+};
 use crate::node_system::plan::{
-    BranchResultBinding, ControlStep, FunctionPlanHandle, LoopCarriedBinding, OperationIndex,
-    RegionValueBinding, StructuredControlRegion, ValueRef,
+    BranchResultBinding, CallArgumentBinding, CallResultBinding, ControlStep, FunctionPlanAbi,
+    FunctionPlanHandle, LoopCarriedBinding, OperationIndex, StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::{
     ManagedNodeRole, NodeProtocol, ParameterKey, PortDirection, PortKind, PortMemberGroupSpec,
@@ -17,6 +19,7 @@ pub(crate) struct ControlNode<'a> {
     pub parameters: &'a BTreeMap<ParameterKey, Value>,
     pub ports: Box<[PortAddress]>,
     pub values: BTreeMap<PortAddress, ValueRef>,
+    pub dynamic_members: BTreeMap<PortAddress, DynamicMemberLocator>,
     pub operation: Option<OperationIndex>,
 }
 
@@ -108,24 +111,6 @@ pub(crate) fn validate_structural_contract(
                     "call requires a non-empty target/function_plan resource parameter",
                 ));
             }
-            validate_binding_parameter(
-                &mut issues,
-                node_id,
-                protocol,
-                parameters,
-                "arguments",
-                &["destination", "source"],
-                false,
-            );
-            validate_binding_parameter(
-                &mut issues,
-                node_id,
-                protocol,
-                parameters,
-                "results",
-                &["destination", "source"],
-                false,
-            );
         }
         StructuralNodeRole::Sequence => {
             require_control_port(
@@ -161,8 +146,9 @@ pub(crate) fn validate_structural_contract(
 pub(crate) fn build_control_region(
     nodes: BTreeMap<NodeId, ControlNode<'_>>,
     edges: Vec<ControlEdge>,
+    function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
 ) -> Result<StructuredControlRegion, ControlIssue> {
-    let mut builder = RegionBuilder::new(nodes, edges)?;
+    let mut builder = RegionBuilder::new(nodes, edges, function_abis)?;
     builder.build()
 }
 
@@ -172,8 +158,16 @@ enum FlowNode {
     Exit,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommonPostDominator {
+    None,
+    Node(NodeId),
+    Ambiguous,
+}
+
 struct RegionBuilder<'a> {
     nodes: BTreeMap<NodeId, ControlNode<'a>>,
+    function_abis: &'a BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     outgoing: BTreeMap<PortAddress, Vec<NodeId>>,
     incoming: BTreeMap<NodeId, usize>,
     visited: BTreeSet<NodeId>,
@@ -184,6 +178,7 @@ impl<'a> RegionBuilder<'a> {
     fn new(
         nodes: BTreeMap<NodeId, ControlNode<'a>>,
         edges: Vec<ControlEdge>,
+        function_abis: &'a BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     ) -> Result<Self, ControlIssue> {
         let mut outgoing: BTreeMap<PortAddress, Vec<NodeId>> = BTreeMap::new();
         let mut incoming = BTreeMap::new();
@@ -212,6 +207,7 @@ impl<'a> RegionBuilder<'a> {
         }
         Ok(Self {
             nodes,
+            function_abis,
             outgoing,
             incoming,
             visited: BTreeSet::new(),
@@ -236,7 +232,20 @@ impl<'a> RegionBuilder<'a> {
                 .copied()
                 .collect::<Vec<_>>()
         } else {
-            entries
+            self.nodes
+                .values()
+                .filter(|node| {
+                    node.operation.is_some()
+                        && node
+                            .protocol
+                            .interface
+                            .ports
+                            .iter()
+                            .all(|port| port.kind != PortKind::Control)
+                })
+                .map(|node| node.node_id)
+                .chain(entries)
+                .collect()
         };
         if !self.nodes.is_empty() && roots.is_empty() {
             return Err(ControlIssue {
@@ -320,7 +329,7 @@ impl<'a> RegionBuilder<'a> {
             }
             Some(StructuralNodeRole::Branch) => {
                 let condition = self.value_for_key(node_id, "condition")?;
-                let continuation = self.branch_continuation(node_id)?;
+                let continuation = self.branch_continuation(node_id, stop)?;
                 let then_region =
                     self.single_region_stopping_before(node_id, "true", continuation.or(stop))?;
                 let else_region =
@@ -364,24 +373,26 @@ impl<'a> RegionBuilder<'a> {
                 self.with_continuation(node_id, loop_region, &["then", "completed", "exit"], stop)
             }
             Some(StructuralNodeRole::Call) => {
-                let target = FunctionPlanHandle::new(
-                    call_target(self.nodes[&node_id].parameters).ok_or_else(|| {
-                        issue(
-                            node_id,
-                            "compiler.control.call.resource_parameter_missing",
-                            "call target is missing",
-                        )
-                    })?,
-                )
-                .map_err(|error| {
+                let target_path = GraphResourcePath(
+                    call_target(self.nodes[&node_id].parameters)
+                        .ok_or_else(|| {
+                            issue(
+                                node_id,
+                                "compiler.control.call.resource_parameter_missing",
+                                "call target is missing",
+                            )
+                        })?
+                        .into(),
+                );
+                let target = FunctionPlanHandle::new(target_path.0.clone()).map_err(|error| {
                     issue(
                         node_id,
                         "compiler.control.call.target_invalid",
                         &error.to_string(),
                     )
                 })?;
-                let arguments = self.call_bindings(node_id, "arguments", PortDirection::Input)?;
-                let results = self.call_bindings(node_id, "results", PortDirection::Output)?;
+                let arguments = self.call_argument_bindings(node_id, &target_path)?;
+                let results = self.call_result_bindings(node_id, &target_path)?;
                 let call = StructuredControlRegion::Call {
                     target,
                     arguments: arguments.into_boxed_slice(),
@@ -454,10 +465,14 @@ impl<'a> RegionBuilder<'a> {
         }
     }
 
-    fn branch_continuation(&self, node_id: NodeId) -> Result<Option<NodeId>, ControlIssue> {
-        let then_start = self.branch_arm_start(node_id, "true")?;
-        let else_start = self.branch_arm_start(node_id, "false")?;
-        let graph = self.normal_flow_graph()?;
+    fn branch_continuation(
+        &self,
+        node_id: NodeId,
+        stop: Option<NodeId>,
+    ) -> Result<Option<NodeId>, ControlIssue> {
+        let then_start = flow_node_before_stop(self.branch_arm_start(node_id, "true")?, stop);
+        let else_start = flow_node_before_stop(self.branch_arm_start(node_id, "false")?, stop);
+        let graph = self.normal_flow_graph(&[then_start, else_start], stop)?;
         let post_dominators = post_dominators(&graph).ok_or_else(|| {
             issue(
                 node_id,
@@ -465,46 +480,24 @@ impl<'a> RegionBuilder<'a> {
                 "normal control flow must reach a structural exit",
             )
         })?;
-        let then_post_dominators = &post_dominators[&then_start];
-        let else_post_dominators = &post_dominators[&else_start];
-        let common = then_post_dominators
-            .intersection(else_post_dominators)
-            .copied()
-            .filter(|candidate| *candidate != FlowNode::Exit)
-            .collect::<BTreeSet<_>>();
-        let immediate = common
-            .iter()
-            .copied()
-            .filter(|candidate| {
-                !common
-                    .iter()
-                    .copied()
-                    .any(|other| other != *candidate && post_dominators[&other].contains(candidate))
-            })
-            .collect::<Vec<_>>();
-        match immediate.as_slice() {
-            [FlowNode::Node(continuation)] => Ok(Some(*continuation)),
-            [] => {
-                let then_reachable = reachable_flow_nodes(&graph, then_start);
-                let else_reachable = reachable_flow_nodes(&graph, else_start);
-                if then_reachable
-                    .intersection(&else_reachable)
-                    .any(|candidate| *candidate != FlowNode::Exit)
-                {
-                    Err(issue(
-                        node_id,
-                        "compiler.control.unstructured_continuation",
-                        "branch arms share reachable nodes that do not post-dominate every arm path",
-                    ))
-                } else {
-                    Ok(None)
-                }
-            }
-            _ => Err(issue(
+        if let Some(continuation) =
+            resolve_common_post_dominator(node_id, &post_dominators, then_start, else_start)?
+        {
+            return Ok(Some(continuation));
+        }
+        let then_reachable = reachable_flow_nodes(&graph, then_start);
+        let else_reachable = reachable_flow_nodes(&graph, else_start);
+        if then_reachable
+            .intersection(&else_reachable)
+            .any(|candidate| *candidate != FlowNode::Exit)
+        {
+            Err(issue(
                 node_id,
-                "compiler.control.branch.continuation_ambiguous",
-                "branch arms have multiple incomparable immediate post-dominators",
-            )),
+                "compiler.control.unstructured_continuation",
+                "branch arms share reachable nodes that do not post-dominate every arm path",
+            ))
+        } else {
+            Ok(None)
         }
     }
 
@@ -520,44 +513,62 @@ impl<'a> RegionBuilder<'a> {
         }
     }
 
-    fn normal_flow_graph(&self) -> Result<BTreeMap<FlowNode, BTreeSet<FlowNode>>, ControlIssue> {
-        let mut graph = BTreeMap::new();
-        graph.insert(FlowNode::Exit, BTreeSet::new());
-        for &node_id in self.nodes.keys() {
-            let node = &self.nodes[&node_id];
-            let mut successors = match node.role {
-                Some(StructuralNodeRole::Branch) => {
-                    let mut successors = BTreeSet::new();
-                    successors.insert(self.branch_arm_start(node_id, "true")?);
-                    successors.insert(self.branch_arm_start(node_id, "false")?);
-                    successors
-                }
-                Some(StructuralNodeRole::Loop) => self
-                    .successors_for_keys(node_id, &["then", "completed", "exit"])
-                    .into_iter()
-                    .map(FlowNode::Node)
-                    .collect(),
-                Some(StructuralNodeRole::Call) => self
-                    .successors_for_keys(node_id, &["then", "completed", "exit"])
-                    .into_iter()
-                    .map(FlowNode::Node)
-                    .collect(),
-                Some(StructuralNodeRole::FunctionReturn) => BTreeSet::new(),
-                _ => self
-                    .successors(node_id, None)
-                    .into_iter()
-                    .map(FlowNode::Node)
-                    .collect(),
+    fn normal_flow_graph(
+        &self,
+        starts: &[FlowNode],
+        stop: Option<NodeId>,
+    ) -> Result<BTreeMap<FlowNode, BTreeSet<FlowNode>>, ControlIssue> {
+        let mut graph = BTreeMap::from([(FlowNode::Exit, BTreeSet::new())]);
+        let mut pending = VecDeque::from(starts.to_vec());
+        while let Some(node) = pending.pop_front() {
+            let FlowNode::Node(node_id) = node else {
+                continue;
             };
-            if successors.is_empty() {
-                successors.insert(FlowNode::Exit);
+            if graph.contains_key(&node) {
+                continue;
             }
-            graph.insert(FlowNode::Node(node_id), successors);
+            let successors = self.normal_flow_successors(node_id, stop)?;
+            pending.extend(successors.iter().copied());
+            graph.insert(node, successors);
         }
         Ok(graph)
     }
 
-    fn successors_for_keys(&self, node_id: NodeId, keys: &[&str]) -> BTreeSet<NodeId> {
+    fn normal_flow_successors(
+        &self,
+        node_id: NodeId,
+        stop: Option<NodeId>,
+    ) -> Result<BTreeSet<FlowNode>, ControlIssue> {
+        let node = &self.nodes[&node_id];
+        if node.role == Some(StructuralNodeRole::Branch) {
+            return Ok(BTreeSet::from([
+                flow_node_before_stop(self.branch_arm_start(node_id, "true")?, stop),
+                flow_node_before_stop(self.branch_arm_start(node_id, "false")?, stop),
+            ]));
+        }
+        // Keep these role-specific keys identical to walk_stopping_before: Branch uses
+        // true/false alternatives above; Sequence uses then; Loop/Call use their ordered
+        // continuation keys; leaf and entry roles use every output; Return terminates.
+        let ordered = match node.role {
+            Some(StructuralNodeRole::Sequence) => self.successors(node_id, Some("then")),
+            Some(StructuralNodeRole::Loop | StructuralNodeRole::Call) => {
+                self.ordered_successors_for_keys(node_id, &["then", "completed", "exit"])
+            }
+            Some(StructuralNodeRole::FunctionReturn) => Vec::new(),
+            None | Some(StructuralNodeRole::EventBegin | StructuralNodeRole::FunctionEntry) => {
+                self.successors(node_id, None)
+            }
+            Some(StructuralNodeRole::Branch) => unreachable!("Branch is handled above"),
+        };
+        Ok(BTreeSet::from([ordered
+            .last()
+            .copied()
+            .map(FlowNode::Node)
+            .map(|successor| flow_node_before_stop(successor, stop))
+            .unwrap_or(FlowNode::Exit)]))
+    }
+
+    fn ordered_successors_for_keys(&self, node_id: NodeId, keys: &[&str]) -> Vec<NodeId> {
         keys.iter()
             .flat_map(|key| self.successors(node_id, Some(key)))
             .collect()
@@ -598,23 +609,6 @@ impl<'a> RegionBuilder<'a> {
                 &format!("missing value for port {key}"),
             )
         })
-    }
-
-    fn resolve_call_value(&self, node_id: NodeId, value: &Value) -> Result<ValueRef, ControlIssue> {
-        if let Some(index) = value.as_u64().and_then(|value| u32::try_from(value).ok()) {
-            return Ok(ValueRef::new(index));
-        }
-        let key = value
-            .as_str()
-            .or_else(|| value.get("port").and_then(Value::as_str))
-            .ok_or_else(|| {
-                issue(
-                    node_id,
-                    "compiler.control.binding_invalid",
-                    "binding value must be a port key or value index",
-                )
-            })?;
-        self.value_for_key(node_id, key)
     }
 
     fn branch_results(&self, node_id: NodeId) -> Result<Vec<BranchResultBinding>, ControlIssue> {
@@ -799,37 +793,203 @@ impl<'a> RegionBuilder<'a> {
         Ok(())
     }
 
-    fn call_bindings(
+    fn call_argument_bindings(
         &self,
         node_id: NodeId,
-        name: &str,
-        inferred_direction: PortDirection,
-    ) -> Result<Vec<RegionValueBinding>, ControlIssue> {
-        let node = &self.nodes[&node_id];
-        if let Some(items) = parameter(node.parameters, name).and_then(Value::as_array) {
-            return items
-                .iter()
-                .map(|item| {
-                    Ok(RegionValueBinding {
-                        destination: self.resolve_call_value(node_id, &item["destination"])?,
-                        source: self.resolve_call_value(node_id, &item["source"])?,
-                    })
+        target: &GraphResourcePath,
+    ) -> Result<Vec<CallArgumentBinding>, ControlIssue> {
+        let abi = self.call_abi(node_id, target)?;
+        let members = self.call_members(node_id, target, PortDirection::Input)?;
+        self.validate_call_member_bijection(node_id, &members, &abi.parameters, "argument")?;
+        members
+            .into_iter()
+            .map(|(parameter, caller_source)| {
+                let callee_destination =
+                    abi.parameters.get(&parameter).copied().ok_or_else(|| {
+                        issue(
+                            node_id,
+                            "compiler.control.call.abi_member_missing",
+                            &format!("target ABI has no parameter '{}'", parameter.0),
+                        )
+                    })?;
+                Ok(CallArgumentBinding {
+                    caller_source,
+                    callee_destination,
                 })
-                .collect();
-        }
-        Ok(node
-            .values
-            .iter()
-            .filter_map(|(address, value)| {
-                let spec = port_spec(node.protocol, address)?;
-                (spec.kind == PortKind::Data && spec.direction == inferred_direction).then_some(
-                    RegionValueBinding {
-                        destination: *value,
-                        source: *value,
-                    },
-                )
             })
-            .collect())
+            .collect()
+    }
+
+    fn call_result_bindings(
+        &self,
+        node_id: NodeId,
+        target: &GraphResourcePath,
+    ) -> Result<Vec<CallResultBinding>, ControlIssue> {
+        let abi = self.call_abi(node_id, target)?;
+        let members = self.call_members(node_id, target, PortDirection::Output)?;
+        self.validate_call_member_bijection(node_id, &members, &abi.results, "result")?;
+        members
+            .into_iter()
+            .map(|(parameter, caller_destination)| {
+                let callee_source = abi.results.get(&parameter).copied().ok_or_else(|| {
+                    issue(
+                        node_id,
+                        "compiler.control.call.abi_member_missing",
+                        &format!("target ABI has no result '{}'", parameter.0),
+                    )
+                })?;
+                Ok(CallResultBinding {
+                    callee_source,
+                    caller_destination,
+                })
+            })
+            .collect()
+    }
+
+    fn validate_call_member_bijection(
+        &self,
+        node_id: NodeId,
+        members: &[(crate::node_system::document::FunctionParameterId, ValueRef)],
+        expected: &BTreeMap<crate::node_system::document::FunctionParameterId, ValueRef>,
+        role: &str,
+    ) -> Result<(), ControlIssue> {
+        let actual = members
+            .iter()
+            .map(|(parameter, _)| parameter)
+            .collect::<BTreeSet<_>>();
+        let expected = expected.keys().collect::<BTreeSet<_>>();
+        if let Some(missing) = expected.difference(&actual).next() {
+            return Err(issue(
+                node_id,
+                "compiler.control.call.member_missing",
+                &format!("Call is missing {role} member '{}'", missing.0),
+            ));
+        }
+        if let Some(unexpected) = actual.difference(&expected).next() {
+            return Err(issue(
+                node_id,
+                "compiler.control.call.member_unexpected",
+                &format!("Call has unexpected {role} member '{}'", unexpected.0),
+            ));
+        }
+        Ok(())
+    }
+
+    fn call_abi(
+        &self,
+        node_id: NodeId,
+        target: &GraphResourcePath,
+    ) -> Result<&FunctionPlanAbi, ControlIssue> {
+        self.function_abis.get(target).ok_or_else(|| {
+            issue(
+                node_id,
+                "compiler.control.call.abi_missing",
+                &format!("target function '{}' has no compiled ABI", target.0),
+            )
+        })
+    }
+
+    fn call_members(
+        &self,
+        node_id: NodeId,
+        target: &GraphResourcePath,
+        direction: PortDirection,
+    ) -> Result<Vec<(crate::node_system::document::FunctionParameterId, ValueRef)>, ControlIssue>
+    {
+        let node = &self.nodes[&node_id];
+        let mut members = BTreeMap::new();
+        for (address, locator) in &node.dynamic_members {
+            let Some(spec) = port_spec(node.protocol, address) else {
+                continue;
+            };
+            if spec.kind != PortKind::Data || spec.direction != direction {
+                continue;
+            }
+            let DynamicMemberLocator::FunctionParameter {
+                function,
+                parameter,
+            } = locator
+            else {
+                return Err(issue(
+                    node_id,
+                    "compiler.control.call.locator_invalid",
+                    "Call data members require FunctionParameter locators",
+                ));
+            };
+            if function != target {
+                return Err(issue(
+                    node_id,
+                    "compiler.control.call.locator_target_mismatch",
+                    "Call member locator does not target the selected function",
+                ));
+            }
+            let value = node.values.get(address).copied().ok_or_else(|| {
+                issue(
+                    node_id,
+                    "compiler.control.call.value_missing",
+                    "Call dynamic member has no compiler-local value",
+                )
+            })?;
+            if members.insert(parameter.clone(), value).is_some() {
+                return Err(issue(
+                    node_id,
+                    "compiler.control.call.locator_duplicate",
+                    "Call has duplicate dynamic members for one function parameter",
+                ));
+            }
+        }
+        Ok(members.into_iter().collect())
+    }
+}
+
+fn flow_node_before_stop(node: FlowNode, stop: Option<NodeId>) -> FlowNode {
+    match node {
+        FlowNode::Node(node_id) if Some(node_id) == stop => FlowNode::Exit,
+        node => node,
+    }
+}
+
+fn resolve_common_post_dominator(
+    branch_id: NodeId,
+    post_dominators: &BTreeMap<FlowNode, BTreeSet<FlowNode>>,
+    left: FlowNode,
+    right: FlowNode,
+) -> Result<Option<NodeId>, ControlIssue> {
+    match immediate_common_post_dominator(post_dominators, left, right) {
+        CommonPostDominator::None => Ok(None),
+        CommonPostDominator::Node(node_id) => Ok(Some(node_id)),
+        CommonPostDominator::Ambiguous => Err(issue(
+            branch_id,
+            "compiler.control.branch.continuation_ambiguous",
+            "branch arms have multiple incomparable immediate post-dominators",
+        )),
+    }
+}
+
+fn immediate_common_post_dominator(
+    post_dominators: &BTreeMap<FlowNode, BTreeSet<FlowNode>>,
+    left: FlowNode,
+    right: FlowNode,
+) -> CommonPostDominator {
+    let common = post_dominators[&left]
+        .intersection(&post_dominators[&right])
+        .copied()
+        .filter(|candidate| *candidate != FlowNode::Exit)
+        .collect::<BTreeSet<_>>();
+    let immediate = common
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            !common
+                .iter()
+                .copied()
+                .any(|other| other != *candidate && post_dominators[&other].contains(candidate))
+        })
+        .collect::<Vec<_>>();
+    match immediate.as_slice() {
+        [] => CommonPostDominator::None,
+        [FlowNode::Node(node_id)] => CommonPostDominator::Node(*node_id),
+        _ => CommonPostDominator::Ambiguous,
     }
 }
 
@@ -900,79 +1060,6 @@ fn post_dominators(
         }
     }
     None
-}
-
-fn validate_binding_parameter(
-    issues: &mut Vec<ControlIssue>,
-    node_id: NodeId,
-    protocol: &NodeProtocol,
-    parameters: &BTreeMap<ParameterKey, Value>,
-    name: &str,
-    fields: &[&str],
-    required: bool,
-) {
-    let Some(value) = parameter(parameters, name) else {
-        if required {
-            issues.push(issue(
-                node_id,
-                "compiler.control.binding_required",
-                &format!("{name} bindings are required"),
-            ));
-        }
-        return;
-    };
-    let Some(items) = value.as_array() else {
-        issues.push(issue(
-            node_id,
-            "compiler.control.binding_invalid",
-            &format!("{name} must be an array"),
-        ));
-        return;
-    };
-    for item in items {
-        let Some(binding) = item.as_object() else {
-            issues.push(issue(
-                node_id,
-                "compiler.control.binding_invalid",
-                &format!("{name} binding must be an object"),
-            ));
-            continue;
-        };
-        for field in fields {
-            let Some(reference) = binding.get(*field) else {
-                issues.push(issue(
-                    node_id,
-                    "compiler.control.binding_invalid",
-                    &format!("{name}.{field} is required"),
-                ));
-                continue;
-            };
-            if let Some(key) = reference
-                .as_str()
-                .or_else(|| reference.get("port").and_then(Value::as_str))
-            {
-                if !has_port(protocol, PortKind::Data, PortDirection::Input, Some(key))
-                    && !has_port(protocol, PortKind::Data, PortDirection::Output, Some(key))
-                {
-                    issues.push(issue(
-                        node_id,
-                        "compiler.control.binding_port_missing",
-                        &format!("unknown data port {key}"),
-                    ));
-                }
-            } else if reference
-                .as_u64()
-                .and_then(|value| u32::try_from(value).ok())
-                .is_none()
-            {
-                issues.push(issue(
-                    node_id,
-                    "compiler.control.binding_invalid",
-                    &format!("{name}.{field} must reference a data port or value index"),
-                ));
-            }
-        }
-    }
 }
 
 fn require_data_port(
@@ -1076,5 +1163,151 @@ fn issue(node_id: NodeId, code: &'static str, detail: &str) -> ControlIssue {
         node_id: Some(node_id),
         code,
         detail: detail.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::protocol::{NodeInterfaceProtocol, NodeTypeId, PortKey};
+    use uuid::Uuid;
+
+    fn node_id(value: u128) -> NodeId {
+        NodeId::from_uuid(Uuid::from_u128(value))
+    }
+
+    fn node(value: u128) -> FlowNode {
+        FlowNode::Node(node_id(value))
+    }
+
+    #[test]
+    fn branch_postdom_ignores_sequence_outputs_the_walker_cannot_reach() {
+        let registry = build_builtin_registry();
+        let branch_protocol = &registry
+            .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
+            .unwrap()
+            .protocol;
+        let base_sequence_protocol = &registry
+            .get(&NodeTypeId::new("yssbi.control.sequence").unwrap())
+            .unwrap()
+            .protocol;
+        let mut sequence_protocol = base_sequence_protocol.as_ref().clone();
+        let mut ports = sequence_protocol.interface.ports.to_vec();
+        let mut extra_output = ports
+            .iter()
+            .find(|port| port.key.as_str() == "then")
+            .unwrap()
+            .clone();
+        extra_output.key = PortKey::new("zzz").unwrap();
+        ports.push(extra_output);
+        sequence_protocol.interface = NodeInterfaceProtocol::new(ports, vec![], vec![]).unwrap();
+
+        let branch = node_id(1);
+        let sequence = node_id(2);
+        let merge = node_id(3);
+        let parameters = BTreeMap::new();
+        let nodes = BTreeMap::from([
+            (
+                branch,
+                ControlNode {
+                    node_id: branch,
+                    role: Some(StructuralNodeRole::Branch),
+                    protocol: branch_protocol,
+                    parameters: &parameters,
+                    ports: Box::from([
+                        PortAddress::declared(branch, PortKey::new("true").unwrap()),
+                        PortAddress::declared(branch, PortKey::new("false").unwrap()),
+                    ]),
+                    values: BTreeMap::new(),
+                    dynamic_members: BTreeMap::new(),
+                    operation: None,
+                },
+            ),
+            (
+                sequence,
+                ControlNode {
+                    node_id: sequence,
+                    role: Some(StructuralNodeRole::Sequence),
+                    protocol: &sequence_protocol,
+                    parameters: &parameters,
+                    ports: Box::from([
+                        PortAddress::declared(sequence, PortKey::new("then").unwrap()),
+                        PortAddress::declared(sequence, PortKey::new("zzz").unwrap()),
+                    ]),
+                    values: BTreeMap::new(),
+                    dynamic_members: BTreeMap::new(),
+                    operation: None,
+                },
+            ),
+            (
+                merge,
+                ControlNode {
+                    node_id: merge,
+                    role: Some(StructuralNodeRole::Sequence),
+                    protocol: base_sequence_protocol,
+                    parameters: &parameters,
+                    ports: Box::from([PortAddress::declared(merge, PortKey::new("then").unwrap())]),
+                    values: BTreeMap::new(),
+                    dynamic_members: BTreeMap::new(),
+                    operation: None,
+                },
+            ),
+        ]);
+        let edges = vec![
+            ControlEdge {
+                source: PortAddress::declared(branch, PortKey::new("true").unwrap()),
+                target: PortAddress::declared(sequence, PortKey::new("enter").unwrap()),
+            },
+            ControlEdge {
+                source: PortAddress::declared(sequence, PortKey::new("zzz").unwrap()),
+                target: PortAddress::declared(merge, PortKey::new("enter").unwrap()),
+            },
+            ControlEdge {
+                source: PortAddress::declared(branch, PortKey::new("false").unwrap()),
+                target: PortAddress::declared(merge, PortKey::new("enter").unwrap()),
+            },
+        ];
+        let function_abis = BTreeMap::new();
+        let builder = RegionBuilder::new(nodes, edges, &function_abis).unwrap();
+
+        assert_eq!(builder.branch_continuation(branch, None).unwrap(), None);
+    }
+
+    #[test]
+    fn post_dominator_fixed_point_is_bounded_for_a_cycle_without_exit() {
+        let a = node(1);
+        let b = node(2);
+        let graph = BTreeMap::from([
+            (FlowNode::Exit, BTreeSet::new()),
+            (a, BTreeSet::from([b])),
+            (b, BTreeSet::from([a])),
+        ]);
+
+        assert_eq!(post_dominators(&graph), None);
+    }
+
+    #[test]
+    fn incomparable_common_post_dominators_are_ambiguous_without_id_tiebreaking() {
+        let left = node(1);
+        let right = node(2);
+        let first = node(3);
+        let second = node(4);
+        let post_dominators = BTreeMap::from([
+            (left, BTreeSet::from([left, first, second, FlowNode::Exit])),
+            (
+                right,
+                BTreeSet::from([right, first, second, FlowNode::Exit]),
+            ),
+            (first, BTreeSet::from([first, FlowNode::Exit])),
+            (second, BTreeSet::from([second, FlowNode::Exit])),
+            (FlowNode::Exit, BTreeSet::from([FlowNode::Exit])),
+        ]);
+
+        let branch_id = NodeId::from_uuid(Uuid::from_u128(9));
+        let error = resolve_common_post_dominator(branch_id, &post_dominators, left, right)
+            .expect_err("incomparable candidates must block");
+        assert_eq!(error.code, "compiler.control.branch.continuation_ambiguous");
+        assert_eq!(error.node_id, Some(branch_id));
     }
 }

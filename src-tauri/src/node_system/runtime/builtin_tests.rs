@@ -13,10 +13,10 @@ use std::collections::BTreeMap;
 struct NoFunctions;
 
 impl FunctionPlanProvider for NoFunctions {
-    fn get_plan(
+    fn get_function(
         &self,
         _: &FunctionPlanHandle,
-    ) -> Result<Option<std::sync::Arc<ExecutionPlan>>, Box<str>> {
+    ) -> Result<Option<std::sync::Arc<PublishedFunctionPlan>>, Box<str>> {
         Ok(None)
     }
 }
