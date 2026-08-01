@@ -772,6 +772,8 @@ pub struct ProjectState {
     #[cfg(test)]
     execution_before_run_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
     #[cfg(test)]
+    execution_before_commit_gate_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
+    #[cfg(test)]
     variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
     #[cfg(test)]
     project_activation_test_hook: Arc<RwLock<Option<ProjectActivationTestHook>>>,
@@ -926,6 +928,8 @@ impl ProjectState {
             execution_before_final_gate_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             execution_before_run_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            execution_before_commit_gate_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             variable_staging_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1548,6 +1552,26 @@ impl ProjectState {
 
     #[cfg(not(test))]
     fn run_execution_before_run_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn set_execution_before_commit_gate_test_hook(&self, hook: ExecutionTestHook) {
+        *self.execution_before_commit_gate_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    fn run_execution_before_commit_gate_test_hook(&self) {
+        if let Some(hook) = self
+            .execution_before_commit_gate_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_execution_before_commit_gate_test_hook(&self) {}
 
     #[cfg(test)]
     pub(crate) fn append_history_head_for_test(&self) {
@@ -4908,12 +4932,32 @@ impl ProjectState {
             .map_err(|error| error.to_string())?;
         self.run_execution_before_final_gate_test_hook();
         self.validate_execution_authority(&compilation.authority)?;
-        let _pre_run = execution
+        let pre_run = execution
             .runs
             .track_pre_run(execution.session_id.clone(), cancellation.clone())
             .map_err(|error| error.to_string())?;
         self.run_execution_before_run_test_hook();
-        let mut result = crate::node_system::runtime::RunExecutor::new(
+        let finalize =
+            |result: &mut crate::node_system::runtime::RunResult,
+             cancellation: &crate::node_system::runtime::CancellationToken| {
+                self.run_execution_before_commit_gate_test_hook();
+                let _finalization = pre_run.begin_finalization(cancellation).map_err(|error| {
+                    crate::node_system::runtime::RunError::ProjectDraining(error.to_string().into())
+                })?;
+                cancellation.check()?;
+                let effects = resources.snapshot().variable_effects();
+                let committed = self
+                    .commit_variable_effects(&execution.session_id, effects)
+                    .map_err(|error| {
+                        crate::node_system::runtime::RunError::ResourceSnapshotMismatch(
+                            error.to_string().into(),
+                        )
+                    })?;
+                result.committed_variable_ids = committed.variable_ids;
+                result.resource_mutation = committed.resource_mutation;
+                Ok(())
+            };
+        crate::node_system::runtime::RunExecutor::new(
             execution.kernels.as_ref(),
             &resources,
             &function_generation,
@@ -4923,15 +4967,9 @@ impl ProjectState {
         .with_run_registry(execution.runs.as_ref())
         .with_event_sink(events)
         .with_result_store(&execution.results)
+        .with_success_finalizer(&finalize)
         .run(&plan, cancellation)
-        .map_err(|error| error.to_string())?;
-        let effects = resources.snapshot().variable_effects();
-        let committed = self
-            .commit_variable_effects(&execution.session_id, effects)
-            .map_err(|error| error.to_string())?;
-        result.committed_variable_ids = committed.variable_ids;
-        result.resource_mutation = committed.resource_mutation;
-        Ok(result)
+        .map_err(|error| error.to_string())
     }
 
     pub(super) fn commit_variable_effects(

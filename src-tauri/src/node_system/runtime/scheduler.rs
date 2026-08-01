@@ -170,6 +170,8 @@ pub struct RunExecutor<'a> {
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
     results: Option<&'a ResultStore>,
+    success_finalizer:
+        Option<&'a dyn Fn(&mut RunResult, &CancellationToken) -> Result<(), RunError>>,
     #[cfg(test)]
     checkpoint:
         Option<Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>>,
@@ -192,6 +194,7 @@ impl<'a> RunExecutor<'a> {
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
             results: None,
+            success_finalizer: None,
             #[cfg(test)]
             checkpoint: None,
         }
@@ -229,6 +232,14 @@ impl<'a> RunExecutor<'a> {
 
     pub fn with_result_store(mut self, results: &'a ResultStore) -> Self {
         self.results = Some(results);
+        self
+    }
+
+    pub fn with_success_finalizer(
+        mut self,
+        finalizer: &'a dyn Fn(&mut RunResult, &CancellationToken) -> Result<(), RunError>,
+    ) -> Self {
+        self.success_finalizer = Some(finalizer);
         self
     }
 
@@ -300,6 +311,12 @@ impl<'a> RunExecutor<'a> {
         }
         if result.is_ok()
             && let Err(error) = cancellation.check()
+        {
+            result = Err(error);
+            pending_sources.clear();
+        }
+        if let (Some(finalizer), Ok(run_result)) = (self.success_finalizer, result.as_mut())
+            && let Err(error) = finalizer(run_result, &cancellation)
         {
             result = Err(error);
             pending_sources.clear();
@@ -499,6 +516,7 @@ impl<'a> RunExecutor<'a> {
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         cancellation.check()?;
+        frame.clear_region_values(plan, region);
         self.propagate_value_dependencies(plan, frame)?;
         match region {
             StructuredControlRegion::Sequence(steps) => self.execute_sequence(
@@ -614,6 +632,15 @@ impl<'a> RunExecutor<'a> {
                     callee
                         .validate()
                         .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
+                    let argument_values = arguments
+                        .iter()
+                        .map(|binding| {
+                            Ok((
+                                binding.callee_destination,
+                                frame.value(binding.caller_source)?.clone(),
+                            ))
+                        })
+                        .collect::<Result<Vec<_>, RunError>>()?;
                     let callee_resources = self.acquire_resources(&callee, &correlation)?;
                     let callee_backends = RunRelationalBackends::acquire(
                         &callee.relational_subplans,
@@ -623,11 +650,8 @@ impl<'a> RunExecutor<'a> {
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count);
                     let result = (|| {
-                        for binding in arguments {
-                            callee_frame.set(
-                                binding.callee_destination,
-                                frame.value(binding.caller_source)?.clone(),
-                            )?;
+                        for (destination, value) in argument_values {
+                            callee_frame.set(destination, value)?;
                         }
                         self.execute_region(
                             run_id,
@@ -1203,6 +1227,40 @@ impl Frame {
         }
     }
 
+    fn clear_region_values(&mut self, plan: &ExecutionPlan, region: &StructuredControlRegion) {
+        let mut operations = BTreeSet::new();
+        collect_region_operations(region, &mut operations);
+        let mut cleared = operations
+            .into_iter()
+            .flat_map(|operation| {
+                plan.operations[operation.index()]
+                    .outputs
+                    .iter()
+                    .map(|output| output.value)
+            })
+            .collect::<BTreeSet<_>>();
+        loop {
+            let derived = plan
+                .value_dependencies
+                .iter()
+                .filter(|dependency| cleared.contains(&dependency.source))
+                .map(|dependency| dependency.destination)
+                .filter(|destination| !cleared.contains(destination))
+                .collect::<Vec<_>>();
+            if derived.is_empty() {
+                break;
+            }
+            cleared.extend(derived);
+        }
+        for reference in cleared {
+            if let Some(slot) = self.values.get_mut(reference.index())
+                && let Some(value) = slot.take()
+            {
+                value.close_stream();
+            }
+        }
+    }
+
     fn has(&self, reference: ValueRef) -> bool {
         self.values
             .get(reference.index())
@@ -1281,6 +1339,36 @@ impl Frame {
 
     fn completion_count(&self, operation: OperationIndex) -> usize {
         self.completion_counts.get(&operation).copied().unwrap_or(0)
+    }
+}
+
+fn collect_region_operations(
+    region: &StructuredControlRegion,
+    operations: &mut BTreeSet<OperationIndex>,
+) {
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            for step in steps {
+                match step {
+                    ControlStep::Operation(operation) => {
+                        operations.insert(*operation);
+                    }
+                    ControlStep::Region(child) => collect_region_operations(child, operations),
+                }
+            }
+        }
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            collect_region_operations(then_region, operations);
+            collect_region_operations(else_region, operations);
+        }
+        StructuredControlRegion::Loop { body, .. } => {
+            collect_region_operations(body, operations);
+        }
+        StructuredControlRegion::Call { .. } => {}
     }
 }
 

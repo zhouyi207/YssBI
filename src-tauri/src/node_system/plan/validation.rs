@@ -207,6 +207,8 @@ impl ExecutionPlan {
             &source_facts,
             &mut errors,
         );
+        let mut region_available = external_inputs.clone();
+        validate_region_availability(&self.root_region, self, &mut region_available, &mut errors);
         validate_relational_subplans(self, &mut errors);
         validate_resources(self, &mut errors);
 
@@ -220,7 +222,10 @@ impl ExecutionPlan {
                     result.name.clone(),
                 ));
             }
-            if result.value.index() < value_count && !sourced_values[result.value.index()] {
+            if result.value.index() < value_count
+                && (!sourced_values[result.value.index()]
+                    || !region_available.contains(&result.value))
+            {
                 errors.push(PlanValidationError::MissingResultSource(result.value));
             }
         }
@@ -616,6 +621,217 @@ fn validate_structured_control_facts(
         if value.index() < value_count && !source_facts.is_statically_sourced(value) {
             errors.push(PlanValidationError::MissingStructuredBindingSource { context, value });
         }
+    }
+}
+
+fn validate_region_availability(
+    region: &StructuredControlRegion,
+    plan: &ExecutionPlan,
+    available: &mut BTreeSet<ValueRef>,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    extend_available_dependencies(plan, available);
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            let mut pending = Vec::new();
+            for step in steps {
+                match step {
+                    ControlStep::Operation(operation) => pending.push(*operation),
+                    ControlStep::Region(child) => {
+                        validate_operation_block(&pending, plan, available, errors);
+                        pending.clear();
+                        validate_region_availability(child, plan, available, errors);
+                    }
+                }
+            }
+            validate_operation_block(&pending, plan, available, errors);
+        }
+        StructuredControlRegion::If {
+            condition,
+            then_region,
+            else_region,
+            results,
+        } => {
+            require_available("If condition", *condition, available, errors);
+            let incoming = available.clone();
+            let mut then_available = incoming.clone();
+            let mut else_available = incoming;
+            validate_region_availability(then_region, plan, &mut then_available, errors);
+            validate_region_availability(else_region, plan, &mut else_available, errors);
+            available
+                .retain(|value| then_available.contains(value) && else_available.contains(value));
+            for binding in results {
+                let then_ready = require_available(
+                    "If then result",
+                    binding.then_source,
+                    &then_available,
+                    errors,
+                );
+                let else_ready = require_available(
+                    "If else result",
+                    binding.else_source,
+                    &else_available,
+                    errors,
+                );
+                if then_ready && else_ready {
+                    available.insert(binding.destination);
+                }
+            }
+            extend_available_dependencies(plan, available);
+        }
+        StructuredControlRegion::Loop {
+            body,
+            carried,
+            continue_condition,
+            ..
+        } => {
+            let mut body_available = available.clone();
+            for binding in carried {
+                if require_available(
+                    "Loop initial source",
+                    binding.initial_source,
+                    available,
+                    errors,
+                ) {
+                    body_available.insert(binding.body_input);
+                }
+            }
+            validate_region_availability(body, plan, &mut body_available, errors);
+            require_available(
+                "Loop continue condition",
+                *continue_condition,
+                &body_available,
+                errors,
+            );
+            for binding in carried {
+                if require_available(
+                    "Loop next source",
+                    binding.next_source,
+                    &body_available,
+                    errors,
+                ) {
+                    available.insert(binding.result);
+                }
+            }
+            extend_available_dependencies(plan, available);
+        }
+        StructuredControlRegion::Call {
+            arguments, results, ..
+        } => {
+            for binding in arguments {
+                require_available(
+                    "Call caller argument",
+                    binding.caller_source,
+                    available,
+                    errors,
+                );
+            }
+            available.extend(results.iter().map(|binding| binding.caller_destination));
+            extend_available_dependencies(plan, available);
+        }
+    }
+}
+
+fn validate_operation_block(
+    operations: &[OperationIndex],
+    plan: &ExecutionPlan,
+    available: &mut BTreeSet<ValueRef>,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    let mut pending = operations
+        .iter()
+        .copied()
+        .filter(|operation| operation.index() < plan.operations.len())
+        .collect::<BTreeSet<_>>();
+    loop {
+        extend_available_dependencies(plan, available);
+        let ready = pending
+            .iter()
+            .copied()
+            .filter(|operation| {
+                let operation = &plan.operations[operation.index()];
+                operation
+                    .inputs
+                    .iter()
+                    .all(|input| available.contains(&input.value))
+                    && operation.outputs.iter().all(|output| {
+                        plan.value_dependencies
+                            .iter()
+                            .filter(|dependency| dependency.destination == output.value)
+                            .all(|dependency| available.contains(&dependency.source))
+                    })
+            })
+            .collect::<Vec<_>>();
+        if ready.is_empty() {
+            break;
+        }
+        for operation in ready {
+            pending.remove(&operation);
+            available.extend(
+                plan.operations[operation.index()]
+                    .outputs
+                    .iter()
+                    .map(|output| output.value),
+            );
+        }
+    }
+    for operation in pending {
+        let operation = &plan.operations[operation.index()];
+        for input in &operation.inputs {
+            require_available("operation input", input.value, available, errors);
+        }
+        for output in &operation.outputs {
+            for dependency in plan
+                .value_dependencies
+                .iter()
+                .filter(|dependency| dependency.destination == output.value)
+            {
+                require_available(
+                    "operation value dependency",
+                    dependency.source,
+                    available,
+                    errors,
+                );
+            }
+        }
+    }
+}
+
+fn extend_available_dependencies(plan: &ExecutionPlan, available: &mut BTreeSet<ValueRef>) {
+    let operation_outputs = plan
+        .operations
+        .iter()
+        .flat_map(|operation| operation.outputs.iter().map(|output| output.value))
+        .collect::<BTreeSet<_>>();
+    loop {
+        let derived = plan
+            .value_dependencies
+            .iter()
+            .filter(|dependency| {
+                available.contains(&dependency.source)
+                    && !operation_outputs.contains(&dependency.destination)
+                    && !available.contains(&dependency.destination)
+            })
+            .map(|dependency| dependency.destination)
+            .collect::<Vec<_>>();
+        if derived.is_empty() {
+            break;
+        }
+        available.extend(derived);
+    }
+}
+
+fn require_available(
+    context: &'static str,
+    value: ValueRef,
+    available: &BTreeSet<ValueRef>,
+    errors: &mut Vec<PlanValidationError>,
+) -> bool {
+    if available.contains(&value) {
+        true
+    } else {
+        errors.push(PlanValidationError::MissingStructuredBindingSource { context, value });
+        false
     }
 }
 

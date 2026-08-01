@@ -114,7 +114,7 @@ mod tests {
             }]),
             results: Box::new([PlanResult {
                 name: "result".into(),
-                value: ValueRef::new(1),
+                value: ValueRef::new(6),
             }]),
         }
     }
@@ -1188,7 +1188,7 @@ mod tests {
 
         let mut control_produced = valid_plan();
         control_produced.operations[1].inputs = Box::new([PlannedInput {
-            value: ValueRef::new(7),
+            value: ValueRef::new(5),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
         }]);
         control_produced.value_dependencies = Box::new([]);

@@ -1329,6 +1329,129 @@ fn builtin_branch_false_path_executes_only_selected_effect_and_binds_result() {
 }
 
 #[test]
+fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
+    let variable = result_variable();
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    let fixture = TempProject::activate(project);
+    let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
+    fixture
+        .state()
+        .insert_graph(
+            graph_path.clone(),
+            branch_fixture(true, InsertionOrder::Forward).resource,
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
+    let winning_state = fixture.state().clone();
+    let winning_variable = variable.clone();
+    let (_, session) = fixture.state().current_run_registry();
+    fixture
+        .state()
+        .set_execution_before_commit_gate_test_hook(std::sync::Arc::new(move || {
+            winning_state
+                .commit_variable_effects(
+                    &session,
+                    vec![crate::node_system::runtime::VariableWriteEffect {
+                        resource: crate::node_system::plan::ResourceId::new(format!(
+                            "variables/{}",
+                            winning_variable.id
+                        ))
+                        .unwrap(),
+                        expected_revision: GraphRevision::INITIAL,
+                        before: winning_variable.clone(),
+                        after: crate::graph::value::DataValue::Int64(99),
+                    }],
+                )
+                .unwrap();
+        }));
+    let events = RecordingRunEvents::default();
+
+    let error = fixture
+        .state()
+        .execute_graph(&graph_path, &events)
+        .expect_err("the staged Variable Set effect must lose the revision race");
+    fixture
+        .state()
+        .set_execution_before_commit_gate_test_hook(std::sync::Arc::new(|| {}));
+    let recorded = events.events();
+
+    assert!(
+        error.contains("project resource snapshot does not match the plan"),
+        "unexpected execution error: {error}"
+    );
+    assert_eq!(
+        fixture.state().get_data().unwrap().variables[&variable.id].data_value,
+        crate::graph::value::DataValue::Int64(99)
+    );
+    assert_no_completed_result(&recorded);
+}
+
+#[test]
+fn builtin_branch_drain_before_commit_gate_commits_nothing() {
+    let variable = result_variable();
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    let fixture = TempProject::activate(project);
+    let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
+    fixture
+        .state()
+        .insert_graph(
+            graph_path.clone(),
+            branch_fixture(true, InsertionOrder::Forward).resource,
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
+    let (gate_reached_tx, gate_reached_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = Mutex::new(release_gate_rx);
+    fixture
+        .state()
+        .set_execution_before_commit_gate_test_hook(std::sync::Arc::new(move || {
+            gate_reached_tx.send(()).unwrap();
+            release_gate_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(5))
+                .expect("test must release the commit gate");
+        }));
+    let events = std::sync::Arc::new(RecordingRunEvents::default());
+    let execution_state = fixture.state().clone();
+    let execution_path = graph_path.clone();
+    let execution_events = std::sync::Arc::clone(&events);
+    let execution = std::thread::spawn(move || {
+        execution_state.execute_graph(&execution_path, execution_events.as_ref())
+    });
+
+    gate_reached_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("execution must reach the commit gate");
+    let (runs, session) = fixture.state().current_run_registry();
+    let drain_runs = std::sync::Arc::clone(&runs);
+    let drain_session = session.clone();
+    let (drained_tx, drained_rx) = std::sync::mpsc::channel();
+    let drain = std::thread::spawn(move || {
+        drain_runs.cancel_and_drain(&drain_session);
+        drained_tx.send(()).unwrap();
+    });
+    assert!(runs.wait_until_draining_for_test(&session, Duration::from_secs(5)));
+    release_gate_tx.send(()).unwrap();
+    let error = execution.join().unwrap().unwrap_err();
+    drained_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("drain must finish after execution rejects finalization");
+    drain.join().unwrap();
+    let recorded = events.events();
+
+    assert!(error.contains("project is draining"));
+    assert_eq!(
+        fixture.state().get_data().unwrap().variables[&variable.id].data_value,
+        crate::graph::value::DataValue::Int64(0)
+    );
+    assert_no_completed_result(&recorded);
+}
+
+#[test]
 fn builtin_branch_reverse_insertion_is_equivalent() {
     let forward = branch_fixture(true, InsertionOrder::Forward);
     let reverse = branch_fixture(true, InsertionOrder::Reverse);

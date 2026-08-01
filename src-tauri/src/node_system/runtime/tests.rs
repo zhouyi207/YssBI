@@ -673,6 +673,123 @@ fn loop_carries_values_through_fresh_activations() {
 }
 
 #[test]
+fn loop_does_not_reuse_an_unselected_branch_value_from_a_prior_iteration() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("initial", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(0).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("selector", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Scalar(Value::Integer(value)) = &inputs[0] else {
+                    return Err(KernelError::new("expected integer"));
+                };
+                let next = value + 1;
+                Ok(vec![
+                    Value::Integer(next).into(),
+                    Value::Bool(*value == 0).into(),
+                    Value::Bool(next < 2).into(),
+                ])
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("branch_value", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(41).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("consume", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| Ok(vec![inputs[0].clone()])),
+        )
+        .unwrap();
+
+    let mut execution_plan = plan(
+        vec![
+            operation("initial", &[], &[1]),
+            operation("selector", &[0], &[2, 3, 4]),
+            operation("branch_value", &[], &[5]),
+            operation("consume", &[5], &[6]),
+        ],
+        8,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Loop {
+                body: Box::new(StructuredControlRegion::Sequence(Box::new([
+                    ControlStep::Operation(OperationIndex::new(1)),
+                    ControlStep::Region(Box::new(StructuredControlRegion::If {
+                        condition: ValueRef::new(3),
+                        then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                            ControlStep::Operation(OperationIndex::new(2)),
+                        ]))),
+                        else_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+                        results: Box::new([]),
+                    })),
+                    ControlStep::Operation(OperationIndex::new(3)),
+                ]))),
+                carried: Box::new([LoopCarriedBinding {
+                    body_input: ValueRef::new(0),
+                    initial_source: ValueRef::new(1),
+                    next_source: ValueRef::new(2),
+                    result: ValueRef::new(7),
+                }]),
+                continue_condition: ValueRef::new(4),
+                max_iterations: 3,
+            })),
+        ])),
+    );
+    execution_plan.value_sources = Box::new([
+        PlanValueSource::ControlProduced(ValueRef::new(0)),
+        PlanValueSource::ControlProduced(ValueRef::new(7)),
+    ]);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .expect_err("an unselected branch must not leak a prior activation value");
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+}
+
+#[test]
+fn call_missing_caller_value_does_not_acquire_callee_resources() {
+    let mut callee = plan(vec![], 1, StructuredControlRegion::Sequence(Box::new([])));
+    callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+    callee.resources = Box::new([CompiledResourceRequirement {
+        resource: id("external/callee", ResourceId::new),
+        kind: ResourceKind::ExternalArtifact,
+        access: ResourceAccess::Shared,
+        optional: false,
+    }]);
+    let published = published_function(callee, "functions/callee", &[0], &[]);
+    let caller = plan(
+        vec![operation("source_not_in_region", &[], &[0])],
+        1,
+        StructuredControlRegion::Call {
+            target: id("functions/callee", FunctionPlanHandle::new),
+            arguments: Box::new([CallArgumentBinding {
+                caller_source: ValueRef::new(0),
+                callee_destination: ValueRef::new(0),
+            }]),
+            results: Box::new([]),
+        },
+    );
+    let resources = no_resources();
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &resources, &OneFunction(published))
+        .run(&caller, CancellationToken::new())
+        .expect_err("the caller value is unavailable");
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+    assert_eq!(resources.acquired.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn call_copies_values_across_different_caller_and_callee_layouts() {
     let mut kernels = KernelRegistry::new();
     kernels
@@ -1845,6 +1962,62 @@ fn cancellation_during_exact_bridge_stream_collection_is_cancelled() {
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(collected.load(Ordering::SeqCst), 1);
     assert_cancelled_without_completion(&events);
+    assert_eq!(results.source_count(), 0);
+}
+
+#[test]
+fn failed_success_finalizer_publishes_no_result_or_completion() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("value", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("value", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "value".into(),
+        value: ValueRef::new(0),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let finalizer = |_: &mut RunResult, _: &CancellationToken| {
+        Err(RunError::ResourceSnapshotMismatch(
+            "authoritative commit failed".into(),
+        ))
+    };
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .with_success_finalizer(&finalizer)
+        .run(&execution_plan, CancellationToken::new())
+        .expect_err("failed authoritative finalization must fail the run");
+
+    assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
+    let recorded = events.0.lock().unwrap();
+    assert!(recorded.iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::RunErrored {
+            code: RunErrorCode::ResourceSnapshotMismatch
+        }
+    )));
+    assert!(
+        recorded
+            .iter()
+            .all(|event| event.kind != RunEventKind::RunCompleted)
+    );
+    assert!(
+        recorded
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+    );
     assert_eq!(results.source_count(), 0);
 }
 

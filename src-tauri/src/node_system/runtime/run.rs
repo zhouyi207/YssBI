@@ -200,6 +200,10 @@ impl CancellationToken {
         Arc::clone(&self.state.cancelled)
     }
 
+    pub(crate) fn shares_state_with(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.state, &other.state)
+    }
+
     pub(crate) fn register_waiter(&self, waiter: &Arc<Condvar>) {
         let mut waiters = self
             .state

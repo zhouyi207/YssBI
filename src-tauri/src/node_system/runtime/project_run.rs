@@ -9,6 +9,7 @@ use std::sync::{Arc, Condvar, Mutex};
 struct ProjectRuns {
     active: BTreeMap<ProjectSessionId, BTreeMap<RunId, CancellationToken>>,
     preparing: BTreeMap<ProjectSessionId, BTreeMap<u64, CancellationToken>>,
+    finalizing: BTreeMap<ProjectSessionId, BTreeMap<u64, CancellationToken>>,
     draining: BTreeMap<ProjectSessionId, usize>,
 }
 
@@ -79,13 +80,26 @@ impl ProjectRunRegistry {
                 cancellation.cancel();
             }
         }
+        let finalizing = runs
+            .finalizing
+            .get(project)
+            .map(|registrations| registrations.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
         if let Some(active) = runs.active.get(project) {
             for cancellation in active.values() {
-                cancellation.cancel();
+                if !finalizing
+                    .iter()
+                    .any(|protected| cancellation.shares_state_with(protected))
+                {
+                    cancellation.cancel();
+                }
             }
         }
         self.drained.notify_all();
-        while runs.active.contains_key(project) || runs.preparing.contains_key(project) {
+        while runs.active.contains_key(project)
+            || runs.preparing.contains_key(project)
+            || runs.finalizing.contains_key(project)
+        {
             runs = self
                 .drained
                 .wait(runs)
@@ -136,6 +150,39 @@ impl ProjectRunRegistry {
             .unwrap_or_default()
     }
 
+    fn begin_finalization(
+        &self,
+        project: &ProjectSessionId,
+        registration_id: u64,
+        cancellation: &CancellationToken,
+    ) -> Result<ProjectRunFinalization<'_>, ProjectRunRegistrationError> {
+        let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        if runs.draining.contains_key(project) || cancellation.is_cancelled() {
+            cancellation.cancel();
+            return Err(ProjectRunRegistrationError::ProjectDraining(
+                project.clone(),
+            ));
+        }
+        let remove_project = if let Some(preparing) = runs.preparing.get_mut(project) {
+            preparing.remove(&registration_id);
+            preparing.is_empty()
+        } else {
+            false
+        };
+        if remove_project {
+            runs.preparing.remove(project);
+        }
+        runs.finalizing
+            .entry(project.clone())
+            .or_default()
+            .insert(registration_id, cancellation.clone());
+        Ok(ProjectRunFinalization {
+            registry: self,
+            project: project.clone(),
+            registration_id,
+        })
+    }
+
     fn release_pre_run(&self, project: &ProjectSessionId, registration_id: u64) {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
         let remove_project = if let Some(preparing) = runs.preparing.get_mut(project) {
@@ -146,6 +193,20 @@ impl ProjectRunRegistry {
         };
         if remove_project {
             runs.preparing.remove(project);
+            self.drained.notify_all();
+        }
+    }
+
+    fn release_finalization(&self, project: &ProjectSessionId, registration_id: u64) {
+        let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        let remove_project = if let Some(finalizing) = runs.finalizing.get_mut(project) {
+            finalizing.remove(&registration_id);
+            finalizing.is_empty()
+        } else {
+            false
+        };
+        if remove_project {
+            runs.finalizing.remove(project);
             self.drained.notify_all();
         }
     }
@@ -195,10 +256,33 @@ pub struct ProjectPreRunRegistration<'a> {
     registration_id: u64,
 }
 
+impl ProjectPreRunRegistration<'_> {
+    pub fn begin_finalization(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<ProjectRunFinalization<'_>, ProjectRunRegistrationError> {
+        self.registry
+            .begin_finalization(&self.project, self.registration_id, cancellation)
+    }
+}
+
 impl Drop for ProjectPreRunRegistration<'_> {
     fn drop(&mut self) {
         self.registry
             .release_pre_run(&self.project, self.registration_id);
+    }
+}
+
+pub struct ProjectRunFinalization<'a> {
+    registry: &'a ProjectRunRegistry,
+    project: ProjectSessionId,
+    registration_id: u64,
+}
+
+impl Drop for ProjectRunFinalization<'_> {
+    fn drop(&mut self) {
+        self.registry
+            .release_finalization(&self.project, self.registration_id);
     }
 }
 
@@ -280,6 +364,70 @@ mod tests {
                 .track(session, RunId::new(3), CancellationToken::new())
                 .unwrap(),
         );
+    }
+
+    #[test]
+    fn drain_waits_for_an_already_started_finalization() {
+        let registry = Arc::new(ProjectRunRegistry::new());
+        let session = ProjectSessionId::new("finalizing");
+        let cancellation = CancellationToken::new();
+        let pre_run = registry
+            .track_pre_run(session.clone(), cancellation.clone())
+            .unwrap();
+        let active = registry
+            .track(session.clone(), RunId::new(1), cancellation.clone())
+            .unwrap();
+        let finalization = pre_run.begin_finalization(&cancellation).unwrap();
+        let drain_registry = Arc::clone(&registry);
+        let drain_session = session.clone();
+        let (drained_tx, drained_rx) = std::sync::mpsc::channel();
+        let drain = std::thread::spawn(move || {
+            drain_registry.cancel_and_drain(&drain_session);
+            drained_tx.send(()).unwrap();
+        });
+
+        assert!(registry.wait_until_draining_for_test(&session, std::time::Duration::from_secs(2)));
+        assert!(
+            drained_rx
+                .recv_timeout(std::time::Duration::from_millis(50))
+                .is_err()
+        );
+        assert!(!cancellation.is_cancelled());
+
+        drop(finalization);
+        assert!(
+            drained_rx
+                .recv_timeout(std::time::Duration::from_millis(50))
+                .is_err()
+        );
+        drop(active);
+        drained_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        drain.join().unwrap();
+    }
+
+    #[test]
+    fn drain_started_before_finalization_rejects_the_commit_gate() {
+        let registry = Arc::new(ProjectRunRegistry::new());
+        let session = ProjectSessionId::new("draining-before-finalization");
+        let cancellation = CancellationToken::new();
+        let pre_run = registry
+            .track_pre_run(session.clone(), cancellation.clone())
+            .unwrap();
+        let drain_registry = Arc::clone(&registry);
+        let drain_session = session.clone();
+        let drain = std::thread::spawn(move || {
+            drain_registry.cancel_and_drain(&drain_session);
+        });
+
+        assert!(registry.wait_until_draining_for_test(&session, std::time::Duration::from_secs(2)));
+        assert!(matches!(
+            pre_run.begin_finalization(&cancellation),
+            Err(ProjectRunRegistrationError::ProjectDraining(_))
+        ));
+        drop(pre_run);
+        drain.join().unwrap();
     }
 
     #[test]
