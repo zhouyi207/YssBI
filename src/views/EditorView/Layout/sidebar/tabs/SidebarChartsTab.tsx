@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import {
-  buildChartsFlatRows,
+  buildChartsSidebarModel,
   useSidebarSectionExpandSnapshot,
   useSidebarStore,
 } from '@/features/core/sidebar';
@@ -26,9 +26,9 @@ export function SidebarChartsTab({
   const sectionExpanded = useSidebarSectionExpandSnapshot('chartsWorksheets');
   const toggleSection = useSidebarStore((s) => s.toggleSection);
 
-  const rows = useMemo(
+  const model = useMemo(
     () =>
-      buildChartsFlatRows({
+      buildChartsSidebarModel({
         worksheets,
         expandedSections: sectionExpanded,
         labels: {
@@ -54,7 +54,7 @@ export function SidebarChartsTab({
   return (
     <SidebarTabPanel>
       <SidebarFlatRowPanel
-        rows={rows}
+        model={model}
         sectionActions={sectionActions}
         onToggleSection={toggleSection}
         onToggleGroup={noopSidebarHandler}

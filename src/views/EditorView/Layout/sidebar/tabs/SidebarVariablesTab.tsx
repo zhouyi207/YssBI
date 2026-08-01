@@ -4,7 +4,7 @@ import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
 import { partitionVariableCatalog } from '@/features/core/variable/variableScopeSelectors';
 import type { Variable } from '@/shared/types/domain/variable';
 import {
-  buildVariablesFlatRows,
+  buildVariablesSidebarModel,
   useSidebarSectionExpandSnapshot,
   useSidebarStore,
 } from '@/features/core/sidebar';
@@ -38,9 +38,9 @@ export function SidebarVariablesTab({
     [variables, scopePath, graphType],
   );
 
-  const rows = useMemo(
+  const model = useMemo(
     () =>
-      buildVariablesFlatRows({
+      buildVariablesSidebarModel({
         localVariables,
         globalVariables: variablesGlobal,
         hasActiveGraph: Boolean(graphType),
@@ -77,7 +77,7 @@ export function SidebarVariablesTab({
   return (
     <SidebarTabPanel>
       <SidebarFlatRowPanel
-        rows={rows}
+        model={model}
         sectionActions={sectionActions}
         onToggleSection={toggleSection}
         onToggleGroup={noopSidebarHandler}

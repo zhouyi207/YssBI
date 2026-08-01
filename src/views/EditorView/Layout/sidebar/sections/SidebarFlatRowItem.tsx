@@ -1,6 +1,5 @@
 import { memo } from 'react';
-import type { FlatSidebarRow } from '@/features/core/sidebar';
-import { sidebarItemIndent } from '../../sidebarUi/sidebarStyles';
+import type { SidebarRenderRow } from './sidebarRenderRows';
 import { SidebarDataRow } from '../rows/SidebarDataRow';
 import { SidebarGraphRow } from '../rows/SidebarGraphRow';
 import { SidebarGroupRow } from '../rows/SidebarGroupRow';
@@ -8,28 +7,13 @@ import { SidebarNodeRow } from '../rows/SidebarNodeRow';
 import { SidebarVariableRow } from '../rows/SidebarVariableRow';
 import { SidebarWorksheetRow } from '../rows/SidebarWorksheetRow';
 import { useSidebarFlatRowContext } from './sidebarFlatRowContext';
+import { SidebarSectionEmptyState } from './SidebarSectionEmptyState';
 
-function SidebarEmptyRow({
-  level,
-  message,
-  onContextMenu,
+export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
+  row,
 }: {
-  level: number;
-  message: string;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  row: SidebarRenderRow;
 }) {
-  return (
-    <div
-      className="flex h-7 w-full items-center pr-2 text-[12px] leading-normal text-muted-foreground/70"
-      style={sidebarItemIndent(level)}
-      onContextMenu={onContextMenu}
-    >
-      {message}
-    </div>
-  );
-}
-
-export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({ row }: { row: FlatSidebarRow }) {
   const ctx = useSidebarFlatRowContext();
 
   switch (row.kind) {
@@ -56,14 +40,12 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({ row }: { ro
           onToggle={() => ctx.onToggleGroup(row.groupKey)}
         />
       );
-    case 'empty':
+    case 'sectionEmpty':
       return (
-        <SidebarEmptyRow
+        <SidebarSectionEmptyState
           level={row.level}
           message={row.message}
-          onContextMenu={
-            row.sectionKey ? ctx.sectionActions[row.sectionKey]?.onContentContextMenu : undefined
-          }
+          onContextMenu={ctx.sectionActions[row.sectionKey]?.onContentContextMenu}
         />
       );
     case 'graph':

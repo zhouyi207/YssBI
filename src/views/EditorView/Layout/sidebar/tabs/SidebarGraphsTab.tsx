@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  buildGraphsFlatRows,
+  buildGraphsSidebarModel,
   useSidebarSectionExpandSnapshot,
   useSidebarStore,
 } from '@/features/core/sidebar';
@@ -34,9 +34,9 @@ export function SidebarGraphsTab({
   const toggleSection = useSidebarStore((s) => s.toggleSection);
   const graphIssueCounts = useCallFunctionIssueCountsByGraph();
 
-  const rows = useMemo(
+  const model = useMemo(
     () =>
-      buildGraphsFlatRows({
+      buildGraphsSidebarModel({
         events,
         functions,
         expandedSections: sectionExpanded,
@@ -71,7 +71,7 @@ export function SidebarGraphsTab({
   return (
     <SidebarTabPanel>
       <SidebarFlatRowPanel
-        rows={rows}
+        model={model}
         sectionActions={sectionActions}
         graphIssueCounts={graphIssueCounts}
         onToggleSection={toggleSection}

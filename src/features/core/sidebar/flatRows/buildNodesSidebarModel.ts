@@ -7,27 +7,24 @@ import {
   type NodeCatalogItem,
 } from '@/features/domain/nodeCatalog';
 import { nodeGroupKey, resolveGroupExpanded } from './groupExpandState';
-import type { FlatSidebarRow } from './types';
+import type { SidebarTreeModel } from './sidebarPanelModel';
+import type { SidebarItemRow } from './types';
 
-export function buildNodesFlatRows(params: {
+export function buildNodesSidebarModel(params: {
   items: NodeCatalogItem[];
   filterQuery: string;
   expandedGroups: Record<string, boolean>;
   noMatchesMessage: string;
-}): FlatSidebarRow[] {
+}): SidebarTreeModel {
   const query = params.filterQuery.trim();
-  if (params.items.length === 0 && !query) return [];
+  if (params.items.length === 0 && !query) return { rows: [] };
 
   const filtered = query ? filterCatalogItems(params.items, query) : params.items;
   if (filtered.length === 0) {
-    return [
-      {
-        kind: 'empty',
-        rowKey: 'empty:nodes-no-match',
-        level: 0,
-        message: params.noMatchesMessage,
-      },
-    ];
+    return {
+      rows: [],
+      emptyState: { title: params.noMatchesMessage },
+    };
   }
 
   const { sortedChildren, allPaths } = buildTreeFromItems(filtered);
@@ -46,7 +43,7 @@ export function buildNodesFlatRows(params: {
   const treeRows: FlatRow[] = [];
   flattenTree(sortedChildren, expandedPaths, '', 0, treeRows);
 
-  const rows: FlatSidebarRow[] = [];
+  const rows: SidebarItemRow[] = [];
   for (const row of treeRows) {
     if (row.type === 'category') {
       rows.push({
@@ -68,5 +65,5 @@ export function buildNodesFlatRows(params: {
     });
   }
 
-  return rows;
+  return { rows };
 }

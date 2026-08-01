@@ -1,21 +1,14 @@
-import { NODE_CATALOG_UNAVAILABLE_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
+import { useTranslation } from 'react-i18next';
+import { SidebarEmptyState } from '../sections/SidebarEmptyState';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
-import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
 
 export function SidebarNodesTab() {
+  const { t } = useTranslation();
   return (
     <SidebarTabPanel>
-      <SidebarFlatRowPanel
-        rows={[
-          {
-            kind: 'empty',
-            rowKey: 'empty:nodes-catalog-unavailable',
-            level: 0,
-            message: NODE_CATALOG_UNAVAILABLE_MESSAGE,
-          },
-        ]}
-        onToggleSection={() => {}}
-        onToggleGroup={() => {}}
+      <SidebarEmptyState
+        title={t('sidebar.nodeCatalogUnavailable')}
+        description={t('sidebar.nodeCatalogUnavailableDescription')}
       />
     </SidebarTabPanel>
   );

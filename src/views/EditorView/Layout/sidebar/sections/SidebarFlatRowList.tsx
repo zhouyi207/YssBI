@@ -1,10 +1,11 @@
 import { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { SIDEBAR_FLAT_ROW_HEIGHT, type FlatSidebarRow } from '@/features/core/sidebar';
+import { SIDEBAR_FLAT_ROW_HEIGHT } from '@/features/core/sidebar';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { SidebarFlatRowItem } from './SidebarFlatRowItem';
+import type { SidebarRenderRow } from './sidebarRenderRows';
 
-export function SidebarFlatRowList({ rows }: { rows: FlatSidebarRow[] }) {
+export function SidebarFlatRowList({ rows }: { rows: SidebarRenderRow[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({

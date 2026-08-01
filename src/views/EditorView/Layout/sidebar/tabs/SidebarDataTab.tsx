@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EditorDataframes } from '@/features/core/editor';
 import {
-  buildDataFlatRows,
+  buildDataSidebarModel,
   useSidebarSectionExpandSnapshot,
   useSidebarStore,
 } from '@/features/core/sidebar';
@@ -25,9 +25,9 @@ export function SidebarDataTab({
   const sectionExpanded = useSidebarSectionExpandSnapshot('dataData');
   const toggleSection = useSidebarStore((s) => s.toggleSection);
 
-  const rows = useMemo(
+  const model = useMemo(
     () =>
-      buildDataFlatRows({
+      buildDataSidebarModel({
         dataframes: dataframes ?? {},
         expandedSections: sectionExpanded,
         labels: {
@@ -53,7 +53,7 @@ export function SidebarDataTab({
   return (
     <SidebarTabPanel>
       <SidebarFlatRowPanel
-        rows={rows}
+        model={model}
         sectionActions={sectionActions}
         onToggleSection={toggleSection}
         onToggleGroup={noopSidebarHandler}

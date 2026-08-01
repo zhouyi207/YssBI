@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useEditorHistoryAvailability } from '@/features/application/editor';
+import { SidebarEmptyState } from '../sections/SidebarEmptyState';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 
 export function SidebarCommandsTab() {
@@ -9,7 +10,10 @@ export function SidebarCommandsTab() {
   if (!activeTabId) {
     return (
       <SidebarTabPanel>
-        <div className="p-3 text-xs text-muted-foreground">{t('sidebar.noActiveGraph')}</div>
+        <SidebarEmptyState
+          title={t('sidebar.noActiveGraph')}
+          description={t('sidebar.noActiveGraphDescription')}
+        />
       </SidebarTabPanel>
     );
   }

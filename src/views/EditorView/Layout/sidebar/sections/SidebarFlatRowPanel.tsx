@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useDetailTarget } from '@/features/core/editor';
 import type {
-  FlatSidebarRow,
+  SidebarPanelModel,
   SidebarSectionActionConfig,
   SidebarSectionKey,
 } from '@/features/core/sidebar';
@@ -9,9 +9,10 @@ import type { NodeCatalogItem } from '@/features/domain/nodeCatalog';
 import type { GraphResourceType } from '../../sidebarContextMenu';
 import { SidebarFlatRowContext, type SidebarFlatRowContextValue } from './sidebarFlatRowContext';
 import { SidebarFlatRowList } from './SidebarFlatRowList';
+import { flattenSidebarPanelModel } from './sidebarRenderRows';
 
 export type SidebarFlatRowPanelProps = {
-  rows: FlatSidebarRow[];
+  model: SidebarPanelModel;
   sectionActions?: Partial<Record<SidebarSectionKey, SidebarSectionActionConfig>>;
   graphIssueCounts?: Record<string, number>;
   onToggleSection: (key: SidebarSectionKey) => void;
@@ -29,7 +30,7 @@ export type SidebarFlatRowPanelProps = {
 };
 
 export function SidebarFlatRowPanel({
-  rows,
+  model,
   sectionActions = {},
   graphIssueCounts = {},
   onToggleSection,
@@ -43,6 +44,7 @@ export function SidebarFlatRowPanel({
   onWorksheetContextMenu,
 }: SidebarFlatRowPanelProps) {
   const detailTarget = useDetailTarget();
+  const rows = useMemo(() => flattenSidebarPanelModel(model), [model]);
   const resolvedSelectedNodeType =
     selectedNodeType ?? (detailTarget?.kind === 'nodeDefinition' ? detailTarget.nodeType : null);
 
