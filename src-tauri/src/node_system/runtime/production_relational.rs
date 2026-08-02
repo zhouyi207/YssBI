@@ -8,11 +8,11 @@ use super::{
 };
 use crate::node_system::plan::{
     CompiledRelationalPlan, PlannedMaterializationBridge, RelationalOperator,
-    RelationalOperatorIndex, infer_relational_pushdown_hints,
+    RelationalOperatorIndex, RelationalRename, infer_relational_pushdown_hints,
 };
 use crate::node_system::protocol::Value;
 use polars::prelude::DataFrame;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -31,6 +31,9 @@ pub(crate) struct ProductionRelationalObservation {
     pub backend_invocations: usize,
     pub bridge_inputs: Vec<usize>,
     pub scan_limits: Vec<Option<usize>>,
+    pub relational_subplans: Vec<crate::node_system::plan::RelationalSubplan>,
+    pub relational_result_bindings:
+        Vec<(Box<str>, crate::node_system::plan::RelationalOperatorIndex)>,
 }
 
 #[cfg(test)]
@@ -50,6 +53,29 @@ impl ProductionRelationalObserver {
                 .map(|subplan| subplan.materialization_bridges.len())
                 .sum(),
         );
+        observation.relational_subplans = plan.relational_subplans.to_vec();
+        observation.relational_result_bindings.clear();
+        for operation in &plan.operations {
+            let crate::node_system::plan::PlannedKernel::Relational(subplan_index) =
+                &operation.kernel
+            else {
+                continue;
+            };
+            let Some(subplan) = plan.relational_subplans.get(subplan_index.index()) else {
+                continue;
+            };
+            for (output, root) in operation.outputs.iter().zip(&subplan.compiled_plan.roots) {
+                if let Some(result) = plan
+                    .results
+                    .iter()
+                    .find(|result| result.value == output.value)
+                {
+                    observation
+                        .relational_result_bindings
+                        .push((result.name.clone(), *root));
+                }
+            }
+        }
     }
 
     fn observe_invocation(&self, bridge_inputs: usize) {
@@ -295,13 +321,9 @@ impl<'a> Evaluator<'a> {
             }
             RelationalOperator::Rename { input, columns } => {
                 let source = self.materialize_index(input)?;
-                let mut source = relational_object(runtime_scalar(&source)?)?;
-                for rename in columns {
-                    if let Some(value) = source.remove(rename.from.as_ref()) {
-                        source.insert(rename.to, value);
-                    }
-                }
-                EvaluatedValue::Runtime(RuntimeValue::Scalar(Value::Object(source)))
+                let source = relational_object(runtime_scalar(&source)?)?;
+                let renamed = rename_relational_columns(source, &columns)?;
+                EvaluatedValue::Runtime(RuntimeValue::Scalar(Value::Object(renamed)))
             }
             RelationalOperator::Union { inputs, all: _ } => {
                 let mut combined = BTreeMap::<Box<str>, Vec<Value>>::new();
@@ -405,6 +427,77 @@ impl RelationalBackend for ProductionRelationalBackend {
     }
 }
 
+fn rename_relational_columns(
+    source: BTreeMap<Box<str>, Value>,
+    columns: &[RelationalRename],
+) -> Result<BTreeMap<Box<str>, Value>, RelationalError> {
+    for rename in columns {
+        validate_rename_column_name("source", rename.from.as_ref())?;
+        validate_rename_column_name("destination", rename.to.as_ref())?;
+    }
+
+    let source_fields = source.keys().map(AsRef::as_ref).collect::<BTreeSet<&str>>();
+    let mut renamed_sources = BTreeSet::new();
+    let mut destinations = BTreeSet::new();
+
+    for rename in columns {
+        if !source_fields.contains(rename.from.as_ref()) {
+            return Err(RelationalError::new(format!(
+                "rename source column '{}' does not exist",
+                rename.from
+            )));
+        }
+        if !renamed_sources.insert(rename.from.as_ref()) {
+            return Err(RelationalError::new(format!(
+                "rename source column '{}' is mapped more than once",
+                rename.from
+            )));
+        }
+        if !destinations.insert(rename.to.as_ref()) {
+            return Err(RelationalError::new(format!(
+                "rename destination column '{}' is mapped more than once",
+                rename.to
+            )));
+        }
+    }
+    if let Some(destination) = destinations.iter().find(|destination| {
+        source_fields.contains(**destination) && !renamed_sources.contains(**destination)
+    }) {
+        return Err(RelationalError::new(format!(
+            "rename destination column '{destination}' already exists"
+        )));
+    }
+
+    let destinations_by_source = columns
+        .iter()
+        .map(|rename| (rename.from.as_ref(), rename.to.as_ref()))
+        .collect::<BTreeMap<_, _>>();
+    Ok(source
+        .into_iter()
+        .map(|(name, value)| {
+            let destination = destinations_by_source
+                .get(name.as_ref())
+                .copied()
+                .unwrap_or(name.as_ref());
+            (Box::<str>::from(destination), value)
+        })
+        .collect())
+}
+
+fn validate_rename_column_name(role: &str, name: &str) -> Result<(), RelationalError> {
+    if name.is_empty() {
+        return Err(RelationalError::new(format!(
+            "rename {role} column name must not be empty"
+        )));
+    }
+    if name.trim() != name {
+        return Err(RelationalError::new(format!(
+            "rename {role} column name must not have leading or trailing whitespace"
+        )));
+    }
+    Ok(())
+}
+
 fn source_limits(plan: &CompiledRelationalPlan) -> BTreeMap<RelationalOperatorIndex, usize> {
     let mut requirements = BTreeMap::new();
     for root in &plan.roots {
@@ -485,14 +578,16 @@ mod tests {
     use crate::node_system::plan::{
         CompiledRelationalPlan, CompiledResourceRequirement, RelationalExpression,
         RelationalFragmentId, RelationalFragmentRoot, RelationalLiteral, RelationalOperator,
-        RelationalOperatorIndex, RelationalPushdownHint, ResourceAccess, ResourceId, ResourceKind,
+        RelationalOperatorIndex, RelationalPushdownHint, RelationalRename, ResourceAccess,
+        ResourceId, ResourceKind,
     };
     use crate::node_system::protocol::Value;
     use crate::node_system::runtime::{
         CancellationToken, ProjectResourceProvider, ProjectResourceSnapshot, RelationalBackend,
-        RelationalContext, RunResourceSet, RuntimeValue,
+        RelationalContext, RelationalError, RunResourceSet, RuntimeValue,
     };
     use polars::prelude::{Column, DataFrame};
+    use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -678,6 +773,239 @@ mod tests {
         assert_eq!(observed.lock().unwrap().as_slice(), &[Some(10)]);
         assert_eq!(output_len(&execution.outputs[0]), 2);
         assert_eq!(output_len(&execution.outputs[1]), 10);
+    }
+
+    #[test]
+    fn rename_preserves_values_names_untouched_columns_and_row_count() {
+        let output = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris"), string("Tokyo")]),
+                ("sales", vec![Value::Integer(10), Value::Integer(20)]),
+            ]),
+            vec![rename("city", "location")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            output,
+            dataframe_value(&[
+                ("location", vec![string("Paris"), string("Tokyo")]),
+                ("sales", vec![Value::Integer(10), Value::Integer(20)]),
+            ])
+        );
+    }
+
+    #[test]
+    fn rename_rejects_blank_source_name_before_exposing_any_output() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("", vec![string("private")]),
+                ("city", vec![string("Paris")]),
+            ]),
+            vec![rename("city", "location"), rename("", "redacted")],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "rename source column name must not be empty"
+        );
+    }
+
+    #[test]
+    fn rename_rejects_padded_source_name_before_exposing_any_output() {
+        let error = execute_rename(
+            dataframe_value(&[
+                (" city", vec![string("private")]),
+                ("city", vec![string("Paris")]),
+            ]),
+            vec![rename("city", "location"), rename(" city", "redacted")],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "rename source column name must not have leading or trailing whitespace"
+        );
+    }
+
+    #[test]
+    fn rename_rejects_blank_destination_name_before_exposing_any_output() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris")]),
+                ("sales", vec![Value::Integer(10)]),
+            ]),
+            vec![rename("city", "location"), rename("sales", "")],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "rename destination column name must not be empty"
+        );
+    }
+
+    #[test]
+    fn rename_rejects_padded_destination_name_before_exposing_any_output() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris")]),
+                ("sales", vec![Value::Integer(10)]),
+            ]),
+            vec![rename("city", "location"), rename("sales", " region ")],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "rename destination column name must not have leading or trailing whitespace"
+        );
+    }
+
+    #[test]
+    fn rename_rejects_missing_source_before_applying_any_mapping() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris"), string("Tokyo")]),
+                ("sales", vec![Value::Integer(10), Value::Integer(20)]),
+            ]),
+            vec![rename("city", "location"), rename("missing", "other")],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("missing"));
+    }
+
+    #[test]
+    fn rename_rejects_destination_collision_before_applying_any_mapping() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris"), string("Tokyo")]),
+                ("sales", vec![Value::Integer(10), Value::Integer(20)]),
+                ("region", vec![string("EU"), string("APAC")]),
+            ]),
+            vec![rename("city", "location"), rename("sales", "region")],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("region"));
+    }
+
+    #[test]
+    fn rename_rejects_duplicate_source_mappings() {
+        let error = execute_rename(
+            dataframe_value(&[("city", vec![string("Paris")])]),
+            vec![rename("city", "location"), rename("city", "place")],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("city"));
+    }
+
+    #[test]
+    fn rename_rejects_duplicate_destination_mappings() {
+        let error = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris")]),
+                ("region", vec![string("EU")]),
+            ]),
+            vec![rename("city", "place"), rename("region", "place")],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("place"));
+    }
+
+    #[test]
+    fn rename_validates_against_original_fields_and_applies_swaps_atomically() {
+        let output = execute_rename(
+            dataframe_value(&[
+                ("city", vec![string("Paris"), string("Tokyo")]),
+                ("region", vec![string("EU"), string("APAC")]),
+            ]),
+            vec![rename("city", "region"), rename("region", "city")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            output,
+            dataframe_value(&[
+                ("city", vec![string("EU"), string("APAC")]),
+                ("region", vec![string("Paris"), string("Tokyo")]),
+            ])
+        );
+    }
+
+    #[test]
+    fn rename_same_name_is_a_no_op() {
+        let input = dataframe_value(&[
+            ("city", vec![string("Paris"), string("Tokyo")]),
+            ("sales", vec![Value::Integer(10), Value::Integer(20)]),
+        ]);
+
+        let output = execute_rename(input.clone(), vec![rename("city", "city")]).unwrap();
+
+        assert_eq!(output, input);
+    }
+
+    fn execute_rename(
+        input: RuntimeValue,
+        columns: Vec<RelationalRename>,
+    ) -> Result<RuntimeValue, RelationalError> {
+        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
+            ProjectSessionId::new("rename-test"),
+            Default::default(),
+        ));
+        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
+        let plan = CompiledRelationalPlan {
+            fragment_order: Box::new([]),
+            operators: vec![
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Rename {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: columns.into_boxed_slice(),
+                },
+            ]
+            .into_boxed_slice(),
+            fragment_roots: Box::new([]),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
+            roots: Box::new([RelationalOperatorIndex::new(1)]),
+            pushdown_hints: Box::new([]),
+        };
+        let cancellation = CancellationToken::new();
+        let context = RelationalContext {
+            run_id: RunId::new(1),
+            resources: &resources,
+            cancellation: &cancellation,
+        };
+
+        ProductionRelationalBackend::default()
+            .execute(&context, &plan, &[input], &[])
+            .map(|mut execution| execution.outputs.remove(0))
+    }
+
+    fn dataframe_value(columns: &[(&str, Vec<Value>)]) -> RuntimeValue {
+        RuntimeValue::Scalar(Value::Object(
+            columns
+                .iter()
+                .map(|(name, values)| ((*name).into(), Value::List(values.clone())))
+                .collect::<BTreeMap<_, _>>(),
+        ))
+    }
+
+    fn string(value: &str) -> Value {
+        Value::String(value.into())
+    }
+
+    fn rename(from: &str, to: &str) -> RelationalRename {
+        RelationalRename {
+            from: from.into(),
+            to: to.into(),
+        }
     }
 
     fn output_len(value: &RuntimeValue) -> usize {

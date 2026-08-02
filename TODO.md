@@ -455,92 +455,44 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 [12:43:12.757][BE][DEBUG] [APP] Settings saved successfully via backend
 [12:43:12.758][BE][DEBUG] [APP] Settings saved successfully via backend
 
-
-### 二、Pin 右键类型收窄
-
-**目标**：用户可以右键点击 `OneOf` 类型的 Pin，将其收窄为某个具体成员类型。
-
-**结构**：
-
-```
-PinInstance 新增字段:
-  type_narrowing: Option<DataType>
-```
-
-**需要改动的位置**：
-
-| #   | 位置                                         | 改动内容                                                          |
-| --- | -------------------------------------------- | ----------------------------------------------------------------- |
-| 1   | `pin_instance.rs` — struct                   | 添加 `type_narrowing: Option<DataType>` 字段                      |
-| 2   | `pin_instance.rs` — `from_definition`        | 初始化为 `None`                                                   |
-| 3   | `type_inference_session.rs` — `register_all` | 注册 Pin 类型时，若 `type_narrowing` 有值，用它覆盖定义中的 OneOf |
-| 4   | 后端 API                                     | 新增命令：`set_pin_type_narrowing(pin_id, Option<DataType>)`      |
-| 5   | 前端 Pin 右键菜单                            | 检测 Pin 定义是否含 OneOf → 生成收窄选项菜单 + "重置"选项         |
-| 6   | 前端 Pin 类型显示                            | 收窄后显示具体类型，未收窄显示 `Float64 \| String`                |
-| 7   | 收窄后触发                                   | 设置 `type_narrowing` → 重跑类型推断 → 检查已有连线兼容性         |
-
-**优先级链**：`type_narrowing` > 类型推断结果 > Pin 定义默认值
-
-结构估计
-
-
----
-
-## 仍待收敛（未改，风险较低）
-
-| 领域 | 说明 |
-|------|------|
-| Plot 网格线绘制 | 各 XY 图内联 d3 grid 逻辑相似，但 `axisScale.ts` 注释明确单图可内联，暂不强制抽取 |
-| `normalizeVariables` | `projectIOStore` 本地 helper 与 `variableService` 模式略重复，但边界清晰，暂保留 |
-
----
-
-## 验证
-
-- `npx tsc --noEmit` — 通过
-- `cargo check` — 通过
-- vitest：plotTime、pinResultSearch、execution、graphModel、layoutTabModel — 通过
-- 全项目 `@deprecated` 业务标注 — 已清零（`src/` / `src-tauri/`）
-
----
-
-## 仍待收敛（非 §13，独立任务）
-
-| 领域 | 说明 |
-|------|------|
-| ACF/PACF IPC 与 Plot DTO 对齐 | `command_sci::compute_acf_pacf` 与 `correlogram.rs` 字段统一（见 TODO §1547） |
-| Plot 网格线绘制 | 各 XY 图内联 d3 grid，暂不强制抽取 |
-| `normalizeVariables` | `projectIOStore` 本地 helper，边界清晰，暂保留 |
-| `loadGraph` 双 IPC | 动态 pin 物化所需，属有意设计 |
+## node_architecture 进度
 
 
 
-# functionsignature（已完成 2026.07.09）
+| Phase | 完成度 | 当前状态 |
+|---|---:|---|
+| Phase 1：身份、协议、Registry | **96%** | 稳定 ID、Node Protocol、Registry 与 opaque Function/Variable/Database resource descriptor 已冻结；严格 serde、operation identity 与 891 项基线验证已覆盖 |
+| Phase 2：GraphDocument 和事务 | **95%** | GraphDocument、revision transaction 与 session tombstone 已收敛；database writes 现复用 canonical operation ledger/receipt/event，duplicate/stale/failure 均零副作用 |
+| Phase 3：编辑器权威投影 | **88%** | Rust 投影、图加载和静态 descriptor 创建链路已完成；resource/contextual Catalog 与部分旧推导逻辑仍待后续切片移除 |
+| Phase 4：Rust 权威 History | **98%** | 变量删除、图卸载 tombstone、跨资源 rename/undo/redo 与 session reset 已通过独立审查、聚焦验证及 891 项完整 Rust 套件 |
+| Phase 5：确定性语义分析 | **97%** | 确定性语义、编译发布、snapshot canonicalization 与 capture retry 行为契约已收敛；15 个历史失败已修复，完整 Rust 套件全绿 |
+| Phase 6：无环数据执行计划 | **98%** | ExecutionPlan/RunExecutor、canonical IPC、pre-run drain 与 resource preflight 已对齐；891 项完整 Rust 套件全绿，剩余主要是缓存/超时策略增强 |
+| Phase 7：Relational island | **95%** | Source→Rename→Limit、严格 pushdown metadata、单 island/backend/零 bridge 已通过审查和完整 Rust 套件；后续继续 Project/Filter lineage |
+| Phase 8：结构化控制与副作用 | **94%** | Branch、Loop、Call、Effect、取消、资源清理、最终化竞态及加载期 drain 已完成生产验证，并纳入 891 项完整 Rust 套件全绿覆盖 |
+| Phase 9：Catalog、搜索、可观测性 | **94%** | Static Catalog、bounded observability 与 revisioned resource descriptor 基础已完成；database discovery 使用唯一 Catalog watermark/canonical event，resource snapshot/docs 待后续任务 |
 
-`FunctionSignaturePin` 已从 `type` + `containerType` 字符串 DSL 迁移为结构化 `DataType`（exec pin 缺省 `dataType`）。
 
-**契约**
+需要你确认的执行语义
 
-```ts
-interface FunctionSignaturePin {
-  id: string;
-  name: string;
-  dataType?: DataType; // 缺省 = exec
-}
-```
+我建议选择：
 
-**实现单源**
+### A. Demand-driven（推荐）
 
-| 层 | 权威位置 |
-|----|----------|
-| Rust 签名类型 | `graph_instance/types.rs`（`exec()` / `data()` 构造器） |
-| 壳节点 / Call 投影 | `function_shell.rs`、`sync_call_function_pins_from_signature` |
-| Call 索引 | `register_call_site`（`sync_call_node` 成功后幂等登记） |
-| 前端编辑 | `functionSignaturePin.ts` + `PinEditor.tsx` |
-| Call 有效定义 | `resolveEffectiveDefinition.ts` |
+- 普通运行只计算终端结果、effect 和跨 island 依赖；
+- 中间 Pin 不自动物化；
+- 点击 Pin 预览时单独请求该输出；
+- compiler 根据 requested outputs 决定 roots。
 
-**已删除**：`signature_data_type`、`dataTypeFromPinType`、`dataTypeFromFunctionSignaturePin`。
+### B. 所有 Pin 每次都可立即查询
 
-**测试**：`types.rs` serde 单测；`functionSignaturePin.test.ts` / `resolveEffectiveDefinition.test.ts`；`function_call_test` / `shell_node_test`（共享 `tests/common::function_signature_pin`）。
+- 每次运行自动计算并保存所有节点输出；
+- 行为接近旧架构；
+- relational pushdown 和大图优化空间明显受限。
 
-**后续（非阻塞）**：`PinEditor` 可逐步接入变量面板级类型选择器（`DataFrame` / `Struct` / `OneOf` 等），无需再改字符串映射表。
+### C. 用户配置
+
+- 默认 demand-driven；
+- 可将特定 Pin 标记为“始终保留”；
+- 灵活，但第一阶段复杂度更高。
+
+请选择 **A、B 或 C**。我推荐 **A**。

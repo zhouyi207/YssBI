@@ -20,10 +20,12 @@ pub fn canonical_analysis(analysis: &impl std::fmt::Debug) -> String {
 }
 
 /// Plans deliberately contain non-serde, plan-local handles. Their derived
-/// debug representation is deterministic because all source collections are
-/// ordered and runtime-generated IDs are absent.
+/// debug representation preserves all semantic plan and provenance fields while
+/// normalizing the process-monotonic `compile_id`.
 pub fn plan_debug_snapshot(plan: &ExecutionPlan) -> String {
-    format!("{plan:#?}")
+    let mut canonical = plan.clone();
+    canonical.provenance.compile_id = crate::node_system::analysis::CompileId::new(0);
+    format!("{canonical:#?}")
 }
 
 fn sort_json(value: Value) -> Value {

@@ -11,8 +11,8 @@ use super::{
     RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
 };
 use crate::node_system::analysis::{
-    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RunId, SpanEvent, SpanKind, SpanStatus,
-    TraceSink,
+    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RedactionPolicy, RunId, SpanEvent, SpanKind,
+    SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
 };
 use crate::node_system::plan::{
     CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan, FunctionPlanHandle,
@@ -972,6 +972,7 @@ impl<'a> RunExecutor<'a> {
         ));
         let result = self.execute_operation_inner(
             run_id,
+            &correlation,
             plan,
             operation_index,
             activation_id,
@@ -1044,6 +1045,7 @@ impl<'a> RunExecutor<'a> {
     fn execute_operation_inner(
         &self,
         run_id: RunId,
+        correlation: &CorrelationContext,
         plan: &ExecutionPlan,
         operation_index: OperationIndex,
         activation_id: ActivationId,
@@ -1150,12 +1152,28 @@ impl<'a> RunExecutor<'a> {
                     resources,
                     cancellation,
                 };
-                let execution = match backend.execute(
-                    &context,
-                    &subplan.compiled_plan,
-                    &inputs,
-                    &bridge_inputs,
-                ) {
+                self.trace.record(relational_backend_event(
+                    SpanStatus::Started,
+                    correlation.clone(),
+                    subplan.backend.as_str(),
+                    *index,
+                ));
+                let backend_result =
+                    backend.execute(&context, &subplan.compiled_plan, &inputs, &bridge_inputs);
+                let backend_status = if cancellation.check().is_err() {
+                    SpanStatus::Cancelled
+                } else if backend_result.is_ok() {
+                    SpanStatus::Succeeded
+                } else {
+                    SpanStatus::Failed
+                };
+                self.trace.record(relational_backend_event(
+                    backend_status,
+                    correlation.clone(),
+                    subplan.backend.as_str(),
+                    *index,
+                ));
+                let execution = match backend_result {
                     Ok(execution) => execution,
                     Err(error) => {
                         cancellation.check()?;
@@ -1186,6 +1204,27 @@ impl<'a> RunExecutor<'a> {
         *frame.completion_counts.entry(operation_index).or_default() += 1;
         Ok(())
     }
+}
+
+fn relational_backend_event(
+    status: SpanStatus,
+    correlation: CorrelationContext,
+    backend_id: &str,
+    subplan_index: RelationalSubplanIndex,
+) -> SpanEvent {
+    SpanEvent::new(SpanKind::RelationalBackend, status, correlation)
+        .with_field(
+            "backendId",
+            TraceValue::Text(backend_id.into()),
+            TraceFieldSensitivity::Public,
+            RedactionPolicy::strict(),
+        )
+        .with_field(
+            "subplanIndex",
+            TraceValue::Integer(subplan_index.index() as i64),
+            TraceFieldSensitivity::Public,
+            RedactionPolicy::strict(),
+        )
 }
 
 fn run_status<T>(result: &Result<T, RunError>) -> SpanStatus {

@@ -126,7 +126,7 @@ export function CanvasExecutionToolbar({
         <VscClearAll size={14} />
       </CanvasToolbarButton>
 
-      {isLiveRunning && (
+      {isLiveRunning && graphState?.runId && (
         <CanvasToolbarButton
           type="button"
           variant="ghost"

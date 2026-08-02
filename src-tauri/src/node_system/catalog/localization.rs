@@ -1,8 +1,7 @@
 use crate::node_system::analysis::{DiagnosticArguments, LocalizationBundle};
-use crate::node_system::document::GraphResourcePath;
 use crate::node_system::protocol::{I18nKey, NodeTypeId};
 use crate::node_system::registry::{I18nManifest, NodeRegistry};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 const DEFAULT_LOCALE: &str = "en-US";
@@ -26,12 +25,40 @@ pub struct BuiltinLocalizationBundle<'a> {
     locale: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalizedCatalogDto {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalizedCatalog {
     pub locale: Box<str>,
     pub categories: Vec<LocalizedCategoryDto>,
     pub items: Vec<LocalizedCatalogItemDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedCatalogDto {
+    pub project_instance_id: Box<str>,
+    pub registry_fingerprint: Box<str>,
+    pub resource_publication_revision: u64,
+    pub locale: Box<str>,
+    pub categories: Vec<LocalizedCategoryDto>,
+    pub items: Vec<LocalizedCatalogItemDto>,
+}
+
+impl LocalizedCatalog {
+    pub(crate) fn into_dto(
+        self,
+        project_instance_id: &str,
+        registry_fingerprint: String,
+        resource_publication_revision: u64,
+    ) -> LocalizedCatalogDto {
+        LocalizedCatalogDto {
+            project_instance_id: project_instance_id.into(),
+            registry_fingerprint: registry_fingerprint.into(),
+            resource_publication_revision,
+            locale: self.locale,
+            categories: self.categories,
+            items: self.items,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -58,19 +85,36 @@ pub struct LocalizedCatalogItemDto {
     pub search_text: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CatalogResourcePath(Box<str>);
+
+impl CatalogResourcePath {
+    pub fn new(value: impl Into<Box<str>>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
 pub enum NodeCreationDescriptor {
     #[serde(rename = "static")]
     Static {
         #[serde(rename = "nodeTypeId")]
-        node_type_id: Box<str>,
+        node_type_id: NodeTypeId,
     },
     #[serde(rename = "resourceBound")]
     ResourceBound {
         #[serde(rename = "nodeTypeId")]
-        node_type_id: Box<str>,
-        resource: GraphResourcePath,
+        node_type_id: NodeTypeId,
+        #[serde(rename = "resourcePath")]
+        resource_path: CatalogResourcePath,
+        #[serde(rename = "resourceRevision")]
+        resource_revision: crate::node_system::document::ResourceRevision,
         #[serde(rename = "createArgs")]
         create_args: ResourceBoundCreateArgsDto,
     },
@@ -81,14 +125,38 @@ pub enum NodeCreationDescriptor {
 pub enum ResourceBoundCreateArgsDto {
     Function,
     Variable,
-    Resource,
+    Database,
+}
+
+impl<'de> Deserialize<'de> for ResourceBoundCreateArgsDto {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            kind: Box<str>,
+        }
+
+        match Wire::deserialize(deserializer)?.kind.as_ref() {
+            "function" => Ok(Self::Function),
+            "variable" => Ok(Self::Variable),
+            "database" => Ok(Self::Database),
+            kind => Err(serde::de::Error::unknown_variant(
+                kind,
+                &["function", "variable", "database"],
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogResourceEntry {
     pub name: Box<str>,
     pub node_type_id: NodeTypeId,
-    pub resource: GraphResourcePath,
+    pub resource_path: CatalogResourcePath,
+    pub resource_revision: crate::node_system::document::ResourceRevision,
     pub create_args: ResourceBoundCreateArgsDto,
     pub technical_terms: Vec<Box<str>>,
     pub pinyin: Option<Box<str>>,
@@ -129,6 +197,17 @@ impl std::fmt::Display for I18nBundleValidationError {
 
 impl std::error::Error for I18nBundleValidationError {}
 
+fn static_descriptor_is_eligible(protocol: &crate::node_system::protocol::NodeProtocol) -> bool {
+    !protocol.catalog.hidden
+        && protocol.managed_role.is_none()
+        && !protocol.parameters.parameters.iter().any(|parameter| {
+            parameter.default_value.is_none()
+                && parameter
+                    .constraints
+                    .contains(&crate::node_system::protocol::ParameterConstraint::Required)
+        })
+}
+
 impl BuiltinCatalog {
     pub(crate) fn new(entries: &[(&'static str, &'static str, Message)]) -> Self {
         let mut bundles = BTreeMap::<Box<str>, Bundle>::new();
@@ -148,7 +227,7 @@ impl BuiltinCatalog {
         }
     }
 
-    pub fn localize(&self, registry: &NodeRegistry, locale: &str) -> LocalizedCatalogDto {
+    pub fn localize(&self, registry: &NodeRegistry, locale: &str) -> LocalizedCatalog {
         self.localize_with_resources(registry, locale, &[])
     }
 
@@ -157,7 +236,7 @@ impl BuiltinCatalog {
         registry: &NodeRegistry,
         locale: &str,
         resources: &[CatalogResourceEntry],
-    ) -> LocalizedCatalogDto {
+    ) -> LocalizedCatalog {
         let locale = normalize_locale(locale);
         let categories = registry
             .categories()
@@ -173,7 +252,7 @@ impl BuiltinCatalog {
             .collect();
         let mut items = registry
             .iter()
-            .filter(|(_, node)| !node.protocol.catalog.hidden)
+            .filter(|(_, node)| static_descriptor_is_eligible(&node.protocol))
             .map(|(id, node)| self.static_item(id, &node.protocol, &locale))
             .collect::<Vec<_>>();
         items.extend(resources.iter().filter_map(|entry| {
@@ -181,7 +260,7 @@ impl BuiltinCatalog {
             (!node.protocol.catalog.hidden)
                 .then(|| self.resource_item(entry, &node.protocol, &locale))
         }));
-        LocalizedCatalogDto {
+        LocalizedCatalog {
             locale: locale.into(),
             categories,
             items,
@@ -297,7 +376,7 @@ impl BuiltinCatalog {
             technical_terms,
             pinyin: None,
             creation: NodeCreationDescriptor::Static {
-                node_type_id: id.as_str().into(),
+                node_type_id: id.clone(),
             },
             search_text,
         }
@@ -358,8 +437,9 @@ impl BuiltinCatalog {
             technical_terms,
             pinyin,
             creation: NodeCreationDescriptor::ResourceBound {
-                node_type_id: entry.node_type_id.as_str().into(),
-                resource: entry.resource.clone(),
+                node_type_id: entry.node_type_id.clone(),
+                resource_path: entry.resource_path.clone(),
+                resource_revision: entry.resource_revision,
                 create_args: entry.create_args,
             },
             search_text,

@@ -51,7 +51,10 @@ fn set_writer_snapshot_test_hook(hook: Option<std::sync::Arc<dyn Fn() + Send + S
 struct WriterSnapshot {
     session: ProjectSession,
     data: ProjectData,
-    variable_revisions: std::collections::HashMap<crate::variable::VariableId, ResourceRevision>,
+    variable_revisions: std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::project::project_state::VariableRevisionEntry,
+    >,
     authority_generation: u64,
 }
 
@@ -326,7 +329,7 @@ impl ProjectState {
                     snapshot
                         .variable_revisions
                         .get(id)
-                        .copied()
+                        .map(|entry| entry.revision)
                         .unwrap_or(ResourceRevision::INITIAL),
                 );
             }
@@ -426,7 +429,7 @@ impl ProjectState {
                     variable_key(id),
                     revisions
                         .get(id)
-                        .copied()
+                        .map(|entry| entry.revision)
                         .unwrap_or(ResourceRevision::INITIAL),
                 )
             })
@@ -451,7 +454,7 @@ impl ProjectState {
                     snapshot
                         .variable_revisions
                         .get(id)
-                        .copied()
+                        .map(|entry| entry.revision)
                         .unwrap_or(ResourceRevision::INITIAL),
                 )
             })
@@ -597,7 +600,7 @@ impl ProjectState {
                 }
                 let actual_revision = revisions
                     .get(&id)
-                    .copied()
+                    .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
                 let expected_revision =
                     expected_revision.expect("update command requires revision");
@@ -634,7 +637,7 @@ impl ProjectState {
                     .ok_or_else(|| prepare_error(format!("variable '{id}' not found")))?;
                 let actual_revision = revisions
                     .get(&id)
-                    .copied()
+                    .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
                 let expected_revision =
                     expected_revision.expect("delete command requires revision");
@@ -767,16 +770,31 @@ impl ProjectState {
             GlobalVariableMutationKind::Create => {
                 data.variables.insert(id, staged.variable.clone());
                 Self::publish_variable_cache(&mut store, &id, staged.cache.clone());
-                variable_revisions.insert(id, ResourceRevision::new(1));
+                variable_revisions.insert(
+                    id,
+                    crate::project::project_state::VariableRevisionEntry::present(
+                        ResourceRevision::new(1),
+                    ),
+                );
             }
             GlobalVariableMutationKind::Update => {
                 data.variables.insert(id, staged.variable.clone());
                 Self::publish_variable_cache(&mut store, &id, staged.cache.clone());
-                variable_revisions.insert(id, staged.expected_revision.unwrap().next());
+                variable_revisions.insert(
+                    id,
+                    crate::project::project_state::VariableRevisionEntry::present(
+                        staged.expected_revision.unwrap().next(),
+                    ),
+                );
             }
             GlobalVariableMutationKind::Delete => {
                 data.variables.remove(&id);
-                variable_revisions.insert(id, staged.expected_revision.unwrap().next());
+                variable_revisions.insert(
+                    id,
+                    crate::project::project_state::VariableRevisionEntry::deleted(
+                        staged.expected_revision.unwrap().next(),
+                    ),
+                );
                 crate::tabular::remove_variable_cache(&mut store, &id);
             }
         }
@@ -829,6 +847,293 @@ impl ProjectState {
             },
             history,
         })
+    }
+
+    fn commit_local_variable_mutation(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        expected_collection_revision: Option<u64>,
+        expected_revision: Option<ResourceRevision>,
+        operation_id: OperationId,
+        mutation: GlobalVariableMutation,
+        scope: Option<VariableScope>,
+    ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
+        let session = self.capture_project_session()?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "variable command project instance is stale".into(),
+            });
+        }
+        let reservation = self.reserve_resource_operation(&session.instance_id, operation_id)?;
+        let (authority_generation, revisions, names, current) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            if publication.project_instance_id != session.instance_id.as_str() {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "project changed during local variable staging".into(),
+                });
+            }
+            if let Some(expected) = expected_collection_revision
+                && publication.resource_revision != expected
+            {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!(
+                        "local variable collection expected revision {expected}, found {}",
+                        publication.resource_revision
+                    ),
+                });
+            }
+            let data = self.project_data.read().unwrap();
+            let current = match &mutation {
+                GlobalVariableMutation::Create { .. } => None,
+                GlobalVariableMutation::Update { id, .. }
+                | GlobalVariableMutation::Delete { id } => data.variables.get(id).cloned(),
+            };
+            (
+                publication.authority_generation(),
+                self.variable_revisions.read().unwrap().clone(),
+                data.variables
+                    .values()
+                    .map(|variable| variable.name.clone())
+                    .collect::<Vec<_>>(),
+                current,
+            )
+        };
+
+        let staged = match mutation {
+            GlobalVariableMutation::Create {
+                name,
+                data_type,
+                data_value,
+                description,
+                tags,
+            } => {
+                let variable = VariableInstance {
+                    id: VariableId::new(),
+                    name: super::unique_name::unique_name(
+                        &name,
+                        names.iter().map(String::as_str).collect::<Vec<_>>(),
+                    ),
+                    data_type,
+                    data_value,
+                    tabular: None,
+                    description,
+                    scope: scope.expect("local create requires scope"),
+                    tags,
+                };
+                let (variable, cache) = Self::stage_variable(variable)?;
+                let patch = crate::node_system::document::ResourcePatch::variable(
+                    VariableResourceKey(format!("variables/{}", variable.id).into()),
+                    ResourceRevision::INITIAL,
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        None,
+                        Some(serde_json::to_value(&variable).map_err(prepare_error)?),
+                    ),
+                );
+                StagedGlobalVariableMutation {
+                    kind: GlobalVariableMutationKind::Create,
+                    variable,
+                    cache,
+                    expected_revision: None,
+                    history_patch: Some(patch),
+                }
+            }
+            GlobalVariableMutation::Update {
+                id,
+                name,
+                data_type,
+                data_value,
+                description,
+                tags,
+            } => {
+                let before =
+                    current.ok_or_else(|| prepare_error(format!("variable '{id}' not found")))?;
+                if matches!(before.scope, VariableScope::Global) {
+                    return Err(prepare_error(format!("variable '{id}' is not local")));
+                }
+                let actual_revision = revisions
+                    .get(&id)
+                    .map(|entry| entry.revision)
+                    .unwrap_or(ResourceRevision::INITIAL);
+                let expected_revision = expected_revision.expect("update requires revision");
+                if actual_revision != expected_revision {
+                    return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                        message: format!(
+                            "variable 'variables/{id}' expected revision {}, found {}",
+                            expected_revision.get(),
+                            actual_revision.get()
+                        ),
+                    });
+                }
+                let mut variable = before.clone();
+                if let Some(name) = name {
+                    variable.name = name;
+                }
+                if let Some(data_type) = data_type {
+                    let changed = variable.data_type != data_type;
+                    variable.data_type = data_type;
+                    if changed && data_value.is_none() {
+                        variable.data_value = variable.data_type.default_value();
+                    }
+                }
+                if let Some(data_value) = data_value {
+                    variable.data_value = data_value;
+                }
+                if let Some(description) = description {
+                    variable.description = description;
+                }
+                if let Some(tags) = tags {
+                    variable.tags = tags;
+                }
+                let patch = crate::node_system::document::ResourcePatch::variable(
+                    VariableResourceKey(format!("variables/{id}").into()),
+                    expected_revision,
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&before).map_err(prepare_error)?),
+                        Some(serde_json::to_value(&variable).map_err(prepare_error)?),
+                    ),
+                );
+                let (variable, cache) = Self::stage_variable(variable)?;
+                StagedGlobalVariableMutation {
+                    kind: GlobalVariableMutationKind::Update,
+                    variable,
+                    cache,
+                    expected_revision: Some(expected_revision),
+                    history_patch: Some(patch),
+                }
+            }
+            GlobalVariableMutation::Delete { id } => {
+                let variable =
+                    current.ok_or_else(|| prepare_error(format!("variable '{id}' not found")))?;
+                if matches!(variable.scope, VariableScope::Global) {
+                    return Err(prepare_error(format!("variable '{id}' is not local")));
+                }
+                let actual_revision = revisions
+                    .get(&id)
+                    .map(|entry| entry.revision)
+                    .unwrap_or(ResourceRevision::INITIAL);
+                let expected_revision = expected_revision.expect("delete requires revision");
+                if actual_revision != expected_revision {
+                    return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                        message: format!(
+                            "variable 'variables/{id}' expected revision {}, found {}",
+                            expected_revision.get(),
+                            actual_revision.get()
+                        ),
+                    });
+                }
+                let patch = crate::node_system::document::ResourcePatch::variable(
+                    VariableResourceKey(format!("variables/{id}").into()),
+                    expected_revision,
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&variable).map_err(prepare_error)?),
+                        None,
+                    ),
+                );
+                StagedGlobalVariableMutation {
+                    kind: GlobalVariableMutationKind::Delete,
+                    variable,
+                    cache: None,
+                    expected_revision: Some(expected_revision),
+                    history_patch: Some(patch),
+                }
+            }
+        };
+        let key = variable_key(&staged.variable.id);
+        let context = context(
+            self,
+            session,
+            operation_id,
+            staged
+                .expected_revision
+                .map(|revision| BTreeMap::from([(key.clone(), revision)]))
+                .unwrap_or_default(),
+            if staged.kind == GlobalVariableMutationKind::Create {
+                BTreeSet::from([key])
+            } else {
+                BTreeSet::new()
+            },
+        );
+        let result =
+            self.publish_global_variable_mutation(&context, authority_generation, &staged)?;
+        reservation.complete();
+        Ok(GlobalVariableMutationResult {
+            variable: staged.variable,
+            result,
+        })
+    }
+
+    pub fn create_local_variable_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        name: String,
+        data_type: DataType,
+        data_value: DataValue,
+        description: String,
+        scope: VariableScope,
+        tags: Vec<String>,
+        expected_collection_revision: u64,
+        operation_id: OperationId,
+    ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
+        self.commit_local_variable_mutation(
+            expected_project_instance_id,
+            Some(expected_collection_revision),
+            None,
+            operation_id,
+            GlobalVariableMutation::Create {
+                name,
+                data_type,
+                data_value,
+                description,
+                tags,
+            },
+            Some(scope),
+        )
+    }
+
+    pub fn update_local_variable_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        id: VariableId,
+        name: Option<String>,
+        data_type: Option<DataType>,
+        data_value: Option<DataValue>,
+        description: Option<String>,
+        tags: Option<Vec<String>>,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
+        self.commit_local_variable_mutation(
+            expected_project_instance_id,
+            None,
+            Some(expected_revision),
+            operation_id,
+            GlobalVariableMutation::Update {
+                id,
+                name,
+                data_type,
+                data_value,
+                description,
+                tags,
+            },
+            None,
+        )
+    }
+
+    pub fn delete_local_variable_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        id: VariableId,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
+        self.commit_local_variable_mutation(
+            expected_project_instance_id,
+            None,
+            Some(expected_revision),
+            operation_id,
+            GlobalVariableMutation::Delete { id },
+            None,
+        )
     }
 
     pub fn create_global_variable_transaction(
@@ -1615,11 +1920,10 @@ mod tests {
             )
         });
         staged_rx.recv().unwrap();
-        state
-            .variable_revisions
-            .write()
-            .unwrap()
-            .insert(variable.id, ResourceRevision::new(1));
+        state.variable_revisions.write().unwrap().insert(
+            variable.id,
+            crate::project::project_state::VariableRevisionEntry::present(ResourceRevision::new(1)),
+        );
         drop(lease);
 
         let error = match worker.join().unwrap() {

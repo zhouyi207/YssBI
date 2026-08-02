@@ -26,6 +26,20 @@ describe('useExecutionStore pin result lifecycle', () => {
     });
   });
 
+  it('tracks the active opaque run ID only for the live run lifecycle', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+
+    store.startExecution(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
+
+    store.setActiveRunId(graphPath, '9007199254740993');
+    expect(useExecutionStore.getState().getGraph(graphPath).runId).toBe('9007199254740993');
+
+    store.completeExecution(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
+  });
+
   it('indexes pin results by graphPath and pinId', () => {
     const store = useExecutionStore.getState();
     store.recordPinResult(

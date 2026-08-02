@@ -245,6 +245,15 @@ impl ResourceProvider for ProjectResourceProvider {
             )));
         }
         for requirement in requirements {
+            if self.snapshot_contains(requirement)
+                && requirement.access == ResourceAccess::Exclusive
+                && !self.snapshot.variables.contains_key(&requirement.resource)
+            {
+                return Err(ResourceError::unsupported_access(format!(
+                    "project resource '{}' does not support exclusive access",
+                    requirement.resource.as_str()
+                )));
+            }
             if !self.snapshot_contains(requirement) {
                 continue;
             }

@@ -58,6 +58,13 @@ pub struct WorksheetDeltaDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceMutationCommandResultDto<T> {
+    pub data: T,
+    pub mutation: ResourceMutationResultDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceMutationResultDto {
     pub operation_id: crate::node_system::document::OperationId,

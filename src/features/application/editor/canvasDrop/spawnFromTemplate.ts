@@ -30,7 +30,7 @@ export async function spawnNodeFromTemplate(
   event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey'>,
   ctx: SpawnFromTemplateContext,
 ): Promise<boolean> {
-  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) {
+  if (!EDITOR_MUTATION_CAPABILITIES.contextualCompatibility) {
     notifyNodeCreationUnavailable();
     return false;
   }

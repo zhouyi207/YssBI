@@ -21,7 +21,7 @@ use crate::node_system::runtime::build_builtin_kernel_registry;
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
-fn item<'a>(catalog: &'a LocalizedCatalogDto, id: &str) -> &'a LocalizedCatalogItemDto {
+fn item<'a>(catalog: &'a LocalizedCatalog, id: &str) -> &'a LocalizedCatalogItemDto {
     catalog
         .items
         .iter()
@@ -163,13 +163,158 @@ fn catalog_items_serialize_narrow_creation_descriptors_without_ports_or_paramete
 }
 
 #[test]
+fn resource_catalog_serializes_opaque_paths_and_revisions() {
+    use crate::node_system::document::ResourceRevision;
+
+    for (create_args, expected_kind) in [
+        (ResourceBoundCreateArgsDto::Function, "function"),
+        (ResourceBoundCreateArgsDto::Variable, "variable"),
+        (ResourceBoundCreateArgsDto::Database, "database"),
+    ] {
+        let descriptor = NodeCreationDescriptor::ResourceBound {
+            node_type_id: NodeTypeId::new("yssbi.dataframe.source.get").unwrap(),
+            resource_path: CatalogResourcePath::new("opaque/backend-issued/path"),
+            resource_revision: ResourceRevision::new(17),
+            create_args,
+        };
+        let value = serde_json::to_value(&descriptor).unwrap();
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "kind": "resourceBound",
+                "nodeTypeId": "yssbi.dataframe.source.get",
+                "resourcePath": "opaque/backend-issued/path",
+                "resourceRevision": 17,
+                "createArgs": { "kind": expected_kind },
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<NodeCreationDescriptor>(value).unwrap(),
+            descriptor
+        );
+    }
+
+    for malformed in [
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "resource" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database" },
+            "resource": "compatibility-is-forbidden",
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": 42,
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": 42,
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": "17",
+            "createArgs": { "kind": "database" },
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": "database",
+        }),
+        serde_json::json!({
+            "kind": "resourceBound",
+            "nodeTypeId": "yssbi.dataframe.source.get",
+            "resourcePath": "databases/sales",
+            "resourceRevision": 17,
+            "createArgs": { "kind": "database", "extra": true },
+        }),
+        serde_json::json!({
+            "kind": "static",
+            "nodeTypeId": "yssbi.numeric.add.int64",
+            "extra": true,
+        }),
+        serde_json::json!({ "kind": "static" }),
+        serde_json::json!({
+            "kind": "static",
+            "nodeTypeId": 42,
+        }),
+    ] {
+        assert!(
+            serde_json::from_value::<NodeCreationDescriptor>(malformed.clone()).is_err(),
+            "accepted malformed descriptor: {malformed}"
+        );
+    }
+}
+
+#[test]
+fn static_catalog_excludes_managed_and_resource_required_descriptors() {
+    let registry = build_builtin_registry();
+    let (_, catalog) = build_builtin_provider();
+
+    let localized = catalog.localize(&registry, "en-US");
+    let node_type_ids = localized
+        .items
+        .iter()
+        .map(|item| item.node_type_id.as_ref())
+        .collect::<BTreeSet<_>>();
+
+    assert!(node_type_ids.contains("yssbi.numeric.add.int64"));
+    assert!(!node_type_ids.contains("yssbi.project.event.begin"));
+    assert!(!node_type_ids.contains("yssbi.project.function.call"));
+    assert!(!node_type_ids.contains("yssbi.project.variable.get"));
+}
+
+#[test]
 fn resource_entries_merge_without_translating_user_names() {
     let registry = build_builtin_registry();
     let (_, catalog) = build_builtin_provider();
     let resource = CatalogResourceEntry {
         name: "Calculate Sales".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
-        resource: GraphResourcePath("functions/calculate-sales".into()),
+        resource_path: CatalogResourcePath::new("functions/calculate-sales"),
+        resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: vec!["call".into(), "function".into()],
         pinyin: Some("calculate sales".into()),
@@ -196,10 +341,10 @@ fn resource_entries_merge_without_translating_user_names() {
     assert!(matches!(
         &zh_resource.creation,
         NodeCreationDescriptor::ResourceBound {
-            resource: GraphResourcePath(path),
+            resource_path,
             create_args: ResourceBoundCreateArgsDto::Function,
             ..
-        } if path.as_ref() == "functions/calculate-sales"
+        } if resource_path.as_str() == "functions/calculate-sales"
     ));
     let serialized = serde_json::to_value(zh_resource).unwrap();
     assert_eq!(serialized["creation"]["createArgs"]["kind"], "function");
@@ -508,20 +653,12 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
 }
 
 #[test]
-fn project_nodes_are_fully_localized_searchable_and_resource_bound() {
+fn eligible_static_and_resource_bound_catalog_items_are_localized() {
     let registry = build_builtin_registry();
     let (_, catalog) = build_builtin_provider();
     for locale in ["en-US", "zh-CN"] {
         let localized = catalog.localize(&registry, locale);
-        for id in [
-            "yssbi.project.event.begin",
-            "yssbi.project.function.entry",
-            "yssbi.project.function.return",
-            "yssbi.project.function.call",
-            "yssbi.project.variable.get",
-            "yssbi.project.variable.set",
-            "yssbi.control.loop",
-        ] {
+        for id in ["yssbi.numeric.add.int64"] {
             let item = item(&localized, id);
             assert!(!item.title.is_empty());
             assert!(
@@ -545,7 +682,8 @@ fn project_nodes_are_fully_localized_searchable_and_resource_bound() {
         CatalogResourceEntry {
             name: "Calculate Sales".into(),
             node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
-            resource: GraphResourcePath("functions/calculate-sales".into()),
+            resource_path: CatalogResourcePath::new("functions/calculate-sales"),
+            resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
             create_args: ResourceBoundCreateArgsDto::Function,
             technical_terms: vec!["call".into()],
             pinyin: None,
@@ -553,7 +691,8 @@ fn project_nodes_are_fully_localized_searchable_and_resource_bound() {
         CatalogResourceEntry {
             name: "Tax Rate".into(),
             node_type_id: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
-            resource: GraphResourcePath("variables/tax-rate".into()),
+            resource_path: CatalogResourcePath::new("variables/tax-rate"),
+            resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
             create_args: ResourceBoundCreateArgsDto::Variable,
             technical_terms: vec!["variable".into()],
             pinyin: None,
@@ -880,7 +1019,7 @@ fn every_leaf_has_a_protocol_lowerer_and_production_kernel() {
         );
         if matches!(
             node_id.as_str(),
-            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit"
+            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit" | "yssbi.dataframe.rename"
         ) {
             // These nodes lower to relational fragments, frozen by the focused
             // dataframe catalog contract rather than the native kernel registry.

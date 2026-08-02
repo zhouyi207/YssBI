@@ -123,6 +123,61 @@ fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() 
     assert!(provider.validate_plan(&provenance, &[exclusive]).is_ok());
 }
 
+#[test]
+fn project_resource_provider_rejects_unsupported_access_during_validation() {
+    let session = ProjectSessionId::new("project-a");
+    let database = resource_id("databases/main");
+    let resource_versions = versions(&[(database.as_str(), "1")]);
+    let provider = ProjectResourceProvider::new(
+        ProjectResourceSnapshot::new(session.clone(), resource_versions.clone()).with_database(
+            database.clone(),
+            Arc::new(polars::prelude::DataFrame::default()),
+        ),
+    );
+    let provenance = empty_plan(
+        &session,
+        "events/main",
+        &RegistryFingerprint::from_bytes([7; 32]),
+        resource_versions,
+    )
+    .provenance;
+    let requirement = CompiledResourceRequirement {
+        resource: database,
+        kind: ResourceKind::DatabaseConnection,
+        access: ResourceAccess::Exclusive,
+        optional: false,
+    };
+
+    let error = provider
+        .validate_plan(&provenance, &[requirement])
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        crate::node_system::runtime::ResourceErrorKind::UnsupportedAccess
+    );
+}
+
+struct UnsupportedAccessProvider;
+
+impl ResourceProvider for UnsupportedAccessProvider {
+    fn validate_plan(
+        &self,
+        _: &CompileProvenance,
+        _: &[CompiledResourceRequirement],
+    ) -> Result<(), ResourceError> {
+        Err(ResourceError::unsupported_access(
+            "resource access is unsupported",
+        ))
+    }
+
+    fn acquire(
+        &self,
+        _: &CompiledResourceRequirement,
+    ) -> Result<Box<dyn ResourceLease>, ResourceError> {
+        unreachable!("validation errors must prevent resource acquisition")
+    }
+}
+
 struct NoFunctions;
 
 impl FunctionPlanProvider for NoFunctions {
@@ -167,9 +222,13 @@ fn run_executor_classifies_resource_plan_validation_errors() {
         optional: false,
     }]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
-        .run(&unsupported, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &UnsupportedAccessProvider,
+        &NoFunctions,
+    )
+    .run(&unsupported, CancellationToken::new())
+    .unwrap_err();
     assert!(matches!(error, RunError::InvalidPlan(_)));
     assert_eq!(RunErrorCode::from(&error), RunErrorCode::InvalidPlan);
 

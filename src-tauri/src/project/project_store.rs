@@ -1,5 +1,5 @@
 use crate::database::DatabaseInstance;
-use crate::node_system::analysis::ProjectSessionId;
+use crate::node_system::analysis::{BoundedTraceSink, ProjectSessionId};
 use crate::node_system::catalog::{BuiltinCatalog, build_builtin_provider};
 use crate::node_system::registry::{NodeRegistry, NodeRegistryBuilder};
 use crate::node_system::runtime::{
@@ -20,6 +20,7 @@ pub struct ProjectStore {
     pub function_plans: Arc<FunctionPlanStore>,
     pub results: ResultStore,
     pub runs: Arc<ProjectRunRegistry>,
+    pub trace_sink: Arc<BoundedTraceSink>,
     pub project_session_id: ProjectSessionId,
     #[cfg(test)]
     drop_test_hook: Option<Arc<dyn Fn() + Send + Sync>>,
@@ -50,6 +51,7 @@ impl Default for ProjectStore {
             function_plans,
             results: ResultStore::new(),
             runs: Arc::new(ProjectRunRegistry::new()),
+            trace_sink: Arc::new(BoundedTraceSink::default()),
             project_session_id,
             #[cfg(test)]
             drop_test_hook: None,

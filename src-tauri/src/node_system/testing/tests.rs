@@ -1,5 +1,5 @@
 use super::*;
-use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalogDto, build_builtin_provider};
+use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalog, build_builtin_provider};
 use crate::node_system::document::{DocumentConnection, DocumentNode, GraphDocument};
 use crate::node_system::protocol::{NodeTypeId, PortKey, Value};
 use crate::node_system::registry::{
@@ -85,7 +85,7 @@ struct LocaleState {
     document: GraphDocument,
     registry: NodeRegistry,
     catalog: BuiltinCatalog,
-    localized: Option<LocalizedCatalogDto>,
+    localized: Option<LocalizedCatalog>,
 }
 
 #[test]

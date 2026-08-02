@@ -69,6 +69,10 @@ pub struct SchemaColumnRef(pub Box<str>);
 pub enum RenameExpr {
     Explicit(Vec<ColumnRename>),
     FromParameter(ParameterKey),
+    FromParameters {
+        from: ParameterKey,
+        to: ParameterKey,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

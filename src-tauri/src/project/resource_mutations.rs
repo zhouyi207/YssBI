@@ -72,7 +72,7 @@ impl ResourceOperationLedger {
     }
 }
 
-struct ResourceOperationReservation {
+pub(crate) struct ResourceOperationReservation {
     ledger: std::sync::Arc<std::sync::Mutex<ResourceOperationLedger>>,
     owner: ResourceOperationOwner,
     operation_id: OperationId,
@@ -80,7 +80,7 @@ struct ResourceOperationReservation {
 }
 
 impl ResourceOperationReservation {
-    fn complete(mut self) {
+    pub(crate) fn complete(mut self) {
         let mut state = self
             .ledger
             .lock()
@@ -340,7 +340,7 @@ fn resource_from_disk_document(
 }
 
 impl ProjectState {
-    fn reserve_resource_operation(
+    pub(crate) fn reserve_resource_operation(
         &self,
         project_instance_id: &ProjectInstanceId,
         operation_id: OperationId,
@@ -1891,11 +1891,12 @@ mod tests {
                     .write()
                     .unwrap()
                     .insert(unrelated_for_hook.clone(), ResourceRevision::new(9));
-                concurrent
-                    .variable_revisions
-                    .write()
-                    .unwrap()
-                    .insert(variable_id, ResourceRevision::new(7));
+                concurrent.variable_revisions.write().unwrap().insert(
+                    variable_id,
+                    crate::project::project_state::VariableRevisionEntry::present(
+                        ResourceRevision::new(7),
+                    ),
+                );
                 concurrent.append_history_head_for_test();
             }
         })));
@@ -1920,7 +1921,7 @@ mod tests {
             ResourceRevision::new(9)
         );
         assert_eq!(
-            state.variable_revisions.read().unwrap()[&variable_id],
+            state.variable_revisions.read().unwrap()[&variable_id].revision,
             ResourceRevision::new(7)
         );
         assert_eq!(state.history.read().unwrap().undo_len(), 2);

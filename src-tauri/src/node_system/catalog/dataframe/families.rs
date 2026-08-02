@@ -1,9 +1,10 @@
-//! Stable inventory for the legacy DataFrame catalog.
+//! Stable inventory for the DataFrame catalog and its legacy identity subset.
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum InterfaceKind {
     DataframeSource,
     Limit,
+    Rename,
     Decompose,
     Combine,
     Filter,
@@ -24,7 +25,7 @@ pub(super) enum InterfaceKind {
 #[derive(Clone, Copy)]
 pub(super) struct NodeSpec {
     #[allow(dead_code)]
-    pub legacy_name: &'static str,
+    pub legacy_name: Option<&'static str>,
     pub id: &'static str,
     pub title: &'static str,
     pub zh_title: &'static str,
@@ -106,6 +107,14 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["limit", "take rows", "head"],
         &["限制", "选取行", "前几行"],
         InterfaceKind::Limit,
+    ),
+    builtin_spec(
+        "yssbi.dataframe.rename",
+        "Rename DataFrame",
+        "重命名数据框",
+        &["rename column", "column name", "dataframe"],
+        &["重命名列", "列名", "数据框"],
+        InterfaceKind::Rename,
     ),
     spec(
         "Decompose DataFrame",
@@ -335,7 +344,27 @@ const fn spec(
     interface: InterfaceKind,
 ) -> NodeSpec {
     NodeSpec {
-        legacy_name,
+        legacy_name: Some(legacy_name),
+        id,
+        title,
+        zh_title,
+        aliases,
+        zh_aliases,
+        interface,
+        kernel: id,
+    }
+}
+
+const fn builtin_spec(
+    id: &'static str,
+    title: &'static str,
+    zh_title: &'static str,
+    aliases: &'static [&'static str],
+    zh_aliases: &'static [&'static str],
+    interface: InterfaceKind,
+) -> NodeSpec {
+    NodeSpec {
+        legacy_name: None,
         id,
         title,
         zh_title,

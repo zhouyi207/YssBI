@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
-    ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink,
+    ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink, TraceValue,
 };
 use crate::node_system::document::{FunctionParameterId, GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::plan::*;
@@ -1525,6 +1525,155 @@ impl RelationalBackend for RecordingRelationalBackend {
             )]),
         })
     }
+}
+
+#[derive(Clone, Copy)]
+enum TraceRelationalOutcome {
+    Succeed,
+    Fail,
+    Cancel,
+}
+
+struct TraceRelationalBackend(TraceRelationalOutcome);
+
+impl RelationalBackend for TraceRelationalBackend {
+    fn execute(
+        &self,
+        context: &RelationalContext<'_>,
+        _: &CompiledRelationalPlan,
+        _: &[RuntimeValue],
+        _: &[RelationalInput],
+    ) -> Result<RelationalExecution, RelationalError> {
+        match self.0 {
+            TraceRelationalOutcome::Succeed => Ok(RelationalExecution {
+                outputs: vec![Value::Integer(41).into()],
+                fragment_outputs: BTreeMap::new(),
+            }),
+            TraceRelationalOutcome::Fail => Err(RelationalError::new("backend failed")),
+            TraceRelationalOutcome::Cancel => {
+                context.cancellation.cancel();
+                Err(RelationalError::new("secret row must not be traced"))
+            }
+        }
+    }
+}
+
+fn run_relational_backend_trace(
+    outcome: TraceRelationalOutcome,
+) -> (Result<RunResult, RunError>, ExecutionPlan, Vec<SpanEvent>) {
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("trace-backend", RelationalBackendId::new),
+            TraceRelationalBackend(outcome),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        "trace-backend",
+        "private-fragment",
+        Box::new([]),
+    )]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        value: ValueRef::new(0),
+    }]);
+    let trace = RecordingTrace::default();
+
+    let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_trace_sink(&trace)
+        .run(&execution_plan, CancellationToken::new());
+    let events = trace.0.into_inner().unwrap();
+    (result, execution_plan, events)
+}
+
+fn assert_relational_backend_trace(
+    execution_plan: &ExecutionPlan,
+    events: &[SpanEvent],
+    terminal_status: SpanStatus,
+) {
+    let spans = events
+        .iter()
+        .filter(|event| event.kind == SpanKind::RelationalBackend)
+        .collect::<Vec<_>>();
+    assert_eq!(spans.len(), 2);
+    assert_eq!(spans[0].status, SpanStatus::Started);
+    assert_eq!(spans[1].status, terminal_status);
+    assert_eq!(spans[0].correlation, spans[1].correlation);
+
+    let correlation = &spans[0].correlation;
+    assert_eq!(
+        correlation.project_session_id,
+        execution_plan.provenance.project_session_id
+    );
+    assert_eq!(correlation.graph_path, execution_plan.provenance.graph_path);
+    assert_eq!(
+        correlation.graph_revision,
+        execution_plan.provenance.basis.graph_revision
+    );
+    assert_eq!(
+        correlation.registry_fingerprint,
+        execution_plan.provenance.basis.registry_fingerprint
+    );
+    assert_eq!(
+        correlation.resource_versions,
+        execution_plan.provenance.basis.resource_versions
+    );
+    assert_eq!(correlation.compile_id, execution_plan.provenance.compile_id);
+    assert!(correlation.run_id.is_some());
+    assert_eq!(
+        correlation.node_id,
+        Some(execution_plan.operations[0].source_node_id)
+    );
+    assert_eq!(
+        correlation.node_type_id,
+        Some(execution_plan.operations[0].source_node_type_id.clone())
+    );
+    assert_eq!(correlation.parent_call, None);
+
+    let expected_fields = BTreeMap::from([
+        (
+            Box::<str>::from("backendId"),
+            TraceValue::Text("trace-backend".into()),
+        ),
+        (Box::<str>::from("subplanIndex"), TraceValue::Integer(0)),
+    ]);
+    assert_eq!(spans[0].fields, expected_fields);
+    assert_eq!(spans[1].fields, expected_fields);
+}
+
+#[test]
+fn relational_backend_trace_records_success_with_full_operation_correlation() {
+    let (result, execution_plan, events) =
+        run_relational_backend_trace(TraceRelationalOutcome::Succeed);
+
+    result.unwrap();
+    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Succeeded);
+}
+
+#[test]
+fn relational_backend_trace_records_failure_with_full_operation_correlation() {
+    let (result, execution_plan, events) =
+        run_relational_backend_trace(TraceRelationalOutcome::Fail);
+
+    assert!(matches!(result, Err(RunError::RelationalFailed { .. })));
+    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Failed);
+}
+
+#[test]
+fn relational_backend_trace_records_cancellation_with_full_operation_correlation() {
+    let (result, execution_plan, events) =
+        run_relational_backend_trace(TraceRelationalOutcome::Cancel);
+
+    assert_eq!(result, Err(RunError::Cancelled));
+    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Cancelled);
 }
 
 fn assert_production_source_cancellation(

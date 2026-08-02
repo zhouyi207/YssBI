@@ -12,6 +12,8 @@ import { markResourceDirty } from '@/features/core/resource';
 import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
+import { cancelActiveGraphRun } from './cancelActiveGraphRun';
+import { observeGraphRunEvent, type GraphRunOutcomeState } from './observeGraphRunEvent';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
   captureGraphSaveCommandContext,
@@ -24,16 +26,10 @@ import {
   getExecutionEventGraph,
   resolveExecutionGraphPath,
   graphHasClearableArtifacts,
-  enqueueLiveExecutionEvent,
 } from '@/features/core/execution';
-import { openWindowInspectableSource } from '@/features/application/execution/openInspectableSource';
-import type { Presentation } from '@/features/core/resultSource';
-import type { ExecutionEvent, RecordedEvent } from '@/shared/types/ui/execution';
-import {
-  ensureGraphExecutionTerminal,
-  firstNodeErrorMessage,
-  recordingHadError,
-} from '@/features/core/execution/executionRecording';
+
+import type { RecordedEvent } from '@/shared/types/ui/execution';
+import { ensureGraphExecutionTerminal } from '@/features/core/execution/executionRecording';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import {
@@ -199,13 +195,6 @@ export function useProjectOperations() {
     }
   }, []);
 
-  const handleOpenSourceWindow = useCallback(async (
-    sourceId: string,
-    event: { presentation: Presentation; windowTitle: string },
-  ) => {
-    await openWindowInspectableSource(sourceId, event);
-  }, []);
-
   const finalizeExecutionRun = useCallback((
     graphPath: string,
     recording: RecordedEvent[],
@@ -246,39 +235,20 @@ export function useProjectOperations() {
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
 
       const recording: RecordedEvent[] = [];
-      const pendingWindows: Promise<void>[] = [];
-      const { startExecution, applySideEffectEvent } = useExecutionStore.getState();
-      startExecution(graphPath);
+      const runState: GraphRunOutcomeState = { outcome: 'success' };
+      useExecutionStore.getState().startExecution(graphPath);
 
-      const res = await ProjectService.executeProject((event: ExecutionEvent) => {
-        if (event.event === 'openSourceWindow') {
-          pendingWindows.push(
-            handleOpenSourceWindow(event.data.sourceId, {
-              presentation: event.data.presentation,
-              windowTitle: event.data.windowTitle,
-            }),
-          );
-          return;
-        }
-        enqueueLiveExecutionEvent(graphPath, event, (_gid, e) => applySideEffectEvent(graphPath, e));
-        recording.push({ event, timestamp: Date.now() });
-      }, graphPath);
+      const result = await ProjectService.executeGraphDocument(graphPath, (event) => {
+        observeGraphRunEvent(graphPath, event, runState);
+      });
 
-      await Promise.all(pendingWindows);
-      const hadError = recordingHadError(recording);
-      finalizeExecutionRun(graphPath, recording, hadError ? 'error' : 'success');
+      finalizeExecutionRun(graphPath, recording, runState.outcome);
+      logger.exec.debug(`执行 runId: ${result.runId}`);
 
-      if (res.logs.length > 0) {
-        logger.exec.debug(`执行日志:\n${res.logs.map((line: string) => `  ${line}`).join('\n')}`);
-      }
-
-      if (hadError) {
-        const nodeErr = firstNodeErrorMessage(recording);
-        uiStore.showToast(
-          nodeErr ? `执行失败: ${nodeErr}` : `执行失败: ${currentGraph.name}`,
-          "error",
-          5000,
-        );
+      if (runState.outcome === 'cancelled') {
+        uiStore.showToast(t('canvas.executionCancelled'), "warning", 2500);
+      } else if (runState.outcome === 'error') {
+        uiStore.showToast(`执行失败: ${currentGraph.name}`, "error", 5000);
       } else {
         uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
       }
@@ -294,11 +264,13 @@ export function useProjectOperations() {
       finalizeExecutionRun(graphPath, [], 'error');
       uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
     }
-  }, [handleOpenSourceWindow, finalizeExecutionRun, t]);
+  }, [finalizeExecutionRun, t]);
 
-  const cancelGraphExecution = useCallback(async () => {
+  const cancelGraphExecution = useCallback(async (targetGraphPath?: string) => {
+    const graphPath = resolveExecutionGraphPath(targetGraphPath);
+    if (!graphPath) return;
     try {
-      await ProjectService.cancelExecution();
+      await cancelActiveGraphRun(graphPath);
     } catch (e) {
       logger.exec.error(`中断执行失败: ${formatErrorMessage(e)}`);
       uiStore.showToast(`中断执行失败: ${formatErrorMessage(e)}`, "error", 3000);

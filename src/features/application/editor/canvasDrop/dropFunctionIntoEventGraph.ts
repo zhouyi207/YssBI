@@ -15,7 +15,7 @@ export function canDropFunctionIntoEventGraph(
   resource: Pick<GraphResourceDragData, 'type' | 'id'>,
   shiftKey: boolean,
 ): boolean {
-  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) return false;
+  if (!EDITOR_MUTATION_CAPABILITIES.resourceBoundDescriptors) return false;
   if (!shiftKey || resource.type !== 'function') return false;
 
   const activeTab = getActiveLayoutTab(groupId)?.tab;
@@ -36,7 +36,7 @@ export async function dropFunctionCallIntoEventGraph(
   functions: EditorFunctions,
   createNode: CreateNodeFn,
 ): Promise<boolean> {
-  if (!EDITOR_MUTATION_CAPABILITIES.createNodes) {
+  if (!EDITOR_MUTATION_CAPABILITIES.resourceBoundDescriptors) {
     notifyNodeCreationUnavailable();
     return false;
   }

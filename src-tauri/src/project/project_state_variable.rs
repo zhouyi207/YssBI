@@ -1,14 +1,19 @@
+#[cfg(test)]
 use super::unique_name;
 use super::{ProjectFilesystemError, ProjectState};
 
+#[cfg(test)]
 use crate::graph::value::{DataType, DataValue};
 
+#[cfg(test)]
+use crate::tabular::remove_variable_cache;
 use crate::tabular::{
-    VariableTabularCache, build_variable_cache_entry, normalize_variable_tabular,
-    remove_variable_cache, variable_handle,
+    VariableTabularCache, build_variable_cache_entry, normalize_variable_tabular, variable_handle,
 };
 use crate::variable::VariableId;
-use crate::variable::{VariableInstance, VariableScope};
+use crate::variable::VariableInstance;
+#[cfg(test)]
+use crate::variable::VariableScope;
 
 impl ProjectState {
     pub(super) fn stage_variable(
@@ -67,7 +72,8 @@ impl ProjectState {
         Ok(())
     }
 
-    pub fn add_variable(
+    #[cfg(test)]
+    pub(crate) fn add_variable(
         &self,
         name: &str,
         data_type: DataType,
@@ -112,13 +118,19 @@ impl ProjectState {
         let id = committed.id;
         data.variables.insert(id, committed.clone());
         Self::publish_variable_cache(&mut store, &id, cache);
-        revisions.insert(id, crate::node_system::document::ResourceRevision::INITIAL);
+        revisions.insert(
+            id,
+            crate::project::project_state::VariableRevisionEntry::present(
+                crate::node_system::document::ResourceRevision::INITIAL,
+            ),
+        );
         publication.advance_authority_generation();
         self.invalidate_all_compile_products();
         Ok(committed)
     }
 
-    pub fn remove_variable(
+    #[cfg(test)]
+    pub(crate) fn remove_variable(
         &self,
         variable_id: &VariableId,
     ) -> Result<Option<VariableInstance>, ProjectFilesystemError> {
@@ -130,7 +142,15 @@ impl ProjectState {
         self.ensure_project_operational()?;
         let removed = data.variables.remove(variable_id);
         if removed.is_some() {
-            revisions.remove(variable_id);
+            let revision = revisions
+                .get(variable_id)
+                .map(|entry| entry.revision)
+                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+                .next();
+            revisions.insert(
+                *variable_id,
+                crate::project::project_state::VariableRevisionEntry::deleted(revision),
+            );
             remove_variable_cache(&mut store, variable_id);
             publication.advance_authority_generation();
             self.invalidate_all_compile_products();
@@ -153,7 +173,8 @@ impl ProjectState {
     }
 
     /// 更新变量（部分字段），返回更新后的实例
-    pub fn update_variable(
+    #[cfg(test)]
+    pub(crate) fn update_variable(
         &self,
         variable_id: &VariableId,
         name: Option<String>,
@@ -243,7 +264,7 @@ mod tests {
         state: &ProjectState,
     ) -> (
         serde_json::Value,
-        std::collections::HashMap<VariableId, ResourceRevision>,
+        std::collections::HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
         Vec<(String, serde_json::Value, usize)>,
         u64,
     ) {
@@ -314,6 +335,24 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(same_root(label), ProjectData::new());
         state
+    }
+
+    #[test]
+    fn remove_variable_retains_next_revision_tombstone() {
+        let state = active_state("remove-tombstone");
+        let variable = add_int_variable(&state);
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable.id),
+            Some(&ResourceRevision::INITIAL)
+        );
+
+        state.remove_variable(&variable.id).unwrap();
+
+        assert!(state.get_variable(&variable.id).unwrap().is_none());
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable.id),
+            Some(&ResourceRevision::new(1))
+        );
     }
 
     #[test]

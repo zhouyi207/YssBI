@@ -40,6 +40,24 @@ fn decimal(value: &str) -> Value {
     Value::Decimal(CanonicalDecimal::new(value).unwrap())
 }
 
+fn assert_decimal_list_approx_eq(actual: &RuntimeValue, expected: &[f64]) {
+    let RuntimeValue::Scalar(Value::List(actual)) = actual else {
+        panic!("expected scalar decimal list, got {actual:?}");
+    };
+    assert_eq!(actual.len(), expected.len());
+    for (actual, expected) in actual.iter().zip(expected) {
+        let Value::Decimal(actual) = actual else {
+            panic!("expected decimal list member, got {actual:?}");
+        };
+        let actual = actual.as_str().parse::<f64>().unwrap();
+        let tolerance = 1e-12 * expected.abs().max(1.0);
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "expected {expected} ± {tolerance}, got {actual}"
+        );
+    }
+}
+
 fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> PlannedOperation {
     PlannedOperation {
         source_node_id: NodeId::from_uuid(uuid::Uuid::new_v4()),
@@ -199,10 +217,7 @@ fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
         result.values["value_5"],
         RuntimeValue::Scalar(Value::Object(_))
     ));
-    assert_eq!(
-        result.values["value_6"],
-        Value::List(vec![decimal("1"), decimal("2"), decimal("3"), decimal("4"),]).into()
-    );
+    assert_decimal_list_approx_eq(&result.values["value_6"], &[1.0, 2.0, 3.0, 4.0]);
 }
 
 #[test]

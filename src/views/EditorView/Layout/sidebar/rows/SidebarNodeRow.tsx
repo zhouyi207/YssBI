@@ -9,7 +9,7 @@ export const SidebarNodeRow = memo(function SidebarNodeRow({
   level,
   selected,
   onClick,
-  creationEnabled = EDITOR_MUTATION_CAPABILITIES.createNodes,
+  creationEnabled = EDITOR_MUTATION_CAPABILITIES.contextualCompatibility,
 }: {
   item: NodeCatalogItem;
   level: number;

@@ -1,11 +1,13 @@
 import { uiStore } from '@/features/core/ui/UIStore';
 
 export const EDITOR_MUTATION_CAPABILITIES = {
-  createNodes: false,
+  createStaticNodes: true,
+  catalogDescriptors: true,
+  resourceBoundDescriptors: false,
+  contextualCompatibility: false,
+  nodeDocumentation: false,
   duplicateNodes: false,
   pasteNodes: false,
-  catalogDescriptors: false,
-  nodeDocumentation: false,
 } as const;
 
 export const NODE_CREATION_UNAVAILABLE_MESSAGE =

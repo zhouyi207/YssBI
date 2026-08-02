@@ -19,6 +19,7 @@ import { pinResultCacheKey } from './pinResultIndex';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
+  runId: null,
   nodeStates: new Map(),
   completedConnections: new Set(),
   flowingConnections: new Set(),
@@ -29,10 +30,11 @@ const emptyGraphState = (): GraphExecutionState => ({
 
 function clearedVisualPatch(): Pick<
   GraphExecutionState,
-  'status' | 'nodeStates' | 'completedConnections' | 'flowingConnections'
+  'status' | 'runId' | 'nodeStates' | 'completedConnections' | 'flowingConnections'
 > {
   return {
     status: "idle",
+    runId: null,
     nodeStates: new Map(),
     completedConnections: new Set(),
     flowingConnections: new Set(),
@@ -55,6 +57,7 @@ interface ExecutionStore extends ExecutionState {
 
   /** Mark graph as running; clears prior run artifacts and node visuals. */
   startExecution: (graphPath: string) => void;
+  setActiveRunId: (graphPath: string, runId: string) => void;
   completeExecution: (graphPath: string) => void;
   failExecution: (graphPath: string) => void;
   /** User cancelled a live run; clear partial pin results and replay data. */
@@ -120,12 +123,20 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     }));
   },
 
+  setActiveRunId: (graphPath, runId) => set((state) => {
+    const graph = state.graphs[graphPath];
+    if (graph?.status !== 'running') return state;
+    return updateGraph(state, graphPath, { runId });
+  }),
+
   completeExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
     status: "completed",
+    runId: null,
   })),
 
   failExecution: (graphPath) => set((state) => updateGraph(state, graphPath, {
     status: "error",
+    runId: null,
   })),
 
   interruptExecution: (graphPath) => {

@@ -13,9 +13,10 @@ mod statistics;
 pub use builtin::{build_builtin_provider, build_builtin_registry};
 pub use dataframe::DATAFRAME_RESOURCE_SCHEMA_RESOLVER;
 pub use localization::{
-    BuiltinCatalog, BuiltinLocalizationBundle, CatalogResourceEntry, I18nBundleInventory,
-    I18nBundleValidationError, LocalizedCatalogDto, LocalizedCatalogItemDto, LocalizedCategoryDto,
-    NodeCreationDescriptor, ResourceBoundCreateArgsDto, normalize_search_text,
+    BuiltinCatalog, BuiltinLocalizationBundle, CatalogResourceEntry, CatalogResourcePath,
+    I18nBundleInventory, I18nBundleValidationError, LocalizedCatalog, LocalizedCatalogDto,
+    LocalizedCatalogItemDto, LocalizedCategoryDto, NodeCreationDescriptor,
+    ResourceBoundCreateArgsDto, normalize_search_text,
 };
 
 #[cfg(test)]

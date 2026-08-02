@@ -305,7 +305,41 @@ impl<'a> SchemaAnalyzer<'a> {
                 }
                 Some(RenameExpr::Explicit(renames))
             }
+            RenameExpr::FromParameters { from, to } => {
+                let from = self.resolve_rename_name(node_id, from)?;
+                let to = self.resolve_rename_name(node_id, to)?;
+                Some(RenameExpr::Explicit(vec![ColumnRename { from, to }]))
+            }
         }
+    }
+
+    fn resolve_rename_name(
+        &mut self,
+        node_id: NodeId,
+        key: &ParameterKey,
+    ) -> Option<SchemaColumnRef> {
+        let value = self.nodes.get(&node_id)?.parameters.get(key).cloned();
+        let Some(value) = value else {
+            self.invalid_parameter(node_id, key, "expected a string column name");
+            return None;
+        };
+        let Some(name) = value.as_str() else {
+            self.invalid_parameter(node_id, key, "expected a string column name");
+            return None;
+        };
+        if name.is_empty() {
+            self.invalid_parameter(node_id, key, "column name must not be empty");
+            return None;
+        }
+        if name.trim() != name {
+            self.invalid_parameter(
+                node_id,
+                key,
+                "column name must not have leading or trailing whitespace",
+            );
+            return None;
+        }
+        Some(SchemaColumnRef(name.into()))
     }
 
     fn project(
@@ -406,6 +440,9 @@ impl<'a> SchemaAnalyzer<'a> {
         if !valid {
             return None;
         }
+        if renames.iter().all(|rename| rename.from.0 == rename.to.0) {
+            return Some(input);
+        }
         let by_source = renames
             .iter()
             .map(|rename| (rename.from.0.clone(), rename.to.clone()))
@@ -469,5 +506,158 @@ fn port_template(address: &PortAddress) -> &PortKey {
     match &address.port {
         PortRef::Declared { key } => key,
         PortRef::Instance { template, .. } => template,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node_system::analysis::DiagnosticLocation;
+    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::protocol::NodeTypeId;
+
+    fn parameter_key(value: &str) -> ParameterKey {
+        ParameterKey::new(value).unwrap()
+    }
+
+    fn two_parameter_mapping() -> RenameExpr {
+        RenameExpr::FromParameters {
+            from: parameter_key("from"),
+            to: parameter_key("to"),
+        }
+    }
+
+    fn resolve_builtin_rename(
+        from: serde_json::Value,
+        to: serde_json::Value,
+    ) -> (Option<RenameExpr>, Vec<SchemaAnalysisIssue>) {
+        let registry = build_builtin_registry();
+        let rename = registry
+            .get(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+            .unwrap();
+        let parameters = BTreeMap::from([(parameter_key("from"), from), (parameter_key("to"), to)]);
+        let resolvers = SchemaResolverSet::new();
+        let node_id = NodeId::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        analyzer.add_node(node_id, &rename.protocol, &parameters, std::iter::empty());
+        let mapping = analyzer.resolve_rename(node_id, &two_parameter_mapping());
+        (mapping, analyzer.issues)
+    }
+
+    #[test]
+    fn rename_dataframe_resolves_two_scalars_and_preserves_field_order() {
+        let (mapping, issues) =
+            resolve_builtin_rename(serde_json::json!("a"), serde_json::json!("renamed"));
+        assert!(issues.is_empty());
+        let mapping = mapping.expect("valid scalar parameters resolve");
+        assert_eq!(
+            mapping,
+            RenameExpr::Explicit(vec![ColumnRename {
+                from: SchemaColumnRef("a".into()),
+                to: SchemaColumnRef("renamed".into()),
+            }])
+        );
+
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        let input_expression = SchemaExpr::Input(PortKey::new("raw").unwrap());
+        let renamed = analyzer
+            .rename(
+                NodeId::new(),
+                SchemaFact::new(
+                    input_expression.clone(),
+                    [SchemaColumnRef("a".into()), SchemaColumnRef("b".into())],
+                ),
+                mapping,
+            )
+            .expect("valid rename fact");
+        assert_eq!(
+            renamed.fields,
+            vec![
+                SchemaColumnRef("renamed".into()),
+                SchemaColumnRef("b".into())
+            ]
+        );
+        assert!(matches!(
+            renamed.expression,
+            SchemaExpr::Rename { input, .. } if *input == input_expression
+        ));
+    }
+
+    #[test]
+    fn rename_dataframe_rejects_invalid_blank_and_padded_scalars_at_parameter() {
+        for (from, to, key) in [
+            (serde_json::json!(1), serde_json::json!("renamed"), "from"),
+            (serde_json::json!("a"), serde_json::json!(false), "to"),
+            (serde_json::json!(""), serde_json::json!("renamed"), "from"),
+            (serde_json::json!("a"), serde_json::json!(""), "to"),
+            (
+                serde_json::json!(" a"),
+                serde_json::json!("renamed"),
+                "from",
+            ),
+            (serde_json::json!("a"), serde_json::json!("renamed "), "to"),
+        ] {
+            let (mapping, issues) = resolve_builtin_rename(from, to);
+            assert!(mapping.is_none());
+            assert_eq!(issues.len(), 1);
+            assert_eq!(issues[0].code, "compiler.schema.parameter_invalid");
+            assert!(matches!(
+                &issues[0].location,
+                DiagnosticLocation::Parameter { key: actual, .. } if actual.as_str() == key
+            ));
+        }
+    }
+
+    #[test]
+    fn rename_dataframe_preserves_existing_object_parameter_mapping() {
+        let registry = build_builtin_registry();
+        let rename = registry
+            .get(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+            .unwrap();
+        let mapping_key = parameter_key("mapping");
+        let parameters =
+            BTreeMap::from([(mapping_key.clone(), serde_json::json!({"a": "renamed"}))]);
+        let resolvers = SchemaResolverSet::new();
+        let node_id = NodeId::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        analyzer.add_node(node_id, &rename.protocol, &parameters, std::iter::empty());
+
+        let mapping = analyzer
+            .resolve_rename(node_id, &RenameExpr::FromParameter(mapping_key))
+            .expect("existing object mapping resolves");
+
+        assert_eq!(
+            mapping,
+            RenameExpr::Explicit(vec![ColumnRename {
+                from: SchemaColumnRef("a".into()),
+                to: SchemaColumnRef("renamed".into()),
+            }])
+        );
+        assert!(analyzer.issues.is_empty());
+    }
+
+    #[test]
+    fn rename_dataframe_same_name_returns_unchanged_schema_fact() {
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        let input = SchemaFact::new(
+            SchemaExpr::Input(PortKey::new("raw").unwrap()),
+            [SchemaColumnRef("a".into()), SchemaColumnRef("b".into())],
+        );
+
+        let renamed = analyzer
+            .rename(
+                NodeId::new(),
+                input.clone(),
+                RenameExpr::Explicit(vec![ColumnRename {
+                    from: SchemaColumnRef("a".into()),
+                    to: SchemaColumnRef("a".into()),
+                }]),
+            )
+            .expect("same-name rename is valid");
+
+        assert_eq!(renamed, input);
+        assert!(analyzer.issues.is_empty());
     }
 }

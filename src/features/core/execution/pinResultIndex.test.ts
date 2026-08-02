@@ -32,6 +32,7 @@ function bucket(
   );
   return {
     status,
+    runId: null,
     nodeStates: new Map(),
     completedConnections: new Set(),
     flowingConnections: new Set(),

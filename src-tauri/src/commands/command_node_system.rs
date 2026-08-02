@@ -1,3 +1,6 @@
+use crate::commands::node_system_execution_dto::{
+    ResultSourceDescriptorDto, ResultSourcePageDto, RunEventDto,
+};
 use crate::error::AppError;
 use crate::event::{
     Event, EventProject, GraphMutationResultDto, ResourceMutationResultDto, emit_project_event,
@@ -8,17 +11,24 @@ use crate::node_system::document::{
     EditorGraphMutationDto, HistoryMutation, HistoryStatusDto, MutationRequest, OperationId,
     ResourceRevision,
 };
-use crate::node_system::runtime::{
-    ArtifactSnapshot, ResultSourceDescriptor, ResultSourceId, ResultSourcePage, RunEvent,
-    RunEventSink,
-};
+use crate::node_system::runtime::{ArtifactSnapshot, ResultSourceId, RunEvent, RunEventSink};
 use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{GraphResourcePath, ProjectInstanceId, ProjectState};
+use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use serde::Serialize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{AppHandle, State, ipc::Channel};
 
 fn parse_graph_path(value: String) -> Result<GraphResourcePath, AppError> {
     GraphResourcePath::new(value).map_err(AppError::from)
+}
+
+fn parse_opaque_u64(field: &'static str, value: &str) -> Result<u64, AppError> {
+    value.parse::<u64>().map_err(|_| AppError {
+        code: "invalid_opaque_id".into(),
+        message: format!("'{value}' is not a valid decimal {field}"),
+        details: Some(serde_json::json!({ "field": field })),
+    })
 }
 
 fn mutation_conflict_to_app_error(
@@ -38,15 +48,28 @@ fn mutation_conflict_to_app_error(
     }
 }
 
+fn get_localized_node_catalog_from_state(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    locale: &str,
+) -> Result<LocalizedCatalogDto, AppError> {
+    state
+        .localized_catalog_snapshot(&project_instance_id, locale)
+        .map_err(|error| match error {
+            ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+                AppError::new("catalog_project_stale", error.to_string())
+            }
+            _ => AppError::from(error),
+        })
+}
+
 #[tauri::command]
 pub fn get_localized_node_catalog(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     locale: String,
 ) -> Result<LocalizedCatalogDto, AppError> {
-    let store = state.project_store.read().unwrap();
-    Ok(store
-        .catalog
-        .localize(store.node_registry.as_ref(), &locale))
+    get_localized_node_catalog_from_state(state.inner(), project_instance_id, &locale)
 }
 
 trait EmitOutcome {
@@ -409,28 +432,77 @@ pub fn redo_graph_document(
         .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
 }
 
-struct ChannelRunEvents(Channel<RunEvent>);
+#[derive(Clone, Copy)]
+enum TerminalRunEvent {
+    Errored = 1,
+    Cancelled = 2,
+}
+
+impl TerminalRunEvent {
+    fn from_state(state: u8) -> Option<Self> {
+        match state {
+            1 => Some(Self::Errored),
+            2 => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+
+struct ChannelRunEvents {
+    channel: Channel<RunEventDto>,
+    terminal: Arc<AtomicU8>,
+}
 
 impl RunEventSink for ChannelRunEvents {
     fn record(&self, event: RunEvent) {
-        let _ = self.0.send(event);
+        let terminal = match &event.kind {
+            crate::node_system::runtime::RunEventKind::RunErrored { .. } => {
+                Some(TerminalRunEvent::Errored)
+            }
+            crate::node_system::runtime::RunEventKind::RunCancelled => {
+                Some(TerminalRunEvent::Cancelled)
+            }
+            _ => None,
+        };
+        if self.channel.send(event.into()).is_ok() {
+            if let Some(terminal) = terminal {
+                self.terminal.store(terminal as u8, Ordering::Release);
+            }
+        }
+    }
+}
+
+fn execution_app_error(message: String, terminal: Option<TerminalRunEvent>) -> AppError {
+    let Some(terminal) = terminal else {
+        return AppError::internal(message);
+    };
+    AppError {
+        code: match terminal {
+            TerminalRunEvent::Errored => "run_failed",
+            TerminalRunEvent::Cancelled => "run_cancelled",
+        }
+        .into(),
+        message,
+        details: Some(serde_json::json!({ "terminalRunEventSent": true })),
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteGraphResultDto {
-    pub run_id: u64,
+    pub run_id: String,
 }
 
 #[tauri::command]
 pub fn get_result_source_descriptor(
     state: State<'_, ProjectState>,
-    source_id: u64,
-) -> Result<Option<ResultSourceDescriptor>, AppError> {
+    source_id: String,
+) -> Result<Option<ResultSourceDescriptorDto>, AppError> {
+    let source_id = parse_opaque_u64("sourceId", &source_id)?;
     state
         .result_source_descriptor(ResultSourceId::new(source_id))
         .map_err(AppError::from)
+        .map(|descriptor| descriptor.map(Into::into))
 }
 
 #[derive(Debug, Serialize)]
@@ -443,8 +515,9 @@ pub enum ResultSourceValueDto {
 #[tauri::command]
 pub fn get_result_source_value(
     state: State<'_, ProjectState>,
-    source_id: u64,
+    source_id: String,
 ) -> Result<Option<ResultSourceValueDto>, AppError> {
+    let source_id = parse_opaque_u64("sourceId", &source_id)?;
     state
         .result_source_value(ResultSourceId::new(source_id))
         .map_err(AppError::from)
@@ -461,20 +534,23 @@ pub fn get_result_source_value(
 #[tauri::command]
 pub fn get_result_source_page(
     state: State<'_, ProjectState>,
-    source_id: u64,
+    source_id: String,
     offset: usize,
     limit: usize,
-) -> Result<Option<ResultSourcePage>, AppError> {
+) -> Result<Option<ResultSourcePageDto>, AppError> {
+    let source_id = parse_opaque_u64("sourceId", &source_id)?;
     state
         .result_source_page(ResultSourceId::new(source_id), offset, limit)
         .map_err(AppError::from)
+        .map(|page| page.map(Into::into))
 }
 
 #[tauri::command]
 pub fn release_result_source(
     state: State<'_, ProjectState>,
-    source_id: u64,
+    source_id: String,
 ) -> Result<bool, AppError> {
+    let source_id = parse_opaque_u64("sourceId", &source_id)?;
     state
         .release_result_source(ResultSourceId::new(source_id))
         .map_err(AppError::from)
@@ -483,11 +559,18 @@ pub fn release_result_source(
 #[tauri::command]
 pub fn release_run_result_sources(
     state: State<'_, ProjectState>,
-    run_id: u64,
+    run_id: String,
 ) -> Result<usize, AppError> {
+    let run_id = parse_opaque_u64("runId", &run_id)?;
     state
         .release_run_result_sources(crate::node_system::analysis::RunId::new(run_id))
         .map_err(AppError::from)
+}
+
+#[tauri::command]
+pub fn cancel_graph_run(state: State<'_, ProjectState>, run_id: String) -> Result<bool, AppError> {
+    let run_id = parse_opaque_u64("runId", &run_id)?;
+    Ok(state.cancel_graph_run(crate::node_system::analysis::RunId::new(run_id)))
 }
 
 #[tauri::command]
@@ -495,22 +578,32 @@ pub async fn execute_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
     graph_path: String,
-    on_event: Channel<RunEvent>,
+    on_event: Channel<RunEventDto>,
 ) -> Result<ExecuteGraphResultDto, AppError> {
     let graph_path = parse_graph_path(graph_path)?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let terminal = Arc::new(AtomicU8::new(0));
+        let events = ChannelRunEvents {
+            channel: on_event,
+            terminal: Arc::clone(&terminal),
+        };
         state
-            .execute_graph(&graph_path, &ChannelRunEvents(on_event))
+            .execute_graph(&graph_path, &events)
             .map(|result| {
                 publish_run_resource_mutation(result.resource_mutation.as_ref(), |event| {
                     emit_project_event(&app, event)
                 });
                 ExecuteGraphResultDto {
-                    run_id: result.run_id.get(),
+                    run_id: result.run_id.get().to_string(),
                 }
             })
-            .map_err(AppError::internal)
+            .map_err(|error| {
+                execution_app_error(
+                    error,
+                    TerminalRunEvent::from_state(terminal.load(Ordering::Acquire)),
+                )
+            })
     })
     .await
     .map_err(AppError::internal)?
@@ -519,11 +612,189 @@ pub async fn execute_graph_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node_system::analysis::{
+        CompilationBasis, CompileId, CorrelationContext, ParentCallId, ProjectSessionId, RunId,
+    };
+    use crate::node_system::catalog::NodeCreationDescriptor;
     use crate::node_system::document::{
         ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey, ResourceRevision,
         VariableDocumentPatch, VariableResourceKey,
     };
+    use crate::node_system::registry::RegistryFingerprint;
+    use crate::node_system::runtime::{ResultSourceId, RunEventKind};
     use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
+
+    #[test]
+    fn execution_errors_report_terminal_delivery_and_stable_codes() {
+        let cancelled = execution_app_error(
+            "run was cancelled".into(),
+            Some(TerminalRunEvent::Cancelled),
+        );
+        let failed =
+            execution_app_error("operation failed".into(), Some(TerminalRunEvent::Errored));
+        let pre_run = execution_app_error("compile failed".into(), None);
+
+        assert_eq!(cancelled.code, "run_cancelled");
+        assert_eq!(failed.code, "run_failed");
+        assert_eq!(pre_run.code, "internal_error");
+        assert_eq!(
+            cancelled.details,
+            Some(serde_json::json!({ "terminalRunEventSent": true })),
+        );
+        assert_eq!(
+            failed.details,
+            Some(serde_json::json!({ "terminalRunEventSent": true })),
+        );
+        assert!(pre_run.details.is_none());
+    }
+
+    #[test]
+    fn execution_ipc_dto_serializes_opaque_ids_as_decimal_strings() {
+        let unsafe_id = 9_007_199_254_740_993_u64;
+        let basis = CompilationBasis {
+            graph_revision: crate::node_system::document::GraphRevision::new(unsafe_id),
+            registry_fingerprint: RegistryFingerprint::from_bytes([2; 32]),
+            resource_versions: Default::default(),
+        };
+        let correlation = CorrelationContext {
+            project_session_id: ProjectSessionId::new("session"),
+            graph_path: crate::node_system::document::GraphResourcePath("events/main".into()),
+            graph_revision: basis.graph_revision,
+            registry_fingerprint: basis.registry_fingerprint.clone(),
+            resource_versions: basis.resource_versions.clone(),
+            compile_id: CompileId::new(unsafe_id),
+            run_id: Some(RunId::new(unsafe_id)),
+            node_id: None,
+            node_type_id: None,
+            parent_call: Some(ParentCallId::new(unsafe_id)),
+        };
+        let operation = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
+            correlation: correlation.clone(),
+            basis: basis.clone(),
+            kind: RunEventKind::OperationStarted {
+                operation_index: 3,
+                activation_id: unsafe_id,
+            },
+        });
+        let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
+            correlation,
+            basis,
+            kind: RunEventKind::ResultReady {
+                name: "result".into(),
+                source_id: ResultSourceId::new(unsafe_id),
+            },
+        });
+
+        let operation = serde_json::to_value(operation).unwrap();
+        assert_eq!(
+            operation["correlation"]["graphRevision"],
+            unsafe_id.to_string()
+        );
+        assert_eq!(operation["correlation"]["compileId"], unsafe_id.to_string());
+        assert_eq!(operation["correlation"]["runId"], unsafe_id.to_string());
+        assert_eq!(
+            operation["correlation"]["parentCall"],
+            unsafe_id.to_string()
+        );
+        assert_eq!(operation["basis"]["graphRevision"], unsafe_id.to_string());
+        assert_eq!(operation["kind"]["activationId"], unsafe_id.to_string());
+        assert!(operation["correlation"].get("graph_revision").is_none());
+        let result = serde_json::to_value(result).unwrap();
+        assert_eq!(result["kind"]["sourceId"], unsafe_id.to_string());
+        let execute_result = serde_json::to_value(ExecuteGraphResultDto {
+            run_id: unsafe_id.to_string(),
+        })
+        .unwrap();
+        assert_eq!(execute_result["runId"], unsafe_id.to_string());
+        assert_eq!(
+            parse_opaque_u64("sourceId", &unsafe_id.to_string()).unwrap(),
+            unsafe_id,
+        );
+        assert_eq!(
+            parse_opaque_u64("runId", "not-decimal").unwrap_err().code,
+            "invalid_opaque_id",
+        );
+    }
+
+    #[test]
+    fn localized_catalog_rejects_stale_project_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-localized-catalog-stale-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let stale = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+
+        let error = get_localized_node_catalog_from_state(&state, stale, "en-US").unwrap_err();
+
+        assert_eq!(error.code, "catalog_project_stale");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn localized_catalog_returns_coherent_metadata_with_camel_case_serialization() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-localized-catalog-metadata-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let expected_fingerprint = state
+            .project_store
+            .read()
+            .unwrap()
+            .node_registry
+            .fingerprint()
+            .to_string();
+
+        let catalog =
+            get_localized_node_catalog_from_state(&state, project_instance_id.clone(), "en-US")
+                .unwrap();
+
+        assert_eq!(
+            catalog.project_instance_id.as_ref(),
+            project_instance_id.as_str()
+        );
+        assert_eq!(catalog.registry_fingerprint.as_ref(), expected_fingerprint);
+        assert_eq!(catalog.resource_publication_revision, 0);
+        let value = serde_json::to_value(&catalog).unwrap();
+        assert_eq!(value["projectInstanceId"], project_instance_id.as_str());
+        assert_eq!(value["registryFingerprint"], expected_fingerprint);
+        assert_eq!(value["resourcePublicationRevision"], 0);
+        assert!(value.get("project_instance_id").is_none());
+        assert!(value.get("registry_fingerprint").is_none());
+        assert!(value.get("resource_publication_revision").is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn localized_catalog_contains_no_resource_bound_items() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-localized-catalog-static-only-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+
+        let catalog =
+            get_localized_node_catalog_from_state(&state, project_instance_id, "en-US").unwrap();
+
+        assert!(!catalog.items.is_empty());
+        assert!(
+            catalog
+                .items
+                .iter()
+                .all(|item| matches!(item.creation, NodeCreationDescriptor::Static { .. }))
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn run_result_routes_canonical_resource_mutation_without_split_reconstruction() {
@@ -556,97 +827,6 @@ mod tests {
         assert!(!resource_source.contains(
             "does not support Run-side writes until durable revisioned commits are available"
         ));
-    }
-
-    #[test]
-    fn committed_resource_completion_source_is_total_and_state_independent() {
-        let project_source = include_str!("../project/project_state.rs");
-        let receipt_start = project_source
-            .find("impl CommittedResourceMutation {")
-            .expect("committed receipt completion impl must exist");
-        let receipt_end = project_source[receipt_start..]
-            .find("\nimpl ProjectState {")
-            .map(|offset| receipt_start + offset)
-            .expect("receipt completion impl must end before ProjectState impl");
-        let completion = &project_source[receipt_start..receipt_end];
-
-        assert!(completion.contains(
-            "fn complete(self, locale: &str) -> crate::event::ResourceMutationResultDto"
-        ));
-        for forbidden in [
-            "Result<",
-            "ensure_mutation_operational",
-            "ensure_project_operational",
-            "self.project_",
-            "self.history",
-            "self.mutation_publication",
-            "std::fs",
-            "ProjectFilesystem",
-        ] {
-            assert!(
-                !completion.contains(forbidden),
-                "committed completion contains forbidden post-receipt dependency: {forbidden}"
-            );
-        }
-
-        let projection_start = project_source
-            .find("impl ProjectionSourceSnapshot {")
-            .expect("projection snapshot impl must exist");
-        let projection_end = project_source[projection_start..]
-            .find("\npub struct ProjectState {")
-            .map(|offset| projection_start + offset)
-            .expect("projection snapshot impl must end before ProjectState");
-        let projection = &project_source[projection_start..projection_end];
-        assert!(projection.contains("compile_resources_from_projection_snapshot(self)"));
-        for forbidden in [
-            "read_table_meta",
-            "crate::database",
-            "std::fs",
-            "ProjectState",
-        ] {
-            assert!(
-                !projection.contains(forbidden),
-                "receipt projection snapshot contains forbidden live dependency: {forbidden}"
-            );
-        }
-
-        let compile_start = project_source
-            .find("fn compile_resources_from_projection_snapshot(")
-            .expect("projection compile helper must exist");
-        let compile_end = project_source[compile_start..]
-            .find("\npub(super) fn snapshot_project_resources(")
-            .map(|offset| compile_start + offset)
-            .expect("projection compile helper must have an isolated source region");
-        let compile_helper = &project_source[compile_start..compile_end];
-        for forbidden in [
-            "read_table_meta",
-            "crate::database",
-            "project_root_from_path",
-            "std::fs",
-        ] {
-            assert!(
-                !compile_helper.contains(forbidden),
-                "receipt projection compile helper contains forbidden live dependency: {forbidden}"
-            );
-        }
-
-        for forbidden_api in [
-            "pub fn update_function_signature(",
-            "pub fn undo_last_transaction(",
-            "pub fn redo_last_transaction(",
-            "resource_project_instance_id",
-            "resource_publication_revision",
-            "resource_deltas",
-            "resource_history",
-        ] {
-            assert!(
-                !project_source.contains(forbidden_api),
-                "resource publication retains split/delta-only API: {forbidden_api}"
-            );
-        }
-
-        assert!(!project_source.contains("fn complete_resource_mutation("));
-        assert!(!project_source.contains("let data = self\n            .get_data()"));
     }
 
     #[test]
@@ -702,160 +882,6 @@ mod tests {
             assert!(
                 !publish.contains(forbidden),
                 "activation publication contains size-dependent work: {forbidden}"
-            );
-        }
-    }
-
-    #[test]
-    fn projection_environment_capture_rejects_mixed_activation_generation() {
-        let project_source = include_str!("../project/project_state.rs");
-        assert!(
-            project_source.contains("activation_generation: Arc<std::sync::atomic::AtomicU64>")
-        );
-        assert!(project_source.contains("activation_identity:"));
-        assert!(!project_source.contains(".capture_projection_environment()"));
-
-        let publish_start = project_source
-            .find("    pub(super) fn publish_project_activation(")
-            .expect("activation publication must exist");
-        let publish_end = project_source[publish_start..]
-            .find("\n    pub fn get_path(")
-            .map(|offset| publish_start + offset)
-            .expect("activation publication region must be isolated");
-        let publish = &project_source[publish_start..publish_end];
-        let store_guard = publish
-            .find("let (mut current_store, store_recovered)")
-            .expect("activation must retain the recovered runtime-store guard");
-        let changing = publish
-            .find("ActivationGenerationTransition::begin")
-            .expect("activation must mark generation changing through RAII");
-        let path_install = publish
-            .find("std::mem::replace(&mut *current_path, path)")
-            .expect("activation must install project path");
-        let store_install = publish
-            .find("std::mem::replace(&mut *current_store, store)")
-            .expect("activation must install project store through the named guard");
-        let stable = publish
-            .rfind("generation.complete();")
-            .expect("activation must mark generation stable");
-        assert!(store_guard < changing);
-        assert!(changing < path_install);
-        assert!(path_install < store_install);
-        assert!(store_install < stable);
-
-        let capture_start = project_source
-            .find("    fn capture_projection_environment(")
-            .expect("projection environment capture must exist");
-        let capture_end = project_source[capture_start..]
-            .find("\n    fn projection_source_snapshot(")
-            .map(|offset| capture_start + offset)
-            .expect("projection environment capture region must be isolated");
-        let capture = &project_source[capture_start..capture_end];
-        assert!(capture.contains("expected: &ProjectionEnvironmentExpectation"));
-        assert!(capture.contains("activation_generation.load"));
-        assert!(capture.contains("generation_before != generation_after"));
-        assert!(capture.contains("generation_after % 2 != 0"));
-        assert!(capture.contains("stale_project_lifecycle"));
-        assert!(capture.contains("databases.contains_key(id)"));
-        let data_drop = capture.find("drop(data);").unwrap();
-        let path_drop = capture.find("drop(path);").unwrap();
-        let overlap_hook = capture
-            .find("run_projection_environment_after_path_data_test_hook")
-            .expect("capture must expose deterministic post-path/data overlap hook");
-        let store_lock = capture
-            .find("let store = self.project_store.read().unwrap();")
-            .expect("capture must snapshot cached store schemas");
-        let metadata_io = capture
-            .find("crate::database::read_table_meta")
-            .expect("capture must materialize uncached metadata after locks");
-        let final_recheck = capture
-            .rfind("activation_generation.load")
-            .expect("capture must recheck generation after metadata I/O");
-        assert!(data_drop < overlap_hook);
-        assert!(path_drop < overlap_hook);
-        assert!(overlap_hook < store_lock);
-        assert!(store_lock < metadata_io);
-        assert!(metadata_io < final_recheck);
-
-        for (caller, end) in [
-            (
-                "    fn commit_graph_patch(",
-                "\n    pub fn update_function_signature_observed(",
-            ),
-            (
-                "    fn commit_function_signature(",
-                "\n    pub fn undo_last_transaction_observed(",
-            ),
-            (
-                "    fn commit_history_direction(",
-                "\n    fn commit_variable_effect_history_direction(",
-            ),
-        ] {
-            let start = project_source.find(caller).unwrap();
-            let finish = project_source[start..]
-                .find(end)
-                .map(|offset| start + offset)
-                .unwrap();
-            let region = &project_source[start..finish];
-            assert!(region.contains(
-                "let expected_session = self.current_projection_environment_expectation();"
-            ));
-            assert!(region.contains("capture_projection_environment(&expected_session)"));
-        }
-
-        let variable_start = project_source
-            .find("    fn commit_variable_effects_receipt(")
-            .unwrap();
-        let variable_end = project_source[variable_start..]
-            .find("fn install_variable_effect_snapshots(")
-            .map(|offset| variable_start + offset)
-            .unwrap();
-        let variable = &project_source[variable_start..variable_end];
-        assert!(variable.contains("capture_projection_environment_for_execution_session("));
-        assert!(
-            variable
-                .find("capture_projection_environment_for_execution_session(")
-                .unwrap()
-                < variable.find(".commit()").unwrap()
-        );
-    }
-
-    #[test]
-    fn projection_environment_capture_lock_order_is_activation_compatible() {
-        let project_source = include_str!("../project/project_state.rs");
-        let capture_start = project_source
-            .find("    fn capture_projection_environment(")
-            .expect("projection environment capture must exist");
-        let capture_end = project_source[capture_start..]
-            .find("\n    fn projection_source_snapshot(")
-            .map(|offset| capture_start + offset)
-            .expect("capture lock region must be isolated");
-        let capture = &project_source[capture_start..capture_end];
-
-        let path_lock = capture
-            .find("let path = self.project_path.read().unwrap();")
-            .expect("capture must acquire project path first");
-        let data_lock = capture
-            .find("let data = self.project_data.read().unwrap();")
-            .expect("capture must acquire project data second");
-        let data_drop = capture
-            .find("drop(data);")
-            .expect("capture must release project data before materialization");
-        let path_drop = capture
-            .find("drop(path);")
-            .expect("capture must release project path before materialization");
-        let materialize = capture
-            .find("let project_root = project_path")
-            .expect("capture must materialize from owned path and declarations");
-        assert!(path_lock < data_lock);
-        assert!(data_lock < data_drop);
-        assert!(data_drop < path_drop);
-        assert!(path_drop < materialize);
-        let locked_region = &capture[..path_drop];
-        for forbidden in ["mutation_publication", "project_store", "read_table_meta"] {
-            assert!(
-                !locked_region.contains(forbidden),
-                "capture lock region contains forbidden dependency: {forbidden}"
             );
         }
     }

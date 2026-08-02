@@ -1723,6 +1723,170 @@ impl SchemaResolver for SourceSchemaResolver {
     }
 }
 
+fn compile_builtin_rename(
+    from: serde_json::Value,
+    to: serde_json::Value,
+    include_source_schema: bool,
+) -> CompileResult {
+    use crate::node_system::catalog::{DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_builtin_registry};
+
+    let registry = build_builtin_registry();
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.dataframe.source.get"),
+        (2, "yssbi.dataframe.rename"),
+    ]);
+    graph.nodes.get_mut(&node_id(1)).unwrap().parameters = BTreeMap::from([(
+        ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    )]);
+    graph.nodes.get_mut(&node_id(2)).unwrap().parameters = BTreeMap::from([
+        (ParameterKey::new("from").unwrap(), from),
+        (ParameterKey::new("to").unwrap(), to),
+    ]);
+    connect(&mut graph, 10, 1, "dataframe", 2, "source");
+
+    let mut resolvers = SchemaResolverSet::new();
+    if include_source_schema {
+        resolvers.insert(
+            SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+            SourceSchemaResolver,
+        );
+    }
+    GraphCompiler::with_schema_resolvers(&registry, &Resources, resolvers).compile(&graph)
+}
+
+fn rename_diagnostic_codes(result: &CompileResult) -> BTreeSet<&str> {
+    result
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect()
+}
+
+#[test]
+fn rename_dataframe_configured_builtin_reaches_relational_plan() {
+    let result = compile_builtin_rename(serde_json::json!("a"), serde_json::json!("renamed"), true);
+
+    assert!(
+        result.semantic.is_some(),
+        "{:?}",
+        result.analysis.diagnostics
+    );
+    let plan = result.plan.expect("configured Rename must lower");
+    assert!(result.analysis.diagnostics.is_empty());
+    assert_eq!(
+        result
+            .analysis
+            .partial_schemas
+            .get(&PortAddress::declared(node_id(2), key("result"))),
+        Some(&SchemaExpr::Rename {
+            input: Box::new(SchemaExpr::Input(key("raw"))),
+            mapping: RenameExpr::Explicit(vec![ColumnRename {
+                from: SchemaColumnRef("a".into()),
+                to: SchemaColumnRef("renamed".into()),
+            }]),
+        })
+    );
+    assert_eq!(plan.relational_subplans.len(), 1);
+    assert_eq!(
+        plan.relational_subplans[0].compiled_plan.operators.as_ref(),
+        [
+            RelationalOperator::Source {
+                resource: ResourceId::new("databases/main").unwrap(),
+                relation: "databases/main".into(),
+            },
+            RelationalOperator::Rename {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([crate::node_system::plan::RelationalRename {
+                    from: "a".into(),
+                    to: "renamed".into(),
+                }]),
+            },
+        ]
+    );
+}
+
+#[test]
+fn rename_dataframe_rejects_invalid_scalar_parameter_types() {
+    for (from, to, expected_key) in [
+        (serde_json::json!(1), serde_json::json!("renamed"), "from"),
+        (serde_json::json!("a"), serde_json::json!(false), "to"),
+    ] {
+        let result = compile_builtin_rename(from, to, true);
+        assert!(result.plan.is_none());
+        assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+            matches!(
+                &diagnostic.primary,
+                crate::node_system::analysis::DiagnosticLocation::Parameter { node_id: id, key }
+                    if *id == node_id(2) && key.as_str() == expected_key
+            )
+        }));
+    }
+}
+
+#[test]
+fn rename_dataframe_rejects_empty_or_whitespace_padded_names() {
+    for (from, to) in [
+        ("", "renamed"),
+        ("a", ""),
+        (" a", "renamed"),
+        ("a", "renamed "),
+    ] {
+        let result = compile_builtin_rename(serde_json::json!(from), serde_json::json!(to), true);
+        assert!(result.plan.is_none(), "{from:?} -> {to:?}");
+        assert!(
+            rename_diagnostic_codes(&result).contains("compiler.schema.parameter_invalid"),
+            "{:?}",
+            result.analysis.diagnostics
+        );
+    }
+}
+
+#[test]
+fn rename_dataframe_rejects_missing_source_and_destination_collision() {
+    for (from, to, code) in [
+        ("missing", "renamed", "compiler.schema.rename_field_missing"),
+        ("a", "b", "compiler.schema.rename_target_conflict"),
+    ] {
+        let result = compile_builtin_rename(serde_json::json!(from), serde_json::json!(to), true);
+        assert!(result.plan.is_none());
+        assert!(
+            rename_diagnostic_codes(&result).contains(code),
+            "{:?}",
+            result.analysis.diagnostics
+        );
+    }
+}
+
+#[test]
+fn rename_dataframe_same_name_is_schema_noop_but_still_lowers() {
+    let result = compile_builtin_rename(serde_json::json!("a"), serde_json::json!("a"), true);
+
+    assert!(result.plan.is_some(), "{:?}", result.analysis.diagnostics);
+    assert!(result.analysis.diagnostics.is_empty());
+    assert_eq!(
+        result
+            .analysis
+            .partial_schemas
+            .get(&PortAddress::declared(node_id(2), key("result"))),
+        Some(&SchemaExpr::Input(key("raw")))
+    );
+}
+
+#[test]
+fn rename_dataframe_unknown_input_schema_blocks_with_existing_diagnostic() {
+    let result =
+        compile_builtin_rename(serde_json::json!("a"), serde_json::json!("renamed"), false);
+
+    assert!(result.plan.is_none());
+    assert!(
+        rename_diagnostic_codes(&result).contains("compiler.schema.resolver_missing"),
+        "{:?}",
+        result.analysis.diagnostics
+    );
+}
+
 #[test]
 fn schema_filter_project_and_rename_are_evaluated_into_facts() {
     let resolver_id = SchemaResolverId::new("test.source_schema").unwrap();

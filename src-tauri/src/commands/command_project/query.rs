@@ -377,18 +377,11 @@ mod tests {
 
     #[test]
     fn project_index_during_activation_observes_only_the_previous_complete_lifecycle() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-query-activation-index-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        crate::project::fixtures::write_project(
-            &ProjectData::new(),
-            root.to_string_lossy().as_ref(),
-        )
-        .unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let project = crate::project::fixtures::TempProject::activate(
+            "query-activation-index",
+            ProjectData::new(),
+        );
+        let state = project.state().clone();
         state
             .add_variable(
                 "project_a_global",
@@ -401,7 +394,11 @@ mod tests {
             .unwrap();
         let previous_identity = state.project_instance_id();
 
-        let replacement_source = ProjectState::new();
+        let replacement_project = crate::project::fixtures::TempProject::activate(
+            "project-index-replacement",
+            ProjectData::new(),
+        );
+        let replacement_source = replacement_project.state();
         replacement_source
             .add_variable(
                 "project_b_global",
@@ -414,31 +411,39 @@ mod tests {
             .unwrap();
         let replacement_data = replacement_source.get_data().unwrap();
 
-        let activation_reached_midpoint = std::sync::Arc::new(std::sync::Barrier::new(2));
-        let release_activation = std::sync::Arc::new(std::sync::Barrier::new(2));
-        state.set_project_activation_test_hook({
-            let activation_reached_midpoint = std::sync::Arc::clone(&activation_reached_midpoint);
-            let release_activation = std::sync::Arc::clone(&release_activation);
-            std::sync::Arc::new(move || {
-                activation_reached_midpoint.wait();
-                release_activation.wait();
-            })
-        });
+        let (activation_reached_tx, activation_reached_rx) = std::sync::mpsc::channel();
+        let (release_activation_tx, release_activation_rx) = std::sync::mpsc::channel();
+        let release_activation_rx = std::sync::Mutex::new(release_activation_rx);
+        state.set_project_activation_test_hook(std::sync::Arc::new(move || {
+            let _ = activation_reached_tx.send(());
+            let _ = release_activation_rx
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .recv_timeout(std::time::Duration::from_secs(5));
+        }));
 
-        let activation_state = state.clone();
+        let (activation_done_tx, activation_done_rx) = std::sync::mpsc::channel();
         let activation = std::thread::spawn(move || {
-            activation_state.activate_project_fixture("project-b".into(), replacement_data);
+            project
+                .state()
+                .activate_project_fixture("project-b".into(), replacement_data);
+            let _ = activation_done_tx.send(());
         });
-        activation_reached_midpoint.wait();
+        activation_reached_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
 
         let index = read_project_index_for_test(&state);
+        drop(state);
 
-        release_activation.wait();
+        release_activation_tx.send(()).unwrap();
+        activation_done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
         activation.join().unwrap();
 
         assert_eq!(index.project_instance_id, previous_identity);
         assert_eq!(index.variables.len(), 1);
         assert_eq!(index.variables[0].name, "project_a_global");
-        std::fs::remove_dir_all(root).unwrap();
     }
 }

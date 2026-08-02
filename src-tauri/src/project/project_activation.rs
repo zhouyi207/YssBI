@@ -72,7 +72,8 @@ pub struct PreparedProjectActivation {
     pub session_root: Option<NormalizedProjectRoot>,
     pub data: ProjectData,
     pub store: ProjectStore,
-    pub variable_revisions: HashMap<VariableId, ResourceRevision>,
+    pub(crate) variable_revisions:
+        HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
     pub(crate) graph_revisions: HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) worksheet_revisions: HashMap<String, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
@@ -117,7 +118,14 @@ impl PreparedProjectActivation {
             .variables
             .keys()
             .copied()
-            .map(|id| (id, ResourceRevision::INITIAL))
+            .map(|id| {
+                (
+                    id,
+                    crate::project::project_state::VariableRevisionEntry::present(
+                        ResourceRevision::INITIAL,
+                    ),
+                )
+            })
             .collect();
         let worksheet_revisions = data
             .worksheets
@@ -237,8 +245,8 @@ mod tests {
     use crate::graph::value::{DataType, DataValue};
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
-        GraphDocumentKind, GraphResourcePath, ProjectData, ProjectState, WorksheetDocument,
-        fixtures, load_project_from_file,
+        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectState,
+        WorksheetDocument, fixtures, load_project_from_file,
     };
     use crate::variable::VariableScope;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -262,6 +270,73 @@ mod tests {
         data.worksheets.insert(worksheet.id.clone(), worksheet);
         fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         (root, data)
+    }
+
+    #[test]
+    fn activation_replaces_old_session_revision_tombstones() {
+        let (old_root, _) = save_named_project("revision-tombstones-old");
+        let new_root = project_root("revision-tombstones-new");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&old_root).unwrap();
+        let old_graph = state
+            .create_graph_resource_fixture("Old Session Graph", GraphDocumentKind::Event)
+            .unwrap();
+        state.unload_graph_resource(&old_graph).unwrap();
+
+        let mut new_data = ProjectData::new();
+        let new_graph = GraphResourcePath::new("events/NewSession.yssbi-event").unwrap();
+        new_data.graphs.insert(
+            new_graph,
+            GraphResourceDocument::new("New Session", GraphDocumentKind::Event),
+        );
+        let variable = crate::variable::VariableInstance {
+            id: crate::variable::VariableId::new(),
+            name: "new_session_variable".into(),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(1),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Global,
+            tags: Vec::new(),
+        };
+        new_data.variables.insert(variable.id, variable);
+        let worksheet = WorksheetDocument::new("New Session Worksheet", "database");
+        new_data.worksheets.insert(worksheet.id.clone(), worksheet);
+        let new_root = crate::project::NormalizedProjectRoot::from_project_path(&new_root).unwrap();
+        let prepared = super::PreparedProjectActivation::from_data(
+            Some(new_root.clone()),
+            new_data.clone(),
+            None,
+            false,
+        );
+        let prepared_revisions = (
+            prepared.graph_revisions.clone(),
+            prepared
+                .variable_revisions
+                .iter()
+                .map(|(id, entry)| (*id, entry.revision))
+                .collect(),
+            prepared.worksheet_revisions.clone(),
+        );
+
+        state.activate_prepared_project(prepared).unwrap();
+
+        assert_eq!(state.revision_state_for_test(), prepared_revisions);
+        let (graphs, variables, worksheets) = state.revision_state_for_test();
+        assert!(!graphs.contains_key(&old_graph));
+        assert!(
+            variables
+                .keys()
+                .all(|id| new_data.variables.contains_key(id))
+        );
+        assert!(
+            worksheets
+                .keys()
+                .all(|id| new_data.worksheets.contains_key(id))
+        );
+
+        let _ = std::fs::remove_dir_all(old_root);
+        let _ = std::fs::remove_dir_all(new_root.as_path());
     }
 
     #[test]
@@ -712,6 +787,8 @@ mod tests {
         let prepared = state.prepare_project_activation(Some(&root)).unwrap();
         let imported = crate::application::database::load_database(
             &state,
+            &session.instance_id,
+            crate::node_system::document::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -719,7 +796,8 @@ mod tests {
                 infer_schema_length: None,
             },
         )
-        .unwrap();
+        .unwrap()
+        .data;
 
         let error = state.activate_prepared_project(prepared).unwrap_err();
 
@@ -757,6 +835,7 @@ mod tests {
         std::fs::write(&csv, "value\n1\n").unwrap();
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
+        let writer_project_id = state.capture_project_session().unwrap().instance_id;
         let prepared = state.prepare_project_activation(Some(&root)).unwrap();
         let entered = Arc::new(Barrier::new(2));
         let release = Arc::new(Barrier::new(2));
@@ -778,6 +857,8 @@ mod tests {
         let writer = std::thread::spawn(move || {
             let result = crate::application::database::load_database(
                 &writer_state,
+                &writer_project_id,
+                crate::node_system::document::OperationId::new(),
                 crate::schema::DatabaseEngineDTO::Csv {
                     path: csv_path,
                     delimiter: ',',
@@ -808,8 +889,11 @@ mod tests {
         std::fs::write(&initial_csv, "value\n1\n").unwrap();
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
         let imported = crate::application::database::load_database(
             &state,
+            &project_instance_id,
+            crate::node_system::document::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: initial_csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -817,7 +901,8 @@ mod tests {
                 infer_schema_length: None,
             },
         )
-        .unwrap();
+        .unwrap()
+        .data;
         let prepared = state.prepare_project_activation(Some(&root)).unwrap();
         let declaration = state
             .get_data()
@@ -1002,21 +1087,27 @@ mod tests {
         assert!(after_legacy > after_global);
 
         let database_id = "generation-db".to_string();
+        let (database_session, _lease) = state.acquire_database_write_lease().unwrap();
         state
-            .add_database(crate::database::DatabaseInstance {
-                decl: crate::database::DatabaseDecl {
-                    id: database_id.clone(),
-                    engine: crate::database::DatabaseEngine::InMemory {
-                        name: "generation".into(),
+            .add_database_for_session(
+                &database_session,
+                &database_session.instance_id,
+                crate::node_system::document::OperationId::new(),
+                crate::database::DatabaseInstance {
+                    decl: crate::database::DatabaseDecl {
+                        id: database_id.clone(),
+                        engine: crate::database::DatabaseEngine::InMemory {
+                            name: "generation".into(),
+                        },
+                        schema_version: 1,
+                        required: false,
+                        name: Some("generation".into()),
                     },
-                    schema_version: 1,
-                    required: false,
-                    name: Some("generation".into()),
+                    state: crate::database::DatabaseState::Failed {
+                        error: "test fixture".into(),
+                    },
                 },
-                state: crate::database::DatabaseState::Failed {
-                    error: "test fixture".into(),
-                },
-            })
+            )
             .unwrap();
         assert!(state.authority_generation_for_test() > after_legacy);
 

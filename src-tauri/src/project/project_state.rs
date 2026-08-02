@@ -34,6 +34,8 @@ type CompilePublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type ExecutionTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
+type TraceQueryTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
 type VariableStagingTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -49,6 +51,38 @@ enum CompileProductInvalidation {
     All,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum VariablePresence {
+    Present,
+    Deleted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct VariableRevisionEntry {
+    pub(crate) revision: crate::node_system::document::ResourceRevision,
+    pub(crate) presence: VariablePresence,
+}
+
+impl VariableRevisionEntry {
+    pub(crate) const fn present(revision: crate::node_system::document::ResourceRevision) -> Self {
+        Self {
+            revision,
+            presence: VariablePresence::Present,
+        }
+    }
+
+    pub(crate) const fn deleted(revision: crate::node_system::document::ResourceRevision) -> Self {
+        Self {
+            revision,
+            presence: VariablePresence::Deleted,
+        }
+    }
+
+    pub(crate) const fn is_present(self) -> bool {
+        matches!(self.presence, VariablePresence::Present)
+    }
+}
+
 struct ActivationGarbage {
     _publication_project_instance_id: String,
     _path: Option<String>,
@@ -59,10 +93,8 @@ struct ActivationGarbage {
         GraphResourcePath,
         crate::node_system::document::ResourceRevision,
     >,
-    _variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
-        crate::node_system::document::ResourceRevision,
-    >,
+    _variable_revisions:
+        std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
     _worksheet_revisions:
         std::collections::HashMap<String, crate::node_system::document::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
@@ -110,6 +142,7 @@ pub(super) struct ProjectionEnvironmentSnapshot {
     pub(super) authority: ProjectionEnvironmentAuthorityBasis,
     pub(super) registry: Arc<crate::node_system::registry::NodeRegistry>,
     pub(super) catalog: Arc<crate::node_system::catalog::BuiltinCatalog>,
+    pub(super) trace_sink: Arc<crate::node_system::analysis::BoundedTraceSink>,
     pub(super) project_session_id: crate::node_system::analysis::ProjectSessionId,
     pub(super) database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
@@ -314,7 +347,7 @@ pub(super) fn validate_context_revisions(
     >,
     variable_revisions: &std::collections::HashMap<
         crate::variable::VariableId,
-        crate::node_system::document::ResourceRevision,
+        VariableRevisionEntry,
     >,
     worksheet_revisions: &std::collections::HashMap<
         String,
@@ -349,14 +382,8 @@ pub(super) fn validate_context_revisions(
                 .or(Some(path.0.as_ref()))
                 .and_then(|id| uuid::Uuid::parse_str(id).ok())
                 .map(crate::variable::VariableId::from)
-                .and_then(|id| {
-                    data.variables.get(&id).map(|_| {
-                        variable_revisions
-                            .get(&id)
-                            .copied()
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
-                    })
-                }),
+                .and_then(|id| variable_revisions.get(&id).map(|entry| entry.revision)),
+            ResourceKey::Database(_) => None,
             ResourceKey::Worksheet(path) => worksheet_revisions.get(path.0.as_ref()).copied(),
         };
         if actual != Some(*expected) {
@@ -387,6 +414,10 @@ pub(super) fn validate_context_revisions(
                 .and_then(|id| uuid::Uuid::parse_str(id).ok())
                 .map(crate::variable::VariableId::from)
                 .is_some_and(|id| data.variables.contains_key(&id)),
+            ResourceKey::Database(path) => path
+                .0
+                .strip_prefix("databases/")
+                .is_some_and(|id| data.databases.contains_key(id)),
             ResourceKey::Worksheet(path) => data.worksheets.contains_key(path.0.as_ref()),
         };
         if present {
@@ -626,6 +657,7 @@ fn affected_projection_paths(
             crate::node_system::document::ResourceKey::Graph(path) => Some(path.0.to_string()),
             crate::node_system::document::ResourceKey::Function(path) => Some(path.0.to_string()),
             crate::node_system::document::ResourceKey::Variable(_)
+            | crate::node_system::document::ResourceKey::Database(_)
             | crate::node_system::document::ResourceKey::Worksheet(_) => None,
         })
         .collect::<std::collections::BTreeSet<_>>();
@@ -720,14 +752,8 @@ pub struct ProjectState {
             >,
         >,
     >,
-    pub(super) variable_revisions: Arc<
-        RwLock<
-            std::collections::HashMap<
-                crate::variable::VariableId,
-                crate::node_system::document::ResourceRevision,
-            >,
-        >,
-    >,
+    pub(super) variable_revisions:
+        Arc<RwLock<std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>>>,
     pub(super) worksheet_revisions: Arc<
         RwLock<std::collections::HashMap<String, crate::node_system::document::ResourceRevision>>,
     >,
@@ -773,6 +799,8 @@ pub struct ProjectState {
     execution_before_run_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
     #[cfg(test)]
     execution_before_commit_gate_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
+    #[cfg(test)]
+    pub(super) trace_query_after_snapshot_test_hook: Arc<RwLock<Option<TraceQueryTestHook>>>,
     #[cfg(test)]
     variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
     #[cfg(test)]
@@ -930,6 +958,8 @@ impl ProjectState {
             execution_before_run_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             execution_before_commit_gate_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            trace_query_after_snapshot_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             variable_staging_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1115,7 +1145,7 @@ impl ProjectState {
                 .map(NormalizedProjectRoot::from_project_path)
                 .transpose()
                 .map_err(|error| error.to_string())?;
-            let (registry, catalog, project_session_id, mut database_schemas) = {
+            let (registry, catalog, trace_sink, project_session_id, mut database_schemas) = {
                 let store = self.project_store.read().unwrap();
                 let schemas = store
                     .databases
@@ -1143,6 +1173,7 @@ impl ProjectState {
                 (
                     Arc::clone(&store.node_registry),
                     Arc::clone(&store.catalog),
+                    Arc::clone(&store.trace_sink),
                     store.project_session_id.clone(),
                     schemas,
                 )
@@ -1233,6 +1264,7 @@ impl ProjectState {
                 authority,
                 registry,
                 catalog,
+                trace_sink,
                 project_session_id,
                 database_schemas,
                 #[cfg(test)]
@@ -1695,9 +1727,22 @@ impl ProjectState {
     ) {
         (
             self.graph_revisions.read().unwrap().clone(),
-            self.variable_revisions.read().unwrap().clone(),
+            self.variable_revisions
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(id, entry)| (*id, entry.revision))
+                .collect(),
             self.worksheet_revisions.read().unwrap().clone(),
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn variable_revision_entry_for_test(
+        &self,
+        id: &crate::variable::VariableId,
+    ) -> Option<VariableRevisionEntry> {
+        self.variable_revisions.read().unwrap().get(id).copied()
     }
 
     #[cfg(test)]
@@ -1771,6 +1816,11 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn set_graph_rename_io_checkpoint(&self, hook: LifecycleLockTestHook) {
         *self.graph_rename_io_checkpoint.write().unwrap() = Some(hook);
+    }
+
+    pub fn cancel_graph_run(&self, run_id: crate::node_system::analysis::RunId) -> bool {
+        let (runs, project_session_id) = self.current_run_registry();
+        runs.cancel_run(&project_session_id, run_id)
     }
 
     pub(super) fn current_run_registry(
@@ -2054,6 +2104,71 @@ impl ProjectState {
             worksheet_id.to_string(),
             crate::node_system::document::ResourceRevision::INITIAL,
         );
+    }
+
+    pub fn localized_catalog_snapshot(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        locale: &str,
+    ) -> Result<crate::node_system::catalog::LocalizedCatalogDto, ProjectFilesystemError> {
+        use std::sync::atomic::Ordering;
+
+        self.ensure_project_operational()?;
+        let generation = self.activation_generation.load(Ordering::Acquire);
+        if generation % 2 != 0 {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "project activation is changing during Catalog snapshot".into(),
+            });
+        }
+
+        let (registry, catalog, publication_revision) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            let path = self.project_path.read().unwrap();
+            let store = self.project_store.read().unwrap();
+            let identity = self.activation_identity.read().unwrap();
+            if publication.project_instance_id != project_instance_id.as_str()
+                || &identity.project_instance_id != project_instance_id
+                || identity.project_session_id != store.project_session_id
+                || path.is_none()
+            {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "project changed before Catalog snapshot".into(),
+                });
+            }
+            (
+                Arc::clone(&store.node_registry),
+                Arc::clone(&store.catalog),
+                publication.resource_revision,
+            )
+        };
+
+        let captured_generation = self.activation_generation.load(Ordering::Acquire);
+        if captured_generation != generation || captured_generation % 2 != 0 {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "project changed during Catalog snapshot".into(),
+            });
+        }
+
+        let registry_fingerprint = registry.fingerprint().to_string();
+        let localized = catalog.localize(registry.as_ref(), locale);
+
+        self.ensure_project_operational()?;
+        let final_generation = self.activation_generation.load(Ordering::Acquire);
+        let final_identity = self.activation_identity.read().unwrap();
+        if final_generation != captured_generation
+            || final_generation % 2 != 0
+            || &final_identity.project_instance_id != project_instance_id
+        {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "project changed while localizing Catalog snapshot".into(),
+            });
+        }
+
+        Ok(localized.into_dto(
+            project_instance_id.as_str(),
+            registry_fingerprint,
+            publication_revision,
+        ))
     }
 
     pub fn capture_project_session(&self) -> Result<ProjectSession, ProjectFilesystemError> {
@@ -2376,17 +2491,29 @@ impl ProjectState {
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
                     data.graphs.remove(&path);
                     graph_revisions.remove(&path);
-                    data.variables.retain(|_, variable| {
-                        !variable_scope_references_path(&variable.scope, path.as_str())
-                    });
-                    variable_revisions.retain(|id, _| data.variables.contains_key(id));
+                    let removed_ids = data
+                        .variables
+                        .iter()
+                        .filter(|(_, variable)| {
+                            variable_scope_references_path(&variable.scope, path.as_str())
+                        })
+                        .map(|(id, _)| *id)
+                        .collect::<Vec<_>>();
+                    for id in removed_ids {
+                        data.variables.remove(&id);
+                        let revision = variable_revisions
+                            .get(&id)
+                            .map(|entry| entry.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+                            .next();
+                        variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
+                    }
                 }
                 ResourceDocumentPatch::UnloadGraph { path } => {
                     data.graphs.remove(&path);
                     data.variables.retain(|_, variable| {
                         !variable_scope_references_path(&variable.scope, path.as_str())
                     });
-                    variable_revisions.retain(|id, _| data.variables.contains_key(id));
                 }
                 ResourceDocumentPatch::MoveGraph {
                     from,
@@ -2413,25 +2540,30 @@ impl ProjectState {
                         data.variables.insert(id, variable);
                         let revision = variable_revisions
                             .get(&id)
-                            .copied()
+                            .map(|entry| entry.revision)
                             .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
                             .next();
-                        variable_revisions.insert(id, revision);
+                        variable_revisions.insert(id, VariableRevisionEntry::present(revision));
                     }
                 }
                 ResourceDocumentPatch::PatchVariables { updates, removals } => {
                     for id in removals {
                         data.variables.remove(&id);
-                        variable_revisions.remove(&id);
+                        let revision = variable_revisions
+                            .get(&id)
+                            .map(|entry| entry.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+                            .next();
+                        variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
                     }
                     for (id, variable) in updates {
                         data.variables.insert(id, variable);
                         let revision = variable_revisions
                             .get(&id)
-                            .copied()
+                            .map(|entry| entry.revision)
                             .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
                             .next();
-                        variable_revisions.insert(id, revision);
+                        variable_revisions.insert(id, VariableRevisionEntry::present(revision));
                     }
                 }
                 ResourceDocumentPatch::UpsertWorksheet { id, mut document } => {
@@ -2807,7 +2939,6 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        self.graph_revisions.write().unwrap().remove(graph_path);
         self.history.write().unwrap().clear();
         publication.advance_authority_generation();
         if removed
@@ -3003,7 +3134,7 @@ impl ProjectState {
                     key,
                     variable_revisions
                         .get(id)
-                        .copied()
+                        .map(|entry| entry.revision)
                         .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(*id, variable.clone());
@@ -3407,10 +3538,21 @@ impl ProjectState {
         graph_revisions.insert(operation.owner.graph_path.clone(), revision);
         if let Some(local_variables) = local_variables {
             for (id, variable) in local_variables {
-                data.variables.insert(id, variable);
-                variable_revisions
-                    .entry(id)
-                    .or_insert(crate::node_system::document::ResourceRevision::INITIAL);
+                match variable_revisions.get(&id).copied() {
+                    Some(entry) if !entry.is_present() => {}
+                    Some(_) => {
+                        data.variables.insert(id, variable);
+                    }
+                    None => {
+                        data.variables.insert(id, variable);
+                        variable_revisions.insert(
+                            id,
+                            VariableRevisionEntry::present(
+                                crate::node_system::document::ResourceRevision::INITIAL,
+                            ),
+                        );
+                    }
+                }
             }
         }
         lifecycle.commit_guard(guard, GraphLifecycleIntent::Load)?;
@@ -3600,7 +3742,6 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        self.graph_revisions.write().unwrap().remove(graph_path);
         self.history.write().unwrap().clear();
         lifecycle.commit_guard(&mut guard, GraphLifecycleIntent::Unload)?;
         let variables_removed = data.variables.len() != variable_count;
@@ -4229,10 +4370,9 @@ impl ProjectState {
             );
         }
         for id in &ids {
-            let Some(variable) = proposed_data.variables.get(id) else {
-                continue;
-            };
-            if let Some(graph_path) = variable_scope_graph_path(&variable.scope)
+            let scope = variable_history_scope(&proposed_data, &transaction, *id, undo)
+                .map_err(|error| MutationConflict::History(error.into()))?;
+            if let Some(graph_path) = variable_scope_graph_path(&scope)
                 .map_err(|error| MutationConflict::History(error.into()))?
             {
                 let revision = graph_revisions.get(&graph_path).copied().ok_or_else(|| {
@@ -4248,8 +4388,9 @@ impl ProjectState {
                 );
             }
         }
-        let mutations = variable_effect_filesystem_mutations(&proposed_data, &ids)
-            .map_err(|error| MutationConflict::History(error.into()))?;
+        let mutations =
+            variable_effect_filesystem_mutations(&proposed_data, &ids, &transaction, undo)
+                .map_err(|error| MutationConflict::History(error.into()))?;
         let context = ProjectTransactionContext {
             session,
             operation_id: request.operation_id,
@@ -4542,7 +4683,7 @@ impl ProjectState {
                     key,
                     variable_revisions
                         .get(&id)
-                        .copied()
+                        .map(|entry| entry.revision)
                         .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(id, current.clone());
@@ -4858,8 +4999,18 @@ impl ProjectState {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
         let cancellation = crate::node_system::runtime::CancellationToken::new();
+        let store = self.project_store.read().unwrap();
+        let runs = Arc::clone(&store.runs);
+        let session_id = store.project_session_id.clone();
+        let trace_sink = Arc::clone(&store.trace_sink);
+        let pre_run = runs
+            .track_pre_run(session_id.clone(), cancellation.clone())
+            .map_err(|error| error.to_string())?;
+        drop(store);
+
         self.load_function_resources(&cancellation)?;
-        let compilation = self.get_or_compile_current(graph_path)?;
+        let compilation =
+            self.get_or_compile_current(graph_path, &session_id, trace_sink.as_ref())?;
         let plan = compilation
             .plan
             .as_ref()
@@ -4894,6 +5045,7 @@ impl ProjectState {
             execution.functions.as_ref(),
             &resource_snapshot.compile,
             execution.session_id.clone(),
+            trace_sink.as_ref(),
             &compile_cancellation,
             &mut compiled_parameters,
         )?;
@@ -4932,10 +5084,6 @@ impl ProjectState {
             .map_err(|error| error.to_string())?;
         self.run_execution_before_final_gate_test_hook();
         self.validate_execution_authority(&compilation.authority)?;
-        let pre_run = execution
-            .runs
-            .track_pre_run(execution.session_id.clone(), cancellation.clone())
-            .map_err(|error| error.to_string())?;
         self.run_execution_before_run_test_hook();
         let finalize =
             |result: &mut crate::node_system::runtime::RunResult,
@@ -4965,6 +5113,7 @@ impl ProjectState {
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
         .with_run_registry(execution.runs.as_ref())
+        .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
         .with_result_store(&execution.results)
         .with_success_finalizer(&finalize)
@@ -5058,7 +5207,7 @@ impl ProjectState {
             })?;
             let revision = variable_revisions
                 .get(&id)
-                .copied()
+                .map(|entry| entry.revision)
                 .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
             if revision != effect.expected_revision
                 || serde_json::to_value(current).map_err(variable_effect_invalid_error)?
@@ -5472,18 +5621,50 @@ fn variable_scope_graph_path(
     }
 }
 
+fn variable_history_scope(
+    data: &ProjectData,
+    transaction: &ProjectHistoryTransaction,
+    id: crate::variable::VariableId,
+    undo: bool,
+) -> Result<crate::variable::VariableScope, String> {
+    if let Some(variable) = data.variables.get(&id) {
+        return Ok(variable.scope.clone());
+    }
+    let snapshots = transaction
+        .variable_effect_snapshots
+        .as_ref()
+        .ok_or_else(|| "durable variable-effect history is missing snapshots".to_string())?;
+    let opposite = if undo {
+        &snapshots.after
+    } else {
+        &snapshots.before
+    };
+    let key = crate::node_system::document::VariableResourceKey(format!("variables/{id}").into());
+    let snapshot = opposite
+        .get(&key)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| format!("variable history cannot recover scope for '{id}'"))?;
+    let variable: crate::variable::VariableInstance =
+        serde_json::from_value(snapshot.clone()).map_err(|error| error.to_string())?;
+    if variable.id != id {
+        return Err(format!(
+            "variable history snapshot does not match resource 'variables/{id}'"
+        ));
+    }
+    Ok(variable.scope)
+}
+
 fn variable_effect_filesystem_mutations(
     data: &ProjectData,
     ids: &[crate::variable::VariableId],
+    transaction: &ProjectHistoryTransaction,
+    undo: bool,
 ) -> Result<Vec<StagedFilesystemMutation>, String> {
     let mut writes_globals = false;
     let mut local_graph_paths = std::collections::BTreeSet::new();
     for id in ids {
-        let Some(variable) = data.variables.get(id) else {
-            writes_globals = true;
-            continue;
-        };
-        match variable_scope_graph_path(&variable.scope)? {
+        let scope = variable_history_scope(data, transaction, *id, undo)?;
+        match variable_scope_graph_path(&scope)? {
             Some(path) => {
                 local_graph_paths.insert(path);
             }
@@ -5731,10 +5912,8 @@ struct ExecutionSnapshot {
     document: crate::node_system::document::GraphDocument,
     data: ProjectData,
     database_instances: std::collections::HashMap<String, crate::database::DatabaseInstance>,
-    variable_revisions: std::collections::HashMap<
-        crate::variable::VariableId,
-        crate::node_system::document::ResourceRevision,
-    >,
+    variable_revisions:
+        std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
     project_root: Option<NormalizedProjectRoot>,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
@@ -5851,7 +6030,7 @@ fn snapshot_execution_resources(
             snapshot
                 .variable_revisions
                 .get(id)
-                .copied()
+                .map(|entry| entry.revision)
                 .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
         );
     }
@@ -5988,7 +6167,7 @@ pub(super) fn snapshot_project_resources(
             Arc::new(variable),
             variable_revisions
                 .get(&id)
-                .copied()
+                .map(|entry| entry.revision)
                 .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
         );
     }
@@ -6032,7 +6211,7 @@ fn project_documents(
     data: &ProjectData,
     variable_revisions: &std::collections::HashMap<
         crate::variable::VariableId,
-        crate::node_system::document::ResourceRevision,
+        VariableRevisionEntry,
     >,
 ) -> ProjectDocumentState {
     ProjectDocumentState::new(
@@ -6058,19 +6237,24 @@ fn project_documents(
             .collect(),
         variable_revisions
             .iter()
-            .map(|(id, revision)| {
-                (
+            .filter_map(|(id, entry)| {
+                let value = if entry.is_present() {
+                    Some(
+                        serde_json::to_value(data.variables.get(id)?)
+                            .expect("variable documents are serializable"),
+                    )
+                } else {
+                    None
+                };
+                Some((
                     crate::node_system::document::VariableResourceKey(
                         format!("variables/{id}").into(),
                     ),
                     crate::node_system::document::VariableDocument {
-                        revision: *revision,
-                        value: data.variables.get(id).map(|variable| {
-                            serde_json::to_value(variable)
-                                .expect("variable documents are serializable")
-                        }),
+                        revision: entry.revision,
+                        value,
                     },
-                )
+                ))
             })
             .collect(),
     )
@@ -6090,7 +6274,7 @@ fn try_project_document_revision(
             .variables
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Worksheet(_) => None,
+        ResourceKey::Database(_) | ResourceKey::Worksheet(_) => None,
     }
 }
 
@@ -6106,7 +6290,7 @@ fn replace_project_documents(
     data: &mut ProjectData,
     variable_revisions: &mut std::collections::HashMap<
         crate::variable::VariableId,
-        crate::node_system::document::ResourceRevision,
+        VariableRevisionEntry,
     >,
     mut documents: ProjectDocumentState,
 ) {
@@ -6128,17 +6312,25 @@ fn replace_project_documents(
             continue;
         };
         let variable_id = crate::variable::VariableId::from(uuid);
-        match document.value {
+        let presence = match document.value {
             Some(value) => {
                 let variable = serde_json::from_value(value)
                     .expect("history retains valid variable documents");
                 data.variables.insert(variable_id, variable);
+                VariablePresence::Present
             }
             None => {
                 data.variables.remove(&variable_id);
+                VariablePresence::Deleted
             }
-        }
-        variable_revisions.insert(variable_id, document.revision);
+        };
+        variable_revisions.insert(
+            variable_id,
+            VariableRevisionEntry {
+                revision: document.revision,
+                presence,
+            },
+        );
     }
 }
 
@@ -6147,6 +6339,7 @@ pub(super) fn publish_function_plans(
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
     session_id: crate::node_system::analysis::ProjectSessionId,
+    trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
 ) -> Result<crate::node_system::runtime::FunctionPlanGeneration, String> {
@@ -6156,7 +6349,7 @@ pub(super) fn publish_function_plans(
         resources.schema_resolvers(),
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     )
-    .with_observability(session_id, &crate::node_system::analysis::NOOP_TRACE_SINK);
+    .with_observability(session_id, trace_sink);
     let mut entries = Vec::with_capacity(resources.function_graphs.len());
     for (document_path, document) in &resources.function_graphs {
         let snapshot = compiler.snapshot(document_path.clone(), document);
@@ -6516,6 +6709,7 @@ mod run_parameter_tests {
             &store,
             &resources,
             session,
+            &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
             &mut parameters,
         )

@@ -20,6 +20,7 @@ pub mod project_scan;
 pub mod project_session;
 pub mod project_state;
 pub mod project_state_database;
+pub mod project_traces;
 pub mod project_writers;
 pub mod resource_mutations;
 
@@ -45,11 +46,15 @@ pub use project_io::*;
 pub use project_lifecycle::*;
 pub use project_metadata::*;
 pub use project_picker_task::*;
+pub use project_reads::{
+    CatalogMutationResource, CatalogMutationValidationSnapshot, CatalogProjectSnapshot,
+};
 pub use project_registry::*;
 pub use project_scan::*;
 pub use project_session::*;
 pub use project_state::*;
 pub use project_store::*;
+pub use project_traces::*;
 
 pub use project_watcher::*;
 pub use resource_patch::*;
@@ -59,7 +64,36 @@ pub use worksheet_io::*;
 #[cfg(test)]
 pub(crate) mod fixtures {
     use super::{GraphResourcePath, ProjectData, ProjectError, WorksheetDocument};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    pub(crate) struct TempProject {
+        state: Option<super::ProjectState>,
+        root: PathBuf,
+    }
+
+    impl TempProject {
+        pub(crate) fn activate(label: &str, project: ProjectData) -> Self {
+            let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+            let mut fixture = Self { state: None, root };
+            std::fs::create_dir_all(&fixture.root).unwrap();
+            write_project(&project, fixture.root.to_string_lossy().as_ref()).unwrap();
+            let state = super::ProjectState::new();
+            state.activate_project_fixture(fixture.root.to_string_lossy().into_owned(), project);
+            fixture.state = Some(state);
+            fixture
+        }
+
+        pub(crate) fn state(&self) -> &super::ProjectState {
+            self.state.as_ref().expect("temporary project is active")
+        }
+    }
+
+    impl Drop for TempProject {
+        fn drop(&mut self) {
+            drop(self.state.take());
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
 
     pub(crate) fn write_project(
         project_data: &ProjectData,
@@ -136,5 +170,7 @@ pub(crate) mod fixtures {
 
 #[cfg(test)]
 mod production_tests;
+#[cfg(test)]
+mod project_trace_query_tests;
 #[cfg(test)]
 mod structured_control_production_tests;

@@ -5,6 +5,7 @@ import type { GraphExecutionState } from '@/shared/types/ui';
 function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
   return {
     status: 'idle',
+    runId: null,
     nodeStates: new Map(),
     completedConnections: new Set(),
     flowingConnections: new Set(),

@@ -69,6 +69,23 @@ impl ProjectRunRegistry {
         })
     }
 
+    pub fn cancel_run(&self, project: &ProjectSessionId, run_id: RunId) -> bool {
+        let cancellation = self
+            .runs
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .active
+            .get(project)
+            .and_then(|runs| runs.get(&run_id))
+            .cloned();
+        if let Some(cancellation) = cancellation {
+            cancellation.cancel();
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn begin_drain(self: &Arc<Self>, project: &ProjectSessionId) -> ProjectRunDrainGuard {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
         let drain_count = runs.draining.entry(project.clone()).or_default();
@@ -323,6 +340,26 @@ impl std::error::Error for ProjectRunRegistrationError {}
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[test]
+    fn cancel_run_targets_only_the_requested_project_run() {
+        let registry = ProjectRunRegistry::new();
+        let target_session = ProjectSessionId::new("target");
+        let other_session = ProjectSessionId::new("other");
+        let target = CancellationToken::new();
+        let other = CancellationToken::new();
+        let _target_run = registry
+            .track(target_session.clone(), RunId::new(41), target.clone())
+            .unwrap();
+        let _other_run = registry
+            .track(other_session.clone(), RunId::new(41), other.clone())
+            .unwrap();
+
+        assert!(registry.cancel_run(&target_session, RunId::new(41)));
+        assert!(target.is_cancelled());
+        assert!(!other.is_cancelled());
+        assert!(!registry.cancel_run(&target_session, RunId::new(99)));
+    }
 
     #[test]
     fn nested_drain_guards_keep_admission_closed_until_last_drop() {

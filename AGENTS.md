@@ -33,7 +33,9 @@ the architecture changes.
 - Do not hold global locks during I/O, sleeps, model loading, or long-running
   inference. Take short lock snapshots and perform work outside the lock.
 - Graph resources are identified by `events/...` and `functions/...` paths;
-  UUIDs identify nodes, pins, and connections only.
+  UUIDs identify nodes, pins, connections, and UUID-backed variable resources.
+  Variable resources serialize as `variables/{VariableId}` and database resources as
+  `databases/{database-id}`; frontend code treats every resource path as opaque.
 
 ## React organization
 

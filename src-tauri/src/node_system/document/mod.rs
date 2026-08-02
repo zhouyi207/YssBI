@@ -11,13 +11,14 @@ mod transaction;
 
 pub use error::DocumentError;
 pub use history::{
-    FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionResourceKey,
-    FunctionSignature, GraphResourceLifecycleKind, GraphResourceLifecyclePatch,
-    GraphResourceLifecycleState, GraphResourceMoveHistoryPatch, HistoryError, HistoryMutation,
-    HistoryPersistencePolicy, HistoryStatusDto, ProjectDocumentState, ProjectHistory,
-    ProjectHistoryTransaction, ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey,
-    ResourceKind, ResourcePatch, ResourcePathMovePatch, VariableDocument, VariableDocumentPatch,
-    VariableEffectHistorySnapshots, VariableResourceKey, WorksheetResourceKey,
+    DatabaseDocumentPatch, DatabaseResourceKey, FunctionDocument, FunctionDocumentPatch,
+    FunctionParameter, FunctionResourceKey, FunctionSignature, GraphResourceLifecycleKind,
+    GraphResourceLifecyclePatch, GraphResourceLifecycleState, GraphResourceMoveHistoryPatch,
+    HistoryError, HistoryMutation, HistoryPersistencePolicy, HistoryStatusDto,
+    ProjectDocumentState, ProjectHistory, ProjectHistoryTransaction, ResourceDeltaEvent,
+    ResourceDocumentPatch, ResourceKey, ResourceKind, ResourcePatch, ResourcePathMovePatch,
+    VariableDocument, VariableDocumentPatch, VariableEffectHistorySnapshots, VariableResourceKey,
+    WorksheetResourceKey,
 };
 pub use ids::{
     ConnectionId, GraphRevision, HistoryEntryId, NodeId, OperationId, PortInstanceId,

@@ -8,7 +8,7 @@ import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { NodePalette } from "../../Layout/NodePalette";
-import type { NodeCatalogItem } from "@/features/domain/nodeCatalog";
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
@@ -31,16 +31,12 @@ export default function CanvasOverlays({
         setContextMenu,
         setPendingConnection,
         pendingConnection,
-        variables,
-        functions,
         tabs,
         activeTabId,
         groupId,
         executeGraph,
         cancelGraphExecution,
         clearGraphArtifacts,
-        setCanvas,
-        createNode,
     } = useEditorGroup({ withCanvasUi: true });
 
     const {
@@ -49,22 +45,18 @@ export default function CanvasOverlays({
         canvasElementRef,
         groupId,
         activeTabId,
-        functions,
         pendingConnection,
         setContextMenu,
         setPendingConnection,
-        createNode,
-        setCanvas,
     });
 
     const tabId = activeTabId ?? "";
-    const onPaletteSelect = (item: NodeCatalogItem) =>
-        contextMenu && handleNodePaletteSelect(item, contextMenu);
+    const onPaletteSelect = (descriptor: NodeCreationDescriptor, locale: string) => {
+        if (contextMenu) void handleNodePaletteSelect(descriptor, locale, contextMenu);
+    };
 
     const activeTabType = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type;
     const isEventTab = activeTabType === "event";
-    const graphKind: "event" | "function" | undefined =
-        activeTabType === "event" ? "event" : activeTabType === "function" ? "function" : undefined;
 
     return (
         <>
@@ -78,7 +70,7 @@ export default function CanvasOverlays({
                 <CanvasExecutionToolbar
                     graphPath={tabId}
                     onExecute={() => executeGraph(tabId)}
-                    onCancelExecution={() => void cancelGraphExecution()}
+                    onCancelExecution={() => void cancelGraphExecution(tabId)}
                     onClearArtifacts={() => void clearGraphArtifacts(tabId)}
                 />
             )}
@@ -90,11 +82,6 @@ export default function CanvasOverlays({
                         x={contextMenu.x}
                         y={contextMenu.y}
                         onSelect={onPaletteSelect}
-                        filterPin={pendingConnection}
-                        variables={variables}
-                        functions={functions}
-                        graphKind={graphKind}
-                        graphPath={activeTabId ?? undefined}
                     />
                 </div>,
                 getOverlayPortalRoot(),

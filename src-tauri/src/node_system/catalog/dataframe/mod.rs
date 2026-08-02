@@ -14,7 +14,7 @@ use crate::node_system::compiler::{
 use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
     CompiledParameterHandle, RelationalBackendId, RelationalFragmentId, RelationalOperator,
-    RelationalOperatorIndex, ResourceId,
+    RelationalOperatorIndex, RelationalRename, ResourceId,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
@@ -63,6 +63,10 @@ fn registered_node(spec: &NodeSpec) -> RegisteredNode {
         InterfaceKind::Limit => RegisteredNode::leaf(
             Arc::new(protocol),
             Arc::new(NodeImplementation::new(LimitLowerer)),
+        ),
+        InterfaceKind::Rename => RegisteredNode::leaf(
+            Arc::new(protocol),
+            Arc::new(NodeImplementation::new(RenameLowerer)),
         ),
         _ => leaf(protocol, spec.kernel),
     }
@@ -118,6 +122,26 @@ fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
                 ),
             ],
             vec![bounded_positive_integer_parameter("rows", 100, 1_000_000)],
+        ),
+        Rename => (
+            vec![
+                streaming_input("source", dataframe_type(), None),
+                streaming_output(
+                    "result",
+                    dataframe_type(),
+                    Some(SchemaExpr::Rename {
+                        input: Box::new(SchemaExpr::Input(port_key("source"))),
+                        mapping: RenameExpr::FromParameters {
+                            from: sid("from", ParameterKey::new),
+                            to: sid("to", ParameterKey::new),
+                        },
+                    }),
+                ),
+            ],
+            vec![
+                required_text_parameter("from"),
+                required_text_parameter("to"),
+            ],
         ),
         Decompose => (
             vec![
@@ -386,6 +410,16 @@ fn text_parameter(key: &'static str, multiline: bool) -> ParameterSpec {
     )
 }
 
+fn required_text_parameter(key: &'static str) -> ParameterSpec {
+    parameter(
+        key,
+        concrete("core.string"),
+        ParameterEditorSpec::Text { multiline: false },
+        None,
+        vec![ParameterConstraint::Required],
+    )
+}
+
 fn select_parameter(key: &'static str) -> ParameterSpec {
     parameter(
         key,
@@ -474,6 +508,7 @@ fn category(kind: InterfaceKind) -> &'static str {
     match kind {
         InterfaceKind::DataframeSource
         | InterfaceKind::Limit
+        | InterfaceKind::Rename
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
         | InterfaceKind::Filter => "dataframe",
@@ -507,6 +542,67 @@ impl NodeLowerer for SourceLowerer {
             FragmentMetadata::default(),
         )
     }
+}
+
+struct RenameLowerer;
+
+impl NodeLowerer for RenameLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let from = rename_parameter(context, "from")?;
+        let to = rename_parameter(context, "to")?;
+        let input = context
+            .inputs
+            .iter()
+            .find(|(address, _)| {
+                matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
+            })
+            .map(|(address, _)| address.clone())
+            .ok_or_else(|| LoweringError::new("rename input 'source' was not materialized"))?;
+        let result = context
+            .outputs
+            .iter()
+            .find(|(address, _)| {
+                matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
+            })
+            .map(|(address, _)| address.clone())
+            .ok_or_else(|| LoweringError::new("rename output 'result' was not materialized"))?;
+        relational_node(
+            context,
+            vec![
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Rename {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([RelationalRename { from, to }]),
+                },
+            ],
+            RelationalOperatorIndex::new(1),
+            Box::new([RelationalInputBinding {
+                port: input,
+                operator: RelationalOperatorIndex::new(0),
+            }]),
+            FragmentMetadata {
+                results: Box::new([FragmentResult {
+                    name: format!("node.{}.result", context.node_id).into(),
+                    output: result,
+                }]),
+                ..FragmentMetadata::default()
+            },
+        )
+    }
+}
+
+fn rename_parameter(
+    context: &LoweringContext<'_>,
+    key: &'static str,
+) -> Result<Box<str>, LoweringError> {
+    context
+        .parameters
+        .get(&ParameterKey::new(key).expect("static parameter key"))
+        .and_then(serde_json::Value::as_str)
+        .map(Into::into)
+        .ok_or_else(|| LoweringError::new(format!("rename parameter '{key}' must be a string")))
 }
 
 struct LimitLowerer;
@@ -634,25 +730,29 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
     let description = leak(format!("nodes.{}.description", spec.id));
     let documentation = leak(format!("nodes.{}.documentation", spec.id));
     let aliases = leak(format!("nodes.{}.aliases", spec.id));
+    let (en_description, zh_description, en_documentation, zh_documentation) =
+        if spec.interface == InterfaceKind::Rename {
+            (
+                "Renames one DataFrame column.",
+                "重命名数据框中的一列。",
+                "Renames the column identified by 'from' to 'to'.",
+                "将“源列”指定的列重命名为“目标列”。",
+            )
+        } else {
+            (
+                "Performs a typed tabular operation.",
+                "执行类型化的表格数据操作。",
+                "Uses stable ports and the tabular runtime API.",
+                "使用稳定端口和表格运行时 API。",
+            )
+        };
     out.extend([
         ("en-US", title, Text(spec.title)),
         ("zh-CN", title, Text(spec.zh_title)),
-        (
-            "en-US",
-            description,
-            Text("Performs a typed tabular operation."),
-        ),
-        ("zh-CN", description, Text("执行类型化的表格数据操作。")),
-        (
-            "en-US",
-            documentation,
-            Text("Uses stable ports and the tabular runtime API."),
-        ),
-        (
-            "zh-CN",
-            documentation,
-            Text("使用稳定端口和表格运行时 API。"),
-        ),
+        ("en-US", description, Text(en_description)),
+        ("zh-CN", description, Text(zh_description)),
+        ("en-US", documentation, Text(en_documentation)),
+        ("zh-CN", documentation, Text(zh_documentation)),
         ("en-US", aliases, Aliases(spec.aliases)),
         ("zh-CN", aliases, Aliases(spec.zh_aliases)),
     ]);
@@ -680,7 +780,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     }
     for key in [
         "dataframe",
-        "source",
         "columns",
         "series",
         "start",
@@ -697,6 +796,14 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("en-US", label, Text(key)));
         out.push(("zh-CN", label, Text(key)));
     }
+    for (key, en, zh) in [
+        ("source", "Source", "源数据框"),
+        ("result", "Result", "结果"),
+    ] {
+        let label = leak(format!("ports.{key}.label"));
+        out.push(("en-US", label, Text(en)));
+        out.push(("zh-CN", label, Text(zh)));
+    }
     for key in [
         "dataframe",
         "column",
@@ -712,6 +819,29 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", title, Text(key)));
         out.push(("en-US", description, Text("Typed node parameter.")));
         out.push(("zh-CN", description, Text("类型化节点参数。")));
+    }
+    for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "from",
+            "Source column",
+            "源列",
+            "Column name to rename.",
+            "要重命名的列名。",
+        ),
+        (
+            "to",
+            "Destination column",
+            "目标列",
+            "New column name.",
+            "新的列名。",
+        ),
+    ] {
+        let title = leak(format!("parameters.{key}.title"));
+        let description = leak(format!("parameters.{key}.description"));
+        out.push(("en-US", title, Text(en_title)));
+        out.push(("zh-CN", title, Text(zh_title)));
+        out.push(("en-US", description, Text(en_description)));
+        out.push(("zh-CN", description, Text(zh_description)));
     }
 }
 

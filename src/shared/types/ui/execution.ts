@@ -60,6 +60,7 @@ export interface PinResultState {
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
+  runId: string | null;
   nodeStates: Map<string, NodeExecutionState>;
   /** data 取数阶段已声明的 input 连线（ConnectionActive） */
   completedConnections: Set<string>;

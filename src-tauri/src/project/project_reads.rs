@@ -1,7 +1,71 @@
+use crate::node_system::catalog::{
+    BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgsDto,
+};
+use crate::node_system::document::{FunctionSignature, ResourceRevision};
+use crate::node_system::protocol::NodeTypeId;
+use crate::node_system::registry::NodeRegistry;
 use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
     ProjectState, WorksheetDocument,
 };
+use crate::variable::VariableScope;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+#[derive(Debug)]
+pub struct CatalogProjectSnapshot {
+    pub project_instance_id: ProjectInstanceId,
+    pub resource_publication_revision: u64,
+    pub registry: Arc<NodeRegistry>,
+    pub catalog: Arc<BuiltinCatalog>,
+    pub resources: Vec<CatalogResourceEntry>,
+    #[allow(dead_code)]
+    authority_generation: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CatalogMutationValidationSnapshot {
+    pub project_instance_id: ProjectInstanceId,
+    pub authority_generation: u64,
+    pub resources: BTreeMap<CatalogResourcePath, CatalogMutationResource>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CatalogMutationResource {
+    Function {
+        revision: ResourceRevision,
+        signature: FunctionSignature,
+        allowed_node_type_id: NodeTypeId,
+        parameter_binding: Box<str>,
+    },
+    Variable {
+        revision: ResourceRevision,
+        scope: VariableScope,
+        allowed_node_type_ids: [NodeTypeId; 2],
+        parameter_binding: Box<str>,
+    },
+    Database {
+        authority_revision: ResourceRevision,
+        allowed_node_type_id: NodeTypeId,
+        parameter_binding: Box<str>,
+    },
+}
+
+struct CatalogCapture {
+    project_instance_id: ProjectInstanceId,
+    resource_publication_revision: u64,
+    authority_generation: u64,
+    registry: Arc<NodeRegistry>,
+    catalog: Arc<BuiltinCatalog>,
+    index: ProjectIndex,
+    data: ProjectData,
+    loaded_variable_revisions: std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::project::project_state::VariableRevisionEntry,
+    >,
+    database_authority_revisions: std::collections::HashMap<String, u64>,
+    runtime_database_ids: BTreeSet<String>,
+}
 
 impl ProjectState {
     pub fn read_project_index(
@@ -11,6 +75,25 @@ impl ProjectState {
         read_project_index_with(self, expected_project_instance_id, |root| {
             crate::project::project_io::read_project_index_from_root(root).map_err(read_error)
         })
+    }
+
+    pub fn catalog_snapshot(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+    ) -> Result<CatalogProjectSnapshot, ProjectFilesystemError> {
+        catalog_snapshot_with_reader(self, expected_project_instance_id, |root| {
+            crate::project::project_io::read_project_index_from_root(root).map_err(read_error)
+        })
+    }
+
+    pub fn catalog_mutation_validation_snapshot(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+    ) -> Result<CatalogMutationValidationSnapshot, ProjectFilesystemError> {
+        let capture = capture_catalog_with_reader(self, expected_project_instance_id, |root| {
+            crate::project::project_io::read_project_index_from_root(root).map_err(read_error)
+        })?;
+        Ok(build_catalog_snapshots(capture).1)
     }
 
     pub fn load_worksheet_document(
@@ -29,6 +112,283 @@ impl ProjectState {
         })?;
         self.validate_project_session(&session)?;
         Ok(document)
+    }
+}
+
+fn catalog_snapshot_with_reader(
+    state: &ProjectState,
+    expected_project_instance_id: &ProjectInstanceId,
+    read: impl FnOnce(&std::path::Path) -> Result<ProjectIndex, ProjectFilesystemError>,
+) -> Result<CatalogProjectSnapshot, ProjectFilesystemError> {
+    let capture = capture_catalog_with_reader(state, expected_project_instance_id, read)?;
+    Ok(build_catalog_snapshots(capture).0)
+}
+
+fn capture_catalog_with_reader(
+    state: &ProjectState,
+    expected_project_instance_id: &ProjectInstanceId,
+    read: impl FnOnce(&std::path::Path) -> Result<ProjectIndex, ProjectFilesystemError>,
+) -> Result<CatalogCapture, ProjectFilesystemError> {
+    let session = expected_session(state, expected_project_instance_id)?;
+    let (resource_publication_revision, authority_generation) = {
+        let publication = state.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != session.instance_id.as_str() {
+            return Err(stale_catalog("project changed before Catalog capture"));
+        }
+        (
+            publication.resource_revision,
+            publication.authority_generation(),
+        )
+    };
+
+    let capture = {
+        let _lease = state.filesystem().acquire(session.root.clone())?;
+        state.validate_project_session(&session)?;
+        let index = read(session.root.as_path())?;
+        state.validate_project_session(&session)?;
+
+        let publication = state.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != session.instance_id.as_str()
+            || publication.resource_revision != resource_publication_revision
+            || publication.authority_generation() != authority_generation
+        {
+            return Err(stale_catalog(
+                "project authority changed while reading Catalog resources",
+            ));
+        }
+        let data = state.project_data.read().unwrap().clone();
+        let store = state.project_store.read().unwrap();
+        let registry = Arc::clone(&store.node_registry);
+        let catalog = Arc::clone(&store.catalog);
+        let runtime_database_ids = store.databases.keys().cloned().collect::<BTreeSet<_>>();
+        let loaded_variable_revisions = state.variable_revisions.read().unwrap().clone();
+        let database_authority_revisions =
+            state.database_authority_revisions.read().unwrap().clone();
+        if data.variables.keys().any(|id| {
+            !loaded_variable_revisions
+                .get(id)
+                .is_some_and(|entry| entry.is_present())
+        }) {
+            return Err(stale_catalog(
+                "loaded variable is missing its authoritative revision",
+            ));
+        }
+        if data.databases.keys().any(|id| {
+            !runtime_database_ids.contains(id) || !database_authority_revisions.contains_key(id)
+        }) {
+            return Err(stale_catalog(
+                "database is missing runtime or revision authority",
+            ));
+        }
+        CatalogCapture {
+            project_instance_id: session.instance_id.clone(),
+            resource_publication_revision,
+            authority_generation,
+            registry,
+            catalog,
+            index,
+            data,
+            loaded_variable_revisions,
+            database_authority_revisions,
+            runtime_database_ids,
+        }
+    };
+
+    state.validate_project_session(&session)?;
+    let publication = state.mutation_publication.lock().unwrap();
+    if publication.project_instance_id != session.instance_id.as_str()
+        || publication.resource_revision != resource_publication_revision
+        || publication.authority_generation() != authority_generation
+    {
+        return Err(stale_catalog(
+            "project authority changed before Catalog snapshot publication",
+        ));
+    }
+    drop(publication);
+    Ok(capture)
+}
+
+fn build_catalog_snapshots(
+    capture: CatalogCapture,
+) -> (CatalogProjectSnapshot, CatalogMutationValidationSnapshot) {
+    let CatalogCapture {
+        project_instance_id,
+        resource_publication_revision,
+        authority_generation,
+        registry,
+        catalog,
+        index,
+        data,
+        loaded_variable_revisions,
+        database_authority_revisions,
+        runtime_database_ids,
+    } = capture;
+    let mut resources = Vec::new();
+    let mut validation_resources = BTreeMap::new();
+
+    let mut functions = index
+        .graphs
+        .into_iter()
+        .filter_map(|entry| {
+            let revision = entry.function_revision?;
+            let signature = entry.function_signature?;
+            Some((entry.path, (entry.name, revision, signature)))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (path, resource) in &data.graphs {
+        let Some(function) = resource.function.as_ref() else {
+            continue;
+        };
+        functions.insert(
+            path.as_str().to_string(),
+            (
+                resource.name.clone(),
+                function.revision,
+                function.signature.clone(),
+            ),
+        );
+    }
+    for (path, (name, revision, signature)) in functions {
+        let resource_path = CatalogResourcePath::new(path);
+        let node_type_id = node_type("yssbi.project.function.call");
+        resources.push(CatalogResourceEntry {
+            name: name.into(),
+            node_type_id: node_type_id.clone(),
+            resource_path: resource_path.clone(),
+            resource_revision: revision,
+            create_args: ResourceBoundCreateArgsDto::Function,
+            technical_terms: vec!["call".into(), "function".into()],
+            pinyin: None,
+        });
+        validation_resources.insert(
+            resource_path,
+            CatalogMutationResource::Function {
+                revision,
+                signature,
+                allowed_node_type_id: node_type_id,
+                parameter_binding: "target".into(),
+            },
+        );
+    }
+
+    let loaded_graph_paths = data
+        .graphs
+        .keys()
+        .map(|path| path.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    let mut variables = index
+        .variables
+        .into_iter()
+        .filter(|entry| {
+            !matches!(entry.scope, VariableScope::Global)
+                && entry
+                    .owner_graph_path
+                    .as_ref()
+                    .is_none_or(|path| !loaded_graph_paths.contains(path))
+        })
+        .filter_map(|entry| {
+            let retained = uuid::Uuid::parse_str(&entry.id)
+                .ok()
+                .map(crate::variable::VariableId::from)
+                .and_then(|id| loaded_variable_revisions.get(&id).copied());
+            let revision = match retained {
+                Some(entry) if entry.is_present() => entry.revision,
+                Some(_) => return None,
+                None => entry.revision,
+            };
+            Some((
+                format!("variables/{}", entry.id),
+                (entry.name, revision, entry.scope),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for variable in data.variables.values() {
+        let revision = loaded_variable_revisions[&variable.id].revision;
+        variables.insert(
+            format!("variables/{}", variable.id),
+            (variable.name.clone(), revision, variable.scope.clone()),
+        );
+    }
+    for (path, (name, revision, scope)) in variables {
+        let resource_path = CatalogResourcePath::new(path);
+        let get = node_type("yssbi.project.variable.get");
+        let set = node_type("yssbi.project.variable.set");
+        for node_type_id in [get.clone(), set.clone()] {
+            resources.push(CatalogResourceEntry {
+                name: name.clone().into(),
+                node_type_id,
+                resource_path: resource_path.clone(),
+                resource_revision: revision,
+                create_args: ResourceBoundCreateArgsDto::Variable,
+                technical_terms: vec!["variable".into()],
+                pinyin: None,
+            });
+        }
+        validation_resources.insert(
+            resource_path,
+            CatalogMutationResource::Variable {
+                revision,
+                scope,
+                allowed_node_type_ids: [get, set],
+                parameter_binding: "variable".into(),
+            },
+        );
+    }
+
+    for (id, declaration) in data.databases {
+        debug_assert!(runtime_database_ids.contains(&id));
+        let authority_revision = database_authority_revisions[&id];
+        let resource_path = CatalogResourcePath::new(format!("databases/{id}"));
+        let node_type_id = node_type("yssbi.dataframe.source.get");
+        let revision = ResourceRevision::new(authority_revision);
+        resources.push(CatalogResourceEntry {
+            name: declaration.name.unwrap_or_else(|| id.clone()).into(),
+            node_type_id: node_type_id.clone(),
+            resource_path: resource_path.clone(),
+            resource_revision: revision,
+            create_args: ResourceBoundCreateArgsDto::Database,
+            technical_terms: vec!["dataframe".into(), "database".into()],
+            pinyin: None,
+        });
+        validation_resources.insert(
+            resource_path,
+            CatalogMutationResource::Database {
+                authority_revision: revision,
+                allowed_node_type_id: node_type_id,
+                parameter_binding: "dataframe".into(),
+            },
+        );
+    }
+
+    resources.sort_by(|left, right| {
+        left.resource_path
+            .cmp(&right.resource_path)
+            .then_with(|| left.node_type_id.as_str().cmp(right.node_type_id.as_str()))
+    });
+    (
+        CatalogProjectSnapshot {
+            project_instance_id: project_instance_id.clone(),
+            resource_publication_revision,
+            registry,
+            catalog,
+            resources,
+            authority_generation,
+        },
+        CatalogMutationValidationSnapshot {
+            project_instance_id,
+            authority_generation,
+            resources: validation_resources,
+        },
+    )
+}
+
+fn node_type(value: &'static str) -> NodeTypeId {
+    NodeTypeId::new(value).expect("built-in resource node type ID")
+}
+
+fn stale_catalog(message: impl Into<String>) -> ProjectFilesystemError {
+    ProjectFilesystemError::StaleProjectLifecycle {
+        message: message.into(),
     }
 }
 
@@ -348,6 +708,511 @@ mod tests {
         let index = reader.join().unwrap().unwrap();
         assert_eq!(index.graphs.len(), 1);
         assert_eq!(index.graphs[0].path, graph_path.as_str());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn catalog_fixture() -> (
+        std::path::PathBuf,
+        ProjectState,
+        GraphResourcePath,
+        GraphResourcePath,
+        crate::variable::VariableId,
+        crate::variable::VariableId,
+    ) {
+        let root = project_root("catalog");
+        let unloaded_path = GraphResourcePath::new("functions/A-Unloaded.yssbi-function").unwrap();
+        let loaded_path = GraphResourcePath::new("functions/Z-Loaded.yssbi-function").unwrap();
+        let unloaded_variable_id = crate::variable::VariableId::new();
+        let loaded_variable_id = crate::variable::VariableId::new();
+        let unloaded_variable = crate::variable::VariableInstance {
+            id: unloaded_variable_id,
+            name: "Unloaded local".into(),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(1),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Function {
+                function_path: unloaded_path.as_str().into(),
+            },
+            tags: Vec::new(),
+        };
+        let loaded_variable = crate::variable::VariableInstance {
+            id: loaded_variable_id,
+            name: "Loaded local".into(),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(2),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Function {
+                function_path: loaded_path.as_str().into(),
+            },
+            tags: Vec::new(),
+        };
+        let mut disk = ProjectData::new();
+        disk.graphs.insert(
+            unloaded_path.clone(),
+            GraphResourceDocument::new("A-Unloaded", GraphDocumentKind::Function),
+        );
+        disk.graphs.insert(
+            loaded_path.clone(),
+            GraphResourceDocument::new("Z-Loaded", GraphDocumentKind::Function),
+        );
+        disk.graphs
+            .get_mut(&unloaded_path)
+            .unwrap()
+            .function
+            .as_mut()
+            .unwrap()
+            .revision = crate::node_system::document::ResourceRevision::new(3);
+        disk.graphs
+            .get_mut(&unloaded_path)
+            .unwrap()
+            .function
+            .as_mut()
+            .unwrap()
+            .signature
+            .return_type = Some("DiskReturn".into());
+        disk.variables
+            .insert(unloaded_variable_id, unloaded_variable);
+        disk.variables
+            .insert(loaded_variable_id, loaded_variable.clone());
+        fixtures::write_project(&disk, root.to_string_lossy().as_ref()).unwrap();
+
+        let mut authoritative = ProjectData::new();
+        let mut loaded =
+            GraphResourceDocument::new("Authoritative loaded", GraphDocumentKind::Function);
+        loaded.function.as_mut().unwrap().revision =
+            crate::node_system::document::ResourceRevision::new(7);
+        loaded.function.as_mut().unwrap().signature.return_type = Some("LoadedReturn".into());
+        authoritative.graphs.insert(loaded_path.clone(), loaded);
+        authoritative
+            .variables
+            .insert(loaded_variable_id, loaded_variable);
+        authoritative.databases.insert(
+            "sales".into(),
+            crate::database::DatabaseDecl {
+                id: "sales".into(),
+                engine: crate::database::DatabaseEngine::InMemory {
+                    name: "sales".into(),
+                },
+                schema_version: 1,
+                required: false,
+                name: Some("Sales warehouse".into()),
+            },
+        );
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), authoritative);
+        (
+            root,
+            state,
+            unloaded_path,
+            loaded_path,
+            unloaded_variable_id,
+            loaded_variable_id,
+        )
+    }
+
+    #[test]
+    fn catalog_snapshot_combines_unloaded_loaded_and_database_resources_in_opaque_order() {
+        let (root, state, unloaded_path, loaded_path, unloaded_variable_id, loaded_variable_id) =
+            catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+
+        let snapshot = state.catalog_snapshot(&expected).unwrap();
+
+        assert_eq!(snapshot.project_instance_id, expected);
+        assert!(std::sync::Arc::ptr_eq(
+            &snapshot.registry,
+            &state.project_store.read().unwrap().node_registry
+        ));
+        assert!(std::sync::Arc::ptr_eq(
+            &snapshot.catalog,
+            &state.project_store.read().unwrap().catalog
+        ));
+        let identities = snapshot
+            .resources
+            .iter()
+            .map(|entry| {
+                (
+                    entry.resource_path.as_str().to_string(),
+                    entry.node_type_id.as_str().to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut sorted = identities.clone();
+        sorted.sort();
+        assert_eq!(identities, sorted);
+        assert!(snapshot.resources.iter().any(|entry| {
+            entry.resource_path.as_str() == unloaded_path.as_str()
+                && entry.name.as_ref() == "A-Unloaded"
+                && entry.resource_revision.get() == 3
+        }));
+        assert!(snapshot.resources.iter().any(|entry| {
+            entry.resource_path.as_str() == loaded_path.as_str()
+                && entry.name.as_ref() == "Authoritative loaded"
+                && entry.resource_revision.get() == 7
+        }));
+        for variable_id in [unloaded_variable_id, loaded_variable_id] {
+            let path = format!("variables/{variable_id}");
+            let entries = snapshot
+                .resources
+                .iter()
+                .filter(|entry| entry.resource_path.as_str() == path)
+                .collect::<Vec<_>>();
+            assert_eq!(entries.len(), 2);
+            assert!(
+                entries
+                    .iter()
+                    .any(|entry| { entry.node_type_id.as_str() == "yssbi.project.variable.get" })
+            );
+            assert!(
+                entries
+                    .iter()
+                    .any(|entry| { entry.node_type_id.as_str() == "yssbi.project.variable.set" })
+            );
+        }
+        assert!(snapshot.resources.iter().any(|entry| {
+            entry.resource_path.as_str() == "databases/sales"
+                && entry.name.as_ref() == "Sales warehouse"
+                && entry.node_type_id.as_str() == "yssbi.dataframe.source.get"
+        }));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_preserves_retained_local_revision_across_unload_and_shuffled_index() {
+        let (root, state, _, loaded_path, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        state
+            .update_local_variable_transaction(
+                &expected,
+                loaded_variable_id,
+                None,
+                None,
+                Some(DataValue::Int64(3)),
+                None,
+                None,
+                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::node_system::document::OperationId::new(),
+            )
+            .unwrap();
+
+        let loaded = state.catalog_snapshot(&expected).unwrap();
+        assert_eq!(loaded.resource_publication_revision, 1);
+        let variable_path = format!("variables/{loaded_variable_id}");
+        assert!(loaded.resources.iter().any(|entry| {
+            entry.resource_path.as_str() == variable_path && entry.resource_revision.get() == 1
+        }));
+
+        state.unload_graph_resource(&loaded_path).unwrap();
+        let retained = state.variable_revisions.read().unwrap()[&loaded_variable_id];
+        assert_eq!(
+            retained.revision,
+            crate::node_system::document::ResourceRevision::new(1)
+        );
+        assert!(retained.is_present());
+        let unloaded = state.catalog_snapshot(&expected).unwrap();
+        assert!(unloaded.resources.iter().any(|entry| {
+            entry.resource_path.as_str() == variable_path && entry.resource_revision.get() == 1
+        }));
+
+        let normal = super::catalog_snapshot_with_reader(&state, &expected, |root| {
+            crate::project::project_io::read_project_index_from_root(root)
+                .map_err(super::read_error)
+        })
+        .unwrap();
+        let shuffled = super::catalog_snapshot_with_reader(&state, &expected, |root| {
+            let mut index = crate::project::project_io::read_project_index_from_root(root)
+                .map_err(super::read_error)?;
+            index.graphs.reverse();
+            index.variables.reverse();
+            Ok(index)
+        })
+        .unwrap();
+        let identities = |snapshot: &super::CatalogProjectSnapshot| {
+            snapshot
+                .resources
+                .iter()
+                .map(|entry| {
+                    (
+                        entry.resource_path.as_str().to_string(),
+                        entry.node_type_id.as_str().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(identities(&normal), identities(&shuffled));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_does_not_resurrect_dirty_deleted_local_variable_after_unload() {
+        let (root, state, _, loaded_path, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        state
+            .delete_local_variable_transaction(
+                &expected,
+                loaded_variable_id,
+                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::node_system::document::OperationId::new(),
+            )
+            .unwrap();
+        state.unload_graph_resource(&loaded_path).unwrap();
+
+        let snapshot = state.catalog_snapshot(&expected).unwrap();
+        let variable_path = format!("variables/{loaded_variable_id}");
+        assert!(
+            !snapshot
+                .resources
+                .iter()
+                .any(|entry| entry.resource_path.as_str() == variable_path)
+        );
+        assert!(
+            !state
+                .catalog_mutation_validation_snapshot(&expected)
+                .unwrap()
+                .resources
+                .contains_key(&crate::node_system::catalog::CatalogResourcePath::new(
+                    variable_path,
+                ))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_waits_for_root_filesystem_lease() {
+        let (root, state, _, _, _, _) = catalog_fixture();
+        let session = state.capture_project_session().unwrap();
+        let lease = state.filesystem().acquire(session.root.clone()).unwrap();
+        let reader_state = state.clone();
+        let expected = session.instance_id;
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let result = reader_state.catalog_snapshot(&expected);
+            done_tx.send(()).unwrap();
+            result
+        });
+
+        assert!(
+            done_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+                .is_err()
+        );
+        drop(lease);
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        reader.join().unwrap().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_rejects_stale_identity_and_authority_change_during_capture() {
+        let (root, state, _, _, _, _) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        let stale = crate::project::ProjectInstanceId::new();
+        assert_eq!(
+            state.catalog_snapshot(&stale).unwrap_err().code(),
+            "stale_project_lifecycle"
+        );
+
+        let changed_state = state.clone();
+        let error = super::catalog_snapshot_with_reader(&state, &expected, move |root| {
+            let index = crate::project::project_io::read_project_index_from_root(root)
+                .map_err(super::read_error)?;
+            changed_state
+                .add_variable(
+                    "concurrent",
+                    DataType::Int64,
+                    DataValue::Int64(1),
+                    "",
+                    VariableScope::Global,
+                    Vec::new(),
+                )
+                .unwrap();
+            Ok(index)
+        })
+        .unwrap_err();
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_rejects_project_replacement_during_capture() {
+        let (root, state, _, _, _, _) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        let replacement = project_root("catalog-replacement");
+        fixtures::write_project(&ProjectData::new(), replacement.to_string_lossy().as_ref())
+            .unwrap();
+        let changed_state = state.clone();
+        let replacement_for_change = replacement.clone();
+
+        let error = super::catalog_snapshot_with_reader(&state, &expected, move |root| {
+            let index = crate::project::project_io::read_project_index_from_root(root)
+                .map_err(super::read_error)?;
+            changed_state.activate_project_fixture(
+                replacement_for_change.to_string_lossy().into_owned(),
+                ProjectData::new(),
+            );
+            Ok(index)
+        })
+        .unwrap_err();
+
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(replacement).unwrap();
+    }
+
+    #[test]
+    fn catalog_snapshot_rejects_missing_existing_revision_owners() {
+        let (root, state, _, _, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        state
+            .variable_revisions
+            .write()
+            .unwrap()
+            .remove(&loaded_variable_id);
+        assert_eq!(
+            state.catalog_snapshot(&expected).unwrap_err().code(),
+            "stale_project_lifecycle"
+        );
+
+        state.variable_revisions.write().unwrap().insert(
+            loaded_variable_id,
+            crate::project::project_state::VariableRevisionEntry::present(
+                crate::node_system::document::ResourceRevision::INITIAL,
+            ),
+        );
+        state
+            .database_authority_revisions
+            .write()
+            .unwrap()
+            .remove("sales");
+        assert_eq!(
+            state.catalog_snapshot(&expected).unwrap_err().code(),
+            "stale_project_lifecycle"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catalog_mutation_validation_snapshot_captures_exact_immutable_authority_without_later_io() {
+        let (root, state, unloaded_path, loaded_path, unloaded_variable_id, loaded_variable_id) =
+            catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+
+        let snapshot = state
+            .catalog_mutation_validation_snapshot(&expected)
+            .unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+
+        let unloaded = snapshot
+            .resources
+            .get(&crate::node_system::catalog::CatalogResourcePath::new(
+                unloaded_path.as_str(),
+            ))
+            .unwrap();
+        let super::CatalogMutationResource::Function {
+            revision,
+            signature,
+            allowed_node_type_id,
+            parameter_binding,
+        } = unloaded
+        else {
+            panic!("unloaded function fact")
+        };
+        assert_eq!(revision.get(), 3);
+        assert_eq!(signature.return_type.as_deref(), Some("DiskReturn"));
+        assert_eq!(allowed_node_type_id.as_str(), "yssbi.project.function.call");
+        assert_eq!(parameter_binding.as_ref(), "target");
+
+        let loaded = snapshot
+            .resources
+            .get(&crate::node_system::catalog::CatalogResourcePath::new(
+                loaded_path.as_str(),
+            ))
+            .unwrap();
+        let super::CatalogMutationResource::Function {
+            revision,
+            signature,
+            ..
+        } = loaded
+        else {
+            panic!("loaded function fact")
+        };
+        assert_eq!(revision.get(), 7);
+        assert_eq!(signature.return_type.as_deref(), Some("LoadedReturn"));
+
+        for variable_id in [unloaded_variable_id, loaded_variable_id] {
+            let variable = snapshot
+                .resources
+                .get(&crate::node_system::catalog::CatalogResourcePath::new(
+                    format!("variables/{variable_id}"),
+                ))
+                .unwrap();
+            let super::CatalogMutationResource::Variable {
+                revision,
+                scope,
+                allowed_node_type_ids,
+                parameter_binding,
+            } = variable
+            else {
+                panic!("variable fact")
+            };
+            assert_eq!(
+                *revision,
+                crate::node_system::document::ResourceRevision::INITIAL
+            );
+            assert!(matches!(scope, VariableScope::Function { .. }));
+            assert_eq!(
+                allowed_node_type_ids
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>(),
+                ["yssbi.project.variable.get", "yssbi.project.variable.set"]
+            );
+            assert_eq!(parameter_binding.as_ref(), "variable");
+        }
+
+        let database = snapshot
+            .resources
+            .get(&crate::node_system::catalog::CatalogResourcePath::new(
+                "databases/sales",
+            ))
+            .unwrap();
+        let super::CatalogMutationResource::Database {
+            authority_revision,
+            allowed_node_type_id,
+            parameter_binding,
+        } = database
+        else {
+            panic!("database fact")
+        };
+        assert_eq!(
+            *authority_revision,
+            crate::node_system::document::ResourceRevision::INITIAL
+        );
+        assert_eq!(allowed_node_type_id.as_str(), "yssbi.dataframe.source.get");
+        assert_eq!(parameter_binding.as_ref(), "dataframe");
+    }
+
+    #[test]
+    fn catalog_mutation_validation_snapshot_waits_for_root_filesystem_lease() {
+        let (root, state, _, _, _, _) = catalog_fixture();
+        let session = state.capture_project_session().unwrap();
+        let lease = state.filesystem().acquire(session.root.clone()).unwrap();
+        let reader_state = state.clone();
+        let expected = session.instance_id;
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let result = reader_state.catalog_mutation_validation_snapshot(&expected);
+            done_tx.send(()).unwrap();
+            result
+        });
+
+        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(lease);
+        reader.join().unwrap().unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 

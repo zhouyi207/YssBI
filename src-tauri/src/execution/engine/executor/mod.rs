@@ -55,7 +55,7 @@ pub struct Executor<E: EventEmitter> {
 
     run_id: String,
 
-    /// Cooperative cancellation flag (set by `cancel_execution` command).
+    /// Cooperative cancellation flag used by the legacy executor.
     cancel: Option<Arc<AtomicBool>>,
 
     /// 首个节点失败后置位：不再 resume waiter / 清空待执行队列，避免 Sequence 继续 Then 3。

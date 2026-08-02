@@ -311,6 +311,96 @@ fn validates_ports_parameters_schema_and_resolvers() {
     ));
 }
 
+fn provider_with_two_parameter_rename_schema() -> ProviderRegistration {
+    let mut provider = valid_provider();
+    let node = Arc::make_mut(&mut provider.nodes[0].protocol);
+    node.interface.ports = vec![
+        PortSpec {
+            key: id("source"),
+            label_key: id("nodes.test.source"),
+            direction: PortDirection::Input,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Declared,
+            connections: ConnectionsPerPort::Single,
+            input_binding: Some(InputBindingSpec {
+                literal_policy: LiteralPolicy::Forbidden,
+                default_value: None,
+            }),
+            consumption: Some(InputConsumption::Streaming),
+            production: None,
+            editor: PortEditorSpec::Default,
+            schema: None,
+        },
+        PortSpec {
+            key: id("result"),
+            label_key: id("nodes.test.result"),
+            direction: PortDirection::Output,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Declared,
+            connections: ConnectionsPerPort::Single,
+            input_binding: None,
+            consumption: None,
+            production: Some(OutputProduction::Streaming),
+            editor: PortEditorSpec::Default,
+            schema: Some(SchemaExpr::Rename {
+                input: Box::new(SchemaExpr::Input(id("source"))),
+                mapping: RenameExpr::FromParameters {
+                    from: id("from"),
+                    to: id("to"),
+                },
+            }),
+        },
+    ]
+    .into_boxed_slice();
+    node.parameters.parameters = ["from", "to"]
+        .into_iter()
+        .map(|key| ParameterSpec {
+            key: id(key),
+            title_key: id(&format!("nodes.test.{key}")),
+            description_key: None,
+            value_type: TypeExpr::Unknown,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Text { multiline: false },
+        })
+        .collect();
+    provider.i18n.keys.extend([
+        id("nodes.test.source"),
+        id("nodes.test.result"),
+        id("nodes.test.from"),
+        id("nodes.test.to"),
+    ]);
+    provider
+}
+
+#[test]
+fn validates_both_two_parameter_rename_schema_references() {
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_two_parameter_rename_schema())
+        .unwrap();
+    builder.freeze().expect("both rename parameters freeze");
+
+    for missing in ["from", "to"] {
+        let mut provider = provider_with_two_parameter_rename_schema();
+        let node = Arc::make_mut(&mut provider.nodes[0].protocol);
+        node.parameters.parameters = node
+            .parameters
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.key.as_str() != missing)
+            .cloned()
+            .collect();
+        assert!(matches!(
+            error(provider),
+            RegistryValidationError::InvalidNode { reason, .. }
+                if reason == format!("schema references unknown parameter '{missing}'")
+        ));
+    }
+}
+
 #[test]
 fn freeze_rejects_an_implementation_without_lowerer_capability() {
     let mut provider = valid_provider();

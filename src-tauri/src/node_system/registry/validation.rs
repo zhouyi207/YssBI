@@ -473,6 +473,16 @@ fn validate_constraint(
     Ok(())
 }
 
+fn validate_schema_parameter(
+    key: &ParameterKey,
+    parameters: &BTreeSet<&ParameterKey>,
+) -> Result<(), String> {
+    parameters
+        .contains(key)
+        .then_some(())
+        .ok_or_else(|| format!("schema references unknown parameter '{key}'"))
+}
+
 fn validate_schema(
     expr: &SchemaExpr,
     ports: &BTreeMap<&PortKey, &PortSpec>,
@@ -531,10 +541,15 @@ fn validate_schema(
                 interface_resolvers,
                 schema_resolvers,
             )?;
-            if let RenameExpr::FromParameter(key) = mapping {
-                if !parameters.contains(key) {
-                    return Err(format!("schema references unknown parameter '{key}'"));
+            match mapping {
+                RenameExpr::FromParameter(key) => {
+                    validate_schema_parameter(key, parameters)?;
                 }
+                RenameExpr::FromParameters { from, to } => {
+                    validate_schema_parameter(from, parameters)?;
+                    validate_schema_parameter(to, parameters)?;
+                }
+                RenameExpr::Explicit(_) => {}
             }
             Ok(())
         }

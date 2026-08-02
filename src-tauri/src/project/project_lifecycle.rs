@@ -517,6 +517,11 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 mod tests {
     use super::*;
     use crate::graph::value::{DataType, DataValue};
+    use crate::node_system::document::{
+        DocumentNode, GraphDocumentOperation, GraphDocumentPatch, MutationRequest, NodeId,
+        NodePosition, OperationId, ParameterValues, ResourceKey, ResourceRevision,
+    };
+    use crate::node_system::protocol::NodeTypeId;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
         ProjectFilesystemFaultPoint, WorksheetDocument, fixtures, load_project_from_file,
@@ -563,6 +568,51 @@ mod tests {
         state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
         let instance_id = state.capture_project_session().unwrap().instance_id;
         (state, root, instance_id)
+    }
+
+    #[test]
+    fn lifecycle_unload_retains_exact_graph_revision() {
+        let (state, root, instance_id) = active_state("unload-revision");
+        let graph_path = state
+            .create_graph_resource_fixture("Lifecycle Revision", GraphDocumentKind::Event)
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &graph_path, 1, "en-US")
+            .unwrap();
+
+        let node = DocumentNode {
+            id: NodeId::new(),
+            node_type: NodeTypeId::new("yssbi.test.reference").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        state
+            .apply_graph_patch(
+                &graph_path,
+                MutationRequest::new(
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        graph_path.as_str().into(),
+                    )),
+                    ResourceRevision::INITIAL,
+                    OperationId::new(),
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node }]),
+                ),
+            )
+            .unwrap();
+
+        assert!(
+            state
+                .unload_graph_resource_for_lifecycle(&instance_id, &graph_path, 2)
+                .unwrap()
+        );
+        assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+        assert_eq!(
+            state.revision_state_for_test().0.get(&graph_path),
+            Some(&ResourceRevision::new(1))
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -1,20 +1,24 @@
 use super::{LEGACY_NODE_IDS, NODES, build_provider_fragment};
-use crate::node_system::catalog::builtin::build_builtin_registry;
+use crate::node_system::catalog::builtin::{build_builtin_provider, build_builtin_registry};
+use crate::node_system::catalog::localization::Message;
 use crate::node_system::compiler::{
     CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
 };
 use crate::node_system::document::{NodeId, PortAddress};
-use crate::node_system::plan::{RelationalOperator, RelationalOperatorIndex, ResourceId, ValueRef};
+use crate::node_system::plan::{
+    RelationalOperator, RelationalOperatorIndex, RelationalRename, ResourceId, ValueRef,
+};
 use crate::node_system::protocol::{
     InputConsumption, LiteralPolicy, NodeInterfaceProtocol, NodeTypeId, OutputProduction,
-    ParameterConstraint, ParameterKey, PortDirection, PortKey, Value,
+    ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection, PortKey, RenameExpr,
+    SchemaExpr, TypeExpr, TypeId, Value,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
 fn every_legacy_dataframe_node_has_one_stable_id() {
     assert_eq!(LEGACY_NODE_IDS.len(), 26);
-    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len());
+    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 1);
 
     let legacy = LEGACY_NODE_IDS
         .iter()
@@ -28,13 +32,11 @@ fn every_legacy_dataframe_node_has_one_stable_id() {
     assert_eq!(legacy.len(), LEGACY_NODE_IDS.len());
     assert_eq!(ids.len(), LEGACY_NODE_IDS.len());
     assert!(ids.iter().all(|id| id.starts_with("yssbi.dataframe.")));
-    for spec in NODES {
-        assert_eq!(
-            LEGACY_NODE_IDS
+    for (legacy_name, id) in LEGACY_NODE_IDS {
+        assert!(
+            NODES
                 .iter()
-                .find(|(legacy_name, _)| *legacy_name == spec.legacy_name)
-                .map(|(_, id)| *id),
-            Some(spec.id),
+                .any(|spec| spec.legacy_name == Some(*legacy_name) && spec.id == *id)
         );
     }
 }
@@ -42,7 +44,199 @@ fn every_legacy_dataframe_node_has_one_stable_id() {
 #[test]
 fn dataframe_fragment_contains_every_migrated_protocol() {
     let fragment = build_provider_fragment();
-    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len());
+    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 1);
+}
+
+#[test]
+fn rename_dataframe_freezes_exact_protocol_and_localization() {
+    let fragment = build_provider_fragment();
+    let rename_id = NodeTypeId::new("yssbi.dataframe.rename").unwrap();
+    let rename = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol.type_id == rename_id)
+        .expect("rename protocol");
+    let protocol = &rename.protocol;
+
+    assert_eq!(protocol.catalog.category_id.as_str(), "dataframe");
+    assert_eq!(protocol.interface.ports.len(), 2);
+    let source = &protocol.interface.ports[0];
+    assert_eq!(source.key.as_str(), "source");
+    assert_eq!(source.direction, PortDirection::Input);
+    assert_eq!(
+        source.value_type,
+        TypeExpr::Concrete(TypeId::new("tabular.dataframe").unwrap())
+    );
+    assert_eq!(source.consumption, Some(InputConsumption::Streaming));
+    let result = &protocol.interface.ports[1];
+    assert_eq!(result.key.as_str(), "result");
+    assert_eq!(result.direction, PortDirection::Output);
+    assert_eq!(
+        result.value_type,
+        TypeExpr::Concrete(TypeId::new("tabular.dataframe").unwrap())
+    );
+    assert_eq!(result.production, Some(OutputProduction::Streaming));
+    assert_eq!(
+        result.schema,
+        Some(SchemaExpr::Rename {
+            input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
+            mapping: RenameExpr::FromParameters {
+                from: ParameterKey::new("from").unwrap(),
+                to: ParameterKey::new("to").unwrap(),
+            },
+        }),
+    );
+
+    assert_eq!(protocol.parameters.parameters.len(), 2);
+    for (parameter, key) in protocol.parameters.parameters.iter().zip(["from", "to"]) {
+        assert_eq!(parameter.key.as_str(), key);
+        assert_eq!(
+            parameter.value_type,
+            TypeExpr::Concrete(TypeId::new("core.string").unwrap())
+        );
+        assert_eq!(
+            parameter.editor,
+            ParameterEditorSpec::Text { multiline: false }
+        );
+        assert_eq!(parameter.default_value, None);
+        assert_eq!(parameter.constraints, vec![ParameterConstraint::Required]);
+    }
+
+    let messages = fragment
+        .messages
+        .iter()
+        .map(|(locale, key, message)| ((*locale, *key), message))
+        .collect::<BTreeMap<_, _>>();
+    for (locale, expected) in [
+        (
+            "en-US",
+            [
+                ("nodes.yssbi.dataframe.rename.title", "Rename DataFrame"),
+                (
+                    "nodes.yssbi.dataframe.rename.description",
+                    "Renames one DataFrame column.",
+                ),
+                (
+                    "nodes.yssbi.dataframe.rename.documentation",
+                    "Renames the column identified by 'from' to 'to'.",
+                ),
+                ("ports.source.label", "Source"),
+                ("ports.result.label", "Result"),
+                ("parameters.from.title", "Source column"),
+                ("parameters.from.description", "Column name to rename."),
+                ("parameters.to.title", "Destination column"),
+                ("parameters.to.description", "New column name."),
+            ],
+        ),
+        (
+            "zh-CN",
+            [
+                ("nodes.yssbi.dataframe.rename.title", "重命名数据框"),
+                (
+                    "nodes.yssbi.dataframe.rename.description",
+                    "重命名数据框中的一列。",
+                ),
+                (
+                    "nodes.yssbi.dataframe.rename.documentation",
+                    "将“源列”指定的列重命名为“目标列”。",
+                ),
+                ("ports.source.label", "源数据框"),
+                ("ports.result.label", "结果"),
+                ("parameters.from.title", "源列"),
+                ("parameters.from.description", "要重命名的列名。"),
+                ("parameters.to.title", "目标列"),
+                ("parameters.to.description", "新的列名。"),
+            ],
+        ),
+    ] {
+        for (key, text) in expected {
+            assert_eq!(messages.get(&(locale, key)), Some(&&Message::Text(text)));
+        }
+    }
+}
+
+#[test]
+fn rename_dataframe_is_excluded_from_static_catalog() {
+    let registry = build_builtin_registry();
+    let (_, catalog) = build_builtin_provider();
+    let localized = catalog.localize(&registry, "en-US");
+    let node_type_ids = localized
+        .items
+        .iter()
+        .map(|item| item.node_type_id.as_ref())
+        .collect::<BTreeSet<_>>();
+
+    assert!(!node_type_ids.contains("yssbi.dataframe.rename"));
+}
+
+#[test]
+fn rename_dataframe_lowers_to_exact_input_and_rename_fragment() {
+    let registry = build_builtin_registry();
+    let rename_id = NodeTypeId::new("yssbi.dataframe.rename").unwrap();
+    let rename = registry.get(&rename_id).expect("rename freezes");
+    let node_id = NodeId::new();
+    let parameters = BTreeMap::from([
+        (
+            ParameterKey::new("from").unwrap(),
+            serde_json::json!("old_name"),
+        ),
+        (
+            ParameterKey::new("to").unwrap(),
+            serde_json::json!("new_name"),
+        ),
+    ]);
+    let input_address = PortAddress::declared(node_id, PortKey::new("source").unwrap());
+    let inputs = [(input_address.clone(), ValueRef::new(0))];
+    let output_address = PortAddress::declared(node_id, PortKey::new("result").unwrap());
+    let outputs = [(output_address.clone(), ValueRef::new(1))];
+    let cancellation = CompileCancellationToken::new();
+    let context = LoweringContext {
+        cancellation: &cancellation,
+        node_id,
+        protocol: &rename.protocol,
+        parameters: &parameters,
+        inputs: &inputs,
+        outputs: &outputs,
+    };
+    let implementation = rename
+        .implementation
+        .as_ref()
+        .and_then(|implementation| implementation.as_any().downcast_ref::<NodeImplementation>())
+        .expect("rename compiler lowerer");
+
+    let lowered = implementation
+        .lowerer
+        .lower(&context)
+        .expect("rename lowers");
+    let LoweredKernel::Relational(fragment) = lowered.kernel else {
+        panic!("rename must lower relationally");
+    };
+    assert_eq!(fragment.backend.as_str(), "relational.default");
+    assert_eq!(
+        fragment.fragment.operators.as_ref(),
+        [
+            RelationalOperator::Input {
+                name: "source".into(),
+            },
+            RelationalOperator::Rename {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([RelationalRename {
+                    from: "old_name".into(),
+                    to: "new_name".into(),
+                }]),
+            },
+        ],
+    );
+    assert_eq!(fragment.fragment.root, RelationalOperatorIndex::new(1));
+    assert_eq!(fragment.inputs.len(), 1);
+    assert_eq!(fragment.inputs[0].port, input_address);
+    assert_eq!(fragment.inputs[0].operator, RelationalOperatorIndex::new(0));
+    assert_eq!(fragment.metadata.results.len(), 1);
+    assert_eq!(fragment.metadata.results[0].output, output_address);
+    assert_eq!(
+        fragment.metadata.results[0].name.as_ref(),
+        format!("node.{node_id}.result")
+    );
 }
 
 #[test]
@@ -210,7 +404,7 @@ fn other_dataframe_nodes_keep_native_lowerers() {
     for spec in NODES.iter().filter(|spec| {
         !matches!(
             spec.id,
-            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit"
+            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit" | "yssbi.dataframe.rename"
         )
     }) {
         let id = NodeTypeId::new(spec.id).unwrap();

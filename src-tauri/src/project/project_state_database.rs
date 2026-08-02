@@ -30,21 +30,40 @@ impl ProjectState {
         database.access(access)
     }
 
-    /// Runs and commits an authoritative database mutation.
-    ///
-    /// The closure operates on a detached instance without project locks. A
-    /// successful result is published through the central database commit path.
-    pub fn with_database_mut<F, R>(&self, id: &str, f: F) -> Result<R, String>
+    pub(crate) fn reserve_database_operation(
+        &self,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::project::resource_mutations::ResourceOperationReservation, String> {
+        self.ensure_project_operational()
+            .map_err(|error| format!("{}: {error}", error.code()))?;
+        self.reserve_resource_operation(project_instance_id, operation_id)
+            .map_err(|error| format!("{}: {error}", error.code()))
+    }
+
+    /// Runs and commits an authoritative database mutation against an exact
+    /// caller-issued project and database revision.
+    pub fn with_database_mut<F, R>(
+        &self,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        id: &str,
+        expected_revision: crate::node_system::document::ResourceRevision,
+        operation_id: crate::node_system::document::OperationId,
+        f: F,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<R>, String>
     where
         F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
     {
-        self.with_database_writer(id, |database, _| f(database))
+        self.with_database_writer(
+            project_instance_id,
+            id,
+            expected_revision,
+            operation_id,
+            |database, _| f(database),
+        )
     }
 
     /// Runs a read/query operation against a detached database snapshot.
-    ///
-    /// Mutations to the snapshot are discarded. This API is crate-visible so
-    /// external mutation callers use `with_database_mut` and its commit path.
     pub(crate) fn with_database_snapshot<F, R>(&self, id: &str, f: F) -> Result<R, String>
     where
         F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
@@ -62,15 +81,40 @@ impl ProjectState {
         f(&mut database)
     }
 
-    pub fn with_database_writer<F, R>(&self, id: &str, f: F) -> Result<R, String>
+    pub fn with_database_writer<F, R>(
+        &self,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        id: &str,
+        expected_revision: crate::node_system::document::ResourceRevision,
+        operation_id: crate::node_system::document::OperationId,
+        f: F,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<R>, String>
     where
         F: FnOnce(&mut DatabaseInstance, &ProjectSession) -> Result<R, String>,
     {
+        let reservation = self.reserve_database_operation(project_instance_id, operation_id)?;
         let (session, _lease) = self.acquire_database_write_lease()?;
-        let (token, mut instance) = self.database_snapshot_for_session(&session, id)?;
-        let result = f(&mut instance, &session)?;
-        self.commit_database_instance(&session, &token, instance)?;
+        let (token, mut instance) = self.revisioned_database_snapshot_for_session(
+            &session,
+            project_instance_id,
+            id,
+            expected_revision,
+        )?;
+        let data = f(&mut instance, &session)?;
+        let mutation = self.commit_database_instance(&session, &token, instance, operation_id)?;
+        let result = crate::event::ResourceMutationCommandResultDto { data, mutation };
+        reservation.complete();
         Ok(result)
+    }
+
+    fn validate_database_project(
+        session: &ProjectSession,
+        project_instance_id: &crate::project::ProjectInstanceId,
+    ) -> Result<(), String> {
+        if &session.instance_id != project_instance_id {
+            return Err("stale_project_lifecycle: project instance changed".into());
+        }
+        Ok(())
     }
 
     pub(crate) fn acquire_database_write_lease(
@@ -127,6 +171,21 @@ impl ProjectState {
         ))
     }
 
+    pub(crate) fn revisioned_database_snapshot_for_session(
+        &self,
+        session: &ProjectSession,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        id: &str,
+        expected_revision: crate::node_system::document::ResourceRevision,
+    ) -> Result<(DatabaseAuthorityToken, DatabaseInstance), String> {
+        Self::validate_database_project(session, project_instance_id)?;
+        let (token, instance) = self.database_snapshot_for_session(session, id)?;
+        if token.database_revision != expected_revision.get() {
+            return Err("stale_database_revision: database authority conflict".into());
+        }
+        Ok((token, instance))
+    }
+
     fn validate_database_authority(
         publication: &super::project_state::MutationPublication,
         session: &ProjectSession,
@@ -146,13 +205,49 @@ impl ProjectState {
         Ok(())
     }
 
-    fn advance_database_authority(
+    fn publish_database_delta(
+        &self,
         publication: &mut super::project_state::MutationPublication,
         revisions: &mut std::collections::HashMap<String, u64>,
         id: &str,
-    ) {
-        publication.advance_authority_generation();
-        revisions.insert(id.to_string(), publication.authority_generation());
+        from_revision: crate::node_system::document::ResourceRevision,
+        operation_id: crate::node_system::document::OperationId,
+        before: Option<DatabaseDecl>,
+        after: Option<DatabaseDecl>,
+    ) -> crate::event::ResourceMutationResultDto {
+        use crate::node_system::document::{
+            DatabaseDocumentPatch, DatabaseResourceKey, ResourceDeltaEvent, ResourceDocumentPatch,
+            ResourceKey, ResourceRevision,
+        };
+
+        let publication_revision = publication.allocate_resource_revision();
+        let to_revision = ResourceRevision::new(publication.authority_generation());
+        if after.is_some() {
+            revisions.insert(id.to_string(), to_revision.get());
+        } else {
+            revisions.remove(id);
+        }
+        crate::event::ResourceMutationResultDto {
+            operation_id,
+            project_instance_id: publication.project_instance_id.clone(),
+            publication_revision,
+            moves: Vec::new(),
+            deltas: vec![ResourceDeltaEvent {
+                resource: ResourceKey::Database(DatabaseResourceKey(
+                    format!("databases/{id}").into(),
+                )),
+                from_revision,
+                to_revision,
+                caused_by: Some(operation_id),
+                payload: ResourceDocumentPatch::Database(DatabaseDocumentPatch { before, after }),
+            }],
+            worksheet_deltas: Vec::new(),
+            projection_replacements: Vec::new(),
+            projection_status: crate::event::ProjectionStatusDto::Complete {
+                expected_graph_paths: Vec::new(),
+            },
+            history: self.history.read().unwrap().status(),
+        }
     }
 
     pub(crate) fn commit_database_instance(
@@ -160,7 +255,8 @@ impl ProjectState {
         session: &ProjectSession,
         token: &DatabaseAuthorityToken,
         instance: DatabaseInstance,
-    ) -> Result<(), String> {
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
         let id = token.database_id.as_str();
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
@@ -174,21 +270,57 @@ impl ProjectState {
             token,
             id,
         )?;
-        if !data.databases.contains_key(id) || !store.databases.contains_key(id) {
+        let before = data
+            .databases
+            .get(id)
+            .cloned()
+            .ok_or("Database not found")?;
+        if !store.databases.contains_key(id) {
             return Err("Database not found".into());
         }
-        data.databases.insert(id.to_string(), instance.decl.clone());
+        let after = instance.decl.clone();
+        data.databases.insert(id.to_string(), after.clone());
         store.databases.insert(id.to_string(), instance);
-        Self::advance_database_authority(&mut publication, &mut revisions, id);
+        let mutation = self.publish_database_delta(
+            &mut publication,
+            &mut revisions,
+            id,
+            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            operation_id,
+            Some(before),
+            Some(after),
+        );
         self.invalidate_all_compile_products();
-        Ok(())
+        Ok(mutation)
     }
 
+    #[cfg(test)]
     pub(crate) fn add_database_for_session(
         &self,
         session: &ProjectSession,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        operation_id: crate::node_system::document::OperationId,
         instance: DatabaseInstance,
-    ) -> Result<(), String> {
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
+        let reservation = self.reserve_database_operation(project_instance_id, operation_id)?;
+        let mutation = self.commit_database_add_for_session(
+            session,
+            project_instance_id,
+            operation_id,
+            instance,
+        )?;
+        reservation.complete();
+        Ok(mutation)
+    }
+
+    pub(crate) fn commit_database_add_for_session(
+        &self,
+        session: &ProjectSession,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        operation_id: crate::node_system::document::OperationId,
+        instance: DatabaseInstance,
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
+        Self::validate_database_project(session, project_instance_id)?;
         let mut publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
             return Err("stale_project_lifecycle: project instance changed".into());
@@ -198,16 +330,25 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
         let mut revisions = self.database_authority_revisions.write().unwrap();
-        data.databases.insert(id.clone(), decl);
+        if data.databases.contains_key(&id)
+            || store.databases.contains_key(&id)
+            || revisions.contains_key(&id)
+        {
+            return Err("database_already_exists: expected database to be absent".into());
+        }
+        data.databases.insert(id.clone(), decl.clone());
         store.databases.insert(id.clone(), instance);
-        Self::advance_database_authority(&mut publication, &mut revisions, &id);
+        let mutation = self.publish_database_delta(
+            &mut publication,
+            &mut revisions,
+            &id,
+            crate::node_system::document::ResourceRevision::INITIAL,
+            operation_id,
+            None,
+            Some(decl),
+        );
         self.invalidate_all_compile_products();
-        Ok(())
-    }
-
-    pub fn add_database(&self, instance: DatabaseInstance) -> Result<(), String> {
-        let (session, _lease) = self.acquire_database_write_lease()?;
-        self.add_database_for_session(&session, instance)
+        Ok(mutation)
     }
 
     pub(crate) fn commit_database_name(
@@ -216,7 +357,8 @@ impl ProjectState {
         token: &DatabaseAuthorityToken,
         id: &str,
         name: &str,
-    ) -> Result<(), String> {
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
@@ -230,22 +372,47 @@ impl ProjectState {
             id,
         )?;
         let declaration = data.databases.get_mut(id).ok_or("Database not found")?;
+        let before = declaration.clone();
         let instance = store.databases.get_mut(id).ok_or("Database not found")?;
         declaration.name = Some(name.to_string());
         instance.decl.name = Some(name.to_string());
-        Self::advance_database_authority(&mut publication, &mut revisions, id);
+        let after = declaration.clone();
+        let mutation = self.publish_database_delta(
+            &mut publication,
+            &mut revisions,
+            id,
+            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            operation_id,
+            Some(before),
+            Some(after),
+        );
         self.invalidate_all_compile_products();
-        Ok(())
+        Ok(mutation)
     }
 
-    pub fn delete_database(&self, id: &str) -> Result<(), String> {
+    pub fn delete_database(
+        &self,
+        project_instance_id: &crate::project::ProjectInstanceId,
+        id: &str,
+        expected_revision: crate::node_system::document::ResourceRevision,
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<()>, String> {
+        let reservation = self.reserve_database_operation(project_instance_id, operation_id)?;
         let (session, _lease) = self.acquire_database_write_lease()?;
-        let (token, instance) = self.database_snapshot_for_session(&session, id)?;
+        let (token, instance) = self.revisioned_database_snapshot_for_session(
+            &session,
+            project_instance_id,
+            id,
+            expected_revision,
+        )?;
         crate::application::database::remove_duckdb_table_if_needed(
             &instance.decl.engine,
             Some(session.root.as_path()),
         )?;
-        self.commit_database_delete(&session, &token, id)
+        let mutation = self.commit_database_delete(&session, &token, id, operation_id)?;
+        let result = crate::event::ResourceMutationCommandResultDto { data: (), mutation };
+        reservation.complete();
+        Ok(result)
     }
 
     pub(crate) fn commit_database_delete(
@@ -253,7 +420,8 @@ impl ProjectState {
         session: &ProjectSession,
         token: &DatabaseAuthorityToken,
         id: &str,
-    ) -> Result<(), String> {
+        operation_id: crate::node_system::document::OperationId,
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
@@ -266,15 +434,22 @@ impl ProjectState {
             token,
             id,
         )?;
-        if !data.databases.contains_key(id) || !store.databases.contains_key(id) {
+        let before = data.databases.remove(id).ok_or("Database not found")?;
+        if store.databases.remove(id).is_none() {
+            data.databases.insert(id.to_string(), before);
             return Err("Database not found".into());
         }
-        data.databases.remove(id);
-        store.databases.remove(id);
-        publication.advance_authority_generation();
-        revisions.remove(id);
+        let mutation = self.publish_database_delta(
+            &mut publication,
+            &mut revisions,
+            id,
+            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            operation_id,
+            Some(before),
+            None,
+        );
         self.invalidate_all_compile_products();
-        Ok(())
+        Ok(mutation)
     }
 }
 
@@ -295,6 +470,57 @@ mod tests {
         root
     }
 
+    fn database_basis(
+        state: &ProjectState,
+        id: &str,
+    ) -> (
+        crate::project::ProjectInstanceId,
+        crate::node_system::document::ResourceRevision,
+        crate::node_system::document::OperationId,
+    ) {
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let revision = state
+            .database_authority_revisions
+            .read()
+            .unwrap()
+            .get(id)
+            .copied()
+            .map(crate::node_system::document::ResourceRevision::new)
+            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+        (
+            project_instance_id,
+            revision,
+            crate::node_system::document::OperationId::new(),
+        )
+    }
+
+    fn add_database_fixture(
+        state: &ProjectState,
+        instance: DatabaseInstance,
+    ) -> Result<crate::event::ResourceMutationResultDto, String> {
+        let (session, _lease) = state.acquire_database_write_lease()?;
+        state.add_database_for_session(
+            &session,
+            &session.instance_id,
+            crate::node_system::document::OperationId::new(),
+            instance,
+        )
+    }
+
+    fn load_database_fixture(
+        state: &ProjectState,
+        engine: crate::schema::DatabaseEngineDTO,
+    ) -> Result<crate::application::database::LoadDatabaseResult, String> {
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        crate::application::database::load_database(
+            state,
+            &project_instance_id,
+            crate::node_system::document::OperationId::new(),
+            engine,
+        )
+        .map(|result| result.data)
+    }
+
     #[test]
     fn execution_access_during_activation_is_detached_and_failure_has_zero_effects() {
         let root = project_root("detached-execution");
@@ -302,7 +528,7 @@ mod tests {
         std::fs::write(&csv, "value\n1\n").unwrap();
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
-        let imported = crate::application::database::load_database(
+        let imported = load_database_fixture(
             &state,
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
@@ -348,8 +574,9 @@ mod tests {
         assert_eq!(generation_after_access, generation_before_access);
 
         let missing_id = "missing-execution".to_string();
-        state
-            .add_database(DatabaseInstance {
+        add_database_fixture(
+            &state,
+            DatabaseInstance {
                 decl: DatabaseDecl {
                     id: missing_id.clone(),
                     engine: DatabaseEngine::InMemory {
@@ -366,8 +593,9 @@ mod tests {
                     columns: Vec::new(),
                     history: EditHistory::new(),
                 },
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         let generation_before_failure = state.authority_generation_for_test();
 
         assert!(
@@ -400,8 +628,9 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
         let database_id = "writer";
-        state
-            .add_database(DatabaseInstance {
+        add_database_fixture(
+            &state,
+            DatabaseInstance {
                 decl: DatabaseDecl {
                     id: database_id.into(),
                     engine: DatabaseEngine::InMemory {
@@ -414,8 +643,9 @@ mod tests {
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
                 },
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         let graph_path =
             crate::project::GraphResourcePath::new("events/DatabaseWriter.yssbi-event").unwrap();
         state
@@ -434,15 +664,24 @@ mod tests {
         assert!(coordinator.contains_slot_for_test(&document_path));
         let generation = state.authority_generation_for_test();
 
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, database_id);
         let closure_had_no_store_lock = state
-            .with_database_mut(database_id, |database| {
-                let store_lock = state.project_store.try_write();
-                let lock_available = store_lock.is_ok();
-                drop(store_lock);
-                database.decl.name = Some("Committed".into());
-                Ok(lock_available)
-            })
-            .unwrap();
+            .with_database_mut(
+                &project_instance_id,
+                database_id,
+                expected_revision,
+                operation_id,
+                |database| {
+                    let store_lock = state.project_store.try_write();
+                    let lock_available = store_lock.is_ok();
+                    drop(store_lock);
+                    database.decl.name = Some("Committed".into());
+                    Ok(lock_available)
+                },
+            )
+            .unwrap()
+            .data;
 
         assert!(closure_had_no_store_lock);
         assert_eq!(
@@ -463,11 +702,19 @@ mod tests {
 
         state.graph_projection(&graph_path, "en-US").unwrap();
         let generation = state.authority_generation_for_test();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, database_id);
         let error = state
-            .with_database_mut(database_id, |database| {
-                database.decl.name = Some("Rejected".into());
-                Err::<(), _>("reject mutation".into())
-            })
+            .with_database_mut(
+                &project_instance_id,
+                database_id,
+                expected_revision,
+                operation_id,
+                |database| {
+                    database.decl.name = Some("Rejected".into());
+                    Err::<(), _>("reject mutation".into())
+                },
+            )
             .unwrap_err();
         assert_eq!(error, "reject mutation");
         assert_eq!(
@@ -488,8 +735,9 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
         let database_id = "snapshot";
-        state
-            .add_database(DatabaseInstance {
+        add_database_fixture(
+            &state,
+            DatabaseInstance {
                 decl: DatabaseDecl {
                     id: database_id.into(),
                     engine: DatabaseEngine::InMemory {
@@ -502,8 +750,9 @@ mod tests {
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
                 },
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         let graph_path =
             crate::project::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event").unwrap();
         state
@@ -559,9 +808,12 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
         let initial = state.authority_generation_for_test();
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
 
-        let imported = crate::application::database::load_database(
+        let imported_result = crate::application::database::load_database(
             &state,
+            &project_instance_id,
+            crate::node_system::document::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -570,30 +822,86 @@ mod tests {
             },
         )
         .unwrap();
+        assert_eq!(imported_result.mutation.publication_revision, 1);
+        let imported = imported_result.data;
         let after_import = state.authority_generation_for_test();
-        assert!(after_import > initial);
+        assert_eq!(after_import, initial + 1);
+        assert_eq!(
+            state.database_authority_revisions.read().unwrap()[&imported.id],
+            imported_result.mutation.deltas[0].to_revision.get()
+        );
 
-        crate::application::database::rename_database(&state, &imported.id, "renamed").unwrap();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, &imported.id);
+        let renamed = crate::application::database::rename_database(
+            &state,
+            &project_instance_id,
+            &imported.id,
+            expected_revision,
+            "renamed",
+            operation_id,
+        )
+        .unwrap();
+        assert_eq!(renamed.mutation.publication_revision, 2);
         let after_rename = state.authority_generation_for_test();
-        assert!(after_rename > after_import);
+        assert_eq!(after_rename, after_import + 1);
+        assert_eq!(
+            state.database_authority_revisions.read().unwrap()[&imported.id],
+            renamed.mutation.deltas[0].to_revision.get()
+        );
 
-        state
-            .with_database_writer(&imported.id, |database, _| {
-                database.add_column("added", "Int64")
-            })
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, &imported.id);
+        let edited = state
+            .with_database_writer(
+                &project_instance_id,
+                &imported.id,
+                expected_revision,
+                operation_id,
+                |database, _| database.add_column("added", "Int64"),
+            )
             .unwrap();
+        assert_eq!(edited.mutation.publication_revision, 3);
         let after_edit = state.authority_generation_for_test();
-        assert!(after_edit > after_rename);
+        assert_eq!(after_edit, after_rename + 1);
+        assert_eq!(
+            state.database_authority_revisions.read().unwrap()[&imported.id],
+            edited.mutation.deltas[0].to_revision.get()
+        );
         let metadata =
             crate::application::database::get_database_meta(&state, &imported.id).unwrap();
         assert!(metadata.columns.iter().any(|column| column.name == "added"));
 
-        crate::application::database::save_database_changes(&state, &imported.id).unwrap();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, &imported.id);
+        let saved = crate::application::database::save_database_changes(
+            &state,
+            &project_instance_id,
+            &imported.id,
+            expected_revision,
+            operation_id,
+        )
+        .unwrap();
+        assert_eq!(saved.mutation.publication_revision, 4);
         let after_save = state.authority_generation_for_test();
-        assert!(after_save > after_edit);
+        assert_eq!(after_save, after_edit + 1);
+        assert_eq!(
+            state.database_authority_revisions.read().unwrap()[&imported.id],
+            saved.mutation.deltas[0].to_revision.get()
+        );
 
-        state.delete_database(&imported.id).unwrap();
-        assert!(state.authority_generation_for_test() > after_save);
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, &imported.id);
+        let deleted = state
+            .delete_database(
+                &project_instance_id,
+                &imported.id,
+                expected_revision,
+                operation_id,
+            )
+            .unwrap();
+        assert_eq!(deleted.mutation.publication_revision, 5);
+        assert_eq!(state.authority_generation_for_test(), after_save + 1);
         assert!(
             !state
                 .get_data()
@@ -620,8 +928,9 @@ mod tests {
     }
 
     fn add_in_memory_database(state: &ProjectState, id: &str, name: &str) {
-        state
-            .add_database(DatabaseInstance {
+        add_database_fixture(
+            state,
+            DatabaseInstance {
                 decl: DatabaseDecl {
                     id: id.into(),
                     engine: DatabaseEngine::InMemory { name: id.into() },
@@ -632,8 +941,9 @@ mod tests {
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
                 },
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
     }
 
     #[test]
@@ -659,7 +969,13 @@ mod tests {
         let generation_after_unrelated = state.authority_generation_for_test();
 
         state
-            .commit_database_name(&session, &token, "writer", "Committed")
+            .commit_database_name(
+                &session,
+                &token,
+                "writer",
+                "Committed",
+                crate::node_system::document::OperationId::new(),
+            )
             .unwrap();
 
         assert_eq!(
@@ -683,7 +999,7 @@ mod tests {
         std::fs::write(&csv, "value\n1\n").unwrap();
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
-        let imported = crate::application::database::load_database(
+        let imported = load_database_fixture(
             &state,
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
@@ -716,8 +1032,17 @@ mod tests {
 
         let rename_state = state.clone();
         let rename_id = imported.id.clone();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, &rename_id);
         let rename = std::thread::spawn(move || {
-            crate::application::database::rename_database(&rename_state, &rename_id, "Renamed")
+            crate::application::database::rename_database(
+                &rename_state,
+                &project_instance_id,
+                &rename_id,
+                expected_revision,
+                "Renamed",
+                operation_id,
+            )
         });
         io_done_rx
             .recv_timeout(std::time::Duration::from_secs(5))
@@ -770,16 +1095,29 @@ mod tests {
             snapshot_ready_tx.send(()).unwrap();
             resume_rx.recv().unwrap();
             instance.decl.name = Some("Stale A".into());
-            stale_state.commit_database_instance(&stale_session, &token, instance)
+            stale_state.commit_database_instance(
+                &stale_session,
+                &token,
+                instance,
+                crate::node_system::document::OperationId::new(),
+            )
         });
         snapshot_ready_rx
             .recv_timeout(std::time::Duration::from_secs(5))
             .unwrap();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, "writer");
         state
-            .with_database_mut("writer", |database| {
-                database.decl.name = Some("Committed B".into());
-                Ok(())
-            })
+            .with_database_mut(
+                &project_instance_id,
+                "writer",
+                expected_revision,
+                operation_id,
+                |database| {
+                    database.decl.name = Some("Committed B".into());
+                    Ok(())
+                },
+            )
             .unwrap();
         let generation_after_b = state.authority_generation_for_test();
         resume_tx.send(()).unwrap();
@@ -798,6 +1136,314 @@ mod tests {
     }
 
     #[test]
+    fn database_operation_ids_reject_in_flight_and_completed_replays_and_release_failures() {
+        use crate::node_system::document::{OperationId, ResourceRevision};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+
+        let root = project_root("database-operation-ledger");
+        let state = ProjectState::new();
+        state.activate_project_from_path(&root).unwrap();
+        add_in_memory_database(&state, "writer", "Initial");
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let expected_revision =
+            ResourceRevision::new(state.database_authority_revisions.read().unwrap()["writer"]);
+        let operation_id = OperationId::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+
+        let first_state = state.clone();
+        let first_project = project_instance_id.clone();
+        let first_calls = Arc::clone(&calls);
+        let first = std::thread::spawn(move || {
+            first_state.with_database_writer(
+                &first_project,
+                "writer",
+                expected_revision,
+                operation_id,
+                |database, _| {
+                    first_calls.fetch_add(1, Ordering::SeqCst);
+                    entered_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    database.decl.name = Some("First".into());
+                    Ok(())
+                },
+            )
+        });
+        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+
+        let duplicate_state = state.clone();
+        let duplicate_project = project_instance_id.clone();
+        let duplicate_calls = Arc::clone(&calls);
+        let (duplicate_tx, duplicate_rx) = std::sync::mpsc::channel();
+        let duplicate = std::thread::spawn(move || {
+            let result = duplicate_state.with_database_writer(
+                &duplicate_project,
+                "writer",
+                expected_revision,
+                operation_id,
+                |_, _| {
+                    duplicate_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                },
+            );
+            let _ = duplicate_tx.send(result);
+        });
+        let in_flight = match duplicate_rx.recv_timeout(Duration::from_millis(250)) {
+            Ok(result) => result,
+            Err(error) => {
+                release_tx.send(()).unwrap();
+                first.join().unwrap().unwrap();
+                duplicate.join().unwrap();
+                panic!("duplicate operation did not reject before waiting for the writer: {error}");
+            }
+        };
+        assert!(in_flight.unwrap_err().contains("duplicate_operation"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        release_tx.send(()).unwrap();
+        let first = first.join().unwrap().unwrap();
+        duplicate.join().unwrap();
+        let committed_revision = first.mutation.deltas[0].to_revision;
+        let replay = state.with_database_writer(
+            &project_instance_id,
+            "writer",
+            committed_revision,
+            operation_id,
+            |_, _| Ok(()),
+        );
+        assert!(replay.unwrap_err().contains("duplicate_operation"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let retryable_operation = OperationId::new();
+        let failed = state.with_database_writer(
+            &project_instance_id,
+            "writer",
+            committed_revision,
+            retryable_operation,
+            |_, _| Err::<(), _>("injected failure".into()),
+        );
+        assert_eq!(failed.unwrap_err(), "injected failure");
+        let retried = state
+            .with_database_writer(
+                &project_instance_id,
+                "writer",
+                committed_revision,
+                retryable_operation,
+                |database, _| {
+                    database.decl.required = true;
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(retried.mutation.operation_id, retryable_operation);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn discovery_database_commits_publish_once_and_failures_have_zero_effects() {
+        use crate::node_system::document::{
+            DatabaseResourceKey, OperationId, ResourceDocumentPatch, ResourceKey, ResourceRevision,
+        };
+
+        let root = project_root("canonical-publication");
+        let state = ProjectState::new();
+        let project = state.activate_project_from_path(&root).unwrap();
+        let (session, _lease) = state.acquire_database_write_lease().unwrap();
+        let database_id = "writer";
+        let operation_id = OperationId::new();
+        let created = state
+            .add_database_for_session(
+                &session,
+                &project.instance_id,
+                operation_id,
+                DatabaseInstance {
+                    decl: DatabaseDecl {
+                        id: database_id.into(),
+                        engine: DatabaseEngine::InMemory {
+                            name: database_id.into(),
+                        },
+                        schema_version: 1,
+                        required: false,
+                        name: Some("Before".into()),
+                    },
+                    state: DatabaseState::Failed {
+                        error: "fixture".into(),
+                    },
+                },
+            )
+            .unwrap();
+        drop(_lease);
+
+        assert_eq!(created.publication_revision, 1);
+        assert_eq!(created.operation_id, operation_id);
+        assert_eq!(created.project_instance_id, project.instance_id.as_str());
+        assert_eq!(created.deltas.len(), 1);
+        assert_eq!(
+            created.deltas[0].resource,
+            ResourceKey::Database(DatabaseResourceKey("databases/writer".into()))
+        );
+        assert_eq!(created.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(created.deltas[0].caused_by, Some(operation_id));
+        assert!(matches!(
+            created.deltas[0].payload,
+            ResourceDocumentPatch::Database(_)
+        ));
+
+        let created_revision =
+            ResourceRevision::new(state.database_authority_revisions.read().unwrap()[database_id]);
+        assert_eq!(created.deltas[0].to_revision, created_revision);
+
+        let publication_before_duplicate =
+            state.mutation_publication.lock().unwrap().resource_revision;
+        let authority_before_duplicate = state.database_authority_revisions.read().unwrap().clone();
+        let data_before_duplicate = state.get_data().unwrap().databases[database_id].clone();
+        let duplicate = add_database_fixture(
+            &state,
+            DatabaseInstance {
+                decl: data_before_duplicate.clone(),
+                state: DatabaseState::Failed {
+                    error: "duplicate fixture".into(),
+                },
+            },
+        );
+        assert!(
+            duplicate
+                .unwrap_err()
+                .contains("expected database to be absent")
+        );
+        assert_eq!(
+            state.mutation_publication.lock().unwrap().resource_revision,
+            publication_before_duplicate
+        );
+        assert_eq!(
+            *state.database_authority_revisions.read().unwrap(),
+            authority_before_duplicate
+        );
+        assert_eq!(
+            state.get_data().unwrap().databases[database_id],
+            data_before_duplicate
+        );
+
+        let edit_operation = OperationId::new();
+        let edited = state
+            .with_database_writer(
+                &project.instance_id,
+                database_id,
+                created_revision,
+                edit_operation,
+                |database, _| {
+                    database.decl.schema_version = 2;
+                    Ok("edited")
+                },
+            )
+            .unwrap();
+        assert_eq!(edited.data, "edited");
+        assert_eq!(edited.mutation.publication_revision, 2);
+        assert_eq!(edited.mutation.operation_id, edit_operation);
+        assert_eq!(edited.mutation.deltas[0].from_revision, created_revision);
+        let edited_revision = edited.mutation.deltas[0].to_revision;
+        assert_eq!(
+            state.database_authority_revisions.read().unwrap()[database_id],
+            edited_revision.get()
+        );
+
+        let revision_before_failure = state.mutation_publication.lock().unwrap().resource_revision;
+        let authority_before_failure = state.database_authority_revisions.read().unwrap().clone();
+        let data_before_failure = state.get_data().unwrap().databases[database_id].clone();
+        let failure = state.with_database_writer(
+            &project.instance_id,
+            database_id,
+            edited_revision,
+            OperationId::new(),
+            |database, _| {
+                database.decl.name = Some("Rejected".into());
+                Err::<(), _>("reject mutation".into())
+            },
+        );
+        assert_eq!(failure.unwrap_err(), "reject mutation");
+        assert_eq!(
+            state.mutation_publication.lock().unwrap().resource_revision,
+            revision_before_failure
+        );
+        assert_eq!(
+            *state.database_authority_revisions.read().unwrap(),
+            authority_before_failure
+        );
+        assert_eq!(
+            state.get_data().unwrap().databases[database_id].name,
+            data_before_failure.name
+        );
+
+        let stale = state.with_database_writer(
+            &project.instance_id,
+            database_id,
+            created_revision,
+            OperationId::new(),
+            |database, _| {
+                database.decl.required = true;
+                Ok(())
+            },
+        );
+        assert!(stale.unwrap_err().contains("stale"));
+        assert_eq!(
+            state.mutation_publication.lock().unwrap().resource_revision,
+            revision_before_failure
+        );
+        assert_eq!(
+            *state.database_authority_revisions.read().unwrap(),
+            authority_before_failure
+        );
+
+        let delete_operation = OperationId::new();
+        let deleted = state
+            .delete_database(
+                &project.instance_id,
+                database_id,
+                edited_revision,
+                delete_operation,
+            )
+            .unwrap();
+        assert_eq!(deleted.mutation.publication_revision, 3);
+        assert_eq!(deleted.mutation.operation_id, delete_operation);
+        assert_eq!(deleted.mutation.deltas[0].from_revision, edited_revision);
+        assert!(
+            !state
+                .database_authority_revisions
+                .read()
+                .unwrap()
+                .contains_key(database_id)
+        );
+
+        let mut replacement = crate::project::ProjectData::new();
+        replacement.databases.insert(
+            "replacement".into(),
+            DatabaseDecl {
+                id: "replacement".into(),
+                engine: DatabaseEngine::InMemory {
+                    name: "replacement".into(),
+                },
+                schema_version: 1,
+                required: false,
+                name: Some("Replacement".into()),
+            },
+        );
+        state.activate_project_fixture("replacement-project".into(), replacement);
+        assert_eq!(
+            *state.database_authority_revisions.read().unwrap(),
+            std::collections::HashMap::from([("replacement".into(), 0)])
+        );
+        assert_eq!(
+            state.mutation_publication.lock().unwrap().resource_revision,
+            0
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn database_rename_and_delete_share_authority_token_cas() {
         let root = project_root("rename-delete-cas");
         let state = ProjectState::new();
@@ -808,16 +1454,30 @@ mod tests {
         let (rename_token, _) = state
             .database_snapshot_for_session(&session, "writer")
             .unwrap();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, "writer");
         state
-            .with_database_mut("writer", |database| {
-                database.decl.name = Some("New Authority".into());
-                Ok(())
-            })
+            .with_database_mut(
+                &project_instance_id,
+                "writer",
+                expected_revision,
+                operation_id,
+                |database| {
+                    database.decl.name = Some("New Authority".into());
+                    Ok(())
+                },
+            )
             .unwrap();
         let generation = state.authority_generation_for_test();
         assert!(
             state
-                .commit_database_name(&session, &rename_token, "writer", "Stale Rename")
+                .commit_database_name(
+                    &session,
+                    &rename_token,
+                    "writer",
+                    "Stale Rename",
+                    crate::node_system::document::OperationId::new(),
+                )
                 .unwrap_err()
                 .contains("stale")
         );
@@ -826,16 +1486,29 @@ mod tests {
         let (delete_token, _) = state
             .database_snapshot_for_session(&session, "writer")
             .unwrap();
+        let (project_instance_id, expected_revision, operation_id) =
+            database_basis(&state, "writer");
         state
-            .with_database_mut("writer", |database| {
-                database.decl.required = true;
-                Ok(())
-            })
+            .with_database_mut(
+                &project_instance_id,
+                "writer",
+                expected_revision,
+                operation_id,
+                |database| {
+                    database.decl.required = true;
+                    Ok(())
+                },
+            )
             .unwrap();
         let generation = state.authority_generation_for_test();
         assert!(
             state
-                .commit_database_delete(&session, &delete_token, "writer")
+                .commit_database_delete(
+                    &session,
+                    &delete_token,
+                    "writer",
+                    crate::node_system::document::OperationId::new(),
+                )
                 .unwrap_err()
                 .contains("stale")
         );

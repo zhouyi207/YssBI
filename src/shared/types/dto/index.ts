@@ -12,6 +12,8 @@ export * from './graphCommands';
 export * from './graphModel';
 export * from './editorProjection';
 export * from './editorMutation';
+export * from './runEvent';
+export * from './trace';
 
 export * from './converters';
 export * from './dataType';

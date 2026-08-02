@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ExecutionEvent } from "@/shared/types/ui/execution";
+import type { ExecuteGraphResultDto, RunEvent } from "@/shared/types/dto/runEvent";
 import type { Graph } from "@/shared/types/domain";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
 import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
@@ -25,14 +25,27 @@ export type ProjectCleanupProgressEvent =
     | { kind: "removing"; removed: number; total: number };
 
 export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
-export const EXECUTION_CANCELLED = "EXECUTION_CANCELLED";
 
 export function isPickerTaskCancelledError(error: unknown): boolean {
     return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
 }
 
 export function isExecutionCancelledError(error: unknown): boolean {
-    return formatErrorMessage(error, "") === EXECUTION_CANCELLED;
+    return Boolean(
+        error
+        && typeof error === "object"
+        && (error as { code?: unknown }).code === "run_cancelled",
+    );
+}
+
+function commandSentTerminalRunEvent(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const details = (error as { details?: unknown }).details;
+    return Boolean(
+        details
+        && typeof details === "object"
+        && (details as { terminalRunEventSent?: unknown }).terminalRunEventSent === true,
+    );
 }
 
 export interface ProjectGraphIndexRow {
@@ -309,29 +322,38 @@ export class ProjectService {
             throw e;
         }
     }
-    /**
-     * 执行指定的 Event 图（通过 Tauri Channel 流式接收执行事件）
-     * @param graphPath 要执行的 graph 路径，传 undefined 则执行所有 Event 图
-     */
-    static async executeProject(
-        onEvent?: (event: ExecutionEvent) => void,
-        graphPath?: string,
-    ): Promise<{ executedGraphs: number; logs: string[] }> {
+    /** Execute one graph document and drain its streamed run events. */
+    static async executeGraphDocument(
+        graphPath: string,
+        onEvent?: (event: RunEvent) => void,
+    ): Promise<ExecuteGraphResultDto> {
         const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
         try {
-            const res = await invoke<{ executedGraphs: number; logs: string[] }>(
-                "execute_project",
-                { onEvent: channel , graphPath: graphPath ?? null },
-            );
-            await waitForStreamEnd(res.executedGraphs);
-            return res;
+            let result: ExecuteGraphResultDto;
+            try {
+                result = await invoke<ExecuteGraphResultDto>(
+                    "execute_graph_document",
+                    { graphPath, onEvent: channel },
+                );
+            } catch (error) {
+                if (commandSentTerminalRunEvent(error)) {
+                    try {
+                        await waitForStreamEnd();
+                    } catch {
+                        // Drain failures must not replace the backend command classification.
+                    }
+                }
+                throw error;
+            }
+            await waitForStreamEnd();
+            return result;
         } finally {
             untrackChannel(channel);
         }
     }
 
-    static async cancelExecution(): Promise<void> {
-        await invoke("cancel_execution");
+    static async cancelGraphRun(runId: string): Promise<boolean> {
+        return invoke<boolean>("cancel_graph_run", { runId });
     }
 
     static async clearGraphExecutionArtifacts(graphPath: string): Promise<void> {

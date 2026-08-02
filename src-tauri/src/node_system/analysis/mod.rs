@@ -9,6 +9,7 @@ mod observability;
 mod projection;
 mod semantic;
 mod snapshot;
+mod trace_store;
 
 pub use crate::node_system::document::PortAddressDto;
 pub use basis::{
@@ -42,6 +43,7 @@ pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,
     SchemaFacts, TypeFacts, ValidationError,
 };
+pub use trace_store::{BoundedTraceSink, DEFAULT_PROJECT_TRACE_CAPACITY, TraceRecord};
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
 
+import { GraphTraceDetails } from '../observability/GraphTraceDetails';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
 
@@ -50,7 +51,7 @@ export function FunctionDetailPanel({
         pins={fn.outputs ?? []}
         onChange={(outputs) => onSignatureChange({ outputs })}
       />
-
+      <GraphTraceDetails graphPath={fn.path} />
     </DetailPanelShell>
   );
 }

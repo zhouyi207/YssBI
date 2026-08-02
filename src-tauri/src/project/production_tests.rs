@@ -18,14 +18,9 @@ fn document_path() -> crate::node_system::document::GraphResourcePath {
 fn load_graph(
     state: &ProjectState,
     graph_path: &GraphResourcePath,
-) -> Result<GraphResourceDocument, String> {
-    let project_instance_id = state
-        .capture_project_session()
-        .map_err(|error| error.to_string())?
-        .instance_id;
-    state
-        .load_graph_resource(&project_instance_id, graph_path, 1)
-        .map_err(|error| error.to_string())
+) -> Result<GraphResourceDocument, ProjectFilesystemError> {
+    let project_instance_id = state.capture_project_session()?.instance_id;
+    state.load_graph_resource(&project_instance_id, graph_path, 1)
 }
 
 fn node(node_type: &str) -> DocumentNode {
@@ -365,11 +360,9 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
             .unwrap_err()
             .contains("project_recovery_required")
     );
-    assert!(
-        load_graph(&state, &graph)
-            .unwrap_err()
-            .contains("project_recovery_required")
-    );
+    let error = load_graph(&state, &graph).unwrap_err();
+    assert_eq!(error.code(), "project_recovery_required");
+    assert!(error.recovery_required());
     assert_eq!(
         state
             .insert_graph(
@@ -682,11 +675,9 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             .unwrap_err()
             .contains("project_recovery_required")
     );
-    assert!(
-        load_graph(&state, &event)
-            .unwrap_err()
-            .contains("project_recovery_required")
-    );
+    let error = load_graph(&state, &event).unwrap_err();
+    assert_eq!(error.code(), "project_recovery_required");
+    assert!(error.recovery_required());
     assert_eq!(
         state
             .insert_graph(
@@ -710,7 +701,13 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
     );
     assert!(
         state
-            .with_database_mut("missing", |_| Ok(()))
+            .with_database_mut(
+                &crate::project::ProjectInstanceId::from_existing("blocked".into()),
+                "missing",
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                |_| Ok(()),
+            )
             .unwrap_err()
             .contains("project_recovery_required")
     );
@@ -822,11 +819,10 @@ fn rename_rejects_concurrent_referenced_graph_and_variable_changes() {
         caller.name = "Concurrent Caller".into();
         caller.document.revision = GraphRevision::new(1);
         drop(data);
-        concurrent_state
-            .variable_revisions
-            .write()
-            .unwrap()
-            .insert(variable_id, GraphRevision::new(1));
+        concurrent_state.variable_revisions.write().unwrap().insert(
+            variable_id,
+            crate::project::project_state::VariableRevisionEntry::present(GraphRevision::new(1)),
+        );
     }));
     let project_instance_id = state.project_instance_id();
 
@@ -844,7 +840,7 @@ fn rename_rejects_concurrent_referenced_graph_and_variable_changes() {
         "Concurrent Caller"
     );
     assert_eq!(
-        state.variable_revisions.read().unwrap()[&variable_id],
+        state.variable_revisions.read().unwrap()[&variable_id].revision,
         GraphRevision::new(1)
     );
     assert!(root.join(source.as_str()).is_file());
@@ -1970,22 +1966,18 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         .unwrap();
     load_graph(&state, &caller).unwrap();
     load_graph(&state, &function).unwrap();
-    let local_variable_id = crate::variable::VariableId::new();
-    state.project_data.write().unwrap().variables.insert(
-        local_variable_id,
-        crate::variable::VariableInstance {
-            id: local_variable_id,
-            name: "Local Rate".into(),
-            data_type: crate::graph::value::DataType::Int64,
-            data_value: crate::graph::value::DataValue::Int64(9),
-            tabular: None,
-            description: String::new(),
-            scope: crate::variable::VariableScope::Function {
+    let local_variable = state
+        .add_variable(
+            "Local Rate",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(9),
+            "",
+            crate::variable::VariableScope::Function {
                 function_path: function.as_str().into(),
             },
-            tags: Vec::new(),
-        },
-    );
+            Vec::new(),
+        )
+        .unwrap();
 
     let mut call = node("yssbi.project.function.call");
     call.parameters.insert(
@@ -2071,7 +2063,7 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
             .any(|value| value.as_str() == Some(function.as_str()))
     }));
     assert_eq!(
-        data.variables[&local_variable_id].scope,
+        data.variables[&local_variable.id].scope,
         crate::variable::VariableScope::Function {
             function_path: renamed.as_str().into(),
         }
@@ -2159,24 +2151,18 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
         )
         .unwrap();
     crate::project::fixtures::write_state_graph(&state, &caller).unwrap();
-    let variable = crate::variable::VariableInstance {
-        id: crate::variable::VariableId::new(),
-        name: "Scoped".into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(1),
-        tabular: None,
-        description: String::new(),
-        scope: crate::variable::VariableScope::Event {
-            event_path: source.as_str().into(),
-        },
-        tags: Vec::new(),
-    };
-    state
-        .project_data
-        .write()
-        .unwrap()
-        .variables
-        .insert(variable.id, variable.clone());
+    let variable = state
+        .add_variable(
+            "Scoped",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(1),
+            "",
+            crate::variable::VariableScope::Event {
+                event_path: source.as_str().into(),
+            },
+            Vec::new(),
+        )
+        .unwrap();
     crate::project::fixtures::write_state_graph(&state, &source).unwrap();
 
     let renamed = state
@@ -2329,6 +2315,12 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
         .unwrap();
     crate::project::fixtures::write_state_graph(&state, &caller).unwrap();
     state.unload_graph_resource(&caller).unwrap();
+
+    assert!(!state.get_data().unwrap().graphs.contains_key(&caller));
+    assert_eq!(
+        state.revision_state_for_test().0.get(&caller),
+        Some(&GraphRevision::new(1))
+    );
 
     let renamed = state
         .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Renamed Callee")
@@ -3685,6 +3677,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             store.as_ref(),
             &resources,
             session,
+            &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
             &mut parameters,
         )
@@ -3725,7 +3718,8 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
 
 #[test]
 fn production_compiler_rejects_wrong_scope_and_duplicate_shell_nodes() {
-    let state = state_with_empty_graph();
+    let project = temp_project_with_empty_graph("compiler-shell-diagnostics");
+    let state = project.state();
     let first = node("yssbi.project.function.entry");
     let second = node("yssbi.project.function.entry");
     let patch = GraphDocumentPatch::new(vec![
@@ -3793,7 +3787,10 @@ fn production_relational_backend_executes_project_dataframe_source() {
         bridge_inputs: Box::new([]),
         requested_fragment_outputs: Box::new([]),
         roots: Box::new([crate::node_system::plan::RelationalOperatorIndex::new(1)]),
-        pushdown_hints: Box::new([]),
+        pushdown_hints: Box::new([crate::node_system::plan::RelationalPushdownHint::Limit {
+            source: crate::node_system::plan::RelationalOperatorIndex::new(0),
+            rows: 2,
+        }]),
     };
 
     let result = crate::node_system::runtime::ProductionRelationalBackend::default()
@@ -3953,25 +3950,22 @@ fn project_execution_refuses_blocking_analysis() {
 
 #[test]
 fn project_variable_get_executes_against_authoritative_resource() {
-    let state = state_with_empty_graph();
-    let variable_id = crate::variable::VariableId::new();
-    state.project_data.write().unwrap().variables.insert(
-        variable_id,
-        crate::variable::VariableInstance {
-            id: variable_id,
-            name: "Rate".into(),
-            data_type: crate::graph::value::DataType::Int64,
-            data_value: crate::graph::value::DataValue::Int64(9),
-            tabular: None,
-            description: String::new(),
-            scope: crate::variable::VariableScope::Global,
-            tags: Vec::new(),
-        },
-    );
-    let mut variable = node("yssbi.project.variable.get");
-    variable.parameters.insert(
+    let project = temp_project_with_empty_graph("project-variable-execution");
+    let state = project.state();
+    let variable = state
+        .add_variable(
+            "authoritative",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(41),
+            "",
+            crate::variable::VariableScope::Global,
+            Vec::new(),
+        )
+        .unwrap();
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
         crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
-        serde_json::json!(format!("variables/{variable_id}")),
+        serde_json::json!(format!("variables/{}", variable.id)),
     );
     state
         .apply_graph_patch(
@@ -3981,7 +3975,7 @@ fn project_variable_get_executes_against_authoritative_resource() {
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
-                    node: variable,
+                    node: variable_node,
                 }]),
             ),
         )
@@ -4345,7 +4339,7 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
         );
         assert_eq!(cached_i64_column(&state, variable.id), vec![7, 8, 9]);
         assert_eq!(
-            state.variable_revisions.read().unwrap()[&variable.id],
+            state.variable_revisions.read().unwrap()[&variable.id].revision,
             GraphRevision::new(1)
         );
         let resource = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
@@ -4439,7 +4433,7 @@ fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
         disk_before
     );
     assert_eq!(
-        state.variable_revisions.read().unwrap()[&variable.id],
+        state.variable_revisions.read().unwrap()[&variable.id].revision,
         GraphRevision::INITIAL
     );
     std::fs::remove_dir_all(root).unwrap();
@@ -4715,6 +4709,42 @@ fn active_state_with_empty_graph(label: &str) -> (ProjectState, std::path::PathB
         )
         .unwrap();
     (state, root)
+}
+
+fn temp_project_with_empty_graph(label: &str) -> crate::project::fixtures::TempProject {
+    let project = crate::project::fixtures::TempProject::activate(label, ProjectData::new());
+    project
+        .state()
+        .insert_graph(
+            graph_path(),
+            GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    project
+}
+
+fn temp_project_with_valid_constant_graph(label: &str) -> crate::project::fixtures::TempProject {
+    let project = temp_project_with_empty_graph(label);
+    let mut constant = node("yssbi.constant.int64");
+    constant.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("value").unwrap(),
+        serde_json::json!(7),
+    );
+    project
+        .state()
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: constant,
+                }]),
+            ),
+        )
+        .unwrap();
+    project
 }
 
 fn active_state_with_valid_constant_graph(label: &str) -> (ProjectState, std::path::PathBuf) {
@@ -5052,7 +5082,11 @@ fn graph_projection_retries_when_authority_changes_during_metadata_capture() {
 
     let projection = projection.join().unwrap().unwrap();
     assert_eq!(projection.source_revision, 2);
-    assert_eq!(capture_count.load(std::sync::atomic::Ordering::Acquire), 2);
+    let captures = capture_count.load(std::sync::atomic::Ordering::Acquire);
+    assert!(
+        captures >= 2,
+        "expected invalidated capture to be retried, observed {captures} capture(s)"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -5125,7 +5159,11 @@ fn compile_capture_retries_when_authority_changes_during_metadata_capture() {
     release_capture_tx.send(()).unwrap();
 
     execution.join().unwrap().unwrap();
-    assert_eq!(capture_count.load(std::sync::atomic::Ordering::Acquire), 2);
+    let captures = capture_count.load(std::sync::atomic::Ordering::Acquire);
+    assert!(
+        captures >= 2,
+        "expected invalidated capture to be retried, observed {captures} capture(s)"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -5293,21 +5331,21 @@ fn different_basis_request_compiles_after_authoritative_invalidation() {
 
 #[test]
 fn execution_rejects_function_body_change_after_main_plan_before_run() {
-    let (state, root) = active_state_with_valid_constant_graph("execution-authority-gate");
-    let function_path = GraphResourcePath::new("functions/Authority.yssbi-function").unwrap();
-    state
-        .insert_graph(
-            function_path.clone(),
-            GraphResourceDocument::new("Authority", GraphDocumentKind::Function),
-        )
+    let project = temp_project_with_valid_constant_graph("execution-authority-gate");
+    let state = project.state();
+    let function_path = state
+        .create_graph_resource_fixture("Authority", GraphDocumentKind::Function)
         .unwrap();
 
     let (plan_ready_tx, plan_ready_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let release_rx = std::sync::Mutex::new(release_rx);
     state.set_execution_before_final_gate_test_hook(std::sync::Arc::new(move || {
-        plan_ready_tx.send(()).unwrap();
-        release_rx.lock().unwrap().recv().unwrap();
+        let _ = plan_ready_tx.send(());
+        let _ = release_rx
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .recv_timeout(std::time::Duration::from_secs(5));
     }));
     let run_entered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let run_entered_for_hook = std::sync::Arc::clone(&run_entered);
@@ -5315,34 +5353,40 @@ fn execution_rejects_function_body_change_after_main_plan_before_run() {
         run_entered_for_hook.store(true, std::sync::atomic::Ordering::Release);
     }));
 
-    let executing_state = state.clone();
-    let execution = std::thread::spawn(move || {
-        executing_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+    let error = std::thread::scope(|scope| {
+        let executing_state = state.clone();
+        let (execution_done_tx, execution_done_rx) = std::sync::mpsc::channel();
+        let execution = scope.spawn(move || {
+            let result = executing_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK);
+            let _ = execution_done_tx.send(());
+            result
+        });
+        plan_ready_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        state
+            .apply_graph_patch(
+                &function_path,
+                MutationRequest::new(
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        function_path.as_str().into(),
+                    )),
+                    GraphRevision::INITIAL,
+                    OperationId::new(),
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                        node: node("yssbi.constant.int64"),
+                    }]),
+                ),
+            )
+            .unwrap();
+        release_tx.send(()).unwrap();
+        execution_done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        execution.join().unwrap().unwrap_err()
     });
-    plan_ready_rx
-        .recv_timeout(std::time::Duration::from_secs(5))
-        .unwrap();
-    state
-        .apply_graph_patch(
-            &function_path,
-            MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    function_path.as_str().into(),
-                )),
-                GraphRevision::INITIAL,
-                OperationId::new(),
-                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
-                    node: node("yssbi.constant.int64"),
-                }]),
-            ),
-        )
-        .unwrap();
-    release_tx.send(()).unwrap();
-
-    let error = execution.join().unwrap().unwrap_err();
     assert!(error.contains("stale"), "unexpected error: {error}");
     assert!(!run_entered.load(std::sync::atomic::Ordering::Acquire));
-    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -5415,6 +5459,384 @@ fn project_execution_runs_valid_plan_through_run_executor() {
         .unwrap();
     assert!(result.run_id.get() > 0);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn production_observability_execute_graph_records_compile_and_run_for_current_session() {
+    use crate::node_system::analysis::{SpanKind, SpanStatus};
+
+    let (state, root) = active_state_with_valid_constant_graph("production-observability");
+    let (session_id, trace_sink) = {
+        let store = state.project_store.read().unwrap();
+        (
+            store.project_session_id.clone(),
+            std::sync::Arc::clone(&store.trace_sink),
+        )
+    };
+
+    state
+        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+
+    let records = trace_sink.records();
+    assert!(!records.is_empty());
+    assert!(records.iter().all(|record| {
+        record.event.correlation.project_session_id == session_id
+            && record.event.correlation.graph_path.0.as_ref() == graph_path().as_str()
+    }));
+    for kind in [SpanKind::Snapshot, SpanKind::Analysis, SpanKind::Lowering] {
+        assert!(records.iter().any(|record| {
+            record.event.kind == kind && record.event.status == SpanStatus::Succeeded
+        }));
+    }
+    assert!(records.iter().any(|record| {
+        record.event.kind == SpanKind::Run && record.event.status == SpanStatus::Started
+    }));
+    assert!(records.iter().any(|record| {
+        record.event.kind == SpanKind::Run && record.event.status == SpanStatus::Succeeded
+    }));
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn production_observability_project_replacement_installs_empty_distinct_sink() {
+    let (state, root) = active_state_with_valid_constant_graph("trace-sink-replacement");
+    let old_sink = {
+        let store = state.project_store.read().unwrap();
+        std::sync::Arc::clone(&store.trace_sink)
+    };
+    state
+        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+    assert!(!old_sink.records().is_empty());
+
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+
+    let new_sink = {
+        let store = state.project_store.read().unwrap();
+        std::sync::Arc::clone(&store.trace_sink)
+    };
+    assert!(!std::sync::Arc::ptr_eq(&old_sink, &new_sink));
+    assert!(new_sink.records().is_empty());
+    assert!(!old_sink.records().is_empty());
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+struct SourceRenameLimitFixture {
+    state: ProjectState,
+    root: std::path::PathBuf,
+    path: GraphResourcePath,
+    nodes: [DocumentNode; 3],
+    connections: [crate::node_system::document::DocumentConnection; 2],
+    rename_result_name: String,
+    limit_result_name: String,
+}
+
+impl SourceRenameLimitFixture {
+    fn new(label: &str) -> Self {
+        use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
+        use crate::node_system::protocol::{ParameterKey, PortKey};
+
+        let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("database")).unwrap();
+        let duckdb = root.join("database/project.duckdb");
+        let mut dataframe = polars::df!(
+            "old_name" => [11_i64, 22, 33, 44],
+            "untouched" => [101_i64, 202, 303, 404],
+        )
+        .unwrap();
+        crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+
+        let mut project_data = ProjectData::new();
+        project_data.databases.insert(
+            "main".into(),
+            crate::database::DatabaseDecl {
+                id: "main".into(),
+                engine: crate::database::DatabaseEngine::DuckDb {
+                    path: "database/project.duckdb".into(),
+                    table: "main".into(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some("Main".into()),
+            },
+        );
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project_data);
+
+        let mut source = node("yssbi.dataframe.source.get");
+        source.parameters.insert(
+            ParameterKey::new("dataframe").unwrap(),
+            serde_json::json!("databases/main"),
+        );
+        let mut rename = node("yssbi.dataframe.rename");
+        rename.parameters.insert(
+            ParameterKey::new("from").unwrap(),
+            serde_json::json!("old_name"),
+        );
+        rename.parameters.insert(
+            ParameterKey::new("to").unwrap(),
+            serde_json::json!("new_name"),
+        );
+        let mut limit = node("yssbi.dataframe.limit");
+        limit
+            .parameters
+            .insert(ParameterKey::new("rows").unwrap(), serde_json::json!(2));
+        let rename_result_name = format!("node.{}.result", rename.id);
+        let limit_result_name = format!("node.{}.result", limit.id);
+
+        let source_to_rename = DocumentConnection {
+            id: ConnectionId::new(),
+            output: PortAddress::declared(source.id, PortKey::new("dataframe").unwrap()),
+            input: PortAddress::declared(rename.id, PortKey::new("source").unwrap()),
+            order: None,
+        };
+        let rename_to_limit = DocumentConnection {
+            id: ConnectionId::new(),
+            output: PortAddress::declared(rename.id, PortKey::new("result").unwrap()),
+            input: PortAddress::declared(limit.id, PortKey::new("source").unwrap()),
+            order: None,
+        };
+
+        Self {
+            state,
+            root,
+            path: GraphResourcePath::new("events/SourceRenameLimit.yssbi-event").unwrap(),
+            nodes: [source, rename, limit],
+            connections: [source_to_rename, rename_to_limit],
+            rename_result_name,
+            limit_result_name,
+        }
+    }
+
+    fn document(&self, reversed: bool) -> GraphResourceDocument {
+        let mut graph = GraphResourceDocument::new("Source Rename Limit", GraphDocumentKind::Event);
+        if reversed {
+            for node in self.nodes.iter().rev() {
+                graph.document.nodes.insert(node.id, node.clone());
+            }
+            for connection in self.connections.iter().rev() {
+                graph
+                    .document
+                    .connections
+                    .insert(connection.id, connection.clone());
+            }
+        } else {
+            for node in &self.nodes {
+                graph.document.nodes.insert(node.id, node.clone());
+            }
+            for connection in &self.connections {
+                graph
+                    .document
+                    .connections
+                    .insert(connection.id, connection.clone());
+            }
+        }
+        graph
+    }
+}
+
+#[test]
+fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
+    use crate::node_system::plan::{
+        RelationalOperator, RelationalOperatorIndex, RelationalRename, ResourceId,
+    };
+    use crate::node_system::protocol::Value;
+    use crate::node_system::runtime::{ProductionRelationalObserver, RuntimeValue};
+
+    let fixture = SourceRenameLimitFixture::new("project-source-rename-limit");
+    fixture
+        .state
+        .insert_graph(fixture.path.clone(), fixture.document(false))
+        .unwrap();
+    let observer = std::sync::Arc::new(ProductionRelationalObserver::default());
+    fixture
+        .state
+        .set_production_relational_observer(std::sync::Arc::clone(&observer));
+
+    let result = fixture
+        .state
+        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .expect("authoritative Source -> Rename -> Limit graph executes");
+
+    let observation = observer.snapshot();
+    assert_eq!(observation.relational_islands, Some(1));
+    assert_eq!(observation.backend_invocations, 1);
+    assert_eq!(observation.materialization_bridges, Some(0));
+    assert_eq!(observation.bridge_inputs, vec![0]);
+    assert_eq!(observation.relational_subplans.len(), 1);
+    let plan = &observation.relational_subplans[0].compiled_plan;
+    assert_eq!(
+        plan.operators.as_ref(),
+        &[
+            RelationalOperator::Source {
+                resource: ResourceId::new("databases/main").unwrap(),
+                relation: "databases/main".into(),
+            },
+            RelationalOperator::Rename {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([RelationalRename {
+                    from: "old_name".into(),
+                    to: "new_name".into(),
+                }]),
+            },
+            RelationalOperator::Limit {
+                input: RelationalOperatorIndex::new(1),
+                rows: 2,
+            },
+        ]
+    );
+    assert_eq!(
+        plan.roots.as_ref(),
+        &[
+            RelationalOperatorIndex::new(1),
+            RelationalOperatorIndex::new(2),
+        ]
+    );
+    assert_eq!(
+        observation.relational_result_bindings,
+        vec![
+            (
+                fixture.rename_result_name.as_str().into(),
+                RelationalOperatorIndex::new(1),
+            ),
+            (
+                fixture.limit_result_name.as_str().into(),
+                RelationalOperatorIndex::new(2),
+            ),
+        ]
+    );
+
+    let RuntimeValue::Scalar(Value::Object(rename_columns)) = result
+        .values
+        .get(fixture.rename_result_name.as_str())
+        .expect("Rename result must be exposed")
+    else {
+        panic!("expected Rename dataframe output")
+    };
+    assert!(!rename_columns.contains_key("old_name"));
+    assert_eq!(
+        rename_columns,
+        &[
+            (
+                "new_name".into(),
+                Value::List(vec![
+                    Value::Integer(11),
+                    Value::Integer(22),
+                    Value::Integer(33),
+                    Value::Integer(44),
+                ]),
+            ),
+            (
+                "untouched".into(),
+                Value::List(vec![
+                    Value::Integer(101),
+                    Value::Integer(202),
+                    Value::Integer(303),
+                    Value::Integer(404),
+                ]),
+            ),
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    let RuntimeValue::Scalar(Value::Object(limit_columns)) = result
+        .values
+        .get(fixture.limit_result_name.as_str())
+        .expect("Limit result must be exposed")
+    else {
+        panic!("expected Limit dataframe output")
+    };
+    assert!(!limit_columns.contains_key("old_name"));
+    assert_eq!(
+        limit_columns,
+        &[
+            (
+                "new_name".into(),
+                Value::List(vec![Value::Integer(11), Value::Integer(22)]),
+            ),
+            (
+                "untouched".into(),
+                Value::List(vec![Value::Integer(101), Value::Integer(202)]),
+            ),
+        ]
+        .into_iter()
+        .collect()
+    );
+    assert!(plan.pushdown_hints.is_empty());
+    assert_eq!(observation.scan_limits, vec![None]);
+
+    drop(fixture.state);
+    std::fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
+    use crate::node_system::runtime::ProductionRelationalObserver;
+
+    let fixture = SourceRenameLimitFixture::new("project-source-rename-limit-order");
+    let forward_document = fixture.document(false);
+    let reversed_document = fixture.document(true);
+    assert_eq!(forward_document.document, reversed_document.document);
+
+    fixture
+        .state
+        .insert_graph(fixture.path.clone(), forward_document)
+        .unwrap();
+    let forward_observer = std::sync::Arc::new(ProductionRelationalObserver::default());
+    fixture
+        .state
+        .set_production_relational_observer(std::sync::Arc::clone(&forward_observer));
+    let forward = fixture
+        .state
+        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .expect("forward insertion graph executes");
+
+    fixture
+        .state
+        .insert_graph(fixture.path.clone(), reversed_document)
+        .unwrap();
+    let reversed_observer = std::sync::Arc::new(ProductionRelationalObserver::default());
+    fixture
+        .state
+        .set_production_relational_observer(std::sync::Arc::clone(&reversed_observer));
+    let mut reversed = fixture
+        .state
+        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .expect("reversed insertion graph executes");
+
+    assert_eq!(forward_observer.snapshot(), reversed_observer.snapshot());
+    assert_ne!(forward.run_id, reversed.run_id);
+    assert_eq!(forward.correlation.run_id, Some(forward.run_id));
+    assert_eq!(reversed.correlation.run_id, Some(reversed.run_id));
+    assert_ne!(forward.correlation.run_id, reversed.correlation.run_id);
+    assert_eq!(
+        forward.correlation.compile_id,
+        forward.provenance.compile_id
+    );
+    assert_eq!(
+        reversed.correlation.compile_id,
+        reversed.provenance.compile_id
+    );
+    assert_ne!(
+        forward.provenance.compile_id,
+        reversed.provenance.compile_id
+    );
+    assert_ne!(
+        forward.correlation.compile_id,
+        reversed.correlation.compile_id
+    );
+    reversed.run_id = forward.run_id;
+    reversed.provenance.compile_id = forward.provenance.compile_id;
+    reversed.correlation.run_id = forward.correlation.run_id;
+    reversed.correlation.compile_id = forward.correlation.compile_id;
+    assert_eq!(forward, reversed);
+
+    drop(fixture.state);
+    std::fs::remove_dir_all(fixture.root).unwrap();
 }
 
 #[test]

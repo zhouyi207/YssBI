@@ -13,6 +13,7 @@ pub enum ResourceKind {
     Graph,
     Function,
     Variable,
+    Database,
     Worksheet,
 }
 
@@ -22,6 +23,7 @@ pub enum ResourceKey {
     Graph(GraphResourcePath),
     Function(FunctionResourceKey),
     Variable(VariableResourceKey),
+    Database(DatabaseResourceKey),
     Worksheet(WorksheetResourceKey),
 }
 
@@ -31,6 +33,7 @@ impl ResourceKey {
             Self::Graph(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
             Self::Variable(_) => ResourceKind::Variable,
+            Self::Database(_) => ResourceKind::Database,
             Self::Worksheet(_) => ResourceKind::Worksheet,
         }
     }
@@ -46,6 +49,7 @@ macro_rules! opaque_resource_type {
 
 opaque_resource_type!(FunctionResourceKey);
 opaque_resource_type!(VariableResourceKey);
+opaque_resource_type!(DatabaseResourceKey);
 opaque_resource_type!(WorksheetResourceKey);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +182,21 @@ impl ResourcePathMovePatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DatabaseDocumentPatch {
+    pub before: Option<crate::database::DatabaseDecl>,
+    pub after: Option<crate::database::DatabaseDecl>,
+}
+
+impl DatabaseDocumentPatch {
+    pub fn inverse(&self) -> Self {
+        Self {
+            before: self.after.clone(),
+            after: self.before.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Graph(GraphDocumentPatch),
@@ -186,6 +205,7 @@ pub enum ResourceDocumentPatch {
     Function(FunctionDocumentPatch),
     Variable(VariableDocumentPatch),
     VariableScopeMove(ResourcePathMovePatch),
+    Database(DatabaseDocumentPatch),
 }
 
 impl ResourceDocumentPatch {
@@ -196,6 +216,7 @@ impl ResourceDocumentPatch {
             }
             Self::Function(_) => ResourceKind::Function,
             Self::Variable(_) | Self::VariableScopeMove(_) => ResourceKind::Variable,
+            Self::Database(_) => ResourceKind::Database,
         }
     }
 
@@ -207,6 +228,7 @@ impl ResourceDocumentPatch {
             Self::Function(patch) => Self::Function(patch.inverse()),
             Self::Variable(patch) => Self::Variable(patch.inverse()),
             Self::VariableScopeMove(patch) => Self::VariableScopeMove(patch.inverse()),
+            Self::Database(patch) => Self::Database(patch.inverse()),
         }
     }
 }
@@ -760,7 +782,9 @@ fn resource_revision(
             .get(key)
             .map(|document| document.revision)
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
-        ResourceKey::Worksheet(_) => Err(HistoryError::ResourceNotFound(resource.clone())),
+        ResourceKey::Database(_) | ResourceKey::Worksheet(_) => {
+            Err(HistoryError::ResourceNotFound(resource.clone()))
+        }
     }
 }
 

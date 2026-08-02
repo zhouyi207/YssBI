@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { GraphTraceDetails } from '../observability/GraphTraceDetails';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm, DetailNameField } from '../shared/DetailForm';
 
@@ -19,6 +20,7 @@ export function EventDetailPanel({ event, onUpdate }: EventDetailPanelProps) {
           onCommit={(name) => onUpdate({ name })}
         />
       </DetailForm>
+      <GraphTraceDetails graphPath={event.path} />
     </DetailPanelShell>
   );
 }

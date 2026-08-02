@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::event::ResourceMutationResultDto;
-use crate::event::{Event, EventProject, EventVariable, emit_project_event};
+use crate::event::{Event, EventProject, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
 use crate::node_system::document::{OperationId, ResourceRevision};
 #[cfg(test)]
@@ -93,18 +93,24 @@ fn create_variable_with_emitter(
             result: Some(committed.result),
         });
     }
-    let variable = state
-        .add_variable(name, data_type, data_value, description, scope, tags)
+    let committed = state
+        .create_local_variable_transaction(
+            &project_instance_id,
+            name.to_string(),
+            data_type,
+            data_value,
+            description.to_string(),
+            scope,
+            tags,
+            expected_collection_revision,
+            operation_id,
+        )
         .map_err(AppError::from)?;
-    emit(Event::Variable(EventVariable::VariableCreated {
-        variable_id: variable.id,
-        variable_scope: variable.scope.clone(),
-        data: (&variable).into(),
-    }));
+    emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
-        variable_id: variable.id.to_string(),
-        variable: Some((&variable).into()),
-        result: None,
+        variable_id: committed.variable.id.to_string(),
+        variable: Some((&committed.variable).into()),
+        result: Some(committed.result),
     })
 }
 
@@ -155,24 +161,24 @@ fn update_variable_with_emitter(
             result: Some(committed.result),
         });
     }
-    let updated = state
-        .update_variable(&variable_id, name, data_type, data_value, description, tags)
-        .map_err(AppError::from)?
-        .ok_or_else(|| {
-            AppError::new(
-                "variable_not_found",
-                format!("Variable '{variable_id}' not found"),
-            )
-        })?;
-    emit(Event::Variable(EventVariable::VariableUpdated {
-        variable_id: updated.id,
-        variable_scope: updated.scope.clone(),
-        data: (&updated).into(),
-    }));
+    let committed = state
+        .update_local_variable_transaction(
+            &project_instance_id,
+            variable_id,
+            name,
+            data_type,
+            data_value,
+            description,
+            tags,
+            expected_revision,
+            operation_id,
+        )
+        .map_err(AppError::from)?;
+    emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
-        variable_id: updated.id.to_string(),
-        variable: Some((&updated).into()),
-        result: None,
+        variable_id: committed.variable.id.to_string(),
+        variable: Some((&committed.variable).into()),
+        result: Some(committed.result),
     })
 }
 
@@ -210,23 +216,19 @@ fn delete_variable_with_emitter(
             result: Some(committed.result),
         });
     }
-    let removed = state
-        .remove_variable(&variable_id)
-        .map_err(AppError::from)?
-        .ok_or_else(|| {
-            AppError::new(
-                "variable_not_found",
-                format!("Variable '{variable_id}' not found"),
-            )
-        })?;
-    emit(Event::Variable(EventVariable::VariableDeleted {
-        variable_id: removed.id,
-        variable_scope: removed.scope,
-    }));
+    let committed = state
+        .delete_local_variable_transaction(
+            &project_instance_id,
+            variable_id,
+            expected_revision,
+            operation_id,
+        )
+        .map_err(AppError::from)?;
+    emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
-        variable_id: removed.id.to_string(),
+        variable_id: committed.variable.id.to_string(),
         variable: None,
-        result: None,
+        result: Some(committed.result),
     })
 }
 
@@ -723,6 +725,350 @@ mod tests {
     }
 
     #[test]
+    fn local_commands_publish_once_validate_revisions_and_reject_duplicate_operations() {
+        let (root, state, project_instance_id) = active_state("local-canonical-contract");
+        let scope = VariableScope::Function {
+            function_path: "functions/Local.yssbi-function".into(),
+        };
+        let create_operation = OperationId::new();
+        let mut events = Vec::new();
+
+        let stale_create = create_variable_with_emitter(
+            &state,
+            "stale",
+            DataType::Int64,
+            DataValue::Int64(0),
+            "",
+            scope.clone(),
+            vec![],
+            project_instance_id.clone(),
+            9,
+            create_operation,
+            |event| events.push(event),
+        )
+        .unwrap_err();
+        assert_eq!(stale_create.code, "resource_revision_conflict");
+        assert!(state.get_data().unwrap().variables.is_empty());
+        assert!(events.is_empty());
+
+        let created = create_variable_with_emitter(
+            &state,
+            "local",
+            DataType::Int64,
+            DataValue::Int64(1),
+            "",
+            scope.clone(),
+            vec![],
+            project_instance_id.clone(),
+            0,
+            create_operation,
+            |event| events.push(event),
+        )
+        .unwrap();
+        let variable_id = *state.get_data().unwrap().variables.keys().next().unwrap();
+        assert_eq!(created.result.as_ref().unwrap().publication_revision, 1);
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable_id),
+            Some(&ResourceRevision::new(1))
+        );
+
+        let duplicate = create_variable_with_emitter(
+            &state,
+            "duplicate",
+            DataType::Int64,
+            DataValue::Int64(2),
+            "",
+            scope,
+            vec![],
+            project_instance_id.clone(),
+            1,
+            create_operation,
+            |event| events.push(event),
+        )
+        .unwrap_err();
+        assert_eq!(duplicate.code, "duplicate_operation");
+
+        let updated = update_variable_with_emitter(
+            &state,
+            variable_id,
+            None,
+            None,
+            Some(DataValue::Int64(2)),
+            None,
+            None,
+            project_instance_id.clone(),
+            ResourceRevision::new(1),
+            OperationId::new(),
+            |event| events.push(event),
+        )
+        .unwrap();
+        assert_eq!(updated.result.as_ref().unwrap().publication_revision, 2);
+
+        let delete_operation = OperationId::new();
+        let stale = delete_variable_with_emitter(
+            &state,
+            variable_id,
+            project_instance_id.clone(),
+            ResourceRevision::new(1),
+            delete_operation,
+            |event| events.push(event),
+        )
+        .unwrap_err();
+        assert_eq!(stale.code, "resource_revision_conflict");
+        assert!(state.get_variable(&variable_id).unwrap().is_some());
+        assert_eq!(events.len(), 2);
+
+        let deleted = delete_variable_with_emitter(
+            &state,
+            variable_id,
+            project_instance_id,
+            ResourceRevision::new(2),
+            delete_operation,
+            |event| events.push(event),
+        )
+        .unwrap();
+        assert_eq!(deleted.result.as_ref().unwrap().publication_revision, 3);
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable_id),
+            Some(&ResourceRevision::new(3))
+        );
+        assert_eq!(events.len(), 3);
+        assert!(events.iter().all(|event| matches!(
+            event,
+            Event::Project(EventProject::ResourceMutationCommitted { .. })
+        )));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn local_history_state(
+        label: &str,
+        variable: Option<crate::variable::VariableInstance>,
+    ) -> (
+        std::path::PathBuf,
+        ProjectState,
+        ProjectInstanceId,
+        crate::project::GraphResourcePath,
+    ) {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-local-history-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let graph_path =
+            crate::project::GraphResourcePath::new("events/Local.yssbi-event").unwrap();
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            graph_path.clone(),
+            crate::project::GraphResourceDocument::new(
+                "Local",
+                crate::project::GraphDocumentKind::Event,
+            ),
+        );
+        if let Some(variable) = variable {
+            data.variables.insert(variable.id, variable);
+        }
+        crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        (root, state, project_instance_id, graph_path)
+    }
+
+    fn disk_local_variables(
+        root: &std::path::Path,
+        graph_path: &crate::project::GraphResourcePath,
+    ) -> std::collections::HashMap<VariableId, crate::variable::VariableInstance> {
+        let document: crate::project::project_io::GraphDocument =
+            serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap())
+                .unwrap();
+        document.local_variables
+    }
+
+    #[test]
+    fn local_create_history_rewrites_owning_graph_when_selected_snapshot_is_absent() {
+        let (root, state, project_instance_id, graph_path) = local_history_state("create", None);
+        let scope = VariableScope::Event {
+            event_path: graph_path.as_str().into(),
+        };
+        let created = create_variable_with_emitter(
+            &state,
+            "created",
+            DataType::Int64,
+            DataValue::Int64(1),
+            "",
+            scope,
+            vec![],
+            project_instance_id.clone(),
+            0,
+            OperationId::new(),
+            |_| {},
+        )
+        .unwrap();
+        let variable_id = *state.get_data().unwrap().variables.keys().next().unwrap();
+        let resource = ResourceKey::Variable(VariableResourceKey(
+            format!("variables/{variable_id}").into(),
+        ));
+        assert_eq!(created.result.unwrap().publication_revision, 1);
+
+        for (undo, base_revision, publication_revision) in
+            [(true, 1, 2), (false, 2, 3), (true, 3, 4)]
+        {
+            let request = MutationRequest::new(
+                resource.clone(),
+                ResourceRevision::new(base_revision),
+                OperationId::new(),
+                HistoryMutation {},
+            );
+            let result = if undo {
+                state.undo_last_transaction_observed("en-US", request, |_| {})
+            } else {
+                state.redo_last_transaction_observed("en-US", request, |_| {})
+            }
+            .unwrap();
+            assert_eq!(result.publication_revision, publication_revision);
+        }
+
+        assert!(state.get_variable(&variable_id).unwrap().is_none());
+        assert!(!disk_local_variables(&root, &graph_path).contains_key(&variable_id));
+        state.unload_graph_resource(&graph_path).unwrap();
+        state
+            .load_graph_resource(&project_instance_id, &graph_path, 1)
+            .unwrap();
+        assert!(state.get_variable(&variable_id).unwrap().is_none());
+        let entry = state
+            .variable_revision_entry_for_test(&variable_id)
+            .unwrap();
+        assert_eq!(entry.revision, ResourceRevision::new(4));
+        assert!(!entry.is_present());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn local_update_delete_history_persists_graph_and_preserves_publication_continuity() {
+        let variable_id = VariableId::new();
+        let variable = crate::variable::VariableInstance {
+            id: variable_id,
+            name: "before".into(),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(1),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Event {
+                event_path: "events/Local.yssbi-event".into(),
+            },
+            tags: Vec::new(),
+        };
+        let (root, state, project_instance_id, graph_path) =
+            local_history_state("update-delete", Some(variable));
+        let resource = ResourceKey::Variable(VariableResourceKey(
+            format!("variables/{variable_id}").into(),
+        ));
+        let mut events = Vec::new();
+
+        let updated = update_variable_with_emitter(
+            &state,
+            variable_id,
+            Some("after".into()),
+            None,
+            Some(DataValue::Int64(2)),
+            None,
+            None,
+            project_instance_id.clone(),
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            |event| events.push(event),
+        )
+        .unwrap();
+        assert_eq!(updated.result.unwrap().publication_revision, 1);
+
+        for (undo, base_revision, publication_revision, expected_name) in
+            [(true, 1, 2, "before"), (false, 2, 3, "after")]
+        {
+            let request = MutationRequest::new(
+                resource.clone(),
+                ResourceRevision::new(base_revision),
+                OperationId::new(),
+                HistoryMutation {},
+            );
+            let result = if undo {
+                state.undo_last_transaction_observed("en-US", request, |_| {})
+            } else {
+                state.redo_last_transaction_observed("en-US", request, |_| {})
+            }
+            .unwrap();
+            assert_eq!(result.publication_revision, publication_revision);
+            assert_eq!(
+                disk_local_variables(&root, &graph_path)[&variable_id].name,
+                expected_name
+            );
+        }
+
+        let deleted = delete_variable_with_emitter(
+            &state,
+            variable_id,
+            project_instance_id.clone(),
+            ResourceRevision::new(3),
+            OperationId::new(),
+            |event| events.push(event),
+        )
+        .unwrap();
+        assert_eq!(deleted.result.unwrap().publication_revision, 4);
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|event| matches!(
+            event,
+            Event::Project(EventProject::ResourceMutationCommitted { .. })
+        )));
+
+        let restored = state
+            .undo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource.clone(),
+                    ResourceRevision::new(4),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(restored.publication_revision, 5);
+        let restored_entry = state
+            .variable_revision_entry_for_test(&variable_id)
+            .unwrap();
+        assert_eq!(restored_entry.revision, ResourceRevision::new(5));
+        assert!(restored_entry.is_present());
+        assert!(disk_local_variables(&root, &graph_path).contains_key(&variable_id));
+
+        let removed = state
+            .redo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource,
+                    ResourceRevision::new(5),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(removed.publication_revision, 6);
+        assert!(!disk_local_variables(&root, &graph_path).contains_key(&variable_id));
+        assert!(state.get_variable(&variable_id).unwrap().is_none());
+        assert!(state.history_status().can_undo);
+
+        state.unload_graph_resource(&graph_path).unwrap();
+        state
+            .load_graph_resource(&project_instance_id, &graph_path, 1)
+            .unwrap();
+        assert!(state.get_variable(&variable_id).unwrap().is_none());
+        let entry = state
+            .variable_revision_entry_for_test(&variable_id)
+            .unwrap();
+        assert_eq!(entry.revision, ResourceRevision::new(6));
+        assert!(!entry.is_present());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn global_create_update_delete_history_restores_full_documents_and_publishes_once() {
         let (root, state, project_instance_id) = active_state("crud-history");
         let created = create_variable_with_emitter(
@@ -763,10 +1109,37 @@ mod tests {
             |_| {},
         )
         .unwrap();
+        assert!(state.get_variable(&variable_id).unwrap().is_none());
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable_id),
+            Some(&ResourceRevision::new(3))
+        );
         let resource = ResourceKey::Variable(VariableResourceKey(
             format!("variables/{variable_id}").into(),
         ));
         let mut publications = Vec::new();
+
+        let stale = state
+            .undo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource.clone(),
+                    ResourceRevision::new(2),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |result| publications.push(result.clone()),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            stale,
+            crate::node_system::document::MutationConflict::StaleRevision {
+                base_revision,
+                current_revision,
+            } if base_revision == ResourceRevision::new(2)
+                && current_revision == ResourceRevision::new(3)
+        ));
+        assert!(publications.is_empty());
 
         let undo_delete = state
             .undo_last_transaction_observed(
@@ -817,6 +1190,10 @@ mod tests {
             )
             .unwrap();
         assert!(state.get_variable(&variable_id).unwrap().is_none());
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable_id),
+            Some(&ResourceRevision::new(6))
+        );
 
         for revision in 6..=8 {
             state
@@ -833,6 +1210,10 @@ mod tests {
                 .unwrap();
         }
         assert!(state.get_variable(&variable_id).unwrap().is_none());
+        assert_eq!(
+            state.revision_state_for_test().1.get(&variable_id),
+            Some(&ResourceRevision::new(9))
+        );
         assert_eq!(publications.len(), 6);
         assert_eq!(
             publications

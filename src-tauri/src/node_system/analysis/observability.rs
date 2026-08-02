@@ -104,6 +104,7 @@ pub enum SpanKind {
     Lowering,
     Run,
     Operation,
+    RelationalBackend,
     ResourceAcquire,
     Cleanup,
 }
