@@ -16,6 +16,7 @@ export type { DataValueBackend } from './dataValue';
 /** 变量实例 DTO - 与后端 VariableInstanceDTO 一一对应 */
 export interface VariableInstanceDTO {
   id: string;
+  resourcePath?: string;
   name: string;
   dataType: DataType;
   dataValue: DataValue;
@@ -41,6 +42,7 @@ export function normalizeVariableFromBackend(raw: VariablePayloadRaw): Variable 
 
   return {
     id: raw.id,
+    resourcePath: raw.resourcePath,
     name: raw.name,
     dataType,
     dataValue,

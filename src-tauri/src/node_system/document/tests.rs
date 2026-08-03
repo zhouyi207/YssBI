@@ -1,4 +1,5 @@
 use super::materialization::ProjectedMemberRef;
+use super::mutation::{create_node_operations, validate_parameters};
 use super::*;
 use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
 use crate::node_system::compiler::{
@@ -316,17 +317,20 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
     let cases = [
         (
             EditorGraphMutationDto::CreateNode {
-                node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+                descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+                    node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+                },
                 position: NodePosition { x: 1.0, y: 2.0 },
-                parameters: ParameterValues::new(),
                 user_label: Some("Created".to_owned()),
             },
             json!({
                 "type": "createNode",
                 "payload": {
-                    "nodeTypeId": "yssbi.test.editor_mutation",
+                    "descriptor": {
+                        "kind": "static",
+                        "nodeTypeId": "yssbi.test.editor_mutation"
+                    },
                     "position": { "x": 1.0, "y": 2.0 },
-                    "parameters": {},
                     "userLabel": "Created"
                 }
             }),
@@ -412,9 +416,10 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
 fn create_node_rejects_protocol_scope_mismatch() {
     let registry = editor_mutation_registry_with(NodeScope::Event, 0);
     let mutation = EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        },
         position: NodePosition { x: 1.0, y: 2.0 },
-        parameters: ParameterValues::new(),
         user_label: None,
     };
 
@@ -433,9 +438,10 @@ fn create_node_rejects_protocol_scope_mismatch() {
 fn create_node_materializes_required_user_created_ports() {
     let registry = editor_mutation_registry_with(NodeScope::Any, 2);
     let patch = EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        },
         position: NodePosition { x: 1.0, y: 2.0 },
-        parameters: ParameterValues::new(),
         user_label: None,
     }
     .into_patch(
@@ -471,18 +477,16 @@ fn builtin_loop_create_materializes_one_complete_carried_member() {
     let registry = build_builtin_registry();
     let mut parameters = ParameterValues::new();
     parameters.insert(ParameterKey::new("max_iterations").unwrap(), json!(100));
-    let patch = EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new("yssbi.control.loop").unwrap(),
-        position: NodePosition { x: 1.0, y: 2.0 },
+    let node_type_id = NodeTypeId::new("yssbi.control.loop").unwrap();
+    let protocol = registry.protocol(&node_type_id).unwrap();
+    validate_parameters(protocol, &parameters).unwrap();
+    let patch = GraphDocumentPatch::new(create_node_operations(
+        protocol,
+        node_type_id,
+        NodePosition { x: 1.0, y: 2.0 },
         parameters,
-        user_label: None,
-    }
-    .into_patch(
-        &graph_path("events/grouped-loop"),
-        &GraphDocument::default(),
-        &registry,
-    )
-    .unwrap();
+        None,
+    ));
 
     let addresses = grouped_binding_addresses(&patch);
     assert_eq!(addresses.len(), 4);
@@ -782,9 +786,10 @@ fn create_connect_and_add_port_allocate_identity_in_rust() {
         .unwrap();
 
     let create_patch = EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.test.editor_mutation").unwrap(),
+        },
         position: NodePosition { x: 5.0, y: 8.0 },
-        parameters: ParameterValues::new(),
         user_label: None,
     }
     .into_patch(&path, &document, &registry)

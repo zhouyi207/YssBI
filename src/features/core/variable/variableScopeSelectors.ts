@@ -5,6 +5,7 @@ import { variableVisibleInGraph } from '@/shared/types/domain/variable';
 
 export interface VariableListEntry {
   id: string;
+  resourcePath?: string;
   name: string;
   typeLabel: string;
   dataType: DataType;
@@ -13,6 +14,7 @@ export interface VariableListEntry {
 function toListEntry(variable: Variable): VariableListEntry {
   return {
     id: variable.id,
+    resourcePath: variable.resourcePath,
     name: variable.name,
     typeLabel: dataTypeKind(variable.dataType),
     dataType: variable.dataType,

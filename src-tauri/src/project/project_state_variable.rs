@@ -353,6 +353,12 @@ mod tests {
             state.revision_state_for_test().1.get(&variable.id),
             Some(&ResourceRevision::new(1))
         );
+        assert!(
+            !state
+                .variable_revision_entry_for_test(&variable.id)
+                .unwrap()
+                .is_present()
+        );
     }
 
     #[test]

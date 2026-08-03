@@ -57,7 +57,7 @@ pub(crate) fn registry_fingerprint<T: Serialize>(value: &T) -> RegistryFingerpri
     RegistryFingerprint(hash_canonical("yssbi.node-registry.v1", value))
 }
 
-fn hash_canonical<T: Serialize>(domain: &str, value: &T) -> [u8; 32] {
+pub(crate) fn hash_canonical<T: Serialize>(domain: &str, value: &T) -> [u8; 32] {
     let encoded = serde_json::to_vec(value).expect("registry canonical values are serializable");
     let mut bytes = Vec::with_capacity(domain.len() + encoded.len() + 9);
     bytes.extend_from_slice(&(domain.len() as u64).to_be_bytes());

@@ -18,6 +18,10 @@ function hasOwn(value: UnknownRecord, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
+function hasExactKeys(value: UnknownRecord, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length && keys.every((key) => hasOwn(value, key));
+}
+
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
@@ -159,7 +163,81 @@ function isVariablePatch(value: unknown): boolean {
     && !(value.before === null && value.after === null);
 }
 
+function isSqlEngine(value: unknown): boolean {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if (isRecord(value.sqlite)) {
+    return hasExactKeys(value.sqlite, ['autoCreate']) && typeof value.sqlite.autoCreate === 'boolean';
+  }
+  if (isRecord(value.postgres)) {
+    return hasExactKeys(value.postgres, ['ssl']) && typeof value.postgres.ssl === 'boolean';
+  }
+  return isRecord(value.mysql)
+    && hasExactKeys(value.mysql, ['charset'])
+    && typeof value.mysql.charset === 'string';
+}
 
+function isDatabaseEngine(value: unknown): boolean {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if (isRecord(value.csv)) {
+    return hasExactKeys(value.csv, ['path', 'delimiter', 'hasHeader', 'inferSchemaLength'])
+      && typeof value.csv.path === 'string'
+      && typeof value.csv.delimiter === 'string'
+      && [...value.csv.delimiter].length === 1
+      && typeof value.csv.hasHeader === 'boolean'
+      && (value.csv.inferSchemaLength === null
+        || (Number.isSafeInteger(value.csv.inferSchemaLength)
+          && (value.csv.inferSchemaLength as number) >= 0));
+  }
+  if (isRecord(value.sql)) {
+    return hasExactKeys(value.sql, ['engine', 'connectionString', 'table'])
+      && isSqlEngine(value.sql.engine)
+      && typeof value.sql.connectionString === 'string'
+      && typeof value.sql.table === 'string';
+  }
+  if (isRecord(value.parquet)) {
+    return hasExactKeys(value.parquet, ['path', 'columns'])
+      && typeof value.parquet.path === 'string'
+      && (value.parquet.columns === null
+        || (Array.isArray(value.parquet.columns)
+          && value.parquet.columns.every((column) => typeof column === 'string')));
+  }
+  if (isRecord(value.excel)) {
+    return hasExactKeys(value.excel, ['path', 'sheet'])
+      && typeof value.excel.path === 'string'
+      && typeof value.excel.sheet === 'string';
+  }
+  if (isRecord(value.duckDb)) {
+    return hasExactKeys(value.duckDb, ['path', 'table'])
+      && typeof value.duckDb.path === 'string'
+      && typeof value.duckDb.table === 'string';
+  }
+  return isRecord(value.inMemory)
+    && hasExactKeys(value.inMemory, ['name'])
+    && typeof value.inMemory.name === 'string';
+}
+
+function isDatabaseDocument(value: unknown): value is UnknownRecord {
+  return isRecord(value)
+    && hasExactKeys(value, ['id', 'engine', 'schemaVersion', 'required', 'name'])
+    && typeof value.id === 'string'
+    && value.id.length > 0
+    && isDatabaseEngine(value.engine)
+    && Number.isSafeInteger(value.schemaVersion)
+    && (value.schemaVersion as number) >= 0
+    && typeof value.required === 'boolean'
+    && isNullableString(value.name);
+}
+
+function isDatabasePatch(value: unknown): boolean {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['before', 'after'])
+    || (value.before !== null && !isDatabaseDocument(value.before))
+    || (value.after !== null && !isDatabaseDocument(value.after))
+    || (value.before === null && value.after === null)) return false;
+  return value.before === null
+    || value.after === null
+    || value.before.id === value.after.id;
+}
 
 function isVariableResourceKey(value: unknown): value is string {
   if (typeof value !== 'string') return false;
@@ -216,15 +294,25 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
       && value.payload.kind === 'function'
       && isFunctionPatch(value.payload.patch);
   }
-  return kind === 'variable'
-    && isVariableResourceKey(key)
-    && ((value.payload.kind === 'variable' && isVariablePatch(value.payload.patch))
-      || (value.payload.kind === 'variable_scope_move'
-        && isResourcePathMovePatch(value.payload.patch)));
+  if (kind === 'variable') {
+    return isVariableResourceKey(key)
+      && ((value.payload.kind === 'variable' && isVariablePatch(value.payload.patch))
+        || (value.payload.kind === 'variable_scope_move'
+          && isResourcePathMovePatch(value.payload.patch)));
+  }
+  return kind === 'database'
+    && hasExactKeys(value.resource, ['kind', 'key'])
+    && typeof key === 'string'
+    && key.length > 0
+    && hasExactKeys(value.payload, ['kind', 'patch'])
+    && value.payload.kind === 'database'
+    && isDatabasePatch(value.payload.patch);
 }
 
 function isResourceDelta(value: unknown): value is ResourceDeltaDto {
-  if (!isRecord(value) || !isResourceAndPayload(value)) return false;
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['resource', 'fromRevision', 'toRevision', 'causedBy', 'payload'])
+    || !isResourceAndPayload(value)) return false;
   if (!Number.isSafeInteger(value.fromRevision)
     || !Number.isSafeInteger(value.toRevision)
     || (value.fromRevision as number) < 0

@@ -34,6 +34,7 @@ import {
 } from '@/features/core/resource';
 import { isGraphCachedInMemory } from '@/features/core/dataStore/graphDocumentLoadPolicy';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   hydrateGraphProjection,
   resetGraphProjectionCoordinator,
@@ -69,6 +70,7 @@ describe('graphSessionLifecycle', () => {
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
     resetGraphProjectionCoordinator();
+    startProjectLifecycle('project-instance-1');
     resetEditorTabStore();
     useLayoutStore.setState({
       rootId: 'root',

@@ -1,3 +1,5 @@
+import type { GraphOutputRefDto } from './executionDemand';
+
 export type RunErrorCode =
   | 'invalidPlan'
   | 'cancelled'
@@ -37,6 +39,7 @@ export interface RunCorrelationDto {
   registryFingerprint: string;
   resourceVersions: ResourceVersionSetDto;
   compileId: string;
+  selectionDigest: string | null;
   runId: string | null;
   nodeId: string | null;
   nodeTypeId: string | null;
@@ -57,7 +60,8 @@ export type RunEventKind =
       code: RunErrorCode;
     }
   | { type: 'valueReady'; valueIndex: number; sourceId: string }
-  | { type: 'resultReady'; name: string; sourceId: string };
+  | { type: 'resultReady'; name: string; sourceId: string }
+  | { type: 'outputReady'; output: GraphOutputRefDto; sourceId: string };
 
 export interface RunEvent {
   correlation: RunCorrelationDto;

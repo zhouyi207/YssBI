@@ -1,6 +1,7 @@
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { getPendingMutation } from '@/features/application/editorMutation/pendingMutationRegistry';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import type { GraphDeltaDto, ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { BaseEventHandler } from './BaseEventHandler';
@@ -11,7 +12,7 @@ import type {
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 function isCurrentProjectEvent(projectInstanceId: string): boolean {
   try {
@@ -49,8 +50,14 @@ export class ResourceMutationCommittedHandler extends BaseEventHandler<ResourceM
     if (!result || typeof result !== 'object') return;
     const projectInstanceId = (result as { projectInstanceId?: unknown }).projectInstanceId;
     if (typeof projectInstanceId !== 'string' || !isCurrentProjectEvent(projectInstanceId)) return;
+    const committed = result as ResourceMutationResultDto;
     void projectPublicationCoordinator.submit({
-      result: result as ResourceMutationResultDto,
+      result: committed,
+    }).then(() => {
+      useNodeCatalogStore.getState().observeResourcePublication(
+        committed.projectInstanceId,
+        committed.publicationRevision,
+      );
     }).catch((error) => {
       this.error(
         'Resource publication event failed:',

@@ -6,7 +6,7 @@ import {
   useProjectIOStore,
 } from '@/features/core/dataStore/projectIOStore';
 import { ProjectService } from '@/services/project/projectService';
-import { captureProjectIdentity } from '@/services/project/projectIdentity';
+import { captureProjectIdentity } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 export function createProjectLifecycleReceiptDependencies(
   onProjectCleared?: () => void,

@@ -1,5 +1,9 @@
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type {
   LifecycleMutationKind,
   LifecycleMutationResultDto,
@@ -81,10 +85,10 @@ function fingerprintReceipt(result: LifecycleMutationResultDto): string {
 }
 
 function ownsLifecycle(projectInstanceId: string | null, coordinatorEpoch: number): boolean {
-  return projectPublicationCoordinator.ownsApplicationLifecycle(
+  return isProjectLifecycleStateCurrent({
     projectInstanceId,
-    coordinatorEpoch,
-  );
+    epoch: coordinatorEpoch,
+  });
 }
 
 function entryIsCurrent(entry: ProjectLifecycleRegistryEntry): boolean {
@@ -158,7 +162,7 @@ function validateReceipt(
 }
 
 function captureOwnedTransition(entry: ProjectLifecycleRegistryEntry): void {
-  const lifecycle = projectPublicationCoordinator.captureApplicationLifecycle();
+  const lifecycle = captureProjectLifecycleState();
   entry.transition = {
     projectInstanceId: lifecycle.projectInstanceId,
     coordinatorEpoch: lifecycle.epoch,
@@ -258,7 +262,7 @@ export function registerPendingProjectLifecycleOperation(options: {
   if (pendingOperations.size >= MAX_PENDING_LIFECYCLE_OPERATIONS) {
     throw new ProjectLifecycleProtocolError('Too many pending project lifecycle operations');
   }
-  const lifecycle = projectPublicationCoordinator.captureApplicationLifecycle();
+  const lifecycle = captureProjectLifecycleState();
   const storeProjectInstanceId = useProjectIOStore.getState().projectInstanceId;
   if (storeProjectInstanceId !== lifecycle.projectInstanceId) {
     throw new ProjectLifecycleProtocolError(

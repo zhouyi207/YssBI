@@ -416,6 +416,7 @@ impl ProjectState {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn global_variable_revision_snapshot(
         &self,
     ) -> BTreeMap<ResourceKey, ResourceRevision> {

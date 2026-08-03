@@ -1,5 +1,5 @@
 use crate::commands::node_system_execution_dto::{
-    ResultSourceDescriptorDto, ResultSourcePageDto, RunEventDto,
+    ExecutionDemandDto, ResultSourceDescriptorDto, ResultSourcePageDto, RunEventDto,
 };
 use crate::error::AppError;
 use crate::event::{
@@ -41,6 +41,11 @@ fn mutation_conflict_to_app_error(
             message: message.into(),
             details: Some(serde_json::json!({ "recoveryRequired": true })),
         },
+        catalog_error
+        @ (crate::node_system::document::MutationConflict::CatalogResourceStale(_)
+        | crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(_)) => {
+            AppError::new(catalog_error.code(), catalog_error.to_string())
+        }
         crate::node_system::document::MutationConflict::StaleRevision { .. } => {
             AppError::new(revision_conflict_code, error.to_string())
         }
@@ -351,29 +356,79 @@ pub fn hydrate_editor_graph(
         .map_err(AppError::internal)
 }
 
+fn parse_editor_mutation_request(
+    request: serde_json::Value,
+) -> Result<MutationRequest<EditorGraphMutationDto>, AppError> {
+    serde_json::from_value(request.clone()).map_err(|error| {
+        let code = if is_create_node_descriptor_shape_error(&request) {
+            "catalog_descriptor_invalid"
+        } else {
+            "invalid_editor_mutation"
+        };
+        AppError::new(code, format!("invalid editor mutation request: {error}"))
+    })
+}
+
+fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
+    let Some(mutation) = request
+        .get("payload")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    if mutation.get("type").and_then(serde_json::Value::as_str) != Some("createNode") {
+        return false;
+    }
+    let Some(create) = mutation
+        .get("payload")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    if create.contains_key("parameters") {
+        return true;
+    }
+    create.get("descriptor").is_none_or(|descriptor| {
+        serde_json::from_value::<crate::node_system::catalog::NodeCreationDescriptor>(
+            descriptor.clone(),
+        )
+        .is_err()
+    })
+}
+
+fn mutate_graph_document_with_emitter(
+    state: &ProjectState,
+    graph_path: String,
+    locale: &str,
+    request: serde_json::Value,
+    mut emit: impl FnMut(Event),
+) -> Result<GraphMutationResultDto, AppError> {
+    let request = parse_editor_mutation_request(request)?;
+    state
+        .apply_editor_graph_mutation_observed(
+            &parse_graph_path(graph_path)?,
+            locale,
+            request,
+            |delta| {
+                emit(Event::Project(EventProject::GraphDelta {
+                    delta: delta.clone(),
+                }))
+            },
+        )
+        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))
+}
+
 #[tauri::command]
 pub fn mutate_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
     graph_path: String,
     locale: String,
-    request: MutationRequest<EditorGraphMutationDto>,
+    request: serde_json::Value,
 ) -> Result<GraphMutationResultDto, AppError> {
-    state
-        .apply_editor_graph_mutation_observed(
-            &parse_graph_path(graph_path)?,
-            &locale,
-            request,
-            |delta| {
-                emit_project_event(
-                    &app,
-                    Event::Project(EventProject::GraphDelta {
-                        delta: delta.clone(),
-                    }),
-                )
-            },
-        )
-        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))
+    mutate_graph_document_with_emitter(state.inner(), graph_path, &locale, request, |event| {
+        emit_project_event(&app, event)
+    })
 }
 
 #[tauri::command]
@@ -474,6 +529,13 @@ impl RunEventSink for ChannelRunEvents {
 
 fn execution_app_error(message: String, terminal: Option<TerminalRunEvent>) -> AppError {
     let Some(terminal) = terminal else {
+        if message.starts_with("invalid_execution_demand:") {
+            return AppError {
+                code: "invalid_execution_demand".into(),
+                message,
+                details: None,
+            };
+        }
         return AppError::internal(message);
     };
     AppError {
@@ -578,9 +640,18 @@ pub async fn execute_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
     graph_path: String,
+    demand: ExecutionDemandDto,
     on_event: Channel<RunEventDto>,
 ) -> Result<ExecuteGraphResultDto, AppError> {
     let graph_path = parse_graph_path(graph_path)?;
+    let demand =
+        crate::node_system::plan::ExecutionDemand::try_from(demand).map_err(|message| {
+            AppError {
+                code: "invalid_execution_demand".into(),
+                message,
+                details: None,
+            }
+        })?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let terminal = Arc::new(AtomicU8::new(0));
@@ -589,7 +660,7 @@ pub async fn execute_graph_document(
             terminal: Arc::clone(&terminal),
         };
         state
-            .execute_graph(&graph_path, &events)
+            .execute_graph(&graph_path, &demand, &events)
             .map(|result| {
                 publish_run_resource_mutation(result.resource_mutation.as_ref(), |event| {
                     emit_project_event(&app, event)
@@ -622,7 +693,9 @@ mod tests {
     };
     use crate::node_system::registry::RegistryFingerprint;
     use crate::node_system::runtime::{ResultSourceId, RunEventKind};
-    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
+    use crate::project::{
+        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
+    };
 
     #[test]
     fn execution_errors_report_terminal_delivery_and_stable_codes() {
@@ -633,10 +706,15 @@ mod tests {
         let failed =
             execution_app_error("operation failed".into(), Some(TerminalRunEvent::Errored));
         let pre_run = execution_app_error("compile failed".into(), None);
+        let invalid_demand = execution_app_error(
+            "invalid_execution_demand: requested output node is missing".into(),
+            None,
+        );
 
         assert_eq!(cancelled.code, "run_cancelled");
         assert_eq!(failed.code, "run_failed");
         assert_eq!(pre_run.code, "internal_error");
+        assert_eq!(invalid_demand.code, "invalid_execution_demand");
         assert_eq!(
             cancelled.details,
             Some(serde_json::json!({ "terminalRunEventSent": true })),
@@ -663,6 +741,7 @@ mod tests {
             registry_fingerprint: basis.registry_fingerprint.clone(),
             resource_versions: basis.resource_versions.clone(),
             compile_id: CompileId::new(unsafe_id),
+            selection_digest: Some("demand-selection-a".into()),
             run_id: Some(RunId::new(unsafe_id)),
             node_id: None,
             node_type_id: None,
@@ -676,6 +755,24 @@ mod tests {
                 activation_id: unsafe_id,
             },
         });
+        let preview = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
+            correlation: CorrelationContext {
+                selection_digest: Some("demand-selection-b".into()),
+                ..correlation.clone()
+            },
+            basis: basis.clone(),
+            kind: RunEventKind::RunStarted,
+        });
+        let source =
+            ResultSourceDescriptorDto::from(crate::node_system::runtime::ResultSourceDescriptor {
+                source_id: ResultSourceId::new(unsafe_id),
+                artifact_id: crate::node_system::runtime::ArtifactId::new(unsafe_id),
+                name: "result".into(),
+                kind: crate::node_system::runtime::ArtifactSnapshotKind::Value,
+                total_count: 1,
+                correlation: correlation.clone(),
+                basis: basis.clone(),
+            });
         let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
             correlation,
             basis,
@@ -691,6 +788,10 @@ mod tests {
             unsafe_id.to_string()
         );
         assert_eq!(operation["correlation"]["compileId"], unsafe_id.to_string());
+        assert_eq!(
+            operation["correlation"]["selectionDigest"],
+            "demand-selection-a"
+        );
         assert_eq!(operation["correlation"]["runId"], unsafe_id.to_string());
         assert_eq!(
             operation["correlation"]["parentCall"],
@@ -699,7 +800,26 @@ mod tests {
         assert_eq!(operation["basis"]["graphRevision"], unsafe_id.to_string());
         assert_eq!(operation["kind"]["activationId"], unsafe_id.to_string());
         assert!(operation["correlation"].get("graph_revision").is_none());
+        assert!(operation["correlation"].get("selection_digest").is_none());
+        let preview = serde_json::to_value(preview).unwrap();
+        assert_eq!(
+            operation["correlation"]["compileId"],
+            preview["correlation"]["compileId"]
+        );
+        assert_ne!(
+            operation["correlation"]["selectionDigest"],
+            preview["correlation"]["selectionDigest"]
+        );
+        let source = serde_json::to_value(source).unwrap();
+        assert_eq!(
+            source["correlation"]["selectionDigest"],
+            "demand-selection-a"
+        );
         let result = serde_json::to_value(result).unwrap();
+        assert_eq!(
+            result["correlation"]["selectionDigest"],
+            "demand-selection-a"
+        );
         assert_eq!(result["kind"]["sourceId"], unsafe_id.to_string());
         let execute_result = serde_json::to_value(ExecuteGraphResultDto {
             run_id: unsafe_id.to_string(),
@@ -741,6 +861,7 @@ mod tests {
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
+        fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
@@ -773,26 +894,55 @@ mod tests {
     }
 
     #[test]
-    fn localized_catalog_contains_no_resource_bound_items() {
+    fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         let root = std::env::temp_dir().join(format!(
-            "yssbi-localized-catalog-static-only-{}",
+            "yssbi-localized-catalog-resource-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&root).unwrap();
+        let function_path =
+            GraphResourcePath::new("functions/Sales Report.yssbi-function").unwrap();
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            function_path.clone(),
+            GraphResourceDocument::new("Sales Report", GraphDocumentKind::Function),
+        );
+        fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+        fixtures::write_graph(&project, root.to_string_lossy().as_ref(), &function_path).unwrap();
         let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let snapshot = state.catalog_snapshot(&project_instance_id).unwrap();
+        let expected_fingerprint = snapshot.registry.fingerprint().to_string();
+        let expected_revision = snapshot.resource_publication_revision;
 
         let catalog =
-            get_localized_node_catalog_from_state(&state, project_instance_id, "en-US").unwrap();
+            get_localized_node_catalog_from_state(&state, project_instance_id.clone(), "zh-CN")
+                .unwrap();
 
-        assert!(!catalog.items.is_empty());
-        assert!(
-            catalog
-                .items
-                .iter()
-                .all(|item| matches!(item.creation, NodeCreationDescriptor::Static { .. }))
+        assert_eq!(
+            catalog.project_instance_id.as_ref(),
+            project_instance_id.as_str()
         );
+        assert_eq!(catalog.registry_fingerprint.as_ref(), expected_fingerprint);
+        assert_eq!(catalog.resource_publication_revision, expected_revision);
+        let resource = catalog
+            .items
+            .iter()
+            .find(|item| item.resource_path.is_some())
+            .expect("persisted function must be projected by the Catalog command");
+        assert_eq!(resource.title.as_ref(), "Sales Report");
+        assert_eq!(
+            resource
+                .resource_path
+                .as_ref()
+                .map(crate::node_system::catalog::CatalogResourcePath::as_str),
+            Some(function_path.as_str())
+        );
+        assert!(matches!(
+            resource.creation,
+            NodeCreationDescriptor::ResourceBound { .. }
+        ));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -943,6 +1093,207 @@ mod tests {
             error.details,
             Some(serde_json::json!({ "recoveryRequired": true }))
         );
+    }
+
+    #[test]
+    fn malformed_create_node_body_maps_to_catalog_descriptor_invalid() {
+        let raw = serde_json::json!({
+            "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+            "baseRevision": 0,
+            "operationId": "00000000-0000-0000-0000-000000000777",
+            "payload": {
+                "type": "createNode",
+                "payload": {
+                    "descriptor": {
+                        "kind": "resourceBound",
+                        "nodeTypeId": "yssbi.project.function.call",
+                        "resourcePath": "functions/Helper.yssbi-function",
+                        "resourceRevision": 0,
+                        "createArgs": { "kind": "function" }
+                    },
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "userLabel": null,
+                    "parameters": { "target": "functions/Injected.yssbi-function" }
+                }
+            }
+        });
+
+        let malformed_descriptor = serde_json::json!({
+            "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+            "baseRevision": 0,
+            "operationId": "00000000-0000-0000-0000-000000000779",
+            "payload": {
+                "type": "createNode",
+                "payload": {
+                    "descriptor": {
+                        "kind": "resourceBound",
+                        "nodeTypeId": "yssbi.project.function.call",
+                        "resourcePath": "functions/Helper.yssbi-function",
+                        "resourceRevision": "stale",
+                        "createArgs": { "kind": "function" }
+                    },
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "userLabel": null
+                }
+            }
+        });
+
+        for request in [raw, malformed_descriptor] {
+            let error = parse_editor_mutation_request(request).unwrap_err();
+            assert_eq!(error.code, "catalog_descriptor_invalid");
+        }
+    }
+
+    #[test]
+    fn non_descriptor_request_shape_errors_are_not_catalog_errors() {
+        let valid_static_descriptor = serde_json::json!({
+            "kind": "static",
+            "nodeTypeId": "yssbi.constant.int64"
+        });
+        let cases = [
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+                "baseRevision": 0,
+                "operationId": "00000000-0000-0000-0000-000000000801",
+                "payload": { "type": "moveNodes", "payload": { "positions": "invalid" } }
+            }),
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+                "baseRevision": 0,
+                "operationId": "00000000-0000-0000-0000-000000000802",
+                "payload": {
+                    "type": "connect",
+                    "payload": { "output": { "kind": "declared" }, "input": null, "order": null }
+                }
+            }),
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+                "baseRevision": 0,
+                "operationId": "not-an-operation-id",
+                "payload": {
+                    "type": "createNode",
+                    "payload": {
+                        "descriptor": valid_static_descriptor.clone(),
+                        "position": { "x": 1.0, "y": 2.0 },
+                        "userLabel": null
+                    }
+                }
+            }),
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": 7 },
+                "baseRevision": "zero",
+                "operationId": "00000000-0000-0000-0000-000000000803",
+                "payload": { "type": "deleteNode", "payload": { "nodeId": "invalid" } }
+            }),
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+                "baseRevision": 0,
+                "operationId": "00000000-0000-0000-0000-000000000804",
+                "payload": {
+                    "type": "createNode",
+                    "payload": {
+                        "descriptor": valid_static_descriptor.clone(),
+                        "position": { "x": "left", "y": 2.0 },
+                        "userLabel": null
+                    }
+                }
+            }),
+            serde_json::json!({
+                "resource": { "kind": "graph", "key": "events/Main.yssbi-event" },
+                "baseRevision": 0,
+                "operationId": "00000000-0000-0000-0000-000000000805",
+                "payload": {
+                    "type": "createNode",
+                    "payload": {
+                        "descriptor": valid_static_descriptor,
+                        "position": { "x": 1.0, "y": 2.0 },
+                        "userLabel": 42
+                    }
+                }
+            }),
+        ];
+
+        for raw in cases {
+            let error = parse_editor_mutation_request(raw).unwrap_err();
+            assert_eq!(error.code, "invalid_editor_mutation");
+        }
+    }
+
+    #[test]
+    fn injected_create_node_command_has_zero_authoritative_effects() {
+        let state = ProjectState::new();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        state
+            .insert_graph(
+                graph_path.clone(),
+                GraphResourceDocument::new("Main", GraphDocumentKind::Event),
+            )
+            .unwrap();
+        let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let history_before = state.history_status();
+        let revisions_before = state.revision_state_for_test();
+        let publication_before = state.publication_state_for_test();
+        let raw = serde_json::json!({
+            "resource": { "kind": "graph", "key": graph_path.as_str() },
+            "baseRevision": 0,
+            "operationId": "00000000-0000-0000-0000-000000000778",
+            "payload": {
+                "type": "createNode",
+                "payload": {
+                    "descriptor": {
+                        "kind": "resourceBound",
+                        "nodeTypeId": "yssbi.project.function.call",
+                        "resourcePath": "functions/Helper.yssbi-function",
+                        "resourceRevision": 0,
+                        "createArgs": { "kind": "function" }
+                    },
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "userLabel": null,
+                    "parameters": { "target": "functions/Injected.yssbi-function" }
+                }
+            }
+        });
+        let mut events = Vec::new();
+
+        let error = mutate_graph_document_with_emitter(
+            &state,
+            graph_path.as_str().to_string(),
+            "en-US",
+            raw,
+            |event| events.push(event),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "catalog_descriptor_invalid");
+        assert!(events.is_empty());
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            data_before
+        );
+        assert_eq!(state.history_status(), history_before);
+        assert_eq!(state.revision_state_for_test(), revisions_before);
+        assert_eq!(state.publication_state_for_test(), publication_before);
+    }
+
+    #[test]
+    fn catalog_mutation_conflicts_preserve_stable_app_error_codes() {
+        for (conflict, expected) in [
+            (
+                crate::node_system::document::MutationConflict::CatalogResourceStale(
+                    "resource changed".into(),
+                ),
+                "catalog_resource_stale",
+            ),
+            (
+                crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(
+                    "descriptor is invalid".into(),
+                ),
+                "catalog_descriptor_invalid",
+            ),
+        ] {
+            let error = mutation_conflict_to_app_error(conflict, "graph_revision_conflict");
+            assert_eq!(error.code, expected);
+        }
     }
 
     #[test]

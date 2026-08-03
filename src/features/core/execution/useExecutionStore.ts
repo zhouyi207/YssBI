@@ -6,6 +6,7 @@ import type {
   RecordedEvent,
   PinResultState,
 } from '@/shared/types/ui';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { flushLiveExecutionEventsNow } from './executionLiveFeed';
 import {
   clearExecutionVisual,
@@ -15,7 +16,7 @@ import {
 } from './executionVisualSession';
 import { clearedRunArtifactsPatch } from './graphRunArtifacts';
 import { normalizePinResultState, type PinResultWirePayload } from './normalizePinResult';
-import { pinResultCacheKey } from './pinResultIndex';
+import { pinPreviewCacheKey, pinResultCacheKey } from './pinResultIndex';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -26,6 +27,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   recording: [],
   graphDirty: false,
   pinResults: new Map(),
+  pinPreviews: new Map(),
 });
 
 function clearedVisualPatch(): Pick<
@@ -67,6 +69,24 @@ interface ExecutionStore extends ExecutionState {
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
   recordPinResult: (graphPath: string, result: PinResultWirePayload | PinResultState) => void;
+  beginPinPreview: (graphPath: string, port: PortAddressDto) => number;
+  completePinPreview: (
+    graphPath: string,
+    port: PortAddressDto,
+    generation: number,
+    sourceId: string,
+  ) => boolean;
+  failPinPreview: (
+    graphPath: string,
+    port: PortAddressDto,
+    generation: number,
+    error: string,
+  ) => boolean;
+  removePinPreview: (
+    graphPath: string,
+    port: PortAddressDto,
+    generation: number,
+  ) => boolean;
   setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphPath?: string) => void;
   markGraphDirty: (graphPath: string) => void;
@@ -108,6 +128,7 @@ function commitVisualSnapshot(
 }
 
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
+  previewGeneration: 0,
   graphs: {},
   playbackGraphPath: null,
   isPlaying: false,
@@ -173,6 +194,86 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     next.set(pinResultCacheKey(normalized.graphPath, normalized.pinId), normalized);
     return updateGraph(state, graphPath, { pinResults: next });
   }),
+
+  beginPinPreview: (graphPath, port) => {
+    let generation = 0;
+    set((state) => {
+      generation = state.previewGeneration + 1;
+      const graph = state.graphs[graphPath] ?? emptyGraphState();
+      const pinPreviews = new Map(graph.pinPreviews);
+      pinPreviews.set(pinPreviewCacheKey(graphPath, port), {
+        graphPath,
+        port,
+        generation,
+        status: 'pending',
+        sourceId: null,
+        error: null,
+      });
+      return {
+        ...updateGraph(state, graphPath, { pinPreviews }),
+        previewGeneration: generation,
+      };
+    });
+    return generation;
+  },
+
+  completePinPreview: (graphPath, port, generation, sourceId) => {
+    let accepted = false;
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (!graph) return state;
+      const key = pinPreviewCacheKey(graphPath, port);
+      const preview = graph.pinPreviews.get(key);
+      if (!preview || preview.generation !== generation) return state;
+      const pinPreviews = new Map(graph.pinPreviews);
+      pinPreviews.set(key, {
+        ...preview,
+        status: 'ready',
+        sourceId,
+        error: null,
+      });
+      accepted = true;
+      return updateGraph(state, graphPath, { pinPreviews });
+    });
+    return accepted;
+  },
+
+  failPinPreview: (graphPath, port, generation, error) => {
+    let accepted = false;
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (!graph) return state;
+      const key = pinPreviewCacheKey(graphPath, port);
+      const preview = graph.pinPreviews.get(key);
+      if (!preview || preview.generation !== generation) return state;
+      const pinPreviews = new Map(graph.pinPreviews);
+      pinPreviews.set(key, {
+        ...preview,
+        status: 'error',
+        sourceId: null,
+        error,
+      });
+      accepted = true;
+      return updateGraph(state, graphPath, { pinPreviews });
+    });
+    return accepted;
+  },
+
+  removePinPreview: (graphPath, port, generation) => {
+    let removed = false;
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (!graph) return state;
+      const key = pinPreviewCacheKey(graphPath, port);
+      const preview = graph.pinPreviews.get(key);
+      if (!preview || preview.generation !== generation) return state;
+      const pinPreviews = new Map(graph.pinPreviews);
+      pinPreviews.delete(key);
+      removed = true;
+      return updateGraph(state, graphPath, { pinPreviews });
+    });
+    return removed;
+  },
 
   setRecording: (graphPath, recording) => set((state) => updateGraph(state, graphPath, { recording })),
 

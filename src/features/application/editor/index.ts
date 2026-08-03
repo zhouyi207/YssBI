@@ -54,3 +54,10 @@ export { useCanvasDrop } from './useCanvasDrop';
 export type { VariableDropMenu } from './canvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
 export { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
+export {
+  isPinPreviewActionAvailable,
+  requestAndOpenPinPreview,
+  requestPinPreview,
+  type PinPreviewRejectionReason,
+  type PinPreviewRequestResult,
+} from './requestPinPreview';

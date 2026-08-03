@@ -561,11 +561,18 @@ export const enUS = {
   },
   nodeDocumentationModal: {
     title: "Node Documentation",
-    description: "Search nodes by name, category, description, or documentation content; click the active node again to close the preview.",
-    searchPlaceholder: "Search node documentation...",
+    description: "Search current-language node titles and aliases; click the active node again to close the preview.",
+    searchPlaceholder: "Search node titles and aliases...",
     noMatches: "No matching node documentation",
     noDocumentation: "This node has no detailed documentation yet.",
-
+    selectNode: "Select a node to view its documentation.",
+    nodeId: "Node ID",
+    ports: "Ports",
+    noPorts: "No ports",
+    parameters: "Parameters",
+    noParameters: "No parameters",
+    resourcePath: "Resource path",
+    resourceRevision: "Resource revision",
     close: "Close node documentation",
   },
   editorDropPreview: {
@@ -650,8 +657,7 @@ export const enUS = {
     promoteToGlobal: "Promote to global",
     demoteToLocal: "Demote to local",
     viewInDatabaseEditor: "View in Database Editor",
-    nodeCatalogUnavailable: "Node catalog unavailable",
-    nodeCatalogUnavailableDescription: "Waiting for stable node catalog descriptors",
+
     nodeSearchNoMatches: "No matching nodes",
     noActiveGraph: "No active graph open",
     noActiveGraphDescription: "Open an Event or Function to view command status",

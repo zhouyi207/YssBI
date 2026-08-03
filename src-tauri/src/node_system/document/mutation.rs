@@ -6,6 +6,9 @@ use super::{
     PortAddress, PortInstanceId, PortRef, ResourceKey, ResourceRevision, TypedValue,
     port_member_group_state,
 };
+use crate::node_system::catalog::{
+    CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
+};
 use crate::node_system::protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, ParameterConstraint,
     PortDirection, PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec, TypeExpr,
@@ -14,7 +17,7 @@ use crate::node_system::protocol::{
 use crate::node_system::registry::NodeRegistry;
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 /// A client mutation paired with the resource revision it was based on.
@@ -103,6 +106,8 @@ pub enum MutationConflict {
         current_revision: ResourceRevision,
     },
     MaterializationUnauthorized,
+    CatalogResourceStale(Box<str>),
+    CatalogDescriptorInvalid(Box<str>),
     InvalidEditorMutation(Box<str>),
     Projection(Box<str>),
     History(Box<str>),
@@ -113,6 +118,8 @@ impl MutationConflict {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::RecoveryRequired(_) => "project_recovery_required",
+            Self::CatalogResourceStale(_) => "catalog_resource_stale",
+            Self::CatalogDescriptorInvalid(_) => "catalog_descriptor_invalid",
             _ => "mutation_conflict",
         }
     }
@@ -154,7 +161,9 @@ impl fmt::Display for MutationConflict {
             Self::MaterializationUnauthorized => {
                 formatter.write_str("materialization authorization does not match projected member")
             }
-            Self::InvalidEditorMutation(message) => formatter.write_str(message),
+            Self::CatalogResourceStale(message)
+            | Self::CatalogDescriptorInvalid(message)
+            | Self::InvalidEditorMutation(message) => formatter.write_str(message),
             Self::Projection(message) => {
                 write!(formatter, "committed graph projection failed: {message}")
             }
@@ -178,7 +187,8 @@ impl From<DocumentError> for MutationConflict {
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
 pub enum PortAddressDto {
     Declared {
@@ -252,13 +262,13 @@ fn parse_node_id(value: &str) -> Result<NodeId, String> {
     tag = "type",
     content = "payload",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
 pub enum EditorGraphMutationDto {
     CreateNode {
-        node_type_id: NodeTypeId,
+        descriptor: NodeCreationDescriptor,
         position: NodePosition,
-        parameters: ParameterValues,
         user_label: Option<String>,
     },
     DeleteNode {
@@ -303,19 +313,65 @@ impl EditorGraphMutationDto {
         document: &GraphDocument,
         registry: &NodeRegistry,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_catalog_snapshot(graph_path, document, registry, None)
+    }
+
+    pub(crate) fn into_patch_with_catalog_snapshot(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
             Self::CreateNode {
-                node_type_id,
+                descriptor,
                 position,
-                parameters,
                 user_label,
             } => {
                 validate_position(position)?;
+                let (node_type_id, parameters, resource_bound) = match descriptor {
+                    NodeCreationDescriptor::Static { node_type_id } => {
+                        (node_type_id, ParameterValues::new(), false)
+                    }
+                    NodeCreationDescriptor::ResourceBound {
+                        node_type_id,
+                        resource_path,
+                        resource_revision,
+                        create_args,
+                    } => (
+                        node_type_id.clone(),
+                        materialize_resource_descriptor(
+                            graph_path,
+                            &node_type_id,
+                            &resource_path,
+                            resource_revision,
+                            create_args,
+                            catalog_validation.ok_or_else(|| {
+                                catalog_resource_stale(
+                                    "resource validation snapshot is unavailable",
+                                )
+                            })?,
+                        )?,
+                        true,
+                    ),
+                };
                 let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
-                    invalid_editor_mutation(format!("unknown node type '{node_type_id}'"))
+                    if resource_bound {
+                        catalog_descriptor_invalid(format!("unknown node type '{node_type_id}'"))
+                    } else {
+                        invalid_editor_mutation(format!("unknown node type '{node_type_id}'"))
+                    }
                 })?;
-                validate_node_scope(graph_path, protocol)?;
-                validate_parameters(protocol, &parameters)?;
+                if resource_bound {
+                    validate_node_scope(graph_path, protocol)
+                        .map_err(catalog_descriptor_validation_error)?;
+                    validate_parameters(protocol, &parameters)
+                        .map_err(catalog_descriptor_validation_error)?;
+                } else {
+                    validate_node_scope(graph_path, protocol)?;
+                    validate_parameters(protocol, &parameters)?;
+                }
                 create_node_operations(protocol, node_type_id, position, parameters, user_label)
             }
             Self::DeleteNode { node_id } => {
@@ -372,6 +428,172 @@ fn invalid_editor_mutation(message: impl Into<Box<str>>) -> MutationConflict {
     MutationConflict::InvalidEditorMutation(message.into())
 }
 
+fn catalog_resource_stale(message: impl Into<Box<str>>) -> MutationConflict {
+    MutationConflict::CatalogResourceStale(message.into())
+}
+
+fn catalog_descriptor_invalid(message: impl Into<Box<str>>) -> MutationConflict {
+    MutationConflict::CatalogDescriptorInvalid(message.into())
+}
+
+fn catalog_descriptor_validation_error(error: MutationConflict) -> MutationConflict {
+    catalog_descriptor_invalid(error.to_string())
+}
+
+fn materialize_resource_descriptor(
+    graph_path: &GraphResourcePath,
+    node_type_id: &NodeTypeId,
+    resource_path: &CatalogResourcePath,
+    resource_revision: ResourceRevision,
+    create_args: ResourceBoundCreateArgsDto,
+    snapshot: &crate::project::CatalogMutationValidationSnapshot,
+) -> Result<ParameterValues, MutationConflict> {
+    validate_resource_path(resource_path, create_args)?;
+    let resource = snapshot.resources.get(resource_path).ok_or_else(|| {
+        catalog_resource_stale(format!(
+            "catalog resource '{}' is unavailable",
+            resource_path.as_str()
+        ))
+    })?;
+    let (current_revision, allowed_node_type, binding, scope) = match (create_args, resource) {
+        (
+            ResourceBoundCreateArgsDto::Function,
+            crate::project::CatalogMutationResource::Function {
+                revision,
+                allowed_node_type_id,
+                parameter_binding,
+                ..
+            },
+        ) => (
+            *revision,
+            allowed_node_type_id,
+            parameter_binding.as_ref(),
+            None,
+        ),
+        (
+            ResourceBoundCreateArgsDto::Variable,
+            crate::project::CatalogMutationResource::Variable {
+                revision,
+                scope,
+                allowed_node_type_ids,
+                parameter_binding,
+            },
+        ) => {
+            if !allowed_node_type_ids
+                .iter()
+                .any(|allowed| allowed == node_type_id)
+            {
+                return Err(catalog_descriptor_invalid(
+                    "resource descriptor node type is not allowed",
+                ));
+            }
+            (
+                *revision,
+                node_type_id,
+                parameter_binding.as_ref(),
+                Some(scope),
+            )
+        }
+        (
+            ResourceBoundCreateArgsDto::Database,
+            crate::project::CatalogMutationResource::Database {
+                authority_revision,
+                allowed_node_type_id,
+                parameter_binding,
+            },
+        ) => (
+            *authority_revision,
+            allowed_node_type_id,
+            parameter_binding.as_ref(),
+            None,
+        ),
+        _ => {
+            return Err(catalog_descriptor_invalid(
+                "resource descriptor create arguments do not match the resource kind",
+            ));
+        }
+    };
+    if allowed_node_type != node_type_id {
+        return Err(catalog_descriptor_invalid(
+            "resource descriptor node type is not allowed",
+        ));
+    }
+    if current_revision != resource_revision {
+        return Err(catalog_resource_stale(format!(
+            "catalog resource '{}' revision is stale",
+            resource_path.as_str()
+        )));
+    }
+    let expected_binding = match create_args {
+        ResourceBoundCreateArgsDto::Function => "target",
+        ResourceBoundCreateArgsDto::Variable => "variable",
+        ResourceBoundCreateArgsDto::Database => "dataframe",
+    };
+    if binding != expected_binding {
+        return Err(catalog_descriptor_invalid(
+            "catalog resource parameter binding is invalid",
+        ));
+    }
+    if let Some(scope) = scope {
+        validate_variable_scope(graph_path, scope)?;
+    }
+    Ok(BTreeMap::from([(
+        crate::node_system::protocol::ParameterKey::new(expected_binding)
+            .expect("catalog bindings are static valid keys"),
+        serde_json::Value::String(resource_path.as_str().to_owned()),
+    )]))
+}
+
+fn validate_resource_path(
+    resource_path: &CatalogResourcePath,
+    create_args: ResourceBoundCreateArgsDto,
+) -> Result<(), MutationConflict> {
+    let path = resource_path.as_str();
+    let valid = match create_args {
+        ResourceBoundCreateArgsDto::Function => crate::project::GraphResourcePath::new(path)
+            .is_ok_and(|canonical| {
+                canonical.as_str() == path && canonical.as_str().starts_with("functions/")
+            }),
+        ResourceBoundCreateArgsDto::Variable => path
+            .strip_prefix("variables/")
+            .and_then(|id| uuid::Uuid::parse_str(id).ok())
+            .is_some_and(|id| format!("variables/{id}") == path),
+        ResourceBoundCreateArgsDto::Database => path
+            .strip_prefix("databases/")
+            .is_some_and(|id| !id.is_empty()),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(catalog_descriptor_invalid(format!(
+            "catalog resource path '{path}' is malformed for its create arguments"
+        )))
+    }
+}
+
+fn validate_variable_scope(
+    graph_path: &GraphResourcePath,
+    scope: &crate::variable::VariableScope,
+) -> Result<(), MutationConflict> {
+    let in_scope = match scope {
+        crate::variable::VariableScope::Global => true,
+        crate::variable::VariableScope::Event { event_path } => {
+            event_path.as_str() == graph_path.0.as_ref()
+        }
+        crate::variable::VariableScope::Function { function_path } => {
+            function_path.as_str() == graph_path.0.as_ref()
+        }
+    };
+    if in_scope {
+        Ok(())
+    } else {
+        Err(catalog_descriptor_invalid(format!(
+            "variable resource is out of scope for graph '{}'",
+            graph_path.0
+        )))
+    }
+}
+
 fn delete_editor_node_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
@@ -417,7 +639,7 @@ fn validate_node_scope(
     }
 }
 
-fn create_node_operations(
+pub(super) fn create_node_operations(
     protocol: &NodeProtocol,
     node_type: NodeTypeId,
     position: NodePosition,
@@ -480,7 +702,7 @@ fn validate_position(position: NodePosition) -> Result<(), MutationConflict> {
     }
 }
 
-fn validate_parameters(
+pub(super) fn validate_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {

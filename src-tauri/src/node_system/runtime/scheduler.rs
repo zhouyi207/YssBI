@@ -16,7 +16,7 @@ use crate::node_system::analysis::{
 };
 use crate::node_system::plan::{
     CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan, FunctionPlanHandle,
-    OperationIndex, PlannedKernel, RelationalFragmentId, RelationalSubplanIndex,
+    GraphOutputRef, OperationIndex, PlannedKernel, RelationalFragmentId, RelationalSubplanIndex,
     StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::Value;
@@ -39,7 +39,7 @@ pub(crate) enum SchedulerCheckpoint {
 
 enum PendingSourceEvent {
     ValueReady { value_index: u32 },
-    ResultReady,
+    ResultReady { output: GraphOutputRef },
 }
 
 struct PendingSourcePublication {
@@ -166,6 +166,7 @@ pub struct RunExecutor<'a> {
     relational_backends: Option<&'a dyn RelationalBackendProvider>,
     compiled_parameters: Option<&'a CompiledParameterStore>,
     run_registry: Option<&'a ProjectRunRegistry>,
+    selection_digest: Option<[u8; 32]>,
     recursion_limit: usize,
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
@@ -190,6 +191,7 @@ impl<'a> RunExecutor<'a> {
             relational_backends: None,
             compiled_parameters: None,
             run_registry: None,
+            selection_digest: None,
             recursion_limit: functions.recursion_limit().max(1),
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
@@ -217,6 +219,11 @@ impl<'a> RunExecutor<'a> {
 
     pub fn with_run_registry(mut self, registry: &'a ProjectRunRegistry) -> Self {
         self.run_registry = Some(registry);
+        self
+    }
+
+    pub fn with_selection_digest(mut self, digest: [u8; 32]) -> Self {
+        self.selection_digest = Some(digest);
         self
     }
 
@@ -280,7 +287,10 @@ impl<'a> RunExecutor<'a> {
             })
             .transpose()
             .map_err(|error| RunError::ProjectDraining(error.to_string().into()))?;
-        let correlation = CorrelationContext::compile(&plan.provenance).for_run(run_id, None);
+        let mut correlation = CorrelationContext::compile(&plan.provenance).for_run(run_id, None);
+        if let Some(digest) = self.selection_digest {
+            correlation = correlation.with_selection_digest(digest);
+        }
         self.record_event(plan, correlation.clone(), RunEventKind::RunStarted);
         self.trace.record(SpanEvent::new(
             SpanKind::Run,
@@ -360,7 +370,15 @@ impl<'a> RunExecutor<'a> {
         cancellation: &CancellationToken,
         pending_sources: &mut Vec<PendingSourcePublication>,
     ) -> Result<(), RunError> {
+        let outputs_by_name = plan
+            .results
+            .iter()
+            .map(|result| (result.name.as_ref(), &result.output))
+            .collect::<BTreeMap<_, _>>();
         for (name, value) in &run_result.values {
+            let output = outputs_by_name
+                .get(name.as_ref())
+                .expect("validated plan result must retain stable output identity");
             if let Some(source) = results.prepare_runtime_value(
                 correlation.clone(),
                 plan.provenance.basis.clone(),
@@ -369,7 +387,9 @@ impl<'a> RunExecutor<'a> {
             ) {
                 pending_sources.push(PendingSourcePublication {
                     source,
-                    event: PendingSourceEvent::ResultReady,
+                    event: PendingSourceEvent::ResultReady {
+                        output: (*output).clone(),
+                    },
                 });
                 #[cfg(test)]
                 self.run_test_checkpoint(SchedulerCheckpoint::ResultSourceStaged, cancellation);
@@ -411,7 +431,14 @@ impl<'a> RunExecutor<'a> {
                 value_index,
                 source_id,
             },
-            PendingSourceEvent::ResultReady => RunEventKind::ResultReady { name, source_id },
+            PendingSourceEvent::ResultReady { output } => {
+                self.events.record(RunEvent {
+                    correlation: correlation.clone(),
+                    basis: basis.clone(),
+                    kind: RunEventKind::ResultReady { name, source_id },
+                });
+                RunEventKind::OutputReady { output, source_id }
+            }
         };
         self.events.record(RunEvent {
             correlation,
@@ -606,6 +633,7 @@ impl<'a> RunExecutor<'a> {
                 target,
                 arguments,
                 results,
+                ..
             } => {
                 if frame_depth >= self.recursion_limit {
                     return Err(RunError::RecursionLimitExceeded {

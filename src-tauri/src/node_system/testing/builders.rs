@@ -8,7 +8,9 @@ use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition,
     PortAddress,
 };
-use crate::node_system::plan::{CompiledParameterHandle, ExecutionPlan, KernelHandle, PlanResult};
+use crate::node_system::plan::{
+    CompiledParameterHandle, ExecutionPlan, GraphOutputRef, KernelHandle, PlanResult,
+};
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     ExecutionSemantics, I18nKey, IconId, InputBindingSpec, LiteralPolicy, NodeCatalogProtocol,
@@ -226,6 +228,10 @@ impl TestProvider {
             .unwrap_or_else(|| panic!("lowered output order did not match protocol"));
         plan.results = vec![PlanResult {
             name: name.into(),
+            output: GraphOutputRef {
+                graph_path: plan.provenance.graph_path.clone(),
+                port: PortAddress::declared(node.id, port.clone()),
+            },
             value: output.value,
         }]
         .into_boxed_slice();

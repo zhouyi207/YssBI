@@ -1,28 +1,51 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGraphMetaStore } from '@/features/core/dataStore';
+import { useDatabaseStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useResourceStore } from '@/features/core/resource';
+import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { renameResource } from './resourceActions';
+import { deleteResource, renameResource } from './resourceActions';
 
 vi.mock('@/features/application/editorMutation/projectPublicationCoordinator', () => ({
   projectPublicationCoordinator: {
     submit: vi.fn(async () => ({ status: 'applied', affectedGraphPaths: new Set() })),
-    captureCommandLifecycle: vi.fn(() => ({
-      projectInstanceId: 'project-instance-current',
-      epoch: 1,
-      publicationRevision: 0,
-    })),
-    ownsCommandLifecycle: vi.fn((projectInstanceId: string) =>
-      useProjectIOStore.getState().projectInstanceId === projectInstanceId),
-    assertCommandLifecycle: vi.fn((projectInstanceId: string) => {
-      if (useProjectIOStore.getState().projectInstanceId !== projectInstanceId) {
-        throw new Error('stale project lifecycle');
-      }
-    }),
+    capturePublicationRevision: vi.fn(() => 0),
   },
 }));
+
+function databaseResult(afterName: string | null, operationId: string) {
+  const before = {
+    id: 'sales',
+    engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+    schemaVersion: 1,
+    required: false,
+    name: 'Sales',
+  };
+  return {
+    data: null,
+    mutation: {
+      operationId,
+      projectInstanceId: 'project-instance-current',
+      publicationRevision: 1,
+      moves: [],
+      deltas: [{
+        resource: { kind: 'database' as const, key: 'opaque database resource path' },
+        fromRevision: 4,
+        toRevision: 5,
+        causedBy: operationId,
+        payload: {
+          kind: 'database' as const,
+          patch: { before, after: afterName === null ? null : { ...before, name: afterName } },
+        },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete' as const, expectedGraphPaths: [] },
+      history: { canUndo: false, canRedo: false },
+    },
+  };
+}
 
 function renameResult(projectInstanceId: string, publicationRevision = 1) {
   return {
@@ -78,7 +101,44 @@ describe('renameResource project ownership', () => {
       graphOrder: ['events/Old.yssbi-event'],
     });
     useGraphMetaStore.getState().clear();
+    useDatabaseStore.setState({
+      databases: {
+        sales: { id: 'sales', name: 'Sales', resourcePath: 'opaque database resource path' },
+      },
+      revisions: { sales: 4 },
+    });
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-current' });
+    startProjectLifecycle('project-instance-current');
+  });
+
+  it('routes database rename and delete through exact revisioned canonical receipts', async () => {
+    let renamed!: ReturnType<typeof databaseResult>;
+    let deleted!: ReturnType<typeof databaseResult>;
+    vi.spyOn(DatabaseService, 'renameDatabase').mockImplementation(
+      async (_project, operation) => (renamed = databaseResult('Renamed', operation)),
+    );
+    vi.spyOn(DatabaseService, 'deleteDatabase').mockImplementation(
+      async (_project, operation) => (deleted = databaseResult(null, operation)),
+    );
+
+    await renameResource({ id: 'sales', kind: 'database' }, 'Renamed');
+    await deleteResource({ id: 'sales', kind: 'database' });
+
+    expect(DatabaseService.renameDatabase).toHaveBeenCalledWith(
+      'project-instance-current',
+      expect.any(String),
+      4,
+      'sales',
+      'Renamed',
+    );
+    expect(DatabaseService.deleteDatabase).toHaveBeenCalledWith(
+      'project-instance-current',
+      expect.any(String),
+      4,
+      'sales',
+    );
+    expect(projectPublicationCoordinator.submit).toHaveBeenNthCalledWith(1, { result: renamed.mutation });
+    expect(projectPublicationCoordinator.submit).toHaveBeenNthCalledWith(2, { result: deleted.mutation });
   });
 
   it('rejects a stale rename receipt before coordinator submission', async () => {
@@ -149,9 +209,10 @@ describe('renameResource project ownership', () => {
 
     const pending = renameResource({ id: 'events/Old.yssbi-event', kind: 'event' }, 'New');
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-replacement' });
+    startProjectLifecycle('project-instance-replacement');
     resolveRename(renameResult('project-instance-current'));
 
-    await expect(pending).rejects.toThrow('stale');
+    await expect(pending).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
   });
 });

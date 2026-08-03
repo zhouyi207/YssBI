@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { SourceDescriptor, SourcePage, SourceValue } from '@/features/core/resultSource/types';
+import type { SourceDescriptor, SourcePage, SourceValue } from '@/shared/types/dto/resultSource';
 
 export class SourceService {
   static async getDescriptor(sourceId: string): Promise<SourceDescriptor | null> {

@@ -2,6 +2,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
 import { useNodeManagement } from './useNodeManagement';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -13,6 +15,12 @@ vi.mock('@/features/core/editor/hooks/useActiveEditorGroup', () => ({
 }));
 vi.mock('@/features/core/dataStore/graphNodeSelectors', () => ({
   canDeleteNode: () => true,
+}));
+vi.mock('@/features/application/nodeCatalog/createNodeFromDescriptor', () => ({
+  createNodeFromDescriptor: vi.fn(),
+}));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { resolvedLanguage: 'zh-CN', language: 'zh-CN' } }),
 }));
 
 describe('useNodeManagement mutation outcomes', () => {
@@ -30,6 +38,26 @@ describe('useNodeManagement mutation outcomes', () => {
   });
 
   afterEach(() => act(() => root.unmount()));
+
+  it('forwards an exact descriptor through the active graph mutation path', async () => {
+    vi.mocked(createNodeFromDescriptor).mockResolvedValue({ status: 'conflict' });
+    const descriptor: NodeCreationDescriptor = {
+      kind: 'resourceBound',
+      nodeTypeId: 'function.call',
+      resourcePath: 'functions/Helper.yssbi-function',
+      resourceRevision: 3,
+      createArgs: { kind: 'function' },
+    };
+
+    await expect(management.createNode(descriptor, { x: 4, y: 9 })).resolves.toBe(false);
+
+    expect(createNodeFromDescriptor).toHaveBeenCalledWith({
+      graphPath: 'events/main.yssbi-event',
+      locale: 'zh-CN',
+      descriptor,
+      position: { x: 4, y: 9 },
+    });
+  });
 
   it('does not report requested node IDs when delete sequencing fails', async () => {
     executeCommand.mockResolvedValueOnce(false);

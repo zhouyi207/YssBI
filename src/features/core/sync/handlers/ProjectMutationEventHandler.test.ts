@@ -5,8 +5,10 @@ import {
 } from '@/features/application/editorMutation/pendingMutationRegistry';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useHistoryStore } from '@/features/core/history';
+import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { ProjectService } from '@/services/project/projectService';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
@@ -65,6 +67,32 @@ function resourceResult(publicationRevision = 1): ResourceMutationResultDto {
   };
 }
 
+function databaseResult(publicationRevision = 1): ResourceMutationResultDto {
+  const before = {
+    id: 'sales',
+    engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+    schemaVersion: 1,
+    required: false,
+    name: 'Before',
+  };
+  return {
+    operationId,
+    projectInstanceId,
+    publicationRevision,
+    moves: [],
+    deltas: [{
+      resource: { kind: 'database', key: 'opaque database resource path' },
+      fromRevision: 4,
+      toRevision: 5,
+      causedBy: operationId,
+      payload: { kind: 'database', patch: { before, after: { ...before, name: 'After' } } },
+    }],
+    projectionReplacements: [],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+    history: { canUndo: false, canRedo: false },
+  };
+}
+
 function emptyResult(
   publicationRevision: number,
   history = { canUndo: true, canRedo: false },
@@ -90,6 +118,7 @@ function recoveryIndex(publicationRevision: number) {
     graphs: [],
     variables: [],
     worksheets: [],
+    databases: [],
     exportTime: '',
     appVersion: '0.2.7',
   };
@@ -103,6 +132,8 @@ describe('Project mutation event synchronization', () => {
     vi.clearAllMocks();
     resetPendingMutations();
     useGraphDataStore.setState({ graphEntities: {} });
+    useDatabaseStore.setState({ databases: {}, revisions: {} });
+    useNodeCatalogStore.getState().clear();
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
   });
 
@@ -191,6 +222,47 @@ describe('Project mutation event synchronization', () => {
 
     expect(submit).toHaveBeenCalledOnce();
     expect(submit).toHaveBeenCalledWith({ result });
+  });
+
+  it('applies a database publication and then advances the canonical Catalog watermark', async () => {
+    useDatabaseStore.setState({
+      databases: {
+        sales: {
+          id: 'sales',
+          name: 'Before',
+          resourcePath: 'opaque database resource path',
+          engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+          schemaVersion: 1,
+          required: false,
+        },
+      },
+      revisions: { sales: 4 },
+    });
+    const observe = vi.spyOn(useNodeCatalogStore.getState(), 'observeResourcePublication');
+
+    new ResourceMutationCommittedHandler().handle({ result: databaseResult(1) });
+
+    await vi.waitFor(() => expect(useDatabaseStore.getState().revisions.sales).toBe(5));
+    expect(useDatabaseStore.getState().databases.sales?.name).toBe('After');
+    expect(observe).toHaveBeenCalledWith(projectInstanceId, 1);
+  });
+
+  it('advances the Catalog refresh watermark only after the resource event settles', async () => {
+    let settle!: () => void;
+    vi.spyOn(projectPublicationCoordinator, 'submit').mockReturnValue(new Promise((resolve) => {
+      settle = () => resolve({ status: 'applied', affectedGraphPaths: new Set() });
+    }));
+    const observe = vi.spyOn(useNodeCatalogStore.getState(), 'observeResourcePublication');
+
+    new ResourceMutationCommittedHandler().handle({ result: resourceResult(3) });
+    expect(observe).not.toHaveBeenCalled();
+
+    settle();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(projectInstanceId, 3);
   });
 
   it('delivers matching direct and event receipts to coordinator-owned deduplication', () => {

@@ -205,6 +205,7 @@ describe('project lifecycle initiating operations', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -245,6 +246,7 @@ describe('project lifecycle initiating operations', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -289,6 +291,7 @@ describe('project lifecycle initiating operations', () => {
         graphs: [],
         variables: [],
         worksheets: [],
+        databases: [],
         exportTime: '',
         appVersion: '0.2.7',
       });

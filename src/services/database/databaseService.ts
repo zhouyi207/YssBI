@@ -6,6 +6,7 @@ import type {
     EditState,
 } from "@/shared/types/domain/dataframe";
 import type { DatabaseRow, LoadDatabaseEngineSpec, LoadDatabaseResult } from "@/shared/types/dto/database";
+import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 
 export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 
@@ -13,6 +14,11 @@ export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
 export interface DatabaseRowsResult {
     rows: DatabaseRow[];
     rowIds: number[];
+}
+
+export interface DatabaseMutationCommandResult<T> {
+    data: T;
+    mutation: ResourceMutationResultDto;
 }
 
 /**
@@ -23,8 +29,12 @@ export class DatabaseService {
     /**
      * 加载数据库（CSV、Parquet 等）
      */
-    static async loadDatabase(engine: LoadDatabaseEngineSpec): Promise<LoadDatabaseResult> {
-        return await invoke("load_database", { engine });
+    static async loadDatabase(
+        projectInstanceId: string,
+        operationId: string,
+        engine: LoadDatabaseEngineSpec,
+    ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
+        return await invoke("load_database", { projectInstanceId, operationId, engine });
     }
 
     /**
@@ -60,15 +70,30 @@ export class DatabaseService {
     /**
      * 删除数据库
      */
-    static async deleteDatabase(id: string): Promise<void> {
-        await invoke("delete_database", { id });
+    static async deleteDatabase(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+    ): Promise<DatabaseMutationCommandResult<null>> {
+        return await invoke("delete_database", {
+            projectInstanceId, operationId, expectedRevision, id,
+        });
     }
 
     /**
      * 重命名数据库（显示名，写入 DuckDB meta）
      */
-    static async renameDatabase(id: string, name: string): Promise<void> {
-        await invoke("rename_database", { id, name });
+    static async renameDatabase(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        name: string,
+    ): Promise<DatabaseMutationCommandResult<null>> {
+        return await invoke("rename_database", {
+            projectInstanceId, operationId, expectedRevision, id, name,
+        });
     }
 
     /**
@@ -107,53 +132,126 @@ export class DatabaseService {
     }
 
     static async editCell(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
         id: string,
         row: number,
         colName: string,
         value: unknown,
         rowId?: number | null,
-    ): Promise<EditState> {
-        return await invoke("edit_cell", { id, row, colName, value, rowId: rowId ?? null });
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("edit_cell", {
+            projectInstanceId, operationId, expectedRevision, id, row, colName, value,
+            rowId: rowId ?? null,
+        });
     }
 
-    static async addRow(id: string, index?: number): Promise<EditState> {
-        return await invoke("add_row", { id, index: index ?? null });
+    static async addRow(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        index?: number,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("add_row", {
+            projectInstanceId, operationId, expectedRevision, id, index: index ?? null,
+        });
     }
 
-    static async deleteRows(id: string, indices: number[], rowIds?: number[]): Promise<EditState> {
+    static async deleteRows(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        indices: number[],
+        rowIds?: number[],
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
         return await invoke("delete_rows", {
-            id,
-            indices,
+            projectInstanceId, operationId, expectedRevision, id, indices,
             rowIds: rowIds && rowIds.length > 0 ? rowIds : null,
         });
     }
 
-    static async addColumn(id: string, name: string, dtype: string): Promise<EditState> {
-        return await invoke("add_column", { id, name, dtype });
+    static async addColumn(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        name: string,
+        dtype: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("add_column", {
+            projectInstanceId, operationId, expectedRevision, id, name, dtype,
+        });
     }
 
-    static async deleteColumn(id: string, name: string): Promise<EditState> {
-        return await invoke("delete_column", { id, name });
+    static async deleteColumn(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        name: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("delete_column", {
+            projectInstanceId, operationId, expectedRevision, id, name,
+        });
     }
 
-    static async castColumn(id: string, colName: string, newDtype: string, force = false): Promise<EditState> {
-        return await invoke("cast_column", { id, colName, newDtype, force });
+    static async castColumn(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        colName: string,
+        newDtype: string,
+        force = false,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("cast_column", {
+            projectInstanceId, operationId, expectedRevision, id, colName, newDtype, force,
+        });
     }
 
-    static async renameColumn(id: string, oldName: string, newName: string): Promise<EditState> {
-        return await invoke("rename_column", { id, oldName, newName });
+    static async renameColumn(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+        oldName: string,
+        newName: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("rename_column", {
+            projectInstanceId, operationId, expectedRevision, id, oldName, newName,
+        });
     }
 
-    static async undoEdit(id: string): Promise<EditState> {
-        return await invoke("undo_edit", { id });
+    static async undoEdit(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("undo_edit", { projectInstanceId, operationId, expectedRevision, id });
     }
 
-    static async redoEdit(id: string): Promise<EditState> {
-        return await invoke("redo_edit", { id });
+    static async redoEdit(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("redo_edit", { projectInstanceId, operationId, expectedRevision, id });
     }
 
-    static async saveDatabaseChanges(id: string): Promise<EditState> {
-        return await invoke("save_database_changes", { id });
+    static async saveDatabaseChanges(
+        projectInstanceId: string,
+        operationId: string,
+        expectedRevision: number,
+        id: string,
+    ): Promise<DatabaseMutationCommandResult<EditState>> {
+        return await invoke("save_database_changes", {
+            projectInstanceId, operationId, expectedRevision, id,
+        });
     }
 
     static async exportDatabase(id: string, path: string, format: string): Promise<void> {

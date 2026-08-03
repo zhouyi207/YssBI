@@ -347,6 +347,7 @@ mod tests {
             registry_fingerprint: basis.registry_fingerprint.clone(),
             resource_versions: basis.resource_versions.clone(),
             compile_id: CompileId::new(9),
+            selection_digest: None,
             run_id: Some(run_id),
             node_id: None,
             node_type_id: None,

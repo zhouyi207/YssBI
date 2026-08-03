@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PinResultState } from '@/shared/types/ui';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import { pinPreviewCacheKey } from './pinResultIndex';
 import { useExecutionStore } from './useExecutionStore';
 
 function samplePinResult(pinId: string, graphPath = 'events/Main.yssbi-event'): PinResultState {
@@ -17,6 +19,19 @@ function samplePinResult(pinId: string, graphPath = 'events/Main.yssbi-event'): 
   };
 }
 
+const declaredOutput: PortAddressDto = {
+  kind: 'declared',
+  nodeId: 'node-1',
+  portKey: 'result',
+};
+
+const instanceOutput: PortAddressDto = {
+  kind: 'instance',
+  nodeId: 'node-1',
+  templateKey: 'result',
+  instanceId: 'instance-7',
+};
+
 describe('useExecutionStore pin result lifecycle', () => {
   beforeEach(() => {
     useExecutionStore.setState({
@@ -24,6 +39,59 @@ describe('useExecutionStore pin result lifecycle', () => {
       playbackGraphPath: null,
       isPlaying: false,
     });
+  });
+
+  it('accepts only the newest preview generation for an exact stable address', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+    const first = store.beginPinPreview(graphPath, declaredOutput);
+    const second = store.beginPinPreview(graphPath, declaredOutput);
+
+    expect(store.completePinPreview(graphPath, declaredOutput, first, 'source-stale')).toBe(false);
+    expect(store.completePinPreview(graphPath, instanceOutput, second, 'source-wrong-port')).toBe(false);
+    expect(store.completePinPreview(graphPath, declaredOutput, second, 'source-current')).toBe(true);
+
+    const preview = useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(
+      pinPreviewCacheKey(graphPath, declaredOutput),
+    );
+    expect(preview).toMatchObject({
+      generation: second,
+      status: 'ready',
+      sourceId: 'source-current',
+      port: declaredOutput,
+    });
+  });
+
+  it('removes only the matching preview generation', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+    const staleGeneration = store.beginPinPreview(graphPath, declaredOutput);
+    const currentGeneration = store.beginPinPreview(graphPath, declaredOutput);
+
+    expect(store.removePinPreview(graphPath, declaredOutput, staleGeneration)).toBe(false);
+    expect(useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(
+      pinPreviewCacheKey(graphPath, declaredOutput),
+    )).toMatchObject({ generation: currentGeneration, status: 'pending' });
+    expect(store.removePinPreview(graphPath, declaredOutput, currentGeneration)).toBe(true);
+    expect(useExecutionStore.getState().getGraph(graphPath).pinPreviews.has(
+      pinPreviewCacheKey(graphPath, declaredOutput),
+    )).toBe(false);
+  });
+
+  it('does not let a completion revive preview state after graph release', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+    const generation = store.beginPinPreview(graphPath, instanceOutput);
+
+    store.releaseGraphExecutionState(graphPath);
+
+    expect(store.completePinPreview(
+      graphPath,
+      instanceOutput,
+      generation,
+      'source-stale',
+    )).toBe(false);
+    expect(useExecutionStore.getState().graphs[graphPath]).toBeUndefined();
   });
 
   it('tracks the active opaque run ID only for the live run lifecycle', () => {

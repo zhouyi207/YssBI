@@ -6,6 +6,10 @@ import { useProjectionLocaleSync } from './useProjectionLocaleSync';
 import { resetGraphProjectionCoordinator } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
   buildGraphResourceMeta,
   markResourceLoaded,
   useDocumentStateStore,
@@ -57,6 +61,8 @@ describe('useProjectionLocaleSync', () => {
     vi.clearAllMocks();
     localeState.language = 'zh-CN';
     resetGraphProjectionCoordinator();
+    clearProjectLifecycle();
+    startProjectLifecycle('project-instance-1');
     useGraphDataStore.setState({ graphEntities: {} });
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
@@ -68,6 +74,7 @@ describe('useProjectionLocaleSync', () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
+    clearProjectLifecycle();
     host.remove();
   });
 
@@ -108,7 +115,12 @@ describe('useProjectionLocaleSync', () => {
     markResourceLoaded({ id: functionPath, kind: 'function' });
     const viewportScope = editorViewportScope('default_editor', eventPath);
     useViewportStore.getState().setViewport(viewportScope, { x: 120, y: -30, scale: 1.5 });
-    vi.mocked(GraphProjectionService.hydrateGraph).mockImplementation(async (graphPath, locale) => {
+    vi.mocked(GraphProjectionService.hydrateGraph).mockImplementation(async (
+      projectInstanceId,
+      graphPath,
+      locale,
+    ) => {
+      expect(projectInstanceId).toBe('project-instance-1');
       expect(locale).toBe('en-US');
       return graphPath === eventPath ? localizedEvent.projection : localizedFunction.projection;
     });
@@ -117,16 +129,26 @@ describe('useProjectionLocaleSync', () => {
     expect(GraphProjectionService.hydrateGraph).not.toHaveBeenCalled();
 
     localeState.language = 'en-US';
-    await act(async () => {
-      root.render(createElement(Harness));
-      await Promise.resolve();
-      await Promise.resolve();
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => {
+      expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     });
 
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(eventPath, 'en-US');
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(functionPath, 'en-US');
-    expect(GraphProjectionService.hydrateGraph).not.toHaveBeenCalledWith(unloadedPath, 'en-US');
+    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(
+      'project-instance-1',
+      eventPath,
+      'en-US',
+    );
+    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(
+      'project-instance-1',
+      functionPath,
+      'en-US',
+    );
+    expect(GraphProjectionService.hydrateGraph).not.toHaveBeenCalledWith(
+      'project-instance-1',
+      unloadedPath,
+      'en-US',
+    );
     expect(useGraphDataStore.getState().graphEntities[eventPath]).toMatchObject({
       sourceRevision: 4,
       nodes: { 'local-node': { title: 'Localized event' } },
@@ -157,10 +179,13 @@ describe('useProjectionLocaleSync', () => {
     await act(async () => root.render(createElement(Harness)));
     localeState.language = 'en-US';
     await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => {
+      expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(1);
+    });
     localeState.language = 'zh-CN';
-    await act(async () => {
-      root.render(createElement(Harness));
-      await Promise.resolve();
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => {
+      expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledTimes(2);
     });
     pendingEnglish.resolve(olderLocale.projection);
     await act(async () => {
@@ -168,8 +193,18 @@ describe('useProjectionLocaleSync', () => {
       await Promise.resolve();
     });
 
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenNthCalledWith(1, graphPath, 'en-US');
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenNthCalledWith(2, graphPath, 'zh-CN');
+    expect(GraphProjectionService.hydrateGraph).toHaveBeenNthCalledWith(
+      1,
+      'project-instance-1',
+      graphPath,
+      'en-US',
+    );
+    expect(GraphProjectionService.hydrateGraph).toHaveBeenNthCalledWith(
+      2,
+      'project-instance-1',
+      graphPath,
+      'zh-CN',
+    );
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
       nodes: { 'local-node': { title: '中文' } },
       requestGeneration: 3,

@@ -64,6 +64,7 @@ function index(projectInstanceId: string, publicationRevision: number) {
     graphs: [],
     variables: [],
     worksheets: [],
+    databases: [],
     exportTime: '2026-07-29T00:00:00Z',
     appVersion: '0.2.7',
   };

@@ -20,7 +20,36 @@ vi.mock('@/features/application/nodeCatalog/createNodeFromDescriptor', () => ({
   createNodeFromDescriptor: vi.fn().mockResolvedValue({ status: 'conflict' }),
 }));
 
-
+const resourceDescriptor: NodeCreationDescriptor = {
+  kind: 'resourceBound',
+  nodeTypeId: 'functions.call',
+  resourcePath: 'functions/helper.yssbi-function',
+  resourceRevision: 3,
+  createArgs: { kind: 'function' },
+};
+const refreshCatalog = vi.fn();
+vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
+  useLocalizedNodeCatalog: () => ({
+    status: 'ready',
+    error: null,
+    catalog: {
+      projectInstanceId: 'project-1',
+      registryFingerprint: 'registry-1',
+      resourcePublicationRevision: 3,
+      locale: 'en-US',
+      categories: [],
+      items: [{
+        nodeTypeId: 'functions.call', title: 'Helper', description: null, documentation: null,
+        categoryId: 'functions', iconId: 'function', styleId: 'call', aliases: [],
+        technicalTerms: [], ports: [], parameters: [],
+        resourcePath: 'functions/helper.yssbi-function', resourceRevision: 3,
+        creation: resourceDescriptor, searchText: 'helper',
+      }],
+    },
+    searchIndex: null,
+    refresh: refreshCatalog,
+  }),
+}));
 
 const graphPath = 'events/main.yssbi-event';
 const groupId = 'group-1';
@@ -188,7 +217,7 @@ describe('unavailable creation routing', () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
-  it('keeps resource-bound palette descriptors unavailable', async () => {
+  it('routes resource-bound palette descriptors unchanged', async () => {
     let select!: ReturnType<typeof useCanvasOverlayHandlers>['handleNodePaletteSelect'];
     function Harness() {
       select = useCanvasOverlayHandlers({
@@ -205,33 +234,82 @@ describe('unavailable creation routing', () => {
 
     await act(async () => {
       await select(
-        {
-          kind: 'resourceBound',
-          nodeTypeId: 'functions.call',
-          resourcePath: 'functions/helper.yssbi-function',
-        } as unknown as NodeCreationDescriptor,
+        resourceDescriptor,
         'en-US',
         { x: 20, y: 30 },
       );
     });
 
-    expect(createNodeFromDescriptor).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalled();
+    expect(createNodeFromDescriptor).toHaveBeenCalledWith(expect.objectContaining({
+      descriptor: resourceDescriptor,
+    }));
+    expect(showToast).not.toHaveBeenCalled();
   });
 
-  it('exposes only static catalog descriptor creation capability', () => {
+  it('enables Catalog descriptors and documentation while duplicate and paste stay disabled', () => {
     expect(EDITOR_MUTATION_CAPABILITIES).toEqual({
       createStaticNodes: true,
       catalogDescriptors: true,
-      resourceBoundDescriptors: false,
+      resourceBoundDescriptors: true,
       contextualCompatibility: false,
-      nodeDocumentation: false,
+      nodeDocumentation: true,
       duplicateNodes: false,
       pasteNodes: false,
     });
   });
 
-  it('rejects sidebar node-template drops before invoking createNode', async () => {
+  it('shift-drops a function only through its exact current opaque Catalog path', async () => {
+    let routeDrop!: ReturnType<typeof useCanvasDrop>['handleSidebarCanvasDrop'];
+    function Harness() {
+      routeDrop = useCanvasDrop({
+        canvasElementRef: { current: canvas }, groupId, graphPath,
+        variables: {}, functions: {}, setContextMenu: vi.fn(), setPendingConnection: vi.fn(),
+        createNode, enabled: false,
+      }).handleSidebarCanvasDrop;
+      return null;
+    }
+    act(() => root.render(<Harness />));
+    createNode.mockResolvedValueOnce(true);
+
+    await expect(routeDrop({
+      type: 'graph-resource',
+      sidebarResource: { id: resourceDescriptor.resourcePath, name: 'Helper', type: 'function' },
+      x: 20,
+      y: 30,
+    }, { altKey: false, ctrlKey: false, shiftKey: true })).resolves.toBe(true);
+
+    expect(createNode).toHaveBeenCalledWith(resourceDescriptor, { x: 20, y: 30 });
+    expect(refreshCatalog).not.toHaveBeenCalled();
+  });
+
+  it('rejects a shift-drop without an exact path, refreshes, and toasts without synthesis', async () => {
+    let routeDrop!: ReturnType<typeof useCanvasDrop>['handleSidebarCanvasDrop'];
+    function Harness() {
+      routeDrop = useCanvasDrop({
+        canvasElementRef: { current: canvas }, groupId, graphPath,
+        variables: {}, functions: {}, setContextMenu: vi.fn(), setPendingConnection: vi.fn(),
+        createNode, enabled: false,
+      }).handleSidebarCanvasDrop;
+      return null;
+    }
+    act(() => root.render(<Harness />));
+
+    await expect(routeDrop({
+      type: 'graph-resource',
+      sidebarResource: { id: 'functions/helper', name: 'Helper', type: 'function' },
+      x: 20,
+      y: 30,
+    }, { altKey: false, ctrlKey: false, shiftKey: true })).resolves.toBe(false);
+
+    expect(createNode).not.toHaveBeenCalled();
+    expect(refreshCatalog).toHaveBeenCalledOnce();
+    expect(showToast).toHaveBeenCalledWith(
+      'Resource catalog is stale. Refreshing before node creation.',
+      'warning',
+    );
+  });
+
+  it('forwards sidebar node-template descriptors unchanged', async () => {
     let routeDrop!: ReturnType<typeof useCanvasDrop>['handleSidebarCanvasDrop'];
     function Harness() {
       routeDrop = useCanvasDrop({
@@ -249,14 +327,16 @@ describe('unavailable creation routing', () => {
     }
     act(() => root.render(<Harness />));
 
+    createNode.mockResolvedValueOnce(true);
+    const descriptor: NodeCreationDescriptor = { kind: 'static', nodeTypeId: 'math.add' };
     await expect(routeDrop({
       type: 'node-template',
-      template: { nodeType: 'Math:Add', title: 'Add' },
+      template: { title: 'Add', descriptor },
       x: 20,
       y: 30,
-    }, { altKey: false, ctrlKey: false, shiftKey: false })).resolves.toBe(false);
+    }, { altKey: false, ctrlKey: false, shiftKey: false })).resolves.toBe(true);
 
-    expect(createNode).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalled();
+    expect(createNode).toHaveBeenCalledWith(descriptor, { x: 20, y: 30 });
+    expect(showToast).not.toHaveBeenCalled();
   });
 });

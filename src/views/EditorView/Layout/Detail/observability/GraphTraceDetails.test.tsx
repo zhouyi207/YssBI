@@ -64,6 +64,7 @@ function trace(overrides: Partial<TraceRecordDto> = {}): TraceRecordDto {
       registryFingerprint: 'registry-public',
       resourceVersions: { inventory: 'version-public' },
       compileId: '5',
+      selectionDigest: 'demand-selection-a',
       runId: '41',
       nodeId: 'node-public',
       nodeTypeId: 'functions/public-node',

@@ -61,6 +61,7 @@ pub struct CorrelationContext {
     pub registry_fingerprint: crate::node_system::registry::RegistryFingerprint,
     pub resource_versions: super::ResourceVersionSet,
     pub compile_id: CompileId,
+    pub selection_digest: Option<Box<str>>,
     pub run_id: Option<RunId>,
     pub node_id: Option<NodeId>,
     pub node_type_id: Option<NodeTypeId>,
@@ -76,6 +77,7 @@ impl CorrelationContext {
             registry_fingerprint: provenance.basis.registry_fingerprint.clone(),
             resource_versions: provenance.basis.resource_versions.clone(),
             compile_id: provenance.compile_id,
+            selection_digest: None,
             run_id: None,
             node_id: None,
             node_type_id: None,
@@ -86,6 +88,17 @@ impl CorrelationContext {
     pub fn for_run(mut self, run_id: RunId, parent_call: Option<ParentCallId>) -> Self {
         self.run_id = Some(run_id);
         self.parent_call = parent_call;
+        self
+    }
+
+    pub fn with_selection_digest(mut self, digest: [u8; 32]) -> Self {
+        self.selection_digest = Some(
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+                .into(),
+        );
         self
     }
 

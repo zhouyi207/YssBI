@@ -48,6 +48,7 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
   readonly projectData: ProjectData;
   readonly storeState: {
     readonly databases: Record<string, DatabaseRecord>;
+    readonly databaseRevisions: Record<string, number>;
     readonly variables: Record<string, Variable>;
     readonly variableRevisions: Record<string, number>;
     readonly graphMeta: Record<string, GraphMeta>;
@@ -245,7 +246,18 @@ export function buildAuthoritativeProjectLoadPlan(
   context: AuthoritativeProjectLoadPlanContext,
   dependencies: AuthoritativeProjectLoadPlanDependencies,
 ): PreparedAuthoritativeProjectLoad {
-  const databases = dependencies.normalizeDatabases(source.databases, context.databases);
+  const normalizedDatabases = dependencies.normalizeDatabases(source.databases, context.databases);
+  const databaseRows = source.index.databases ?? [];
+  const databaseResourcePaths = Object.fromEntries(
+    databaseRows.map((row) => [row.id, row.resourcePath]),
+  );
+  const databaseRevisions = Object.fromEntries(
+    databaseRows.map((row) => [row.id, row.revision]),
+  );
+  const databases = Object.fromEntries(Object.entries(normalizedDatabases).map(([id, database]) => [
+    id,
+    { ...database, resourcePath: databaseResourcePaths[id] },
+  ]));
   const variableState = dependencies.normalizeVariables(source.index);
   const worksheetIndex = (source.index.worksheets ?? []).map((worksheet) => ({
     id: worksheet.id,
@@ -279,6 +291,7 @@ export function buildAuthoritativeProjectLoadPlan(
     projectData,
     storeState: {
       databases,
+      databaseRevisions,
       variables: variableState.variables,
       variableRevisions: variableState.revisions,
       graphMeta,

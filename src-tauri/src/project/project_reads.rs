@@ -408,6 +408,19 @@ fn expected_session(
     Ok(session)
 }
 
+struct ProjectIndexAuthorityCapture {
+    project_instance_id: String,
+    publication_revision: u64,
+    authority_generation: u64,
+    history: crate::node_system::document::HistoryStatusDto,
+    data: ProjectData,
+    variable_revisions: std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::project::project_state::VariableRevisionEntry,
+    >,
+    database_revisions: std::collections::HashMap<String, u64>,
+}
+
 fn read_project_index_with(
     state: &ProjectState,
     expected_project_instance_id: &ProjectInstanceId,
@@ -416,50 +429,185 @@ fn read_project_index_with(
     let session = expected_session(state, expected_project_instance_id)?;
     let _lease = state.filesystem().acquire(session.root.clone())?;
     state.validate_project_session(&session)?;
-    let disk_result = read(session.root.as_path());
+    let mut index = read(session.root.as_path())?;
     state.validate_project_session(&session)?;
-    let mut index = disk_result?;
-    let (project_instance_id, publication_revision, history, data) =
-        state.coherent_project_read_snapshot(&session)?;
-    let variable_revisions = state.global_variable_revision_snapshot();
-    overlay_authoritative_project_index(&data, &variable_revisions, &mut index);
-    index.project_instance_id = project_instance_id;
-    index.publication_revision = publication_revision;
-    index.history = history;
-    state.validate_project_session(&session)?;
+    let capture = capture_project_index_authority(state, &session)?;
+    overlay_authoritative_project_index(
+        &capture.data,
+        &capture.variable_revisions,
+        &capture.database_revisions,
+        &mut index,
+    );
+    index.project_instance_id = capture.project_instance_id.clone();
+    index.publication_revision = capture.publication_revision;
+    index.history = capture.history;
+    validate_project_index_authority(state, &session, &capture)?;
     Ok(index)
+}
+
+fn capture_project_index_authority(
+    state: &ProjectState,
+    session: &ProjectSession,
+) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
+    capture_project_index_authority_with(state, session, || {})
+}
+
+#[cfg(test)]
+fn capture_project_index_authority_with_test_hook(
+    state: &ProjectState,
+    session: &ProjectSession,
+    after_declaration_capture: impl FnOnce(),
+) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
+    capture_project_index_authority_with(state, session, after_declaration_capture)
+}
+
+fn capture_project_index_authority_with(
+    state: &ProjectState,
+    session: &ProjectSession,
+    after_declaration_capture: impl FnOnce(),
+) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
+    let publication = state.mutation_publication.lock().unwrap();
+    if publication.project_instance_id != session.instance_id.as_str() {
+        return Err(stale_catalog(
+            "project changed before project index authority capture",
+        ));
+    }
+    let data = state.project_data.read().unwrap().clone();
+    after_declaration_capture();
+    let variable_revisions = state.variable_revisions.read().unwrap().clone();
+    let database_revisions = state.database_authority_revisions.read().unwrap().clone();
+    if data.variables.keys().any(|id| {
+        !variable_revisions
+            .get(id)
+            .is_some_and(|entry| entry.is_present())
+    }) {
+        return Err(stale_catalog(
+            "loaded variable is missing its present revision authority",
+        ));
+    }
+    if data
+        .databases
+        .keys()
+        .any(|id| !database_revisions.contains_key(id))
+    {
+        return Err(stale_catalog(
+            "loaded database is missing its revision authority",
+        ));
+    }
+    Ok(ProjectIndexAuthorityCapture {
+        project_instance_id: publication.project_instance_id.clone(),
+        publication_revision: publication.resource_revision,
+        authority_generation: publication.authority_generation(),
+        history: state.history.read().unwrap().status(),
+        data,
+        variable_revisions,
+        database_revisions,
+    })
+}
+
+fn validate_project_index_authority(
+    state: &ProjectState,
+    session: &ProjectSession,
+    capture: &ProjectIndexAuthorityCapture,
+) -> Result<(), ProjectFilesystemError> {
+    state.validate_project_session(session)?;
+    let publication = state.mutation_publication.lock().unwrap();
+    if publication.project_instance_id != capture.project_instance_id
+        || publication.resource_revision != capture.publication_revision
+        || publication.authority_generation() != capture.authority_generation
+    {
+        return Err(stale_catalog(
+            "project authority changed before project index publication",
+        ));
+    }
+    Ok(())
+}
+
+fn variable_owner_graph_path(
+    scope: &crate::variable::VariableScope,
+) -> Option<crate::project::GraphResourcePath> {
+    match scope {
+        crate::variable::VariableScope::Global => None,
+        crate::variable::VariableScope::Event { event_path } => {
+            crate::project::GraphResourcePath::new(event_path).ok()
+        }
+        crate::variable::VariableScope::Function { function_path } => {
+            crate::project::GraphResourcePath::new(function_path).ok()
+        }
+    }
 }
 
 fn overlay_authoritative_project_index(
     data: &ProjectData,
-    variable_revisions: &std::collections::BTreeMap<
-        crate::node_system::document::ResourceKey,
-        crate::node_system::document::ResourceRevision,
+    variable_revisions: &std::collections::HashMap<
+        crate::variable::VariableId,
+        crate::project::project_state::VariableRevisionEntry,
     >,
+    database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
 ) {
+    let mut variables = std::collections::BTreeMap::new();
+    for mut variable in std::mem::take(&mut index.variables) {
+        if matches!(variable.scope, crate::variable::VariableScope::Global) {
+            continue;
+        }
+        let retained = uuid::Uuid::parse_str(&variable.id)
+            .ok()
+            .map(crate::variable::VariableId::from)
+            .and_then(|id| variable_revisions.get(&id).copied());
+        match retained {
+            Some(entry) if entry.is_present() => variable.revision = entry.revision,
+            Some(_) => continue,
+            None => {}
+        }
+        variables.insert(variable.id.clone(), variable);
+    }
+    for variable in data.variables.values() {
+        let authority = variable_revisions[&variable.id];
+        let mut entry = crate::project::ProjectVariableIndexEntry::from(variable.clone());
+        entry.revision = authority.revision;
+        if let Some(persisted) = variables.get(&entry.id) {
+            entry.owner_graph_path = persisted.owner_graph_path.clone();
+            entry.owner_graph_name = persisted.owner_graph_name.clone();
+            entry.owner_graph_kind = persisted.owner_graph_kind;
+        } else if let Some(path) = variable_owner_graph_path(&variable.scope) {
+            entry.owner_graph_path = Some(path.as_str().to_string());
+            if let Some(graph) = data.graphs.get(&path) {
+                entry.owner_graph_name = Some(graph.name.clone());
+                entry.owner_graph_kind = Some(graph.kind);
+            }
+        }
+        variables.insert(entry.id.clone(), entry);
+    }
+    index.variables = variables.into_values().collect();
+    index.variables.sort_by(|left, right| {
+        left.name
+            .to_lowercase()
+            .cmp(&right.name.to_lowercase())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    index.databases = data
+        .databases
+        .iter()
+        .map(
+            |(id, declaration)| crate::project::ProjectDatabaseIndexEntry {
+                id: id.clone(),
+                resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
+                    "databases/{id}"
+                )),
+                revision: crate::node_system::document::ResourceRevision::new(
+                    database_revisions[id],
+                ),
+                engine: declaration.engine.clone(),
+                schema_version: declaration.schema_version,
+                required: declaration.required,
+                name: declaration.name.clone(),
+            },
+        )
+        .collect();
     index
-        .variables
-        .retain(|variable| !matches!(variable.scope, crate::variable::VariableScope::Global));
-    index.variables.extend(
-        data.variables
-            .values()
-            .filter(|variable| matches!(variable.scope, crate::variable::VariableScope::Global))
-            .cloned()
-            .map(|variable| {
-                let key = crate::node_system::document::ResourceKey::Variable(
-                    crate::node_system::document::VariableResourceKey(
-                        format!("variables/{}", variable.id).into(),
-                    ),
-                );
-                let mut entry = crate::project::ProjectVariableIndexEntry::from(variable);
-                entry.revision = variable_revisions
-                    .get(&key)
-                    .copied()
-                    .expect("authoritative global variable has a revision");
-                entry
-            }),
-    );
+        .databases
+        .sort_by(|left, right| left.id.cmp(&right.id));
     index.worksheets = data
         .worksheets
         .values()
@@ -670,6 +818,225 @@ mod tests {
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
             before
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_index_carries_backend_issued_sidebar_resource_paths() {
+        let (root, state, _, _, unloaded_variable_id, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+
+        let index = state.read_project_index(&expected).unwrap();
+
+        assert!(index.variables.iter().any(|entry| {
+            entry.id == unloaded_variable_id.to_string()
+                && entry.resource_path.as_str() == format!("variables/{unloaded_variable_id}")
+        }));
+        assert!(index.variables.iter().any(|entry| {
+            entry.id == loaded_variable_id.to_string()
+                && entry.resource_path.as_str() == format!("variables/{loaded_variable_id}")
+        }));
+        assert_eq!(index.databases.len(), 1);
+        assert_eq!(index.databases[0].id, "sales");
+        assert_eq!(index.databases[0].resource_path.as_str(), "databases/sales");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_index_database_declaration_and_revision_are_one_captured_generation() {
+        let (root, state, _, _, _, _) = catalog_fixture();
+        let session = state.capture_project_session().unwrap();
+        let changed_state = state.clone();
+        let (capture_window_tx, capture_window_rx) = std::sync::mpsc::channel();
+        let (writer_blocked_tx, writer_blocked_rx) = std::sync::mpsc::channel();
+        let (mutated_tx, mutated_rx) = std::sync::mpsc::channel();
+        let mutation = std::thread::spawn(move || {
+            capture_window_rx.recv().unwrap();
+            let mut publication = match changed_state.mutation_publication.try_lock() {
+                Ok(publication) => {
+                    writer_blocked_tx.send(false).unwrap();
+                    publication
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    writer_blocked_tx.send(true).unwrap();
+                    changed_state.mutation_publication.lock().unwrap()
+                }
+                Err(std::sync::TryLockError::Poisoned(error)) => error.into_inner(),
+            };
+            let mut data = changed_state.project_data.write().unwrap();
+            let mut revisions = changed_state.database_authority_revisions.write().unwrap();
+            let database = data.databases.get_mut("sales").unwrap();
+            database.engine = crate::database::DatabaseEngine::DuckDb {
+                path: "database/coherent.duckdb".into(),
+                table: "sales_after".into(),
+            };
+            database.schema_version = 9;
+            database.required = true;
+            database.name = Some("After generation".into());
+            publication.allocate_resource_revision();
+            revisions.insert("sales".into(), publication.authority_generation());
+            mutated_tx.send(()).unwrap();
+        });
+
+        let before_capture =
+            super::capture_project_index_authority_with_test_hook(&state, &session, move || {
+                capture_window_tx.send(()).unwrap();
+                assert!(
+                    writer_blocked_rx.recv().unwrap(),
+                    "database writer acquired publication lock inside authority capture window"
+                );
+            })
+            .unwrap();
+        mutated_rx.recv().unwrap();
+        mutation.join().unwrap();
+        let after_capture = super::capture_project_index_authority(&state, &session).unwrap();
+
+        let project_generation = |capture: &super::ProjectIndexAuthorityCapture| {
+            let mut index =
+                crate::project::project_io::read_project_index_from_root(&root).unwrap();
+            super::overlay_authoritative_project_index(
+                &capture.data,
+                &capture.variable_revisions,
+                &capture.database_revisions,
+                &mut index,
+            );
+            let database = index
+                .databases
+                .iter()
+                .find(|database| database.id == "sales")
+                .unwrap();
+            (
+                database.engine.clone(),
+                database.schema_version,
+                database.required,
+                database.name.clone(),
+                database.revision.get(),
+            )
+        };
+        let before = (
+            crate::database::DatabaseEngine::InMemory {
+                name: "sales".into(),
+            },
+            1,
+            false,
+            Some("Sales warehouse".into()),
+            0,
+        );
+        let after = (
+            crate::database::DatabaseEngine::DuckDb {
+                path: "database/coherent.duckdb".into(),
+                table: "sales_after".into(),
+            },
+            9,
+            true,
+            Some("After generation".into()),
+            1,
+        );
+        assert_eq!(project_generation(&before_capture), before);
+        assert_eq!(project_generation(&after_capture), after);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_index_suppresses_dirty_deleted_local_after_unload_and_recovers_publication() {
+        let (root, state, _, loaded_path, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        let deleted = state
+            .delete_local_variable_transaction(
+                &expected,
+                loaded_variable_id,
+                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::node_system::document::OperationId::new(),
+            )
+            .unwrap();
+        assert_eq!(deleted.result.publication_revision, 1);
+        state.unload_graph_resource(&loaded_path).unwrap();
+
+        let index = state.read_project_index(&expected).unwrap();
+        assert_eq!(index.publication_revision, 1);
+        assert!(
+            !index
+                .variables
+                .iter()
+                .any(|entry| entry.id == loaded_variable_id.to_string())
+        );
+        let retained = state
+            .variable_revision_entry_for_test(&loaded_variable_id)
+            .unwrap();
+        assert_eq!(
+            retained.revision,
+            crate::node_system::document::ResourceRevision::new(1)
+        );
+        assert!(!retained.is_present());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_index_uses_retained_revision_for_unloaded_local_variable() {
+        let (root, state, _, loaded_path, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        state
+            .update_local_variable_transaction(
+                &expected,
+                loaded_variable_id,
+                Some("Retained local".into()),
+                None,
+                None,
+                None,
+                None,
+                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::node_system::document::OperationId::new(),
+            )
+            .unwrap();
+        state.unload_graph_resource(&loaded_path).unwrap();
+
+        let index = state.read_project_index(&expected).unwrap();
+        let variable = index
+            .variables
+            .iter()
+            .find(|entry| entry.id == loaded_variable_id.to_string())
+            .unwrap();
+        assert_eq!(variable.revision.get(), 1);
+        assert_eq!(index.publication_revision, 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_index_concurrent_local_mutation_is_one_coherent_generation() {
+        let (root, state, _, _, _, loaded_variable_id) = catalog_fixture();
+        let expected = state.capture_project_session().unwrap().instance_id;
+        let changed_state = state.clone();
+        let changed_project = expected.clone();
+
+        let index = super::read_project_index_with(&state, &expected, move |root| {
+            let index = crate::project::project_io::read_project_index_from_root(root)
+                .map_err(super::read_error)?;
+            changed_state
+                .update_local_variable_transaction(
+                    &changed_project,
+                    loaded_variable_id,
+                    Some("Concurrent local".into()),
+                    None,
+                    Some(DataValue::Int64(9)),
+                    None,
+                    None,
+                    crate::node_system::document::ResourceRevision::INITIAL,
+                    crate::node_system::document::OperationId::new(),
+                )
+                .unwrap();
+            Ok(index)
+        })
+        .unwrap();
+
+        let variable = index
+            .variables
+            .iter()
+            .find(|entry| entry.id == loaded_variable_id.to_string())
+            .unwrap();
+        assert_eq!(index.publication_revision, 1);
+        assert_eq!(variable.revision.get(), 1);
+        assert_eq!(variable.name, "Concurrent local");
+        assert_eq!(variable.data_value, DataValue::Int64(9));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -957,6 +1324,12 @@ mod tests {
                 crate::node_system::document::OperationId::new(),
             )
             .unwrap();
+        let deleted = state.variable_revisions.read().unwrap()[&loaded_variable_id];
+        assert_eq!(
+            deleted.revision,
+            crate::node_system::document::ResourceRevision::new(1)
+        );
+        assert!(!deleted.is_present());
         state.unload_graph_resource(&loaded_path).unwrap();
 
         let snapshot = state.catalog_snapshot(&expected).unwrap();

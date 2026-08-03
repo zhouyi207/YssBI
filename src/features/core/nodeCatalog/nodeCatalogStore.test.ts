@@ -62,6 +62,7 @@ describe('useNodeCatalogStore', () => {
         responseKey: null,
         error: null,
         requestGeneration: owner!.requestGeneration,
+        minimumResourcePublicationRevision: 0,
       },
     });
   });
@@ -84,6 +85,7 @@ describe('useNodeCatalogStore', () => {
         responseKey: catalogResponseKey(response),
         error: null,
         requestGeneration: newer.requestGeneration,
+        minimumResourcePublicationRevision: 0,
       },
     });
   });
@@ -107,7 +109,65 @@ describe('useNodeCatalogStore', () => {
         responseKey: catalogResponseKey(newerResponse),
         error: null,
         requestGeneration: newer.requestGeneration,
+        minimumResourcePublicationRevision: 0,
       },
+    });
+  });
+
+  it('invalidates only the matching project when its publication watermark advances', () => {
+    const projectOne = catalog();
+    const projectTwo = catalog({ projectInstanceId: 'project-2' });
+    const store = useNodeCatalogStore.getState();
+    const ownerOne = store.beginRequest(projectOne.projectInstanceId, projectOne.locale)!;
+    const ownerTwo = store.beginRequest(projectTwo.projectInstanceId, projectTwo.locale)!;
+    store.storeResponse(ownerOne, projectOne);
+    store.storeResponse(ownerTwo, projectTwo);
+
+    expect(store.observeResourcePublication('project-1', 8)).toBe(true);
+
+    const state = useNodeCatalogStore.getState();
+    expect(state.requests['["project-1","zh-CN"]']).toMatchObject({
+      status: 'idle',
+      responseKey: catalogResponseKey(projectOne),
+      minimumResourcePublicationRevision: 8,
+    });
+    expect(state.requests['["project-2","zh-CN"]']).toMatchObject({
+      status: 'ready',
+      responseKey: catalogResponseKey(projectTwo),
+      minimumResourcePublicationRevision: 0,
+    });
+    expect(store.observeResourcePublication('project-1', 8)).toBe(false);
+  });
+
+  it('rejects a response below the requested publication watermark without losing cached data', () => {
+    const previous = catalog({ resourcePublicationRevision: 7 });
+    const store = useNodeCatalogStore.getState();
+    store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, previous);
+    store.observeResourcePublication('project-1', 9);
+    const refresh = store.beginRequest('project-1', 'zh-CN')!;
+
+    expect(store.storeResponse(refresh, catalog({ resourcePublicationRevision: 8 }))).toBe(false);
+    expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
+      status: 'error',
+      responseKey: catalogResponseKey(previous),
+      error: 'Catalog response is older than publication revision 9',
+      minimumResourcePublicationRevision: 9,
+    });
+  });
+
+  it('preserves the last ready response when a refresh fails', () => {
+    const previous = catalog();
+    const store = useNodeCatalogStore.getState();
+    store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, previous);
+    store.observeResourcePublication('project-1', 8);
+    const refresh = store.beginRequest('project-1', 'zh-CN')!;
+
+    expect(store.storeError(refresh, 'refresh failed')).toBe(true);
+    expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
+      status: 'error',
+      responseKey: catalogResponseKey(previous),
+      error: 'refresh failed',
+      minimumResourcePublicationRevision: 8,
     });
   });
 });

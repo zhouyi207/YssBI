@@ -124,6 +124,7 @@ function index(
     variables: [],
     worksheets: [],
     ...options,
+    databases: options.databases ?? [],
   };
 }
 
@@ -278,8 +279,9 @@ function createHarness() {
         tabs: { registry: {}, placements: {} },
       },
       storeState: {
-        resources: {}, graphOrder: [], documents: {}, graphMeta: {}, variables: {},
-        variableRevisions: {}, worksheetIndex: [], worksheetDocuments: {},
+        resources: {}, graphOrder: [], documents: {}, graphMeta: {}, databases: {},
+        databaseRevisions: {}, variables: {}, variableRevisions: {}, worksheetIndex: [],
+        worksheetDocuments: {},
         tabs: { registry: {}, placements: {} }, focusedSession: null, viewports: {},
       },
       history: result.history,

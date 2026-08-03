@@ -1,9 +1,5 @@
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { logger } from '@/utils/appLogger';
-import type { EditorVariables } from '@/features/core/editor';
-import { isVariableAvailable } from './editorResources';
-import type { CreateNodeFn } from './createNodeFn';
 
 export type VariableNodeType = 'Variables:Get Variable' | 'Variables:Set Variable';
 
@@ -77,31 +73,4 @@ export function buildVariableDropMenu(
     variableId,
     variableName,
   };
-}
-
-export async function spawnVariableNode(
-  nodeType: VariableNodeType,
-  worldPosition: { x: number; y: number },
-  variableId: string,
-  createNode: CreateNodeFn,
-): Promise<void> {
-  await createNode(nodeType, worldPosition, { variableId });
-}
-
-export async function spawnVariableFromMenu(
-  menu: VariableDropMenu,
-  nodeType: VariableNodeType,
-  variables: EditorVariables,
-  createNode: CreateNodeFn,
-): Promise<void> {
-  if (!isVariableAvailable(menu.variableId, variables)) {
-    logger.graph.warn('Variable no longer exists', 'CanvasVariableDrop');
-    return;
-  }
-  await spawnVariableNode(
-    nodeType,
-    { x: menu.worldX, y: menu.worldY },
-    menu.variableId,
-    createNode,
-  );
 }

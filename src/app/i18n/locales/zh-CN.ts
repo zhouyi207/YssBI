@@ -561,11 +561,18 @@ export const zhCN = {
   },
   nodeDocumentationModal: {
     title: "节点文档",
-    description: "按名称、分类、说明或文档内容搜索节点；再次点击当前节点可收起文档。",
-    searchPlaceholder: "搜索节点文档…",
+    description: "搜索当前语言的节点标题和别名；再次点击当前节点可收起文档。",
+    searchPlaceholder: "搜索节点标题和别名…",
     noMatches: "未找到匹配的节点文档",
     noDocumentation: "此节点暂无详细文档。",
-
+    selectNode: "选择节点以查看其文档。",
+    nodeId: "节点 ID",
+    ports: "端口",
+    noPorts: "无端口",
+    parameters: "参数",
+    noParameters: "无参数",
+    resourcePath: "资源路径",
+    resourceRevision: "资源修订版本",
     close: "关闭节点文档",
   },
   editorDropPreview: {
@@ -650,8 +657,7 @@ export const zhCN = {
     promoteToGlobal: "提升为全局变量",
     demoteToLocal: "降级为局部变量",
     viewInDatabaseEditor: "在数据库编辑器中查看",
-    nodeCatalogUnavailable: "节点目录暂不可用",
-    nodeCatalogUnavailableDescription: "等待稳定的节点目录描述信息",
+
     nodeSearchNoMatches: "未找到匹配的节点",
     noActiveGraph: "未打开活动图",
     noActiveGraphDescription: "打开一个 Event 或 Function 后可查看命令状态",

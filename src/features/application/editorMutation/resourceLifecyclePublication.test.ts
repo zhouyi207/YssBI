@@ -122,6 +122,7 @@ describe('graph resource lifecycle publication', () => {
         graphs: [{ path: graphPath, name: 'Created', type: 'event', revision: 0 }],
         variables: [],
         worksheets: [],
+        databases: [],
       },
       new Set(),
       [created],

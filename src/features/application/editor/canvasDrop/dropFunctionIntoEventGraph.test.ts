@@ -16,7 +16,7 @@ describe('canDropFunctionIntoEventGraph', () => {
     vi.mocked(getActiveLayoutTab).mockReset();
   });
 
-  it('requires shift and a function resource', () => {
+  it('allows a shifted function resource in an event graph when descriptor creation is available', () => {
     vi.mocked(getActiveLayoutTab).mockReturnValue({
       activeTabId: 'events/Main.yssbi-event',
       tab: { id: 'events/Main.yssbi-event', type: 'event', component: 'GraphEditor' },
@@ -24,16 +24,16 @@ describe('canDropFunctionIntoEventGraph', () => {
 
     expect(canDropFunctionIntoEventGraph('g1', draggedFunction, false)).toBe(false);
     expect(canDropFunctionIntoEventGraph('g1', { type: 'event', id: 'events/Main.yssbi-event' }, true)).toBe(false);
-    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(false);
+    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(true);
   });
 
-  it('keeps function-to-function node creation unavailable', () => {
+  it('allows descriptor-backed function creation in a different function graph', () => {
     vi.mocked(getActiveLayoutTab).mockReturnValue({
       activeTabId: 'functions/B.yssbi-function',
       tab: { id: 'functions/B.yssbi-function', type: 'function', component: 'GraphEditor' },
     });
 
-    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(false);
+    expect(canDropFunctionIntoEventGraph('g1', draggedFunction, true)).toBe(true);
   });
 
   it('rejects dropping a function onto itself', () => {

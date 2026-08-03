@@ -3,7 +3,7 @@ use super::{GraphResourcePath, ProjectState};
 use crate::node_system::analysis::{CompilationBasis, CompileProjection, TraceSink};
 use crate::node_system::compiler::{
     CompilationTask, CompileProducts, GraphCompiler, ProjectCompileCoordinator,
-    PublishedCompileAnalysis, ScheduleOutcome, compilation_basis,
+    PublishedCompileAnalysis, PublishedExecutionPlan, ScheduleOutcome, compilation_basis,
 };
 use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::ExecutionPlan;
@@ -12,6 +12,10 @@ use std::sync::Arc;
 type PublishedProducts = (
     CompileProjection<PublishedCompileAnalysis>,
     Option<CompileProjection<ExecutionPlan>>,
+);
+type PublishedBasisProducts = (
+    CompileProjection<PublishedCompileAnalysis>,
+    Option<CompileProjection<Arc<PublishedExecutionPlan>>>,
 );
 
 pub(super) struct ExecutionAuthorityToken {
@@ -24,7 +28,7 @@ pub(super) struct ExecutionAuthorityToken {
 
 pub(super) struct CurrentCompilation {
     pub(super) analysis: CompileProjection<PublishedCompileAnalysis>,
-    pub(super) plan: Option<CompileProjection<ExecutionPlan>>,
+    pub(super) plan: Option<CompileProjection<Arc<PublishedExecutionPlan>>>,
     pub(super) source: ProjectionSourceSnapshot,
     pub(super) authority: ExecutionAuthorityToken,
 }
@@ -48,7 +52,13 @@ struct CurrentBasis {
 
 impl CurrentCompilation {
     fn into_products(self) -> PublishedProducts {
-        (self.analysis, self.plan)
+        let plan = self.plan.map(|projection| CompileProjection {
+            graph_path: projection.graph_path,
+            basis: projection.basis,
+            compile_id: projection.compile_id,
+            payload: projection.payload.full_plan().clone(),
+        });
+        (self.analysis, plan)
     }
 }
 
@@ -247,13 +257,19 @@ impl ProjectState {
             return;
         };
         let has_blocking_diagnostics = result.analysis.has_blocking_errors();
+        let plan = result
+            .plan
+            .zip(result.execution_basis)
+            .map(|(plan, execution_basis)| {
+                Arc::new(PublishedExecutionPlan::new(plan, execution_basis))
+            });
         let products = CompileProducts {
             analysis: PublishedCompileAnalysis {
                 analysis: result.analysis,
                 semantic: result.semantic,
             },
             has_blocking_diagnostics,
-            plan: result.plan,
+            plan,
         };
 
         let Ok(current) = self.capture_current_basis(
@@ -339,6 +355,18 @@ impl ProjectState {
     }
 
     #[cfg(test)]
+    pub(super) fn published_variant_cache_state_for_test(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Option<(crate::node_system::analysis::CompileId, usize)> {
+        let input = self.capture_compile_input(graph_path).ok()?;
+        let coordinator = self.compile_coordinator.read().unwrap().clone();
+        let (_, plan) = coordinator.get_current(&input.document_path, &input.basis)?;
+        let plan = plan?;
+        Some((plan.compile_id, plan.payload.cached_variant_count()))
+    }
+
+    #[cfg(test)]
     pub(super) fn published_compile_ids_for_test(
         &self,
         graph_path: &GraphResourcePath,
@@ -390,10 +418,11 @@ impl CompileInput {
 fn current_products(
     coordinator: &ProjectCompileCoordinator,
     input: &CompileInput,
-) -> Option<PublishedProducts> {
+) -> Option<PublishedBasisProducts> {
     let products = coordinator.get_current(&input.document_path, &input.basis)?;
     if products.1.as_ref().is_some_and(|plan| {
-        plan.payload.provenance.project_session_id != input.source.environment.project_session_id
+        plan.payload.full_plan().provenance.project_session_id
+            != input.source.environment.project_session_id
     }) {
         return None;
     }

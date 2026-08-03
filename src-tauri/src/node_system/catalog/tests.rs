@@ -126,12 +126,12 @@ fn locale_fallback_uses_language_then_english_then_stable_key() {
 }
 
 #[test]
-fn aliases_stable_ids_and_english_technical_terms_are_searchable() {
+fn search_uses_only_current_locale_titles_and_aliases() {
     let registry = build_builtin_registry();
     let (_, catalog) = build_builtin_provider();
     let en = catalog.localize(&registry, "en-US");
     let en_add = item(&en, "yssbi.numeric.add.int64");
-    assert!(en_add.search_text.contains("yssbi numeric add int64"));
+    assert!(!en_add.search_text.contains("yssbi numeric add int64"));
     assert!(en_add.search_text.contains("plus"));
     assert_eq!(
         en_add.aliases,
@@ -141,11 +141,12 @@ fn aliases_stable_ids_and_english_technical_terms_are_searchable() {
     let zh = catalog.localize(&registry, "zh-CN");
     let zh_add = item(&zh, "yssbi.numeric.add.int64");
     assert_eq!(zh_add.title.as_ref(), "加法");
-    assert!(zh_add.search_text.contains("plus"));
+    assert!(zh_add.search_text.contains("求和"));
+    assert!(!zh_add.search_text.contains("plus"));
 }
 
 #[test]
-fn catalog_items_serialize_narrow_creation_descriptors_without_ports_or_parameter_maps() {
+fn catalog_items_keep_creation_descriptors_narrow_with_focused_documentation() {
     let registry = build_builtin_registry();
     let (_, catalog) = build_builtin_provider();
     let value = serde_json::to_value(item(
@@ -156,8 +157,10 @@ fn catalog_items_serialize_narrow_creation_descriptors_without_ports_or_paramete
 
     assert_eq!(value["creation"]["kind"], "static");
     assert_eq!(value["creation"]["nodeTypeId"], "yssbi.numeric.add.int64");
-    assert!(value.get("ports").is_none());
-    assert!(value.get("parameters").is_none());
+    assert!(value["ports"].is_array());
+    assert!(value["parameters"].is_array());
+    assert!(value.get("resourcePath").is_none());
+    assert!(value.get("resourceRevision").is_none());
     assert!(value["creation"].get("ports").is_none());
     assert!(value["creation"].get("parameters").is_none());
 }
@@ -307,7 +310,7 @@ fn static_catalog_excludes_managed_and_resource_required_descriptors() {
 }
 
 #[test]
-fn resource_entries_merge_without_translating_user_names() {
+fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity() {
     let registry = build_builtin_registry();
     let (_, catalog) = build_builtin_provider();
     let resource = CatalogResourceEntry {
@@ -334,10 +337,34 @@ fn resource_entries_merge_without_translating_user_names() {
         .unwrap();
 
     assert_eq!(en_resource.title, zh_resource.title);
+    assert_ne!(en_resource.description, zh_resource.description);
+    assert_ne!(en_resource.documentation, zh_resource.documentation);
     assert_eq!(en_resource.pinyin, None);
     assert_eq!(zh_resource.pinyin.as_deref(), Some("calculate sales"));
-    assert!(zh_resource.search_text.contains("calculate sales"));
-    assert!(zh_resource.search_text.contains("function"));
+    assert_eq!(zh_resource.icon_id.as_ref(), "builtin.project");
+    assert_eq!(zh_resource.style_id.as_ref(), "builtin.default");
+    assert_eq!(
+        zh_resource
+            .resource_path
+            .as_ref()
+            .map(CatalogResourcePath::as_str),
+        Some("functions/calculate-sales")
+    );
+    assert_eq!(
+        zh_resource.resource_revision,
+        Some(crate::node_system::document::ResourceRevision::INITIAL)
+    );
+    assert!(zh_resource.ports.iter().any(|port| {
+        port.key.as_ref() == "enter"
+            && port.label.as_ref() == "进入"
+            && port.direction.as_ref() == "input"
+            && port.kind.as_ref() == "control"
+    }));
+    assert!(zh_resource.parameters.iter().any(|parameter| {
+        parameter.key.as_ref() == "target"
+            && parameter.title.as_ref() == "目标函数"
+            && parameter.description.as_deref() == Some("要调用的函数资源。")
+    }));
     assert!(matches!(
         &zh_resource.creation,
         NodeCreationDescriptor::ResourceBound {
@@ -348,8 +375,150 @@ fn resource_entries_merge_without_translating_user_names() {
     ));
     let serialized = serde_json::to_value(zh_resource).unwrap();
     assert_eq!(serialized["creation"]["createArgs"]["kind"], "function");
+    assert_eq!(serialized["resourcePath"], "functions/calculate-sales");
+    assert_eq!(serialized["resourceRevision"], 0);
+    assert_eq!(
+        serialized["ports"].as_array().unwrap()[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "direction".to_string(),
+            "key".to_string(),
+            "kind".to_string(),
+            "label".to_string(),
+        ])
+    );
+    assert_eq!(
+        serialized["parameters"].as_array().unwrap()[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "description".to_string(),
+            "key".to_string(),
+            "title".to_string(),
+        ])
+    );
     assert!(serialized["creation"].get("parameters").is_none());
     assert!(serialized["creation"].get("ports").is_none());
+}
+
+#[test]
+fn resource_catalog_search_uses_only_current_locale_title_and_aliases() {
+    let registry = build_builtin_registry();
+    let (_, catalog) = build_builtin_provider();
+    let resource = CatalogResourceEntry {
+        name: "Calculate Sales".into(),
+        node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+        resource_path: CatalogResourcePath::new("functions/opaque-sales"),
+        resource_revision: crate::node_system::document::ResourceRevision::new(9),
+        create_args: ResourceBoundCreateArgsDto::Function,
+        technical_terms: vec!["english-technical-only".into()],
+        pinyin: Some("pinyin-only-token".into()),
+    };
+
+    let localized = catalog.localize_with_resources(&registry, "zh-CN", &[resource]);
+    let resource = localized
+        .items
+        .iter()
+        .find(|item| item.resource_path.is_some())
+        .unwrap();
+
+    assert!(resource.search_text.contains("calculate sales"));
+    assert!(resource.search_text.contains("调用"));
+    assert!(!resource.search_text.contains("invoke"));
+    assert!(!resource.search_text.contains("english technical only"));
+    assert!(!resource.search_text.contains("pinyin only token"));
+    assert!(!resource.search_text.contains("yssbi"));
+    assert!(!resource.search_text.contains("项目资源接入图执行"));
+    assert!(!resource.search_text.contains("资源身份"));
+}
+
+#[test]
+fn resource_catalog_localization_falls_back_without_changing_identity() {
+    let registry = build_builtin_registry();
+    let (_, catalog) = build_builtin_provider();
+    let resource = CatalogResourceEntry {
+        name: "Opaque Display Name".into(),
+        node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+        resource_path: CatalogResourcePath::new("functions/Do Not Normalize/Case"),
+        resource_revision: crate::node_system::document::ResourceRevision::new(13),
+        create_args: ResourceBoundCreateArgsDto::Function,
+        technical_terms: Vec::new(),
+        pinyin: None,
+    };
+
+    let en = catalog.localize_with_resources(&registry, "en-US", &[resource.clone()]);
+    let fallback = catalog.localize_with_resources(&registry, "fr-FR", &[resource]);
+    let en = en
+        .items
+        .iter()
+        .find(|item| item.resource_path.is_some())
+        .unwrap();
+    let fallback = fallback
+        .items
+        .iter()
+        .find(|item| item.resource_path.is_some())
+        .unwrap();
+
+    assert_eq!(fallback.title.as_ref(), "Opaque Display Name");
+    assert_eq!(fallback.description, en.description);
+    assert_eq!(fallback.documentation, en.documentation);
+    assert_eq!(fallback.ports, en.ports);
+    assert_eq!(fallback.parameters, en.parameters);
+    assert_eq!(fallback.resource_path, en.resource_path);
+    assert_eq!(fallback.resource_revision, en.resource_revision);
+}
+
+#[test]
+fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
+    let registry = build_builtin_registry();
+    let (_, catalog) = build_builtin_provider();
+    let first = CatalogResourceEntry {
+        name: "First".into(),
+        node_type_id: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
+        resource_path: CatalogResourcePath::new("variables/a"),
+        resource_revision: crate::node_system::document::ResourceRevision::new(2),
+        create_args: ResourceBoundCreateArgsDto::Variable,
+        technical_terms: Vec::new(),
+        pinyin: None,
+    };
+    let second = CatalogResourceEntry {
+        name: "Second".into(),
+        node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+        resource_path: CatalogResourcePath::new("functions/z"),
+        resource_revision: crate::node_system::document::ResourceRevision::new(3),
+        create_args: ResourceBoundCreateArgsDto::Function,
+        technical_terms: Vec::new(),
+        pinyin: None,
+    };
+
+    let forward =
+        catalog.localize_with_resources(&registry, "en-US", &[first.clone(), second.clone()]);
+    let reversed = catalog.localize_with_resources(&registry, "en-US", &[second, first]);
+
+    assert_eq!(forward, reversed);
+    let identities = forward
+        .items
+        .iter()
+        .filter_map(|item| {
+            item.resource_path
+                .as_ref()
+                .map(|path| (path.as_str(), item.node_type_id.as_ref()))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        identities,
+        vec![
+            ("functions/z", "yssbi.project.function.call"),
+            ("variables/a", "yssbi.project.variable.get"),
+        ]
+    );
 }
 
 #[test]
@@ -673,6 +842,11 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
             );
             assert!(
                 item.search_text
+                    .contains(normalize_search_text(&item.title).as_ref())
+            );
+            assert!(
+                !item
+                    .search_text
                     .contains(normalize_search_text(id).as_ref())
             );
         }
@@ -1041,4 +1215,98 @@ fn every_leaf_has_a_protocol_lowerer_and_production_kernel() {
             handle.as_str(),
         );
     }
+}
+
+#[test]
+fn production_catalog_document_and_command_boundaries_reject_legacy_graph_inference() {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn production_rust_files(directory: &Path, files: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(directory).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name == "tests") {
+                    continue;
+                }
+                production_rust_files(&path, files);
+            } else if path.extension().is_some_and(|extension| extension == "rs")
+                && path.file_name().is_none_or(|name| name != "tests.rs")
+            {
+                files.push(path);
+            }
+        }
+    }
+
+    fn use_statements(source: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        for line in source.lines() {
+            let trimmed = line.trim();
+            if current.is_empty()
+                && !(trimmed.starts_with("use ") || trimmed.starts_with("pub use "))
+            {
+                continue;
+            }
+            current.push_str(trimmed);
+            if trimmed.ends_with(';') {
+                statements.push(std::mem::take(&mut current));
+            }
+        }
+        statements
+    }
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let roots = [
+        manifest_dir.join("src/node_system/catalog"),
+        manifest_dir.join("src/node_system/document"),
+        manifest_dir.join("src/commands"),
+    ];
+    let mut files = Vec::new();
+    for root in roots {
+        production_rust_files(&root, &mut files);
+    }
+    files.sort();
+
+    let forbidden_imports = [
+        "crate::graph::node",
+        "crate::schema::node",
+        "NodeDefinition",
+        "NodeDefinitionDTO",
+        "PinResolver",
+    ];
+    let forbidden_resolvers = [
+        "NodeDefinition::placeholder",
+        ".resolve_dynamic_pins(",
+        ".resolve_all_dynamic_pins(",
+        "PinResolverContext",
+        "pin_resolver",
+    ];
+    let mut offenders = Vec::new();
+    for path in &files {
+        let source = fs::read_to_string(path).unwrap();
+        for statement in use_statements(&source) {
+            for needle in forbidden_imports {
+                if statement.contains(needle) {
+                    offenders.push(format!("{}: {statement}", path.display()));
+                }
+            }
+        }
+        for needle in forbidden_resolvers {
+            if source.contains(needle) {
+                offenders.push(format!("{}: {needle}", path.display()));
+            }
+        }
+    }
+
+    assert!(
+        !files.is_empty(),
+        "boundary audit scanned no production Rust files"
+    );
+    assert!(
+        offenders.is_empty(),
+        "legacy graph inference crossed Catalog/document/command boundaries:\n{}",
+        offenders.join("\n"),
+    );
 }

@@ -23,6 +23,15 @@ import {
   useExecutionStore,
 } from "@/features/core/execution";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableSource";
+import {
+  isPinPreviewActionAvailable,
+  requestAndOpenPinPreview,
+} from "@/features/application/editor/requestPinPreview";
+import type {
+  PortAddressDto,
+  PortKindDto,
+  ResolvedPortStatusDto,
+} from "@/shared/types/dto/editorProjection";
 
 /** 将 userValue 转为可显示/编辑的原始值（兼容 DataValue DTO 与本地 raw 格式） */
 function toDisplayValue(v: unknown): unknown {
@@ -49,6 +58,11 @@ export interface PinProps extends PinModel {
   onValueChange?: (pinId: string, value: unknown) => void;
   onRemovePin?: (pinId: string) => void;
   forceShowInput?: boolean;
+  /** Rust-projected preview eligibility fields. */
+  address?: PortAddressDto;
+  kind?: PortKindDto;
+  orphan?: boolean;
+  status?: ResolvedPortStatusDto;
 }
 
 export const Pin: React.FC<PinProps> = (props) => {
@@ -75,6 +89,10 @@ export const Pin: React.FC<PinProps> = (props) => {
     onRemovePin,
     forceShowInput,
     validationWarning,
+    address,
+    kind,
+    orphan,
+    status,
   } = props;
 
   const { t } = useTranslation();
@@ -136,9 +154,18 @@ export const Pin: React.FC<PinProps> = (props) => {
     [viewParams],
   );
 
-  const showViewMenu = viewState?.showMenu ?? false;
-  const viewEnabled = viewState?.enabled ?? false;
-  const viewDisabledReason = viewState?.disabledReason ?? null;
+  const previewActionAvailable = isPinPreviewActionAvailable(graphPath, {
+    direction,
+    kind,
+    address,
+    orphan,
+    status,
+  });
+  const showViewMenu = (viewState?.showMenu ?? false) || previewActionAvailable;
+  const viewEnabled = (viewState?.enabled ?? false) || previewActionAvailable;
+  const viewDisabledReason = previewActionAvailable
+    ? null
+    : (viewState?.disabledReason ?? null);
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -149,9 +176,15 @@ export const Pin: React.FC<PinProps> = (props) => {
   }, [onRemovePin, menuActions, nodeId, id]);
 
   const handleView = useCallback(() => {
-    if (!viewParams) return;
-    void openPinInspectableView(viewParams, t);
-  }, [viewParams, t]);
+    if (!viewParams || !graphPath) return;
+    if (viewState?.enabled) {
+      void openPinInspectableView(viewParams, t);
+      return;
+    }
+    if (previewActionAvailable) {
+      void requestAndOpenPinPreview(graphPath, id, t);
+    }
+  }, [graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
   const scalarInputKey = scalarPinInputKey(dataType);

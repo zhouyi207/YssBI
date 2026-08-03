@@ -7,17 +7,23 @@ export type { DatabaseRecord };
 
 interface DatabaseStore {
   databases: Record<DatabaseId, DatabaseRecord>;
+  revisions: Record<DatabaseId, number>;
 
   addDatabase(id: DatabaseId, db: DatabaseRecord): void;
   updateDatabase(id: DatabaseId, patch: Partial<DatabaseRecord>): void;
   deleteDatabase(id: DatabaseId): void;
 
+  setDatabaseSnapshot(
+    dbs: Record<DatabaseId, DatabaseRecord>,
+    revisions: Record<DatabaseId, number>,
+  ): void;
   setDatabases(dbs: Record<DatabaseId, DatabaseRecord>): void;
   clear(): void;
 }
 
 export const useDatabaseStore = create<DatabaseStore>((set) => ({
   databases: {},
+  revisions: {},
 
   addDatabase: (id, db) =>
     set((state) => {
@@ -63,16 +69,22 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
       const next = { ...state.databases };
       delete next[id];
 
-      return { databases: next };
+      const revisions = { ...state.revisions };
+      delete revisions[id];
+      return { databases: next, revisions };
     }),
 
+  setDatabaseSnapshot: (dbs, revisions) => set({
+    databases: dbs ?? {},
+    revisions: revisions ?? {},
+  }),
+
   setDatabases: (dbs) =>
-    set({
-      databases: dbs ?? {},
-    }),
+    set({ databases: dbs ?? {} }),
 
   clear: () =>
     set({
       databases: {},
+      revisions: {},
     }),
 }));

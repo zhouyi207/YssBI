@@ -12,19 +12,13 @@ describe('createNodeFromDescriptor', () => {
     vi.clearAllMocks();
   });
 
-  it('sends only the static descriptor node type and position through the mutation coordinator', async () => {
+  it('sends the exact static descriptor and position through the mutation coordinator', async () => {
     const outcome = { status: 'conflict' as const };
     vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
-    const descriptor = {
+    const descriptor: NodeCreationDescriptor = {
       kind: 'static',
       nodeTypeId: 'math.add',
-      nodeId: 'frontend-node-id',
-      ports: [{ id: 'frontend-port-id' }],
-      inferredTypes: { value: 'Float64' },
-      dynamicInterfaces: [{ template: 'inputs' }],
-      compatibilityData: { accepts: ['Float64'] },
-      parameters: { arbitrary: true },
-    } as unknown as NodeCreationDescriptor;
+    };
 
     await expect(createNodeFromDescriptor({
       graphPath: 'functions/Main.yssbi-function',
@@ -40,20 +34,45 @@ describe('createNodeFromDescriptor', () => {
       mutation: {
         type: 'createNode',
         payload: {
-          nodeTypeId: 'math.add',
+          descriptor,
           position: { x: 12, y: 34 },
-          parameters: {},
           userLabel: null,
         },
       },
     });
   });
 
-  it('rejects resource-bound descriptors before mutation execution', async () => {
-    const descriptor = {
+  it('sends the exact resource-bound descriptor unchanged', async () => {
+    const outcome = { status: 'conflict' as const };
+    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const descriptor: NodeCreationDescriptor = {
       kind: 'resourceBound',
       nodeTypeId: 'functions.call',
       resourcePath: 'functions/Helper.yssbi-function',
+      resourceRevision: 4,
+      createArgs: { kind: 'function' },
+    };
+
+    await expect(createNodeFromDescriptor({
+      graphPath: 'events/Main.yssbi-event',
+      locale: 'zh-CN',
+      descriptor,
+      position: { x: 5, y: 8 },
+    })).resolves.toBe(outcome);
+
+    expect(executeEditorMutation).toHaveBeenCalledWith(expect.objectContaining({
+      mutation: {
+        type: 'createNode',
+        payload: { descriptor, position: { x: 5, y: 8 }, userLabel: null },
+      },
+    }));
+  });
+
+  it('rejects descriptors with compatibility fields before mutation execution', async () => {
+    const descriptor = {
+      kind: 'static',
+      nodeTypeId: 'math.add',
+      parameters: {},
     } as unknown as NodeCreationDescriptor;
 
     await expect(createNodeFromDescriptor({

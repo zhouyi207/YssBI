@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
@@ -17,7 +17,7 @@ import { CatalogService } from '@/services/nodeSystem/catalogService';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
 export interface LocalizedNodeCatalogState {
@@ -25,6 +25,7 @@ export interface LocalizedNodeCatalogState {
   error: string | null;
   catalog: LocalizedCatalogResponse | null;
   searchIndex: LocalizedSearchIndex | null;
+  refresh(): void;
 }
 
 export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
@@ -39,7 +40,8 @@ export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
     : null);
 
   useEffect(() => {
-    if (!projectInstanceId || catalog) return;
+    if (!projectInstanceId || request?.status === 'loading' || request?.status === 'ready'
+      || request?.status === 'error') return;
 
     let identity: ReturnType<typeof captureProjectIdentity>;
     try {
@@ -69,12 +71,18 @@ export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
           formatErrorMessage(error, 'Failed to load node catalog'),
         );
       });
-  }, [catalog, locale, projectInstanceId]);
+  }, [locale, projectInstanceId, request?.status]);
+
+  const refresh = useCallback(() => {
+    if (!projectInstanceId) return;
+    useNodeCatalogStore.getState().requestRefresh(projectInstanceId, locale);
+  }, [locale, projectInstanceId]);
 
   return {
     status: request?.status ?? 'idle',
     error: request?.error ?? null,
     catalog,
     searchIndex: catalog ? getLocalizedSearchIndex(catalog) : null,
+    refresh,
   };
 }

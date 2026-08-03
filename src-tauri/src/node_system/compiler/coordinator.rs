@@ -1,9 +1,11 @@
+use super::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProjection, ResourceVersionSet,
 };
 use crate::node_system::document::{GraphResourcePath, GraphRevision};
+use crate::node_system::plan::{ExecutionDemand, ExecutionPlan};
 use crate::node_system::registry::RegistryFingerprint;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -81,6 +83,117 @@ pub struct CompileProducts<Analysis, Plan> {
     pub analysis: Analysis,
     pub has_blocking_diagnostics: bool,
     pub plan: Option<Plan>,
+}
+
+const DEMAND_VARIANT_CACHE_CAPACITY: usize = 16;
+
+#[derive(Debug)]
+struct BoundedVariantCache<K, V> {
+    capacity: usize,
+    insertion_order: VecDeque<K>,
+    entries: BTreeMap<K, V>,
+}
+
+impl<K: Clone + Ord, V> BoundedVariantCache<K, V> {
+    fn new(capacity: usize) -> Self {
+        assert!(capacity > 0, "variant cache capacity must be positive");
+        Self {
+            capacity,
+            insertion_order: VecDeque::with_capacity(capacity),
+            entries: BTreeMap::new(),
+        }
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        self.entries.get(key)
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        if self.entries.contains_key(&key) {
+            self.entries.insert(key, value);
+            return;
+        }
+        if self.entries.len() == self.capacity
+            && let Some(evicted) = self.insertion_order.pop_front()
+        {
+            self.entries.remove(&evicted);
+        }
+        self.insertion_order.push_back(key.clone());
+        self.entries.insert(key, value);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectedExecutionPlan {
+    pub plan: Arc<ExecutionPlan>,
+    pub normalized_demand: NormalizedExecutionDemand,
+    pub selection_digest: [u8; 32],
+}
+
+#[derive(Debug)]
+pub struct PublishedExecutionPlan {
+    full_plan: ExecutionPlan,
+    execution_basis: ExecutionPlanBasis,
+    variants: Mutex<BoundedVariantCache<NormalizedExecutionDemand, Arc<ExecutionPlan>>>,
+}
+
+impl PublishedExecutionPlan {
+    pub fn new(full_plan: ExecutionPlan, execution_basis: ExecutionPlanBasis) -> Self {
+        Self {
+            full_plan,
+            execution_basis,
+            variants: Mutex::new(BoundedVariantCache::new(DEMAND_VARIANT_CACHE_CAPACITY)),
+        }
+    }
+
+    pub fn full_plan(&self) -> &ExecutionPlan {
+        &self.full_plan
+    }
+
+    pub fn select(
+        &self,
+        demand: &ExecutionDemand,
+    ) -> Result<SelectedExecutionPlan, DemandPlanError> {
+        let normalized_demand = self.execution_basis.normalize_demand(demand)?;
+        let selection_digest = normalized_demand.digest();
+        if let Some(plan) = self
+            .variants
+            .lock()
+            .expect("demand variant cache lock poisoned")
+            .get(&normalized_demand)
+            .cloned()
+        {
+            return Ok(SelectedExecutionPlan {
+                plan,
+                normalized_demand,
+                selection_digest,
+            });
+        }
+
+        let plan = Arc::new(self.execution_basis.derive_plan(demand)?);
+        self.variants
+            .lock()
+            .expect("demand variant cache lock poisoned")
+            .insert(normalized_demand.clone(), Arc::clone(&plan));
+        Ok(SelectedExecutionPlan {
+            plan,
+            normalized_demand,
+            selection_digest,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cached_variant_count(&self) -> usize {
+        self.variants
+            .lock()
+            .expect("demand variant cache lock poisoned")
+            .len()
+    }
 }
 
 #[derive(Debug)]
@@ -588,6 +701,75 @@ mod tests {
                 .get_current(&path(), &basis(1, 1, "2"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn demand_variant_cache_is_bounded_and_eviction_only_loses_reuse() {
+        let mut cache = BoundedVariantCache::new(2);
+        cache.insert(1_u8, "first");
+        cache.insert(2_u8, "second");
+        assert_eq!(cache.get(&1), Some(&"first"));
+
+        cache.insert(3_u8, "third");
+
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.get(&1), None);
+        assert_eq!(cache.get(&2), Some(&"second"));
+        assert_eq!(cache.get(&3), Some(&"third"));
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct VariantProduct {
+        variants: Box<[&'static str]>,
+    }
+
+    #[test]
+    fn populated_variants_are_not_current_for_registry_or_resource_basis_changes() {
+        for changed in [basis(7, 2, "1"), basis(7, 1, "2")] {
+            let mut slot = CompilationSlot::<&str, VariantProduct>::new(path());
+            let original = basis(7, 1, "1");
+            let old = started(slot.request(CompileId::new(1), original.clone()));
+            slot.publish(
+                &old,
+                &original,
+                CompileProducts {
+                    analysis: "old analysis",
+                    has_blocking_diagnostics: false,
+                    plan: Some(VariantProduct {
+                        variants: Box::new(["default", "preview"]),
+                    }),
+                },
+            );
+            assert_eq!(
+                slot.current_products(&path(), &original)
+                    .unwrap()
+                    .1
+                    .unwrap()
+                    .payload
+                    .variants
+                    .len(),
+                2,
+            );
+            assert!(slot.current_products(&path(), &changed).is_none());
+            assert_eq!(slot.published_analysis().unwrap().payload, "old analysis");
+
+            assert!(slot.finish(old.compile_id).is_none());
+            let replacement = started(slot.request(CompileId::new(2), changed.clone()));
+            slot.publish(
+                &replacement,
+                &changed,
+                CompileProducts {
+                    analysis: "new analysis",
+                    has_blocking_diagnostics: false,
+                    plan: Some(VariantProduct {
+                        variants: Box::new([]),
+                    }),
+                },
+            );
+            let current = slot.current_products(&path(), &changed).unwrap();
+            assert_eq!(current.0.payload, "new analysis");
+            assert!(current.1.unwrap().payload.variants.is_empty());
+        }
     }
 
     #[test]

@@ -1,7 +1,14 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscDatabase } from 'react-icons/vsc';
-import { buildSidebarDragData } from '@/features/application/sidebar';
+import {
+  buildSidebarDragData,
+  refreshMissingSidebarResourcePath,
+} from '@/features/application/sidebar';
+import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
+import { RESOURCE_CATALOG_REFRESH_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
@@ -10,6 +17,7 @@ import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '
 
 export const SidebarDataRow = memo(function SidebarDataRow({
   id,
+  resourcePath,
   name,
   data,
   indentDepth = 0,
@@ -17,6 +25,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
   onContextMenu,
 }: {
   id: string;
+  resourcePath?: string;
   name: string;
   data: unknown;
   indentDepth?: number;
@@ -26,11 +35,39 @@ export const SidebarDataRow = memo(function SidebarDataRow({
   const { t } = useTranslation();
   const isLoading = (data as { loading?: unknown }).loading === true;
   const loadError = (data as { loadError?: unknown }).loadError;
+  const { status, catalog, refresh } = useLocalizedNodeCatalog();
+  const templateForPath = (path: string) => status === 'ready' && catalog
+    ? findResourceNodeSpawnTemplate(
+        catalog.items,
+        path,
+        'database',
+        'yssbi.dataframe.source.get',
+      )
+    : null;
+  const template = resourcePath ? templateForPath(resourcePath) : null;
+  const dragData = template
+    ? buildSidebarDragData(id, name, 'data', template.descriptor)
+    : null;
+  const handleDisabledDragAttempt = () => {
+    if (resourcePath) {
+      refresh();
+    } else {
+      void refreshMissingSidebarResourcePath({
+        kind: 'database',
+        id,
+        hasCurrentDescriptor: (path) => templateForPath(path) != null,
+        refreshCatalog: refresh,
+      });
+    }
+    uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+  };
 
   return (
     <SidebarListItem
       id={id}
-      dragData={buildSidebarDragData(id, name, 'data')}
+      dragData={dragData}
+      dragDisabledReason={RESOURCE_CATALOG_REFRESH_MESSAGE}
+      onDisabledDragAttempt={handleDisabledDragAttempt}
       isSelected={isSelected}
       indentDepth={indentDepth}
       icon={<VscDatabase size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.data }} />}

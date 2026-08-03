@@ -1,6 +1,13 @@
 import { memo } from 'react';
 import { VscSymbolVariable } from 'react-icons/vsc';
-import { buildSidebarDragData } from '@/features/application/sidebar';
+import {
+  buildSidebarDragData,
+  refreshMissingSidebarResourcePath,
+} from '@/features/application/sidebar';
+import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
+import { RESOURCE_CATALOG_REFRESH_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import type { DataType } from '@/shared/types/domain/dataType';
@@ -13,6 +20,7 @@ import {
 
 export const SidebarVariableRow = memo(function SidebarVariableRow({
   id,
+  resourcePath,
   name,
   dataType,
   isGlobal,
@@ -21,6 +29,7 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
   onContextMenu,
 }: {
   id: string;
+  resourcePath?: string;
   name: string;
   dataType: unknown;
   isGlobal: boolean;
@@ -29,11 +38,39 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const iconColor = isGlobal ? TYPE_ICON_COLORS.variableGlobal : TYPE_ICON_COLORS.variable;
+  const { status, catalog, refresh } = useLocalizedNodeCatalog();
+  const templateForPath = (path: string) => status === 'ready' && catalog
+    ? findResourceNodeSpawnTemplate(
+        catalog.items,
+        path,
+        'variable',
+        'yssbi.project.variable.get',
+      )
+    : null;
+  const template = resourcePath ? templateForPath(resourcePath) : null;
+  const dragData = template
+    ? buildSidebarDragData(id, name, 'variable', template.descriptor)
+    : null;
+  const handleDisabledDragAttempt = () => {
+    if (resourcePath) {
+      refresh();
+    } else {
+      void refreshMissingSidebarResourcePath({
+        kind: 'variable',
+        id,
+        hasCurrentDescriptor: (path) => templateForPath(path) != null,
+        refreshCatalog: refresh,
+      });
+    }
+    uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+  };
 
   return (
     <SidebarListItem
       id={id}
-      dragData={buildSidebarDragData(id, name, 'variable')}
+      dragData={dragData}
+      dragDisabledReason={RESOURCE_CATALOG_REFRESH_MESSAGE}
+      onDisabledDragAttempt={handleDisabledDragAttempt}
       isSelected={isSelected}
       indentDepth={indentDepth}
       icon={<VscSymbolVariable size={SIDEBAR_ROW_ICON_SIZE} style={{ color: iconColor }} />}

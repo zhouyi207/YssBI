@@ -11,6 +11,7 @@ function runEvent(kind: RunEventKind): RunEvent {
       registryFingerprint: 'registry-1',
       resourceVersions: {},
       compileId: '9',
+      selectionDigest: 'demand-selection-a',
       runId: '41',
       nodeId: null,
       nodeTypeId: null,

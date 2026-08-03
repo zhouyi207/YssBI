@@ -444,7 +444,14 @@ fn run_branch(document: GraphResourceDocument) -> BranchOutcome {
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let events = RecordingRunEvents::default();
-    let run = fixture.state().execute_graph(&graph_path, &events).unwrap();
+    let run = fixture
+        .state()
+        .execute_graph(
+            &graph_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap();
     let result = fixture.state().get_data().unwrap().variables[&result_variable.id]
         .data_value
         .clone();
@@ -793,7 +800,11 @@ fn run_loop(
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let events = RecordingRunEvents::default();
-    let run = fixture.state().execute_graph(&graph_path, &events);
+    let run = fixture.state().execute_graph(
+        &graph_path,
+        &crate::node_system::plan::ExecutionDemand::Default,
+        &events,
+    );
     let result = fixture.state().get_data().unwrap().variables[&result_variable.id]
         .data_value
         .clone();
@@ -1087,7 +1098,14 @@ fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
     );
     let events = RecordingRunEvents::default();
 
-    let run = fixture.state().execute_graph(&event_path, &events).unwrap();
+    let run = fixture
+        .state()
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap();
 
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&output.id].data_value,
@@ -1123,7 +1141,14 @@ fn builtin_call_two_calls_in_one_run_keep_arguments_results_and_frames_independe
     insert_persisted_graph(&fixture, &event_path, two_call_event(&function_path));
     let events = RecordingRunEvents::default();
 
-    let run = fixture.state().execute_graph(&event_path, &events).unwrap();
+    let run = fixture
+        .state()
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap();
     let data = fixture.state().get_data().unwrap();
     let recorded = events.events();
 
@@ -1195,7 +1220,11 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 
     let first = fixture
         .state()
-        .execute_graph(&event_path, &RecordingRunEvents::default())
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &RecordingRunEvents::default(),
+        )
         .unwrap();
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&output.id].data_value,
@@ -1225,7 +1254,11 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 
     let second = fixture
         .state()
-        .execute_graph(&event_path, &RecordingRunEvents::default())
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &RecordingRunEvents::default(),
+        )
         .unwrap();
 
     assert_ne!(first.provenance.compile_id, second.provenance.compile_id);
@@ -1258,7 +1291,11 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
 
     let error = fixture
         .state()
-        .execute_graph(&event_path, &events)
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
         .unwrap_err();
     let recorded = events.events();
 
@@ -1369,7 +1406,11 @@ fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
 
     let error = fixture
         .state()
-        .execute_graph(&graph_path, &events)
+        .execute_graph(
+            &graph_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
         .expect_err("the staged Variable Set effect must lose the revision race");
     fixture
         .state()
@@ -1420,7 +1461,11 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(&execution_path, execution_events.as_ref())
+        execution_state.execute_graph(
+            &execution_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            execution_events.as_ref(),
+        )
     });
 
     gate_reached_rx
@@ -1498,7 +1543,14 @@ fn builtin_loop_carries_initial_and_subsequent_values_across_observable_iteratio
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let events = RecordingRunEvents::default();
 
-    let run = fixture.state().execute_graph(&graph_path, &events).unwrap();
+    let run = fixture
+        .state()
+        .execute_graph(
+            &graph_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap();
     let data = fixture.state().get_data().unwrap();
     let recorded = events.events();
 
@@ -1620,7 +1672,11 @@ fn builtin_loop_project_drain_cancels_between_iterations_without_publishing_resu
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(&execution_path, execution_events.as_ref())
+        execution_state.execute_graph(
+            &execution_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            execution_events.as_ref(),
+        )
     });
 
     first_body_completed_rx
@@ -1811,7 +1867,14 @@ fn builtin_effect_edge_orders_real_builtins_independent_of_document_insertion() 
         insert_persisted_graph(&fixture, &graph_path, document);
         let events = RecordingRunEvents::default();
 
-        fixture.state().execute_graph(&graph_path, &events).unwrap();
+        fixture
+            .state()
+            .execute_graph(
+                &graph_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &events,
+            )
+            .unwrap();
 
         assert_eq!(
             operation_event_sequence(&events.events()),
@@ -1826,7 +1889,7 @@ fn builtin_effect_edge_orders_real_builtins_independent_of_document_insertion() 
 }
 
 #[test]
-fn builtin_effect_failure_attempts_once_and_drops_every_project_resource() {
+fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resource() {
     let first_resource = int64_variable(EFFECT_RESOURCE_VARIABLE, "First Failure Resource", 7);
     let second_resource = int64_variable(
         EFFECT_SECOND_RESOURCE_VARIABLE,
@@ -1841,7 +1904,11 @@ fn builtin_effect_failure_attempts_once_and_drops_every_project_resource() {
 
     let error = fixture
         .state()
-        .execute_graph(&graph_path, &events)
+        .execute_graph(
+            &graph_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
         .unwrap_err();
 
     assert!(error.contains("int64 division by zero"), "{error}");
@@ -1919,13 +1986,24 @@ fn builtin_effect_failure_attempts_once_and_drops_every_project_resource() {
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
         crate::graph::value::DataValue::Int64(0)
     );
-    assert_eq!(observer.acquired(), 3);
-    assert_eq!(observer.dropped(), 3);
+    for resource_node in [EFFECT_RESOURCE_NODE, EFFECT_RESOURCE_NODE + 1] {
+        assert_eq!(
+            event_count(
+                &recorded,
+                resource_node,
+                "yssbi.project.variable.get",
+                false,
+            ),
+            0,
+        );
+    }
+    assert_eq!(observer.acquired(), 1);
+    assert_eq!(observer.dropped(), 1);
     assert_eq!(observer.active(), 0);
 }
 
 #[test]
-fn builtin_effect_cancellation_attempts_once_drops_resources_and_drains_run() {
+fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains_run() {
     let first_resource = int64_variable(EFFECT_RESOURCE_VARIABLE, "First Cancel Resource", 7);
     let second_resource =
         int64_variable(EFFECT_SECOND_RESOURCE_VARIABLE, "Second Cancel Resource", 8);
@@ -1944,7 +2022,11 @@ fn builtin_effect_cancellation_attempts_once_drops_resources_and_drains_run() {
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(&execution_path, execution_events.as_ref())
+        execution_state.execute_graph(
+            &execution_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            execution_events.as_ref(),
+        )
     });
 
     first_body_completed_rx
@@ -2013,8 +2095,19 @@ fn builtin_effect_cancellation_attempts_once_drops_resources_and_drains_run() {
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
         crate::graph::value::DataValue::Float64(0.0)
     );
-    assert_eq!(observer.acquired(), 3);
-    assert_eq!(observer.dropped(), 3);
+    for resource_node in [EFFECT_RESOURCE_NODE, EFFECT_RESOURCE_NODE + 1] {
+        assert_eq!(
+            event_count(
+                &recorded,
+                resource_node,
+                "yssbi.project.variable.get",
+                false,
+            ),
+            0,
+        );
+    }
+    assert_eq!(observer.acquired(), 1);
+    assert_eq!(observer.dropped(), 1);
     assert_eq!(observer.active(), 0);
     assert_eq!(runs.active_run_count(), 0);
 }

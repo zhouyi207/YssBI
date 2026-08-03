@@ -12,6 +12,12 @@ fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
+fn is_test_only_source(relative: &str) -> bool {
+    relative.rsplit('/').next() == Some("tests.rs")
+        || relative.ends_with("_tests.rs")
+        || relative.ends_with("production_tests.rs")
+}
+
 fn production_source(source: &str) -> String {
     let marker = "#[cfg(test)]";
     let mut remaining = source;
@@ -181,7 +187,7 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
-        if relative.ends_with("_tests.rs") || relative.ends_with("production_tests.rs") {
+        if is_test_only_source(&relative) {
             continue;
         }
         let source = std::fs::read_to_string(&file).unwrap();
@@ -232,6 +238,16 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         "production project filesystem ownership violations:\n{}",
         offenders.join("\n")
     );
+}
+
+#[test]
+fn test_only_source_classification_accepts_conventional_nested_tests_rs() {
+    assert!(is_test_only_source("node_system/catalog/tests.rs"));
+}
+
+#[test]
+fn test_only_source_classification_rejects_similarly_named_production_file() {
+    assert!(!is_test_only_source("node_system/catalog/tests_support.rs"));
 }
 
 fn project_io_is_allowed(

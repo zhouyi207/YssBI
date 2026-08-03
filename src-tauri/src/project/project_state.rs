@@ -6,8 +6,9 @@ use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
     EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch, GraphMutation, HistoryEntryId,
-    HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, ProjectDocumentState,
-    ProjectHistory, ProjectHistoryTransaction, ResourceKey, RevisionedGraphStore,
+    HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, OperationId,
+    ProjectDocumentState, ProjectHistory, ProjectHistoryTransaction, ResourceKey, ResourceRevision,
+    RevisionedGraphStore,
 };
 use crate::project::{
     GraphLifecycleIntent, GraphLifecycleOperation, GraphLifecycleRegistry,
@@ -788,6 +789,8 @@ pub struct ProjectState {
     #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
     #[cfg(test)]
+    catalog_mutation_before_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
+    #[cfg(test)]
     compile_capture_after_environment_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
     compile_before_authority_gate_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
@@ -946,6 +949,8 @@ impl ProjectState {
             projection_environment_after_path_data_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            catalog_mutation_before_publication_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             compile_capture_after_environment_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1315,6 +1320,21 @@ impl ProjectState {
     fn run_mutation_publication_test_hook(&self) {}
 
     #[cfg(test)]
+    fn run_catalog_mutation_before_publication_test_hook(&self) {
+        if let Some(hook) = self
+            .catalog_mutation_before_publication_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_catalog_mutation_before_publication_test_hook(&self) {}
+
+    #[cfg(test)]
     pub(super) fn run_project_activation_test_hook(&self) {
         if let Some(hook) = self.project_activation_test_hook.read().unwrap().clone() {
             hook();
@@ -1470,6 +1490,17 @@ impl ProjectState {
     #[cfg(test)]
     pub(super) fn set_mutation_publication_test_hook(&self, hook: MutationPublicationTestHook) {
         *self.mutation_publication_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_catalog_mutation_before_publication_test_hook(
+        &self,
+        hook: MutationPublicationTestHook,
+    ) {
+        *self
+            .catalog_mutation_before_publication_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -1689,6 +1720,16 @@ impl ProjectState {
     pub(crate) fn poison_project_path_for_test(&self) {
         let _guard = self.project_path.write().unwrap();
         panic!("injected project path poison");
+    }
+
+    #[cfg(test)]
+    pub(crate) fn publication_state_for_test(&self) -> (String, u64, u64) {
+        let publication = self.mutation_publication.lock().unwrap();
+        (
+            publication.project_instance_id.clone(),
+            publication.resource_revision,
+            publication.authority_generation(),
+        )
     }
 
     #[cfg(test)]
@@ -2111,63 +2152,18 @@ impl ProjectState {
         project_instance_id: &ProjectInstanceId,
         locale: &str,
     ) -> Result<crate::node_system::catalog::LocalizedCatalogDto, ProjectFilesystemError> {
-        use std::sync::atomic::Ordering;
-
-        self.ensure_project_operational()?;
-        let generation = self.activation_generation.load(Ordering::Acquire);
-        if generation % 2 != 0 {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "project activation is changing during Catalog snapshot".into(),
-            });
-        }
-
-        let (registry, catalog, publication_revision) = {
-            let publication = self.mutation_publication.lock().unwrap();
-            let path = self.project_path.read().unwrap();
-            let store = self.project_store.read().unwrap();
-            let identity = self.activation_identity.read().unwrap();
-            if publication.project_instance_id != project_instance_id.as_str()
-                || &identity.project_instance_id != project_instance_id
-                || identity.project_session_id != store.project_session_id
-                || path.is_none()
-            {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                    message: "project changed before Catalog snapshot".into(),
-                });
-            }
-            (
-                Arc::clone(&store.node_registry),
-                Arc::clone(&store.catalog),
-                publication.resource_revision,
-            )
-        };
-
-        let captured_generation = self.activation_generation.load(Ordering::Acquire);
-        if captured_generation != generation || captured_generation % 2 != 0 {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "project changed during Catalog snapshot".into(),
-            });
-        }
-
-        let registry_fingerprint = registry.fingerprint().to_string();
-        let localized = catalog.localize(registry.as_ref(), locale);
-
-        self.ensure_project_operational()?;
-        let final_generation = self.activation_generation.load(Ordering::Acquire);
-        let final_identity = self.activation_identity.read().unwrap();
-        if final_generation != captured_generation
-            || final_generation % 2 != 0
-            || &final_identity.project_instance_id != project_instance_id
-        {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "project changed while localizing Catalog snapshot".into(),
-            });
-        }
+        let snapshot = self.catalog_snapshot(project_instance_id)?;
+        let registry_fingerprint = snapshot.registry.fingerprint().to_string();
+        let localized = snapshot.catalog.localize_with_resources(
+            snapshot.registry.as_ref(),
+            locale,
+            &snapshot.resources,
+        );
 
         Ok(localized.into_dto(
-            project_instance_id.as_str(),
+            snapshot.project_instance_id.as_str(),
             registry_fingerprint,
-            publication_revision,
+            snapshot.resource_publication_revision,
         ))
     }
 
@@ -3786,39 +3782,32 @@ impl ProjectState {
                 store: expected_resource,
             });
         }
-        let document = self
-            .project_data
-            .read()
-            .unwrap()
-            .graphs
-            .get(graph_path)
-            .map(|resource| resource.document.clone())
-            .ok_or_else(|| MutationConflict::ResourceMismatch {
-                requested: request.resource.clone(),
-                store: ResourceKey::Graph(node_path.clone()),
-            })?;
-        if request.base_revision != document.revision {
-            return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision,
-                current_revision: document.revision,
-            });
-        }
-        let registry = {
-            let store = self.project_store.read().unwrap();
-            Arc::clone(&store.node_registry)
+        let catalog_snapshot = match &request.payload {
+            EditorGraphMutationDto::CreateNode {
+                descriptor:
+                    crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. },
+                ..
+            } => {
+                let project_instance_id = self
+                    .capture_project_session()
+                    .map_err(|error| {
+                        MutationConflict::CatalogResourceStale(error.to_string().into())
+                    })?
+                    .instance_id;
+                Some(
+                    self.catalog_mutation_validation_snapshot(&project_instance_id)
+                        .map_err(|error| {
+                            MutationConflict::CatalogResourceStale(error.to_string().into())
+                        })?,
+                )
+            }
+            _ => None,
         };
-        let patch = request
-            .payload
-            .into_patch(&node_path, &document, registry.as_ref())?;
-        let committed = self.commit_graph_patch(
-            graph_path,
-            MutationRequest::new(
-                request.resource,
-                request.base_revision,
-                request.operation_id,
-                patch,
-            ),
-        )?;
+        if catalog_snapshot.is_some() {
+            self.run_catalog_mutation_before_publication_test_hook();
+        }
+        let committed =
+            self.commit_editor_graph_mutation(graph_path, request, catalog_snapshot.as_ref())?;
         observe(&committed.delta);
         let projection_replacement = crate::event::GraphProjectionReplacementDto {
             graph_path: graph_path.as_str().to_string(),
@@ -3904,12 +3893,70 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         request: MutationRequest<GraphDocumentPatch>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
+        let MutationRequest {
+            resource,
+            base_revision,
+            operation_id,
+            payload,
+        } = request;
+        self.commit_graph_patch_planned(
+            graph_path,
+            resource,
+            base_revision,
+            operation_id,
+            None,
+            move |_, _| Ok(payload),
+        )
+    }
+
+    fn commit_editor_graph_mutation(
+        &self,
+        graph_path: &GraphResourcePath,
+        request: MutationRequest<EditorGraphMutationDto>,
+        catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
+    ) -> Result<CommittedGraphMutation, MutationConflict> {
+        let MutationRequest {
+            resource,
+            base_revision,
+            operation_id,
+            payload,
+        } = request;
+        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        self.commit_graph_patch_planned(
+            graph_path,
+            resource,
+            base_revision,
+            operation_id,
+            catalog_snapshot,
+            move |document, registry| {
+                payload.into_patch_with_catalog_snapshot(
+                    &node_path,
+                    document,
+                    registry,
+                    catalog_snapshot,
+                )
+            },
+        )
+    }
+
+    fn commit_graph_patch_planned(
+        &self,
+        graph_path: &GraphResourcePath,
+        resource: ResourceKey,
+        base_revision: ResourceRevision,
+        operation_id: OperationId,
+        catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        plan: impl FnOnce(
+            &crate::node_system::document::GraphDocument,
+            &crate::node_system::registry::NodeRegistry,
+        ) -> Result<GraphDocumentPatch, MutationConflict>,
+    ) -> Result<CommittedGraphMutation, MutationConflict> {
         self.ensure_mutation_operational()?;
         let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
         let expected_resource = ResourceKey::Graph(node_path.clone());
-        if request.resource != expected_resource {
+        if resource != expected_resource {
             return Err(MutationConflict::ResourceMismatch {
-                requested: request.resource,
+                requested: resource,
                 store: expected_resource,
             });
         }
@@ -3918,6 +3965,15 @@ impl ProjectState {
             .capture_projection_environment(&expected_session)
             .map_err(|error| MutationConflict::Projection(error.into()))?;
         let mut publication = self.mutation_publication.lock().unwrap();
+        if let Some(snapshot) = catalog_snapshot {
+            if publication.project_instance_id != snapshot.project_instance_id.as_str()
+                || publication.authority_generation() != snapshot.authority_generation
+            {
+                return Err(MutationConflict::CatalogResourceStale(
+                    "catalog authority changed before graph mutation publication".into(),
+                ));
+            }
+        }
         if publication.project_instance_id != expected_session.project_instance_id.as_str() {
             return Err(MutationConflict::Projection(
                 "stale_project_lifecycle: project changed before graph authority commit".into(),
@@ -3932,20 +3988,21 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         self.ensure_mutation_operational()?;
-        let resource =
+        let graph =
             data.graphs
                 .get(graph_path)
                 .ok_or_else(|| MutationConflict::ResourceMismatch {
                     requested: expected_resource.clone(),
                     store: expected_resource.clone(),
                 })?;
-        if resource.document.revision != request.base_revision {
+        if graph.document.revision != base_revision {
             return Err(MutationConflict::StaleRevision {
-                base_revision: request.base_revision,
-                current_revision: resource.document.revision,
+                base_revision,
+                current_revision: graph.document.revision,
             });
         }
-        let graph_kind = resource.kind;
+        let graph_kind = graph.kind;
+        let patch = plan(&graph.document, projection_environment.registry.as_ref())?;
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
@@ -3959,12 +4016,8 @@ impl ProjectState {
             BTreeMap::new(),
             BTreeMap::new(),
         );
-        let transaction = ProjectHistoryTransaction::graph(
-            request.operation_id,
-            node_path,
-            request.base_revision,
-            request.payload.clone(),
-        );
+        let transaction =
+            ProjectHistoryTransaction::graph(operation_id, node_path, base_revision, patch.clone());
         let mut history = self.history.write().unwrap();
         history
             .apply_transaction(&mut documents, transaction)
@@ -3996,10 +4049,10 @@ impl ProjectState {
                 graph_path: crate::node_system::document::GraphResourcePath(
                     graph_path.as_str().into(),
                 ),
-                from_revision: request.base_revision,
+                from_revision: base_revision,
                 to_revision,
-                caused_by: Some(request.operation_id),
-                payload: request.payload,
+                caused_by: Some(operation_id),
+                payload: patch,
             },
             projection_source,
             history,
@@ -4994,6 +5047,7 @@ impl ProjectState {
     pub fn execute_graph(
         &self,
         graph_path: &GraphResourcePath,
+        demand: &crate::node_system::plan::ExecutionDemand,
         events: &dyn crate::node_system::runtime::RunEventSink,
     ) -> Result<crate::node_system::runtime::RunResult, String> {
         self.ensure_project_operational()
@@ -5011,10 +5065,10 @@ impl ProjectState {
         self.load_function_resources(&cancellation)?;
         let compilation =
             self.get_or_compile_current(graph_path, &session_id, trace_sink.as_ref())?;
-        let plan = compilation
+        let product = compilation
             .plan
             .as_ref()
-            .map(|projection| projection.payload.clone())
+            .map(|projection| Arc::clone(&projection.payload))
             .ok_or_else(|| {
                 let codes = compilation
                     .analysis
@@ -5027,6 +5081,10 @@ impl ProjectState {
                     .join(", ");
                 format!("execution refused because graph has blocking diagnostics: {codes}")
             })?;
+        let selected = product
+            .select(demand)
+            .map_err(|error| format!("invalid_execution_demand: {error}"))?;
+        let plan = selected.plan;
         cancellation.check().map_err(|error| error.to_string())?;
         let execution = self.capture_execution_snapshot(graph_path, &compilation)?;
         let compile_resources =
@@ -5054,7 +5112,7 @@ impl ProjectState {
             self.production_relational_observer.read().unwrap().clone();
         #[cfg(test)]
         if let Some(observer) = &production_relational_observer {
-            observer.observe_plan(&plan);
+            observer.observe_plan(plan.as_ref());
         }
         #[cfg(test)]
         let mut resources =
@@ -5066,7 +5124,7 @@ impl ProjectState {
         if let Some(observer) = self.project_resource_lease_observer.read().unwrap().clone() {
             resources.set_lease_observer(observer);
         }
-        build_run_parameters(&mut compiled_parameters, &execution.document, &plan)?;
+        build_run_parameters(&mut compiled_parameters, &execution.document, plan.as_ref())?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
         #[cfg(test)]
         let production_relational_backend = production_relational_observer
@@ -5113,11 +5171,12 @@ impl ProjectState {
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
         .with_run_registry(execution.runs.as_ref())
+        .with_selection_digest(selected.selection_digest)
         .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
         .with_result_store(&execution.results)
         .with_success_finalizer(&finalize)
-        .run(&plan, cancellation)
+        .run(plan.as_ref(), cancellation)
         .map_err(|error| error.to_string())
     }
 
@@ -6574,11 +6633,13 @@ fn json_to_protocol_value(
 #[cfg(test)]
 mod run_parameter_tests {
     use super::*;
-    use crate::node_system::document::{DocumentNode, GraphDocument, NodeId, NodePosition};
-    use crate::node_system::plan::{
-        CompiledParameterHandle, ExecutionPlan, PlannedKernel, PlannedOperation,
+    use crate::node_system::document::{
+        DocumentNode, GraphDocument, NodeId, NodePosition, PortAddress,
     };
-    use crate::node_system::protocol::{NodeTypeId, ParameterKey, Value};
+    use crate::node_system::plan::{
+        CompiledParameterHandle, ExecutionPlan, GraphOutputRef, PlannedKernel, PlannedOperation,
+    };
+    use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey, Value};
     use crate::project::GraphDocumentKind;
     use std::collections::BTreeMap;
 
@@ -6881,6 +6942,10 @@ mod run_parameter_tests {
         ]));
         plan.results = Box::new([PlanResult {
             name: "adf".into(),
+            output: GraphOutputRef {
+                graph_path: plan.provenance.graph_path.clone(),
+                port: PortAddress::declared(adf_id, PortKey::new("result").unwrap()),
+            },
             value: ValueRef::new(1),
         }]);
 
@@ -7038,6 +7103,10 @@ mod run_parameter_tests {
         ]));
         plan.results = Box::new([PlanResult {
             name: "var".into(),
+            output: GraphOutputRef {
+                graph_path: plan.provenance.graph_path.clone(),
+                port: PortAddress::declared(var_id, PortKey::new("summary").unwrap()),
+            },
             value: ValueRef::new(2),
         }]);
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();

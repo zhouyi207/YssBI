@@ -77,12 +77,37 @@ pub struct LocalizedCatalogItemDto {
     pub description: Option<Box<str>>,
     pub documentation: Option<Box<str>>,
     pub category_id: Box<str>,
+    pub icon_id: Box<str>,
+    pub style_id: Box<str>,
     pub aliases: Vec<Box<str>>,
     pub technical_terms: Vec<Box<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pinyin: Option<Box<str>>,
+    pub ports: Vec<LocalizedPortDto>,
+    pub parameters: Vec<LocalizedParameterDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_path: Option<CatalogResourcePath>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_revision: Option<crate::node_system::document::ResourceRevision>,
     pub creation: NodeCreationDescriptor,
     pub search_text: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedPortDto {
+    pub key: Box<str>,
+    pub label: Box<str>,
+    pub direction: Box<str>,
+    pub kind: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalizedParameterDto {
+    pub key: Box<str>,
+    pub title: Box<str>,
+    pub description: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -245,7 +270,7 @@ impl BuiltinCatalog {
                 let title = self.text(&locale, &category.title_key);
                 LocalizedCategoryDto {
                     category_id: id.as_str().into(),
-                    search_text: search([id.as_str(), title.as_ref()]),
+                    search_text: search([title.as_ref()]),
                     title,
                 }
             })
@@ -255,7 +280,13 @@ impl BuiltinCatalog {
             .filter(|(_, node)| static_descriptor_is_eligible(&node.protocol))
             .map(|(id, node)| self.static_item(id, &node.protocol, &locale))
             .collect::<Vec<_>>();
-        items.extend(resources.iter().filter_map(|entry| {
+        let mut resources = resources.iter().collect::<Vec<_>>();
+        resources.sort_by(|left, right| {
+            left.resource_path
+                .cmp(&right.resource_path)
+                .then_with(|| left.node_type_id.as_str().cmp(right.node_type_id.as_str()))
+        });
+        items.extend(resources.into_iter().filter_map(|entry| {
             let node = registry.get(&entry.node_type_id)?;
             (!node.protocol.catalog.hidden)
                 .then(|| self.resource_item(entry, &node.protocol, &locale))
@@ -357,14 +388,9 @@ impl BuiltinCatalog {
             .unwrap_or_default();
         let technical_terms = self.technical_terms(protocol);
         let search_text = search(
-            [
-                id.as_str(),
-                protocol.catalog.category_id.as_str(),
-                title.as_ref(),
-            ]
-            .into_iter()
-            .chain(aliases.iter().map(AsRef::as_ref))
-            .chain(technical_terms.iter().map(AsRef::as_ref)),
+            [title.as_ref()]
+                .into_iter()
+                .chain(aliases.iter().map(AsRef::as_ref)),
         );
         LocalizedCatalogItemDto {
             node_type_id: id.as_str().into(),
@@ -372,9 +398,15 @@ impl BuiltinCatalog {
             description,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
+            icon_id: protocol.catalog.icon_id.as_str().into(),
+            style_id: protocol.catalog.style_id.as_str().into(),
             aliases,
             technical_terms,
             pinyin: None,
+            ports: self.localized_ports(protocol, locale),
+            parameters: self.localized_parameters(protocol, locale),
+            resource_path: None,
+            resource_revision: None,
             creation: NodeCreationDescriptor::Static {
                 node_type_id: id.clone(),
             },
@@ -388,7 +420,6 @@ impl BuiltinCatalog {
         protocol: &crate::node_system::protocol::NodeProtocol,
         locale: &str,
     ) -> LocalizedCatalogItemDto {
-        let system_title = self.text(locale, &protocol.catalog.title_key);
         let description = protocol
             .catalog
             .description_key
@@ -416,16 +447,9 @@ impl BuiltinCatalog {
             .then(|| entry.pinyin.clone())
             .flatten();
         let search_text = search(
-            [
-                entry.name.as_ref(),
-                entry.node_type_id.as_str(),
-                protocol.catalog.category_id.as_str(),
-                system_title.as_ref(),
-            ]
-            .into_iter()
-            .chain(aliases.iter().map(AsRef::as_ref))
-            .chain(technical_terms.iter().map(AsRef::as_ref))
-            .chain(pinyin.iter().map(AsRef::as_ref)),
+            [entry.name.as_ref()]
+                .into_iter()
+                .chain(aliases.iter().map(AsRef::as_ref)),
         );
         LocalizedCatalogItemDto {
             node_type_id: entry.node_type_id.as_str().into(),
@@ -433,9 +457,15 @@ impl BuiltinCatalog {
             description,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
+            icon_id: protocol.catalog.icon_id.as_str().into(),
+            style_id: protocol.catalog.style_id.as_str().into(),
             aliases,
             technical_terms,
             pinyin,
+            ports: self.localized_ports(protocol, locale),
+            parameters: self.localized_parameters(protocol, locale),
+            resource_path: Some(entry.resource_path.clone()),
+            resource_revision: Some(entry.resource_revision),
             creation: NodeCreationDescriptor::ResourceBound {
                 node_type_id: entry.node_type_id.clone(),
                 resource_path: entry.resource_path.clone(),
@@ -444,6 +474,51 @@ impl BuiltinCatalog {
             },
             search_text,
         }
+    }
+
+    fn localized_ports(
+        &self,
+        protocol: &crate::node_system::protocol::NodeProtocol,
+        locale: &str,
+    ) -> Vec<LocalizedPortDto> {
+        protocol
+            .interface
+            .ports
+            .iter()
+            .map(|port| LocalizedPortDto {
+                key: port.key.as_str().into(),
+                label: self.text(locale, &port.label_key),
+                direction: match port.direction {
+                    crate::node_system::protocol::PortDirection::Input => "input".into(),
+                    crate::node_system::protocol::PortDirection::Output => "output".into(),
+                },
+                kind: match port.kind {
+                    crate::node_system::protocol::PortKind::Data => "data".into(),
+                    crate::node_system::protocol::PortKind::Control => "control".into(),
+                    crate::node_system::protocol::PortKind::Effect => "effect".into(),
+                },
+            })
+            .collect()
+    }
+
+    fn localized_parameters(
+        &self,
+        protocol: &crate::node_system::protocol::NodeProtocol,
+        locale: &str,
+    ) -> Vec<LocalizedParameterDto> {
+        protocol
+            .parameters
+            .parameters
+            .iter()
+            .map(|parameter| LocalizedParameterDto {
+                key: parameter.key.as_str().into(),
+                title: self.text(locale, &parameter.title_key),
+                description: parameter
+                    .description_key
+                    .as_ref()
+                    .map(|key| self.text(locale, key)),
+            })
+            .collect()
     }
 
     fn technical_terms(

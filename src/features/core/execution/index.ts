@@ -34,7 +34,9 @@ export {
 } from './pinViewTarget';
 export {
   executionStatusForSourceGraph,
+  lookupPinPreview,
   lookupPinResult,
+  pinPreviewCacheKey,
   pinResultCacheKey,
   pinResultsForSourceGraph,
 } from './pinResultIndex';

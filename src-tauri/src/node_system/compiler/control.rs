@@ -6,7 +6,8 @@ use crate::node_system::plan::{
     FunctionPlanHandle, LoopCarriedBinding, OperationIndex, StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::{
-    ManagedNodeRole, NodeProtocol, ParameterKey, PortDirection, PortKind, PortMemberGroupSpec,
+    EvaluationPolicy, ManagedNodeRole, NodeProtocol, ParameterKey, PortDirection, PortKind,
+    PortMemberGroupSpec,
 };
 use crate::node_system::registry::StructuralNodeRole;
 use serde_json::Value;
@@ -393,10 +394,18 @@ impl<'a> RegionBuilder<'a> {
                 })?;
                 let arguments = self.call_argument_bindings(node_id, &target_path)?;
                 let results = self.call_result_bindings(node_id, &target_path)?;
+                let mandatory = self.nodes[&node_id].protocol.execution.evaluation
+                    == EvaluationPolicy::EagerWhenRegionEntered
+                    || self.incoming.get(&node_id).copied().unwrap_or(0) > 0
+                    || self
+                        .outgoing
+                        .keys()
+                        .any(|address| address.node_id == node_id);
                 let call = StructuredControlRegion::Call {
                     target,
                     arguments: arguments.into_boxed_slice(),
                     results: results.into_boxed_slice(),
+                    mandatory,
                 };
                 self.with_continuation(node_id, call, &["then", "completed", "exit"], stop)
             }

@@ -2,10 +2,10 @@ use super::*;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, ProjectSessionId,
 };
-use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
-    CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, Value,
+    CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::collections::BTreeMap;
@@ -108,6 +108,13 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
             .iter()
             .map(|value| PlanResult {
                 name: format!("value_{value}").into(),
+                output: GraphOutputRef {
+                    graph_path: GraphResourcePath("events/builtin-kernel-test".into()),
+                    port: PortAddress::declared(
+                        NodeId::from_uuid(uuid::Uuid::nil()),
+                        PortKey::new(format!("value_{value}")).unwrap(),
+                    ),
+                },
                 value: ValueRef::new(*value),
             })
             .collect::<Vec<_>>()

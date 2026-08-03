@@ -12,7 +12,7 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 const latestGenerationByGraph = new Map<string, number>();
 const lifecycleTokenByGraph = new Map<string, number>();

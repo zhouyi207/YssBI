@@ -4,7 +4,8 @@ import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
+import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import { RESOURCE_CATALOG_REFRESH_MESSAGE } from './editorMutationAvailability';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
 import {
@@ -13,10 +14,14 @@ import {
   type SidebarDragState,
 } from '@/features/core/dnd';
 import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
-import type {
-  CreateNodeFn,
-  VariableDropMenu,
-  VariableNodeType,
+import {
+  clientToWorldInCanvas,
+  findResourceNodeSpawnTemplate,
+  isPointInsideCanvas,
+  spawnNodeFromTemplate,
+  type CreateNodeFn,
+  type VariableDropMenu,
+  type VariableNodeType,
 } from "./canvasDrop";
 
 export type { VariableDropMenu } from "./canvasDrop";
@@ -43,9 +48,11 @@ export function useCanvasDrop({
   graphPath,
   setContextMenu,
   setPendingConnection,
+  createNode,
   enabled = true,
 }: UseCanvasDropParams) {
   const [variableDropMenu, setVariableDropMenu] = useState<VariableDropMenu | null>(null);
+  const { catalog, refresh: refreshCatalog } = useLocalizedNodeCatalog();
 
   useEffect(() => {
     if (!enabled) return;
@@ -123,7 +130,6 @@ export function useCanvasDrop({
 
   const spawnFromVariableMenu = useCallback(
     async (_menu: VariableDropMenu, _nodeType: VariableNodeType) => {
-      notifyNodeCreationUnavailable();
       setVariableDropMenu(null);
     },
     [],
@@ -140,13 +146,34 @@ export function useCanvasDrop({
   );
 
   const handleSidebarCanvasDrop = useCallback(
-    async (dragState: SidebarDragState, _event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
-      if (!canvasElementRef.current) return false;
-      if (!isGraphResourceDragState(dragState) && !isNodeTemplateDragState(dragState)) return false;
-      notifyNodeCreationUnavailable();
-      return false;
+    async (dragState: SidebarDragState, event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
+      const canvas = canvasElementRef.current;
+      if (!canvas || !graphPath || !isPointInsideCanvas(canvas, dragState.x, dragState.y)) return false;
+
+      let template = isNodeTemplateDragState(dragState) ? dragState.template : null;
+      if (isGraphResourceDragState(dragState)) {
+        if (!event.shiftKey || dragState.sidebarResource.type !== 'function') return false;
+        template = catalog
+          ? findResourceNodeSpawnTemplate(catalog.items, dragState.sidebarResource.id, 'function')
+          : null;
+        if (!template) {
+          refreshCatalog();
+          uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+          return false;
+        }
+      }
+
+      if (!template) return false;
+      const worldPosition = clientToWorldInCanvas(
+        canvas,
+        groupId,
+        graphPath,
+        dragState.x,
+        dragState.y,
+      );
+      return spawnNodeFromTemplate(template, worldPosition, { createNode });
     },
-    [canvasElementRef],
+    [canvasElementRef, catalog, createNode, graphPath, groupId, refreshCatalog],
   );
 
   useEffect(() => {

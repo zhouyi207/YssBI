@@ -59,7 +59,7 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useHistoryStore } from '@/features/core/history';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
@@ -179,6 +179,18 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       variableRevisionsFromIndex(index.variables),
     );
 
+    const databaseRows = index.databases ?? [];
+    const databasePaths = Object.fromEntries(
+      databaseRows.map((row) => [row.id, row.resourcePath]),
+    );
+    useDatabaseStore.setState((state) => ({
+      databases: Object.fromEntries(Object.entries(state.databases).map(([id, database]) => [
+        id,
+        { ...database, resourcePath: databasePaths[id] },
+      ])),
+      revisions: Object.fromEntries(databaseRows.map((row) => [row.id, row.revision])),
+    }));
+
     const graphOrder = index.graphs.map((graph) => graph.path);
 
     const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
@@ -219,7 +231,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
 /** 将后端/快照 databases 规范化并写入 store（合并已有富元数据） */
 function applyDatabasesFromRaw(raw: Record<string, unknown>): Record<string, DatabaseRecord> {
   const normalized = normalizeDatabases(raw, useDatabaseStore.getState().databases);
-  useDatabaseStore.getState().setDatabases(normalized);
+  useDatabaseStore.getState().setDatabaseSnapshot(normalized, {});
   return normalized;
 }
 
@@ -303,6 +315,7 @@ export function commitPreparedAuthoritativeProjectLoad(
   }));
   commitProjectLoadStep('database', () => useDatabaseStore.setState({
     databases: prepared.storeState.databases,
+    revisions: prepared.storeState.databaseRevisions,
   }));
   commitProjectLoadStep('variable', () => useVariableStore.setState({
     variables: prepared.storeState.variables,

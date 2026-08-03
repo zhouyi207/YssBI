@@ -34,10 +34,7 @@ export function useCanvasOverlayHandlers({
       const canvasElement = canvasElementRef.current;
       if (!canvasElement || !activeTabId) return;
 
-      if (
-        !EDITOR_MUTATION_CAPABILITIES.createStaticNodes
-        || descriptor.kind !== 'static'
-      ) {
+      if (!EDITOR_MUTATION_CAPABILITIES.catalogDescriptors) {
         notifyNodeCreationUnavailable();
         return;
       }

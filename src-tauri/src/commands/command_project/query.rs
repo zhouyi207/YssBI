@@ -106,7 +106,7 @@ mod tests {
     use crate::graph::value::{DataType, DataValue};
     use crate::node_system::document::{
         EditorGraphMutationDto, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
-        GraphRevision, MutationRequest, OperationId, ParameterValues, ResourceKey,
+        GraphRevision, MutationRequest, OperationId, ResourceKey,
     };
     use crate::node_system::protocol::NodeTypeId;
     use crate::project::{GraphResourcePath, ProjectData};
@@ -127,9 +127,10 @@ mod tests {
             GraphRevision::INITIAL,
             OperationId::new(),
             EditorGraphMutationDto::CreateNode {
-                node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+                descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+                    node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+                },
                 position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
-                parameters: ParameterValues::new(),
                 user_label: None,
             },
         )
@@ -150,6 +151,63 @@ mod tests {
                 },
             ),
         )
+    }
+
+    #[test]
+    fn project_index_projects_exact_database_authority_declarations() {
+        let state = ProjectState::new();
+        let mut data = ProjectData::new();
+        let sales_engine = crate::database::DatabaseEngine::DuckDb {
+            path: "database/project.duckdb".into(),
+            table: "sales_facts".into(),
+        };
+        data.databases.insert(
+            "sales".into(),
+            crate::database::DatabaseDecl {
+                id: "sales".into(),
+                engine: sales_engine.clone(),
+                schema_version: 7,
+                required: true,
+                name: Some("Sales warehouse".into()),
+            },
+        );
+        data.databases.insert(
+            "scratch".into(),
+            crate::database::DatabaseDecl {
+                id: "scratch".into(),
+                engine: crate::database::DatabaseEngine::InMemory {
+                    name: "scratch".into(),
+                },
+                schema_version: 2,
+                required: false,
+                name: None,
+            },
+        );
+        state.activate_project_fixture("database-index-declaration".into(), data);
+
+        let index = read_project_index_for_test(&state);
+
+        assert_eq!(index.databases.len(), 2);
+        let sales = index
+            .databases
+            .iter()
+            .find(|database| database.id == "sales")
+            .unwrap();
+        assert_eq!(sales.resource_path.as_str(), "databases/sales");
+        assert_eq!(
+            sales.revision,
+            crate::node_system::document::ResourceRevision::INITIAL
+        );
+        assert_eq!(sales.engine, sales_engine);
+        assert_eq!(sales.schema_version, 7);
+        assert!(sales.required);
+        assert_eq!(sales.name.as_deref(), Some("Sales warehouse"));
+        let scratch = index
+            .databases
+            .iter()
+            .find(|database| database.id == "scratch")
+            .unwrap();
+        assert_eq!(scratch.name, None);
     }
 
     #[test]

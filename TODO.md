@@ -462,14 +462,14 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 | Phase | 完成度 | 当前状态 |
 |---|---:|---|
 | Phase 1：身份、协议、Registry | **96%** | 稳定 ID、Node Protocol、Registry 与 opaque Function/Variable/Database resource descriptor 已冻结；严格 serde、operation identity 与 891 项基线验证已覆盖 |
-| Phase 2：GraphDocument 和事务 | **95%** | GraphDocument、revision transaction 与 session tombstone 已收敛；database writes 现复用 canonical operation ledger/receipt/event，duplicate/stale/failure 均零副作用 |
-| Phase 3：编辑器权威投影 | **88%** | Rust 投影、图加载和静态 descriptor 创建链路已完成；resource/contextual Catalog 与部分旧推导逻辑仍待后续切片移除 |
-| Phase 4：Rust 权威 History | **98%** | 变量删除、图卸载 tombstone、跨资源 rename/undo/redo 与 session reset 已通过独立审查、聚焦验证及 891 项完整 Rust 套件 |
-| Phase 5：确定性语义分析 | **97%** | 确定性语义、编译发布、snapshot canonicalization 与 capture retry 行为契约已收敛；15 个历史失败已修复，完整 Rust 套件全绿 |
-| Phase 6：无环数据执行计划 | **98%** | ExecutionPlan/RunExecutor、canonical IPC、pre-run drain 与 resource preflight 已对齐；891 项完整 Rust 套件全绿，剩余主要是缓存/超时策略增强 |
+| Phase 2：GraphDocument 和事务 | **98%** | Graph/document/resource transaction 已高度收敛；CreateNode 现仅接受 exact descriptor，snapshot/publication 双重 authority gate 与所有 rejection 零副作用已覆盖 |
+| Phase 3：编辑器权威投影 | **100%** | Exact descriptor、revisioned command snapshot、coherent database recovery 与唯一 Core lifecycle authority 已完成；identity cycle/shim 已移除，AST-resolved service boundary 与 stale command/event/graph/publication 行为通过最终审查 |
+| Phase 4：Rust 权威 History | **99%** | global/local variable durable history、presence tombstone、graph unload 与跨资源 undo/redo 已统一；absent local scope 可正确重写所属 graph 并通过 reload 验证 |
+| Phase 5：确定性语义分析 | **99%** | 类型/Schema/依赖/编译发布与 descriptor mutation validation 已收敛；immutable resource facts、scope/parameter validation 和 authority races 均有生产级覆盖 |
+| Phase 6：无环数据执行计划 | **99%** | Stable GraphOutputRef、structured specialization、bounded basis variants、canonical execution correlation 与顶层 Event Pin preview 已完成；普通运行/预览生命周期隔离、资源剪枝及前端 1137 项已覆盖，等待 fresh `pnpm verify` 与整片最终审查 |
 | Phase 7：Relational island | **95%** | Source→Rename→Limit、严格 pushdown metadata、单 island/backend/零 bridge 已通过审查和完整 Rust 套件；后续继续 Project/Filter lineage |
 | Phase 8：结构化控制与副作用 | **94%** | Branch、Loop、Call、Effect、取消、资源清理、最终化竞态及加载期 drain 已完成生产验证，并纳入 891 项完整 Rust 套件全绿覆盖 |
-| Phase 9：Catalog、搜索、可观测性 | **94%** | Static Catalog、bounded observability 与 revisioned resource descriptor 基础已完成；database discovery 使用唯一 Catalog watermark/canonical event，resource snapshot/docs 待后续任务 |
+| Phase 9：Catalog、搜索、可观测性 | **100%** | Static/resource Catalog、current-locale title+aliases search/docs、database recovery、canonical delta strict-wire 与 legacy inference audits 已完成；frontend 287、database integration 11 及 Rust focused matrix通过最终审查 |
 
 
 需要你确认的执行语义

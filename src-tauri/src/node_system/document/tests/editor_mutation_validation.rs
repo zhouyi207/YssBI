@@ -237,21 +237,351 @@ fn validation_document(ids: &[NodeId]) -> GraphDocument {
     document
 }
 
-fn create_with(parameters: ParameterValues) -> EditorGraphMutationDto {
-    EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new(NODE_TYPE).unwrap(),
-        position: NodePosition { x: 0.0, y: 0.0 },
-        parameters,
-        user_label: None,
-    }
-}
-
 fn plan(
     mutation: EditorGraphMutationDto,
     document: &GraphDocument,
     registry: &NodeRegistry,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
     mutation.into_patch(&graph_path("events/validation"), document, registry)
+}
+
+fn resource_descriptor_snapshot(
+    variable_id: crate::variable::VariableId,
+) -> crate::project::CatalogMutationValidationSnapshot {
+    use crate::node_system::catalog::CatalogResourcePath;
+    use crate::project::CatalogMutationResource;
+    use crate::variable::VariableScope;
+
+    crate::project::CatalogMutationValidationSnapshot {
+        project_instance_id: crate::project::ProjectInstanceId::from_existing("project-1".into()),
+        authority_generation: 7,
+        resources: BTreeMap::from([
+            (
+                CatalogResourcePath::new("functions/Helper.yssbi-function"),
+                CatalogMutationResource::Function {
+                    revision: ResourceRevision::new(3),
+                    signature: FunctionSignature::default(),
+                    allowed_node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+                    parameter_binding: "target".into(),
+                },
+            ),
+            (
+                CatalogResourcePath::new(format!("variables/{variable_id}")),
+                CatalogMutationResource::Variable {
+                    revision: ResourceRevision::new(4),
+                    scope: VariableScope::Event {
+                        event_path: "events/validation".into(),
+                    },
+                    allowed_node_type_ids: [
+                        NodeTypeId::new("yssbi.project.variable.get").unwrap(),
+                        NodeTypeId::new("yssbi.project.variable.set").unwrap(),
+                    ],
+                    parameter_binding: "variable".into(),
+                },
+            ),
+            (
+                CatalogResourcePath::new("databases/sales"),
+                CatalogMutationResource::Database {
+                    authority_revision: ResourceRevision::new(5),
+                    allowed_node_type_id: NodeTypeId::new("yssbi.dataframe.source.get").unwrap(),
+                    parameter_binding: "dataframe".into(),
+                },
+            ),
+        ]),
+    }
+}
+
+fn resource_create(
+    node_type_id: &str,
+    resource_path: &str,
+    resource_revision: u64,
+    create_args: crate::node_system::catalog::ResourceBoundCreateArgsDto,
+) -> EditorGraphMutationDto {
+    EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
+            node_type_id: NodeTypeId::new(node_type_id).unwrap(),
+            resource_path: crate::node_system::catalog::CatalogResourcePath::new(resource_path),
+            resource_revision: ResourceRevision::new(resource_revision),
+            create_args,
+        },
+        position: NodePosition { x: 1.0, y: 2.0 },
+        user_label: None,
+    }
+}
+
+#[test]
+fn resource_descriptor_materializes_only_function_variable_and_database_bindings() {
+    use crate::node_system::catalog::ResourceBoundCreateArgsDto;
+
+    let variable_id = crate::variable::VariableId::new();
+    let snapshot = resource_descriptor_snapshot(variable_id);
+    let registry = build_builtin_registry();
+    let document = GraphDocument::default();
+    let cases = [
+        (
+            resource_create(
+                "yssbi.project.function.call",
+                "functions/Helper.yssbi-function",
+                3,
+                ResourceBoundCreateArgsDto::Function,
+            ),
+            "target",
+            json!("functions/Helper.yssbi-function"),
+        ),
+        (
+            resource_create(
+                "yssbi.project.variable.get",
+                &format!("variables/{variable_id}"),
+                4,
+                ResourceBoundCreateArgsDto::Variable,
+            ),
+            "variable",
+            json!(format!("variables/{variable_id}")),
+        ),
+        (
+            resource_create(
+                "yssbi.dataframe.source.get",
+                "databases/sales",
+                5,
+                ResourceBoundCreateArgsDto::Database,
+            ),
+            "dataframe",
+            json!("databases/sales"),
+        ),
+    ];
+
+    for (mutation, parameter, expected) in cases {
+        let patch = mutation
+            .into_patch_with_catalog_snapshot(
+                &graph_path("events/validation"),
+                &document,
+                &registry,
+                Some(&snapshot),
+            )
+            .unwrap();
+        let GraphDocumentOperation::InsertNode { node } = &patch.operations[0] else {
+            panic!("creation must insert a node");
+        };
+        assert_eq!(node.parameters.len(), 1);
+        assert_eq!(
+            node.parameters[&ParameterKey::new(parameter).unwrap()],
+            expected
+        );
+    }
+}
+
+#[test]
+fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
+    use crate::node_system::catalog::ResourceBoundCreateArgsDto;
+
+    let variable_id = crate::variable::VariableId::new();
+    let snapshot = resource_descriptor_snapshot(variable_id);
+    let registry = build_builtin_registry();
+    let document = GraphDocument::default();
+    let invalid = [
+        resource_create(
+            "yssbi.project.variable.get",
+            "functions/Helper.yssbi-function",
+            3,
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        resource_create(
+            "yssbi.project.function.call",
+            "functions/Helper.yssbi-function",
+            3,
+            ResourceBoundCreateArgsDto::Variable,
+        ),
+        resource_create(
+            "yssbi.project.function.call",
+            "variables/not-a-variable-id",
+            3,
+            ResourceBoundCreateArgsDto::Function,
+        ),
+    ];
+    for mutation in invalid {
+        assert_eq!(
+            mutation
+                .into_patch_with_catalog_snapshot(
+                    &graph_path("events/validation"),
+                    &document,
+                    &registry,
+                    Some(&snapshot),
+                )
+                .unwrap_err()
+                .code(),
+            "catalog_descriptor_invalid"
+        );
+    }
+
+    for mutation in [
+        resource_create(
+            "yssbi.project.function.call",
+            "functions/Helper.yssbi-function",
+            2,
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        resource_create(
+            "yssbi.project.function.call",
+            "functions/Missing.yssbi-function",
+            1,
+            ResourceBoundCreateArgsDto::Function,
+        ),
+    ] {
+        assert_eq!(
+            mutation
+                .into_patch_with_catalog_snapshot(
+                    &graph_path("events/validation"),
+                    &document,
+                    &registry,
+                    Some(&snapshot),
+                )
+                .unwrap_err()
+                .code(),
+            "catalog_resource_stale"
+        );
+    }
+
+    let out_of_scope = resource_create(
+        "yssbi.project.variable.get",
+        &format!("variables/{variable_id}"),
+        4,
+        ResourceBoundCreateArgsDto::Variable,
+    )
+    .into_patch_with_catalog_snapshot(
+        &graph_path("events/other"),
+        &document,
+        &registry,
+        Some(&snapshot),
+    )
+    .unwrap_err();
+    assert_eq!(out_of_scope.code(), "catalog_descriptor_invalid");
+
+    let injected = serde_json::from_value::<EditorGraphMutationDto>(json!({
+        "type": "createNode",
+        "payload": {
+            "descriptor": {
+                "kind": "resourceBound",
+                "nodeTypeId": "yssbi.project.function.call",
+                "resourcePath": "functions/Helper.yssbi-function",
+                "resourceRevision": 3,
+                "createArgs": { "kind": "function" }
+            },
+            "position": { "x": 1.0, "y": 2.0 },
+            "userLabel": null,
+            "parameters": { "target": "functions/Injected.yssbi-function" }
+        }
+    }));
+    assert!(injected.is_err());
+}
+
+#[test]
+fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
+    use crate::node_system::catalog::ResourceBoundCreateArgsDto;
+
+    let variable_id = crate::variable::VariableId::new();
+    let snapshot = resource_descriptor_snapshot(variable_id);
+    let registry = build_builtin_registry();
+    let document = GraphDocument::default();
+    let variable = variable_id.to_string();
+    let noncanonical = [
+        (
+            "yssbi.project.function.call",
+            r"functions\Helper.yssbi-function".to_string(),
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        (
+            "yssbi.project.function.call",
+            "/functions/Helper.yssbi-function".to_string(),
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        (
+            "yssbi.project.function.call",
+            "functions//Helper.yssbi-function".to_string(),
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        (
+            "yssbi.project.function.call",
+            "events/Helper.yssbi-event".to_string(),
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        (
+            "yssbi.project.variable.get",
+            format!("variables/{}", variable.to_uppercase()),
+            ResourceBoundCreateArgsDto::Variable,
+        ),
+        (
+            "yssbi.project.variable.get",
+            format!("variables/{}", variable.replace('-', "")),
+            ResourceBoundCreateArgsDto::Variable,
+        ),
+        (
+            "yssbi.project.variable.get",
+            format!("variables//{variable}"),
+            ResourceBoundCreateArgsDto::Variable,
+        ),
+        (
+            "yssbi.project.variable.get",
+            format!(r"variables\{variable}"),
+            ResourceBoundCreateArgsDto::Variable,
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            r"databases\sales".to_string(),
+            ResourceBoundCreateArgsDto::Database,
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            "/databases/sales".to_string(),
+            ResourceBoundCreateArgsDto::Database,
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            "database/sales".to_string(),
+            ResourceBoundCreateArgsDto::Database,
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            "databases/".to_string(),
+            ResourceBoundCreateArgsDto::Database,
+        ),
+    ];
+
+    for (node_type, path, create_args) in noncanonical {
+        let error = resource_create(node_type, &path, 1, create_args)
+            .into_patch_with_catalog_snapshot(
+                &graph_path("events/validation"),
+                &document,
+                &registry,
+                Some(&snapshot),
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), "catalog_descriptor_invalid", "path: {path}");
+    }
+
+    for missing in [
+        resource_create(
+            "yssbi.project.function.call",
+            "functions/CanonicalMissing.yssbi-function",
+            1,
+            ResourceBoundCreateArgsDto::Function,
+        ),
+        resource_create(
+            "yssbi.dataframe.source.get",
+            "databases/ sales / .. # opaque ",
+            1,
+            ResourceBoundCreateArgsDto::Database,
+        ),
+    ] {
+        let error = missing
+            .into_patch_with_catalog_snapshot(
+                &graph_path("events/validation"),
+                &document,
+                &registry,
+                Some(&snapshot),
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), "catalog_resource_stale");
+    }
 }
 
 #[test]
@@ -323,68 +653,51 @@ fn derived_address(node_id: NodeId, value: u128) -> PortAddress {
 #[test]
 fn editor_mutation_validates_parameter_type_and_constraints() {
     let registry = validation_registry();
-    let document = GraphDocument::default();
+    let protocol = registry
+        .protocol(&NodeTypeId::new(NODE_TYPE).unwrap())
+        .unwrap();
+    let validate = |parameters: ParameterValues| validate_parameters(protocol, &parameters);
     let count = ParameterKey::new("count").unwrap();
     let mode = ParameterKey::new("mode").unwrap();
     let label = ParameterKey::new("label").unwrap();
 
-    assert!(plan(create_with(ParameterValues::new()), &document, &registry).is_err());
+    assert!(validate(ParameterValues::new()).is_err());
     assert!(
-        plan(
-            create_with(BTreeMap::from([(count.clone(), json!("two"))])),
-            &document,
-            &registry,
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("declared type")
+        validate(BTreeMap::from([(count.clone(), json!("two"))]))
+            .unwrap_err()
+            .to_string()
+            .contains("declared type")
     );
     assert!(
-        plan(
-            create_with(BTreeMap::from([(count.clone(), json!(4))])),
-            &document,
-            &registry,
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("constraints")
+        validate(BTreeMap::from([(count.clone(), json!(4))]))
+            .unwrap_err()
+            .to_string()
+            .contains("constraints")
     );
     assert!(
-        plan(
-            create_with(BTreeMap::from([
-                (count.clone(), json!(2)),
-                (mode.clone(), json!("gamma")),
-            ])),
-            &document,
-            &registry,
-        )
+        validate(BTreeMap::from([
+            (count.clone(), json!(2)),
+            (mode.clone(), json!("gamma")),
+        ]))
         .unwrap_err()
         .to_string()
         .contains("constraints")
     );
     assert!(
-        plan(
-            create_with(BTreeMap::from([
-                (count.clone(), json!(2)),
-                (label.clone(), json!("x")),
-            ])),
-            &document,
-            &registry,
-        )
+        validate(BTreeMap::from([
+            (count.clone(), json!(2)),
+            (label.clone(), json!("x")),
+        ]))
         .unwrap_err()
         .to_string()
         .contains("constraints")
     );
     assert!(
-        plan(
-            create_with(BTreeMap::from([
-                (count, json!(2)),
-                (mode, json!("alpha")),
-                (label, json!("good")),
-            ])),
-            &document,
-            &registry,
-        )
+        validate(BTreeMap::from([
+            (count, json!(2)),
+            (mode, json!("alpha")),
+            (label, json!("good")),
+        ]))
         .is_ok()
     );
 }

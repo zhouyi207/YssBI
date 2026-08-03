@@ -49,6 +49,7 @@ struct TraceCorrelationDto {
     registry_fingerprint: String,
     resource_versions: BTreeMap<String, String>,
     compile_id: String,
+    selection_digest: Option<Box<str>>,
     run_id: Option<String>,
     node_id: Option<String>,
     node_type_id: Option<String>,
@@ -115,6 +116,7 @@ impl From<CorrelationContext> for TraceCorrelationDto {
                 .map(|(key, version)| (key.as_str().to_owned(), version.as_str().to_owned()))
                 .collect(),
             compile_id: correlation.compile_id.get().to_string(),
+            selection_digest: correlation.selection_digest,
             run_id: correlation.run_id.map(|id| id.get().to_string()),
             node_id: correlation.node_id.map(|id| id.to_string()),
             node_type_id: correlation.node_type_id.map(|id| id.as_str().to_owned()),

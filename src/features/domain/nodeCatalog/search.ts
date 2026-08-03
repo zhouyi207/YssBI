@@ -11,13 +11,7 @@ function normalizeQuery(value: string): string {
 
 function searchableText(item: LocalizedCatalogItem): string {
   return normalizeQuery(
-    [
-      item.title,
-      ...item.aliases,
-      ...item.technicalTerms,
-      item.searchText,
-      item.pinyin ?? '',
-    ].join(' '),
+    [item.title, ...item.aliases].join(' '),
   );
 }
 

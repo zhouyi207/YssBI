@@ -1,46 +1,29 @@
 import { invoke } from '@tauri-apps/api/core';
+import {
+  isLocalizedCatalogDto,
+  type LocalizedCatalogDto,
+} from '@/shared/types/dto/localizedCatalog';
 
-export interface StaticNodeCreationDescriptorDto {
-  kind: 'static';
-  nodeTypeId: string;
-}
-
-export interface LocalizedCategoryDto {
-  categoryId: string;
-  title: string;
-  searchText: string;
-}
-
-export interface LocalizedCatalogItemDto {
-  nodeTypeId: string;
-  title: string;
-  description: string | null;
-  documentation: string | null;
-  categoryId: string;
-  aliases: string[];
-  technicalTerms: string[];
-  pinyin?: string;
-  creation: StaticNodeCreationDescriptorDto;
-  searchText: string;
-}
-
-export interface LocalizedCatalogDto {
-  projectInstanceId: string;
-  registryFingerprint: string;
-  resourcePublicationRevision: number;
-  locale: string;
-  categories: LocalizedCategoryDto[];
-  items: LocalizedCatalogItemDto[];
-}
+export type {
+  LocalizedCatalogDto,
+  LocalizedCatalogItemDto,
+  LocalizedCategoryDto,
+  LocalizedParameterDto,
+  LocalizedPortDto,
+} from '@/shared/types/dto/localizedCatalog';
 
 export class CatalogService {
   static async getLocalizedCatalog(
     projectInstanceId: string,
     locale: string,
   ): Promise<LocalizedCatalogDto> {
-    return invoke<LocalizedCatalogDto>('get_localized_node_catalog', {
+    const response: unknown = await invoke('get_localized_node_catalog', {
       projectInstanceId,
       locale,
     });
+    if (!isLocalizedCatalogDto(response)) {
+      throw new Error('Invalid localized node catalog response');
+    }
+    return response;
   }
 }

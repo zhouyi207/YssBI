@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { PinResultState } from '@/shared/types/ui';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import {
   executionStatusForSourceGraph,
+  lookupPinPreview,
   lookupPinResult,
+  pinPreviewCacheKey,
   pinResultCacheKey,
   pinResultsForSourceGraph,
 } from './pinResultIndex';
@@ -39,10 +42,54 @@ function bucket(
     recording: [],
     graphDirty: false,
     pinResults,
+    pinPreviews: new Map(),
   };
 }
 
 describe('pinResultIndex', () => {
+  it('keys previews by exact stable declared and dynamic addresses', () => {
+    const declared: PortAddressDto = {
+      kind: 'declared',
+      nodeId: 'node-1',
+      portKey: 'value',
+    };
+    const instance: PortAddressDto = {
+      kind: 'instance',
+      nodeId: 'node-1',
+      templateKey: 'value',
+      instanceId: 'instance-1',
+    };
+    const previews = new Map([
+      [pinPreviewCacheKey('events/Main.yssbi-event', declared), { port: declared }],
+      [pinPreviewCacheKey('events/Main.yssbi-event', instance), { port: instance }],
+    ]);
+
+    expect(pinPreviewCacheKey('events/Main.yssbi-event', declared)).not.toBe(
+      pinPreviewCacheKey('events/Main.yssbi-event', instance),
+    );
+    expect(lookupPinPreview(previews, 'events/Main.yssbi-event', instance)?.port).toEqual(instance);
+    expect(lookupPinPreview(previews, 'events/Other.yssbi-event', instance)).toBeUndefined();
+  });
+
+  it('distinguishes dynamic addresses by instanceId and templateKey independently', () => {
+    const base: PortAddressDto = {
+      kind: 'instance',
+      nodeId: 'node-1',
+      templateKey: 'values',
+      instanceId: 'instance-1',
+    };
+    const differentInstance: PortAddressDto = { ...base, instanceId: 'instance-2' };
+    const differentTemplate: PortAddressDto = { ...base, templateKey: 'weights' };
+
+    const keys = new Set([
+      pinPreviewCacheKey('events/Main.yssbi-event', base),
+      pinPreviewCacheKey('events/Main.yssbi-event', differentInstance),
+      pinPreviewCacheKey('events/Main.yssbi-event', differentTemplate),
+    ]);
+
+    expect(keys.size).toBe(3);
+  });
+
   it('uses composite cache keys', () => {
     expect(pinResultCacheKey('events/Main.yssbi-event', 'out-1')).toBe(
       'events/Main.yssbi-event:out-1',

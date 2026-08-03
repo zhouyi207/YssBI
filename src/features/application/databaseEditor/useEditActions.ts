@@ -8,6 +8,7 @@ import { EMPTY_EDIT_STATE } from '@/features/core/dataStore/editStateStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
+import { executeDatabaseMutation } from '@/features/application/dataManagement/databaseMutation';
 
 interface UseEditActionsParams {
   selectedDfId: string | null;
@@ -58,13 +59,17 @@ export function useEditActions({
       if (nextStr === '') parsed = null;
       else if (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '') parsed = Number(value);
       const rowId = loadedRowIds[row];
-      const es = await DatabaseService.editCell(
-        selectedDfId,
-        globalRow,
-        colName,
-        parsed,
-        rowId,
-      );
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.editCell(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          globalRow,
+          colName,
+          parsed,
+          rowId,
+        ));
       await handleEditResult(es);
     } catch (e) {
       const msg = String(e);
@@ -78,7 +83,13 @@ export function useEditActions({
   const handleUndo = useCallback(async () => {
     if (!selectedDfId || !currentEditState.canUndo) return;
     try {
-      const es = await DatabaseService.undoEdit(selectedDfId);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.undoEdit(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+        ));
       await handleEditResult(es);
     } catch (e) { logger.data.error('undo failed: ' + String(e), 'DatabaseEditorWindow'); }
   }, [selectedDfId, currentEditState.canUndo, handleEditResult]);
@@ -86,7 +97,13 @@ export function useEditActions({
   const handleRedo = useCallback(async () => {
     if (!selectedDfId || !currentEditState.canRedo) return;
     try {
-      const es = await DatabaseService.redoEdit(selectedDfId);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.redoEdit(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+        ));
       await handleEditResult(es);
     } catch (e) { logger.data.error('redo failed: ' + String(e), 'DatabaseEditorWindow'); }
   }, [selectedDfId, currentEditState.canRedo, handleEditResult]);
@@ -94,7 +111,13 @@ export function useEditActions({
   const handleSave = useCallback(async () => {
     if (!selectedDfId || !currentEditState.isModified) return;
     try {
-      const es = await DatabaseService.saveDatabaseChanges(selectedDfId);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.saveDatabaseChanges(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+        ));
       await handleEditResult(es);
       uiStore.showToast('数据已保存到项目', 'success', 3000);
     } catch (e) {
@@ -124,7 +147,14 @@ export function useEditActions({
     if (!selectedDfId) return;
     try {
       const globalIndex = index === undefined ? undefined : rowOffset + index;
-      const es = await DatabaseService.addRow(selectedDfId, globalIndex);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.addRow(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          globalIndex,
+        ));
       await handleEditResult(es);
     } catch (e) { logger.data.error('addRow failed: ' + String(e), 'DatabaseEditorWindow'); }
   }, [selectedDfId, rowOffset, handleEditResult]);
@@ -136,11 +166,15 @@ export function useEditActions({
       const rowIds = indices
         .map((index) => loadedRowIds[index])
         .filter((id): id is number => typeof id === 'number');
-      const es = await DatabaseService.deleteRows(
-        selectedDfId,
-        globalIndices,
-        rowIds.length === indices.length ? rowIds : undefined,
-      );
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.deleteRows(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          globalIndices,
+          rowIds.length === indices.length ? rowIds : undefined,
+        ));
       await handleEditResult(es);
     } catch (e) { logger.data.error('deleteRows failed: ' + String(e), 'DatabaseEditorWindow'); }
   }, [selectedDfId, rowOffset, loadedRowIds, handleEditResult]);
@@ -162,7 +196,15 @@ export function useEditActions({
     });
     if (!dtype) return;
     try {
-      const es = await DatabaseService.addColumn(selectedDfId, name, dtype);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.addColumn(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          name,
+          dtype,
+        ));
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
@@ -172,7 +214,14 @@ export function useEditActions({
   const handleDeleteColumn = useCallback(async (name: string) => {
     if (!selectedDfId) return;
     try {
-      const es = await DatabaseService.deleteColumn(selectedDfId, name);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.deleteColumn(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          name,
+        ));
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
@@ -189,7 +238,15 @@ export function useEditActions({
     });
     if (!newName || newName === oldName) return;
     try {
-      const es = await DatabaseService.renameColumn(selectedDfId, oldName, newName);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.renameColumn(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          oldName,
+          newName,
+        ));
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
@@ -199,7 +256,16 @@ export function useEditActions({
   const handleCastColumn = useCallback(async (colName: string, newDtype: string) => {
     if (!selectedDfId) return;
     try {
-      const es = await DatabaseService.castColumn(selectedDfId, colName, newDtype, false);
+      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+        DatabaseService.castColumn(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          selectedDfId,
+          colName,
+          newDtype,
+          false,
+        ));
       await handleEditResult(es);
       const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
       useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
@@ -213,7 +279,16 @@ export function useEditActions({
       });
       if (force) {
         try {
-          const es = await DatabaseService.castColumn(selectedDfId, colName, newDtype, true);
+          const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+            DatabaseService.castColumn(
+              authority.projectInstanceId,
+              authority.operationId,
+              authority.expectedRevision,
+              selectedDfId,
+              colName,
+              newDtype,
+              true,
+            ));
           await handleEditResult(es);
           const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
           useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });

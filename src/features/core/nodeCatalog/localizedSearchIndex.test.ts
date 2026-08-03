@@ -26,8 +26,12 @@ function catalog(
       description: null,
       documentation: null,
       categoryId: 'tests',
+      iconId: 'tests',
+      styleId: 'default',
       aliases: [],
       technicalTerms: [],
+      ports: [],
+      parameters: [],
       creation: { kind: 'static', nodeTypeId },
       searchText: nodeTypeId,
     }],
@@ -57,5 +61,33 @@ describe('getLocalizedSearchIndex', () => {
     const second = catalog();
 
     expect(getLocalizedSearchIndex(second)).toBe(getLocalizedSearchIndex(first));
+  });
+
+  it('indexes only current-locale item titles and aliases while preserving metadata', () => {
+    const response = catalog({ resourcePublicationRevision: 99 });
+    const item = response.items[0];
+    item.title = '当前标题';
+    item.aliases = ['current alias'];
+    item.description = 'description-only-secret';
+    item.documentation = 'documentation-only-secret';
+    item.technicalTerms = ['technical-only-secret'];
+    item.pinyin = 'pin yin secret';
+    item.searchText = 'backend-search-only-secret';
+
+    const index = getLocalizedSearchIndex(response);
+
+    expect(index.search('当前')).toEqual([item]);
+    expect(index.search('current alias')).toEqual([item]);
+    for (const excluded of [
+      'description-only-secret',
+      'documentation-only-secret',
+      'technical-only-secret',
+      item.nodeTypeId,
+      'pin yin secret',
+      'backend-search-only-secret',
+    ]) {
+      expect(index.search(excluded)).toEqual([]);
+    }
+    expect(index.response.items[0]).toBe(item);
   });
 });

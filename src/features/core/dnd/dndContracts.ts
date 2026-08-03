@@ -1,3 +1,8 @@
+import {
+  isNodeCreationDescriptor,
+  type NodeCreationDescriptor,
+} from '@/features/domain/nodeCatalog/creationDescriptor';
+
 export const DRAG_TYPES = {
   NODE_TEMPLATE: "node-template",
   GRAPH_RESOURCE: "graph-resource",
@@ -13,14 +18,10 @@ export const DROP_TYPES = {
   TABBAR: "tabbar",
 } as const;
 
-/** Sidebar / palette 拖到画布时写入节点的模板字段 */
+/** Backend-issued descriptor forwarded unchanged when a template is dropped. */
 export type NodeSpawnTemplate = {
   title?: string;
-  nodeType: string;
-  category?: string;
-  variableId?: string;
-  variableName?: string;
-  subGraphPath?: string;
+  descriptor: NodeCreationDescriptor;
 };
 
 export type GraphResourceDragData = {
@@ -112,7 +113,12 @@ function hasDragType(data: unknown, type: DragType): data is Record<string, unkn
 export function isNodeTemplateDragData(data: unknown): data is NodeTemplateDragData {
   if (!hasDragType(data, DRAG_TYPES.NODE_TEMPLATE)) return false;
   const template = data.template;
-  return isRecord(template) && typeof template.nodeType === "string";
+  if (!isRecord(template)) return false;
+  const keys = Object.keys(template);
+  return keys.every((key) => key === 'title' || key === 'descriptor')
+    && keys.includes('descriptor')
+    && (template.title === undefined || typeof template.title === 'string')
+    && isNodeCreationDescriptor(template.descriptor);
 }
 
 export function isGraphResourceDragPayload(data: unknown): data is GraphResourceDragPayload {
@@ -197,7 +203,7 @@ export function getSidebarResourceFromDragState(
 
 export function getSidebarDragOverlayLabel(state: SidebarDragState): string {
   if (state.type === DRAG_TYPES.GRAPH_RESOURCE) return state.sidebarResource.name;
-  return state.template.title ?? state.template.nodeType;
+  return state.template.title ?? state.template.descriptor.nodeTypeId;
 }
 
 export function getSpawnDragTitle(data: SidebarDragPayload): string {
@@ -205,8 +211,7 @@ export function getSpawnDragTitle(data: SidebarDragPayload): string {
   return (
     data.sidebarResource?.name
     ?? data.template.title
-    ?? data.template.variableName
-    ?? data.template.nodeType
+    ?? data.template.descriptor.nodeTypeId
   );
 }
 

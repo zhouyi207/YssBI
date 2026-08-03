@@ -16,6 +16,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const variableResourcePath = 'opaque-variable-path-from-project-index';
 const original: Variable = {
   id: '00000000-0000-0000-0000-000000000701',
   name: 'Original',
@@ -79,9 +80,50 @@ describe('variable command lifecycle guards', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useVariableStore.getState().clear();
-    useVariableStore.getState().addVariable(original.id, original);
+    useVariableStore.getState().addVariable(original.id, {
+      ...original,
+      resourcePath: variableResourcePath,
+    });
     useVariableStore.getState().setVariableRevision(original.id, 1);
     startProject('project-a');
+  });
+
+  it('does not invoke or publish when the project is replaced inside revision authority read', async () => {
+    const authority = useVariableStore.getState();
+    vi.spyOn(useVariableStore, 'getState').mockImplementationOnce(() => {
+      startProject('project-b');
+      return authority;
+    });
+    const update = vi.spyOn(VariableService, 'updateVariable').mockResolvedValue({
+      variableId: original.id,
+      variable: { ...original, name: 'Changed' },
+      result: null,
+    });
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const toast = vi.spyOn(uiStore, 'showToast');
+    const before = {
+      variables: structuredClone(authority.variables),
+      revisions: structuredClone(authority.revisions),
+    };
+
+    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toBeNull();
+
+    expect(update).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(useVariableStore.getState()).toMatchObject(before);
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it('returns without effects when variable revision authority is missing', async () => {
+    useVariableStore.getState().setVariableSnapshot({}, {});
+    const update = vi.spyOn(VariableService, 'updateVariable');
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+
+    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toBeNull();
+
+    expect(update).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(useVariableStore.getState().variables).toEqual({});
   });
 
   it('ignores a delayed update completion from the previous project without a toast', async () => {
@@ -135,10 +177,40 @@ describe('variable command lifecycle guards', () => {
     });
     const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
 
-    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toEqual(updated);
-    expect(useVariableStore.getState().variables[original.id]).toEqual(updated);
+    await expect(updateVariableAction(original.id, { name: 'Changed' })).resolves.toEqual({
+      ...updated,
+      resourcePath: variableResourcePath,
+    });
+    expect(useVariableStore.getState().variables[original.id]).toEqual({
+      ...updated,
+      resourcePath: variableResourcePath,
+    });
     expect(submit).toHaveBeenCalledTimes(2);
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(1);
+  });
+
+  it('preserves index resource metadata for a direct-first update and event echo', async () => {
+    const operationId = crypto.randomUUID();
+    const updated = { ...original, name: 'Direct changed' };
+    const result = mutation({ revision: 1, operationId, before: original, after: updated });
+    vi.spyOn(VariableService, 'updateVariable').mockResolvedValue({
+      variableId: original.id,
+      variable: updated,
+      result,
+    });
+
+    await expect(updateVariableAction(original.id, { name: updated.name })).resolves.toEqual({
+      ...updated,
+      resourcePath: variableResourcePath,
+    });
+    new ResourceMutationCommittedHandler().handle({ result });
+    await vi.waitFor(() => expect(
+      projectPublicationCoordinator.captureCommandLifecycle().publicationRevision,
+    ).toBe(1));
+    expect(useVariableStore.getState().variables[original.id]).toEqual({
+      ...updated,
+      resourcePath: variableResourcePath,
+    });
   });
 
   it('deduplicates direct-first create and event echo without a follow-up read', async () => {
@@ -200,6 +272,7 @@ describe('variable command lifecycle guards', () => {
     await projectPublicationCoordinator.submit({ result: deleteResult });
 
     expect(useVariableStore.getState().variables[original.id]).toBeUndefined();
+    expect(useVariableStore.getState().variables[original.id]?.resourcePath).toBeUndefined();
     expect(useVariableStore.getState().revisions[original.id]).toBe(3);
     expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: false });
     expect(projectPublicationCoordinator.captureCommandLifecycle().publicationRevision).toBe(3);

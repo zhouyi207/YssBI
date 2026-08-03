@@ -78,6 +78,7 @@ pub struct ProjectGraphIndexEntry {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectVariableIndexEntry {
     pub id: String,
+    pub resource_path: crate::node_system::catalog::CatalogResourcePath,
     pub revision: crate::node_system::document::ResourceRevision,
     pub name: String,
     pub data_type: crate::graph::value::DataType,
@@ -95,6 +96,10 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
     fn from(value: VariableInstance) -> Self {
         Self {
             id: value.id.to_string(),
+            resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
+                "variables/{}",
+                value.id
+            )),
             revision: crate::node_system::document::ResourceRevision::INITIAL,
             name: value.name,
             data_type: value.data_type,
@@ -107,6 +112,18 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
             owner_graph_kind: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDatabaseIndexEntry {
+    pub id: String,
+    pub resource_path: crate::node_system::catalog::CatalogResourcePath,
+    pub revision: crate::node_system::document::ResourceRevision,
+    pub engine: crate::database::DatabaseEngine,
+    pub schema_version: u32,
+    pub required: bool,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,6 +142,8 @@ pub struct ProjectIndex {
     pub worksheets: Vec<ProjectWorksheetIndexEntry>,
     #[serde(default)]
     pub variables: Vec<ProjectVariableIndexEntry>,
+    #[serde(default)]
+    pub databases: Vec<ProjectDatabaseIndexEntry>,
 }
 
 pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
@@ -329,6 +348,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         graphs,
         worksheets,
         variables,
+        databases: Vec::new(),
     })
 }
 
@@ -674,6 +694,10 @@ fn read_graph_local_variable_index_entries(
         for variable in document.local_variables.into_values() {
             entries.push(ProjectVariableIndexEntry {
                 id: variable.id.to_string(),
+                resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
+                    "variables/{}",
+                    variable.id
+                )),
                 revision: crate::node_system::document::ResourceRevision::INITIAL,
                 name: variable.name,
                 data_type: variable.data_type,

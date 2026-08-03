@@ -16,7 +16,7 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   beginGraphUnloadLifecycle,
   isGraphLifecycleCurrent,

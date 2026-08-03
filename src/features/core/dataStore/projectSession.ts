@@ -4,7 +4,7 @@ import { useProjectIOStore } from './projectIOStore';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 let reconcilePathInFlight: Promise<string | null> | null = null;
 

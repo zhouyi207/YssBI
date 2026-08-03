@@ -10,6 +10,8 @@ use crate::variable::VariableInstance;
 use polars::prelude::DataFrame;
 use std::any::Any;
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::fmt;
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -146,6 +148,9 @@ fn append_component(output: &mut String, value: &str) {
 #[derive(Clone, Default)]
 pub(crate) struct ProjectResourceLeaseObserver {
     counts: Arc<ProjectResourceLeaseCounts>,
+    validated: Arc<Mutex<Vec<Box<[CompiledResourceRequirement]>>>>,
+    acquire_attempts: Arc<Mutex<Vec<ResourceId>>>,
+    forced_unavailable: Arc<Mutex<BTreeSet<ResourceId>>>,
 }
 
 #[cfg(test)]
@@ -158,6 +163,31 @@ struct ProjectResourceLeaseCounts {
 
 #[cfg(test)]
 impl ProjectResourceLeaseObserver {
+    pub(crate) fn with_forced_unavailable(self, resource: ResourceId) -> Self {
+        self.forced_unavailable.lock().unwrap().insert(resource);
+        self
+    }
+
+    pub(crate) fn validated_requirements(&self) -> Vec<Box<[CompiledResourceRequirement]>> {
+        self.validated.lock().unwrap().clone()
+    }
+
+    pub(crate) fn acquire_attempt_ids(&self) -> Vec<ResourceId> {
+        self.acquire_attempts.lock().unwrap().clone()
+    }
+
+    fn observe_validation(&self, requirements: &[CompiledResourceRequirement]) {
+        self.validated.lock().unwrap().push(requirements.into());
+    }
+
+    fn observe_acquire_attempt(&self, resource: &ResourceId) {
+        self.acquire_attempts.lock().unwrap().push(resource.clone());
+    }
+
+    fn is_forced_unavailable(&self, resource: &ResourceId) -> bool {
+        self.forced_unavailable.lock().unwrap().contains(resource)
+    }
+
     pub(crate) fn acquired(&self) -> usize {
         self.counts.acquired.load(Ordering::SeqCst)
     }
@@ -215,6 +245,14 @@ impl ProjectResourceProvider {
     }
 
     fn snapshot_contains(&self, requirement: &CompiledResourceRequirement) -> bool {
+        #[cfg(test)]
+        if self
+            .lease_observer
+            .as_ref()
+            .is_some_and(|observer| observer.is_forced_unavailable(&requirement.resource))
+        {
+            return false;
+        }
         match requirement.kind {
             ResourceKind::DatabaseConnection => {
                 self.snapshot.databases.contains_key(&requirement.resource)
@@ -237,6 +275,10 @@ impl ResourceProvider for ProjectResourceProvider {
         provenance: &CompileProvenance,
         requirements: &[CompiledResourceRequirement],
     ) -> Result<(), ResourceError> {
+        #[cfg(test)]
+        if let Some(observer) = &self.lease_observer {
+            observer.observe_validation(requirements);
+        }
         if provenance.project_session_id != self.snapshot.project_session_id {
             return Err(ResourceError::snapshot_mismatch(format!(
                 "plan belongs to project session '{}', but resources belong to '{}'",
@@ -281,6 +323,17 @@ impl ResourceProvider for ProjectResourceProvider {
         &self,
         requirement: &CompiledResourceRequirement,
     ) -> Result<Box<dyn ResourceLease>, ResourceError> {
+        #[cfg(test)]
+        if let Some(observer) = &self.lease_observer {
+            observer.observe_acquire_attempt(&requirement.resource);
+            if observer.is_forced_unavailable(&requirement.resource) {
+                return Err(ResourceError::new(format!(
+                    "project resource '{}' is unavailable for {:?}",
+                    requirement.resource.as_str(),
+                    requirement.kind
+                )));
+            }
+        }
         if requirement.access == ResourceAccess::Exclusive
             && !self.snapshot.variables.contains_key(&requirement.resource)
         {

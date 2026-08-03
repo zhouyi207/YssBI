@@ -238,9 +238,13 @@ export function useProjectOperations() {
       const runState: GraphRunOutcomeState = { outcome: 'success' };
       useExecutionStore.getState().startExecution(graphPath);
 
-      const result = await ProjectService.executeGraphDocument(graphPath, (event) => {
-        observeGraphRunEvent(graphPath, event, runState);
-      });
+      const result = await ProjectService.executeGraphDocument(
+        graphPath,
+        { type: 'default' },
+        (event) => {
+          observeGraphRunEvent(graphPath, event, runState);
+        },
+      );
 
       finalizeExecutionRun(graphPath, recording, runState.outcome);
       logger.exec.debug(`执行 runId: ${result.runId}`);

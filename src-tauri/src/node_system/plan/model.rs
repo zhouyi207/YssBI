@@ -1,5 +1,5 @@
 use crate::node_system::analysis::CompileProvenance;
-use crate::node_system::document::{FunctionParameterId, NodeId};
+use crate::node_system::document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -75,6 +75,21 @@ impl fmt::Display for InvalidPlanId {
 }
 
 impl std::error::Error for InvalidPlanId {}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct GraphOutputRef {
+    pub graph_path: GraphResourcePath,
+    pub port: PortAddress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExecutionDemand {
+    Default,
+    Outputs {
+        outputs: Box<[GraphOutputRef]>,
+        include_default_results: bool,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionPlan {
@@ -174,6 +189,7 @@ pub enum StructuredControlRegion {
         target: FunctionPlanHandle,
         arguments: Box<[CallArgumentBinding]>,
         results: Box<[CallResultBinding]>,
+        mandatory: bool,
     },
 }
 
@@ -413,5 +429,6 @@ pub enum ResourceAccess {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanResult {
     pub name: Box<str>,
+    pub output: GraphOutputRef,
     pub value: ValueRef,
 }

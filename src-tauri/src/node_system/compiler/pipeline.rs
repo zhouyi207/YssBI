@@ -9,8 +9,11 @@ use super::dynamic_interface::{
     ValidatedInterfaceProjection, ValidatedNodeInterfaceProjection,
     materialize_dynamic_interface_with_resources,
 };
-use super::relational::{RelationalConnection, RelationalFragment, RelationalPlanner};
+use super::relational::{RelationalConnection, RelationalFragment};
 use super::schema_analysis::{SchemaAnalyzer, SchemaResolverSet};
+use super::specialization::{
+    DemandPortFact, ExecutionPlanBasis, IntermediateKernel, IntermediateOperation,
+};
 use super::type_analysis::{TypeConstraintGraph, TypeEnvironment};
 use super::{LoweredKernel, LoweringContext, NodeImplementation};
 use crate::node_system::analysis::{
@@ -26,15 +29,16 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
-    EffectDependency as PlannedEffectDependency, ExecutionPlan, FunctionPlanAbi, KernelHandle,
-    OperationIndex, PlanResult, PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation,
-    PlannedOutput, RelationalBackendId, RelationalFragmentId, RelationalSubplanIndex,
-    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueDependency, ValueRef,
+    EffectDependency as PlannedEffectDependency, ExecutionPlan, FunctionPlanAbi, GraphOutputRef,
+    KernelHandle, OperationIndex, PlanResult, PlanValueSource, PlannedInput, PlannedOutput,
+    RelationalBackendId, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
+    ValueDependency, ValueRef,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, I18nKey, InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId,
-    OutputProduction, ParameterConstraint, ParameterEditorSpec, PortDirection, PortInstances,
-    PortKind, PortSpec, TypeClassId, TypeConstructorId, TypeExpr, TypeId,
+    ConnectionsPerPort, EffectSemantics, EvaluationPolicy, I18nKey, InputConsumption,
+    LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction, ParameterConstraint,
+    ParameterEditorSpec, PortDirection, PortInstances, PortKind, PortSpec, Purity, TypeClassId,
+    TypeConstructorId, TypeExpr, TypeId,
 };
 use crate::node_system::registry::{
     NodeRegistry, ProtocolFingerprint, RegistryFingerprint, StructuralNodeRole,
@@ -169,6 +173,7 @@ pub struct CompileResult {
     pub analysis: CompilerAnalysis,
     pub interface_projection: ValidatedInterfaceProjection,
     pub semantic: Option<CompilerSemanticGraph>,
+    pub execution_basis: Option<ExecutionPlanBasis>,
     pub plan: Option<ExecutionPlan>,
     pub function_abi: Option<FunctionPlanAbi>,
 }
@@ -365,6 +370,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 analysis,
                 interface_projection,
                 semantic: None,
+                execution_basis: None,
                 plan: None,
                 function_abi: None,
             });
@@ -391,6 +397,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     analysis,
                     interface_projection,
                     semantic: None,
+                    execution_basis: None,
                     plan: None,
                     function_abi: None,
                 });
@@ -419,6 +426,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     analysis,
                     interface_projection,
                     semantic: None,
+                    execution_basis: None,
                     plan: None,
                     function_abi: None,
                 });
@@ -433,12 +441,13 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     analysis,
                     interface_projection,
                     semantic: None,
+                    execution_basis: None,
                     plan: None,
                     function_abi,
                 });
             }
         };
-        let (semantic, plan) = match lower_graph(
+        let (semantic, execution_basis, plan) = match lower_graph(
             self.registry,
             &semantic,
             &interface_projection,
@@ -446,13 +455,13 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             snapshot.provenance.clone(),
             cancellation,
         ) {
-            Ok(plan) => {
+            Ok((basis, plan)) => {
                 self.trace.record(SpanEvent::new(
                     SpanKind::Lowering,
                     SpanStatus::Succeeded,
                     correlation.clone(),
                 ));
-                (Some(semantic), Some(plan))
+                (Some(semantic), Some(basis), Some(plan))
             }
             Err(LowerGraphFailure::Cancelled(error)) => {
                 self.trace.record(SpanEvent::new(
@@ -469,13 +478,14 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Failed,
                     correlation.clone(),
                 ));
-                (None, None)
+                (None, None, None)
             }
         };
         Ok(CompileResult {
             analysis,
             interface_projection,
             semantic,
+            execution_basis,
             plan,
             function_abi,
         })
@@ -1614,6 +1624,7 @@ impl From<CompilerDiagnostic> for LowerGraphFailure {
     }
 }
 
+#[derive(Clone)]
 struct PendingOperation {
     node_id: NodeId,
     node_type_id: NodeTypeId,
@@ -1624,18 +1635,19 @@ struct PendingOperation {
     output_ports: Box<[PortAddress]>,
     outputs: Box<[PlannedOutput]>,
     parameters: CompiledParameterHandle,
+    evaluation: EvaluationPolicy,
+    purity: Purity,
+    effects: EffectSemantics,
+    resources: Box<[CompiledResourceRequirement]>,
 }
 
-enum PendingOperationGroup {
-    Native(PendingOperation),
-    Relational(RelationalSubplanIndex),
-}
-
+#[derive(Clone)]
 enum PendingKernel {
     Native(KernelHandle),
-    Relational(RelationalFragmentId),
+    Relational,
 }
 
+#[derive(Clone)]
 struct PendingRelationalFragment {
     backend: RelationalBackendId,
     fragment: RelationalFragment,
@@ -1743,7 +1755,7 @@ fn lower_graph<R: CompilerRegistry>(
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     provenance: CompileProvenance,
     cancellation: &CompileCancellationToken,
-) -> Result<ExecutionPlan, LowerGraphFailure> {
+) -> Result<(ExecutionPlanBasis, ExecutionPlan), LowerGraphFailure> {
     cancellation.checkpoint()?;
     let (next_value, port_values) = allocate_port_values(registry, graph)?;
     let mut production_by_port = BTreeMap::new();
@@ -1861,6 +1873,7 @@ fn lower_graph<R: CompilerRegistry>(
                 error.to_string(),
             )
         })?;
+        let mut owned_resources = BTreeMap::<ResourceId, CompiledResourceRequirement>::new();
         if let Some(metadata) = lowered.kernel.metadata() {
             if metadata.effect != resolved.protocol.execution.effects {
                 return Err(diagnostic(
@@ -1871,6 +1884,7 @@ fn lower_graph<R: CompilerRegistry>(
                 .into());
             }
             for requirement in &metadata.resources {
+                owned_resources.insert(requirement.resource.clone(), requirement.clone());
                 if let Some(previous) =
                     resources.insert(requirement.resource.clone(), requirement.clone())
                 {
@@ -1906,6 +1920,10 @@ fn lower_graph<R: CompilerRegistry>(
                         result.name.clone(),
                         PlanResult {
                             name: result.name.clone(),
+                            output: GraphOutputRef {
+                                graph_path: provenance.graph_path.clone(),
+                                port: result.output.clone(),
+                            },
                             value,
                         },
                     )
@@ -1956,6 +1974,7 @@ fn lower_graph<R: CompilerRegistry>(
                 access,
                 optional: false,
             };
+            owned_resources.insert(resource.clone(), requirement.clone());
             if let Some(previous) = resources.insert(resource, requirement.clone()) {
                 if previous != requirement {
                     return Err(diagnostic(
@@ -1981,7 +2000,6 @@ fn lower_graph<R: CompilerRegistry>(
             LoweredKernel::Scalar(fragment) => PendingKernel::Native(fragment.kernel),
             LoweredKernel::Kernel(fragment) => PendingKernel::Native(fragment.kernel),
             LoweredKernel::Relational(fragment) => {
-                let id = fragment.fragment.id.clone();
                 if relational_by_node
                     .insert(
                         node.node_id,
@@ -2000,7 +2018,7 @@ fn lower_graph<R: CompilerRegistry>(
                 {
                     unreachable!("one lowering result per semantic node");
                 }
-                PendingKernel::Relational(id)
+                PendingKernel::Relational
             }
         };
         pending_operations.push(PendingOperation {
@@ -2026,6 +2044,13 @@ fn lower_graph<R: CompilerRegistry>(
                 .into_boxed_slice(),
             outputs: planned_outputs.into_boxed_slice(),
             parameters: lowered.parameters,
+            evaluation: resolved.protocol.execution.evaluation,
+            purity: resolved.protocol.execution.purity,
+            effects: resolved.protocol.execution.effects,
+            resources: owned_resources
+                .into_values()
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         });
     }
 
@@ -2125,263 +2150,45 @@ fn lower_graph<R: CompilerRegistry>(
     effect_dependencies.sort_by_key(|dependency| (dependency.before, dependency.after));
     effect_dependencies.dedup();
 
-    let mut relational_fragments = Vec::new();
-    let mut relational_backend = None;
-    for pending in relational_by_node.values() {
-        if let Some(backend) = &relational_backend {
-            if backend != &pending.backend {
-                return Err(diagnostic(
-                    "compiler.relational.backend_mismatch",
-                    DiagnosticLocation::Graph,
-                    "the first relational planner supports one backend per execution plan"
-                        .to_string(),
-                )
-                .into());
-            }
-        } else {
-            relational_backend = Some(pending.backend.clone());
-        }
-        relational_fragments.push(pending.fragment.clone());
-    }
-    let (mut relational_subplans, subplan_by_fragment) = if let Some(backend) = relational_backend {
-        let planning = RelationalPlanner::new(backend)
-            .plan(&relational_fragments, &relational_connections)
-            .map_err(|error| {
-                diagnostic(
-                    "compiler.relational.planning_failed",
-                    DiagnosticLocation::Graph,
-                    error.to_string(),
-                )
-            })?;
-        let by_fragment = planning
-            .subplans
-            .iter()
-            .enumerate()
-            .flat_map(|(index, subplan)| {
-                subplan
-                    .compiled_plan
-                    .fragment_order
-                    .iter()
-                    .cloned()
-                    .map(move |fragment| (fragment, RelationalSubplanIndex::new(index as u32)))
-            })
-            .collect::<BTreeMap<_, _>>();
-        (planning.subplans, by_fragment)
-    } else {
-        (
-            Vec::new().into_boxed_slice(),
-            BTreeMap::<RelationalFragmentId, RelationalSubplanIndex>::new(),
-        )
-    };
-
-    let subplan_by_node = relational_by_node
-        .iter()
-        .map(|(node_id, pending)| {
-            subplan_by_fragment
-                .get(&pending.fragment.id)
-                .copied()
-                .map(|subplan| (*node_id, subplan))
-                .ok_or_else(|| {
-                    diagnostic(
-                        "compiler.relational.fragment_unplanned",
-                        DiagnosticLocation::Node(*node_id),
-                        pending.fragment.id.as_str().to_string(),
-                    )
-                })
-        })
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
-    let mut internal_inputs = BTreeSet::new();
-    let mut internal_outputs = BTreeSet::new();
-    let mut external_outputs = BTreeSet::new();
-    let mut internal_value_dependencies = BTreeSet::new();
-    for dependency in graph.dependencies.iter() {
-        let SemanticDependency::Value(edge) = dependency else {
-            continue;
-        };
-        let producer = subplan_by_node.get(&edge.source.node_id);
-        let consumer = subplan_by_node.get(&edge.target.node_id);
-        if producer.is_some() && producer == consumer {
-            internal_inputs.insert(edge.target.clone());
-            internal_outputs.insert(edge.source.clone());
-            internal_value_dependencies
-                .insert((port_values[&edge.source], port_values[&edge.target]));
-        } else if producer.is_some() {
-            external_outputs.insert(edge.source.clone());
-        }
-    }
-    value_dependencies.retain(|dependency| {
-        !internal_value_dependencies.contains(&(dependency.source, dependency.destination))
-    });
-
-    let result_values = results
-        .values()
-        .map(|result| result.value)
-        .collect::<BTreeSet<_>>();
-    let mut groups = BTreeMap::<RelationalSubplanIndex, Vec<PendingOperation>>::new();
-    let mut group_order = Vec::new();
-    for pending in pending_operations {
-        match &pending.kernel {
-            PendingKernel::Native(_) => group_order.push(PendingOperationGroup::Native(pending)),
-            PendingKernel::Relational(fragment) => {
-                let subplan = subplan_by_fragment.get(fragment).copied().ok_or_else(|| {
-                    diagnostic(
-                        "compiler.relational.fragment_unplanned",
-                        DiagnosticLocation::Node(pending.node_id),
-                        fragment.as_str().to_string(),
-                    )
-                })?;
-                if !groups.contains_key(&subplan) {
-                    group_order.push(PendingOperationGroup::Relational(subplan));
-                }
-                groups.entry(subplan).or_default().push(pending);
-            }
-        }
-    }
-
-    let mut operations = Vec::with_capacity(group_order.len());
-    operation_by_node.clear();
-    for group in group_order {
-        let operation_index = OperationIndex::new(operations.len() as u32);
-        match group {
-            PendingOperationGroup::Native(pending) => {
-                let PendingKernel::Native(handle) = pending.kernel else {
-                    unreachable!("native operation group")
-                };
-                operation_by_node.insert(pending.node_id, operation_index);
-                operations.push(PlannedOperation {
-                    source_node_id: pending.node_id,
-                    source_node_type_id: pending.node_type_id,
-                    kernel: PlannedKernel::Native(handle),
-                    inputs: pending.inputs,
-                    outputs: pending.outputs,
-                    params: pending.parameters,
-                });
-            }
-            PendingOperationGroup::Relational(subplan_index) => {
-                let mut members = groups
-                    .remove(&subplan_index)
-                    .expect("relational group was registered");
-                let fragment_order = &relational_subplans[subplan_index.index()]
-                    .compiled_plan
-                    .fragment_order;
-                members.sort_by_key(|pending| match &pending.kernel {
-                    PendingKernel::Relational(fragment) => fragment_order
-                        .iter()
-                        .position(|candidate| candidate == fragment)
-                        .expect("planned fragment belongs to its subplan"),
-                    PendingKernel::Native(_) => unreachable!("relational operation group"),
-                });
-                if members.len() > 1
-                    && members
-                        .iter()
-                        .any(|member| member.has_control_or_effect_ports)
-                {
-                    return Err(diagnostic(
-                        "compiler.relational.control_region_merge",
-                        DiagnosticLocation::Graph,
-                        "a relational island cannot merge multiple nodes with control or effect ports"
-                            .to_string(),
-                    )
-                    .into());
-                }
-                let representative = members
-                    .first()
-                    .expect("relational subplan has at least one fragment");
-                let source_node_id = representative.node_id;
-                let source_node_type_id = representative.node_type_id.clone();
-                let params = representative.parameters.clone();
-                let mut inputs = Vec::new();
-                let mut outputs_by_fragment = BTreeMap::new();
-                for member in &members {
-                    operation_by_node.insert(member.node_id, operation_index);
-                    for (port, input) in member.input_ports.iter().zip(member.inputs.iter()) {
-                        if !internal_inputs.contains(port) {
-                            inputs.push(input.clone());
-                        }
-                    }
-                    let PendingKernel::Relational(fragment) = &member.kernel else {
-                        unreachable!("relational operation group")
-                    };
-                    let outputs = member
-                        .output_ports
-                        .iter()
-                        .zip(member.outputs.iter())
-                        .filter(|(port, output)| {
-                            !internal_outputs.contains(*port)
-                                || external_outputs.contains(*port)
-                                || result_values.contains(&output.value)
-                        })
-                        .map(|(_, output)| output.clone())
-                        .collect::<Vec<_>>();
-                    if !outputs.is_empty() {
-                        outputs_by_fragment.insert(fragment.clone(), outputs);
-                    }
-                }
-                let fragment_roots = relational_subplans[subplan_index.index()]
-                    .compiled_plan
-                    .fragment_roots
-                    .iter()
-                    .map(|root| (root.fragment.clone(), root.operator))
-                    .collect::<BTreeMap<_, _>>();
-                let mut outputs = Vec::new();
-                let mut backend_roots = Vec::new();
-                for fragment in fragment_order {
-                    if let Some(fragment_outputs) = outputs_by_fragment.remove(fragment) {
-                        let operator = fragment_roots.get(fragment).copied().ok_or_else(|| {
-                            diagnostic(
-                                "compiler.relational.output_binding",
-                                DiagnosticLocation::Node(source_node_id),
-                                format!("missing compiled root for fragment {}", fragment.as_str()),
-                            )
-                        })?;
-                        for output in fragment_outputs {
-                            outputs.push(output);
-                            backend_roots.push(operator);
-                        }
-                    }
-                }
-                relational_subplans[subplan_index.index()]
-                    .compiled_plan
-                    .roots = backend_roots.into_boxed_slice();
-                operations.push(PlannedOperation {
-                    source_node_id,
-                    source_node_type_id,
-                    kernel: PlannedKernel::Relational(subplan_index),
-                    inputs: inputs.into_boxed_slice(),
-                    outputs: outputs.into_boxed_slice(),
-                    params,
-                });
-            }
-        }
-    }
-
-    effect_dependencies.clear();
-    for dependency in graph.dependencies.iter() {
-        let SemanticDependency::Effect(edge) = dependency else {
-            continue;
-        };
-        let Some(&before) = operation_by_node.get(&edge.predecessor) else {
-            return Err(diagnostic(
-                "compiler.plan.effect_producer_missing",
-                DiagnosticLocation::Node(edge.predecessor),
-                edge.effect_key.to_string(),
-            )
-            .into());
-        };
-        let Some(&after) = operation_by_node.get(&edge.successor) else {
-            return Err(diagnostic(
-                "compiler.plan.effect_consumer_missing",
-                DiagnosticLocation::Node(edge.successor),
-                edge.effect_key.to_string(),
-            )
-            .into());
-        };
-        effect_dependencies.push(PlannedEffectDependency { before, after });
-    }
-    effect_dependencies.sort_by_key(|dependency| (dependency.before, dependency.after));
-    effect_dependencies.dedup();
-
     cancellation.checkpoint()?;
+    let mut port_facts = BTreeMap::new();
+    let mut nodes = BTreeSet::new();
+    let mut output_results = BTreeMap::new();
+    for node in graph.nodes.iter() {
+        nodes.insert(node.node_id);
+        let resolved = resolve_for_lowering(registry, node)?;
+        for port in node.ports.iter() {
+            let spec = protocol_port(resolved.protocol, &port.address);
+            port_facts.insert(
+                port.address.clone(),
+                DemandPortFact {
+                    kind: spec.kind,
+                    direction: spec.direction,
+                },
+            );
+            if spec.kind == PortKind::Data && spec.direction == PortDirection::Output {
+                let output = GraphOutputRef {
+                    graph_path: provenance.graph_path.clone(),
+                    port: port.address.clone(),
+                };
+                output_results.insert(
+                    output.clone(),
+                    PlanResult {
+                        name: format!("requested.{}", port.address).into(),
+                        output,
+                        value: port_values[&port.address],
+                    },
+                );
+            }
+        }
+    }
+    let default_outputs = results
+        .values()
+        .map(|result| result.output.clone())
+        .collect::<BTreeSet<_>>();
+    for result in results.values() {
+        output_results.insert(result.output.clone(), result.clone());
+    }
     let control_nodes = graph
         .nodes
         .iter()
@@ -2453,33 +2260,70 @@ fn lower_graph<R: CompilerRegistry>(
     deduplicate_region_operations(&mut root_region);
     collect_control_value_sources(&root_region, &mut value_sources);
     debug_assert_eq!(provenance.basis, graph.basis);
-    let plan = ExecutionPlan {
+    let operations = pending_operations
+        .into_iter()
+        .map(|pending| {
+            let kernel = match pending.kernel {
+                PendingKernel::Native(handle) => IntermediateKernel::Native(handle),
+                PendingKernel::Relational => {
+                    let relational = relational_by_node
+                        .remove(&pending.node_id)
+                        .expect("relational lowering fact belongs to its operation");
+                    IntermediateKernel::Relational {
+                        backend: relational.backend,
+                        fragment: relational.fragment,
+                        input_bindings: relational.inputs,
+                    }
+                }
+            };
+            IntermediateOperation {
+                source_node_id: pending.node_id,
+                source_node_type_id: pending.node_type_id,
+                has_control_or_effect_ports: pending.has_control_or_effect_ports,
+                kernel,
+                input_ports: pending.input_ports,
+                inputs: pending.inputs,
+                output_ports: pending.output_ports,
+                outputs: pending.outputs,
+                params: pending.parameters,
+                evaluation: pending.evaluation,
+                purity: pending.purity,
+                effects: pending.effects,
+                resources: pending.resources,
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let basis = ExecutionPlanBasis {
         provenance,
         value_count: next_value,
-        root_region,
-        operations: operations.into_boxed_slice(),
+        operations,
         value_sources: value_sources
             .into_iter()
             .collect::<Vec<_>>()
             .into_boxed_slice(),
         value_dependencies: value_dependencies.into_boxed_slice(),
-        effect_dependencies: effect_dependencies.into_boxed_slice(),
-        relational_subplans,
-        resources: resources
-            .into_values()
+        effect_dependencies: effect_dependencies
+            .into_iter()
+            .map(|dependency| (dependency.before.index(), dependency.after.index()))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
-        results: results.into_values().collect::<Vec<_>>().into_boxed_slice(),
+        root_region,
+        relational_connections: relational_connections.into_boxed_slice(),
+        port_facts,
+        nodes,
+        output_results,
+        default_outputs,
     };
     cancellation.checkpoint()?;
-    plan.validate().map_err(|error| {
+    let plan = basis.derive_full_plan().map_err(|error| {
         diagnostic(
             "compiler.plan.invalid",
             DiagnosticLocation::Graph,
             error.to_string(),
         )
     })?;
-    Ok(plan)
+    Ok((basis, plan))
 }
 
 fn deduplicate_region_operations(region: &mut StructuredControlRegion) {

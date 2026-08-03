@@ -27,6 +27,7 @@ export interface SidebarVariableItemRow {
   rowKey: string;
   level: number;
   id: string;
+  resourcePath?: string;
   name: string;
   dataType: unknown;
   isGlobal: boolean;
@@ -37,6 +38,7 @@ export interface SidebarDatabaseItemRow {
   rowKey: string;
   level: number;
   id: string;
+  resourcePath?: string;
   name: string;
   data: unknown;
 }

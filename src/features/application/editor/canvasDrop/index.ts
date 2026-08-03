@@ -5,11 +5,13 @@ export {
   clientToWorldInCanvas,
   isPointInsideCanvas,
   resolveVariableSpawnType,
-  spawnVariableFromMenu,
-  spawnVariableNode,
 } from './variableDrop';
 export { isFunctionAvailable, isVariableAvailable } from './editorResources';
-export { spawnNodeFromTemplate, type SpawnFromTemplateContext } from './spawnFromTemplate';
+export {
+  findResourceNodeSpawnTemplate,
+  spawnNodeFromTemplate,
+  type SpawnFromTemplateContext,
+} from './spawnFromTemplate';
 export {
   canDropFunctionIntoEventGraph,
   dropFunctionCallIntoEventGraph,

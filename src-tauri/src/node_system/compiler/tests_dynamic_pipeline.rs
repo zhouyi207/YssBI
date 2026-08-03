@@ -301,6 +301,10 @@ fn full_compile_keeps_complete_projection_when_interface_diagnostics_block_lower
         .compile(&document);
 
     assert!(result.plan.is_none());
+    assert!(
+        result.execution_basis.is_none(),
+        "orphan and stale-instance diagnostics must block demand specialization"
+    );
     let interface = &result.analysis.resolved_interfaces[0];
     assert_eq!(interface.ports.len(), 3);
     assert!(interface.ports.iter().any(|port| {

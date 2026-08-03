@@ -9,12 +9,13 @@ mod pipeline;
 mod project;
 pub mod relational;
 mod schema_analysis;
+mod specialization;
 mod type_analysis;
 
 pub use coordinator::{
     CompilationSlot, CompilationTask, CompileCancellationToken, CompileCancelled,
-    CompileCoordinator, CompileProducts, PublishOutcome, PublishReport, ScheduleOutcome,
-    compilation_basis,
+    CompileCoordinator, CompileProducts, PublishOutcome, PublishReport, PublishedExecutionPlan,
+    ScheduleOutcome, SelectedExecutionPlan, compilation_basis,
 };
 pub use dynamic_interface::{
     InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,
@@ -34,7 +35,7 @@ pub use pipeline::{
 };
 
 pub type ProjectCompileCoordinator =
-    CompileCoordinator<PublishedCompileAnalysis, crate::node_system::plan::ExecutionPlan>;
+    CompileCoordinator<PublishedCompileAnalysis, std::sync::Arc<PublishedExecutionPlan>>;
 pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
@@ -43,6 +44,7 @@ pub use project::{
 pub use schema_analysis::{
     SchemaFact, SchemaResolutionContext, SchemaResolutionError, SchemaResolver, SchemaResolverSet,
 };
+pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
 #[cfg(test)]

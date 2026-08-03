@@ -12,6 +12,7 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     recording: [],
     graphDirty: false,
     pinResults: new Map(),
+    pinPreviews: new Map(),
     ...partial,
   };
 }

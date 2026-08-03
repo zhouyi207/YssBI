@@ -7,12 +7,22 @@ import type {
   ResourceMutationResultDto,
 } from '@/shared/types/dto/editorMutation';
 import type {
+  DatabaseRecord,
   FunctionSignaturePin,
   Variable,
   WorksheetDocument,
   WorksheetIndexEntry,
 } from '@/shared/types';
 import type { PreparedGraphProjectionReplacements } from '@/features/core/dataStore/graphDataStore';
+import {
+  acceptProjectLifecycleActivation,
+  captureProjectIdentity,
+  captureProjectLifecycleState,
+  clearProjectLifecycle,
+  isCurrentProjectIdentity,
+  startProjectLifecycle,
+  type ProjectIdentitySnapshot,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type { EditorTabMemento } from '@/features/core/layout/editorTabStore';
 import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
 import type { FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
@@ -108,6 +118,8 @@ export interface PreparedPublicationStoreState {
   readonly graphOrder: string[];
   readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
   readonly graphMeta: Readonly<Record<string, GraphMeta>>;
+  readonly databases: Readonly<Record<string, DatabaseRecord>>;
+  readonly databaseRevisions: Readonly<Record<string, number>>;
   readonly variables: Readonly<Record<string, Variable>>;
   readonly variableRevisions: Readonly<Record<string, number>>;
   readonly worksheetIndex: WorksheetIndexEntry[];
@@ -196,10 +208,7 @@ interface PendingPublication {
 }
 
 interface ProjectPublicationState {
-  projectInstanceId: string | null;
-  epoch: number;
   appliedRevision: number;
-  activationRevision: number;
   appliedFingerprint?: string;
   phase: 'idle' | 'applying' | 'recovering';
   pendingByRevision: Map<number, PendingPublication>;
@@ -226,10 +235,7 @@ function staleLifecycleError(): ProjectPublicationError {
 
 export class ProjectPublicationCoordinator {
   private readonly state: ProjectPublicationState = {
-    projectInstanceId: null,
-    epoch: 0,
     appliedRevision: 0,
-    activationRevision: 0,
     phase: 'idle',
     pendingByRevision: new Map(),
   };
@@ -249,9 +255,8 @@ export class ProjectPublicationCoordinator {
 
   startProject(projectInstanceId: string, appliedRevision: number): void {
     this.validateProjectStart(projectInstanceId, appliedRevision);
-    this.cancelProject();
-    this.state.projectInstanceId = projectInstanceId;
-    this.state.appliedRevision = appliedRevision;
+    startProjectLifecycle(projectInstanceId);
+    this.resetPublicationState(appliedRevision);
   }
 
   acceptProjectActivation(projectInstanceId: string, activationRevision: number): boolean {
@@ -260,29 +265,15 @@ export class ProjectPublicationCoordinator {
       || activationRevision <= 0) {
       throw protocolError('project activation identity is malformed');
     }
-    if (activationRevision < this.state.activationRevision) return false;
-    if (activationRevision === this.state.activationRevision) {
-      return this.state.projectInstanceId === projectInstanceId;
-    }
-    this.startProject(projectInstanceId, 0);
-    this.state.activationRevision = activationRevision;
+    const result = acceptProjectLifecycleActivation(projectInstanceId, activationRevision);
+    if (result === 'stale') return false;
+    if (result === 'activated') this.resetPublicationState(0);
     return true;
   }
 
-
   cancelProject(): void {
-    this.state.epoch += 1;
-    const error = staleLifecycleError();
-    for (const pending of this.state.pendingByRevision.values()) {
-      for (const waiter of pending.waiters) waiter.reject(error);
-    }
-    this.state.pendingByRevision.clear();
-    this.state.projectInstanceId = null;
-    this.state.appliedRevision = 0;
-    this.state.appliedFingerprint = undefined;
-    this.state.phase = 'idle';
-    this.activeRecoverySnapshotRevision = null;
-    this.driverInFlight = null;
+    clearProjectLifecycle();
+    this.resetPublicationState(0);
   }
 
   submit(input: ProjectPublicationSubmission): Promise<ProjectPublicationSuccess> {
@@ -335,20 +326,8 @@ export class ProjectPublicationCoordinator {
     return promise;
   }
 
-  captureApplicationLifecycle(): {
-    projectInstanceId: string | null;
-    epoch: number;
-    publicationRevision: number;
-  } {
-    return {
-      projectInstanceId: this.state.projectInstanceId,
-      epoch: this.state.epoch,
-      publicationRevision: this.state.appliedRevision,
-    };
-  }
-
-  ownsApplicationLifecycle(projectInstanceId: string | null, epoch: number): boolean {
-    return this.state.projectInstanceId === projectInstanceId && this.state.epoch === epoch;
+  capturePublicationRevision(): number {
+    return this.state.appliedRevision;
   }
 
   captureCommandLifecycle(): {
@@ -356,21 +335,10 @@ export class ProjectPublicationCoordinator {
     epoch: number;
     publicationRevision: number;
   } {
-    const lifecycle = this.captureApplicationLifecycle();
-    if (!lifecycle.projectInstanceId) throw staleLifecycleError();
-    return {
-      projectInstanceId: lifecycle.projectInstanceId,
-      epoch: lifecycle.epoch,
-      publicationRevision: lifecycle.publicationRevision,
-    };
-  }
-
-  ownsCommandLifecycle(projectInstanceId: string, epoch: number): boolean {
-    return this.ownsApplicationLifecycle(projectInstanceId, epoch);
-  }
-
-  assertCommandLifecycle(projectInstanceId: string, epoch: number): void {
-    this.assertLifecycle(projectInstanceId, epoch);
+    const identity = captureProjectIdentity();
+    const publicationRevision = this.capturePublicationRevision();
+    this.assertLifecycle(identity.projectInstanceId, identity.epoch);
+    return { ...identity, publicationRevision };
   }
 
   markProjectProjectionStale(): void {
@@ -384,9 +352,9 @@ export class ProjectPublicationCoordinator {
     phase: 'idle' | 'applying' | 'recovering';
     pendingRevisions: number[];
   } {
+    const lifecycle = captureProjectLifecycleState();
     return {
-      projectInstanceId: this.state.projectInstanceId,
-      epoch: this.state.epoch,
+      ...lifecycle,
       appliedRevision: this.state.appliedRevision,
       phase: this.state.phase,
       pendingRevisions: [...this.state.pendingByRevision.keys()].sort((a, b) => a - b),
@@ -394,8 +362,9 @@ export class ProjectPublicationCoordinator {
   }
 
   private validateSubmission(input: ProjectPublicationSubmission): ProjectPublicationError | undefined {
-    if (!this.state.projectInstanceId) return staleLifecycleError();
-    if (input.result.projectInstanceId !== this.state.projectInstanceId) return staleLifecycleError();
+    const lifecycle = captureProjectLifecycleState();
+    if (!lifecycle.projectInstanceId) return staleLifecycleError();
+    if (input.result.projectInstanceId !== lifecycle.projectInstanceId) return staleLifecycleError();
     const wireError = validateResourceMutationWireResult(input.result);
     if (wireError) return protocolError(wireError);
     const callerError = input.validate?.(input.result);
@@ -421,8 +390,21 @@ export class ProjectPublicationCoordinator {
     return new Promise((resolve, reject) => pending.waiters.push({ resolve, reject }));
   }
 
+  private resetPublicationState(appliedRevision: number): void {
+    const error = staleLifecycleError();
+    for (const pending of this.state.pendingByRevision.values()) {
+      for (const waiter of pending.waiters) waiter.reject(error);
+    }
+    this.state.pendingByRevision.clear();
+    this.state.appliedRevision = appliedRevision;
+    this.state.appliedFingerprint = undefined;
+    this.state.phase = 'idle';
+    this.activeRecoverySnapshotRevision = null;
+    this.driverInFlight = null;
+  }
+
   private ownsLifecycle(projectInstanceId: string, epoch: number): boolean {
-    return this.state.projectInstanceId === projectInstanceId && this.state.epoch === epoch;
+    return isCurrentProjectIdentity({ projectInstanceId, epoch });
   }
 
   private assertLifecycle(projectInstanceId: string, epoch: number): void {
@@ -430,21 +412,25 @@ export class ProjectPublicationCoordinator {
   }
 
   private kick(): void {
-    if (!this.state.projectInstanceId || this.driverInFlight) return;
-    const epoch = this.state.epoch;
-    const driver = this.drive(epoch);
+    if (this.driverInFlight) return;
+    let identity: ProjectIdentitySnapshot;
+    try {
+      identity = captureProjectIdentity();
+    } catch {
+      return;
+    }
+    const driver = this.drive(identity);
     this.driverInFlight = driver;
     void driver.finally(() => {
       if (this.driverInFlight !== driver) return;
       this.driverInFlight = null;
-      if (this.state.epoch === epoch) this.state.phase = 'idle';
+      if (isCurrentProjectIdentity(identity)) this.state.phase = 'idle';
       if (this.state.pendingByRevision.size > 0) this.kick();
     }).catch(() => undefined);
   }
 
-  private async drive(epoch: number): Promise<void> {
-    while (this.state.projectInstanceId && this.state.epoch === epoch
-      && this.state.pendingByRevision.size > 0) {
+  private async drive(identity: ProjectIdentitySnapshot): Promise<void> {
+    while (isCurrentProjectIdentity(identity) && this.state.pendingByRevision.size > 0) {
       const next = this.state.pendingByRevision.get(this.state.appliedRevision + 1);
       if (next && !next.requiresRecovery) {
         await this.applyPending(next);
@@ -476,10 +462,14 @@ export class ProjectPublicationCoordinator {
   }
 
   private async applyPending(pending: PendingPublication): Promise<void> {
-    if (!this.state.projectInstanceId) return;
+    let identity: ProjectIdentitySnapshot;
+    try {
+      identity = captureProjectIdentity();
+    } catch {
+      return;
+    }
     this.state.phase = 'applying';
-    const projectInstanceId = this.state.projectInstanceId;
-    const epoch = this.state.epoch;
+    const { projectInstanceId, epoch } = identity;
     try {
       const result = pending.input.result;
       const statusPaths = result.projectionStatus.status === 'complete'
@@ -523,10 +513,15 @@ export class ProjectPublicationCoordinator {
   }
 
   private async runRecovery(): Promise<void> {
-    if (!this.state.projectInstanceId || this.state.pendingByRevision.size === 0) return;
+    if (this.state.pendingByRevision.size === 0) return;
+    let identity: ProjectIdentitySnapshot;
+    try {
+      identity = captureProjectIdentity();
+    } catch {
+      return;
+    }
     const attempt = ++this.recoveryAttempt;
-    const projectInstanceId = this.state.projectInstanceId;
-    const epoch = this.state.epoch;
+    const { projectInstanceId, epoch } = identity;
     const loadedAtStart = this.dependencies.captureLoadedGraphPaths();
     const coveredAtStart = new Set(this.state.pendingByRevision.values());
     this.state.phase = 'recovering';

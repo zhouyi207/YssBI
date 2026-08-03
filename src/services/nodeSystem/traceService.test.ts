@@ -16,6 +16,7 @@ const traceRecord: TraceRecordDto = {
     registryFingerprint: 'registry-fingerprint-1',
     resourceVersions: { dataset: 'version-1' },
     compileId: '9007199254740994',
+    selectionDigest: 'demand-selection-a',
     runId: '9007199254740995',
     nodeId: null,
     nodeTypeId: null,
@@ -52,6 +53,8 @@ describe('TraceService', () => {
     await expect(
       TraceService.getRunTrace('project-instance-1', runId),
     ).resolves.toEqual([traceRecord]);
+    expect(traceRecord.correlation.compileId).toBe('9007199254740994');
+    expect(traceRecord.correlation.selectionDigest).toBe('demand-selection-a');
 
     expect(invoke).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith('get_run_trace', {

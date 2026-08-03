@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { getDocumentState, markResourceLoaded } from '@/features/core/resource';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
@@ -47,6 +48,7 @@ describe('graphProjectionCoordinator invalidation', () => {
     coordinator.resetGraphProjectionCoordinator();
     useGraphDataStore.setState({ graphEntities: {} });
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-1' });
+    startProjectLifecycle('project-instance-1');
     useDocumentStateStore.getState().clear();
   });
 
@@ -61,7 +63,11 @@ describe('graphProjectionCoordinator invalidation', () => {
     const ok = await invalidationApi()(graphPath);
 
     expect(ok).toBe(true);
-    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(graphPath, 'zh-CN');
+    expect(GraphProjectionService.hydrateGraph).toHaveBeenCalledWith(
+      'project-instance-1',
+      graphPath,
+      'zh-CN',
+    );
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
       nodes: { 'local-node': { title: 'Refreshed' } },

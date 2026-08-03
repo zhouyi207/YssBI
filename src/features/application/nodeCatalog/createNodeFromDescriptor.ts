@@ -28,9 +28,8 @@ export async function createNodeFromDescriptor(
     mutation: {
       type: 'createNode',
       payload: {
-        nodeTypeId: input.descriptor.nodeTypeId,
+        descriptor: input.descriptor,
         position: input.position,
-        parameters: {},
         userLabel: null,
       },
     },

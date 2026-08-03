@@ -27,6 +27,7 @@ function runEvent(kind: RunEvent['kind']): RunEvent {
       registryFingerprint: 'registry-1',
       resourceVersions: {},
       compileId: '9',
+      selectionDigest: 'demand-selection-a',
       runId: '41',
       nodeId: null,
       nodeTypeId: null,
@@ -65,6 +66,47 @@ describe('ProjectService execution contract', () => {
     expect(isExecutionCancelledError('EXECUTION_CANCELLED')).toBe(false);
   });
 
+  it.each([
+    {
+      name: 'declared output',
+      demand: {
+        type: 'outputs' as const,
+        outputs: [{
+          graphPath: 'events/Main.yssbi-event',
+          port: { kind: 'declared' as const, nodeId: 'node-1', portKey: 'result' },
+        }],
+        includeDefaultResults: false,
+      },
+    },
+    {
+      name: 'dynamic output instance',
+      demand: {
+        type: 'outputs' as const,
+        outputs: [{
+          graphPath: 'events/Main.yssbi-event',
+          port: {
+            kind: 'instance' as const,
+            nodeId: 'node-1',
+            templateKey: 'value',
+            instanceId: 'instance-7',
+          },
+        }],
+        includeDefaultResults: false,
+      },
+    },
+  ])('forwards the exact $name demand', async ({ demand }) => {
+    const commandError = { code: 'test_stop', message: 'stop after invoke' };
+    vi.mocked(invoke).mockRejectedValue(commandError);
+
+    const execution = ProjectService.executeGraphDocument(
+      'events/Main.yssbi-event',
+      demand,
+    );
+
+    await expect(execution).rejects.toBe(commandError);
+    expect(vi.mocked(invoke).mock.calls[0]?.[1]).toMatchObject({ demand });
+  });
+
   it('invokes execute_graph_document and drains its RunEvent channel before resolving', async () => {
     let resolveInvoke!: (result: { runId: string }) => void;
     vi.mocked(invoke).mockReturnValue(new Promise((resolve) => {
@@ -74,17 +116,19 @@ describe('ProjectService execution contract', () => {
 
     const execution = ProjectService.executeGraphDocument(
       'events/Main.yssbi-event',
+      { type: 'default' },
       (event) => received.push(event),
     );
 
     expect(invoke).toHaveBeenCalledOnce();
     const [command, args] = vi.mocked(invoke).mock.calls[0] as [
       string,
-      { graphPath: string; onEvent: Channel<RunEvent> },
+      { graphPath: string; demand: { type: 'default' }; onEvent: Channel<RunEvent> },
     ];
     expect(command).toBe('execute_graph_document');
     expect(args).toEqual({
       graphPath: 'events/Main.yssbi-event',
+      demand: { type: 'default' },
       onEvent: expect.any(Channel),
     });
 
@@ -104,6 +148,7 @@ describe('ProjectService execution contract', () => {
         registryFingerprint: 'registry-1',
         resourceVersions: {},
         compileId: '9',
+        selectionDigest: 'demand-selection-a',
         runId: '41',
         nodeId: null,
         nodeTypeId: null,
@@ -127,6 +172,7 @@ describe('ProjectService execution contract', () => {
     vi.mocked(invoke).mockResolvedValue({ runId: '41' });
     const execution = ProjectService.executeGraphDocument(
       'events/Main.yssbi-event',
+      { type: 'default' },
       () => { throw consumerError; },
     );
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
@@ -164,6 +210,7 @@ describe('ProjectService execution contract', () => {
     vi.mocked(invoke).mockRejectedValue(commandError);
     const execution = ProjectService.executeGraphDocument(
       'events/Main.yssbi-event',
+      { type: 'default' },
       () => { throw consumerError; },
     );
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
@@ -178,7 +225,10 @@ describe('ProjectService execution contract', () => {
 
   it('rejects its pending drain when HMR disposes the execution channel', async () => {
     vi.mocked(invoke).mockResolvedValue({ runId: '41' });
-    const execution = ProjectService.executeGraphDocument('events/Main.yssbi-event');
+    const execution = ProjectService.executeGraphDocument(
+      'events/Main.yssbi-event',
+      { type: 'default' },
+    );
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
       string,
       { graphPath: string; onEvent: Channel<RunEvent> },
@@ -202,6 +252,7 @@ describe('ProjectService execution contract', () => {
           registryFingerprint: 'registry-1',
           resourceVersions: {},
           compileId: '9',
+          selectionDigest: 'demand-selection-a',
           runId: '41',
           nodeId: null,
           nodeTypeId: null,
@@ -228,7 +279,10 @@ describe('ProjectService execution contract', () => {
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
-    const execution = ProjectService.executeGraphDocument('events/Main.yssbi-event');
+    const execution = ProjectService.executeGraphDocument(
+      'events/Main.yssbi-event',
+      { type: 'default' },
+    );
     disposeTrackedChannelsForHmr();
 
     await expect(execution).rejects.toBe(commandError);
@@ -245,6 +299,7 @@ describe('ProjectService execution contract', () => {
 
     const execution = ProjectService.executeGraphDocument(
       'events/Main.yssbi-event',
+      { type: 'default' },
       (event) => received.push(event),
     );
     const [, args] = vi.mocked(invoke).mock.calls[0] as [
@@ -267,6 +322,7 @@ describe('ProjectService execution contract', () => {
         registryFingerprint: 'registry-1',
         resourceVersions: {},
         compileId: '9',
+        selectionDigest: 'demand-selection-a',
         runId: '41',
         nodeId: null,
         nodeTypeId: null,

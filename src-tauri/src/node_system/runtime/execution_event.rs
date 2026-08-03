@@ -1,6 +1,7 @@
 use super::{ResultSourceId, RunError};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext};
 use crate::node_system::document::GraphRevision;
+use crate::node_system::plan::GraphOutputRef;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +40,10 @@ pub enum RunEventKind {
     },
     ResultReady {
         name: Box<str>,
+        source_id: ResultSourceId,
+    },
+    OutputReady {
+        output: GraphOutputRef,
         source_id: ResultSourceId,
     },
 }
@@ -134,6 +139,7 @@ mod tests {
             registry_fingerprint: basis.registry_fingerprint.clone(),
             resource_versions: basis.resource_versions.clone(),
             compile_id: CompileId::new(14),
+            selection_digest: None,
             run_id: Some(RunId::new(15)),
             node_id: None,
             node_type_id: None,

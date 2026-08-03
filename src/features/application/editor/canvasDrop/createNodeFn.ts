@@ -1,7 +1,6 @@
-import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 
 export type CreateNodeFn = (
-  nodeType: string,
+  descriptor: NodeCreationDescriptor,
   position: { x: number; y: number },
-  params?: NodeSpawnParams,
-) => Promise<{ nodeId: string; pinIds: string[] } | undefined>;
+) => Promise<boolean>;

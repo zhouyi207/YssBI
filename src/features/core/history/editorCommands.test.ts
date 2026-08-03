@@ -11,7 +11,8 @@ const executeEditorMutation = vi.hoisted(() => vi.fn());
 vi.mock('@/features/application/editorMutation/editorMutationCoordinator', () => ({
   executeEditorMutation,
 }));
-vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', () => ({
+vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
   currentProjectionLocale: () => 'en-US',
   hydrateGraphProjection: vi.fn(async () => true),
 }));

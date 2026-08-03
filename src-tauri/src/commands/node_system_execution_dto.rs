@@ -1,12 +1,97 @@
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, ResourceVersionSet};
-use crate::node_system::document::GraphRevision;
+use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddressDto};
+use crate::node_system::plan::{ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{
     ArtifactSnapshotKind, ResultSourceDescriptor, ResultSourcePage, RunErrorCode, RunEvent,
     RunEventKind,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphOutputRefDto {
+    graph_path: String,
+    port: PortAddressDto,
+}
+
+impl From<GraphOutputRef> for GraphOutputRefDto {
+    fn from(output: GraphOutputRef) -> Self {
+        Self {
+            graph_path: output.graph_path.0.into(),
+            port: output.port.into(),
+        }
+    }
+}
+
+impl TryFrom<GraphOutputRefDto> for GraphOutputRef {
+    type Error = String;
+
+    fn try_from(output: GraphOutputRefDto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            graph_path: GraphResourcePath(output.graph_path.into()),
+            port: output.port.try_into()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ExecutionDemandDto {
+    Default {},
+    Outputs {
+        outputs: Box<[GraphOutputRefDto]>,
+        include_default_results: bool,
+    },
+}
+
+impl TryFrom<ExecutionDemandDto> for ExecutionDemand {
+    type Error = String;
+
+    fn try_from(demand: ExecutionDemandDto) -> Result<Self, Self::Error> {
+        match demand {
+            ExecutionDemandDto::Default {} => Ok(Self::Default),
+            ExecutionDemandDto::Outputs {
+                outputs,
+                include_default_results,
+            } => Ok(Self::Outputs {
+                outputs: outputs
+                    .into_vec()
+                    .into_iter()
+                    .map(GraphOutputRef::try_from)
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_boxed_slice(),
+                include_default_results,
+            }),
+        }
+    }
+}
+
+impl From<ExecutionDemand> for ExecutionDemandDto {
+    fn from(demand: ExecutionDemand) -> Self {
+        match demand {
+            ExecutionDemand::Default => Self::Default {},
+            ExecutionDemand::Outputs {
+                outputs,
+                include_default_results,
+            } => Self::Outputs {
+                outputs: outputs
+                    .into_vec()
+                    .into_iter()
+                    .map(GraphOutputRefDto::from)
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                include_default_results,
+            },
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +120,7 @@ pub(crate) struct RunCorrelationDto {
     registry_fingerprint: String,
     resource_versions: BTreeMap<String, String>,
     compile_id: String,
+    selection_digest: Option<Box<str>>,
     run_id: Option<String>,
     node_id: Option<String>,
     node_type_id: Option<String>,
@@ -50,6 +136,7 @@ impl From<CorrelationContext> for RunCorrelationDto {
             registry_fingerprint: correlation.registry_fingerprint.to_hex(),
             resource_versions: resource_versions(correlation.resource_versions),
             compile_id: correlation.compile_id.get().to_string(),
+            selection_digest: correlation.selection_digest,
             run_id: correlation.run_id.map(|id| id.get().to_string()),
             node_id: correlation.node_id.map(|id| id.to_string()),
             node_type_id: correlation.node_type_id.map(|id| id.as_str().to_owned()),
@@ -97,6 +184,11 @@ pub(crate) enum RunEventKindDto {
         #[serde(rename = "sourceId")]
         source_id: String,
     },
+    OutputReady {
+        output: GraphOutputRefDto,
+        #[serde(rename = "sourceId")]
+        source_id: String,
+    },
 }
 
 impl From<RunEventKind> for RunEventKindDto {
@@ -138,6 +230,10 @@ impl From<RunEventKind> for RunEventKindDto {
             },
             RunEventKind::ResultReady { name, source_id } => Self::ResultReady {
                 name,
+                source_id: source_id.get().to_string(),
+            },
+            RunEventKind::OutputReady { output, source_id } => Self::OutputReady {
+                output: output.into(),
                 source_id: source_id.get().to_string(),
             },
         }
@@ -215,4 +311,157 @@ fn resource_versions(versions: ResourceVersionSet) -> BTreeMap<String, String> {
         .into_iter()
         .map(|(key, version)| (key.as_str().to_owned(), version.as_str().to_owned()))
         .collect()
+}
+
+#[cfg(test)]
+mod execution_demand_tests {
+    use super::*;
+    use crate::node_system::document::{PortAddress, PortAddressDto, PortRef};
+    use crate::node_system::plan::ExecutionDemand;
+    use serde_json::{Value, json};
+
+    const NODE_ID: &str = "00000000-0000-0000-0000-000000000001";
+    const INSTANCE_ID: &str = "00000000-0000-0000-0000-000000000002";
+
+    fn decode(value: Value) -> ExecutionDemand {
+        serde_json::from_value::<ExecutionDemandDto>(value)
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    #[test]
+    fn execution_demand_default_is_strict_and_has_no_compiler_local_identity() {
+        assert_eq!(
+            decode(json!({ "type": "default" })),
+            ExecutionDemand::Default
+        );
+
+        for invalid in [
+            json!({}),
+            json!({ "type": "unknown" }),
+            json!({ "type": "default", "outputs": [] }),
+            json!({ "type": "default", "valueIndex": 0 }),
+            json!({ "type": "default", "operationIndex": 0 }),
+        ] {
+            assert!(serde_json::from_value::<ExecutionDemandDto>(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn execution_demand_outputs_round_trip_declared_instance_empty_and_duplicate_order() {
+        let declared = json!({
+            "graphPath": "events/Main.yssbi-event",
+            "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
+        });
+        let instance = json!({
+            "graphPath": "events/Main.yssbi-event",
+            "port": {
+                "kind": "instance",
+                "nodeId": NODE_ID,
+                "templateKey": "results",
+                "instanceId": INSTANCE_ID
+            }
+        });
+        let wire = json!({
+            "type": "outputs",
+            "outputs": [declared.clone(), instance.clone(), declared],
+            "includeDefaultResults": true
+        });
+
+        let demand = decode(wire.clone());
+        let ExecutionDemand::Outputs {
+            outputs,
+            include_default_results,
+        } = &demand
+        else {
+            panic!("expected output demand");
+        };
+        assert!(include_default_results);
+        assert_eq!(outputs.len(), 3);
+        assert_eq!(outputs[0], outputs[2]);
+        assert!(matches!(outputs[0].port.port, PortRef::Declared { .. }));
+        assert!(matches!(outputs[1].port.port, PortRef::Instance { .. }));
+
+        let encoded = ExecutionDemandDto::from(demand);
+        assert_eq!(serde_json::to_value(encoded).unwrap(), wire);
+        assert_eq!(
+            decode(json!({
+                "type": "outputs",
+                "outputs": [],
+                "includeDefaultResults": false
+            })),
+            ExecutionDemand::Outputs {
+                outputs: Box::new([]),
+                include_default_results: false,
+            }
+        );
+    }
+
+    #[test]
+    fn execution_demand_outputs_reject_missing_extra_and_compiler_local_fields() {
+        for invalid in [
+            json!({ "type": "outputs", "includeDefaultResults": false }),
+            json!({ "type": "outputs", "outputs": [] }),
+            json!({
+                "type": "outputs",
+                "outputs": [],
+                "includeDefaultResults": false,
+                "extra": true
+            }),
+            json!({
+                "type": "outputs",
+                "outputs": [{
+                    "graphPath": "events/Main.yssbi-event",
+                    "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" },
+                    "valueIndex": 1
+                }],
+                "includeDefaultResults": false
+            }),
+            json!({
+                "type": "outputs",
+                "outputs": [{
+                    "graphPath": "events/Main.yssbi-event",
+                    "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" },
+                    "operationIndex": 1
+                }],
+                "includeDefaultResults": false
+            }),
+        ] {
+            assert!(serde_json::from_value::<ExecutionDemandDto>(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn output_ready_serializes_only_stable_output_and_source_id() {
+        let output = GraphOutputRefDto {
+            graph_path: "events/Main.yssbi-event".into(),
+            port: PortAddressDto::from(PortAddress::declared(
+                crate::node_system::document::NodeId::from_uuid(
+                    uuid::Uuid::parse_str(NODE_ID).unwrap(),
+                ),
+                crate::node_system::protocol::PortKey::new("result").unwrap(),
+            )),
+        };
+        let wire = serde_json::to_value(RunEventKindDto::OutputReady {
+            output,
+            source_id: "42".into(),
+        })
+        .unwrap();
+
+        assert_eq!(
+            wire,
+            json!({
+                "type": "outputReady",
+                "output": {
+                    "graphPath": "events/Main.yssbi-event",
+                    "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
+                },
+                "sourceId": "42"
+            })
+        );
+        assert!(wire.get("valueIndex").is_none());
+        assert!(wire.get("operationIndex").is_none());
+        assert!(wire.get("name").is_none());
+    }
 }

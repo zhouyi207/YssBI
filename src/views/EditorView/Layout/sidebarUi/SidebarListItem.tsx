@@ -18,6 +18,8 @@ export function SidebarListItem({
   onClick,
   onDoubleClick,
   onContextMenu,
+  dragDisabledReason,
+  onDisabledDragAttempt,
 }: {
   id: string;
   dragData?: SidebarDragPayload | null;
@@ -29,6 +31,8 @@ export function SidebarListItem({
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  dragDisabledReason?: string;
+  onDisabledDragAttempt?: () => void;
 }) {
   return (
     <SidebarDraggableItem
@@ -37,6 +41,8 @@ export function SidebarListItem({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      dragDisabledReason={dragDisabledReason}
+      onDisabledDragAttempt={onDisabledDragAttempt}
       className={sidebarItemRowClass(isSelected)}
       style={sidebarItemIndent(indentDepth)}
     >

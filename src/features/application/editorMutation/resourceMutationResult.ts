@@ -5,11 +5,17 @@ import {
   type GraphEntityBucket,
 } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
+import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 
 import { areResourceDeltasValid } from '@/features/core/sync/utils/resourceMutationWireValidator';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
+import {
+  normalizeDatabaseRecord,
+  type DatabaseDocumentDto,
+  type DatabaseRecord,
+} from '@/shared/types/dto/database';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
 import type {
@@ -97,6 +103,15 @@ function validateWorksheetDeltas(value: unknown): string | undefined {
 
 function sameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function variableDocument(variable: Variable): Omit<Variable, 'resourcePath'> {
+  const { resourcePath: _projectionMetadata, ...document } = variable;
+  return document;
+}
+
+function sameVariableDocument(left: Variable, right: Variable): boolean {
+  return sameValue(variableDocument(left), variableDocument(right));
 }
 
 function canonicalize(value: unknown): unknown {
@@ -301,14 +316,20 @@ function prepareVariableInstalls(deltas: ResourceDeltaDto[]): PreparedVariableDe
       : normalizeVariableFromBackend(
         patch.before as Parameters<typeof normalizeVariableFromBackend>[0],
       );
-    const after = patch.after == null
+    const normalizedAfter = patch.after == null
       ? null
       : normalizeVariableFromBackend(
         patch.after as Parameters<typeof normalizeVariableFromBackend>[0],
       );
+    const after = normalizedAfter == null
+      ? null
+      : {
+          ...variableDocument(normalizedAfter),
+          ...(current?.resourcePath ? { resourcePath: current.resourcePath } : {}),
+        };
     if ((before === null) !== (current === null)
       || (revisions[id] ?? 0) !== delta.fromRevision
-      || (before && current && !sameValue(before, current))
+      || (before && current && !sameVariableDocument(before, current))
       || (before && before.id !== id)
       || (after && after.id !== id)) {
       throw new Error(`variable delta for '${delta.resource.key}' is inconsistent`);
@@ -322,6 +343,59 @@ function prepareVariableInstalls(deltas: ResourceDeltaDto[]): PreparedVariableDe
     });
   }
   return installs;
+}
+
+function databaseDocumentMatches(
+  current: DatabaseRecord,
+  expected: DatabaseDocumentDto,
+): boolean {
+  return current.id === expected.id
+    && sameValue(current.engine, expected.engine)
+    && current.schemaVersion === expected.schemaVersion
+    && current.required === expected.required
+    && (expected.name === null || current.name === expected.name);
+}
+
+function applyDatabaseDeltasToAggregate(
+  aggregate: PublicationAggregate,
+  deltas: readonly ResourceDeltaDto[],
+): void {
+  for (const delta of deltas) {
+    if (delta.resource.kind !== 'database' || delta.payload.kind !== 'database') continue;
+    const { before, after } = delta.payload.patch;
+    const id = before?.id ?? after?.id;
+    if (!id) throw new Error('database delta omitted its document identity');
+    const current = aggregate.databases[id] ?? null;
+    if ((before === null) !== (current === null)
+      || (aggregate.databaseRevisions[id] ?? 0) !== delta.fromRevision
+      || (before && current && !databaseDocumentMatches(current, before))) {
+      throw new Error(`database delta for '${delta.resource.key}' is inconsistent`);
+    }
+    if (after) {
+      aggregate.databases[id] = {
+        ...normalizeDatabaseRecord(id, after, current ?? undefined),
+        resourcePath: delta.resource.key,
+      };
+      aggregate.databaseRevisions[id] = delta.toRevision;
+      const key = resourceKey({ id, kind: 'database' });
+      const previous = aggregate.resources[key];
+      aggregate.resources[key] = {
+        id,
+        kind: 'database',
+        name: aggregate.databases[id].name,
+        uri: key,
+        exists: true,
+        loaded: true,
+        hasDirtyDocument: previous?.hasDirtyDocument ?? false,
+        hasStaleDocument: previous?.hasStaleDocument ?? false,
+        hasConflictDocument: previous?.hasConflictDocument ?? false,
+      };
+    } else {
+      delete aggregate.databases[id];
+      delete aggregate.databaseRevisions[id];
+      delete aggregate.resources[resourceKey({ id, kind: 'database' })];
+    }
+  }
 }
 
 function validateMoveCorrelation(result: ResourceMutationResultDto): void {
@@ -372,6 +446,8 @@ function createPublicationAggregate(graphEntities: PreparedProjectPublication['g
     graphOrder: [...useResourceStore.getState().graphOrder],
     documents: structuredClone(useDocumentStateStore.getState().documents) as Record<ResourceKey, DocumentState>,
     graphMeta: structuredClone(useGraphMetaStore.getState().graphs),
+    databases: structuredClone(useDatabaseStore.getState().databases),
+    databaseRevisions: structuredClone(useDatabaseStore.getState().revisions),
     variables: structuredClone(useVariableStore.getState().variables),
     variableRevisions: structuredClone(useVariableStore.getState().revisions),
     worksheetIndex: structuredClone(worksheet.index),
@@ -688,6 +764,7 @@ export function prepareSynchronousPublicationCommit(
       delete aggregate.resources[`yssbi://variable/${install.id}`];
     }
   }
+  applyDatabaseDeltasToAggregate(aggregate, result.deltas);
   const worksheetInstalls = applyWorksheetDeltasToAggregate(
     aggregate,
     result.worksheetDeltas ?? [],
@@ -721,6 +798,8 @@ export function prepareSynchronousPublicationCommit(
       graphOrder: aggregate.graphOrder,
       documents: aggregate.documents,
       graphMeta: aggregate.graphMeta,
+      databases: aggregate.databases,
+      databaseRevisions: aggregate.databaseRevisions,
       variables: aggregate.variables,
       variableRevisions: aggregate.variableRevisions,
       worksheetIndex: aggregate.worksheetIndex,
@@ -741,6 +820,10 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
   });
   useDocumentStateStore.setState({ documents: plan.storeState.documents });
   useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
+  useDatabaseStore.setState({
+    databases: plan.storeState.databases,
+    revisions: plan.storeState.databaseRevisions,
+  });
   useVariableStore.setState({
     variables: plan.storeState.variables,
     revisions: plan.storeState.variableRevisions,

@@ -3,9 +3,13 @@ use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
     ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink, TraceValue,
 };
-use crate::node_system::document::{FunctionParameterId, GraphResourcePath, GraphRevision, NodeId};
+use crate::node_system::document::{
+    FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
+};
 use crate::node_system::plan::*;
-use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction, Value};
+use crate::node_system::protocol::{
+    InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+};
 use crate::node_system::registry::RegistryFingerprint;
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -16,6 +20,16 @@ use std::time::Duration;
 
 fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
     constructor(value.into()).unwrap()
+}
+
+fn stable_output(port_key: &str) -> GraphOutputRef {
+    GraphOutputRef {
+        graph_path: GraphResourcePath("events/test".into()),
+        port: PortAddress::declared(
+            NodeId::from_uuid(uuid::Uuid::nil()),
+            PortKey::new(port_key).unwrap(),
+        ),
+    }
 }
 
 fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation {
@@ -138,11 +152,10 @@ fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert!(
-        events
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
-    );
+    assert!(events.iter().all(|event| !matches!(
+        event.kind,
+        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
+    )));
 }
 
 struct NoFunctions;
@@ -298,6 +311,7 @@ fn executes_sequence_deterministically() {
     }]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(1),
     }]);
 
@@ -310,6 +324,57 @@ fn executes_sequence_deterministically() {
         result.values["result"],
         RuntimeValue::from(Value::Integer(2))
     );
+}
+
+#[test]
+fn stable_output_ready_is_published_before_completion() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("value", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+        )
+        .unwrap();
+    let output = stable_output("value");
+    let mut execution_plan = plan(
+        vec![operation("value", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "value".into(),
+        output: output.clone(),
+        value: ValueRef::new(0),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    let recorded = events.0.lock().unwrap();
+    let output_index = recorded
+        .iter()
+        .position(|event| {
+            matches!(
+                &event.kind,
+                RunEventKind::OutputReady {
+                    output: emitted,
+                    ..
+                } if emitted == &output
+            )
+        })
+        .expect("stable output event must be published");
+    let completion_index = recorded
+        .iter()
+        .position(|event| event.kind == RunEventKind::RunCompleted)
+        .expect("run completion must be published");
+    assert!(output_index < completion_index);
 }
 
 #[test]
@@ -568,6 +633,7 @@ fn nested_call_spans_record_the_parent_call_and_callee_compile() {
             target: id("functions/callee", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
     caller.provenance.compile_id = CompileId::new(11);
@@ -656,6 +722,7 @@ fn loop_carries_values_through_fresh_activations() {
     ]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(4),
     }]);
 
@@ -777,6 +844,7 @@ fn call_missing_caller_value_does_not_acquire_callee_resources() {
                 callee_destination: ValueRef::new(0),
             }]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
     let resources = no_resources();
@@ -833,12 +901,14 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
                     callee_source: ValueRef::new(3),
                     caller_destination: ValueRef::new(0),
                 }]),
+                mandatory: true,
             })),
         ])),
     );
     caller.value_sources = Box::new([PlanValueSource::ControlProduced(ValueRef::new(0))]);
     caller.results = Box::new([PlanResult {
         name: "answer".into(),
+        output: stable_output("answer"),
         value: ValueRef::new(0),
     }]);
 
@@ -892,6 +962,7 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
             target: id("functions/callee", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
 
@@ -1023,6 +1094,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
                     target: id("functions/callee", FunctionPlanHandle::new),
                     arguments: arguments.into_boxed_slice(),
                     results: results.into_boxed_slice(),
+                    mandatory: true,
                 })),
             ])),
         );
@@ -1108,6 +1180,7 @@ fn call_preflight_allows_reusing_one_caller_source_for_distinct_parameters() {
                     },
                 ]),
                 results: Box::new([]),
+                mandatory: true,
             })),
         ])),
     );
@@ -1157,6 +1230,7 @@ fn call_uses_an_independent_frame() {
                 target: id("functions/callee", FunctionPlanHandle::new),
                 arguments: Box::new([]),
                 results: Box::new([]),
+                mandatory: true,
             })),
         ])),
     );
@@ -1298,6 +1372,7 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
             target: id("functions/a", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
         vec![],
     );
@@ -1337,6 +1412,7 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
             target: id("functions/b", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
     caller.provenance.basis.resource_versions = versions;
@@ -1361,6 +1437,7 @@ fn recursive_calls_stop_at_the_configured_limit() {
             target: id("recursive", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
     let recursive = published_function(recursive, "recursive", &[], &[]);
@@ -1432,6 +1509,7 @@ fn call_failure_releases_caller_and_callee_resources() {
             target: id("functions/callee", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
+            mandatory: true,
         },
     );
     caller.resources = Box::new([requirement("caller")]);
@@ -1582,6 +1660,7 @@ fn run_relational_backend_trace(
     )]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
     let trace = RecordingTrace::default();
@@ -1748,6 +1827,7 @@ fn assert_production_source_cancellation(
     }]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
     let events = RecordingRunEvents::default();
@@ -1879,6 +1959,7 @@ fn relational_operation_executes_compiled_subplan_by_index() {
         Box::new([relational_subplan("single", "sales", Box::new([]))]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
 
@@ -2018,6 +2099,7 @@ fn exact_bridge_scheduler_fixture() -> (KernelRegistry, RelationalBackendRegistr
     ]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
+        output: stable_output("result"),
         value: ValueRef::new(4),
     }]);
     (kernels, relational, execution_plan)
@@ -2132,6 +2214,7 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
     );
     execution_plan.results = Box::new([PlanResult {
         name: "value".into(),
+        output: stable_output("value"),
         value: ValueRef::new(0),
     }]);
     let events = RecordingRunEvents::default();
@@ -2162,11 +2245,10 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert!(
-        recorded
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
-    );
+    assert!(recorded.iter().all(|event| !matches!(
+        event.kind,
+        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
+    )));
     assert_eq!(results.source_count(), 0);
 }
 
@@ -2196,10 +2278,12 @@ fn cancellation_after_first_multi_result_source_is_staged_publishes_nothing() {
     execution_plan.results = Box::new([
         PlanResult {
             name: "first".into(),
+            output: stable_output("first"),
             value: ValueRef::new(0),
         },
         PlanResult {
             name: "second".into(),
+            output: stable_output("second"),
             value: ValueRef::new(1),
         },
     ]);

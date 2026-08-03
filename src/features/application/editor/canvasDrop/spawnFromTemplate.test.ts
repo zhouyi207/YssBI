@@ -1,44 +1,104 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import {
-  dataFrameNodeSpawnTemplate,
-  functionCallNodeSpawnTemplate,
-  variableNodeSpawnTemplate,
-} from '@/features/core/dnd/nodeSpawnTemplate';
-import { spawnNodeFromTemplate } from './spawnFromTemplate';
+  findResourceNodeSpawnTemplate,
+  spawnNodeFromTemplate,
+} from './spawnFromTemplate';
 
-const variables: EditorVariables = {
-  'var-1': {
-    id: 'var-1',
-    name: 'Counter',
-    dataType: { kind: 'Int64' },
-    dataValue: { kind: 'Int64', value: 0 },
-    description: '',
-    scope: { type: 'global' },
-    tags: [],
-  },
-};
-const functions: EditorFunctions = {
-  'fn-1': { id: 'fn-1', name: 'Add', functionInputs: [], functionOutputs: [] },
-};
-
-describe('spawnNodeFromTemplate unavailable capability', () => {
+describe('spawnNodeFromTemplate', () => {
   it.each([
-    { nodeType: 'Math:Add', title: 'Add' },
-    dataFrameNodeSpawnTemplate('df-1', 'sales'),
-    variableNodeSpawnTemplate('var-1', 'Counter'),
-    functionCallNodeSpawnTemplate('fn-1', 'Add'),
-  ])('does not call createNode for $nodeType', async (template) => {
-    const createNode = vi.fn();
+    {
+      label: 'static',
+      descriptor: { kind: 'static', nodeTypeId: 'math.add' },
+    },
+    {
+      label: 'function',
+      descriptor: {
+        kind: 'resourceBound',
+        nodeTypeId: 'function.call',
+        resourcePath: 'functions/Helper.yssbi-function',
+        resourceRevision: 4,
+        createArgs: { kind: 'function' },
+      },
+    },
+    {
+      label: 'variable',
+      descriptor: {
+        kind: 'resourceBound',
+        nodeTypeId: 'variable.get',
+        resourcePath: 'variables/00000000-0000-0000-0000-000000000001',
+        resourceRevision: 5,
+        createArgs: { kind: 'variable' },
+      },
+    },
+    {
+      label: 'database',
+      descriptor: {
+        kind: 'resourceBound',
+        nodeTypeId: 'dataframe.source',
+        resourcePath: 'databases/sales / . # 数据',
+        resourceRevision: 6,
+        createArgs: { kind: 'database' },
+      },
+    },
+  ] satisfies Array<{ label: string; descriptor: NodeCreationDescriptor }>) (
+    'forwards the exact $label descriptor without reconstruction',
+    async ({ descriptor }) => {
+      const createNode = vi.fn(async () => true);
+
+      await expect(spawnNodeFromTemplate(
+        { title: 'Spawn', descriptor },
+        { x: 10, y: 20 },
+        { createNode },
+      )).resolves.toBe(true);
+
+      expect(createNode).toHaveBeenCalledOnce();
+      expect(createNode).toHaveBeenCalledWith(descriptor, { x: 10, y: 20 });
+    },
+  );
+
+  it('looks up only the exact current opaque resource path and descriptor kind', () => {
+    const descriptor: NodeCreationDescriptor = {
+      kind: 'resourceBound',
+      nodeTypeId: 'function.call',
+      resourcePath: 'functions/opaque / . # 数据',
+      resourceRevision: 9,
+      createArgs: { kind: 'function' },
+    };
+    const items = [{
+      nodeTypeId: 'function.call',
+      title: 'Opaque',
+      description: null,
+      documentation: null,
+      categoryId: 'functions',
+      iconId: 'function',
+      styleId: 'call',
+      aliases: [],
+      technicalTerms: [],
+      ports: [],
+      parameters: [],
+      resourcePath: descriptor.resourcePath,
+      resourceRevision: 9,
+      creation: descriptor,
+      searchText: 'opaque',
+    }];
+
+    expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, 'function'))
+      .toEqual({ title: 'Opaque', descriptor });
+    expect(findResourceNodeSpawnTemplate(items, 'functions/opaque', 'function')).toBeNull();
+    expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, 'database')).toBeNull();
+  });
+
+  it('returns false without retrying when descriptor creation is rejected', async () => {
+    const descriptor: NodeCreationDescriptor = { kind: 'static', nodeTypeId: 'math.add' };
+    const createNode = vi.fn(async () => false);
 
     await expect(spawnNodeFromTemplate(
-      template,
-      { x: 10, y: 20 },
-      { x: 100, y: 200 },
-      { altKey: false, ctrlKey: true },
-      { variables, functions, createNode, onVariableMenu: vi.fn() },
+      { descriptor },
+      { x: 1, y: 2 },
+      { createNode },
     )).resolves.toBe(false);
 
-    expect(createNode).not.toHaveBeenCalled();
+    expect(createNode).toHaveBeenCalledOnce();
   });
 });

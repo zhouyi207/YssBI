@@ -39,8 +39,12 @@ function catalog(projectInstanceId: string, locale: string): LocalizedCatalogDto
       description: null,
       documentation: null,
       categoryId: 'tests',
+      iconId: 'tests',
+      styleId: 'default',
       aliases: [],
       technicalTerms: [],
+      ports: [],
+      parameters: [],
       creation: { kind: 'static', nodeTypeId },
       searchText: nodeTypeId,
     }],
@@ -63,6 +67,7 @@ function Harness() {
     'data-project': state.catalog?.projectInstanceId ?? '',
     'data-locale': state.catalog?.locale ?? '',
     'data-results': state.searchIndex?.search('').length ?? 0,
+    onClick: state.refresh,
   });
 }
 
@@ -171,6 +176,65 @@ describe('useLocalizedNodeCatalog', () => {
     expect(output?.dataset.status).toBe('ready');
     expect(output?.dataset.error).toBe('');
     expect(output?.dataset.project).toBe('project-2');
+  });
+
+  it('refetches to the exact resource publication watermark and keeps the old catalog while loading', async () => {
+    const refresh = deferred<LocalizedCatalogDto>();
+    vi.mocked(CatalogService.getLocalizedCatalog)
+      .mockResolvedValueOnce(catalog('project-1', 'zh-CN'))
+      .mockReturnValueOnce(refresh.promise);
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('ready'));
+
+    act(() => {
+      useNodeCatalogStore.getState().observeResourcePublication('project-1', 8);
+    });
+    await vi.waitFor(() => expect(CatalogService.getLocalizedCatalog).toHaveBeenCalledTimes(2));
+    expect(host.querySelector('output')?.dataset).toMatchObject({
+      status: 'loading',
+      project: 'project-1',
+    });
+
+    const current = catalog('project-1', 'zh-CN');
+    current.resourcePublicationRevision = 8;
+    refresh.resolve(current);
+    await act(async () => {
+      await refresh.promise;
+      await Promise.resolve();
+    });
+    expect(host.querySelector('output')?.dataset.status).toBe('ready');
+    expect(useNodeCatalogStore.getState().projectWatermarks['project-1']).toBe(8);
+  });
+
+  it('preserves the last catalog when a publication refresh fails and allows an explicit retry', async () => {
+    vi.mocked(CatalogService.getLocalizedCatalog)
+      .mockResolvedValueOnce(catalog('project-1', 'zh-CN'))
+      .mockRejectedValueOnce(new Error('refresh unavailable'))
+      .mockResolvedValueOnce({ ...catalog('project-1', 'zh-CN'), resourcePublicationRevision: 8 });
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('ready'));
+    await act(async () => {
+      useNodeCatalogStore.getState().observeResourcePublication('project-1', 8);
+      await vi.waitFor(() => expect(
+        useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']?.status,
+      ).toBe('error'));
+    });
+
+    expect(host.querySelector('output')?.dataset).toMatchObject({
+      error: 'refresh unavailable',
+      project: 'project-1',
+      results: '1',
+    });
+
+    await act(async () => {
+      host.querySelector('output')?.click();
+      await vi.waitFor(() => expect(
+        useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']?.status,
+      ).toBe('ready'));
+    });
+    expect(CatalogService.getLocalizedCatalog).toHaveBeenCalledTimes(3);
   });
 
   it('exposes an error only for the current project request', async () => {

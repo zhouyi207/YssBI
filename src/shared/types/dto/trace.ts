@@ -29,6 +29,7 @@ export interface TraceCorrelationDto {
   registryFingerprint: string;
   resourceVersions: Record<string, string>;
   compileId: TraceDecimalString;
+  selectionDigest: string | null;
   runId: TraceDecimalString | null;
   nodeId: string | null;
   nodeTypeId: string | null;

@@ -10,13 +10,43 @@ const historyAvailability = vi.hoisted(() => ({
   pending: false,
 }));
 
+const catalogState = vi.hoisted(() => ({
+  status: 'ready' as const,
+  error: null,
+  catalog: {
+    items: [
+      {
+        nodeTypeId: 'yssbi.numeric.add.int64',
+        title: 'Add',
+        description: null,
+        documentation: null,
+        categoryId: 'math',
+        iconId: 'math',
+        styleId: 'default',
+        aliases: [],
+        technicalTerms: [],
+        ports: [],
+        parameters: [],
+        creation: { kind: 'static' as const, nodeTypeId: 'yssbi.numeric.add.int64' },
+        searchText: 'add',
+      },
+    ],
+  },
+  searchIndex: {
+    search: () => [],
+  },
+  refresh: vi.fn(),
+}));
+
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        'sidebar.nodeCatalogUnavailable': 'Node catalog unavailable',
-        'sidebar.nodeCatalogUnavailableDescription': 'Waiting for descriptors',
+        'canvas.nodePalette.searchPlaceholder': 'Search nodes...',
+        'canvas.nodePalette.noMatches': 'No matching nodes',
+        'common.loading': 'Loading...',
+        'common.error': 'Error',
         'sidebar.noActiveGraph': 'No active graph open',
         'sidebar.noActiveGraphDescription': 'Open a graph to view commands',
         'common.undo': 'Undo',
@@ -27,6 +57,10 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@/features/application/editor', () => ({
   useEditorHistoryAvailability: () => historyAvailability,
+}));
+
+vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
+  useLocalizedNodeCatalog: () => catalogState,
 }));
 
 import { SidebarCommandsTab } from './SidebarCommandsTab';
@@ -49,11 +83,13 @@ describe('Sidebar tab-level empty states', () => {
     host.remove();
   });
 
-  it('does not mount a scroll viewport for an unavailable node catalog', () => {
+  it('renders the backend Catalog without exposing a creation action', () => {
     act(() => root.render(<SidebarNodesTab />));
-    expect(host.textContent).toContain('Node catalog unavailable');
-    expect(host.textContent).toContain('Waiting for descriptors');
-    expect(host.querySelector('.overlay-scrollbar-viewport')).toBeNull();
+
+    expect(host.textContent).toContain('Add');
+    expect(host.querySelector('input[placeholder="Search nodes..."]')).not.toBeNull();
+    expect(host.querySelector('button')).toBeNull();
+    expect(host.querySelector('[draggable="true"]')).toBeNull();
   });
 
   it('uses the shared empty state when Commands has no active graph', () => {

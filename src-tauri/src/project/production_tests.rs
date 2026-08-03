@@ -33,6 +33,15 @@ fn node(node_type: &str) -> DocumentNode {
     }
 }
 
+#[derive(Default)]
+struct DemandRunEvents(std::sync::Mutex<Vec<crate::node_system::runtime::RunEvent>>);
+
+impl crate::node_system::runtime::RunEventSink for DemandRunEvents {
+    fn record(&self, event: crate::node_system::runtime::RunEvent) {
+        self.0.lock().unwrap().push(event);
+    }
+}
+
 fn state_with_empty_graph() -> ProjectState {
     let state = ProjectState::new();
     state.insert_graph(
@@ -44,9 +53,10 @@ fn state_with_empty_graph() -> ProjectState {
 
 fn create_node_mutation() -> EditorGraphMutationDto {
     EditorGraphMutationDto::CreateNode {
-        node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+        },
         position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
-        parameters: ParameterValues::new(),
         user_label: None,
     }
 }
@@ -99,6 +109,479 @@ fn editor_mutation_request(
         operation_id,
         create_node_mutation(),
     )
+}
+
+fn resource_descriptor_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    crate::variable::VariableId,
+) {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    let variable = test_variable("Catalog variable");
+    let variable_id = variable.id;
+    let mut data = ProjectData::new();
+    data.variables.insert(variable_id, variable);
+    data.graphs.insert(
+        graph_path(),
+        GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+    );
+    crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+    crate::project::fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &graph_path())
+        .unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+    (state, root, variable_id)
+}
+
+fn resource_descriptor_request(
+    variable_id: crate::variable::VariableId,
+) -> MutationRequest<EditorGraphMutationDto> {
+    MutationRequest::new(
+        ResourceKey::Graph(document_path()),
+        GraphRevision::INITIAL,
+        OperationId::new(),
+        EditorGraphMutationDto::CreateNode {
+            descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
+                node_type_id: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
+                resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
+                    "variables/{variable_id}"
+                )),
+                resource_revision: GraphRevision::INITIAL,
+                create_args: crate::node_system::catalog::ResourceBoundCreateArgsDto::Variable,
+            },
+            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            user_label: None,
+        },
+    )
+}
+
+struct ResourceDescriptorMatrixFixture {
+    state: ProjectState,
+    root: std::path::PathBuf,
+    function_path: GraphResourcePath,
+    variable_id: crate::variable::VariableId,
+    out_of_scope_variable_id: crate::variable::VariableId,
+    database_id: String,
+}
+
+fn resource_descriptor_matrix_fixture(label: &str) -> ResourceDescriptorMatrixFixture {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    let function_path = GraphResourcePath::new("functions/Helper.yssbi-function").unwrap();
+    let owner_path = GraphResourcePath::new("functions/Owner.yssbi-function").unwrap();
+    let variable = test_variable("Catalog variable");
+    let variable_id = variable.id;
+    let mut out_of_scope = test_variable("Scoped variable");
+    let out_of_scope_variable_id = out_of_scope.id;
+    out_of_scope.scope = crate::variable::VariableScope::Function {
+        function_path: owner_path.as_str().into(),
+    };
+    let database_id = "sales / . # 数据".to_string();
+
+    let mut data = ProjectData::new();
+    data.variables.insert(variable_id, variable);
+    data.variables
+        .insert(out_of_scope_variable_id, out_of_scope);
+    for (path, name, kind) in [
+        (graph_path(), "Production", GraphDocumentKind::Event),
+        (function_path.clone(), "Helper", GraphDocumentKind::Function),
+        (owner_path, "Owner", GraphDocumentKind::Function),
+    ] {
+        data.graphs
+            .insert(path, GraphResourceDocument::new(name, kind));
+    }
+    data.databases.insert(
+        database_id.clone(),
+        crate::database::DatabaseDecl {
+            id: database_id.clone(),
+            engine: crate::database::DatabaseEngine::InMemory {
+                name: database_id.clone(),
+            },
+            schema_version: 1,
+            required: false,
+            name: Some("Sales".into()),
+        },
+    );
+    crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
+    for path in data.graphs.keys() {
+        crate::project::fixtures::write_graph(&data, root.to_string_lossy().as_ref(), path)
+            .unwrap();
+    }
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+    ResourceDescriptorMatrixFixture {
+        state,
+        root,
+        function_path,
+        variable_id,
+        out_of_scope_variable_id,
+        database_id,
+    }
+}
+
+fn resource_descriptor_matrix_request(
+    base_revision: GraphRevision,
+    node_type_id: &str,
+    resource_path: impl Into<Box<str>>,
+    resource_revision: GraphRevision,
+    create_args: crate::node_system::catalog::ResourceBoundCreateArgsDto,
+) -> MutationRequest<EditorGraphMutationDto> {
+    MutationRequest::new(
+        ResourceKey::Graph(document_path()),
+        base_revision,
+        OperationId::new(),
+        EditorGraphMutationDto::CreateNode {
+            descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
+                node_type_id: NodeTypeId::new(node_type_id).unwrap(),
+                resource_path: crate::node_system::catalog::CatalogResourcePath::new(resource_path),
+                resource_revision,
+                create_args,
+            },
+            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            user_label: None,
+        },
+    )
+}
+
+#[derive(Debug, PartialEq)]
+struct ResourceDescriptorEffects {
+    document_revision: GraphRevision,
+    graph_revision_ledger: Option<GraphRevision>,
+    history: crate::node_system::document::HistoryStatusDto,
+    publication_project_instance_id: String,
+    resource_publication_revision: u64,
+    authority_generation: u64,
+    project_data: serde_json::Value,
+    filesystem: std::collections::BTreeMap<String, Option<Vec<u8>>>,
+}
+
+fn resource_descriptor_effects(
+    state: &ProjectState,
+    root: &std::path::Path,
+) -> ResourceDescriptorEffects {
+    fn collect(
+        root: &std::path::Path,
+        current: &std::path::Path,
+        entries: &mut std::collections::BTreeMap<String, Option<Vec<u8>>>,
+    ) {
+        for entry in std::fs::read_dir(current).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if path.is_dir() {
+                entries.insert(relative, None);
+                collect(root, &path, entries);
+            } else {
+                entries.insert(relative, Some(std::fs::read(path).unwrap()));
+            }
+        }
+    }
+
+    let data = state.get_data().unwrap();
+    let document_revision = data.graphs[&graph_path()].document.revision;
+    let graph_revision_ledger = state
+        .revision_state_for_test()
+        .0
+        .get(&graph_path())
+        .copied();
+    let (publication_project_instance_id, resource_publication_revision, authority_generation) = {
+        let publication = state.mutation_publication.lock().unwrap();
+        (
+            publication.project_instance_id.clone(),
+            publication.resource_revision,
+            publication.authority_generation(),
+        )
+    };
+    let history = state.history.read().unwrap().status();
+    let project_data = serde_json::to_value(data).unwrap();
+    let mut filesystem = std::collections::BTreeMap::new();
+    collect(root, root, &mut filesystem);
+    ResourceDescriptorEffects {
+        document_revision,
+        graph_revision_ledger,
+        history,
+        publication_project_instance_id,
+        resource_publication_revision,
+        authority_generation,
+        project_data,
+        filesystem,
+    }
+}
+
+#[test]
+fn resource_descriptor_publication_accepts_function_variable_and_database_paths() {
+    use crate::node_system::catalog::ResourceBoundCreateArgsDto;
+    use crate::node_system::protocol::ParameterKey;
+
+    let fixture = resource_descriptor_matrix_fixture("resource-descriptor-valid-matrix");
+    let database_path = format!("databases/{}", fixture.database_id);
+    let project_instance_id = fixture.state.capture_project_session().unwrap().instance_id;
+    let catalog = fixture
+        .state
+        .catalog_snapshot(&project_instance_id)
+        .unwrap();
+    assert!(catalog.resources.iter().any(|resource| {
+        resource.resource_path.as_str() == database_path
+            && resource.node_type_id.as_str() == "yssbi.dataframe.source.get"
+    }));
+    let validation = fixture
+        .state
+        .catalog_mutation_validation_snapshot(&project_instance_id)
+        .unwrap();
+    assert!(validation.resources.contains_key(
+        &crate::node_system::catalog::CatalogResourcePath::new(database_path.clone())
+    ));
+    let events = std::cell::Cell::new(0_u32);
+    let cases = [
+        (
+            "yssbi.project.function.call",
+            fixture.function_path.as_str().to_string(),
+            ResourceBoundCreateArgsDto::Function,
+            "target",
+        ),
+        (
+            "yssbi.project.variable.get",
+            format!("variables/{}", fixture.variable_id),
+            ResourceBoundCreateArgsDto::Variable,
+            "variable",
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            database_path,
+            ResourceBoundCreateArgsDto::Database,
+            "dataframe",
+        ),
+    ];
+
+    for (index, (node_type, path, create_args, parameter)) in cases.into_iter().enumerate() {
+        fixture
+            .state
+            .apply_editor_graph_mutation_observed(
+                &graph_path(),
+                "en-US",
+                resource_descriptor_matrix_request(
+                    GraphRevision::new(index as u64),
+                    node_type,
+                    path.clone(),
+                    GraphRevision::INITIAL,
+                    create_args,
+                ),
+                |_| events.set(events.get() + 1),
+            )
+            .unwrap();
+        let data = fixture.state.get_data().unwrap();
+        let node = data.graphs[&graph_path()]
+            .document
+            .nodes
+            .values()
+            .find(|node| node.node_type.as_str() == node_type)
+            .unwrap();
+        assert_eq!(
+            node.parameters[&ParameterKey::new(parameter).unwrap()],
+            serde_json::json!(path)
+        );
+    }
+
+    assert_eq!(events.get(), 3);
+    assert_eq!(
+        fixture.state.get_data().unwrap().graphs[&graph_path()]
+            .document
+            .revision,
+        GraphRevision::new(3)
+    );
+    std::fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn resource_descriptor_rejections_have_zero_publication_effects() {
+    use crate::node_system::catalog::ResourceBoundCreateArgsDto;
+
+    let cases = [
+        ("wrong-tuple", "catalog_descriptor_invalid"),
+        ("malformed-path", "catalog_descriptor_invalid"),
+        ("stale-revision", "catalog_resource_stale"),
+        ("missing-resource", "catalog_resource_stale"),
+        ("out-of-scope", "catalog_descriptor_invalid"),
+    ];
+
+    for (case, expected_code) in cases {
+        let fixture = resource_descriptor_matrix_fixture(case);
+        let request = match case {
+            "wrong-tuple" => resource_descriptor_matrix_request(
+                GraphRevision::INITIAL,
+                "yssbi.project.variable.get",
+                fixture.function_path.as_str(),
+                GraphRevision::INITIAL,
+                ResourceBoundCreateArgsDto::Function,
+            ),
+            "malformed-path" => resource_descriptor_matrix_request(
+                GraphRevision::INITIAL,
+                "yssbi.project.function.call",
+                r"functions\Helper.yssbi-function",
+                GraphRevision::INITIAL,
+                ResourceBoundCreateArgsDto::Function,
+            ),
+            "stale-revision" => resource_descriptor_matrix_request(
+                GraphRevision::INITIAL,
+                "yssbi.project.function.call",
+                fixture.function_path.as_str(),
+                GraphRevision::new(1),
+                ResourceBoundCreateArgsDto::Function,
+            ),
+            "missing-resource" => resource_descriptor_matrix_request(
+                GraphRevision::INITIAL,
+                "yssbi.project.function.call",
+                "functions/Missing.yssbi-function",
+                GraphRevision::INITIAL,
+                ResourceBoundCreateArgsDto::Function,
+            ),
+            "out-of-scope" => resource_descriptor_matrix_request(
+                GraphRevision::INITIAL,
+                "yssbi.project.variable.get",
+                format!("variables/{}", fixture.out_of_scope_variable_id),
+                GraphRevision::INITIAL,
+                ResourceBoundCreateArgsDto::Variable,
+            ),
+            _ => unreachable!(),
+        };
+        let before = resource_descriptor_effects(&fixture.state, &fixture.root);
+        let event_count = std::cell::Cell::new(0_u32);
+
+        let error = fixture
+            .state
+            .apply_editor_graph_mutation_observed(&graph_path(), "en-US", request, |_| {
+                event_count.set(event_count.get() + 1);
+            })
+            .unwrap_err();
+
+        assert_eq!(error.code(), expected_code, "case: {case}");
+        assert_eq!(event_count.get(), 0, "case: {case}");
+        assert_eq!(
+            resource_descriptor_effects(&fixture.state, &fixture.root),
+            before,
+            "case: {case}"
+        );
+        std::fs::remove_dir_all(fixture.root).unwrap();
+    }
+}
+
+#[test]
+fn resource_descriptor_publication_materializes_exact_variable_binding() {
+    let (state, root, variable_id) = resource_descriptor_fixture("resource-descriptor-valid");
+
+    let result = state
+        .apply_editor_graph_mutation(
+            &graph_path(),
+            "en-US",
+            resource_descriptor_request(variable_id),
+        )
+        .unwrap();
+
+    assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
+    assert_eq!(result.delta.to_revision, GraphRevision::new(1));
+    let data = state.get_data().unwrap();
+    let node = data.graphs[&graph_path()]
+        .document
+        .nodes
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(node.node_type.as_str(), "yssbi.project.variable.get");
+    assert_eq!(
+        node.parameters[&crate::node_system::protocol::ParameterKey::new("variable").unwrap()],
+        serde_json::json!(format!("variables/{variable_id}"))
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn resource_descriptor_authority_change_after_snapshot_has_zero_mutation_effects() {
+    let (state, root, variable_id) = resource_descriptor_fixture("resource-descriptor-authority");
+    let graph_before = state.get_data().unwrap().graphs[&graph_path()]
+        .document
+        .clone();
+    let history_before = state.history_status();
+    let generation_before = state.authority_generation_for_test();
+    let hook_state = state.clone();
+    state.set_catalog_mutation_before_publication_test_hook(std::sync::Arc::new(move || {
+        hook_state
+            .mutation_publication
+            .lock()
+            .unwrap()
+            .advance_authority_generation();
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_by_callback = std::sync::Arc::clone(&observed);
+
+    let error = state
+        .apply_editor_graph_mutation_observed(
+            &graph_path(),
+            "en-US",
+            resource_descriptor_request(variable_id),
+            move |_| {
+                observed_by_callback.store(true, std::sync::atomic::Ordering::Release);
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "catalog_resource_stale");
+    assert_eq!(
+        state.get_data().unwrap().graphs[&graph_path()].document,
+        graph_before
+    );
+    assert_eq!(state.history_status(), history_before);
+    assert_eq!(state.authority_generation_for_test(), generation_before + 1);
+    assert!(!observed.load(std::sync::atomic::Ordering::Acquire));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn resource_descriptor_project_replacement_after_snapshot_has_zero_mutation_effects() {
+    let (state, root, variable_id) = resource_descriptor_fixture("resource-descriptor-project");
+    let original_instance = state.capture_project_session().unwrap().instance_id;
+    let replacement_root = std::env::temp_dir().join(format!(
+        "yssbi-resource-descriptor-replacement-{}",
+        uuid::Uuid::new_v4()
+    ));
+    crate::project::fixtures::write_project(
+        &ProjectData::new(),
+        replacement_root.to_string_lossy().as_ref(),
+    )
+    .unwrap();
+    let replacement_state = state.clone();
+    let replacement_path = replacement_root.to_string_lossy().into_owned();
+    state.set_catalog_mutation_before_publication_test_hook(std::sync::Arc::new(move || {
+        replacement_state.activate_project_fixture(replacement_path.clone(), ProjectData::new());
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_by_callback = std::sync::Arc::clone(&observed);
+
+    let error = state
+        .apply_editor_graph_mutation_observed(
+            &graph_path(),
+            "en-US",
+            resource_descriptor_request(variable_id),
+            move |_| {
+                observed_by_callback.store(true, std::sync::atomic::Ordering::Release);
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "catalog_resource_stale");
+    assert_ne!(
+        state.capture_project_session().unwrap().instance_id,
+        original_instance
+    );
+    assert!(state.get_data().unwrap().graphs.is_empty());
+    assert_eq!(state.history_status(), Default::default());
+    assert!(!observed.load(std::sync::atomic::Ordering::Acquire));
+    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(replacement_root).unwrap();
 }
 
 #[test]
@@ -695,7 +1178,11 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
     assert_eq!(observed, 0);
     assert!(
         state
-            .execute_graph(&event, &NOOP_RUN_EVENT_SINK)
+            .execute_graph(
+                &event,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &NOOP_RUN_EVENT_SINK
+            )
             .unwrap_err()
             .contains("project_recovery_required")
     );
@@ -2542,8 +3029,13 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
     ));
 
     let executing_state = state.clone();
-    let execution =
-        std::thread::spawn(move || executing_state.execute_graph(&event, &NOOP_RUN_EVENT_SINK));
+    let execution = std::thread::spawn(move || {
+        executing_state.execute_graph(
+            &event,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+    });
     loading_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .unwrap();
@@ -3178,7 +3670,13 @@ fn project_execution_publishes_persisted_function_plans() {
         )
         .unwrap();
 
-    state.execute_graph(&event, &NOOP_RUN_EVENT_SINK).unwrap();
+    state
+        .execute_graph(
+            &event,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -3411,7 +3909,11 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     drop(data);
 
     let first = state
-        .execute_graph(&event_path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     let first_version = first.provenance.basis.resource_versions
         [&AnalysisResourceKey::new(function_path.as_str())]
@@ -3444,7 +3946,11 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
         )
         .unwrap();
     let second = state
-        .execute_graph(&event_path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &event_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     let second_version = &second.provenance.basis.resource_versions
         [&AnalysisResourceKey::new(function_path.as_str())];
@@ -3698,7 +4204,11 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             .collect::<Vec<_>>();
 
         state
-            .execute_graph(&event_path, &NOOP_RUN_EVENT_SINK)
+            .execute_graph(
+                &event_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &NOOP_RUN_EVENT_SINK,
+            )
             .unwrap();
         let value = state.get_data().unwrap().variables[&output_variable.id]
             .data_value
@@ -3739,7 +4249,11 @@ fn production_compiler_rejects_wrong_scope_and_duplicate_shell_nodes() {
         .unwrap();
 
     let error = state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap_err();
     assert!(error.contains("compiler.node.scope_mismatch"));
     assert!(error.contains("compiler.node.managed_singleton"));
@@ -3941,7 +4455,11 @@ fn project_execution_refuses_blocking_analysis() {
         .unwrap();
 
     let error = state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap_err();
     assert!(error.contains("blocking diagnostics"));
     assert!(error.contains("compiler.node.unknown"));
@@ -3982,9 +4500,153 @@ fn project_variable_get_executes_against_authoritative_resource() {
         .unwrap();
 
     let result = state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     assert!(result.run_id.get() > 0);
+}
+
+#[test]
+fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_lease() {
+    let project = temp_project_with_empty_graph("demanded-variable-resource");
+    let state = project.state();
+    let first = state
+        .add_variable(
+            "first",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(1),
+            "",
+            crate::variable::VariableScope::Global,
+            Vec::new(),
+        )
+        .unwrap();
+    let second = state
+        .add_variable(
+            "second",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(2),
+            "",
+            crate::variable::VariableScope::Global,
+            Vec::new(),
+        )
+        .unwrap();
+    let mut first_get = node("yssbi.project.variable.get");
+    first_get.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", first.id)),
+    );
+    let first_node = first_get.id;
+    let mut second_get = node("yssbi.project.variable.get");
+    let second_node = second_get.id;
+    second_get.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", second.id)),
+    );
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![
+                    GraphDocumentOperation::InsertNode { node: first_get },
+                    GraphDocumentOperation::InsertNode { node: second_get },
+                ]),
+            ),
+        )
+        .unwrap();
+    let first_resource =
+        crate::node_system::plan::ResourceId::new(format!("variables/{}", first.id)).unwrap();
+    let second_resource =
+        crate::node_system::plan::ResourceId::new(format!("variables/{}", second.id)).unwrap();
+    let requirement = |resource| crate::node_system::plan::CompiledResourceRequirement {
+        resource,
+        kind: crate::node_system::plan::ResourceKind::ExternalArtifact,
+        access: crate::node_system::plan::ResourceAccess::Shared,
+        optional: false,
+    };
+    let observer = crate::node_system::runtime::ProjectResourceLeaseObserver::default()
+        .with_forced_unavailable(second_resource.clone());
+    state.set_project_resource_lease_observer(observer.clone());
+    let invalid_demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([crate::node_system::plan::GraphOutputRef {
+            graph_path: document_path(),
+            port: crate::node_system::document::PortAddress::declared(
+                crate::node_system::document::NodeId::new(),
+                crate::node_system::protocol::PortKey::new("value").unwrap(),
+            ),
+        }]),
+        include_default_results: false,
+    };
+    let invalid = state
+        .execute_graph(&graph_path(), &invalid_demand, &NOOP_RUN_EVENT_SINK)
+        .unwrap_err();
+    assert!(invalid.starts_with("invalid_execution_demand:"));
+    assert_eq!(observer.acquired(), 0);
+
+    let demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([crate::node_system::plan::GraphOutputRef {
+            graph_path: document_path(),
+            port: crate::node_system::document::PortAddress::declared(
+                first_node,
+                crate::node_system::protocol::PortKey::new("value").unwrap(),
+            ),
+        }]),
+        include_default_results: false,
+    };
+    let run = state
+        .execute_graph(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+
+    assert_eq!(run.values.len(), 1);
+    assert_eq!(
+        observer.validated_requirements(),
+        vec![vec![requirement(first_resource.clone())].into_boxed_slice()]
+    );
+    assert_eq!(observer.acquire_attempt_ids(), vec![first_resource]);
+    assert_eq!(observer.acquired(), 1);
+    assert_eq!(observer.dropped(), 1);
+    assert_eq!(observer.active(), 0);
+
+    let unavailable_observer = crate::node_system::runtime::ProjectResourceLeaseObserver::default()
+        .with_forced_unavailable(second_resource.clone());
+    state.set_project_resource_lease_observer(unavailable_observer.clone());
+    let unavailable_demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([crate::node_system::plan::GraphOutputRef {
+            graph_path: document_path(),
+            port: crate::node_system::document::PortAddress::declared(
+                second_node,
+                crate::node_system::protocol::PortKey::new("value").unwrap(),
+            ),
+        }]),
+        include_default_results: false,
+    };
+    let events = DemandRunEvents::default();
+
+    let unavailable = state
+        .execute_graph(&graph_path(), &unavailable_demand, &events)
+        .unwrap_err();
+
+    assert!(unavailable.contains("unavailable"), "{unavailable}");
+    assert_eq!(
+        unavailable_observer.validated_requirements(),
+        vec![vec![requirement(second_resource.clone())].into_boxed_slice()],
+    );
+    assert_eq!(
+        unavailable_observer.acquire_attempt_ids(),
+        vec![second_resource],
+    );
+    assert_eq!(unavailable_observer.acquired(), 0);
+    assert_eq!(unavailable_observer.dropped(), 0);
+    assert_eq!(unavailable_observer.active(), 0);
+    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
+        event.kind,
+        crate::node_system::runtime::RunEventKind::OperationStarted { .. }
+    )));
 }
 
 fn tabular_variable(
@@ -4777,7 +5439,11 @@ fn projection_and_execution_reuse_one_compile_product() {
 
     state.graph_projection(&graph_path(), "en-US").unwrap();
     state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
 
     assert_eq!(
@@ -4790,12 +5456,214 @@ fn projection_and_execution_reuse_one_compile_product() {
 }
 
 #[test]
+fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_digests() {
+    let (state, root) = active_state_with_valid_constant_graph("demand-variant-reuse");
+    let first_node = state.get_data().unwrap().graphs[&graph_path()]
+        .document
+        .nodes
+        .keys()
+        .next()
+        .copied()
+        .unwrap();
+    let mut second = node("yssbi.constant.int64");
+    second.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("value").unwrap(),
+        serde_json::json!(9),
+    );
+    let second_node = second.id;
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: second }]),
+            ),
+        )
+        .unwrap();
+    let output = |node_id| crate::node_system::plan::GraphOutputRef {
+        graph_path: document_path(),
+        port: crate::node_system::document::PortAddress::declared(
+            node_id,
+            crate::node_system::protocol::PortKey::new("value").unwrap(),
+        ),
+    };
+    let demand = |output| crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([output]),
+        include_default_results: false,
+    };
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    let default_run = state
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
+    let first_output = output(first_node);
+    let first_events = DemandRunEvents::default();
+    let first_run = state
+        .execute_graph(&graph_path(), &demand(first_output.clone()), &first_events)
+        .unwrap();
+    let second_run = state
+        .execute_graph(
+            &graph_path(),
+            &demand(output(second_node)),
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        1
+    );
+    assert_eq!(
+        default_run.provenance.compile_id,
+        first_run.provenance.compile_id
+    );
+    assert_eq!(
+        first_run.provenance.compile_id,
+        second_run.provenance.compile_id
+    );
+    assert_eq!(first_run.values.len(), 1);
+    assert_eq!(second_run.values.len(), 1);
+    let first_events = first_events.0.lock().unwrap();
+    assert_eq!(
+        first_events
+            .iter()
+            .filter(|event| matches!(
+                event.kind,
+                crate::node_system::runtime::RunEventKind::OperationStarted { .. }
+            ))
+            .count(),
+        1,
+    );
+    assert!(first_events.iter().any(|event| matches!(
+        &event.kind,
+        crate::node_system::runtime::RunEventKind::OutputReady { output, .. }
+            if output == &first_output
+    )));
+    assert_ne!(
+        default_run.correlation.selection_digest,
+        first_run.correlation.selection_digest
+    );
+    assert_ne!(
+        first_run.correlation.selection_digest,
+        second_run.correlation.selection_digest
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn graph_basis_replacement_discards_old_demand_variants() {
+    let (state, root) = active_state_with_valid_constant_graph("demand-variant-invalidation");
+    let node_id = state.get_data().unwrap().graphs[&graph_path()]
+        .document
+        .nodes
+        .keys()
+        .next()
+        .copied()
+        .unwrap();
+    let demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([crate::node_system::plan::GraphOutputRef {
+            graph_path: document_path(),
+            port: crate::node_system::document::PortAddress::declared(
+                node_id,
+                crate::node_system::protocol::PortKey::new("value").unwrap(),
+            ),
+        }]),
+        include_default_results: false,
+    };
+    state
+        .execute_graph(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
+        .unwrap();
+    let (old_compile_id, old_variants) = state
+        .published_variant_cache_state_for_test(&graph_path())
+        .unwrap();
+    assert_eq!(old_variants, 1);
+
+    state
+        .apply_graph_patch(
+            &graph_path(),
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: node("yssbi.constant.int64"),
+                }]),
+            ),
+        )
+        .unwrap();
+    state
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
+    let (new_compile_id, new_variants) = state
+        .published_variant_cache_state_for_test(&graph_path())
+        .unwrap();
+
+    assert_ne!(old_compile_id, new_compile_id);
+    assert_eq!(new_variants, 1);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_mismatch_rejects_populated_variant_without_overwriting_current_product() {
+    let (state, root) = active_state_with_valid_constant_graph("variant-authority-mismatch");
+    let observed = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let observed_for_hook = std::sync::Arc::clone(&observed);
+    let authority_state = state.clone();
+    state.set_execution_before_final_gate_test_hook(std::sync::Arc::new(move || {
+        *observed_for_hook.lock().unwrap() =
+            authority_state.published_variant_cache_state_for_test(&graph_path());
+        authority_state
+            .mutation_publication
+            .lock()
+            .unwrap()
+            .advance_authority_generation();
+    }));
+    let events = DemandRunEvents::default();
+
+    let error = state
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap_err();
+
+    assert!(error.contains("stale_project_lifecycle"), "{error}");
+    let (compile_id, variants) = observed.lock().unwrap().unwrap();
+    assert_eq!(variants, 1);
+    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
+        event.kind,
+        crate::node_system::runtime::RunEventKind::OperationStarted { .. }
+    )));
+    assert_eq!(
+        state.published_compile_ids_for_test(&graph_path()),
+        Some((compile_id, Some(compile_id))),
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn execution_and_projection_reuse_one_compile_product() {
     let (state, root) = active_state_with_valid_constant_graph("execution-projection-reuse");
     let before = crate::node_system::compiler::compile_snapshot_invocations();
 
     state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     state.graph_projection(&graph_path(), "en-US").unwrap();
 
@@ -4971,9 +5839,19 @@ fn function_body_mutations_invalidate_other_graph_compile_slots() {
 }
 
 #[test]
-fn project_replacement_detaches_old_compile_generation() {
+fn project_replacement_detaches_old_compile_generation_and_populated_variants() {
     let (state, root) = active_state_with_valid_constant_graph("replace-compile-generation");
-    state.graph_projection(&graph_path(), "en-US").unwrap();
+    state
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
+    let (detached_compile_id, variants) = state
+        .published_variant_cache_state_for_test(&graph_path())
+        .unwrap();
+    assert_eq!(variants, 1);
     let detached = state.compile_coordinator.read().unwrap().clone();
     assert!(detached.contains_slot_for_test(&document_path()));
 
@@ -4982,6 +5860,13 @@ fn project_replacement_detaches_old_compile_generation() {
     let current = state.compile_coordinator.read().unwrap().clone();
     assert!(!std::sync::Arc::ptr_eq(&detached, &current));
     assert!(!detached.contains_slot_for_test(&document_path()));
+    assert!(!current.contains_slot_for_test(&document_path()));
+    assert!(
+        state
+            .published_variant_cache_state_for_test(&graph_path())
+            .is_none()
+    );
+    assert!(detached_compile_id.get() > 0);
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -5144,7 +6029,11 @@ fn compile_capture_retries_when_authority_changes_during_metadata_capture() {
 
     let execution_state = state.clone();
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        execution_state.execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
     });
     capture_paused_rx
         .recv_timeout(std::time::Duration::from_secs(5))
@@ -5357,13 +6246,21 @@ fn execution_rejects_function_body_change_after_main_plan_before_run() {
         let executing_state = state.clone();
         let (execution_done_tx, execution_done_rx) = std::sync::mpsc::channel();
         let execution = scope.spawn(move || {
-            let result = executing_state.execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK);
+            let result = executing_state.execute_graph(
+                &graph_path(),
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &NOOP_RUN_EVENT_SINK,
+            );
             let _ = execution_done_tx.send(());
             result
         });
         plan_ready_rx
             .recv_timeout(std::time::Duration::from_secs(5))
             .unwrap();
+        let (selected_compile_id, variants) = state
+            .published_variant_cache_state_for_test(&graph_path())
+            .unwrap();
+        assert_eq!(variants, 1);
         state
             .apply_graph_patch(
                 &function_path,
@@ -5379,6 +6276,12 @@ fn execution_rejects_function_body_change_after_main_plan_before_run() {
                 ),
             )
             .unwrap();
+        assert!(
+            state
+                .published_variant_cache_state_for_test(&graph_path())
+                .is_none()
+        );
+        assert!(selected_compile_id.get() > 0);
         release_tx.send(()).unwrap();
         execution_done_rx
             .recv_timeout(std::time::Duration::from_secs(5))
@@ -5455,7 +6358,11 @@ fn database_resource_version_changes_with_resolved_column_type() {
 fn project_execution_runs_valid_plan_through_run_executor() {
     let (state, root) = active_state_with_valid_constant_graph("valid-plan-execution");
     let result = state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     assert!(result.run_id.get() > 0);
     std::fs::remove_dir_all(root).unwrap();
@@ -5475,7 +6382,11 @@ fn production_observability_execute_graph_records_compile_and_run_for_current_se
     };
 
     state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
 
     let records = trace_sink.records();
@@ -5507,7 +6418,11 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
         std::sync::Arc::clone(&store.trace_sink)
     };
     state
-        .execute_graph(&graph_path(), &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap();
     assert!(!old_sink.records().is_empty());
 
@@ -5658,7 +6573,11 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
 
     let result = fixture
         .state
-        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &fixture.path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .expect("authoritative Source -> Rename -> Limit graph executes");
 
     let observation = observer.snapshot();
@@ -5792,7 +6711,11 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
         .set_production_relational_observer(std::sync::Arc::clone(&forward_observer));
     let forward = fixture
         .state
-        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &fixture.path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .expect("forward insertion graph executes");
 
     fixture
@@ -5805,7 +6728,11 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
         .set_production_relational_observer(std::sync::Arc::clone(&reversed_observer));
     let mut reversed = fixture
         .state
-        .execute_graph(&fixture.path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &fixture.path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .expect("reversed insertion graph executes");
 
     assert_eq!(forward_observer.snapshot(), reversed_observer.snapshot());
@@ -5899,7 +6826,11 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     state.set_production_relational_observer(std::sync::Arc::clone(&observer));
 
     let result = state
-        .execute_graph(&path, &NOOP_RUN_EVENT_SINK)
+        .execute_graph(
+            &path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .expect("authoritative relational graph executes");
 
     let observation = observer.snapshot();

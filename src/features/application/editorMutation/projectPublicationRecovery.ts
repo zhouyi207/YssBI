@@ -1,5 +1,13 @@
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
-import type { ProjectIndexRow } from '@/services/project/projectService';
+import {
+  isProjectDatabaseIndexRow,
+  type ProjectDatabaseIndexRow,
+  type ProjectIndexRow,
+} from '@/services/project/projectService';
+import {
+  displayNameFromEngine,
+  type DatabaseRecord,
+} from '@/shared/types/dto/database';
 import type {
   PreparedProjectRecovery,
   ProjectRecoveryPreparation,
@@ -84,6 +92,11 @@ export function validateProjectRecoveryIndex(
   }
   if (!Array.isArray(index.variables) || !Array.isArray(index.worksheets)) {
     return 'recovery resource index is incomplete';
+  }
+  if (!Array.isArray(index.databases)
+    || index.databases.some((database) => !isProjectDatabaseIndexRow(database))
+    || new Set(index.databases.map((database) => database.id)).size !== index.databases.length) {
+    return 'recovery database metadata is malformed';
   }
   if (index.worksheets.some((worksheet) =>
     typeof worksheet.id !== 'string'
@@ -357,11 +370,40 @@ function prepareViewports(
   return viewports;
 }
 
+function databaseFromIndex(
+  row: ProjectDatabaseIndexRow,
+  current: DatabaseRecord | undefined,
+): DatabaseRecord {
+  const runtime: Partial<DatabaseRecord> = {};
+  if (current?.columns !== undefined) runtime.columns = structuredClone(current.columns);
+  if (current?.rowCount !== undefined) runtime.rowCount = current.rowCount;
+  if (current?.columnCount !== undefined) runtime.columnCount = current.columnCount;
+  if (current?.loadError !== undefined) runtime.loadError = current.loadError;
+  return {
+    ...runtime,
+    id: row.id,
+    resourcePath: row.resourcePath,
+    name: row.name ?? displayNameFromEngine(row.engine) ?? row.id,
+    engine: structuredClone(row.engine),
+    schemaVersion: row.schemaVersion,
+    required: row.required,
+  };
+}
+
 export function prepareProjectRecoveryCommit(
   plan: ProjectRecoveryPreparation,
 ): PreparedProjectRecovery {
   const variables = applyVariableCatalogFromIndex(plan.index.variables);
   const variableRevisions = variableRevisionsFromIndex(plan.index.variables);
+  const currentDatabases = useDatabaseStore.getState().databases;
+  const databaseRows = plan.index.databases;
+  const databases = Object.fromEntries(databaseRows.map((row) => [
+    row.id,
+    databaseFromIndex(row, currentDatabases[row.id]),
+  ]));
+  const databaseRevisions = Object.fromEntries(
+    databaseRows.map((row) => [row.id, row.revision]),
+  );
   const worksheetState = useWorksheetStore.getState();
   const worksheetIndex = (plan.index.worksheets ?? []).map((worksheet) => ({
     id: worksheet.id,
@@ -396,7 +438,7 @@ export function prepareProjectRecoveryCommit(
     plan.index,
     variables,
     worksheetDocuments,
-    useDatabaseStore.getState().databases,
+    databases,
   );
   const { resources: reconciledResources, documentPatches } = reconcileResourceSnapshot(
     incoming,
@@ -459,6 +501,8 @@ export function prepareProjectRecoveryCommit(
       graphOrder: plan.index.graphs.map((graph) => graph.path),
       documents,
       graphMeta,
+      databases,
+      databaseRevisions,
       variables,
       variableRevisions,
       worksheetIndex,
@@ -472,6 +516,10 @@ export function prepareProjectRecoveryCommit(
 }
 
 export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): void {
+  useDatabaseStore.setState({
+    databases: plan.storeState.databases,
+    revisions: plan.storeState.databaseRevisions,
+  });
   useVariableStore.setState({
     variables: plan.storeState.variables,
     revisions: plan.storeState.variableRevisions,

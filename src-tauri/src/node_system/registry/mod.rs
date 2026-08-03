@@ -2,6 +2,7 @@ mod fingerprint;
 mod model;
 mod validation;
 
+pub(crate) use fingerprint::hash_canonical;
 pub use fingerprint::{ProtocolFingerprint, RegistryFingerprint};
 pub use model::{
     CatalogManifest, CategoryRegistration, CategoryRegistry, I18nManifest, ImplementationKind,

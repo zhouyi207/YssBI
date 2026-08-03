@@ -6,6 +6,7 @@ import type { ProjectResourceMeta } from '@/features/core/resource';
 export function variableFromIndexRow(row: ProjectVariableIndexRow): Variable {
   return normalizeVariableFromBackend({
     id: row.id,
+    resourcePath: row.resourcePath,
     name: row.name,
     dataType: row.dataType,
     dataValue: row.dataValue,

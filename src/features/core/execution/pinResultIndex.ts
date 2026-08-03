@@ -1,4 +1,18 @@
+import { portAddressKey } from '@/features/domain/editorProjection';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { GraphExecutionState, PinResultState } from '@/shared/types/ui';
+
+export function pinPreviewCacheKey(graphPath: string, port: PortAddressDto): string {
+  return `${graphPath.length}:${graphPath}:${portAddressKey(port)}`;
+}
+
+export function lookupPinPreview<T>(
+  previews: ReadonlyMap<string, T> | undefined,
+  graphPath: string,
+  port: PortAddressDto,
+): T | undefined {
+  return previews?.get(pinPreviewCacheKey(graphPath, port));
+}
 
 /** Aligns frontend cache keys with backend `(graphPath, pinId)` runtime index. */
 export function pinResultCacheKey(graphPath: string, pinId: string): string {

@@ -12,7 +12,7 @@ import {
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 function isCurrentProjectEvent(projectInstanceId: string): boolean {
   try {

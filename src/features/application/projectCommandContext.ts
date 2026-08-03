@@ -1,10 +1,11 @@
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import {
   assertCurrentProjectIdentity,
-  captureProjectCommandIdentity,
+  captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 export interface ProjectCommandContext {
   projectInstanceId: string;
@@ -20,21 +21,37 @@ export interface GraphSaveCommandContext extends ProjectCommandContext {
   expectedRevision: number;
 }
 
+export interface RevisionedProjectCommandSnapshot<T> {
+  readonly context: ProjectCommandContext;
+  readonly authority: T;
+}
+
 export function captureProjectCommandContext(
   requestedOperationId: string = crypto.randomUUID(),
 ): ProjectCommandContext {
-  const identity = captureProjectCommandIdentity();
+  const identity = captureProjectIdentity();
+  const publicationRevision = projectPublicationCoordinator.capturePublicationRevision();
+  assertCurrentProjectIdentity(identity);
   const operationId = requestedOperationId;
   const isCurrent = () => isCurrentProjectIdentity(identity);
   return {
     projectInstanceId: identity.projectInstanceId,
     projectEpoch: identity.epoch,
-    publicationRevision: identity.publicationRevision,
+    publicationRevision,
     operationId,
     operationPendingKey: `${identity.projectInstanceId}:${operationId}`,
     isCurrent,
     assertCurrent: () => assertCurrentProjectIdentity(identity),
   };
+}
+
+export function captureRevisionedProjectCommandSnapshot<T>(
+  readAuthority: () => T,
+): RevisionedProjectCommandSnapshot<T> {
+  const context = captureProjectCommandContext();
+  const authority = readAuthority();
+  context.assertCurrent();
+  return Object.freeze({ context, authority });
 }
 
 export function isGraphSaveCommandRevisionCurrent(

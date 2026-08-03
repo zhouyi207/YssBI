@@ -1,6 +1,7 @@
 import { currentProjectionLocale, hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
+import { captureRevisionedProjectCommandSnapshot } from '@/features/application/projectCommandContext';
 
 import { setHistoryStatus } from '@/features/application/editorMutation/historyCoordinator';
 import {
@@ -23,10 +24,9 @@ import {
   type ProjectGraphIndexRow,
 } from '@/services/project/projectService';
 import {
-  captureProjectIdentity,
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
-} from '@/services/project/projectIdentity';
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   completePendingMutation,
   invalidatePendingMutation,
@@ -151,7 +151,9 @@ export async function executeFunctionSignatureMutation(
   overrides: Partial<FunctionSignatureCoordinatorDependencies> = {},
 ): Promise<ExecuteFunctionSignatureMutationOutcome> {
   const dependencies = { ...defaultDependencies, ...overrides };
-  const meta = useGraphMetaStore.getState().graphs[input.functionPath];
+  const { context, authority: meta } = captureRevisionedProjectCommandSnapshot(
+    () => useGraphMetaStore.getState().graphs[input.functionPath],
+  );
   if (meta?.type !== 'function' || meta.functionRevision == null || !meta.functionSignature) {
     throw new Error(`function signature resource '${input.functionPath}' is not hydrated`);
   }
@@ -173,7 +175,10 @@ export async function executeFunctionSignatureMutation(
     payload: requestPatch,
   };
   const epoch = coordinatorEpoch;
-  const identity = captureProjectIdentity();
+  const identity: ProjectIdentitySnapshot = {
+    projectInstanceId: context.projectInstanceId,
+    epoch: context.projectEpoch,
+  };
   registerPendingMutation(pending);
   pendingSignatureOperations.add(operationId);
 

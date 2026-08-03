@@ -370,7 +370,11 @@ mod tests {
         let execution_state = state.clone();
         let (execution_tx, execution_rx) = std::sync::mpsc::channel();
         let execution = std::thread::spawn(move || {
-            let result = execution_state.execute_graph(&event, &NOOP_RUN_EVENT_SINK);
+            let result = execution_state.execute_graph(
+                &event,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &NOOP_RUN_EVENT_SINK,
+            );
             execution_tx.send(()).unwrap();
             result
         });

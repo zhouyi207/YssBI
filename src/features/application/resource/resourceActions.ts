@@ -1,5 +1,3 @@
-import { useDatabaseStore } from '@/features/core/dataStore';
-
 import {
   commitAfterCommand,
   useResourceStore,
@@ -16,6 +14,7 @@ import type { ResourceMutationResultDto } from '@/shared/types/dto';
 
 import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { deleteVariableAction, renameVariableAction } from '@/features/application/dataManagement/variableActions';
+import { executeDatabaseMutation } from '@/features/application/dataManagement/databaseMutation';
 
 export type { GraphResourceKind };
 
@@ -76,9 +75,13 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
   }
 
   if (ref.kind === 'database') {
-    await DatabaseService.renameDatabase(ref.id, name);
-    useDatabaseStore.getState().updateDatabase(ref.id, { name });
-    useResourceStore.getState().patchResource(ref, { name });
+    await executeDatabaseMutation(ref.id, (authority) => DatabaseService.renameDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      authority.expectedRevision,
+      ref.id,
+      name,
+    ));
     return;
   }
 
@@ -134,9 +137,12 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
   }
 
   if (ref.kind === 'database') {
-    await DatabaseService.deleteDatabase(ref.id);
-    useDatabaseStore.getState().deleteDatabase(ref.id);
-    useResourceStore.getState().removeResource(ref);
+    await executeDatabaseMutation(ref.id, (authority) => DatabaseService.deleteDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      authority.expectedRevision,
+      ref.id,
+    ));
     return;
   }
 

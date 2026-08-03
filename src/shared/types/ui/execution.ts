@@ -5,6 +5,7 @@
  */
 
 import type { Presentation, SourceDescriptor } from '@/features/core/resultSource';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
@@ -57,6 +58,15 @@ export interface PinResultState {
   descriptor: SourceDescriptor;
 }
 
+export interface PinPreviewState {
+  graphPath: string;
+  port: PortAddressDto;
+  generation: number;
+  status: 'pending' | 'ready' | 'error';
+  sourceId: string | null;
+  error: string | null;
+}
+
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
@@ -70,10 +80,14 @@ export interface GraphExecutionState {
   graphDirty: boolean;
   /** output pin id -> latest backend source descriptor */
   pinResults: Map<string, PinResultState>;
+  /** Stable `(graphPath, PortAddressDto)` preview projections. */
+  pinPreviews: Map<string, PinPreviewState>;
 }
 
 /** 全局执行状态 */
 export interface ExecutionState {
+  /** Monotonic authority for preview completions across graph release/reopen. */
+  previewGeneration: number;
   /** 按 graphPath 存储的执行状态 */
   graphs: Record<string, GraphExecutionState>;
   /** 当前正在回放的 graphPath */

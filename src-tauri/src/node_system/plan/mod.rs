@@ -17,8 +17,8 @@ mod tests {
     use crate::node_system::analysis::{
         CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceVersionSet,
     };
-    use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
-    use crate::node_system::protocol::{NodeTypeId, OutputProduction};
+    use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+    use crate::node_system::protocol::{NodeTypeId, OutputProduction, PortKey};
     use crate::node_system::registry::RegistryFingerprint;
 
     fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
@@ -80,6 +80,7 @@ mod tests {
                             callee_source: ValueRef::new(0),
                             caller_destination: ValueRef::new(7),
                         }]),
+                        mandatory: true,
                     }),
                     results: Box::new([BranchResultBinding {
                         destination: ValueRef::new(2),
@@ -114,9 +115,64 @@ mod tests {
             }]),
             results: Box::new([PlanResult {
                 name: "result".into(),
+                output: GraphOutputRef {
+                    graph_path: GraphResourcePath("events/test".into()),
+                    port: PortAddress::declared(
+                        NodeId::from_uuid(uuid::Uuid::nil()),
+                        PortKey::new("result").unwrap(),
+                    ),
+                },
                 value: ValueRef::new(6),
             }]),
         }
+    }
+
+    #[test]
+    fn rejects_duplicate_stable_outputs_names_and_invalid_internal_values() {
+        let mut duplicate_output = valid_plan();
+        duplicate_output.results = Box::new([
+            duplicate_output.results[0].clone(),
+            PlanResult {
+                name: "other".into(),
+                output: duplicate_output.results[0].output.clone(),
+                value: ValueRef::new(6),
+            },
+        ]);
+        assert!(matches!(
+            duplicate_output.validate().unwrap_err().0.as_ref(),
+            [PlanValidationError::DuplicateResultOutput(_)]
+        ));
+
+        let mut duplicate_name = valid_plan();
+        duplicate_name.results = Box::new([
+            duplicate_name.results[0].clone(),
+            PlanResult {
+                name: "result".into(),
+                output: GraphOutputRef {
+                    graph_path: GraphResourcePath("events/test".into()),
+                    port: PortAddress::declared(
+                        NodeId::from_uuid(uuid::Uuid::nil()),
+                        PortKey::new("other").unwrap(),
+                    ),
+                },
+                value: ValueRef::new(6),
+            },
+        ]);
+        assert!(duplicate_name.validate().unwrap_err().0.iter().any(|error| {
+            matches!(error, PlanValidationError::DuplicateResultName(name) if name.as_ref() == "result")
+        }));
+
+        let mut invalid_value = valid_plan();
+        invalid_value.results[0].value = ValueRef::new(invalid_value.value_count);
+        assert!(invalid_value.validate().unwrap_err().0.iter().any(|error| {
+            matches!(
+                error,
+                PlanValidationError::ValueOutOfBounds {
+                    context: "plan result",
+                    ..
+                }
+            )
+        }));
     }
 
     fn valid_bridged_plan() -> (ExecutionPlan, PlannedMaterializationBridge) {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectService } from '@/services/project/projectService';
+import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useProjectIOStore } from './projectIOStore';
 import { reconcileProjectPath, resolveActiveProjectPath } from './projectSession';
 
@@ -11,6 +12,7 @@ vi.mock('@/services/project/projectService', () => ({
 
 describe('projectSession', () => {
   beforeEach(() => {
+    startProjectLifecycle('project-instance-1');
     useProjectIOStore.setState({ currentPath: null });
     vi.mocked(ProjectService.getProjectPath).mockReset();
   });

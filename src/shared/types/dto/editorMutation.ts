@@ -1,4 +1,6 @@
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import type { DatabaseDocumentDto } from './database';
+import type { NodeCreationDescriptorDto } from './nodeCreationDescriptor';
 import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
@@ -10,6 +12,7 @@ export type ResourceKeyDto =
   | { kind: 'graph'; key: string }
   | { kind: 'function'; key: string }
   | { kind: 'variable'; key: string }
+  | { kind: 'database'; key: string }
   | { kind: 'worksheet'; key: string };
 
 export interface MutationRequestDto<TPayload> {
@@ -23,9 +26,8 @@ export type EditorGraphMutationDto =
   | {
       type: 'createNode';
       payload: {
-        nodeTypeId: string;
+        descriptor: NodeCreationDescriptorDto;
         position: NodePositionDto;
-        parameters: Record<string, unknown>;
         userLabel: string | null;
       };
     }
@@ -143,6 +145,11 @@ export interface VariableDocumentPatchDto {
   after: unknown;
 }
 
+export interface DatabaseDocumentPatchDto {
+  before: DatabaseDocumentDto | null;
+  after: DatabaseDocumentDto | null;
+}
+
 export interface WorksheetDocumentPatchDto {
   before: WorksheetDocument | null;
   after: WorksheetDocument | null;
@@ -174,7 +181,8 @@ export type ResourceDocumentPatchDto =
   | { kind: 'graph_resource_move'; patch: ResourcePathMovePatchDto }
   | { kind: 'function'; patch: FunctionDocumentPatchDto }
   | { kind: 'variable'; patch: VariableDocumentPatchDto }
-  | { kind: 'variable_scope_move'; patch: ResourcePathMovePatchDto };
+  | { kind: 'variable_scope_move'; patch: ResourcePathMovePatchDto }
+  | { kind: 'database'; patch: DatabaseDocumentPatchDto };
 
 export interface GraphDeltaDto<TPayload = GraphDocumentPatchDto> {
   graphPath: string;

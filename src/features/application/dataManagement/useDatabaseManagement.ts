@@ -4,16 +4,19 @@ import { i18n } from '@/app/i18n';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import type { LoadDatabaseResult } from '@/shared/types/dto/database';
 import { databaseRecordFromLoad } from '@/shared/types/dto/database';
 import type { DatabaseRecord, LoadDatabaseEngineSpec } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
+import { executeDatabaseCreate, executeDatabaseMutation } from './databaseMutation';
 
 function commitLoadedDatabase(result: LoadDatabaseResult, engine: LoadDatabaseEngineSpec) {
-  useDatabaseStore.getState().addDatabase(result.id, databaseRecordFromLoad(result, engine));
+  const store = useDatabaseStore.getState();
+  const record = databaseRecordFromLoad(result, engine);
+  if (store.databases[result.id]) store.updateDatabase(result.id, record);
+  else store.addDatabase(result.id, record);
 }
 
 async function loadSqliteTable(dbPath: string, table: string) {
@@ -27,7 +30,11 @@ async function loadSqliteTable(dbPath: string, table: string) {
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingSqlite', { table }),
-    () => DatabaseService.loadDatabase(engine),
+    () => executeDatabaseCreate((authority) => DatabaseService.loadDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      engine,
+    )),
   );
   commitLoadedDatabase(result, engine);
   uiStore.showToast(
@@ -48,7 +55,11 @@ async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: str
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingRemote', { label, table }),
-    () => DatabaseService.loadDatabase(loadEngine),
+    () => executeDatabaseCreate((authority) => DatabaseService.loadDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      loadEngine,
+    )),
   );
   commitLoadedDatabase(result, loadEngine);
   uiStore.showToast(
@@ -62,7 +73,11 @@ async function loadExcelSheet(filePath: string, sheet: string) {
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingExcel', { sheet }),
-    () => DatabaseService.loadDatabase(engine),
+    () => executeDatabaseCreate((authority) => DatabaseService.loadDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      engine,
+    )),
   );
   commitLoadedDatabase(result, engine);
   uiStore.showToast(
@@ -83,7 +98,11 @@ async function loadCsv(path: string) {
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingCsv'),
-    () => DatabaseService.loadDatabase(engine),
+    () => executeDatabaseCreate((authority) => DatabaseService.loadDatabase(
+      authority.projectInstanceId,
+      authority.operationId,
+      engine,
+    )),
   );
   commitLoadedDatabase(result, engine);
   uiStore.showToast(
@@ -246,9 +265,13 @@ export function useDatabaseManagement() {
       await runWithDataOperationProgress(
         i18n.t('dataOperation.deleting'),
         String(previous.name ?? id),
-        () => DatabaseService.deleteDatabase(id),
+        () => executeDatabaseMutation(id, (authority) => DatabaseService.deleteDatabase(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          id,
+        )),
       );
-      useDatabaseStore.getState().deleteDatabase(id);
       if (detailFocus?.kind === 'data' && detailFocus.id === id) {
         clearDetailFocus();
       }
@@ -264,9 +287,13 @@ export function useDatabaseManagement() {
     if (!trimmed) return;
 
     try {
-      await DatabaseService.renameDatabase(id, trimmed);
-      useDatabaseStore.getState().updateDatabase(id, { name: trimmed });
-      useResourceStore.getState().patchResource({ id, kind: 'database' }, { name: trimmed });
+      await executeDatabaseMutation(id, (authority) => DatabaseService.renameDatabase(
+        authority.projectInstanceId,
+        authority.operationId,
+        authority.expectedRevision,
+        id,
+        trimmed,
+      ));
     } catch (e) {
       logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
       uiStore.showToast(i18n.t('dataOperation.renameFailed', { error: String(e) }), 'error');

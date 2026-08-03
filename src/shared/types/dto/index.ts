@@ -13,7 +13,9 @@ export * from './graphModel';
 export * from './editorProjection';
 export * from './editorMutation';
 export * from './runEvent';
+export * from './executionDemand';
 export * from './trace';
+export * from './resultSource';
 
 export * from './converters';
 export * from './dataType';

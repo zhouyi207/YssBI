@@ -5,7 +5,8 @@ import { buildGraphResourceMeta, useResourceStore } from '@/features/core/resour
 import { EventUpdatedHandler, FunctionUpdatedHandler } from './GraphEventHandler';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 
-vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', () => ({
+vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
   invalidateGraphProjection: vi.fn(async () => true),
 }));
 

@@ -26,6 +26,7 @@ fn command_trace_dto_uses_decimal_ids_full_correlation_and_field_allowlist() {
                 ResourceVersion::new("9"),
             )]),
             compile_id: CompileId::new(unsafe_id),
+            selection_digest: Some("demand-selection-a".into()),
             run_id: Some(RunId::new(unsafe_id)),
             node_id: Some(node_id),
             node_type_id: Some(NodeTypeId::new("yssbi.test.node").unwrap()),
@@ -45,9 +46,21 @@ fn command_trace_dto_uses_decimal_ids_full_correlation_and_field_allowlist() {
         ]),
     };
 
+    let second_event = SpanEvent {
+        correlation: CorrelationContext {
+            selection_digest: Some("demand-selection-b".into()),
+            ..event.correlation.clone()
+        },
+        ..event.clone()
+    };
     let value = serde_json::to_value(TraceRecordDto::from(TraceRecord {
         sequence: unsafe_id,
         event,
+    }))
+    .unwrap();
+    let second = serde_json::to_value(TraceRecordDto::from(TraceRecord {
+        sequence: unsafe_id + 1,
+        event: second_event,
     }))
     .unwrap();
 
@@ -58,6 +71,19 @@ fn command_trace_dto_uses_decimal_ids_full_correlation_and_field_allowlist() {
     assert_eq!(value["correlation"]["graphPath"], "events/main.yssbi-event");
     assert_eq!(value["correlation"]["graphRevision"], unsafe_id.to_string());
     assert_eq!(value["correlation"]["compileId"], unsafe_id.to_string());
+    assert_eq!(
+        value["correlation"]["selectionDigest"],
+        "demand-selection-a"
+    );
+    assert!(value["correlation"].get("selection_digest").is_none());
+    assert_eq!(
+        value["correlation"]["compileId"],
+        second["correlation"]["compileId"]
+    );
+    assert_ne!(
+        value["correlation"]["selectionDigest"],
+        second["correlation"]["selectionDigest"]
+    );
     assert_eq!(value["correlation"]["runId"], unsafe_id.to_string());
     assert_eq!(value["correlation"]["nodeId"], node_id.to_string());
     assert_eq!(value["correlation"]["nodeTypeId"], "yssbi.test.node");

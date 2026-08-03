@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { useGraphDataStore, useGraphMetaStore, useVariableStore } from '@/features/core/dataStore';
+import {
+  useDatabaseStore,
+  useGraphDataStore,
+  useGraphMetaStore,
+  useVariableStore,
+} from '@/features/core/dataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
@@ -16,6 +21,7 @@ import { useHistoryStore } from '@/features/core/history';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import type { ResourceMoveDto, ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { ProjectDatabaseIndexRow, ProjectIndexRow } from '@/services/project/projectService';
 import {
   ProjectPublicationCoordinator,
   type ProjectPublicationDependencies,
@@ -24,6 +30,7 @@ import { prepareGraphResourceMove } from './projectPublicationMovePlan';
 import {
   commitPreparedProjectRecovery,
   prepareProjectRecoveryCommit,
+  validateProjectRecoveryIndex,
 } from './projectPublicationRecovery';
 import {
   commitPreparedPublication,
@@ -35,6 +42,36 @@ const firstPath = 'events/First.yssbi-event';
 const secondPath = 'events/Second.yssbi-event';
 const destinationPath = 'events/Merged.yssbi-event';
 const worksheetId = 'worksheet-1';
+
+function databaseIndexRow(
+  overrides: Partial<ProjectDatabaseIndexRow> = {},
+): ProjectDatabaseIndexRow {
+  return {
+    id: 'sales',
+    resourcePath: 'opaque-database-resource',
+    revision: 4,
+    engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+    schemaVersion: 7,
+    required: true,
+    name: 'Authoritative sales',
+    ...overrides,
+  };
+}
+
+function recoveryIndex(databases: ProjectDatabaseIndexRow[] = []): ProjectIndexRow {
+  return {
+    projectInstanceId,
+    projectName: 'Current',
+    appVersion: '0.2.7',
+    exportTime: '',
+    publicationRevision: 2,
+    history: { canUndo: false, canRedo: false },
+    graphs: [],
+    variables: [],
+    worksheets: [],
+    databases,
+  };
+}
 
 function worksheet(name = 'Worksheet'): WorksheetDocument {
   return {
@@ -89,6 +126,8 @@ function snapshotProductionStores() {
     documents: useDocumentStateStore.getState().documents,
     worksheetIndex: useWorksheetStore.getState().index,
     worksheetDocuments: useWorksheetStore.getState().documents,
+    databases: useDatabaseStore.getState().databases,
+    databaseRevisions: useDatabaseStore.getState().revisions,
     focusedSession: useGraphSessionStore.getState().focusedSession,
     tabs: useEditorTabStore.getState().snapshotMemento(),
     viewports: useViewportStore.getState().viewports,
@@ -98,7 +137,8 @@ function snapshotProductionStores() {
 function resetProductionStores(): void {
   useGraphDataStore.setState({ graphEntities: {} });
   useGraphMetaStore.setState({ graphs: {} });
-  useVariableStore.setState({ variables: {} });
+  useVariableStore.setState({ variables: {}, revisions: {} });
+  useDatabaseStore.setState({ databases: {}, revisions: {} });
   useResourceStore.getState().clear();
   useDocumentStateStore.getState().clear();
   useWorksheetStore.getState().clear();
@@ -110,6 +150,73 @@ function resetProductionStores(): void {
 
 describe('project publication production stores', () => {
   beforeEach(resetProductionStores);
+
+  it('applies canonical database deltas to the database revision authority projection', () => {
+    const operationId = '00000000-0000-0000-0000-000000000904';
+    const before = {
+      id: 'sales',
+      engine: { duckDb: { path: 'database/project.duckdb', table: 'sales' } },
+      schemaVersion: 1,
+      required: false,
+      name: 'Before',
+    };
+    const after = { ...before, name: 'After' };
+    useDatabaseStore.setState({
+      databases: {
+        sales: {
+          ...before,
+          name: 'Before',
+          columns: [{ name: 'amount', type: 'Float64' }],
+          resourcePath: 'opaque database resource path',
+        },
+      },
+      revisions: { sales: 4 },
+    });
+    useResourceStore.getState().upsertResource({
+      id: 'sales',
+      kind: 'database',
+      name: 'Before',
+      uri: 'yssbi://database/sales',
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+    const result: ResourceMutationResultDto = {
+      operationId,
+      projectInstanceId,
+      publicationRevision: 1,
+      moves: [],
+      deltas: [{
+        resource: { kind: 'database', key: 'opaque database resource path' },
+        fromRevision: 4,
+        toRevision: 5,
+        causedBy: operationId,
+        payload: { kind: 'database', patch: { before, after } },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+      history: { canUndo: false, canRedo: false },
+    };
+
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId,
+      epoch: 1,
+      fingerprint: 'database',
+      affectedGraphPaths: new Set(),
+      moves: [],
+    });
+    commitPreparedPublication(plan);
+
+    expect(useDatabaseStore.getState().revisions.sales).toBe(5);
+    expect(useDatabaseStore.getState().databases.sales).toMatchObject({
+      name: 'After',
+      columns: [{ name: 'amount', type: 'Float64' }],
+      resourcePath: 'opaque database resource path',
+    });
+    expect(useResourceStore.getState().resources['yssbi://database/sales']?.name).toBe('After');
+  });
 
   it('rejects collective move destination conflicts with zero production-store effects', () => {
     useResourceStore.getState().setSnapshot({
@@ -268,6 +375,7 @@ describe('project publication production stores', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
     };
     const preparation = {
       projectInstanceId,
@@ -314,6 +422,257 @@ describe('project publication production stores', () => {
     expect(useEditorTabStore.getState().placements).toEqual({});
     expect(useViewportStore.getState().viewports).toEqual({});
     expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: true });
+  });
+
+  it('materializes an initial-revision database from ProjectIndex into an empty store', () => {
+    const row = databaseIndexRow({ revision: 0 });
+    const index = recoveryIndex([row]);
+    expect(validateProjectRecoveryIndex(index, projectInstanceId)).toBeUndefined();
+    const prepared = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 2,
+      index,
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map(),
+    });
+
+    commitPreparedProjectRecovery(prepared);
+
+    expect(useDatabaseStore.getState()).toMatchObject({
+      databases: {
+        sales: {
+          id: 'sales',
+          resourcePath: 'opaque-database-resource',
+          name: 'Authoritative sales',
+          engine: row.engine,
+          schemaVersion: 7,
+          required: true,
+        },
+      },
+      revisions: { sales: 0 },
+    });
+    expect(useResourceStore.getState().resources['yssbi://database/sales']).toMatchObject({
+      id: 'sales',
+      kind: 'database',
+      name: 'Authoritative sales',
+      exists: true,
+    });
+  });
+
+  it('replaces canonical database fields while preserving only same-id runtime enrichment', () => {
+    useDatabaseStore.setState({
+      databases: {
+        sales: {
+          id: 'sales',
+          resourcePath: 'stale-resource-path',
+          name: 'Stale name',
+          engine: { inMemory: { name: 'stale' } },
+          schemaVersion: 1,
+          required: false,
+          columns: [{ name: 'amount', type: 'Float64' }],
+          rowCount: 12,
+          columnCount: 1,
+          loadError: 'runtime load error',
+        },
+        unrelated: {
+          id: 'unrelated',
+          name: 'Must be removed',
+          engine: { inMemory: { name: 'unrelated' } },
+          schemaVersion: 1,
+          required: false,
+        },
+      },
+      revisions: { sales: 1, unrelated: 8 },
+    });
+    useResourceStore.getState().setSnapshot({
+      resources: [{
+        id: 'sales',
+        kind: 'database',
+        name: 'Stale name',
+        uri: 'yssbi://database/sales',
+        exists: true,
+        loaded: false,
+        hasDirtyDocument: false,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      }, {
+        id: 'unrelated',
+        kind: 'database',
+        name: 'Must be removed',
+        uri: 'yssbi://database/unrelated',
+        exists: true,
+        loaded: false,
+        hasDirtyDocument: false,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      }],
+      graphOrder: [],
+    });
+    const row = databaseIndexRow();
+
+    const prepared = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 2,
+      index: recoveryIndex([row]),
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map(),
+    });
+    commitPreparedProjectRecovery(prepared);
+
+    expect(useDatabaseStore.getState().databases).toEqual({
+      sales: {
+        id: 'sales',
+        resourcePath: 'opaque-database-resource',
+        name: 'Authoritative sales',
+        engine: row.engine,
+        schemaVersion: 7,
+        required: true,
+        columns: [{ name: 'amount', type: 'Float64' }],
+        rowCount: 12,
+        columnCount: 1,
+        loadError: 'runtime load error',
+      },
+    });
+    expect(useDatabaseStore.getState().revisions).toEqual({ sales: 4 });
+    expect(useResourceStore.getState().resources).toEqual({
+      'yssbi://database/sales': expect.objectContaining({
+        name: 'Authoritative sales',
+        loaded: false,
+      }),
+    });
+  });
+
+  it('removes database declaration revision and resource together when absent from ProjectIndex', () => {
+    useDatabaseStore.setState({
+      databases: {
+        sales: {
+          id: 'sales',
+          name: 'Sales',
+          engine: { inMemory: { name: 'sales' } },
+          schemaVersion: 1,
+          required: false,
+        },
+      },
+      revisions: { sales: 3 },
+    });
+    useResourceStore.getState().upsertResource({
+      id: 'sales',
+      kind: 'database',
+      name: 'Sales',
+      uri: 'yssbi://database/sales',
+      exists: true,
+      loaded: false,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+
+    const prepared = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 2,
+      index: recoveryIndex(),
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map(),
+    });
+    commitPreparedProjectRecovery(prepared);
+
+    expect(useDatabaseStore.getState().databases).toEqual({});
+    expect(useDatabaseStore.getState().revisions).toEqual({});
+    expect(useResourceStore.getState().resources).toEqual({});
+  });
+
+  it.each([
+    ['missing engine', (({ engine: _engine, ...row }) => row)(databaseIndexRow())],
+    ['missing schemaVersion', (({ schemaVersion: _schemaVersion, ...row }) => row)(databaseIndexRow())],
+    ['missing required', (({ required: _required, ...row }) => row)(databaseIndexRow())],
+    ['missing name', (({ name: _name, ...row }) => row)(databaseIndexRow())],
+    ['malformed engine', databaseIndexRow({ engine: { duckDb: { path: 'only-path' } } as never })],
+    ['empty id', databaseIndexRow({ id: '' })],
+    ['negative revision', databaseIndexRow({ revision: -1 })],
+    ['fractional revision', databaseIndexRow({ revision: 0.5 })],
+    ['unsafe revision', databaseIndexRow({ revision: Number.MAX_SAFE_INTEGER + 1 })],
+    ['empty resource path', databaseIndexRow({ resourcePath: '' })],
+  ])('rejects %s in a database recovery row', (_label, malformed) => {
+    const index = recoveryIndex([malformed as ProjectDatabaseIndexRow]);
+
+    expect(validateProjectRecoveryIndex(index, projectInstanceId))
+      .toBe('recovery database metadata is malformed');
+  });
+
+  it('rejects duplicate database recovery IDs', () => {
+    const index = recoveryIndex([
+      databaseIndexRow(),
+      databaseIndexRow({ resourcePath: 'another-opaque-path', revision: 5 }),
+    ]);
+
+    expect(validateProjectRecoveryIndex(index, projectInstanceId))
+      .toBe('recovery database metadata is malformed');
+  });
+
+  it('accepts nullable database names from the Rust ProjectIndex wire shape', () => {
+    const index = recoveryIndex([databaseIndexRow({ name: null })]);
+
+    expect(validateProjectRecoveryIndex(index, projectInstanceId)).toBeUndefined();
+  });
+
+  it('recovers authoritative variable resource path metadata from ProjectIndex', () => {
+    const variableId = '00000000-0000-0000-0000-000000000905';
+    useVariableStore.setState({
+      variables: {
+        [variableId]: {
+          id: variableId,
+          resourcePath: 'stale-opaque-variable-path',
+          name: 'Counter',
+          dataType: { kind: 'Int64' },
+          dataValue: { kind: 'Int64', value: 1 },
+          description: '',
+          scope: { type: 'global' },
+          tags: [],
+        },
+      },
+      revisions: { [variableId]: 1 },
+    });
+    const plan = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 2,
+      index: {
+        projectInstanceId,
+        projectName: 'Current',
+        appVersion: '0.2.7',
+        exportTime: '',
+        publicationRevision: 2,
+        history: { canUndo: false, canRedo: false },
+        graphs: [],
+        variables: [{
+          id: variableId,
+          resourcePath: 'recovered-opaque-variable-path',
+          revision: 2,
+          name: 'Counter',
+          dataType: { kind: 'Int64' },
+          dataValue: { kind: 'Int64', value: 2 },
+          description: '',
+          scope: { type: 'global' },
+          tags: [],
+        }],
+        worksheets: [],
+        databases: [],
+      },
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map(),
+    });
+
+    commitPreparedProjectRecovery(plan);
+
+    expect(useVariableStore.getState().variables[variableId]?.resourcePath)
+      .toBe('recovered-opaque-variable-path');
   });
 
   it('authoritatively removes absent resources documents tabs sessions and worksheets during recovery', () => {
@@ -374,6 +733,7 @@ describe('project publication production stores', () => {
         graphs: [],
         variables: [],
         worksheets: [],
+        databases: [],
       },
       projections: new Map(),
       graphPathsLoadedAtStart: new Set([firstPath]),

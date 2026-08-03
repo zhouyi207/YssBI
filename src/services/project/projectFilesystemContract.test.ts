@@ -1,16 +1,129 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { extname, join, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve } from 'node:path';
+import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const sourceRoot = resolve('src');
+
+interface ArchitectureSource {
+  path: string;
+  source: string;
+}
+
+const legacyIdentityFacadePaths = [
+  'src/services/project/projectIdentity.ts',
+  'src/features/application/projectIdentity.ts',
+] as const;
+const legacyIdentityTargets = new Set(
+  legacyIdentityFacadePaths.map((path) => path.replace(/\.ts$/, '')),
+);
+const projectPublicationTarget =
+  'src/features/application/editorMutation/projectPublicationCoordinator';
+
+function sourceModuleSpecifiers(path: string, source: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const specifiers: string[] = [];
+  const addLiteral = (node: ts.Expression): void => {
+    if (ts.isStringLiteralLike(node)) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      if (node.moduleSpecifier) addLiteral(node.moduleSpecifier);
+    } else if (
+      ts.isImportEqualsDeclaration(node)
+      && ts.isExternalModuleReference(node.moduleReference)
+      && node.moduleReference.expression
+    ) {
+      addLiteral(node.moduleReference.expression);
+    } else if (ts.isCallExpression(node)) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
+        && node.arguments.length >= 1;
+      const isRequire = ts.isIdentifier(node.expression)
+        && node.expression.text === 'require'
+        && node.arguments.length === 1;
+      if (isDynamicImport || isRequire) addLiteral(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return specifiers;
+}
+
+function resolveSourceSpecifier(importerPath: string, specifier: string): string | null {
+  const absoluteTarget = specifier.startsWith('@/')
+    ? resolve(sourceRoot, specifier.slice(2))
+    : specifier.startsWith('.')
+      ? resolve(dirname(resolve(importerPath)), specifier)
+      : null;
+  if (absoluteTarget === null) return null;
+  return relative(resolve('.'), absoluteTarget).replace(/\\/g, '/');
+}
+
+function resolvedSourceTargets({ path, source }: ArchitectureSource): string[] {
+  return sourceModuleSpecifiers(path, source).flatMap((specifier) => {
+    const target = resolveSourceSpecifier(path, specifier);
+    return target === null ? [] : [target.replace(/\.(?:ts|tsx)$/, '')];
+  });
+}
+
+function readArchitectureSource(path: string): ArchitectureSource {
+  return { path, source: readFileSync(resolve(path), 'utf8') };
+}
+
+function serviceBoundaryViolations(sources: readonly ArchitectureSource[]): string[] {
+  return sources
+    .filter(({ path, source }) => sourceModuleSpecifiers(path, source).some((specifier) => {
+      const target = resolveSourceSpecifier(path, specifier);
+      return target !== null && /^src\/(?:features|views)(?:\/|$)/.test(target);
+    }))
+    .map(({ path }) => path);
+}
+
+function legacyIdentityViolations(
+  sources: readonly ArchitectureSource[],
+  restoredFacadePaths: readonly string[] = [],
+): string[] {
+  const sourceViolations = sources
+    .filter(({ path, source }) => sourceModuleSpecifiers(path, source).some((specifier) => {
+      const target = resolveSourceSpecifier(path, specifier);
+      return target !== null && legacyIdentityTargets.has(target.replace(/\.(?:ts|tsx)$/, ''));
+    }))
+    .map(({ path }) => path);
+  return [
+    ...restoredFacadePaths.filter((path) => legacyIdentityFacadePaths.includes(
+      path as typeof legacyIdentityFacadePaths[number],
+    )),
+    ...sourceViolations,
+  ];
+}
+
+function graphProjectionLifecycleViolations(
+  sources: readonly ArchitectureSource[],
+): string[] {
+  return sources
+    .filter((source) => resolvedSourceTargets(source).some((target) =>
+      target === projectPublicationTarget || legacyIdentityTargets.has(target)))
+    .map(({ path }) => path);
+}
+
+function isProductionSourcePath(path: string): boolean {
+  const normalizedPath = path.replace(/\\/g, '/');
+  return ['.ts', '.tsx'].includes(extname(normalizedPath))
+    && !/\.(?:test|spec)\.[^/]+$/.test(normalizedPath)
+    && !/(?:^|\/)__tests__(?:\/|$)/.test(normalizedPath);
+}
 
 function productionSources(directory = sourceRoot): Array<{ path: string; source: string }> {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return productionSources(path);
-    if (!['.ts', '.tsx'].includes(extname(path)) || path.endsWith('.test.ts') || path.endsWith('.test.tsx')) {
-      return [];
-    }
+    if (!isProductionSourcePath(path)) return [];
     return [{ path: relative(resolve('.'), path).replace(/\\/g, '/'), source: readFileSync(path, 'utf8') }];
   });
 }
@@ -72,6 +185,171 @@ function invokePayload(source: string, command: string): string | null {
 }
 
 describe('projectFilesystemContract', () => {
+  const forbiddenServiceImportFixtures: Array<[string, ArchitectureSource]> = [
+    ['static import with bindings', {
+      path: 'src/services/project/staticFixture.ts',
+      source: "import value from '@/features/core/example';",
+    }],
+    ['side-effect import', {
+      path: 'src/services/project/sideEffectFixture.ts',
+      source: "import '@/features/core/example';",
+    }],
+    ['dynamic import', {
+      path: 'src/services/project/dynamicFixture.ts',
+      source: "const value = await import('@/views/example');",
+    }],
+    ['dynamic import with attributes', {
+      path: 'src/services/project/dynamicAttributesFixture.ts',
+      source: "const value = await import('@/views/example.json', { with: { type: 'json' } });",
+    }],
+    ['CommonJS require', {
+      path: 'src/services/project/requireFixture.ts',
+      source: "const value = require('@/features/core/example');",
+    }],
+    ['TypeScript import equals require', {
+      path: 'src/services/project/importEqualsFixture.ts',
+      source: "import value = require('@/features/application/example');",
+    }],
+    ['relative import', {
+      path: 'src/services/project/relativeFixture.ts',
+      source: "import value from '../../features/core/example';",
+    }],
+    ['re-export', {
+      path: 'src/services/project/reExportFixture.ts',
+      source: "export { value } from '@/views/example';",
+    }],
+    ['alias traversal into features', {
+      path: 'src/services/project/aliasFeatureTraversalFixture.ts',
+      source: "import value from '@/shared/../features/core/example';",
+    }],
+    ['alias traversal into views', {
+      path: 'src/services/project/aliasViewTraversalFixture.ts',
+      source: "export { value } from '@/services/../views/example';",
+    }],
+  ];
+
+  it.each(forbiddenServiceImportFixtures)('rejects %s service boundary violation', (_, fixture) => {
+    expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);
+  });
+
+  it('allows service and shared imports in the scoped service audit', () => {
+    const fixtures: ArchitectureSource[] = [
+      {
+        path: 'src/services/project/allowedServiceFixture.ts',
+        source: "import { GraphService } from '@/services/graph/graphService';",
+      },
+      {
+        path: 'src/services/project/allowedSharedFixture.ts',
+        source: "export type { ProjectIndexDto } from '../../shared/types/dto/project';",
+      },
+      {
+        path: 'src/services/project/nonLiteralDynamicFixture.ts',
+        source: "const modulePath = getModulePath(); void import(modulePath); require(modulePath);",
+      },
+    ];
+
+    expect(serviceBoundaryViolations(fixtures)).toEqual([]);
+  });
+
+  it('centralizes production source filtering for tests, specs, and test directories', () => {
+    expect([
+      'src/services/example.ts',
+      'src/services/example.tsx',
+      'src/services/example.test.ts',
+      'src/services/example.spec.tsx',
+      'src/services/__tests__/helper.ts',
+      'src/services/example.js',
+    ].map(isProductionSourcePath)).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it('keeps production services independent from features and views', () => {
+    const serviceSources = productionSources(resolve('src/services'));
+
+    expect(serviceSources).toHaveLength(34);
+    expect(serviceBoundaryViolations(serviceSources)).toEqual([]);
+  });
+
+  it('rejects restored legacy identity facades and import or re-export shims', () => {
+    const fixtures: ArchitectureSource[] = [
+      {
+        path: 'src/features/application/serviceShim.ts',
+        source: "import { captureProjectIdentity } from '@/services/project/projectIdentity';",
+      },
+      {
+        path: 'src/features/application/applicationShim.ts',
+        source: "export * from '@/features/application/projectIdentity';",
+      },
+      {
+        path: 'src/features/application/relativeShim.ts',
+        source: "export { captureProjectIdentity } from './projectIdentity';",
+      },
+    ];
+    const restoredFacadePaths = [...legacyIdentityFacadePaths];
+
+    expect(legacyIdentityViolations(fixtures, restoredFacadePaths)).toEqual([
+      ...restoredFacadePaths,
+      ...fixtures.map(({ path }) => path),
+    ]);
+  });
+
+  it('keeps both historical identity facades absent without import or re-export shims', () => {
+    const restoredFacadePaths = legacyIdentityFacadePaths
+      .filter((path) => existsSync(resolve(path)));
+
+    expect(restoredFacadePaths).toEqual([]);
+    expect(legacyIdentityViolations(productionSources(), restoredFacadePaths)).toEqual([]);
+  });
+
+  it.each([
+    ['publication reverse import', {
+      path: 'src/features/application/editorProjection/importReverseEdgeFixture.ts',
+      source: "import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';",
+    }],
+    ['publication reverse re-export', {
+      path: 'src/features/application/editorProjection/reExportReverseEdgeFixture.ts',
+      source: "export * from '../editorMutation/projectPublicationCoordinator';",
+    }],
+    ['application identity facade re-export', {
+      path: 'src/features/application/editorProjection/identityReExportFixture.ts',
+      source: "export * from '@/shared/../features/application/projectIdentity';",
+    }],
+  ] satisfies Array<[string, ArchitectureSource]>)(
+    'rejects graph projection %s lifecycle edge',
+    (_, fixture) => {
+      expect(graphProjectionLifecycleViolations([fixture])).toEqual([fixture.path]);
+    },
+  );
+
+  it('keeps lifecycle authority dependency-safe and consumed by identity coordinators', () => {
+    const authority = readArchitectureSource(
+      'src/features/core/projectLifecycle/projectLifecycleAuthority.ts',
+    );
+    const publication = readArchitectureSource(
+      'src/features/application/editorMutation/projectPublicationCoordinator.ts',
+    );
+    const graphProjection = readArchitectureSource(
+      'src/features/application/editorProjection/graphProjectionCoordinator.ts',
+    );
+    const authorityForbiddenTargets = resolvedSourceTargets(authority).filter((target) =>
+      /^src\/(?:features\/application|services|views)(?:\/|$)/.test(target));
+    const authorityTarget = 'src/features/core/projectLifecycle/projectLifecycleAuthority';
+    const graphProjectionTarget =
+      'src/features/application/editorProjection/graphProjectionCoordinator';
+
+    expect(authorityForbiddenTargets).toEqual([]);
+    expect(resolvedSourceTargets(publication)).toContain(authorityTarget);
+    expect(resolvedSourceTargets(publication)).toContain(graphProjectionTarget);
+    expect(resolvedSourceTargets(graphProjection)).toContain(authorityTarget);
+    expect(graphProjectionLifecycleViolations([graphProjection])).toEqual([]);
+  });
+
   it('sends projectInstanceId for every active-project read and write', () => {
     const serviceSources = productionSources(resolve('src/services'));
     const offenders = activeProjectCommands.flatMap((command) => {
@@ -111,7 +389,8 @@ describe('projectFilesystemContract', () => {
         && (source.includes('isCurrentProjectIdentity')
           || source.includes('assertCurrentProjectIdentity'));
       const usesCommandContextFacade = (source.includes('captureProjectCommandContext')
-        || source.includes('captureGraphSaveCommandContext'))
+        || source.includes('captureGraphSaveCommandContext')
+        || source.includes('captureRevisionedProjectCommandSnapshot'))
         && (source.includes('.isCurrent()')
           || source.includes('.assertCurrent()')
           || source.includes('isGraphSaveCommandRevisionCurrent'));
@@ -174,12 +453,15 @@ describe('projectFilesystemContract', () => {
       return matches.map((match) => `${path}: ${match}`);
     });
 
-    const identityFacade = readFileSync(resolve('src/services/project/projectIdentity.ts'), 'utf8');
-    const projectIOStore = readFileSync(resolve('src/features/core/dataStore/projectIOStore.ts'), 'utf8');
+    const publicationCoordinator = readFileSync(
+      resolve('src/features/application/editorMutation/projectPublicationCoordinator.ts'),
+      'utf8',
+    );
 
     expect(offenders).toEqual([]);
-    expect(identityFacade).toContain('projectPublicationCoordinator');
-    expect(identityFacade).not.toMatch(/(?:let|const)\s+\w*epoch\b/i);
-    expect(projectIOStore).not.toMatch(/^\s*epoch\s*:/m);
+    const publicationState = publicationCoordinator.match(
+      /interface ProjectPublicationState \{[\s\S]*?\n\}/,
+    )?.[0] ?? '';
+    expect(publicationState).not.toMatch(/^\s*(?:projectInstanceId|epoch|activationRevision):/m);
   });
 });

@@ -213,8 +213,14 @@ impl ExecutionPlan {
         validate_resources(self, &mut errors);
 
         let mut result_names = BTreeSet::new();
+        let mut result_outputs = BTreeSet::new();
         for result in &self.results {
             check_value(&mut errors, "plan result", result.value, value_count);
+            if !result_outputs.insert(result.output.clone()) {
+                errors.push(PlanValidationError::DuplicateResultOutput(
+                    result.output.clone(),
+                ));
+            }
             if result.name.is_empty() || result.name.trim() != result.name.as_ref() {
                 errors.push(PlanValidationError::InvalidResultName(result.name.clone()));
             } else if !result_names.insert(result.name.clone()) {
@@ -1115,6 +1121,7 @@ pub enum PlanValidationError {
     },
     InvalidResultName(Box<str>),
     DuplicateResultName(Box<str>),
+    DuplicateResultOutput(GraphOutputRef),
     MissingResultSource(ValueRef),
     DuplicateResourceRequirement(ResourceId),
     ConflictingResourceRequirement(ResourceId),

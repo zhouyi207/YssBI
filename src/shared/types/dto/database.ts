@@ -57,6 +57,7 @@ export type LoadDatabaseEngineSpec = Exclude<DatabaseEngineDTO, { inMemory: InMe
 /** 后端 `DatabaseDeclDTO` + 前端 store 富元数据（列统计、加载错误等） */
 export interface DatabaseDeclDTO {
   id: string;
+  resourcePath?: string;
   name?: string;
   engine?: DatabaseEngineDTO;
   schemaVersion?: number;
@@ -65,6 +66,15 @@ export interface DatabaseDeclDTO {
   rowCount?: number;
   columnCount?: number;
   loadError?: string;
+}
+
+/** Canonical `DatabaseDecl` carried by resource mutation patches. */
+export interface DatabaseDocumentDto {
+  id: string;
+  engine: DatabaseEngineDTO;
+  schemaVersion: number;
+  required: boolean;
+  name: string | null;
 }
 
 /** 规范化后的 store 记录：`name` 必有 */

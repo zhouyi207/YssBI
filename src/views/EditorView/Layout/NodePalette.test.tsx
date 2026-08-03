@@ -9,7 +9,7 @@ import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatal
 import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import type { LocalizedCatalogResponse } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import { NodePalette } from './NodePalette';
+import { NodePalette, nodePaletteItemKey } from './NodePalette';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -55,8 +55,8 @@ const productionPaletteChain = {
     { kind: 'import', moduleSpecifier: './catalogItem', symbol: 'LocalizedCatalogItem' },
   ],
   'src/features/domain/nodeCatalog/catalogItem.ts': [
-    { kind: 'import', moduleSpecifier: './creationDescriptor', symbol: 'isNodeCreationDescriptor' },
-    { kind: 'import', moduleSpecifier: './creationDescriptor', symbol: 'NodeCreationDescriptor' },
+    { kind: 'import', moduleSpecifier: '@/shared/types/dto/localizedCatalog', symbol: 'isLocalizedCatalogItemDto' },
+    { kind: 'import', moduleSpecifier: '@/shared/types/dto/localizedCatalog', symbol: 'LocalizedCatalogItemDto' },
   ],
   'src/features/domain/nodeCatalog/creationDescriptor.ts': [],
   'src/features/application/nodeCatalog/createNodeFromDescriptor.ts': [
@@ -66,6 +66,7 @@ const productionPaletteChain = {
   ],
   'src/services/nodeSystem/catalogService.ts': [
     { kind: 'import', moduleSpecifier: '@tauri-apps/api/core', symbol: 'invoke' },
+    { kind: 'import', moduleSpecifier: '@/shared/types/dto/localizedCatalog', symbol: 'isLocalizedCatalogDto' },
   ],
 } as const satisfies Record<string, readonly NamedModuleEdge[]>;
 
@@ -209,6 +210,7 @@ const catalog: LocalizedCatalogResponse = {
   categories: [
     { categoryId: 'math', title: '数学', searchText: '数学 math' },
     { categoryId: 'output', title: '输出', searchText: '输出 output' },
+    { categoryId: 'functions', title: '函数', searchText: '函数 functions' },
   ],
   items: [
     {
@@ -217,9 +219,13 @@ const catalog: LocalizedCatalogResponse = {
       description: '将两个数字相加',
       documentation: null,
       categoryId: 'math',
+      iconId: 'math',
+      styleId: 'default',
       aliases: ['sum'],
       technicalTerms: ['addition'],
       pinyin: 'jia fa',
+      ports: [],
+      parameters: [],
       creation: { kind: 'static', nodeTypeId: 'math.add' },
       searchText: '加法 数学 sum addition jia fa',
     },
@@ -229,11 +235,38 @@ const catalog: LocalizedCatalogResponse = {
       description: null,
       documentation: null,
       categoryId: 'output',
+      iconId: 'output',
+      styleId: 'default',
       aliases: ['print'],
       technicalTerms: [],
       pinyin: 'da yin',
+      ports: [],
+      parameters: [],
       creation: { kind: 'static', nodeTypeId: 'output.print' },
       searchText: '打印 输出 print da yin',
+    },
+    {
+      nodeTypeId: 'function.call',
+      title: '调用 Helper',
+      description: null,
+      documentation: null,
+      categoryId: 'functions',
+      iconId: 'function',
+      styleId: 'call',
+      aliases: ['Helper'],
+      technicalTerms: [],
+      ports: [],
+      parameters: [],
+      resourcePath: 'functions/Helper.yssbi-function',
+      resourceRevision: 3,
+      creation: {
+        kind: 'resourceBound',
+        nodeTypeId: 'function.call',
+        resourcePath: 'functions/Helper.yssbi-function',
+        resourceRevision: 3,
+        createArgs: { kind: 'function' },
+      },
+      searchText: '调用 helper',
     },
   ],
 };
@@ -244,6 +277,7 @@ function readyState(): LocalizedNodeCatalogState {
     error: null,
     catalog,
     searchIndex: getLocalizedSearchIndex(catalog),
+    refresh: vi.fn(),
   };
 }
 
@@ -345,7 +379,9 @@ describe('NodePalette', () => {
   }
 
   it('renders a loading state while the localized catalog is loading', () => {
-    catalogState.current = { status: 'loading', error: null, catalog: null, searchIndex: null };
+    catalogState.current = {
+      status: 'loading', error: null, catalog: null, searchIndex: null, refresh: vi.fn(),
+    };
 
     renderPalette();
 
@@ -358,11 +394,25 @@ describe('NodePalette', () => {
       error: 'Catalog request failed',
       catalog: null,
       searchIndex: null,
+      refresh: vi.fn(),
     };
 
     renderPalette();
 
     expect(host.textContent).toContain('Catalog request failed');
+  });
+
+  it('keeps rendering the last catalog when a refresh fails', () => {
+    catalogState.current = {
+      ...readyState(),
+      status: 'error',
+      error: 'Refresh failed',
+    };
+
+    renderPalette();
+
+    expect(host.textContent).toContain('加法');
+    expect(host.textContent).not.toContain('Refresh failed');
   });
 
   it('renders localized categories and items from the catalog response', () => {
@@ -374,15 +424,19 @@ describe('NodePalette', () => {
     expect(host.textContent).toContain('打印');
   });
 
-  it('filters rendered items through the localized search index', () => {
+  it('filters rendered items through title and aliases only', () => {
     renderPalette();
     const input = host.querySelector('input');
     expect(input).not.toBeNull();
 
     act(() => setInputValue(input!, 'sum'));
-
     expect(host.textContent).toContain('加法');
     expect(host.textContent).not.toContain('打印');
+
+    for (const excluded of ['addition', 'math.add', 'jia fa', '数学']) {
+      act(() => setInputValue(input!, excluded));
+      expect(host.textContent).toContain('No matches found');
+    }
   });
 
   it('renders an empty state when search has no matches', () => {
@@ -406,5 +460,98 @@ describe('NodePalette', () => {
       { kind: 'static', nodeTypeId: 'math.add' },
       'zh-CN',
     );
+  });
+
+  it('keys same-type resources by exact descriptor tuple', () => {
+    const first = catalog.items[2];
+    const second = {
+      ...first,
+      resourcePath: 'functions/Other.yssbi-function',
+      creation: {
+        ...first.creation,
+        resourcePath: 'functions/Other.yssbi-function',
+      } as NodeCreationDescriptor,
+    };
+
+    expect(nodePaletteItemKey(first)).toBe(
+      'resourceBound:function.call:functions/Helper.yssbi-function',
+    );
+    expect(nodePaletteItemKey(second)).toBe(
+      'resourceBound:function.call:functions/Other.yssbi-function',
+    );
+  });
+
+  it('keeps same-type resources distinct across search, refresh, and locale changes', () => {
+    const first = catalog.items[2];
+    const second = {
+      ...first,
+      title: '调用 Other',
+      aliases: ['other-only'],
+      resourcePath: 'functions/Other.yssbi-function',
+      creation: {
+        ...first.creation,
+        resourcePath: 'functions/Other.yssbi-function',
+      } as NodeCreationDescriptor,
+      searchText: '调用 other other-only',
+    };
+    const multiCatalog = {
+      ...catalog,
+      resourcePublicationRevision: 70,
+      items: [...catalog.items, second],
+    };
+    catalogState.current = {
+      status: 'ready', error: null, catalog: multiCatalog,
+      searchIndex: getLocalizedSearchIndex(multiCatalog), refresh: vi.fn(),
+    };
+    renderPalette();
+    const input = host.querySelector('input')!;
+    act(() => setInputValue(input, 'other-only'));
+    expect(host.textContent).toContain('调用 Other');
+    expect(host.textContent).not.toContain('调用 Helper');
+
+    const refreshed = {
+      ...multiCatalog,
+      resourcePublicationRevision: 71,
+      items: multiCatalog.items.map((item) => item.resourcePath === second.resourcePath
+        ? { ...item, title: '刷新 Other' }
+        : item),
+    };
+    catalogState.current = {
+      status: 'ready', error: null, catalog: refreshed,
+      searchIndex: getLocalizedSearchIndex(refreshed), refresh: vi.fn(),
+    };
+    act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
+    expect(host.textContent).toContain('刷新 Other');
+
+    const localized = {
+      ...refreshed,
+      locale: 'en-US',
+      items: refreshed.items.map((item) => item.resourcePath === second.resourcePath
+        ? { ...item, title: 'Call Other' }
+        : item),
+    };
+    catalogState.current = {
+      status: 'ready', error: null, catalog: localized,
+      searchIndex: getLocalizedSearchIndex(localized), refresh: vi.fn(),
+    };
+    act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
+    expect(host.textContent).toContain('Call Other');
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('selects a resource descriptor without reconstructing its opaque identity', () => {
+    renderPalette();
+    const item = Array.from(host.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('调用 Helper'));
+
+    act(() => item!.click());
+
+    expect(onSelect).toHaveBeenCalledWith({
+      kind: 'resourceBound',
+      nodeTypeId: 'function.call',
+      resourcePath: 'functions/Helper.yssbi-function',
+      resourceRevision: 3,
+      createArgs: { kind: 'function' },
+    }, 'zh-CN');
   });
 });

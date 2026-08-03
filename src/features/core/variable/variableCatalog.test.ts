@@ -10,6 +10,7 @@ describe('variableCatalog', () => {
     const catalog = applyVariableCatalogFromIndex([
       {
         id: 'global-1',
+        resourcePath: 'variables/global-1',
         revision: 3,
         name: 'Counter',
         dataType: { kind: 'Int64' },
@@ -20,6 +21,7 @@ describe('variableCatalog', () => {
       },
       {
         id: 'local-1',
+        resourcePath: 'variables/local-1',
         revision: 0,
         name: 'Temp',
         dataType: { kind: 'Float64' },
@@ -32,8 +34,10 @@ describe('variableCatalog', () => {
     ]);
 
     expect(Object.keys(catalog)).toEqual(['global-1', 'local-1']);
+    expect(catalog['global-1'].resourcePath).toBe('variables/global-1');
     expect(variableFromIndexRow({
       id: 'global-1',
+      resourcePath: 'variables/global-1',
       revision: 3,
       name: 'Counter',
       dataType: { kind: 'Int64' },

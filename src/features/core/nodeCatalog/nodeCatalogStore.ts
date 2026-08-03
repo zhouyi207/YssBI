@@ -19,6 +19,7 @@ export interface CatalogRequestIdentity {
   projectInstanceId: string;
   locale: string;
   requestGeneration: number;
+  minimumResourcePublicationRevision: number;
 }
 
 export interface CatalogRequestState {
@@ -26,14 +27,18 @@ export interface CatalogRequestState {
   responseKey: string | null;
   error: string | null;
   requestGeneration: number | null;
+  minimumResourcePublicationRevision: number;
 }
 
 export interface NodeCatalogState {
   responses: Record<string, LocalizedCatalogResponse>;
   requests: Record<string, CatalogRequestState>;
+  projectWatermarks: Record<string, number>;
   beginRequest(projectInstanceId: string, locale: string): CatalogRequestIdentity | null;
   storeResponse(identity: CatalogRequestIdentity, response: LocalizedCatalogResponse): boolean;
   storeError(identity: CatalogRequestIdentity, error: string): boolean;
+  observeResourcePublication(projectInstanceId: string, revision: number): boolean;
+  requestRefresh(projectInstanceId: string, locale: string): void;
   clear(): void;
 }
 
@@ -42,6 +47,7 @@ const IDLE_REQUEST: CatalogRequestState = {
   responseKey: null,
   error: null,
   requestGeneration: null,
+  minimumResourcePublicationRevision: 0,
 };
 
 let nextRequestGeneration = 1;
@@ -85,20 +91,28 @@ function ownsRequest(state: NodeCatalogState, identity: CatalogRequestIdentity):
 export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
   responses: {},
   requests: {},
+  projectWatermarks: {},
 
   beginRequest: (projectInstanceId, locale) => {
     let identity: CatalogRequestIdentity | null = null;
     set((state) => {
-      if (selectCatalogRequest(state, projectInstanceId, locale).status === 'loading') return state;
-      identity = { projectInstanceId, locale, requestGeneration: nextRequestGeneration++ };
+      const current = selectCatalogRequest(state, projectInstanceId, locale);
+      if (current.status === 'loading') return state;
+      identity = {
+        projectInstanceId,
+        locale,
+        requestGeneration: nextRequestGeneration++,
+        minimumResourcePublicationRevision: current.minimumResourcePublicationRevision,
+      };
       return {
         requests: {
           ...state.requests,
           [catalogRequestKey(projectInstanceId, locale)]: {
             status: 'loading',
-            responseKey: null,
+            responseKey: current.responseKey,
             error: null,
             requestGeneration: identity.requestGeneration,
+            minimumResourcePublicationRevision: current.minimumResourcePublicationRevision,
           },
         },
       };
@@ -113,10 +127,32 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
       if (!ownsRequest(state, identity)) return state;
       if (response.projectInstanceId !== identity.projectInstanceId
         || response.locale !== identity.locale) return state;
+      const requestKey = catalogRequestKey(identity.projectInstanceId, identity.locale);
+      const request = state.requests[requestKey];
+      if (response.resourcePublicationRevision < identity.minimumResourcePublicationRevision) {
+        return {
+          requests: {
+            ...state.requests,
+            [requestKey]: {
+              ...request,
+              status: 'error',
+              error: `Catalog response is older than publication revision ${identity.minimumResourcePublicationRevision}`,
+              requestGeneration: null,
+            },
+          },
+        };
+      }
       stored = true;
       const responseKey = catalogResponseKey(response);
       return {
         responses: { ...state.responses, [responseKey]: response },
+        projectWatermarks: {
+          ...state.projectWatermarks,
+          [identity.projectInstanceId]: Math.max(
+            state.projectWatermarks[identity.projectInstanceId] ?? 0,
+            response.resourcePublicationRevision,
+          ),
+        },
         requests: {
           ...state.requests,
           [catalogRequestKey(identity.projectInstanceId, identity.locale)]: {
@@ -124,6 +160,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
             responseKey,
             error: null,
             requestGeneration: identity.requestGeneration,
+            minimumResourcePublicationRevision: identity.minimumResourcePublicationRevision,
           },
         },
       };
@@ -136,14 +173,17 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     set((state) => {
       if (!ownsRequest(state, identity)) return state;
       stored = true;
+      const requestKey = catalogRequestKey(identity.projectInstanceId, identity.locale);
+      const current = state.requests[requestKey];
       return {
         requests: {
           ...state.requests,
-          [catalogRequestKey(identity.projectInstanceId, identity.locale)]: {
+          [requestKey]: {
             status: 'error',
-            responseKey: null,
+            responseKey: current.responseKey,
             error,
             requestGeneration: identity.requestGeneration,
+            minimumResourcePublicationRevision: current.minimumResourcePublicationRevision,
           },
         },
       };
@@ -151,5 +191,43 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     return stored;
   },
 
-  clear: () => set({ responses: {}, requests: {} }),
+  observeResourcePublication: (projectInstanceId, revision) => {
+    let advanced = false;
+    set((state) => {
+      const currentRevision = state.projectWatermarks[projectInstanceId] ?? 0;
+      if (!Number.isSafeInteger(revision) || revision <= currentRevision) return state;
+      advanced = true;
+      const requests = { ...state.requests };
+      for (const [key, request] of Object.entries(requests)) {
+        const [requestProject] = JSON.parse(key) as [string, string];
+        if (requestProject !== projectInstanceId) continue;
+        requests[key] = {
+          ...request,
+          status: 'idle',
+          error: null,
+          requestGeneration: null,
+          minimumResourcePublicationRevision: revision,
+        };
+      }
+      return {
+        projectWatermarks: { ...state.projectWatermarks, [projectInstanceId]: revision },
+        requests,
+      };
+    });
+    return advanced;
+  },
+
+  requestRefresh: (projectInstanceId, locale) => set((state) => {
+    const key = catalogRequestKey(projectInstanceId, locale);
+    const current = selectCatalogRequest(state, projectInstanceId, locale);
+    if (current.status === 'loading' || current.status === 'idle') return state;
+    return {
+      requests: {
+        ...state.requests,
+        [key]: { ...current, status: 'idle', error: null, requestGeneration: null },
+      },
+    };
+  }),
+
+  clear: () => set({ responses: {}, requests: {}, projectWatermarks: {} }),
 }));

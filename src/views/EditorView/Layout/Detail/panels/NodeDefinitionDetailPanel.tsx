@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { NODE_CATALOG_UNAVAILABLE_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
+import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 
@@ -9,16 +9,20 @@ interface NodeDefinitionDetailPanelProps {
 
 export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPanelProps) {
   const { t } = useTranslation();
+  const { catalog } = useLocalizedNodeCatalog();
+  const item = catalog?.items.find((candidate) => candidate.nodeTypeId === nodeType);
 
   return (
-    <DetailPanelShell title={t('detail.titleNodeDefinition')}>
+    <DetailPanelShell title={item?.title ?? t('detail.titleNodeDefinition')}>
       <DetailForm>
         <DetailReadonlyField label={t('detail.fields.type')} tone="muted">
           {nodeType}
         </DetailReadonlyField>
-        <DetailReadonlyField label={t('detail.fields.description')} tone="muted">
-          {NODE_CATALOG_UNAVAILABLE_MESSAGE}
-        </DetailReadonlyField>
+        {item?.description ? (
+          <DetailReadonlyField label={t('detail.fields.description')} tone="muted">
+            {item.description}
+          </DetailReadonlyField>
+        ) : null}
       </DetailForm>
     </DetailPanelShell>
   );

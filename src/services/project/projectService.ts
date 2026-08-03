@@ -2,9 +2,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecuteGraphResultDto, RunEvent } from "@/shared/types/dto/runEvent";
+import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
 import type { Graph } from "@/shared/types/domain";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
 import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
+import type { DatabaseEngineDTO } from '@/shared/types/dto/database';
 import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   graphDataToDomainGraph,
@@ -66,6 +68,7 @@ export interface ProjectWorksheetIndexRow {
 
 export interface ProjectVariableIndexRow {
   id: string;
+  resourcePath: string;
   revision: number;
   name: string;
   dataType: import('@/shared/types/domain').DataType;
@@ -76,6 +79,95 @@ export interface ProjectVariableIndexRow {
   ownerGraphPath?: string | null;
   ownerGraphName?: string | null;
   ownerGraphKind?: 'event' | 'function' | null;
+}
+
+export interface ProjectDatabaseIndexRow {
+  id: string;
+  resourcePath: string;
+  revision: number;
+  engine: DatabaseEngineDTO;
+  schemaVersion: number;
+  required: boolean;
+  name: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length && keys.every((key) => key in value);
+}
+
+function isSqlEngine(value: unknown): boolean {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if (isRecord(value.sqlite)) {
+    return hasExactKeys(value.sqlite, ['autoCreate']) && typeof value.sqlite.autoCreate === 'boolean';
+  }
+  if (isRecord(value.postgres)) {
+    return hasExactKeys(value.postgres, ['ssl']) && typeof value.postgres.ssl === 'boolean';
+  }
+  return isRecord(value.mysql)
+    && hasExactKeys(value.mysql, ['charset'])
+    && typeof value.mysql.charset === 'string';
+}
+
+function isDatabaseEngine(value: unknown): value is DatabaseEngineDTO {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if (isRecord(value.csv)) {
+    return hasExactKeys(value.csv, ['path', 'delimiter', 'hasHeader', 'inferSchemaLength'])
+      && typeof value.csv.path === 'string'
+      && typeof value.csv.delimiter === 'string'
+      && [...value.csv.delimiter].length === 1
+      && typeof value.csv.hasHeader === 'boolean'
+      && (value.csv.inferSchemaLength === null
+        || (Number.isSafeInteger(value.csv.inferSchemaLength)
+          && (value.csv.inferSchemaLength as number) >= 0));
+  }
+  if (isRecord(value.sql)) {
+    return hasExactKeys(value.sql, ['engine', 'connectionString', 'table'])
+      && isSqlEngine(value.sql.engine)
+      && typeof value.sql.connectionString === 'string'
+      && typeof value.sql.table === 'string';
+  }
+  if (isRecord(value.parquet)) {
+    return hasExactKeys(value.parquet, ['path', 'columns'])
+      && typeof value.parquet.path === 'string'
+      && (value.parquet.columns === null
+        || (Array.isArray(value.parquet.columns)
+          && value.parquet.columns.every((column) => typeof column === 'string')));
+  }
+  if (isRecord(value.excel)) {
+    return hasExactKeys(value.excel, ['path', 'sheet'])
+      && typeof value.excel.path === 'string'
+      && typeof value.excel.sheet === 'string';
+  }
+  if (isRecord(value.duckDb)) {
+    return hasExactKeys(value.duckDb, ['path', 'table'])
+      && typeof value.duckDb.path === 'string'
+      && typeof value.duckDb.table === 'string';
+  }
+  return isRecord(value.inMemory)
+    && hasExactKeys(value.inMemory, ['name'])
+    && typeof value.inMemory.name === 'string';
+}
+
+export function isProjectDatabaseIndexRow(value: unknown): value is ProjectDatabaseIndexRow {
+  if (!isRecord(value)
+    || !hasExactKeys(value, [
+      'id', 'resourcePath', 'revision', 'engine', 'schemaVersion', 'required', 'name',
+    ])) return false;
+  return typeof value.id === 'string'
+    && value.id.length > 0
+    && typeof value.resourcePath === 'string'
+    && value.resourcePath.length > 0
+    && Number.isSafeInteger(value.revision)
+    && (value.revision as number) >= 0
+    && isDatabaseEngine(value.engine)
+    && Number.isSafeInteger(value.schemaVersion)
+    && (value.schemaVersion as number) >= 0
+    && typeof value.required === 'boolean'
+    && (value.name === null || typeof value.name === 'string');
 }
 
 export interface ProjectActivationResult {
@@ -94,6 +186,7 @@ export interface ProjectIndexRow {
   graphs: ProjectGraphIndexRow[];
   worksheets?: ProjectWorksheetIndexRow[];
   variables?: ProjectVariableIndexRow[];
+  databases: ProjectDatabaseIndexRow[];
 }
 
 /**
@@ -325,6 +418,7 @@ export class ProjectService {
     /** Execute one graph document and drain its streamed run events. */
     static async executeGraphDocument(
         graphPath: string,
+        demand: ExecutionDemandDto,
         onEvent?: (event: RunEvent) => void,
     ): Promise<ExecuteGraphResultDto> {
         const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
@@ -333,7 +427,7 @@ export class ProjectService {
             try {
                 result = await invoke<ExecuteGraphResultDto>(
                     "execute_graph_document",
-                    { graphPath, onEvent: channel },
+                    { graphPath, demand, onEvent: channel },
                 );
             } catch (error) {
                 if (commandSentTerminalRunEvent(error)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildNodeTemplateDragData } from '@/features/domain/nodeCatalog/buildNodeTemplateDragData';
+
 import { buildSidebarDragData } from '@/features/application/sidebar/buildSidebarDragData';
 import {
   buildSidebarDragState,
@@ -13,8 +13,15 @@ import {
 } from './dndContracts';
 
 describe('parseCanvasDragPayload', () => {
-  it('accepts sidebar variable spawn data', () => {
-    const payload = buildSidebarDragData('v1', 'count', 'variable');
+  it('accepts sidebar variable spawn data only with a backend descriptor', () => {
+    const descriptor = {
+      kind: 'resourceBound' as const,
+      nodeTypeId: 'variable.get',
+      resourcePath: 'variables/v1',
+      resourceRevision: 2,
+      createArgs: { kind: 'variable' as const },
+    };
+    const payload = buildSidebarDragData('v1', 'count', 'variable', descriptor);
     expect(parseCanvasDragPayload(payload)?.type).toBe('node-template');
     expect(isNodeTemplateDragData(payload)).toBe(true);
     expect(isSidebarSpawnDrag(payload)).toBe(true);
@@ -35,12 +42,15 @@ describe('parseCanvasDragPayload', () => {
     }
   });
 
-  it('accepts palette node template data', () => {
-    const payload = buildNodeTemplateDragData({
-      title: 'Add',
-      nodeType: 'Math:Add',
-      category: ['Math'],
-    });
+  it('accepts a node template carrying an exact backend descriptor', () => {
+    const payload = {
+      type: DRAG_TYPES.NODE_TEMPLATE,
+      template: {
+        title: 'Add',
+        descriptor: { kind: 'static', nodeTypeId: 'math.add' },
+      },
+    } as const;
+
     expect(isNodeTemplateDragData(payload)).toBe(true);
   });
 
@@ -50,20 +60,34 @@ describe('parseCanvasDragPayload', () => {
     expect(parseCanvasDragPayload(payload)?.type).toBe('tab');
   });
 
-  it('rejects malformed payload', () => {
+  it('rejects missing and extra NodeSpawnTemplate fields', () => {
     expect(parseCanvasDragPayload({ type: 'node-template', template: {} })).toBeNull();
+    expect(parseCanvasDragPayload({
+      type: 'node-template',
+      template: {
+        descriptor: { kind: 'static', nodeTypeId: 'math.add' },
+        nodeType: 'legacy.add',
+      },
+    })).toBeNull();
     expect(parseCanvasDragPayload(null)).toBeNull();
   });
 });
 
 describe('buildSidebarDragState', () => {
-  it('builds node-template drag state without fake template', () => {
-    const payload = buildSidebarDragData('v1', 'count', 'variable');
+  it('builds node-template drag state with the exact descriptor', () => {
+    const descriptor = {
+      kind: 'resourceBound' as const,
+      nodeTypeId: 'variable.get',
+      resourcePath: 'variables/v1',
+      resourceRevision: 2,
+      createArgs: { kind: 'variable' as const },
+    };
+    const payload = buildSidebarDragData('v1', 'count', 'variable', descriptor);
     expect(payload).not.toBeNull();
     const state = buildSidebarDragState(payload!, 10, 20);
     expect(isNodeTemplateDragState(state)).toBe(true);
     if (state.type === DRAG_TYPES.NODE_TEMPLATE) {
-      expect(state.template.nodeType).toBe('Variables:Get Variable');
+      expect(state.template.descriptor).toBe(descriptor);
       expect(state.x).toBe(10);
     }
   });

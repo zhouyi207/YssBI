@@ -5,8 +5,32 @@ use yssbi_lib::database::{
     DatabaseAccess, DatabaseState, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
     query_page_to_dataframe, write_display_name,
 };
-use yssbi_lib::node_system::document::OperationId;
-use yssbi_lib::project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
+use yssbi_lib::node_system::document::{
+    DatabaseResourceKey, OperationId, ResourceKey, ResourceRevision,
+};
+use yssbi_lib::project::{
+    ProjectInstanceId, ProjectState, discover_databases_from_root, project_duckdb_abs,
+};
+
+fn database_authority(
+    state: &ProjectState,
+    database_id: &str,
+) -> (ProjectInstanceId, ResourceRevision) {
+    let session = state
+        .capture_project_session()
+        .expect("capture project session");
+    let index = state
+        .read_project_index(&session.instance_id)
+        .expect("read authoritative project index");
+    assert_eq!(index.project_instance_id, session.instance_id.as_str());
+    let revision = index
+        .databases
+        .iter()
+        .find(|database| database.id == database_id)
+        .expect("database authority")
+        .revision;
+    (session.instance_id, revision)
+}
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
     let project_root = PathBuf::from(format!(
@@ -238,13 +262,65 @@ fn test_edit_save_persists_to_duckdb() {
     let state = ProjectState::new();
     state.activate_project_from_path(&project_root).unwrap();
 
-    state
-        .with_database_mut(&db_id, |db| {
-            db.edit_cell(0, "sepal_length", serde_json::json!(999.0), None)
-        })
+    let (project_instance_id, edit_expected_revision) = database_authority(&state, &db_id);
+    let edit_operation_id = OperationId::new();
+    let edited = state
+        .with_database_mut(
+            &project_instance_id,
+            &db_id,
+            edit_expected_revision,
+            edit_operation_id,
+            |db| db.edit_cell(0, "sepal_length", serde_json::json!(999.0), None),
+        )
         .expect("edit");
+    assert_eq!(
+        edited.mutation.project_instance_id,
+        project_instance_id.as_str()
+    );
+    assert_eq!(edited.mutation.operation_id, edit_operation_id);
+    assert_eq!(edited.mutation.deltas.len(), 1);
+    let edit_delta = &edited.mutation.deltas[0];
+    assert_eq!(
+        edit_delta.resource,
+        ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
+    );
+    assert_eq!(edit_delta.from_revision, edit_expected_revision);
+    assert_eq!(edit_delta.to_revision, edit_expected_revision.next());
+    assert_eq!(edit_delta.caused_by, Some(edit_operation_id));
 
-    save_database_changes(&state, &db_id).expect("save");
+    let (save_project_instance_id, save_expected_revision) = database_authority(&state, &db_id);
+    assert_eq!(save_project_instance_id, project_instance_id);
+    assert_eq!(save_expected_revision, edit_delta.to_revision);
+    let save_operation_id = OperationId::new();
+    let saved = save_database_changes(
+        &state,
+        &save_project_instance_id,
+        &db_id,
+        save_expected_revision,
+        save_operation_id,
+    )
+    .expect("save");
+    assert_eq!(
+        saved.mutation.project_instance_id,
+        project_instance_id.as_str()
+    );
+    assert_eq!(saved.mutation.operation_id, save_operation_id);
+    assert_eq!(saved.mutation.deltas.len(), 1);
+    let save_delta = &saved.mutation.deltas[0];
+    assert_eq!(
+        save_delta.resource,
+        ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
+    );
+    assert_eq!(save_delta.from_revision, save_expected_revision);
+    assert_eq!(save_delta.to_revision, save_expected_revision.next());
+    assert_eq!(save_delta.caused_by, Some(save_operation_id));
+    assert!(!saved.data.can_undo);
+    assert!(!saved.data.can_redo);
+    assert!(!saved.data.is_modified);
+    assert_eq!(saved.data.undo_count, 0);
+    assert_eq!(saved.data.redo_count, 0);
+    let (_, committed_revision) = database_authority(&state, &db_id);
+    assert_eq!(committed_revision, save_delta.to_revision);
     drop(state);
 
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");

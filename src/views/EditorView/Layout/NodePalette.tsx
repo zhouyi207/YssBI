@@ -1,11 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+
+export function nodePaletteItemKey(item: LocalizedCatalogItem): string {
+  return item.creation.kind === 'static'
+    ? item.nodeTypeId
+    : `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`;
+}
 
 export function NodePalette({
   x,
@@ -27,7 +34,7 @@ export function NodePalette({
       style={{ left: x, top: y }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      {status === 'error' ? (
+      {status === 'error' && (!catalog || !searchIndex) ? (
         <p role="alert" className="px-2 py-1 text-destructive">
           {error ?? t('common.error')}
         </p>
@@ -65,7 +72,7 @@ export function NodePalette({
                     <div className="space-y-0.5">
                       {categoryItems.map((item) => (
                         <Button
-                          key={item.nodeTypeId}
+                          key={nodePaletteItemKey(item)}
                           type="button"
                           variant="ghost"
                           className="h-auto w-full justify-start rounded-sm px-2 py-1.5 text-left font-normal"

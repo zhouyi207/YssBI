@@ -24,7 +24,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { ProjectService } from '@/services/project/projectService';
-import { captureProjectIdentity } from '@/services/project/projectIdentity';
+import { captureProjectIdentity } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 
@@ -106,13 +106,16 @@ describe('useProjectIOStore snapshot paths', () => {
   });
 
   it('loadProjectFromData merges database metadata without caching graph bodies', () => {
-    useDatabaseStore.getState().setDatabases({
-      'df-1': {
-        id: 'df-1',
-        name: 'Stored Name',
-        rowCount: 99,
-        columns: [{ name: 'amount', type: 'Float64' }],
+    useDatabaseStore.setState({
+      databases: {
+        'df-1': {
+          id: 'df-1',
+          name: 'Stored Name',
+          rowCount: 99,
+          columns: [{ name: 'amount', type: 'Float64' }],
+        },
       },
+      revisions: { 'df-1': 9 },
     });
 
     const project: ProjectData = {
@@ -136,6 +139,7 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(storedDb.rowCount).toBe(99);
     expect(storedDb.columns).toEqual([{ name: 'amount', type: 'Float64' }]);
     expect(storedDb.engine).toEqual({ csv: { path: '/data/sales.csv' } });
+    expect(useDatabaseStore.getState().revisions).toEqual({});
     expect(useGraphDataStore.getState().hasGraph('evt-1')).toBe(false);
     expect(useProjectIOStore.getState().currentPath).toBeTruthy();
   });
@@ -192,6 +196,7 @@ describe('useProjectIOStore snapshot paths', () => {
       }],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -232,6 +237,72 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(projectPublicationCoordinator.getSnapshotForTests()).toEqual(before.coordinator);
   });
 
+  it('authoritatively replaces variable and database resource path metadata from ProjectIndex', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+    const variableId = '00000000-0000-0000-0000-000000000602';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
+    useVariableStore.setState({
+      variables: {
+        [variableId]: {
+          id: variableId,
+          resourcePath: 'old-opaque-variable-path',
+          name: 'Counter',
+          dataType: { kind: 'Int64' },
+          dataValue: { kind: 'Int64', value: 1 },
+          description: '',
+          scope: { type: 'global' },
+          tags: [],
+        },
+      },
+      revisions: { [variableId]: 1 },
+    });
+    useDatabaseStore.setState({
+      databases: {
+        sales: { id: 'sales', name: 'Sales', resourcePath: 'old-opaque-database-path' },
+      },
+      revisions: { sales: 1 },
+    });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 1,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Current',
+      graphs: [],
+      variables: [{
+        id: variableId,
+        resourcePath: 'new-opaque-variable-path',
+        revision: 2,
+        name: 'Counter',
+        dataType: { kind: 'Int64' },
+        dataValue: { kind: 'Int64', value: 2 },
+        description: '',
+        scope: { type: 'global' },
+        tags: [],
+      }],
+      databases: [{
+        id: 'sales',
+        resourcePath: 'new-opaque-database-path',
+        revision: 7,
+        engine: { inMemory: { name: 'sales' } },
+        schemaVersion: 1,
+        required: false,
+        name: 'Sales',
+      }],
+      worksheets: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    await expect(useProjectIOStore.getState().refreshResourceIndex()).resolves.toBe(true);
+
+    expect(useVariableStore.getState().variables[variableId]?.resourcePath)
+      .toBe('new-opaque-variable-path');
+    expect(useDatabaseStore.getState().databases.sales?.resourcePath)
+      .toBe('new-opaque-database-path');
+    expect(useDatabaseStore.getState().revisions.sales).toBe(7);
+  });
+
   it('rejects an index completion from a replaced project before resetting or hydrating stores', async () => {
     const projectInstanceId = '00000000-0000-0000-0000-000000000601';
     projectPublicationCoordinator.startProject(projectInstanceId, 3);
@@ -256,6 +327,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -279,6 +351,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -306,6 +379,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     });
@@ -348,6 +422,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: [],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '',
       appVersion: '0.2.7',
     }));
@@ -397,6 +472,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: [{ path: 'evt-1', name: 'Main', type: 'event' }],
       variables: [],
       worksheets: [],
+      databases: [],
       exportTime: '2026-07-08T00:00:00.000Z',
       appVersion: '1.0.0',
     });
@@ -446,6 +522,7 @@ describe('useProjectIOStore snapshot paths', () => {
         graphs: [],
         variables: [],
         worksheets: [],
+        databases: [],
         exportTime: '',
         appVersion: '0.2.7',
       });
@@ -457,7 +534,7 @@ describe('useProjectIOStore snapshot paths', () => {
     const direct = projectPublicationCoordinator.submit({ result: oldResult });
     const event = projectPublicationCoordinator.submit({ result: structuredClone(oldResult) });
     await vi.waitFor(() => expect(ProjectService.getProjectIndex).toHaveBeenCalledOnce());
-    const cancelProject = vi.spyOn(projectPublicationCoordinator, 'cancelProject');
+    const startProject = vi.spyOn(projectPublicationCoordinator, 'startProject');
     const assignResources = vi.spyOn(useResourceStore, 'setState');
     const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000602';
     projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
@@ -468,9 +545,9 @@ describe('useProjectIOStore snapshot paths', () => {
     await expect(direct).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     await expect(event).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     await expect(replacement).resolves.not.toBeNull();
-    expect(cancelProject).toHaveBeenCalled();
+    expect(startProject).toHaveBeenCalled();
     expect(assignResources).toHaveBeenCalled();
-    expect(cancelProject.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(startProject.mock.invocationCallOrder[0]).toBeLessThan(
       assignResources.mock.invocationCallOrder[0],
     );
     expect(projectPublicationCoordinator.getSnapshotForTests()).toMatchObject({

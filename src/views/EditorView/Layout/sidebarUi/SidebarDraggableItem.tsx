@@ -1,4 +1,4 @@
-import { DRAG_TYPES, type SidebarDragPayload } from "@/features/core/dnd";
+import type { SidebarDragPayload } from "@/features/core/dnd";
 import { useDraggable } from "@dnd-kit/core";
 
 /**
@@ -14,6 +14,8 @@ export function SidebarDraggableItem({
   onClick,
   onDoubleClick,
   onContextMenu,
+  dragDisabledReason,
+  onDisabledDragAttempt,
 }: {
   id: string;
   dragData: SidebarDragPayload | null;
@@ -23,11 +25,13 @@ export function SidebarDraggableItem({
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  dragDisabledReason?: string;
+  onDisabledDragAttempt?: () => void;
 }) {
   const canDrag = !!dragData;
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: `sidebar-item-${id}`,
-    data: dragData ?? { type: DRAG_TYPES.NODE_TEMPLATE, template: { nodeType: "" } },
+    data: dragData ?? {},
     disabled: !canDrag,
   });
 
@@ -39,10 +43,13 @@ export function SidebarDraggableItem({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      onPointerDown={!canDrag && dragDisabledReason ? onDisabledDragAttempt : undefined}
+      aria-disabled={!canDrag && Boolean(dragDisabledReason)}
+      title={!canDrag ? dragDisabledReason : undefined}
       className={`${className ?? ""} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{
         ...style,
-        opacity: 1,
+        opacity: !canDrag && dragDisabledReason ? 0.65 : 1,
         touchAction: canDrag ? "none" : undefined,
       }}
     >

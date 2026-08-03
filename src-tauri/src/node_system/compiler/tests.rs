@@ -9,10 +9,12 @@ use crate::node_system::document::{
     GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
 };
 use crate::node_system::plan::{
-    CallArgumentBinding, CallResultBinding, CompiledParameterHandle, CompiledResourceRequirement,
-    ControlStep, KernelHandle, MaterializationBridge, PlanResult, RelationalBackendId,
-    RelationalBridgeInput, RelationalFragmentId, RelationalOperator, RelationalOperatorIndex,
-    ResourceAccess, ResourceId, ResourceKind,
+    BranchResultBinding, CallArgumentBinding, CallResultBinding, CompiledParameterHandle,
+    CompiledResourceRequirement, ControlStep, ExecutionDemand, FunctionPlanHandle, GraphOutputRef,
+    KernelHandle, LoopCarriedBinding, MaterializationBridge, PlanResult, PlanValueSource,
+    RelationalBackendId, RelationalBridgeInput, RelationalFragmentId, RelationalOperator,
+    RelationalOperatorIndex, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
+    ValueRef,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -810,10 +812,15 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     let mut graph = graph_with_nodes(&[(1, "plan_relation_source"), (2, "plan_relation_sink")]);
     connect(&mut graph, 10, 1, "out", 2, "in");
 
-    let plan = GraphCompiler::new(&registry, &Resources)
-        .compile(&graph)
-        .plan
-        .expect("relational graph should lower");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/relational".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("relational graph should retain pre-group facts");
+    let plan = result.plan.expect("relational graph should lower");
 
     assert_eq!(plan.relational_subplans.len(), 1);
     let subplan = &plan.relational_subplans[0];
@@ -846,6 +853,46 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
         crate::node_system::plan::StructuredControlRegion::Sequence(ref steps)
             if matches!(steps.as_ref(), [crate::node_system::plan::ControlStep::Operation(index)] if index.index() == 0)
     ));
+
+    assert_eq!(basis.operations.len(), 2, "basis remains pre-group");
+    assert_eq!(basis.relational_connections.len(), 1);
+    assert!(matches!(
+        &basis.operations[0].kernel,
+        super::specialization::IntermediateKernel::Relational { fragment, .. }
+            if fragment.id.as_str() == "source"
+    ));
+    assert!(matches!(
+        &basis.operations[1].kernel,
+        super::specialization::IntermediateKernel::Relational { fragment, input_bindings, .. }
+            if fragment.id.as_str() == "sink" && input_bindings.len() == 1
+    ));
+
+    let requested_source = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/relational", 1, "out")]),
+            include_default_results: false,
+        })
+        .expect("same-island intermediate output must be derivable");
+    assert_eq!(requested_source.operations.len(), 1);
+    assert_eq!(requested_source.operations[0].outputs.len(), 1);
+    assert_eq!(requested_source.relational_subplans.len(), 1);
+    assert_eq!(
+        requested_source.relational_subplans[0]
+            .compiled_plan
+            .fragment_order
+            .as_ref(),
+        &[RelationalFragmentId::new("source").unwrap()]
+    );
+    assert_eq!(
+        requested_source.relational_subplans[0]
+            .compiled_plan
+            .roots
+            .len(),
+        requested_source.operations[0].outputs.len()
+    );
+    requested_source
+        .validate()
+        .expect("requested relational output plan validates");
 
     let mut reversed = graph_with_nodes(&[(2, "plan_relation_sink"), (1, "plan_relation_source")]);
     connect(&mut reversed, 10, 1, "out", 2, "in");
@@ -906,9 +953,717 @@ fn compiler_aggregates_fragment_resources_and_results() {
         plan.results.as_ref(),
         &[PlanResult {
             name: "answer".into(),
+            output: GraphOutputRef {
+                graph_path: plan.provenance.graph_path.clone(),
+                port: PortAddress::declared(node_id(1), key("out")),
+            },
             value: plan.operations[0].outputs[0].value,
         }]
     );
+}
+
+fn demand_output(graph_path: &str, node: u128, port: &str) -> GraphOutputRef {
+    GraphOutputRef {
+        graph_path: GraphResourcePath(graph_path.into()),
+        port: PortAddress::declared(node_id(node), key(port)),
+    }
+}
+
+fn chain_protocol(name: &str) -> NodeProtocol {
+    test_protocol(
+        name,
+        vec![
+            data_port("in", PortDirection::Input, TypeExpr::Unknown, None),
+            data_port("out", PortDirection::Output, TypeExpr::Unknown, None),
+        ],
+        vec![],
+        vec![],
+    )
+}
+
+fn demand_fixture() -> (TestRegistry, GraphDocument) {
+    let mut entry = test_protocol(
+        "demand_event_begin",
+        vec![control_port("then", PortDirection::Output)],
+        vec![],
+        vec![],
+    );
+    entry.managed_role = Some(ManagedNodeRole::EventBegin);
+    let entry_type = entry.type_id.clone();
+    let source_a = test_protocol(
+        "demand_source_a",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let sink_a = chain_protocol("demand_sink_a");
+    let source_b = test_protocol(
+        "demand_source_b",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let sink_b = chain_protocol("demand_sink_b");
+    let sink_a_type = sink_a.type_id.clone();
+    let sink_b_type = sink_b.type_id.clone();
+    let registry = TestRegistry::new(vec![entry, source_a, sink_a, source_b, sink_b])
+        .structural(&entry_type, StructuralNodeRole::EventBegin)
+        .with_lowerer(
+            &sink_a_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        effect: EffectSemantics::None,
+                        resources: Box::new([CompiledResourceRequirement {
+                            resource: ResourceId::new("database.chain-a").unwrap(),
+                            kind: ResourceKind::DatabaseConnection,
+                            access: ResourceAccess::Shared,
+                            optional: false,
+                        }]),
+                        results: Box::new([FragmentResult {
+                            name: "chain-a".into(),
+                            output: PortAddress::declared(node_id(2), key("out")),
+                        }]),
+                    },
+                ),
+            },
+        )
+        .with_lowerer(
+            &sink_b_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        effect: EffectSemantics::None,
+                        resources: Box::new([CompiledResourceRequirement {
+                            resource: ResourceId::new("database.chain-b").unwrap(),
+                            kind: ResourceKind::DatabaseConnection,
+                            access: ResourceAccess::Shared,
+                            optional: false,
+                        }]),
+                        results: Box::new([FragmentResult {
+                            name: "chain-b".into(),
+                            output: PortAddress::declared(node_id(4), key("out")),
+                        }]),
+                    },
+                ),
+            },
+        );
+    let mut graph = graph_with_nodes(&[
+        (100, "demand_event_begin"),
+        (1, "demand_source_a"),
+        (2, "demand_sink_a"),
+        (3, "demand_source_b"),
+        (4, "demand_sink_b"),
+    ]);
+    connect(&mut graph, 10, 1, "out", 2, "in");
+    connect(&mut graph, 11, 3, "out", 4, "in");
+    (registry, graph)
+}
+
+fn compiled_demand_basis() -> ExecutionPlanBasis {
+    let (registry, graph) = demand_fixture();
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap()
+        .execution_basis
+        .expect("demand fixture has a basis")
+}
+
+fn append_control_region(basis: &mut ExecutionPlanBasis, region: StructuredControlRegion) {
+    let StructuredControlRegion::Sequence(steps) = &mut basis.root_region else {
+        panic!("demand fixture root is a sequence")
+    };
+    let mut projected = steps.to_vec();
+    projected.push(ControlStep::Region(Box::new(region)));
+    *steps = projected.into_boxed_slice();
+}
+
+fn declare_control_value(basis: &mut ExecutionPlanBasis) -> ValueRef {
+    let value = ValueRef::new(basis.value_count);
+    basis.value_count += 1;
+    let mut sources = basis.value_sources.to_vec();
+    sources.push(PlanValueSource::ControlProduced(value));
+    sources.sort();
+    basis.value_sources = sources.into_boxed_slice();
+    value
+}
+
+#[test]
+fn demand_specialization_deletes_disconnected_if_control_sources() {
+    let mut basis = compiled_demand_basis();
+    let destination = declare_control_value(&mut basis);
+    let condition = basis.operations[0].outputs[0].value;
+    let then_source = basis.operations[0].outputs[0].value;
+    let else_source = basis.operations[2].outputs[0].value;
+    append_control_region(
+        &mut basis,
+        StructuredControlRegion::If {
+            condition,
+            then_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            else_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            results: Box::new([BranchResultBinding {
+                destination,
+                then_source,
+                else_source,
+            }]),
+        },
+    );
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            include_default_results: false,
+        })
+        .expect("disconnected If declarations are projected out");
+
+    assert!(!contains_region(&plan.root_region, &|region| matches!(
+        region,
+        StructuredControlRegion::If { .. }
+    )));
+    assert!(
+        !plan
+            .value_sources
+            .contains(&PlanValueSource::ControlProduced(destination))
+    );
+    plan.validate().unwrap();
+}
+
+#[test]
+fn demand_specialization_keeps_only_requested_if_result_declaration() {
+    let mut basis = compiled_demand_basis();
+    let retained_destination = declare_control_value(&mut basis);
+    let deleted_destination = declare_control_value(&mut basis);
+    let condition = basis.operations[0].outputs[0].value;
+    let then_source = basis.operations[0].outputs[0].value;
+    let else_source = basis.operations[2].outputs[0].value;
+    append_control_region(
+        &mut basis,
+        StructuredControlRegion::If {
+            condition,
+            then_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            else_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            results: Box::new([
+                BranchResultBinding {
+                    destination: retained_destination,
+                    then_source,
+                    else_source,
+                },
+                BranchResultBinding {
+                    destination: deleted_destination,
+                    then_source,
+                    else_source,
+                },
+            ]),
+        },
+    );
+    let requested = demand_output("events/main", 99, "out");
+    basis.nodes.insert(node_id(99));
+    basis.port_facts.insert(
+        requested.port.clone(),
+        super::specialization::DemandPortFact {
+            kind: PortKind::Data,
+            direction: PortDirection::Output,
+        },
+    );
+    basis.output_results.insert(
+        requested.clone(),
+        PlanResult {
+            name: "requested.branch-result".into(),
+            output: requested.clone(),
+            value: retained_destination,
+        },
+    );
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([requested]),
+            include_default_results: false,
+        })
+        .expect("only the requested If result declaration remains");
+
+    let retained_results = match &plan.root_region {
+        region
+            if contains_region(region, &|candidate| {
+                matches!(candidate, StructuredControlRegion::If { .. })
+            }) =>
+        {
+            fn find(region: &StructuredControlRegion) -> Option<&[BranchResultBinding]> {
+                match region {
+                    StructuredControlRegion::Sequence(steps) => {
+                        steps.iter().find_map(|step| match step {
+                            ControlStep::Operation(_) => None,
+                            ControlStep::Region(region) => find(region),
+                        })
+                    }
+                    StructuredControlRegion::If { results, .. } => Some(results),
+                    StructuredControlRegion::Loop { body, .. } => find(body),
+                    StructuredControlRegion::Call { .. } => None,
+                }
+            }
+            find(region).unwrap()
+        }
+        _ => panic!("retained If region"),
+    };
+    assert_eq!(retained_results.len(), 1);
+    assert_eq!(retained_results[0].destination, retained_destination);
+    assert!(
+        plan.value_sources
+            .contains(&PlanValueSource::ControlProduced(retained_destination))
+    );
+    assert!(
+        !plan
+            .value_sources
+            .contains(&PlanValueSource::ControlProduced(deleted_destination))
+    );
+    plan.validate().unwrap();
+}
+
+#[test]
+fn demand_specialization_deletes_disconnected_loop_control_sources() {
+    let mut basis = compiled_demand_basis();
+    let body_input = declare_control_value(&mut basis);
+    let result = declare_control_value(&mut basis);
+    let initial_source = basis.operations[0].outputs[0].value;
+    let next_source = basis.operations[2].outputs[0].value;
+    let continue_condition = basis.operations[0].outputs[0].value;
+    append_control_region(
+        &mut basis,
+        StructuredControlRegion::Loop {
+            body: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            carried: Box::new([LoopCarriedBinding {
+                body_input,
+                initial_source,
+                next_source,
+                result,
+            }]),
+            continue_condition,
+            max_iterations: 3,
+        },
+    );
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            include_default_results: false,
+        })
+        .expect("disconnected Loop declarations are projected out");
+
+    assert!(!contains_region(&plan.root_region, &|region| matches!(
+        region,
+        StructuredControlRegion::Loop { .. }
+    )));
+    for value in [body_input, result] {
+        assert!(
+            !plan
+                .value_sources
+                .contains(&PlanValueSource::ControlProduced(value))
+        );
+    }
+    plan.validate().unwrap();
+}
+
+#[test]
+fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
+    let (registry, graph) = demand_fixture();
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            include_default_results: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        plan.operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(1), node_id(2)]
+    );
+    assert_eq!(plan.results.len(), 1);
+    assert_eq!(
+        plan.results[0].output,
+        demand_output("events/main", 2, "out")
+    );
+    assert_eq!(
+        plan.resources
+            .iter()
+            .map(|requirement| requirement.resource.as_str())
+            .collect::<Vec<_>>(),
+        vec!["database.chain-a"]
+    );
+}
+
+#[test]
+fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
+    let (registry, graph) = demand_fixture();
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+    let a = demand_output("events/main", 2, "out");
+    let b = demand_output("events/main", 4, "out");
+
+    let first = ExecutionDemand::Outputs {
+        outputs: Box::new([a.clone(), b.clone()]),
+        include_default_results: false,
+    };
+    let second = ExecutionDemand::Outputs {
+        outputs: Box::new([b.clone(), a.clone(), a.clone()]),
+        include_default_results: false,
+    };
+    let first_key = basis.normalize_demand(&first).unwrap();
+    let second_key = basis.normalize_demand(&second).unwrap();
+    assert_eq!(first_key, second_key);
+    assert_eq!(first_key.digest(), second_key.digest());
+    assert_eq!(
+        basis.derive_plan(&first).unwrap(),
+        basis.derive_plan(&second).unwrap()
+    );
+    let same_selection_different_mode = ExecutionDemand::Outputs {
+        outputs: Box::new([]),
+        include_default_results: true,
+    };
+    let default_key = basis.normalize_demand(&ExecutionDemand::Default).unwrap();
+    let explicit_default_key = basis
+        .normalize_demand(&same_selection_different_mode)
+        .unwrap();
+    assert_ne!(
+        default_key, explicit_default_key,
+        "normalized keys retain request mode even when selected outputs match"
+    );
+    assert_ne!(default_key.digest(), explicit_default_key.digest());
+    let without_defaults = basis
+        .normalize_demand(&ExecutionDemand::Outputs {
+            outputs: Box::new([a.clone(), b.clone()]),
+            include_default_results: false,
+        })
+        .unwrap();
+    let with_defaults = basis
+        .normalize_demand(&ExecutionDemand::Outputs {
+            outputs: Box::new([a.clone(), b.clone()]),
+            include_default_results: true,
+        })
+        .unwrap();
+    assert_ne!(without_defaults, with_defaults);
+    assert_ne!(without_defaults.digest(), with_defaults.digest());
+
+    let defaults = basis.derive_plan(&ExecutionDemand::Default).unwrap();
+    assert_eq!(defaults.results.len(), 2);
+    let only_a = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([a.clone()]),
+            include_default_results: false,
+        })
+        .unwrap();
+    assert_eq!(only_a.results.len(), 1);
+    let a_with_defaults = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([a]),
+            include_default_results: true,
+        })
+        .unwrap();
+    assert_eq!(a_with_defaults.results.len(), 2);
+}
+
+#[test]
+fn invalid_requested_outputs_are_rejected_before_plan_construction() {
+    let source = test_protocol(
+        "demand_validation_source",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let mut protocol = test_protocol(
+        "demand_validation",
+        vec![
+            data_port("in", PortDirection::Input, TypeExpr::Unknown, None),
+            data_port("out", PortDirection::Output, TypeExpr::Unknown, None),
+            effect_port("effect", PortDirection::Output),
+            control_port("control", PortDirection::Output),
+        ],
+        vec![],
+        vec![],
+    );
+    protocol.execution.effects = EffectSemantics::Ordered;
+    let registry = TestRegistry::new(vec![source, protocol]);
+    let mut graph = graph_with_nodes(&[(1, "demand_validation_source"), (2, "demand_validation")]);
+    connect(&mut graph, 10, 1, "out", 2, "in");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+    let stale_instance = GraphOutputRef {
+        graph_path: GraphResourcePath("events/main".into()),
+        port: PortAddress::instance(
+            node_id(2),
+            key("out"),
+            PortInstanceId::from_uuid(Uuid::from_u128(99)),
+        ),
+    };
+    let invalid = [
+        (
+            demand_output("events/other", 2, "out"),
+            "graph_path_mismatch",
+        ),
+        (demand_output("events/main", 99, "out"), "missing_node"),
+        (demand_output("events/main", 2, "missing"), "missing_port"),
+        (demand_output("events/main", 2, "in"), "input_port"),
+        (demand_output("events/main", 2, "effect"), "effect_port"),
+        (demand_output("events/main", 2, "control"), "control_port"),
+        (stale_instance, "stale_instance"),
+    ];
+
+    for (output, expected) in invalid {
+        let error = basis
+            .derive_plan(&ExecutionDemand::Outputs {
+                outputs: Box::new([output.clone()]),
+                include_default_results: false,
+            })
+            .unwrap_err();
+        let actual = match error {
+            DemandPlanError::GraphPathMismatch(_) => "graph_path_mismatch",
+            DemandPlanError::MissingNode(_) => "missing_node",
+            DemandPlanError::MissingPort(_) => "missing_port",
+            DemandPlanError::StalePortInstance(_) => "stale_instance",
+            DemandPlanError::InputPort(_) => "input_port",
+            DemandPlanError::ControlPort(_) => "control_port",
+            DemandPlanError::EffectPort(_) => "effect_port",
+            DemandPlanError::InvalidDerivedPlan(_) => "invalid_derived_plan",
+        };
+        assert_eq!(actual, expected, "wrong error for {output:?}");
+    }
+}
+
+#[test]
+fn retained_operation_keeps_external_value_dependency_and_source() {
+    let mut entry = test_protocol(
+        "demand_external_entry",
+        vec![
+            control_port("then", PortDirection::Output),
+            data_port("payload", PortDirection::Output, TypeExpr::Unknown, None),
+        ],
+        vec![],
+        vec![],
+    );
+    entry.managed_role = Some(ManagedNodeRole::EventBegin);
+    let entry_type = entry.type_id.clone();
+    let sink = chain_protocol("demand_external_sink");
+    let sink_type = sink.type_id.clone();
+    let registry = TestRegistry::new(vec![entry, sink])
+        .structural(&entry_type, StructuralNodeRole::EventBegin)
+        .with_lowerer(
+            &sink_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        results: Box::new([FragmentResult {
+                            name: "external-result".into(),
+                            output: PortAddress::declared(node_id(2), key("out")),
+                        }]),
+                        ..FragmentMetadata::default()
+                    },
+                ),
+            },
+        );
+    let mut graph = graph_with_nodes(&[(1, "demand_external_entry"), (2, "demand_external_sink")]);
+    connect(&mut graph, 10, 1, "payload", 2, "in");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/external".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/external", 2, "out")]),
+            include_default_results: false,
+        })
+        .expect("external source dependency remains valid");
+
+    assert_eq!(plan.operations.len(), 1);
+    assert_eq!(plan.value_dependencies.len(), 1);
+    assert!(plan.value_sources.iter().any(|source| {
+        matches!(source, PlanValueSource::ExternalInput(value) if *value == plan.value_dependencies[0].source)
+    }));
+    assert!(!matches!(
+        plan.validate(),
+        Err(ref errors) if errors.0.iter().any(|error| matches!(error, crate::node_system::plan::PlanValidationError::MissingInputSource { .. }))
+    ));
+}
+
+#[test]
+fn valid_dynamic_output_derives_without_invalid_plan_fallback() {
+    let dynamic_output = PortSpec {
+        key: key("items"),
+        label_key: I18nKey::new("ports.items.label").unwrap(),
+        direction: PortDirection::Output,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Unknown,
+        instances: PortInstances::UserCreated { min: 0, max: None },
+        connections: ConnectionsPerPort::Multiple {
+            max: None,
+            ordered: false,
+        },
+        input_binding: None,
+        consumption: None,
+        production: None,
+        editor: PortEditorSpec::Default,
+        schema: None,
+    };
+    let protocol = test_protocol(
+        "demand_dynamic_output",
+        vec![dynamic_output],
+        vec![],
+        vec![],
+    );
+    let registry = TestRegistry::new(vec![protocol]);
+    let mut graph = graph_with_nodes(&[(1, "demand_dynamic_output")]);
+    let output = bind_member_port(&mut graph, 1, "items", 10, "a");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/dynamic".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid dynamic graph has basis");
+    let requested = GraphOutputRef {
+        graph_path: GraphResourcePath("events/dynamic".into()),
+        port: output,
+    };
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([requested.clone()]),
+            include_default_results: false,
+        })
+        .unwrap_or_else(|error| panic!("accepted dynamic output must derive directly: {error:?}"));
+    assert_eq!(plan.results[0].output, requested);
+    plan.validate()
+        .expect("dynamic requested-output plan validates");
+}
+
+#[test]
+fn evaluation_policy_and_effect_predecessors_are_authoritative_roots() {
+    let mut predecessor = test_protocol(
+        "demand_effect_predecessor",
+        vec![effect_port("effect", PortDirection::Output)],
+        vec![],
+        vec![],
+    );
+    predecessor.execution.purity = Purity::Effectful;
+    predecessor.execution.effects = EffectSemantics::Ordered;
+    let mut middle = test_protocol(
+        "demand_effect_middle",
+        vec![
+            effect_port("before", PortDirection::Input),
+            effect_port("after", PortDirection::Output),
+        ],
+        vec![],
+        vec![],
+    );
+    middle.execution.purity = Purity::Effectful;
+    middle.execution.effects = EffectSemantics::Ordered;
+    let mut eager = test_protocol(
+        "demand_eager_pure",
+        vec![effect_port("effect", PortDirection::Input)],
+        vec![],
+        vec![],
+    );
+    eager.execution.purity = Purity::Pure;
+    eager.execution.evaluation = EvaluationPolicy::EagerWhenRegionEntered;
+    eager.execution.effects = EffectSemantics::Ordered;
+    let mut demand_driven_effectful =
+        test_protocol("demand_disconnected_effectful", vec![], vec![], vec![]);
+    demand_driven_effectful.execution.purity = Purity::Effectful;
+    demand_driven_effectful.execution.effects = EffectSemantics::Ordered;
+    let types = [
+        predecessor.type_id.clone(),
+        middle.type_id.clone(),
+        eager.type_id.clone(),
+        demand_driven_effectful.type_id.clone(),
+    ];
+    let mut registry = TestRegistry::new(vec![predecessor, middle, eager, demand_driven_effectful]);
+    for node_type in &types {
+        registry = registry.with_lowerer(
+            node_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(EffectSemantics::Ordered, FragmentMetadata::default()),
+            },
+        );
+    }
+    let mut graph = graph_with_nodes(&[
+        (1, "demand_effect_predecessor"),
+        (2, "demand_effect_middle"),
+        (3, "demand_eager_pure"),
+        (4, "demand_disconnected_effectful"),
+    ]);
+    connect(&mut graph, 10, 1, "effect", 2, "before");
+    connect(&mut graph, 11, 2, "after", 3, "effect");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([]),
+            include_default_results: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        plan.operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(1), node_id(2), node_id(3)]
+    );
+    assert_eq!(plan.effect_dependencies.len(), 2);
 }
 
 #[test]
@@ -925,10 +1680,51 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
         vec![],
         vec![],
     );
+    let condition = test_protocol(
+        "pruned_bridge_condition",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let mut then_source = data_port("then_source", PortDirection::Input, TypeExpr::Unknown, None);
+    then_source.instances = PortInstances::UserCreated { min: 0, max: None };
+    let mut else_source = data_port("else_source", PortDirection::Input, TypeExpr::Unknown, None);
+    else_source.instances = PortInstances::UserCreated { min: 0, max: None };
+    let mut branch_result = data_port("result", PortDirection::Output, TypeExpr::Unknown, None);
+    branch_result.instances = PortInstances::UserCreated { min: 0, max: None };
+    let mut branch = structural_protocol(
+        "pruned_bridge_branch",
+        vec![
+            control_port("enter", PortDirection::Input),
+            data_port("condition", PortDirection::Input, TypeExpr::Unknown, None),
+            then_source,
+            else_source,
+            control_port("true", PortDirection::Output),
+            control_port("false", PortDirection::Output),
+            branch_result,
+        ],
+        vec![],
+    );
+    branch.interface = branch
+        .interface
+        .with_member_groups(vec![PortMemberGroupSpec {
+            templates: vec![key("then_source"), key("else_source"), key("result")]
+                .into_boxed_slice(),
+            min: 0,
+            max: None,
+        }])
+        .unwrap();
     let source_type = source.type_id.clone();
     let sink_type = sink.type_id.clone();
+    let branch_type = branch.type_id.clone();
     let backend = RelationalBackendId::new("test.relational").unwrap();
-    let registry = TestRegistry::new(vec![source, sink])
+    let registry = TestRegistry::new(vec![source, sink, condition, branch])
+        .structural(&branch_type, StructuralNodeRole::Branch)
         .with_lowerer(
             &source_type,
             FragmentLowerer {
@@ -967,13 +1763,94 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
                 }),
             },
         );
-    let mut graph = graph_with_nodes(&[(1, "plan_bridge_source"), (2, "plan_bridge_sink")]);
+    let mut graph = graph_with_nodes(&[
+        (1, "plan_bridge_source"),
+        (2, "plan_bridge_sink"),
+        (3, "pruned_bridge_condition"),
+        (4, "pruned_bridge_branch"),
+    ]);
     connect(&mut graph, 10, 1, "out", 2, "in");
+    connect(&mut graph, 11, 3, "out", 4, "condition");
 
-    let plan = GraphCompiler::new(&registry, &Resources)
-        .compile(&graph)
-        .plan
-        .expect("bridge graph should lower");
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/bridge-demand".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let specialized = result
+        .execution_basis
+        .as_ref()
+        .unwrap_or_else(|| panic!("bridge diagnostics: {:?}", result.analysis.diagnostics))
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/bridge-demand", 2, "out")]),
+            include_default_results: false,
+        })
+        .expect("retained relational bridge specializes after structured pruning");
+    assert_eq!(
+        specialized
+            .operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(1), node_id(2)],
+        "the unrelated empty Branch and its pure condition are pruned before grouping"
+    );
+    assert_eq!(specialized.relational_subplans.len(), 2);
+    let specialized_bridges = specialized
+        .relational_subplans
+        .iter()
+        .flat_map(|subplan| subplan.materialization_bridges.iter())
+        .collect::<Vec<_>>();
+    assert_eq!(specialized_bridges.len(), 1);
+    let producer =
+        &specialized.relational_subplans[specialized_bridges[0].producer_subplan.index()];
+    assert_eq!(
+        producer.compiled_plan.requested_fragment_outputs.as_ref(),
+        &[specialized_bridges[0].producer_fragment.clone()]
+    );
+    for operation in &specialized.operations {
+        if let crate::node_system::plan::PlannedKernel::Relational(subplan) = operation.kernel {
+            assert_eq!(
+                operation.outputs.len(),
+                specialized.relational_subplans[subplan.index()]
+                    .compiled_plan
+                    .roots
+                    .len(),
+                "relational owner outputs and compiled roots keep exact cardinality"
+            );
+        }
+    }
+    specialized.validate().unwrap();
+
+    let mut reversed = graph_with_nodes(&[
+        (4, "pruned_bridge_branch"),
+        (3, "pruned_bridge_condition"),
+        (2, "plan_bridge_sink"),
+        (1, "plan_bridge_source"),
+    ]);
+    connect(&mut reversed, 11, 3, "out", 4, "condition");
+    connect(&mut reversed, 10, 1, "out", 2, "in");
+    let reversed_snapshot =
+        compiler.snapshot(GraphResourcePath("events/bridge-demand".into()), &reversed);
+    let reversed_result = compiler
+        .compile_snapshot(&reversed_snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let reversed_specialized = reversed_result
+        .execution_basis
+        .expect("reversed bridge graph has a specialization basis")
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/bridge-demand", 2, "out")]),
+            include_default_results: false,
+        })
+        .unwrap();
+    assert_eq!(specialized.operations, reversed_specialized.operations);
+    assert_eq!(
+        specialized.relational_subplans,
+        reversed_specialized.relational_subplans
+    );
+    assert_eq!(specialized.root_region, reversed_specialized.root_region);
+
+    let plan = result.plan.expect("bridge graph should lower");
 
     assert_eq!(plan.relational_subplans.len(), 2);
     let bridges = plan
@@ -2354,10 +3231,12 @@ fn branch_builds_exclusive_true_and_false_regions() {
         (6, "yssbi.control.do"),
         (7, "yssbi.control.merge"),
         (8, "yssbi.debug.view"),
+        (9, "yssbi.constant.int64"),
     ]);
     let then_source = bind_member_port(&mut graph, 4, "then_source", 40, "z");
     let else_source = bind_member_port(&mut graph, 4, "else_source", 40, "a");
     let result_port = bind_member_port(&mut graph, 4, "result", 40, "m");
+    let demanded_result = result_port.clone();
     let merge_true = bind_member_port(&mut graph, 7, "enter", 70, "z");
     let merge_false = bind_member_port(&mut graph, 7, "enter", 71, "a");
 
@@ -2396,7 +3275,142 @@ fn branch_builds_exclusive_true_and_false_regions() {
     );
     connect(&mut graph, 108, 7, "then", 8, "enter");
 
-    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/branch-demand".into()), &graph);
+    let mut result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .as_mut()
+        .unwrap_or_else(|| panic!("branch diagnostics: {:?}", result.analysis.diagnostics));
+    let branch_local_pure = basis
+        .operations
+        .iter_mut()
+        .find(|operation| operation.source_node_id == node_id(5))
+        .expect("true arm operation is present in the basis");
+    branch_local_pure.evaluation = EvaluationPolicy::DemandDriven;
+    branch_local_pure.purity = Purity::Pure;
+    branch_local_pure.effects = EffectSemantics::None;
+
+    fn branch_results_mut(
+        region: &mut StructuredControlRegion,
+    ) -> Option<&mut Box<[crate::node_system::plan::BranchResultBinding]>> {
+        match region {
+            StructuredControlRegion::Sequence(steps) => {
+                steps.iter_mut().find_map(|step| match step {
+                    ControlStep::Operation(_) => None,
+                    ControlStep::Region(region) => branch_results_mut(region),
+                })
+            }
+            StructuredControlRegion::If { results, .. } => Some(results),
+            StructuredControlRegion::Loop { body, .. } => branch_results_mut(body),
+            StructuredControlRegion::Call { .. } => None,
+        }
+    }
+    let deleted_result_value = ValueRef::new(basis.value_count);
+    basis.value_count += 1;
+    let results = branch_results_mut(&mut basis.root_region).expect("Branch result bindings");
+    let mut bindings = results.to_vec();
+    let mut deleted_binding = bindings[0];
+    deleted_binding.destination = deleted_result_value;
+    bindings.push(deleted_binding);
+    *results = bindings.into_boxed_slice();
+    let mut value_sources = basis.value_sources.to_vec();
+    value_sources.push(PlanValueSource::ControlProduced(deleted_result_value));
+    basis.value_sources = value_sources.into_boxed_slice();
+
+    let mut disconnected_basis = basis.clone();
+    for operation in &mut disconnected_basis.operations {
+        if [node_id(6), node_id(8)].contains(&operation.source_node_id) {
+            operation.evaluation = EvaluationPolicy::DemandDriven;
+            operation.purity = Purity::Pure;
+            operation.effects = EffectSemantics::None;
+        }
+    }
+    let disconnected = disconnected_basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/branch-demand", 9, "value")]),
+            include_default_results: false,
+        })
+        .expect("a disconnected If with results is deleted without orphan declarations");
+    assert!(!contains_region(
+        &disconnected.root_region,
+        &|region| matches!(region, StructuredControlRegion::If { .. })
+    ));
+    assert!(
+        disconnected
+            .value_sources
+            .iter()
+            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
+    );
+    disconnected.validate().unwrap();
+
+    let specialized = result
+        .execution_basis
+        .as_ref()
+        .unwrap()
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([GraphOutputRef {
+                graph_path: snapshot.provenance.graph_path.clone(),
+                port: demanded_result.clone(),
+            }]),
+            include_default_results: false,
+        })
+        .expect("demanded Branch result safely specializes");
+    let specialized_nodes = specialized
+        .operations
+        .iter()
+        .map(|operation| operation.source_node_id)
+        .collect::<BTreeSet<_>>();
+    for pruned in [9] {
+        assert!(!specialized_nodes.contains(&node_id(pruned)));
+    }
+    assert!(
+        !specialized_nodes.contains(&node_id(5)),
+        "unrequested arm-local pure work is pruned"
+    );
+    for retained in [1, 2, 3, 6] {
+        assert!(
+            specialized_nodes.contains(&node_id(retained)),
+            "Branch condition, both result sources, and arm-local eager work stay retained"
+        );
+    }
+    let retained_else_eager = operation_index_for_node(&specialized, 6);
+    assert!(contains_region(
+        &specialized.root_region,
+        &|region| matches!(
+            region,
+            StructuredControlRegion::If {
+                then_region,
+                else_region,
+                results,
+                ..
+            } if results.len() == 1
+                && matches!(then_region.as_ref(), StructuredControlRegion::Sequence(steps) if steps.is_empty())
+                && region_contains_operation(else_region, retained_else_eager)
+        )
+    ));
+    specialized.validate().unwrap();
+
+    let basis = result.execution_basis.as_ref().unwrap();
+    let retained_result_value = basis.output_results[&GraphOutputRef {
+        graph_path: snapshot.provenance.graph_path.clone(),
+        port: demanded_result,
+    }]
+        .value;
+
+    assert!(
+        specialized
+            .value_sources
+            .contains(&PlanValueSource::ControlProduced(retained_result_value))
+    );
+    assert!(
+        !specialized
+            .value_sources
+            .contains(&PlanValueSource::ControlProduced(deleted_result_value))
+    );
+
     let plan = result
         .plan
         .unwrap_or_else(|| panic!("branch diagnostics: {:?}", result.analysis.diagnostics));
@@ -2942,6 +3956,9 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
         (6, "yssbi.control.loop"),
         (7, "yssbi.control.do"),
         (8, "yssbi.control.do"),
+        (9, "yssbi.constant.int64"),
+        (10, "yssbi.control.do"),
+        (11, "yssbi.control.sequence"),
     ]);
     set_parameters(&mut graph, 6, &[("max_iterations", serde_json::json!(7))]);
     let mut members = BTreeMap::new();
@@ -2969,10 +3986,109 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
             members[&instance].2.clone(),
         );
     }
-    connect(&mut graph, 105, 6, "body", 7, "enter");
+    let body_pure = bind_member_port(&mut graph, 11, "then", 110, "a");
+    let body_eager = bind_member_port(&mut graph, 11, "then", 111, "z");
+    connect(&mut graph, 105, 6, "body", 11, "enter");
     connect(&mut graph, 106, 6, "then", 8, "enter");
+    connect_addresses(
+        &mut graph,
+        107,
+        body_pure,
+        PortAddress::declared(node_id(7), key("enter")),
+    );
+    connect_addresses(
+        &mut graph,
+        108,
+        body_eager,
+        PortAddress::declared(node_id(10), key("enter")),
+    );
 
-    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/loop-demand".into()), &graph);
+    let mut result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let body_local_pure = result
+        .execution_basis
+        .as_mut()
+        .expect("loop graph has a specialization basis")
+        .operations
+        .iter_mut()
+        .find(|operation| operation.source_node_id == node_id(7))
+        .expect("first body operation is present in the basis");
+    body_local_pure.evaluation = EvaluationPolicy::DemandDriven;
+    body_local_pure.purity = Purity::Pure;
+    body_local_pure.effects = EffectSemantics::None;
+    let specialized = result
+        .execution_basis
+        .as_ref()
+        .unwrap()
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([GraphOutputRef {
+                graph_path: snapshot.provenance.graph_path.clone(),
+                port: members[&60].3.clone(),
+            }]),
+            include_default_results: false,
+        })
+        .expect("demanded Loop result safely specializes");
+    let specialized_nodes = specialized
+        .operations
+        .iter()
+        .map(|operation| operation.source_node_id)
+        .collect::<BTreeSet<_>>();
+    assert!(!specialized_nodes.contains(&node_id(9)));
+    assert!(
+        !specialized_nodes.contains(&node_id(7)),
+        "unrequested body-local pure work is pruned"
+    );
+    for retained in [1, 2, 3, 4, 5, 10] {
+        assert!(
+            specialized_nodes.contains(&node_id(retained)),
+            "Loop condition, carried bindings, and body eager work stay retained"
+        );
+    }
+    let retained_body_eager = operation_index_for_node(&specialized, 10);
+    assert!(contains_region(
+        &specialized.root_region,
+        &|region| matches!(
+            region,
+            StructuredControlRegion::Loop {
+                body,
+                carried,
+                max_iterations: 7,
+                ..
+            } if carried.len() == 2 && region_contains_operation(body, retained_body_eager)
+        )
+    ));
+    specialized.validate().unwrap();
+
+    let mut disconnected_basis = result.execution_basis.as_ref().unwrap().clone();
+    let body_eager = disconnected_basis
+        .operations
+        .iter_mut()
+        .find(|operation| operation.source_node_id == node_id(10))
+        .expect("second body operation is present in the basis");
+    body_eager.evaluation = EvaluationPolicy::DemandDriven;
+    body_eager.purity = Purity::Pure;
+    body_eager.effects = EffectSemantics::None;
+    let disconnected = disconnected_basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/loop-demand", 9, "value")]),
+            include_default_results: false,
+        })
+        .expect("a disconnected carried Loop is deleted without orphan declarations");
+    assert!(!contains_region(
+        &disconnected.root_region,
+        &|region| matches!(region, StructuredControlRegion::Loop { .. })
+    ));
+    assert!(
+        disconnected
+            .value_sources
+            .iter()
+            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
+    );
+    disconnected.validate().unwrap();
+
     let plan = result
         .plan
         .unwrap_or_else(|| panic!("loop diagnostics: {:?}", result.analysis.diagnostics));
@@ -3072,6 +4188,7 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
 
     let mut callee = builtin_graph_with_nodes(&[
         (20, "yssbi.project.function.entry"),
+        (21, "yssbi.constant.int64"),
         (30, "yssbi.project.function.return"),
     ]);
     set_parameters(
@@ -3126,12 +4243,26 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             &CompileCancellationToken::new(),
         )
         .unwrap();
+    let callee_plan = callee_products
+        .plan
+        .clone()
+        .expect("function compilation publishes a complete plan");
+    assert_eq!(
+        callee_plan
+            .operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(21)],
+        "the full callee keeps unrequested pure body work"
+    );
     let callee_abi = callee_products
         .function_abi
         .expect("function compilation publishes Entry/Return ABI");
 
     let mut caller = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.int64"),
+        (2, "yssbi.constant.int64"),
         (10, "yssbi.project.function.call"),
     ]);
     set_parameters(
@@ -3164,16 +4295,203 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         call_argument.clone(),
     );
 
-    let caller_products = compiler
-        .compile_snapshot(
-            &compiler.snapshot(GraphResourcePath("events/caller".into()), &caller),
-            &CompileCancellationToken::new(),
-        )
+    let caller_snapshot = compiler.snapshot(GraphResourcePath("events/caller".into()), &caller);
+    let eager_caller_products = compiler
+        .compile_snapshot(&caller_snapshot, &CompileCancellationToken::new())
         .unwrap();
+    let eager_caller_basis = eager_caller_products
+        .execution_basis
+        .as_ref()
+        .expect("eager caller graph has a specialization basis");
+    let eager_plan = eager_caller_basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([]),
+            include_default_results: false,
+        })
+        .expect("eager Call remains required without requested outputs");
+    assert!(contains_region(
+        &eager_plan.root_region,
+        &|region| matches!(region, StructuredControlRegion::Call { .. })
+    ));
+
+    let mut pure_call_registry = registry.clone();
+    let call_type = NodeTypeId::new("yssbi.project.function.call").unwrap();
+    let mut pure_call_protocol = pure_call_registry.protocol(&call_type).unwrap().clone();
+    pure_call_protocol.execution.purity = Purity::Pure;
+    pure_call_protocol.execution.evaluation = EvaluationPolicy::DemandDriven;
+    pure_call_protocol.execution.effects = EffectSemantics::None;
+    pure_call_registry.by_id.insert(
+        call_type,
+        Arc::new(RegisteredNode::structural(
+            Arc::new(pure_call_protocol),
+            StructuralNodeRole::Call,
+        )),
+    );
+    let pure_compiler = GraphCompiler::with_interface_resolvers(
+        &pure_call_registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    );
+    let pure_caller_snapshot =
+        pure_compiler.snapshot(GraphResourcePath("events/caller".into()), &caller);
+    let caller_products = pure_compiler
+        .compile_snapshot(&pure_caller_snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let caller_basis = caller_products
+        .execution_basis
+        .as_ref()
+        .expect("pure caller graph has a specialization basis");
+
+    for (name, outputs, expected_operations) in [
+        (
+            "unrelated output",
+            Box::new([demand_output("events/caller", 2, "value")]) as Box<[GraphOutputRef]>,
+            vec![node_id(2)],
+        ),
+        ("empty output set", Box::new([]), Vec::new()),
+    ] {
+        let pruned = caller_basis
+            .derive_plan(&ExecutionDemand::Outputs {
+                outputs,
+                include_default_results: false,
+            })
+            .unwrap_or_else(|error| panic!("{name} demand must derive: {error}"));
+        assert_eq!(
+            pruned
+                .operations
+                .iter()
+                .map(|operation| operation.source_node_id)
+                .collect::<Vec<_>>(),
+            expected_operations,
+            "{name} must not retain the caller argument closure"
+        );
+        assert!(
+            !contains_region(&pruned.root_region, &|region| matches!(
+                region,
+                StructuredControlRegion::Call { .. }
+            )),
+            "{name} must prune the disconnected pure Call from the unmodified basis"
+        );
+        assert!(
+            pruned
+                .value_sources
+                .iter()
+                .all(|source| !matches!(source, PlanValueSource::ControlProduced(_))),
+            "{name} must remove pruned Call result declarations"
+        );
+        pruned.validate().unwrap();
+    }
+    let requested_output = GraphOutputRef {
+        graph_path: pure_caller_snapshot.provenance.graph_path.clone(),
+        port: call_result.clone(),
+    };
+    let expected_requested_value = caller_basis.output_results[&requested_output].value;
+    let (
+        original_target,
+        original_argument,
+        original_result,
+        original_argument_count,
+        original_result_count,
+    ) = find_call(&caller_basis.root_region).expect("basis Call region");
+    assert_eq!(original_result.caller_destination, expected_requested_value);
+    let specialized = caller_basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([requested_output.clone()]),
+            include_default_results: false,
+        })
+        .expect("demanded Call result safely specializes");
+    assert_eq!(
+        specialized
+            .operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(1)],
+        "caller argument remains while unrelated caller pure work is pruned"
+    );
+    assert_eq!(
+        callee_plan.operations.len(),
+        1,
+        "caller specialization must not demand-specialize the callee plan"
+    );
+    specialized.validate().unwrap();
+
+    fn remove_call_regions(region: &StructuredControlRegion) -> StructuredControlRegion {
+        match region {
+            StructuredControlRegion::Sequence(steps) => StructuredControlRegion::Sequence(
+                steps
+                    .iter()
+                    .filter_map(|step| match step {
+                        ControlStep::Operation(operation) => {
+                            Some(ControlStep::Operation(*operation))
+                        }
+                        ControlStep::Region(region)
+                            if matches!(region.as_ref(), StructuredControlRegion::Call { .. }) =>
+                        {
+                            None
+                        }
+                        ControlStep::Region(region) => {
+                            Some(ControlStep::Region(Box::new(remove_call_regions(region))))
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            ),
+            StructuredControlRegion::If {
+                condition,
+                then_region,
+                else_region,
+                results,
+            } => StructuredControlRegion::If {
+                condition: *condition,
+                then_region: Box::new(remove_call_regions(then_region)),
+                else_region: Box::new(remove_call_regions(else_region)),
+                results: results.clone(),
+            },
+            StructuredControlRegion::Loop {
+                body,
+                carried,
+                continue_condition,
+                max_iterations,
+            } => StructuredControlRegion::Loop {
+                body: Box::new(remove_call_regions(body)),
+                carried: carried.clone(),
+                continue_condition: *continue_condition,
+                max_iterations: *max_iterations,
+            },
+            StructuredControlRegion::Call { .. } => StructuredControlRegion::Sequence(Box::new([])),
+        }
+    }
+    let mut deleted_call_basis = caller_products.execution_basis.as_ref().unwrap().clone();
+    deleted_call_basis.root_region = remove_call_regions(&deleted_call_basis.root_region);
+    let deleted_call = deleted_call_basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/caller", 2, "value")]),
+            include_default_results: false,
+        })
+        .expect("a projected-out Call deletes its result declarations");
+    assert!(!contains_region(
+        &deleted_call.root_region,
+        &|region| matches!(region, StructuredControlRegion::Call { .. })
+    ));
+    assert!(
+        deleted_call
+            .value_sources
+            .iter()
+            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
+    );
+    deleted_call.validate().unwrap();
+
     let plan = caller_products.plan.expect("caller should compile");
     fn find_call(
         region: &StructuredControlRegion,
-    ) -> Option<(CallArgumentBinding, CallResultBinding)> {
+    ) -> Option<(
+        FunctionPlanHandle,
+        CallArgumentBinding,
+        CallResultBinding,
+        usize,
+        usize,
+    )> {
         match region {
             StructuredControlRegion::Sequence(steps) => steps.iter().find_map(|step| match step {
                 ControlStep::Operation(_) => None,
@@ -3186,12 +4504,63 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             } => find_call(then_region).or_else(|| find_call(else_region)),
             StructuredControlRegion::Loop { body, .. } => find_call(body),
             StructuredControlRegion::Call {
-                arguments, results, ..
-            } => Some((arguments[0], results[0])),
+                target,
+                arguments,
+                results,
+                ..
+            } => Some((
+                target.clone(),
+                arguments[0],
+                results[0],
+                arguments.len(),
+                results.len(),
+            )),
         }
     }
-    let (argument, result) = find_call(&plan.root_region).expect("compiled Call region");
+    let expected_target = FunctionPlanHandle::new(function_path.0.clone()).unwrap();
+    let (
+        specialized_target,
+        specialized_argument,
+        specialized_result,
+        argument_count,
+        result_count,
+    ) = find_call(&specialized.root_region).expect("specialized Call region");
+    assert_eq!(original_target, expected_target);
+    assert_eq!((original_argument_count, original_result_count), (1, 1));
+    assert_eq!(specialized_target, original_target);
+    assert_eq!((argument_count, result_count), (1, 1));
+    assert_eq!(
+        specialized_argument.caller_source,
+        original_argument.caller_source
+    );
+    assert_eq!(
+        specialized_result.caller_destination,
+        original_result.caller_destination
+    );
+    assert_eq!(
+        specialized_result.caller_destination,
+        expected_requested_value
+    );
+    assert_eq!(
+        specialized_argument.callee_destination,
+        callee_abi.parameters[&parameter_id]
+    );
+    assert_eq!(
+        specialized_result.callee_source,
+        callee_abi.results[&return_id]
+    );
+    assert!(
+        specialized
+            .value_sources
+            .contains(&PlanValueSource::ControlProduced(
+                specialized_result.caller_destination
+            ))
+    );
 
+    let (target, argument, result, argument_count, result_count) =
+        find_call(&plan.root_region).expect("compiled Call region");
+    assert_eq!(target, expected_target);
+    assert_eq!((argument_count, result_count), (1, 1));
     assert_eq!(
         argument.callee_destination,
         callee_abi.parameters[&parameter_id]

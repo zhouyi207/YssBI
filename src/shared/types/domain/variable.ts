@@ -40,6 +40,7 @@ export type VariableScope = GlobalScope | EventScope | FunctionScope;
  */
 export interface Variable {
   id: string;
+  resourcePath?: string;
   name: string;
   dataType: DataType;
   dataValue: DataValue;

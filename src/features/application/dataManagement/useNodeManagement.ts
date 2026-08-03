@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { BatchCreateNodeRequest } from '@/shared/types/dto/batchCreateNode';
-import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
+import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { executeCommand } from '@/features/core/history';
 import { canDeleteNode } from '@/features/core/dataStore/graphNodeSelectors';
@@ -9,17 +12,24 @@ import { notifyNodeCreationUnavailable } from '@/features/application/editor/edi
 
 export function useNodeManagement() {
   const { activeTabId } = useActiveEditorGroup();
+  const { i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
 
   const createNode = useCallback(
     async (
-      _nodeType: string,
-      _position: { x: number; y: number },
-      _params?: NodeSpawnParams,
-    ): Promise<{ nodeId: string; pinIds: string[] } | undefined> => {
-      notifyNodeCreationUnavailable();
-      return undefined;
+      descriptor: NodeCreationDescriptor,
+      position: { x: number; y: number },
+    ): Promise<boolean> => {
+      if (!activeTabId) return false;
+      const outcome = await createNodeFromDescriptor({
+        graphPath: activeTabId,
+        locale,
+        descriptor,
+        position,
+      });
+      return outcome.status === 'applied';
     },
-    [],
+    [activeTabId, locale],
   );
 
   const createNodes = useCallback(

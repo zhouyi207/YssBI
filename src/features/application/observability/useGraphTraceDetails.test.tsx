@@ -64,6 +64,7 @@ function trace(
       registryFingerprint: 'registry-fingerprint-1',
       resourceVersions: { dataset: 'version-1' },
       compileId: '10',
+      selectionDigest: 'demand-selection-a',
       runId,
       nodeId: null,
       nodeTypeId: null,

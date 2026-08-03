@@ -9,7 +9,7 @@ import type {
   ResourceMutationResultDto,
 } from '@/shared/types/dto/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
   executeFunctionSignatureMutation,
@@ -31,11 +31,11 @@ const afterSignature: FunctionSignatureDto = {
   return_type: 'Int64',
 };
 
-vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
-  prepareGraphProjectionForPublication: vi.fn(async (graphPath: string) =>
-    (await import('@/tests/helpers/editorProjectionFixtures'))
-      .makeEditorProjectionFixture({ graphPath }).projection),
+vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
+  GraphProjectionService: {
+    loadGraph: vi.fn(),
+    hydrateGraph: vi.fn(),
+  },
 }));
 
 
@@ -117,6 +117,8 @@ describe('executeFunctionSignatureMutation', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.mocked(GraphProjectionService.loadGraph).mockImplementation(async (graphPath) =>
+      makeEditorProjectionFixture({ graphPath, sourceRevision: 7 }).projection);
     resetPendingMutations();
     resetFunctionSignatureCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
@@ -125,13 +127,63 @@ describe('executeFunctionSignatureMutation', () => {
     installState();
   });
 
+  it('does not invoke, publish, or mutate when project replacement occurs inside authority read', async () => {
+    const authority = useGraphMetaStore.getState();
+    vi.spyOn(useGraphMetaStore, 'getState').mockImplementationOnce(() => {
+      projectPublicationCoordinator.startProject(
+        '00000000-0000-0000-0000-000000000602',
+        0,
+      );
+      return authority;
+    });
+    const mutateSignature = vi.fn(async () =>
+      result({ status: 'complete', expectedGraphPaths: [functionPath] }, true));
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    const beforeMeta = authority.graphs[functionPath];
+    const beforeGraph = useGraphDataStore.getState().graphEntities[functionPath];
+
+    await expect(executeFunctionSignatureMutation(
+      {
+        functionPath,
+        locale: 'en-US',
+        patch: { inputs: [] },
+      },
+      dependencies(mutateSignature),
+    )).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
+
+    expect(mutateSignature).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
+    expect(useGraphDataStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
+    expect(getPendingMutation(operationId)).toBeUndefined();
+  });
+
+  it('rejects missing signature authority before invoke or publication effects', async () => {
+    useGraphMetaStore.getState().clear();
+    const mutateSignature = vi.fn();
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+
+    await expect(executeFunctionSignatureMutation(
+      {
+        functionPath,
+        locale: 'en-US',
+        patch: { inputs: [] },
+      },
+      dependencies(mutateSignature),
+    )).rejects.toThrow(`function signature resource '${functionPath}' is not hydrated`);
+
+    expect(mutateSignature).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect(getPendingMutation(operationId)).toBeUndefined();
+  });
+
   it('registers before invoke and atomically applies a complete authoritative result', async () => {
     const committed = result({ status: 'complete', expectedGraphPaths: [functionPath] }, true);
     const eventHandler = new ResourceMutationCommittedHandler();
     let pendingDuringInvoke = false;
     let graphTitleDuringInvoke: string | undefined;
     let signatureRevisionDuringInvoke: number | undefined;
-    const mutateSignature = vi.fn(async (_path, _locale, request) => {
+    const mutateSignature = vi.fn(async (_project, _path, _locale, request) => {
       pendingDuringInvoke = getPendingMutation(request.operationId) != null;
       graphTitleDuringInvoke = useGraphDataStore
         .getState()
@@ -157,7 +209,7 @@ describe('executeFunctionSignatureMutation', () => {
       dependencies(mutateSignature),
     );
 
-    expect(mutateSignature).toHaveBeenCalledWith(functionPath, 'zh-CN', {
+    expect(mutateSignature).toHaveBeenCalledWith(projectInstanceId, functionPath, 'zh-CN', {
       resource: { kind: 'function', key: functionPath },
       baseRevision: 2,
       operationId,
@@ -219,15 +271,17 @@ describe('executeFunctionSignatureMutation', () => {
       functionSignature: afterSignature,
     });
     expect(hydrateGraph).not.toHaveBeenCalled();
-    expect(prepareGraphProjectionForPublication).toHaveBeenCalledWith(
+    expect(GraphProjectionService.loadGraph).toHaveBeenCalledWith(
       functionPath,
-      projectInstanceId,
+      expect.any(String),
       expect.any(Number),
+      projectInstanceId,
     );
-    expect(prepareGraphProjectionForPublication).toHaveBeenCalledWith(
+    expect(GraphProjectionService.loadGraph).toHaveBeenCalledWith(
       callerPath,
-      projectInstanceId,
+      expect.any(String),
       expect.any(Number),
+      projectInstanceId,
     );
     expect(useHistoryStore.getState()).toEqual({
       canUndo: true,
@@ -348,7 +402,7 @@ describe('executeFunctionSignatureMutation', () => {
         patch: { inputs: [] },
       },
       dependencies(vi.fn(async () => malformed), hydrateGraph, loadFunctionResources),
-    )).rejects.toThrow('operation correlation does not match the pending request');
+    )).rejects.toThrow('resource delta operation correlation is inconsistent');
 
     expect(useGraphDataStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);

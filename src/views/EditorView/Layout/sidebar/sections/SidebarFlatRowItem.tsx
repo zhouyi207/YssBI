@@ -71,6 +71,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
       return (
         <SidebarVariableRow
           id={row.id}
+          resourcePath={row.resourcePath}
           name={row.name}
           dataType={row.dataType}
           isGlobal={row.isGlobal}
@@ -83,6 +84,7 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
       return (
         <SidebarDataRow
           id={row.id}
+          resourcePath={row.resourcePath}
           name={row.name}
           data={row.data}
           indentDepth={row.level}
