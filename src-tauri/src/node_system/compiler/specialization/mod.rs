@@ -27,7 +27,7 @@ pub enum NormalizedExecutionDemand {
 }
 
 impl NormalizedExecutionDemand {
-    pub fn digest(&self) -> [u8; 32] {
+    pub fn digest(&self) -> Result<[u8; 32], crate::node_system::registry::CanonicalEncodingError> {
         crate::node_system::registry::hash_canonical("yssbi.execution-demand.v1", self)
     }
 }
@@ -42,6 +42,7 @@ pub enum DemandPlanError {
     ControlPort(GraphOutputRef),
     EffectPort(GraphOutputRef),
     InvalidDerivedPlan(Box<str>),
+    CanonicalEncoding(crate::node_system::registry::CanonicalEncodingError),
 }
 
 impl fmt::Display for DemandPlanError {
@@ -79,11 +80,25 @@ impl fmt::Display for DemandPlanError {
             Self::InvalidDerivedPlan(message) => {
                 write!(formatter, "derived execution plan is invalid: {message}")
             }
+            Self::CanonicalEncoding(error) => error.fmt(formatter),
         }
     }
 }
 
-impl std::error::Error for DemandPlanError {}
+impl From<crate::node_system::registry::CanonicalEncodingError> for DemandPlanError {
+    fn from(error: crate::node_system::registry::CanonicalEncodingError) -> Self {
+        Self::CanonicalEncoding(error)
+    }
+}
+
+impl std::error::Error for DemandPlanError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::CanonicalEncoding(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DemandPortFact {

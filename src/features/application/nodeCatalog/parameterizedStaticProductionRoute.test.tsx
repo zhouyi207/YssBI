@@ -7,7 +7,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/app/i18n';
-import { validateEditorGraphProjection } from '@/features/domain/editorProjection';
+import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,

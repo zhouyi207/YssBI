@@ -1,4 +1,4 @@
-use super::builtin::{iid, sid};
+use super::builtin::{BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, sid};
 use super::localization::{Aliases, Message, Text};
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{RegisteredNode, StructuralNodeRole};
@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub(super) fn register(
     nodes: &mut Vec<RegisteredNode>,
     messages: &mut Vec<(&'static str, &'static str, Message)>,
-) {
+) -> Result<(), BuiltinAssemblyError> {
     add_node_messages(
         messages,
         "yssbi.control.branch",
@@ -17,7 +17,7 @@ pub(super) fn register(
         &["如果", "条件"],
     );
     nodes.push(RegisteredNode::structural(
-        Arc::new(branch_protocol()),
+        Arc::new(branch_protocol()?),
         StructuralNodeRole::Branch,
     ));
 
@@ -30,7 +30,7 @@ pub(super) fn register(
         &["然后", "顺序"],
     );
     nodes.push(RegisteredNode::structural(
-        Arc::new(sequence_protocol()),
+        Arc::new(sequence_protocol()?),
         StructuralNodeRole::Sequence,
     ));
 
@@ -43,111 +43,112 @@ pub(super) fn register(
         &["迭代", "重复", "当"],
     );
     nodes.push(RegisteredNode::structural(
-        Arc::new(loop_protocol()),
+        Arc::new(loop_protocol()?),
         StructuralNodeRole::Loop,
     ));
 
     add_messages(messages);
+    Ok(())
 }
 
-fn branch_protocol() -> NodeProtocol {
+fn branch_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.branch",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared),
+            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
             data_port(
                 "condition",
                 PortDirection::Input,
-                TypeExpr::Concrete(sid("core.bool", TypeId::new)),
+                TypeExpr::Concrete(sid("core.bool", TypeId::new)?),
                 PortInstances::Declared,
-            ),
+            )?,
             data_port(
                 "then_source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
+            )?,
             data_port(
                 "else_source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
-            control_port("true", PortDirection::Output, PortInstances::Declared),
-            control_port("false", PortDirection::Output, PortInstances::Declared),
+            )?,
+            control_port("true", PortDirection::Output, PortInstances::Declared)?,
+            control_port("false", PortDirection::Output, PortInstances::Declared)?,
             data_port(
                 "result",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
+            )?,
         ],
         vec![],
         vec![member_group(
             &["then_source", "else_source", "result"],
             0,
             None,
-        )],
+        )?],
     )
 }
 
-fn sequence_protocol() -> NodeProtocol {
+fn sequence_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.sequence",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared),
+            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
             control_port(
                 "then",
                 PortDirection::Output,
                 PortInstances::UserCreated { min: 1, max: None },
-            ),
+            )?,
         ],
         vec![],
         vec![],
     )
 }
 
-fn loop_protocol() -> NodeProtocol {
+fn loop_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.loop",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared),
+            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
             data_port(
                 "condition",
                 PortDirection::Input,
-                TypeExpr::Concrete(sid("core.bool", TypeId::new)),
+                TypeExpr::Concrete(sid("core.bool", TypeId::new)?),
                 PortInstances::Declared,
-            ),
+            )?,
             data_port(
                 "initial_source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
+            )?,
             data_port(
                 "next_source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
+            )?,
             data_port(
                 "body_input",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
+            )?,
             data_port(
                 "result",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
-            ),
-            control_port("body", PortDirection::Output, PortInstances::Declared),
-            control_port("then", PortDirection::Output, PortInstances::Declared),
+            )?,
+            control_port("body", PortDirection::Output, PortInstances::Declared)?,
+            control_port("then", PortDirection::Output, PortInstances::Declared)?,
         ],
         vec![parameter(
             "max_iterations",
-            TypeExpr::Concrete(sid("core.int64", TypeId::new)),
+            TypeExpr::Concrete(sid("core.int64", TypeId::new)?),
             ParameterEditorSpec::Number,
             vec![
                 ParameterConstraint::Required,
@@ -156,12 +157,12 @@ fn loop_protocol() -> NodeProtocol {
                     max: None,
                 },
             ],
-        )],
+        )?],
         vec![member_group(
             &["initial_source", "body_input", "next_source", "result"],
             1,
             None,
-        )],
+        )?],
     )
 }
 
@@ -170,29 +171,27 @@ fn protocol(
     ports: Vec<PortSpec>,
     parameters: Vec<ParameterSpec>,
     member_groups: Vec<PortMemberGroupSpec>,
-) -> NodeProtocol {
-    NodeProtocol {
-        type_id: sid(id, NodeTypeId::new),
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    Ok(NodeProtocol {
+        type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
-            title_key: iid(Box::leak(format!("nodes.{id}.title").into_boxed_str())),
+            title_key: iid(Box::leak(format!("nodes.{id}.title").into_boxed_str()))?,
             description_key: Some(iid(Box::leak(
                 format!("nodes.{id}.description").into_boxed_str(),
-            ))),
+            ))?),
             documentation_key: Some(iid(Box::leak(
                 format!("nodes.{id}.documentation").into_boxed_str(),
-            ))),
+            ))?),
             aliases_key: Some(iid(Box::leak(
                 format!("nodes.{id}.aliases").into_boxed_str(),
-            ))),
-            category_id: sid("control", NodeCategoryId::new),
-            icon_id: sid("builtin.control", IconId::new),
-            style_id: sid("builtin.default", NodeStyleId::new),
+            ))?),
+            category_id: sid("control", NodeCategoryId::new)?,
+            icon_id: sid("builtin.control", IconId::new)?,
+            style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, vec![], vec![])
-            .and_then(|interface| interface.with_member_groups(member_groups))
-            .expect("built-in control interface"),
-        parameters: ParameterSchema::new(parameters).expect("built-in control parameters"),
+        interface: assembled_interface(id, ports, vec![], vec![], member_groups)?,
+        parameters: assembled_parameters(id, parameters)?,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Effectful,
@@ -202,10 +201,14 @@ fn protocol(
         },
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
-fn control_port(key: &'static str, direction: PortDirection, instances: PortInstances) -> PortSpec {
+fn control_port(
+    key: &'static str,
+    direction: PortDirection,
+    instances: PortInstances,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         direction,
@@ -220,7 +223,7 @@ fn data_port(
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
-) -> PortSpec {
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(key, direction, PortKind::Data, value_type, instances)
 }
 
@@ -230,10 +233,10 @@ fn port(
     kind: PortKind,
     value_type: TypeExpr,
     instances: PortInstances,
-) -> PortSpec {
-    PortSpec {
-        key: sid(key, PortKey::new),
-        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str())),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: sid(key, PortKey::new)?,
+        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str()))?,
         direction,
         kind,
         value_type,
@@ -250,18 +253,23 @@ fn port(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
-fn member_group(templates: &[&'static str], min: u16, max: Option<u16>) -> PortMemberGroupSpec {
-    PortMemberGroupSpec {
+fn member_group(
+    templates: &[&'static str],
+    min: u16,
+    max: Option<u16>,
+) -> Result<PortMemberGroupSpec, BuiltinAssemblyError> {
+    Ok(PortMemberGroupSpec {
         templates: templates
             .iter()
             .map(|template| sid(*template, PortKey::new))
-            .collect(),
+            .collect::<Result<Vec<_>, _>>()?
+            .into_boxed_slice(),
         min,
         max,
-    }
+    })
 }
 
 fn parameter(
@@ -269,20 +277,20 @@ fn parameter(
     value_type: TypeExpr,
     editor: ParameterEditorSpec,
     constraints: Vec<ParameterConstraint>,
-) -> ParameterSpec {
-    ParameterSpec {
-        key: sid(key, ParameterKey::new),
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    Ok(ParameterSpec {
+        key: sid(key, ParameterKey::new)?,
         title_key: iid(Box::leak(
             format!("parameters.{key}.title").into_boxed_str(),
-        )),
+        ))?,
         description_key: Some(iid(Box::leak(
             format!("parameters.{key}.description").into_boxed_str(),
-        ))),
+        ))?),
         value_type,
         default_value: None,
         constraints,
         editor,
-    }
+    })
 }
 
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {

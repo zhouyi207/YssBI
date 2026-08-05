@@ -1434,7 +1434,7 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
     let first_key = basis.normalize_demand(&first).unwrap();
     let second_key = basis.normalize_demand(&second).unwrap();
     assert_eq!(first_key, second_key);
-    assert_eq!(first_key.digest(), second_key.digest());
+    assert_eq!(first_key.digest().unwrap(), second_key.digest().unwrap());
     assert_eq!(
         basis.derive_plan(&first).unwrap(),
         basis.derive_plan(&second).unwrap()
@@ -1451,7 +1451,10 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
         default_key, explicit_default_key,
         "normalized keys retain request mode even when selected outputs match"
     );
-    assert_ne!(default_key.digest(), explicit_default_key.digest());
+    assert_ne!(
+        default_key.digest().unwrap(),
+        explicit_default_key.digest().unwrap()
+    );
     let without_defaults = basis
         .normalize_demand(&ExecutionDemand::Outputs {
             outputs: Box::new([a.clone(), b.clone()]),
@@ -1465,7 +1468,10 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
         })
         .unwrap();
     assert_ne!(without_defaults, with_defaults);
-    assert_ne!(without_defaults.digest(), with_defaults.digest());
+    assert_ne!(
+        without_defaults.digest().unwrap(),
+        with_defaults.digest().unwrap()
+    );
 
     let defaults = basis.derive_plan(&ExecutionDemand::Default).unwrap();
     assert_eq!(defaults.results.len(), 2);
@@ -1558,6 +1564,7 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
             DemandPlanError::ControlPort(_) => "control_port",
             DemandPlanError::EffectPort(_) => "effect_port",
             DemandPlanError::InvalidDerivedPlan(_) => "invalid_derived_plan",
+            DemandPlanError::CanonicalEncoding(_) => "canonical_encoding",
         };
         assert_eq!(actual, expected, "wrong error for {output:?}");
     }

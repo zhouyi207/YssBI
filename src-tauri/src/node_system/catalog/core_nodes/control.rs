@@ -2,13 +2,14 @@ use super::support::*;
 use crate::node_system::protocol::*;
 use crate::node_system::registry::StructuralNodeRole;
 
-pub(super) fn register(fragment: &mut ProviderFragment) {
-    register_do(fragment);
-    register_merge(fragment);
-    register_sleep(fragment);
+pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    register_do(fragment)?;
+    register_merge(fragment)?;
+    register_sleep(fragment)?;
+    Ok(())
 }
 
-fn register_do(fragment: &mut ProviderFragment) {
+fn register_do(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.control.do";
     fragment.add_node_messages(&NodeTextSpec {
         id: ID,
@@ -20,7 +21,7 @@ fn register_do(fragment: &mut ProviderFragment) {
         zh_documentation: "空操作 kernel 在执行计划中保留显式顺序点。",
         aliases: &["do", "no-op", "noop", "sequencing point"],
         zh_aliases: &["执行", "空操作", "顺序点"],
-    });
+    })?;
     add_port_messages(
         fragment,
         ID,
@@ -30,27 +31,28 @@ fn register_do(fragment: &mut ProviderFragment) {
             ("then", "Then", "然后"),
             ("effect_out", "Effect Out", "副作用输出"),
         ],
-    );
+    )?;
     fragment.nodes.push(leaf(
         protocol(
             ID,
             "control",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared),
-                effect_port(ID, "effect_in", PortDirection::Input),
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
-                effect_port(ID, "effect_out", PortDirection::Output),
+                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
+                effect_port(ID, "effect_in", PortDirection::Input)?,
+                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
+                effect_port(ID, "effect_out", PortDirection::Output)?,
             ],
             vec![],
             vec![],
             vec![],
             effectful(),
-        ),
+        )?,
         ID,
     ));
+    Ok(())
 }
 
-fn register_merge(fragment: &mut ProviderFragment) {
+fn register_merge(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.control.merge";
     fragment.add_node_messages(&NodeTextSpec {
         id: ID,
@@ -62,12 +64,12 @@ fn register_merge(fragment: &mut ProviderFragment) {
         zh_documentation: "输入端口具有稳定实例身份，并保持确定性的文档顺序。",
         aliases: &["merge", "join", "control join", "converge"],
         zh_aliases: &["合并", "汇合", "控制流汇合"],
-    });
+    })?;
     add_port_messages(
         fragment,
         ID,
         &[("enter", "Enter", "进入"), ("then", "Then", "然后")],
-    );
+    )?;
     fragment.nodes.push(structural(
         protocol(
             ID,
@@ -81,19 +83,20 @@ fn register_merge(fragment: &mut ProviderFragment) {
                         min: 2,
                         max: Some(8),
                     },
-                ),
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
+                )?,
+                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
             ],
             vec![],
             vec![],
             vec![],
             effectful(),
-        ),
+        )?,
         StructuralNodeRole::Sequence,
     ));
+    Ok(())
 }
 
-fn register_sleep(fragment: &mut ProviderFragment) {
+fn register_sleep(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.control.sleep";
     fragment.add_node_messages(&NodeTextSpec {
         id: ID,
@@ -105,7 +108,7 @@ fn register_sleep(fragment: &mut ProviderFragment) {
         zh_documentation: "时长以秒为单位，范围为零到六十；等待期间会检查取消状态。",
         aliases: &["sleep", "wait", "delay", "seconds"],
         zh_aliases: &["等待", "延迟", "秒"],
-    });
+    })?;
     add_port_messages(
         fragment,
         ID,
@@ -116,18 +119,18 @@ fn register_sleep(fragment: &mut ProviderFragment) {
             ("then", "Then", "然后"),
             ("effect_out", "Effect Out", "副作用输出"),
         ],
-    );
+    )?;
     let mut duration = data_port(
         ID,
         "duration",
         PortDirection::Input,
-        concrete("core.float64"),
-    );
+        concrete("core.float64")?,
+    )?;
     duration.input_binding = Some(InputBindingSpec {
         literal_policy: LiteralPolicy::Allowed,
         default_value: Some(TypedValue {
-            value_type: concrete("core.float64"),
-            value: Value::Decimal(CanonicalDecimal::new("1").expect("canonical duration")),
+            value_type: concrete("core.float64")?,
+            value: Value::Decimal(assembled_decimal(ID, "1")?),
         }),
     });
     fragment.nodes.push(leaf(
@@ -135,25 +138,30 @@ fn register_sleep(fragment: &mut ProviderFragment) {
             ID,
             "control",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared),
-                effect_port(ID, "effect_in", PortDirection::Input),
+                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
+                effect_port(ID, "effect_in", PortDirection::Input)?,
                 duration,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
-                effect_port(ID, "effect_out", PortDirection::Output),
+                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
+                effect_port(ID, "effect_out", PortDirection::Output)?,
             ],
             vec![],
             vec![],
             vec![],
             effectful(),
-        ),
+        )?,
         ID,
     ));
+    Ok(())
 }
 
-fn effect_port(node_id: &'static str, key: &'static str, direction: PortDirection) -> PortSpec {
-    PortSpec {
-        key: semantic(key, PortKey::new),
-        label_key: port_key(node_id, key),
+fn effect_port(
+    node_id: &'static str,
+    key: &'static str,
+    direction: PortDirection,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: semantic(key, PortKey::new)?,
+        label_key: port_key(node_id, key)?,
         direction,
         kind: PortKind::Effect,
         value_type: TypeExpr::Unknown,
@@ -171,5 +179,5 @@ fn effect_port(node_id: &'static str, key: &'static str, direction: PortDirectio
         production: None,
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }

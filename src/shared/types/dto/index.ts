@@ -10,7 +10,7 @@ export * from './project';
 export * from './graph';
 export * from './graphCommands';
 export * from './graphModel';
-export * from './editorProjection';
+export type * from './editorProjection';
 export * from './editorMutation';
 export * from './runEvent';
 export * from './executionDemand';

@@ -7,6 +7,7 @@ use crate::node_system::compiler::{
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
 use crate::node_system::registry::*;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -19,24 +20,116 @@ pub struct BuiltinNodeSystem {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinInitializationError {
-    Registration(NodeRegistrationError),
+    Assembly(BuiltinAssemblyError),
     Localization(super::localization::I18nBundleValidationError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuiltinAssemblyError {
+    InvalidSemanticId {
+        value: Box<str>,
+        source: InvalidSemanticId,
+    },
+    InvalidProtocol {
+        node_type: Box<str>,
+        source: ProtocolError,
+    },
+    InvalidParameterSchema {
+        node_type: Box<str>,
+        source: ParameterSchemaError,
+    },
+    InvalidDecimal {
+        node_type: Box<str>,
+        source: InvalidDecimal,
+    },
+    InvalidDefaultBinding {
+        node_type: Box<str>,
+        source: ProtocolError,
+    },
+    LocalizationConflict {
+        locale: Box<str>,
+        key: Box<str>,
+    },
+    Registration(NodeRegistrationError),
 }
 
 impl std::fmt::Display for BuiltinInitializationError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Registration(error) => error.fmt(formatter),
+            Self::Assembly(error) => error.fmt(formatter),
             Self::Localization(error) => error.fmt(formatter),
         }
     }
 }
 
-impl std::error::Error for BuiltinInitializationError {}
+impl std::error::Error for BuiltinInitializationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Assembly(error) => Some(error),
+            Self::Localization(error) => Some(error),
+        }
+    }
+}
+
+impl std::fmt::Display for BuiltinAssemblyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidSemanticId { value, source } => {
+                write!(
+                    formatter,
+                    "invalid built-in semantic ID '{value}': {source}"
+                )
+            }
+            Self::InvalidProtocol { node_type, source } => {
+                write!(
+                    formatter,
+                    "built-in protocol '{node_type}' is invalid: {source}"
+                )
+            }
+            Self::InvalidParameterSchema { node_type, source } => write!(
+                formatter,
+                "built-in parameter schema '{node_type}' is invalid: {source}",
+            ),
+            Self::InvalidDecimal { node_type, source } => write!(
+                formatter,
+                "built-in decimal for '{node_type}' is invalid: {source}",
+            ),
+            Self::InvalidDefaultBinding { node_type, source } => write!(
+                formatter,
+                "built-in default binding for '{node_type}' is invalid: {source}",
+            ),
+            Self::LocalizationConflict { locale, key } => write!(
+                formatter,
+                "built-in localization key '{key}' has conflicting values for '{locale}'",
+            ),
+            Self::Registration(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for BuiltinAssemblyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidSemanticId { source, .. } => Some(source),
+            Self::InvalidProtocol { source, .. } => Some(source),
+            Self::InvalidParameterSchema { source, .. } => Some(source),
+            Self::InvalidDecimal { source, .. } => Some(source),
+            Self::InvalidDefaultBinding { source, .. } => Some(source),
+            Self::LocalizationConflict { .. } => None,
+            Self::Registration(error) => Some(error),
+        }
+    }
+}
+
+impl From<BuiltinAssemblyError> for BuiltinInitializationError {
+    fn from(error: BuiltinAssemblyError) -> Self {
+        Self::Assembly(error)
+    }
+}
 
 impl From<NodeRegistrationError> for BuiltinInitializationError {
     fn from(error: NodeRegistrationError) -> Self {
-        Self::Registration(error)
+        Self::Assembly(BuiltinAssemblyError::Registration(error))
     }
 }
 
@@ -44,6 +137,51 @@ impl From<super::localization::I18nBundleValidationError> for BuiltinInitializat
     fn from(error: super::localization::I18nBundleValidationError) -> Self {
         Self::Localization(error)
     }
+}
+
+pub(crate) fn assembled_interface(
+    node_type: &str,
+    ports: Vec<PortSpec>,
+    type_parameters: Vec<TypeParameterId>,
+    type_constraints: Vec<TypeConstraint>,
+    member_groups: Vec<PortMemberGroupSpec>,
+) -> Result<NodeInterfaceProtocol, BuiltinAssemblyError> {
+    NodeInterfaceProtocol::new(ports, type_parameters, type_constraints)
+        .and_then(|interface| interface.with_member_groups(member_groups))
+        .map_err(|source| match &source {
+            ProtocolError::InvalidPortContract { reason, .. } if reason.contains("default") => {
+                BuiltinAssemblyError::InvalidDefaultBinding {
+                    node_type: node_type.into(),
+                    source,
+                }
+            }
+            _ => BuiltinAssemblyError::InvalidProtocol {
+                node_type: node_type.into(),
+                source,
+            },
+        })
+}
+
+pub(crate) fn assembled_parameters(
+    node_type: &str,
+    parameters: Vec<ParameterSpec>,
+) -> Result<ParameterSchema, BuiltinAssemblyError> {
+    ParameterSchema::new(parameters).map_err(|source| {
+        BuiltinAssemblyError::InvalidParameterSchema {
+            node_type: node_type.into(),
+            source,
+        }
+    })
+}
+
+pub(crate) fn assembled_decimal(
+    node_type: &str,
+    value: &'static str,
+) -> Result<CanonicalDecimal, BuiltinAssemblyError> {
+    CanonicalDecimal::new(value).map_err(|source| BuiltinAssemblyError::InvalidDecimal {
+        node_type: node_type.into(),
+        source,
+    })
 }
 
 #[derive(Debug, Default)]
@@ -71,10 +209,13 @@ impl ProviderFragment {
         self.messages.extend(fragment.messages);
     }
 
-    pub(crate) fn finish(mut self) -> Self {
-        self.i18n
-            .keys
-            .extend(self.messages.iter().map(|(_, key, _)| iid(key)));
+    pub(crate) fn finish(mut self) -> Result<Self, BuiltinAssemblyError> {
+        let message_keys = self
+            .messages
+            .iter()
+            .map(|(_, key, _)| iid(key))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.i18n.keys.extend(message_keys);
         self.types.sort_by(|left, right| left.id.cmp(&right.id));
         self.type_constructors
             .sort_by(|left, right| left.id.cmp(&right.id));
@@ -87,19 +228,20 @@ impl ProviderFragment {
 
         let mut messages = BTreeMap::new();
         for (locale, key, message) in self.messages {
-            match messages.insert((locale, key), message.clone()) {
-                Some(existing) => assert_eq!(
-                    existing, message,
-                    "built-in localization key '{key}' has conflicting values for '{locale}'",
-                ),
-                None => {}
+            if let Some(existing) = messages.insert((locale, key), message.clone()) {
+                if existing != message {
+                    return Err(BuiltinAssemblyError::LocalizationConflict {
+                        locale: locale.into(),
+                        key: key.into(),
+                    });
+                }
             }
         }
         self.messages = messages
             .into_iter()
             .map(|((locale, key), message)| (locale, key, message))
             .collect();
-        self
+        Ok(self)
     }
 }
 
@@ -322,7 +464,7 @@ impl NodeLowerer for KernelLowerer {
 }
 
 pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
-    let (provider, catalog, alias_keys) = assemble_builtin_parts();
+    let (provider, catalog, alias_keys) = assemble_builtin_parts()?;
     validate_builtin_bundle(provider, catalog, alias_keys)
 }
 
@@ -332,9 +474,15 @@ fn validate_builtin_bundle(
     alias_keys: BTreeSet<I18nKey>,
 ) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
     let mut builder = NodeRegistryBuilder::new();
-    builder.register_provider(provider)?;
+    builder
+        .register_provider(provider)
+        .map_err(BuiltinAssemblyError::Registration)?;
     register_builtin_nominal_validators(&mut builder)?;
-    let registry = Arc::new(builder.freeze()?);
+    let registry = Arc::new(
+        builder
+            .freeze()
+            .map_err(BuiltinAssemblyError::Registration)?,
+    );
     catalog.validate(&registry.catalog_manifest().i18n, &alias_keys)?;
     Ok(BuiltinNodeSystem {
         registry,
@@ -344,8 +492,84 @@ fn validate_builtin_bundle(
 
 #[cfg(test)]
 pub(crate) fn builtin_bundle_parts_for_test()
--> (ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>) {
-    assemble_builtin_parts()
+-> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinInitializationError> {
+    assemble_builtin_parts().map_err(Into::into)
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BuiltinAssemblyTestFault {
+    InvalidSemanticId(&'static str),
+    InvalidProtocol(&'static str),
+    InvalidRegistryProtocol,
+    LocalizationConflict,
+    DuplicateRegistration,
+}
+
+#[cfg(test)]
+pub(crate) fn build_builtin_node_system_with_test_fault(
+    fault: BuiltinAssemblyTestFault,
+) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
+    let parts = match fault {
+        BuiltinAssemblyTestFault::InvalidSemanticId(value) => {
+            assemble_builtin_parts_with(move |fragment| {
+                fragment.nodes.push(leaf(
+                    protocol(value, "constants", Vec::new(), Vec::new(), pure())?,
+                    "test.invalid_semantic_id",
+                ));
+                Ok(())
+            })
+        }
+        BuiltinAssemblyTestFault::InvalidProtocol(node_type) => {
+            assemble_builtin_parts_with(move |_| {
+                let port = data_port("duplicate", PortDirection::Input, "core.bool")?;
+                assembled_interface(
+                    node_type,
+                    vec![port.clone(), port],
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )?;
+                Ok(())
+            })
+        }
+        BuiltinAssemblyTestFault::InvalidRegistryProtocol => {
+            let mut parts = assemble_builtin_parts()?;
+            let node = parts
+                .0
+                .nodes
+                .iter_mut()
+                .find(|node| node.protocol().type_id.as_str() == "yssbi.constant.bool")
+                .expect("built-in test fixture must contain bool constant");
+            let mut protocol = node.protocol().clone();
+            let duplicate = protocol.interface.ports[0].clone();
+            protocol.interface.ports = vec![duplicate.clone(), duplicate].into_boxed_slice();
+            *node = RegisteredNode::leaf(
+                Arc::new(protocol),
+                node.implementation()
+                    .expect("built-in bool constant must be executable")
+                    .clone(),
+            );
+            Ok(parts)
+        }
+        BuiltinAssemblyTestFault::LocalizationConflict => assemble_builtin_parts_with(|fragment| {
+            fragment.messages.extend([
+                ("en-US", "nodes.test.title", Text("First")),
+                ("en-US", "nodes.test.title", Text("Second")),
+            ]);
+            Ok(())
+        }),
+        BuiltinAssemblyTestFault::DuplicateRegistration => {
+            assemble_builtin_parts_with(|fragment| {
+                fragment.nodes.push(leaf(
+                    constant_protocol("yssbi.constant.bool", "core.bool", Value::Bool(false))?,
+                    "test.duplicate_registration",
+                ));
+                Ok(())
+            })
+        }
+    }?;
+    validate_builtin_bundle(parts.0, parts.1, parts.2)
 }
 
 #[cfg(test)]
@@ -359,30 +583,30 @@ pub(crate) fn validate_builtin_bundle_for_test(
 
 fn register_builtin_nominal_validators(
     builder: &mut NodeRegistryBuilder,
-) -> Result<(), NodeRegistrationError> {
-    let parse_type_id = |value| {
-        TypeId::new(value).map_err(|error| {
-            NodeRegistrationError::InvalidProtocol(ProtocolError::InvalidIdentity(
-                error.to_string(),
-            ))
-        })
-    };
-    builder.register_nominal_validator(
-        parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
-        parse_type_id(
-            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
-        )?,
-        crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-        crate::node_system::parameter_types::dataframe::validate_project_columns_json,
-    )?;
-    builder.register_nominal_validator(
-        parse_type_id(crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID)?,
-        parse_type_id(
-            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
-        )?,
-        crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-        crate::node_system::parameter_types::dataframe::validate_filter_predicate_json,
-    )?;
+) -> Result<(), BuiltinAssemblyError> {
+    let parse_type_id = |value| sid(value, TypeId::new);
+    builder
+        .register_nominal_validator(
+            parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
+            parse_type_id(
+                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
+            )?,
+            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            crate::node_system::parameter_types::dataframe::validate_project_columns_json,
+        )
+        .map_err(BuiltinAssemblyError::Registration)?;
+    builder
+        .register_nominal_validator(
+            parse_type_id(
+                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            )?,
+            parse_type_id(
+                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
+            )?,
+            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            crate::node_system::parameter_types::dataframe::validate_filter_predicate_json,
+        )
+        .map_err(BuiltinAssemblyError::Registration)?;
     Ok(())
 }
 
@@ -393,13 +617,21 @@ pub(crate) fn register_builtin_nominal_validators_for_test(
     register_builtin_nominal_validators(builder).map_err(Into::into)
 }
 
-fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>) {
+fn assemble_builtin_parts()
+-> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
+    assemble_builtin_parts_with(|_| Ok(()))
+}
+
+fn assemble_builtin_parts_with(
+    inject: impl FnOnce(&mut ProviderFragment) -> Result<(), BuiltinAssemblyError>,
+) -> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
     let mut fragment = ProviderFragment::default();
     let messages = &mut fragment.messages;
     let nodes = &mut fragment.nodes;
     add_shared_messages(messages);
     add_diagnostic_messages(messages);
 
+    let zero = assembled_decimal("yssbi.constant.float64", "0")?;
     for (kind, title, zh, value) in [
         ("bool", "Boolean Constant", "布尔常量", Value::Bool(false)),
         (
@@ -418,7 +650,7 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
             "float64",
             "Float64 Constant",
             "64 位浮点数常量",
-            Value::Decimal(CanonicalDecimal::new("0").unwrap()),
+            Value::Decimal(zero),
         ),
     ] {
         let id = leak(format!("yssbi.constant.{kind}"));
@@ -432,7 +664,7 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
         );
         let ty = leak(format!("core.{kind}"));
         nodes.push(leaf(
-            constant_protocol(id, ty, value),
+            constant_protocol(id, ty, value)?,
             leak(format!("constant.{kind}")),
         ));
     }
@@ -454,7 +686,7 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
                     "numeric",
                     leak(format!("core.{ty}")),
                     leak(format!("core.{ty}")),
-                ),
+                )?,
                 leak(format!("{}.{}", spec.kernel, ty)),
             ));
         }
@@ -470,9 +702,9 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
             spec.zh_aliases,
         );
         let protocol = if matches!(spec.id, "equal" | "not_equal") {
-            equality_protocol(id)
+            equality_protocol(id)?
         } else {
-            binary_protocol(id, "logic", "core.float64", "core.bool")
+            binary_protocol(id, "logic", "core.float64", "core.bool")?
         };
         nodes.push(leaf(protocol, spec.kernel));
     }
@@ -487,7 +719,7 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
             spec.zh_aliases,
         );
         nodes.push(leaf(
-            binary_protocol(id, "logic", "core.bool", "core.bool"),
+            binary_protocol(id, "logic", "core.bool", "core.bool")?,
             spec.kernel,
         ));
     }
@@ -500,19 +732,24 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
         &["取反", "!"],
     );
     nodes.push(leaf(
-        unary_protocol("yssbi.logic.not", "logic", "core.bool", "core.bool"),
+        unary_protocol("yssbi.logic.not", "logic", "core.bool", "core.bool")?,
         "logic.not",
     ));
 
-    control::register(nodes, messages);
-    project::register(nodes, messages);
+    control::register(nodes, messages)?;
+    project::register(nodes, messages)?;
 
     fragment.types.extend(
-        ["bool", "string", "int64", "float64"].map(|name| TypeRegistration {
-            id: sid(leak(format!("core.{name}")), TypeId::new),
-            title_key: iid(leak(format!("types.{name}.title"))),
-            classes: BTreeSet::new(),
-        }),
+        ["bool", "string", "int64", "float64"]
+            .into_iter()
+            .map(|name| {
+                Ok(TypeRegistration {
+                    id: sid(leak(format!("core.{name}")), TypeId::new)?,
+                    title_key: iid(leak(format!("types.{name}.title")))?,
+                    classes: BTreeSet::new(),
+                })
+            })
+            .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?,
     );
     fragment.categories.extend(
         [
@@ -522,32 +759,38 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
             ("control", 40),
             ("project", 50),
         ]
-        .map(|(name, order)| CategoryRegistration {
-            id: sid(name, NodeCategoryId::new),
-            title_key: iid(leak(format!("categories.{name}.title"))),
-            parent: None,
-            order,
-        }),
+        .into_iter()
+        .map(|(name, order)| {
+            Ok(CategoryRegistration {
+                id: sid(name, NodeCategoryId::new)?,
+                title_key: iid(leak(format!("categories.{name}.title")))?,
+                parent: None,
+                order,
+            })
+        })
+        .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?,
     );
     fragment
         .interface_resolvers
         .extend(builtin_function_interface_resolver_ids());
-    for family in [
-        core_nodes::build_provider_fragment(),
-        dataframe::build_provider_fragment(),
-        statistics::build_provider_fragment(),
-        distribution::build_provider_fragment(),
-        plot::build_provider_fragment(),
-    ] {
-        fragment.merge(family);
-    }
-    let fragment = fragment.finish();
+    fragment.merge(core_nodes::build_provider_fragment()?);
+    fragment.merge(dataframe::build_provider_fragment()?);
+    fragment.merge(statistics::build_provider_fragment()?);
+    fragment.merge(distribution::build_provider_fragment()?);
+    fragment.merge(plot::build_provider_fragment()?);
+    inject(&mut fragment)?;
+    let fragment = fragment.finish()?;
     let (required_i18n, alias_keys) =
-        i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes);
+        i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes)?;
     let mut i18n = fragment.i18n;
     i18n.keys.extend(required_i18n.keys);
-    let catalog = BuiltinCatalog::new(&fragment.messages);
-    let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new));
+    let catalog = BuiltinCatalog::new(&fragment.messages).map_err(|source| {
+        BuiltinAssemblyError::InvalidProtocol {
+            node_type: PROVIDER.into(),
+            source,
+        }
+    })?;
+    let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new)?);
     provider.types = fragment.types.into_boxed_slice();
     provider.type_constructors = fragment.type_constructors.into_boxed_slice();
     provider.categories = fragment.categories.into_boxed_slice();
@@ -555,7 +798,7 @@ fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I
     provider.interface_resolvers = fragment.interface_resolvers.into_boxed_slice();
     provider.schema_resolvers = fragment.schema_resolvers.into_boxed_slice();
     provider.nodes = fragment.nodes.into_boxed_slice();
-    (provider, catalog, alias_keys)
+    Ok((provider, catalog, alias_keys))
 }
 
 pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
@@ -565,18 +808,22 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     )
 }
 
-fn constant_protocol(id: &'static str, ty: &'static str, value: Value) -> NodeProtocol {
+fn constant_protocol(
+    id: &'static str,
+    ty: &'static str,
+    value: Value,
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         id,
         "constants",
-        vec![data_port("value", PortDirection::Output, ty)],
+        vec![data_port("value", PortDirection::Output, ty)?],
         vec![ParameterSpec {
-            key: sid("value", ParameterKey::new),
-            title_key: iid("parameters.value.title"),
-            description_key: Some(iid("parameters.value.description")),
-            value_type: concrete(ty),
+            key: sid("value", ParameterKey::new)?,
+            title_key: iid("parameters.value.title")?,
+            description_key: Some(iid("parameters.value.description")?),
+            value_type: concrete(ty)?,
             default_value: Some(ParameterValue {
-                value_type: concrete(ty),
+                value_type: concrete(ty)?,
                 value,
             }),
             constraints: vec![],
@@ -591,41 +838,43 @@ fn binary_protocol(
     category: &'static str,
     input: &'static str,
     output: &'static str,
-) -> NodeProtocol {
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         id,
         category,
         vec![
-            data_port("left", PortDirection::Input, input),
-            data_port("right", PortDirection::Input, input),
-            data_port("result", PortDirection::Output, output),
+            data_port("left", PortDirection::Input, input)?,
+            data_port("right", PortDirection::Input, input)?,
+            data_port("result", PortDirection::Output, output)?,
         ],
         vec![],
         pure(),
     )
 }
-fn equality_protocol(id: &'static str) -> NodeProtocol {
-    let value = sid("value", TypeParameterId::new);
-    let mut protocol = protocol(id, "logic", vec![], vec![], pure());
-    protocol.interface = NodeInterfaceProtocol::new(
+
+fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let value = sid("value", TypeParameterId::new)?;
+    let mut protocol = protocol(id, "logic", vec![], vec![], pure())?;
+    protocol.interface = assembled_interface(
+        id,
         vec![
             data_port_expr(
                 "left",
                 PortDirection::Input,
                 TypeExpr::Generic(value.clone()),
-            ),
+            )?,
             data_port_expr(
                 "right",
                 PortDirection::Input,
                 TypeExpr::Generic(value.clone()),
-            ),
-            data_port("result", PortDirection::Output, "core.bool"),
+            )?,
+            data_port("result", PortDirection::Output, "core.bool")?,
         ],
         vec![value],
         vec![],
-    )
-    .expect("equality interface");
-    protocol
+        vec![],
+    )?;
+    Ok(protocol)
 }
 
 fn unary_protocol(
@@ -633,13 +882,13 @@ fn unary_protocol(
     category: &'static str,
     input: &'static str,
     output: &'static str,
-) -> NodeProtocol {
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         id,
         category,
         vec![
-            data_port("input", PortDirection::Input, input),
-            data_port("result", PortDirection::Output, output),
+            data_port("input", PortDirection::Input, input)?,
+            data_port("result", PortDirection::Output, output)?,
         ],
         vec![],
         pure(),
@@ -652,35 +901,43 @@ fn protocol(
     ports: Vec<PortSpec>,
     parameters: Vec<ParameterSpec>,
     execution: ExecutionSemantics,
-) -> NodeProtocol {
-    NodeProtocol {
-        type_id: sid(id, NodeTypeId::new),
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    Ok(NodeProtocol {
+        type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
-            title_key: iid(leak(format!("nodes.{id}.title"))),
-            description_key: Some(iid(leak(format!("nodes.{id}.description")))),
-            documentation_key: Some(iid(leak(format!("nodes.{id}.documentation")))),
-            aliases_key: Some(iid(leak(format!("nodes.{id}.aliases")))),
-            category_id: sid(category, NodeCategoryId::new),
-            icon_id: sid(leak(format!("builtin.{category}")), IconId::new),
-            style_id: sid("builtin.default", NodeStyleId::new),
+            title_key: iid(leak(format!("nodes.{id}.title")))?,
+            description_key: Some(iid(leak(format!("nodes.{id}.description")))?),
+            documentation_key: Some(iid(leak(format!("nodes.{id}.documentation")))?),
+            aliases_key: Some(iid(leak(format!("nodes.{id}.aliases")))?),
+            category_id: sid(category, NodeCategoryId::new)?,
+            icon_id: sid(leak(format!("builtin.{category}")), IconId::new)?,
+            style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, vec![], vec![]).expect("built-in interface"),
-        parameters: ParameterSchema::new(parameters).expect("built-in parameters"),
+        interface: assembled_interface(id, ports, vec![], vec![], vec![])?,
+        parameters: assembled_parameters(id, parameters)?,
         execution,
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
-fn data_port(key: &'static str, direction: PortDirection, ty: &'static str) -> PortSpec {
-    data_port_expr(key, direction, concrete(ty))
+fn data_port(
+    key: &'static str,
+    direction: PortDirection,
+    ty: &'static str,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    data_port_expr(key, direction, concrete(ty)?)
 }
 
-fn data_port_expr(key: &'static str, direction: PortDirection, value_type: TypeExpr) -> PortSpec {
-    PortSpec {
-        key: sid(key, PortKey::new),
-        label_key: iid(leak(format!("ports.{key}.label"))),
+fn data_port_expr(
+    key: &'static str,
+    direction: PortDirection,
+    value_type: TypeExpr,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: sid(key, PortKey::new)?,
+        label_key: iid(leak(format!("ports.{key}.label")))?,
         direction,
         kind: PortKind::Data,
         value_type,
@@ -695,11 +952,11 @@ fn data_port_expr(key: &'static str, direction: PortDirection, value_type: TypeE
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
-fn concrete(id: &'static str) -> TypeExpr {
-    TypeExpr::Concrete(sid(id, TypeId::new))
+fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
@@ -711,14 +968,17 @@ fn pure() -> ExecutionSemantics {
     }
 }
 
-pub(super) fn iid(value: &'static str) -> I18nKey {
+pub(super) fn iid(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     sid(value, I18nKey::new)
 }
 pub(super) fn sid<T>(
     value: &'static str,
     make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
-) -> T {
-    make(value).unwrap()
+) -> Result<T, BuiltinAssemblyError> {
+    make(value).map_err(|source| BuiltinAssemblyError::InvalidSemanticId {
+        value: value.into(),
+        source,
+    })
 }
 fn leak(value: String) -> &'static str {
     Box::leak(value.into_boxed_str())
@@ -728,7 +988,7 @@ fn i18n_requirements(
     types: &[TypeRegistration],
     categories: &[CategoryRegistration],
     nodes: &[RegisteredNode],
-) -> (I18nManifest, BTreeSet<I18nKey>) {
+) -> Result<(I18nManifest, BTreeSet<I18nKey>), BuiltinAssemblyError> {
     let mut keys = BTreeSet::new();
     let mut alias_keys = BTreeSet::new();
     keys.extend(types.iter().map(|item| item.title_key.clone()));
@@ -754,11 +1014,18 @@ fn i18n_requirements(
             keys.extend(parameter.description_key.iter().cloned());
         }
     }
-    keys.extend(COMPILER_DIAGNOSTIC_CODES.iter().map(|code| {
-        I18nKey::new(format!("diagnostics.{code}"))
-            .expect("compiler diagnostic codes form valid i18n keys")
-    }));
-    (I18nManifest { keys }, alias_keys)
+    for code in COMPILER_DIAGNOSTIC_CODES {
+        keys.insert(
+            I18nKey::new(format!("diagnostics.{code}")).map_err(|source| {
+                let value = format!("diagnostics.{code}");
+                BuiltinAssemblyError::InvalidSemanticId {
+                    value: value.into(),
+                    source,
+                }
+            })?,
+        );
+    }
+    Ok((I18nManifest { keys }, alias_keys))
 }
 
 fn add_diagnostic_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {

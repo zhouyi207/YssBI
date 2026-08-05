@@ -13,7 +13,8 @@ fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
 }
 
 fn is_test_only_source(relative: &str) -> bool {
-    relative.rsplit('/').next() == Some("tests.rs")
+    relative.starts_with("node_system/testing/")
+        || relative.rsplit('/').next() == Some("tests.rs")
         || relative.ends_with("_tests.rs")
         || relative.ends_with("production_tests.rs")
 }
@@ -243,6 +244,11 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
 #[test]
 fn test_only_source_classification_accepts_conventional_nested_tests_rs() {
     assert!(is_test_only_source("node_system/catalog/tests.rs"));
+}
+
+#[test]
+fn test_only_source_classification_accepts_cfg_test_module_trees() {
+    assert!(is_test_only_source("node_system/testing/contracts.rs"));
 }
 
 #[test]

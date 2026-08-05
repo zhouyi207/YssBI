@@ -19,11 +19,11 @@ pub struct ParameterSchema {
 }
 
 impl ParameterSchema {
-    pub fn new(parameters: Vec<ParameterSpec>) -> Result<Self, DuplicateParameterKey> {
+    pub fn new(parameters: Vec<ParameterSpec>) -> Result<Self, ParameterSchemaError> {
         let mut keys = BTreeSet::new();
         for parameter in &parameters {
             if !keys.insert(parameter.key.clone()) {
-                return Err(DuplicateParameterKey(parameter.key.clone()));
+                return Err(DuplicateParameterKey(parameter.key.clone()).into());
             }
         }
         Ok(Self {
@@ -66,3 +66,30 @@ impl std::fmt::Display for DuplicateParameterKey {
 }
 
 impl std::error::Error for DuplicateParameterKey {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParameterSchemaError {
+    DuplicateKey(DuplicateParameterKey),
+}
+
+impl From<DuplicateParameterKey> for ParameterSchemaError {
+    fn from(error: DuplicateParameterKey) -> Self {
+        Self::DuplicateKey(error)
+    }
+}
+
+impl std::fmt::Display for ParameterSchemaError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateKey(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for ParameterSchemaError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::DuplicateKey(error) => Some(error),
+        }
+    }
+}

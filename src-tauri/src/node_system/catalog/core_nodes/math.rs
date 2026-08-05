@@ -86,16 +86,20 @@ const UNARY_FUNCTIONS: &[MathSpec] = &[
     },
 ];
 
-pub(super) fn register(fragment: &mut ProviderFragment) {
+pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for spec in SERIES_OPERATORS {
-        register_series_operator(fragment, *spec);
+        register_series_operator(fragment, *spec)?;
     }
     for spec in UNARY_FUNCTIONS {
-        register_unary(fragment, *spec);
+        register_unary(fragment, *spec)?;
     }
+    Ok(())
 }
 
-fn register_series_operator(fragment: &mut ProviderFragment, spec: MathSpec) {
+fn register_series_operator(
+    fragment: &mut ProviderFragment,
+    spec: MathSpec,
+) -> Result<(), BuiltinAssemblyError> {
     let id = leak(format!("yssbi.numeric.series.{}", spec.operation));
     fragment.add_node_messages(&NodeTextSpec {
         id,
@@ -107,8 +111,11 @@ fn register_series_operator(fragment: &mut ProviderFragment, spec: MathSpec) {
         zh_documentation: "标量输入会广播到 DataSeries 长度；多个 DataSeries 操作数的长度必须一致。",
         aliases: spec.aliases,
         zh_aliases: spec.zh_aliases,
-    });
-    let numeric = TypeExpr::Union(vec![concrete("core.float64"), data_series("core.float64")]);
+    })?;
+    let numeric = TypeExpr::Union(vec![
+        concrete("core.float64")?,
+        data_series("core.float64")?,
+    ]);
     let operands = if spec.operation == "add" {
         data_port_with_instances(
             id,
@@ -116,20 +123,20 @@ fn register_series_operator(fragment: &mut ProviderFragment, spec: MathSpec) {
             PortDirection::Input,
             numeric.clone(),
             PortInstances::UserCreated { min: 2, max: None },
-        )
+        )?
     } else {
-        data_port(id, "left", PortDirection::Input, numeric.clone())
+        data_port(id, "left", PortDirection::Input, numeric.clone())?
     };
     let mut ports = vec![operands];
     if spec.operation != "add" {
-        ports.push(data_port(id, "right", PortDirection::Input, numeric));
+        ports.push(data_port(id, "right", PortDirection::Input, numeric)?);
     }
     ports.push(data_port(
         id,
         "result",
         PortDirection::Output,
-        data_series("core.float64"),
-    ));
+        data_series("core.float64")?,
+    )?);
     let labels = if spec.operation == "add" {
         &[
             ("operands", "Operands", "操作数"),
@@ -142,14 +149,18 @@ fn register_series_operator(fragment: &mut ProviderFragment, spec: MathSpec) {
             ("result", "Result", "结果"),
         ][..]
     };
-    add_port_messages(fragment, id, labels);
+    add_port_messages(fragment, id, labels)?;
     fragment.nodes.push(leaf(
-        protocol(id, "numeric", ports, vec![], vec![], vec![], pure()),
+        protocol(id, "numeric", ports, vec![], vec![], vec![], pure())?,
         id,
     ));
+    Ok(())
 }
 
-fn register_unary(fragment: &mut ProviderFragment, spec: MathSpec) {
+fn register_unary(
+    fragment: &mut ProviderFragment,
+    spec: MathSpec,
+) -> Result<(), BuiltinAssemblyError> {
     let id = leak(format!("yssbi.numeric.{}", spec.operation));
     fragment.add_node_messages(&NodeTextSpec {
         id,
@@ -161,26 +172,30 @@ fn register_unary(fragment: &mut ProviderFragment, spec: MathSpec) {
         zh_documentation: "输出形状与输入一致；运行时 kernel 会拒绝非有限结果。",
         aliases: spec.aliases,
         zh_aliases: spec.zh_aliases,
-    });
+    })?;
     add_port_messages(
         fragment,
         id,
         &[("input", "Input", "输入"), ("result", "Result", "结果")],
-    );
-    let numeric = TypeExpr::Union(vec![concrete("core.float64"), data_series("core.float64")]);
+    )?;
+    let numeric = TypeExpr::Union(vec![
+        concrete("core.float64")?,
+        data_series("core.float64")?,
+    ]);
     fragment.nodes.push(leaf(
         protocol(
             id,
             "numeric",
             vec![
-                data_port(id, "input", PortDirection::Input, numeric.clone()),
-                data_port(id, "result", PortDirection::Output, numeric),
+                data_port(id, "input", PortDirection::Input, numeric.clone())?,
+                data_port(id, "result", PortDirection::Output, numeric)?,
             ],
             vec![],
             vec![],
             vec![],
             pure(),
-        ),
+        )?,
         id,
     ));
+    Ok(())
 }

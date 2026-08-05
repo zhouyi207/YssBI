@@ -3,8 +3,52 @@ use crate::node_system::compiler::{LoweredNode, LoweringContext, LoweringError, 
 use crate::node_system::protocol::*;
 use crate::node_system::testing::TestProtocolBuilder;
 use std::any::Any;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+#[test]
+fn canonical_encoding_failures_remain_typed() {
+    struct RefusesSerialization;
+
+    impl serde::Serialize for RefusesSerialization {
+        fn serialize<S>(&self, _: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("canonical encoding rejected"))
+        }
+    }
+
+    let error = hash_canonical("yssbi.registry.test", &RefusesSerialization).unwrap_err();
+    assert_eq!(error.to_string(), "canonical encoding rejected");
+    assert_eq!(
+        std::error::Error::source(&error).map(ToString::to_string),
+        Some("canonical encoding rejected".to_string())
+    );
+}
+
+#[test]
+fn node_registration_error_preserves_typed_sources() {
+    let protocol =
+        NodeRegistrationError::InvalidProtocol(ProtocolError::InvalidPortMemberGroup("bad group"));
+    assert!(
+        std::error::Error::source(&protocol)
+            .and_then(|source| source.downcast_ref::<ProtocolError>())
+            .is_some_and(|source| matches!(
+                source,
+                ProtocolError::InvalidPortMemberGroup("bad group")
+            ))
+    );
+
+    let id = NodeTypeId::new("yssbi.test.duplicate").unwrap();
+    let registry =
+        NodeRegistrationError::InvalidRegistry(RegistryValidationError::DuplicateNode(id.clone()));
+    assert!(
+        std::error::Error::source(&registry)
+            .and_then(|source| source.downcast_ref::<RegistryValidationError>())
+            .is_some_and(|source| matches!(source, RegistryValidationError::DuplicateNode(actual) if actual == &id))
+    );
+}
 
 #[test]
 fn frozen_registry_state_is_scoped_to_the_registry_module() {
@@ -41,8 +85,15 @@ where
     value.parse().unwrap()
 }
 struct RegistryTestLowerer;
+struct AlternateRegistryTestLowerer;
 
 impl NodeLowerer for RegistryTestLowerer {
+    fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        unreachable!("registry validation never lowers nodes")
+    }
+}
+
+impl NodeLowerer for AlternateRegistryTestLowerer {
     fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
         unreachable!("registry validation never lowers nodes")
     }
@@ -326,7 +377,10 @@ fn rejects_incomplete_or_invalid_port_member_groups() {
     ] {
         assert!(matches!(
             error(provider_with_member_groups(groups)),
-            RegistryValidationError::InvalidNode { .. }
+            RegistryValidationError::InvalidNodeProtocol {
+                node,
+                source: ProtocolError::InvalidPortMemberGroup(_),
+            } if node.as_str() == "yssbi.test.empty"
         ));
     }
 }
@@ -339,7 +393,10 @@ fn rejects_templates_repeated_across_port_member_groups() {
     ]);
     assert!(matches!(
         error(provider_with_member_groups(groups)),
-        RegistryValidationError::InvalidNode { .. }
+        RegistryValidationError::InvalidNodeProtocol {
+            node,
+            source: ProtocolError::InvalidPortMemberGroup(_),
+        } if node.as_str() == "yssbi.test.empty"
     ));
 }
 
@@ -718,8 +775,8 @@ fn display_metadata_does_not_change_semantic_snapshot_or_fingerprint() {
 
     assert_eq!(first.fingerprint(), second.fingerprint());
     assert_eq!(
-        canonical_semantic_protocol_snapshot(&first),
-        canonical_semantic_protocol_snapshot(&second)
+        canonical_semantic_protocol_snapshot(&first).unwrap(),
+        canonical_semantic_protocol_snapshot(&second).unwrap()
     );
 }
 
@@ -729,12 +786,12 @@ fn protocol_snapshot_and_i18n_inventory_are_deterministic() {
     builder.register_provider(valid_provider()).unwrap();
     let registry = builder.freeze().unwrap();
 
-    let snapshot = canonical_semantic_protocol_snapshot(&registry);
+    let snapshot = canonical_semantic_protocol_snapshot(&registry).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
     assert_eq!(parsed["nodes"][0]["nodeTypeId"], "yssbi.test.empty");
     assert!(parsed["nodes"][0]["protocol"].get("catalog").is_none());
 
-    let inventory: Vec<String> = serde_json::from_str(&i18n_inventory(&registry)).unwrap();
+    let inventory: Vec<String> = serde_json::from_str(&i18n_inventory(&registry).unwrap()).unwrap();
     assert!(inventory.windows(2).all(|keys| keys[0] < keys[1]));
     assert_eq!(
         inventory,
@@ -852,6 +909,529 @@ fn provider_provenance_covers_every_builtin_node_and_type() {
         assert_eq!(
             registry.type_provider(id).map(ProviderId::as_str),
             Some("yssbi.builtin")
+        );
+    }
+}
+
+fn duplicate_provider_pair() -> [ProviderRegistration; 2] {
+    provenance_providers()
+}
+
+fn duplicate_result(kind: &str) -> Result<NodeRegistry, NodeRegistrationError> {
+    let [first, mut second] = duplicate_provider_pair();
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(first.clone())?;
+
+    match kind {
+        "provider" => builder.register_provider(first)?,
+        "node" => {
+            Arc::make_mut(&mut second.nodes[0].protocol).type_id =
+                first.nodes[0].protocol().type_id.clone();
+            builder.register_provider(second)?;
+        }
+        "type" => {
+            second.types[0].id = first.types[0].id.clone();
+            builder.register_provider(second)?;
+        }
+        "type constructor" => {
+            let constructor = TypeConstructorRegistration {
+                id: id("test.list"),
+                title_key: id("types.test.list.title"),
+                arity: 1,
+            };
+            let mut first = first;
+            first.type_constructors = vec![constructor.clone()].into_boxed_slice();
+            first.i18n.keys.insert(constructor.title_key.clone());
+            second.type_constructors = vec![constructor.clone()].into_boxed_slice();
+            second.i18n.keys.insert(constructor.title_key);
+            let mut builder = NodeRegistryBuilder::new();
+            builder.register_provider(first)?;
+            builder.register_provider(second)?;
+            return builder.freeze();
+        }
+        "type class" => {
+            let class: TypeClassId = id("test.scalar");
+            let mut first = first;
+            first.type_classes = vec![class.clone()].into_boxed_slice();
+            second.type_classes = vec![class].into_boxed_slice();
+            let mut builder = NodeRegistryBuilder::new();
+            builder.register_provider(first)?;
+            builder.register_provider(second)?;
+            return builder.freeze();
+        }
+        "category" => {
+            second.categories[0].id = first.categories[0].id.clone();
+            builder.register_provider(second)?;
+        }
+        "i18n key" => {
+            second.i18n.keys.insert(id("categories.test.title"));
+            builder.register_provider(second)?;
+        }
+        "interface resolver" => {
+            let resolver: InterfaceResolverId = id("test.interface");
+            let mut first = first;
+            first.interface_resolvers = vec![resolver.clone()].into_boxed_slice();
+            second.interface_resolvers = vec![resolver].into_boxed_slice();
+            let mut builder = NodeRegistryBuilder::new();
+            builder.register_provider(first)?;
+            builder.register_provider(second)?;
+            return builder.freeze();
+        }
+        "schema resolver" => {
+            let resolver: SchemaResolverId = id("test.schema");
+            let mut first = first;
+            first.schema_resolvers = vec![resolver.clone()].into_boxed_slice();
+            second.schema_resolvers = vec![resolver].into_boxed_slice();
+            let mut builder = NodeRegistryBuilder::new();
+            builder.register_provider(first)?;
+            builder.register_provider(second)?;
+            return builder.freeze();
+        }
+        "nominal validator" => {
+            builder.register_nominal_validator(
+                id("yssbi.value"),
+                id("test.validator"),
+                1,
+                accepts_any_json,
+            )?;
+            builder.register_nominal_validator(
+                id("yssbi.value"),
+                id("test.validator.v2"),
+                2,
+                accepts_any_json,
+            )?;
+        }
+        other => panic!("unknown duplicate matrix case {other}"),
+    }
+
+    builder.freeze()
+}
+
+#[test]
+fn duplicate_global_identity_matrix() {
+    use RegistryValidationError::*;
+
+    for (kind, expected) in [
+        ("provider", "DuplicateProvider"),
+        ("node", "DuplicateNode"),
+        ("type", "DuplicateType"),
+        ("type constructor", "DuplicateTypeConstructor"),
+        ("type class", "DuplicateTypeClass"),
+        ("category", "DuplicateCategory"),
+        ("i18n key", "DuplicateI18nKey"),
+        ("interface resolver", "DuplicateInterfaceResolver"),
+        ("schema resolver", "DuplicateSchemaResolver"),
+        ("nominal validator", "DuplicateNominalValidator"),
+    ] {
+        let result = duplicate_result(kind);
+        let actual = match result {
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateProvider(_))) => {
+                "DuplicateProvider"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateNode(_))) => "DuplicateNode",
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateType(_))) => "DuplicateType",
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateTypeConstructor(_))) => {
+                "DuplicateTypeConstructor"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateTypeClass(_))) => {
+                "DuplicateTypeClass"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateCategory(_))) => {
+                "DuplicateCategory"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateI18nKey(_))) => "DuplicateI18nKey",
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateInterfaceResolver(_))) => {
+                "DuplicateInterfaceResolver"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateSchemaResolver(_))) => {
+                "DuplicateSchemaResolver"
+            }
+            Err(NodeRegistrationError::InvalidRegistry(DuplicateNominalValidator(_))) => {
+                "DuplicateNominalValidator"
+            }
+            Err(other) => panic!("{kind}: unexpected error {other}"),
+            Ok(_) => panic!("{kind}: duplicate identity returned a frozen Registry"),
+        };
+        assert_eq!(actual, expected, "{kind}");
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ValidatorFingerprintSpec {
+    identity: &'static str,
+    version: u32,
+}
+
+fn validator_spec(identity: &'static str, version: u32) -> Option<ValidatorFingerprintSpec> {
+    Some(ValidatorFingerprintSpec { identity, version })
+}
+
+fn freeze_for_fingerprint(
+    provider: ProviderRegistration,
+    validator: Option<ValidatorFingerprintSpec>,
+) -> NodeRegistry {
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(provider).unwrap();
+    if let Some(validator) = validator {
+        builder
+            .register_nominal_validator(
+                id("acme.nominal"),
+                id(validator.identity),
+                validator.version,
+                accepts_any_json,
+            )
+            .unwrap();
+    }
+    builder.freeze().unwrap()
+}
+
+fn canonical_for_fingerprint(
+    provider: &ProviderRegistration,
+    validator: Option<ValidatorFingerprintSpec>,
+) -> serde_json::Value {
+    let protocols = provider
+        .nodes
+        .iter()
+        .map(|node| {
+            (
+                node.protocol().type_id.clone(),
+                fingerprint::protocol_fingerprint(node.protocol()).unwrap(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let nominal_validators = validator
+        .map(|validator| {
+            BTreeMap::from([(
+                id("acme.nominal"),
+                NominalParameterValidator::new(
+                    id(validator.identity),
+                    validator.version,
+                    accepts_any_json,
+                ),
+            )])
+        })
+        .unwrap_or_default();
+    canonical_registry(
+        std::slice::from_ref(provider),
+        &protocols,
+        &nominal_validators,
+    )
+}
+
+fn assert_single_canonical_fingerprint_change(
+    case: &str,
+    left_provider: ProviderRegistration,
+    right_provider: ProviderRegistration,
+    left_validator: Option<ValidatorFingerprintSpec>,
+    right_validator: Option<ValidatorFingerprintSpec>,
+    target_pointer: &str,
+) {
+    let mut left_canonical = canonical_for_fingerprint(&left_provider, left_validator);
+    let mut right_canonical = canonical_for_fingerprint(&right_provider, right_validator);
+    let left_target = left_canonical
+        .pointer(target_pointer)
+        .unwrap_or_else(|| panic!("{case}: missing left canonical target {target_pointer}"))
+        .clone();
+    let right_target = right_canonical
+        .pointer(target_pointer)
+        .unwrap_or_else(|| panic!("{case}: missing right canonical target {target_pointer}"))
+        .clone();
+    assert_ne!(left_target, right_target, "{case}: target did not change");
+    *left_canonical.pointer_mut(target_pointer).unwrap() = serde_json::json!("target");
+    *right_canonical.pointer_mut(target_pointer).unwrap() = serde_json::json!("target");
+    assert_eq!(
+        left_canonical, right_canonical,
+        "{case}: canonical input outside {target_pointer} changed"
+    );
+
+    let left = freeze_for_fingerprint(left_provider, left_validator);
+    let right = freeze_for_fingerprint(right_provider, right_validator);
+    assert_ne!(
+        left.fingerprint(),
+        right.fingerprint(),
+        "{case}: target canonical change did not change fingerprint"
+    );
+}
+
+fn assert_canonical_fingerprint_invariant(
+    case: &str,
+    left_provider: ProviderRegistration,
+    right_provider: ProviderRegistration,
+) {
+    assert_eq!(
+        canonical_for_fingerprint(&left_provider, None),
+        canonical_for_fingerprint(&right_provider, None),
+        "{case}: display-only input entered canonical Registry JSON"
+    );
+    assert_eq!(
+        freeze_for_fingerprint(left_provider, None).fingerprint(),
+        freeze_for_fingerprint(right_provider, None).fingerprint(),
+        "{case}: display-only input changed fingerprint"
+    );
+}
+
+fn provider_with_type_definition(type_id: &str, classes: &[&str]) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    provider.type_classes = vec![id("acme.comparable"), id("acme.scalar")].into_boxed_slice();
+    provider.types = vec![TypeRegistration {
+        id: id(type_id),
+        title_key: id("types.acme.value.title"),
+        classes: classes.iter().map(|class| id(class)).collect(),
+    }]
+    .into_boxed_slice();
+    provider.i18n.keys.insert(id("types.acme.value.title"));
+    provider
+}
+
+fn provider_with_constructor_arity(arity: u16) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    provider.type_constructors = vec![TypeConstructorRegistration {
+        id: id("acme.list"),
+        title_key: id("types.acme.list.title"),
+        arity,
+    }]
+    .into_boxed_slice();
+    provider.i18n.keys.insert(id("types.acme.list.title"));
+    provider
+}
+
+fn structural_fingerprint_provider(role: StructuralNodeRole) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    provider.nodes[0] = RegisteredNode::structural(provider.nodes[0].protocol.clone(), role);
+    provider
+}
+
+fn lowerer_fingerprint_provider(alternate: bool) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    provider.nodes[0].implementation = Some(if alternate {
+        crate::node_system::compiler::NodeImplementation::new(AlternateRegistryTestLowerer).into()
+    } else {
+        crate::node_system::compiler::NodeImplementation::new(RegistryTestLowerer).into()
+    });
+    provider
+}
+
+#[test]
+fn registry_fingerprint_matrix() {
+    let mut changed_provider = valid_provider();
+    changed_provider.provider = id("acme.changed");
+    assert_single_canonical_fingerprint_change(
+        "ProviderId",
+        valid_provider(),
+        changed_provider,
+        None,
+        None,
+        "/providers/0/provider",
+    );
+    assert_single_canonical_fingerprint_change(
+        "lowerer implementation identity",
+        lowerer_fingerprint_provider(false),
+        lowerer_fingerprint_provider(true),
+        None,
+        None,
+        "/providers/0/nodes/0/2/implementationIdentity",
+    );
+    assert_single_canonical_fingerprint_change(
+        "structural role",
+        structural_fingerprint_provider(StructuralNodeRole::Branch),
+        structural_fingerprint_provider(StructuralNodeRole::Loop),
+        None,
+        None,
+        "/providers/0/nodes/0/2/role",
+    );
+    assert_single_canonical_fingerprint_change(
+        "type definition",
+        provider_with_type_definition("acme.value", &["acme.scalar"]),
+        provider_with_type_definition("acme.value.v2", &["acme.scalar"]),
+        None,
+        None,
+        "/providers/0/types/0/0",
+    );
+    assert_single_canonical_fingerprint_change(
+        "type class membership",
+        provider_with_type_definition("acme.value", &["acme.scalar"]),
+        provider_with_type_definition("acme.value", &["acme.scalar", "acme.comparable"]),
+        None,
+        None,
+        "/providers/0/types/0/1",
+    );
+    assert_single_canonical_fingerprint_change(
+        "constructor arity",
+        provider_with_constructor_arity(1),
+        provider_with_constructor_arity(2),
+        None,
+        None,
+        "/providers/0/constructors/0/1",
+    );
+
+    let mut interface_resolver = valid_provider();
+    interface_resolver.interface_resolvers = vec![id("acme.interface")].into_boxed_slice();
+    assert_single_canonical_fingerprint_change(
+        "interface resolver inventory",
+        valid_provider(),
+        interface_resolver,
+        None,
+        None,
+        "/providers/0/interface_resolvers",
+    );
+    let mut schema_resolver = valid_provider();
+    schema_resolver.schema_resolvers = vec![id("acme.schema")].into_boxed_slice();
+    assert_single_canonical_fingerprint_change(
+        "schema resolver inventory",
+        valid_provider(),
+        schema_resolver,
+        None,
+        None,
+        "/providers/0/schema_resolvers",
+    );
+    assert_single_canonical_fingerprint_change(
+        "nominal validator identity",
+        provider_with_nominal_type("acme.nominal"),
+        provider_with_nominal_type("acme.nominal"),
+        validator_spec("acme.validator", 1),
+        validator_spec("acme.validator.v2", 1),
+        "/nominalValidators/0/1",
+    );
+    assert_single_canonical_fingerprint_change(
+        "nominal validator version",
+        provider_with_nominal_type("acme.nominal"),
+        provider_with_nominal_type("acme.nominal"),
+        validator_spec("acme.validator", 1),
+        validator_spec("acme.validator", 2),
+        "/nominalValidators/0/2",
+    );
+
+    let [first, second] = provenance_providers();
+    let forward = freeze_provenance_providers([first.clone(), second.clone()]).unwrap();
+    let reverse = freeze_provenance_providers([second, first]).unwrap();
+    assert_eq!(
+        forward.fingerprint(),
+        reverse.fingerprint(),
+        "provider order"
+    );
+
+    let mut title_changed = valid_provider();
+    Arc::make_mut(&mut title_changed.nodes[0].protocol)
+        .catalog
+        .title_key = id("nodes.test.changed.title");
+    title_changed
+        .i18n
+        .keys
+        .insert(id("nodes.test.changed.title"));
+    title_changed
+        .i18n
+        .keys
+        .remove(&id("nodes.test.empty.title"));
+    assert_canonical_fingerprint_invariant("title key", valid_provider(), title_changed);
+
+    let mut description_changed = valid_provider();
+    Arc::make_mut(&mut description_changed.nodes[0].protocol)
+        .catalog
+        .description_key = Some(id("nodes.test.changed.description"));
+    description_changed
+        .i18n
+        .keys
+        .insert(id("nodes.test.changed.description"));
+    assert_canonical_fingerprint_invariant(
+        "description key",
+        valid_provider(),
+        description_changed,
+    );
+
+    let mut aliases_changed = valid_provider();
+    Arc::make_mut(&mut aliases_changed.nodes[0].protocol)
+        .catalog
+        .aliases_key = Some(id("nodes.test.changed.aliases"));
+    aliases_changed
+        .i18n
+        .keys
+        .insert(id("nodes.test.changed.aliases"));
+    assert_canonical_fingerprint_invariant("aliases key", valid_provider(), aliases_changed);
+
+    let mut icon_changed = valid_provider();
+    Arc::make_mut(&mut icon_changed.nodes[0].protocol)
+        .catalog
+        .icon_id = id("changed.icon");
+    assert_canonical_fingerprint_invariant("icon", valid_provider(), icon_changed);
+
+    let mut style_changed = valid_provider();
+    Arc::make_mut(&mut style_changed.nodes[0].protocol)
+        .catalog
+        .style_id = id("changed.style");
+    assert_canonical_fingerprint_invariant("style", valid_provider(), style_changed);
+
+    let mut hidden_changed = valid_provider();
+    Arc::make_mut(&mut hidden_changed.nodes[0].protocol)
+        .catalog
+        .hidden = true;
+    assert_canonical_fingerprint_invariant("hidden", valid_provider(), hidden_changed);
+
+    let mut category_changed = valid_provider();
+    category_changed.categories[0].order = 99;
+    assert_canonical_fingerprint_invariant(
+        "category arrangement",
+        valid_provider(),
+        category_changed,
+    );
+
+    let (left_provider, mut left_catalog, left_aliases) =
+        crate::node_system::catalog::builtin_bundle_parts_for_test().unwrap();
+    let (right_provider, mut right_catalog, right_aliases) =
+        crate::node_system::catalog::builtin_bundle_parts_for_test().unwrap();
+    assert_eq!(
+        canonical_for_fingerprint(&left_provider, None),
+        canonical_for_fingerprint(&right_provider, None),
+        "translation fixtures must use identical Registry/provider/protocol input"
+    );
+    assert_eq!(left_aliases, right_aliases);
+    let title_key: I18nKey = id("nodes.yssbi.constant.bool.title");
+    left_catalog.replace_text_for_test("en-US", title_key.clone(), "Contract Boolean A");
+    right_catalog.replace_text_for_test("en-US", title_key, "Contract Boolean B");
+    let left_bundle = crate::node_system::catalog::validate_builtin_bundle_for_test(
+        left_provider,
+        left_catalog,
+        left_aliases,
+    )
+    .unwrap();
+    let right_bundle = crate::node_system::catalog::validate_builtin_bundle_for_test(
+        right_provider,
+        right_catalog,
+        right_aliases,
+    )
+    .unwrap();
+    let localized_title = |bundle: &crate::node_system::catalog::BuiltinNodeSystem| {
+        bundle
+            .catalog
+            .localize(&bundle.registry, "en-US")
+            .items
+            .into_iter()
+            .find(|item| item.node_type_id.as_ref() == "yssbi.constant.bool")
+            .unwrap()
+            .title
+    };
+    assert_ne!(
+        localized_title(&left_bundle),
+        localized_title(&right_bundle)
+    );
+    assert_eq!(
+        left_bundle.registry.fingerprint(),
+        right_bundle.registry.fingerprint()
+    );
+    assert_eq!(
+        canonical_semantic_protocol_snapshot(&left_bundle.registry).unwrap(),
+        canonical_semantic_protocol_snapshot(&right_bundle.registry).unwrap()
+    );
+
+    let providers = vec![valid_provider()];
+    let protocols = BTreeMap::from([(
+        providers[0].nodes[0].protocol().type_id.clone(),
+        fingerprint::protocol_fingerprint(providers[0].nodes[0].protocol()).unwrap(),
+    )]);
+    let canonical = canonical_registry(&providers, &protocols, &BTreeMap::new()).to_string();
+    for forbidden in ["0x", "LeafImplementation", "Arc<", " at 0x"] {
+        assert!(
+            !canonical.contains(forbidden),
+            "canonical Registry contains process-local/debug text {forbidden}: {canonical}"
         );
     }
 }

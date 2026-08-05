@@ -32,12 +32,51 @@ impl<T: LocalizationBundle + ?Sized> LocalizationLookup for T {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectionBasis {
     pub graph_path: Box<str>,
     pub graph_revision: u64,
+    #[serde(
+        serialize_with = "serialize_registry_fingerprint",
+        deserialize_with = "deserialize_registry_fingerprint"
+    )]
     pub registry_fingerprint: RegistryFingerprint,
     pub resource_versions: ResourceVersionSet,
+}
+
+fn serialize_registry_fingerprint<S>(
+    fingerprint: &RegistryFingerprint,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&fingerprint.to_hex())
+}
+
+fn deserialize_registry_fingerprint<'de, D>(
+    deserializer: D,
+) -> Result<RegistryFingerprint, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Box::<str>::deserialize(deserializer)?;
+    if value.len() != 64
+        || !value
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+    {
+        return Err(serde::de::Error::custom(
+            "Registry fingerprint must be 64 lowercase hexadecimal characters",
+        ));
+    }
+    let mut bytes = [0; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(serde::de::Error::custom)?;
+    }
+    Ok(RegistryFingerprint::from_bytes(bytes))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1318,6 +1357,39 @@ mod tests {
             diagnostics: Vec::new(),
             has_blocking_diagnostics: false,
         }
+    }
+
+    #[test]
+    fn projection_basis_serializes_registry_fingerprint_as_lowercase_sha256_hex() {
+        let value = serde_json::to_value(basis(7)).unwrap();
+        assert_eq!(
+            value["registryFingerprint"],
+            "0707070707070707070707070707070707070707070707070707070707070707"
+        );
+        assert_eq!(
+            serde_json::from_value::<ProjectionBasis>(value).unwrap(),
+            basis(7)
+        );
+    }
+
+    #[test]
+    fn projection_basis_rejects_legacy_and_malformed_registry_fingerprint_wire_values() {
+        let valid = serde_json::to_value(basis(7)).unwrap();
+        for malformed in [
+            serde_json::to_value(vec![7_u8; 32]).unwrap(),
+            serde_json::json!("070707070707070707070707070707070707070707070707070707070707070A"),
+            serde_json::json!("070707070707070707070707070707070707070707070707070707070707070"),
+            serde_json::json!("07070707070707070707070707070707070707070707070707070707070707070"),
+            serde_json::json!("070707070707070707070707070707070707070707070707070707070707070g"),
+        ] {
+            let mut value = valid.clone();
+            value["registryFingerprint"] = malformed;
+            assert!(serde_json::from_value::<ProjectionBasis>(value).is_err());
+        }
+
+        let mut unknown = valid;
+        unknown["legacyFingerprint"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<ProjectionBasis>(unknown).is_err());
     }
 
     #[test]

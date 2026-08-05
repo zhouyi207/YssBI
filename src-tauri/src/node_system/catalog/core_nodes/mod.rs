@@ -4,7 +4,7 @@ mod math;
 mod support;
 mod value;
 
-use super::builtin::ProviderFragment;
+use super::builtin::{BuiltinAssemblyError, ProviderFragment};
 use support::{category, empty_classes, i18n, semantic};
 
 use crate::node_system::protocol::{TypeConstructorId, TypeId};
@@ -26,23 +26,23 @@ pub(crate) struct LegacyCoverage {
     pub disposition: CoverageDisposition,
 }
 
-pub(crate) fn build_provider_fragment() -> ProviderFragment {
+pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut fragment = ProviderFragment::default();
     fragment.types.push(TypeRegistration {
-        id: semantic("core.categorical", TypeId::new),
-        title_key: i18n("types.categorical.title"),
+        id: semantic("core.categorical", TypeId::new)?,
+        title_key: i18n("types.categorical.title")?,
         classes: empty_classes(),
     });
     fragment
         .type_constructors
         .push(TypeConstructorRegistration {
-            id: semantic("core.data_series", TypeConstructorId::new),
-            title_key: i18n("types.data_series.title"),
+            id: semantic("core.data_series", TypeConstructorId::new)?,
+            title_key: i18n("types.data_series.title")?,
             arity: 1,
         });
     fragment.categories.extend([
-        category("conversion", "categories.conversion.title", 25),
-        category("debug", "categories.debug.title", 60),
+        category("conversion", "categories.conversion.title", 25)?,
+        category("debug", "categories.debug.title", 60)?,
     ]);
     for (key, en, zh) in [
         ("types.categorical.title", "Categorical", "分类"),
@@ -50,16 +50,16 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
         ("categories.conversion.title", "Conversion", "转换"),
         ("categories.debug.title", "Debug", "调试"),
     ] {
-        let key = i18n(key);
+        let key = i18n(key)?;
         fragment.text("en-US", key.clone(), en);
         fragment.text("zh-CN", key, zh);
     }
 
-    value::register(&mut fragment);
-    math::register(&mut fragment);
-    control::register(&mut fragment);
-    debug::register(&mut fragment);
-    fragment.finish()
+    value::register(&mut fragment)?;
+    math::register(&mut fragment)?;
+    control::register(&mut fragment)?;
+    debug::register(&mut fragment)?;
+    Ok(fragment)
 }
 
 #[cfg(test)]

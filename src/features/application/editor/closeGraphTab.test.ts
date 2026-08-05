@@ -27,7 +27,12 @@ function installGraphRevision(graphPath: string, graphRevision: number): void {
   useGraphDataStore.setState({
     graphEntities: {
       [graphPath]: {
-        basis: { graphPath, graphRevision, registryFingerprint: [], resourceVersions: {} },
+        basis: {
+                  graphPath,
+                  graphRevision,
+                  registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
+                  resourceVersions: {},
+                },
         sourceRevision: graphRevision,
         requestGeneration: 1,
         diagnostics: [],

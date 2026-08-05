@@ -9397,6 +9397,7 @@ dependencies = [
  "polars",
  "polars-arrow",
  "polars-dtype",
+ "proc-macro2",
  "rand 0.8.5",
  "regex",
  "serde",

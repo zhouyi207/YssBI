@@ -5,7 +5,10 @@
 
 mod families;
 
-use super::builtin::{ProviderFragment, iid, leaf, sid};
+use super::builtin::{
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
+    sid,
+};
 use super::localization::{Aliases, Message, Text};
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
@@ -32,7 +35,7 @@ pub const DATAFRAME_COLUMNS_RESOLVER: &str = "yssbi.dataframe.interface.columns"
 pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 pub const DATAFRAME_PANEL_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.panel";
 
-pub(crate) fn build_provider_fragment() -> ProviderFragment {
+pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut messages = Vec::new();
     add_shared_messages(&mut messages);
     let nodes = NODES
@@ -41,25 +44,25 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
             add_node_messages(&mut messages, spec);
             registered_node(spec)
         })
-        .collect();
+        .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
 
-    ProviderFragment {
-        types: dataframe_types(),
-        categories: dataframe_categories(),
-        interface_resolvers: vec![sid(DATAFRAME_COLUMNS_RESOLVER, InterfaceResolverId::new)],
+    Ok(ProviderFragment {
+        types: dataframe_types()?,
+        categories: dataframe_categories()?,
+        interface_resolvers: vec![sid(DATAFRAME_COLUMNS_RESOLVER, InterfaceResolverId::new)?],
         schema_resolvers: vec![
-            sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new),
-            sid(DATAFRAME_PANEL_SCHEMA_RESOLVER, SchemaResolverId::new),
+            sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new)?,
+            sid(DATAFRAME_PANEL_SCHEMA_RESOLVER, SchemaResolverId::new)?,
         ],
         nodes,
         messages,
         ..ProviderFragment::default()
-    }
+    })
 }
 
-fn registered_node(spec: &NodeSpec) -> RegisteredNode {
-    let protocol = protocol(spec);
-    match spec.interface {
+fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyError> {
+    let protocol = protocol(spec)?;
+    Ok(match spec.interface {
         InterfaceKind::DataframeSource => RegisteredNode::leaf(
             Arc::new(protocol),
             Arc::new(NodeImplementation::new(SourceLowerer)),
@@ -81,26 +84,25 @@ fn registered_node(spec: &NodeSpec) -> RegisteredNode {
             Arc::new(NodeImplementation::new(FilterRowsLowerer)),
         ),
         _ => leaf(protocol, spec.kernel),
-    }
+    })
 }
 
-fn protocol(spec: &NodeSpec) -> NodeProtocol {
-    let (ports, parameters) = interface(spec.interface);
-    NodeProtocol {
-        type_id: sid(spec.id, NodeTypeId::new),
+fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let (ports, parameters) = interface(spec.interface)?;
+    Ok(NodeProtocol {
+        type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
-            title_key: node_key(spec.id, "title"),
-            description_key: Some(node_key(spec.id, "description")),
-            documentation_key: Some(node_key(spec.id, "documentation")),
-            aliases_key: Some(node_key(spec.id, "aliases")),
-            category_id: sid(category(spec.interface), NodeCategoryId::new),
-            icon_id: sid("builtin.dataframe", IconId::new),
-            style_id: sid("builtin.dataframe", NodeStyleId::new),
+            title_key: node_key(spec.id, "title")?,
+            description_key: Some(node_key(spec.id, "description")?),
+            documentation_key: Some(node_key(spec.id, "documentation")?),
+            aliases_key: Some(node_key(spec.id, "aliases")?),
+            category_id: sid(category(spec.interface), NodeCategoryId::new)?,
+            icon_id: sid("builtin.dataframe", IconId::new)?,
+            style_id: sid("builtin.dataframe", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, vec![], vec![])
-            .expect("dataframe node interface"),
-        parameters: ParameterSchema::new(parameters).expect("dataframe node parameters"),
+        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        parameters: assembled_parameters(spec.id, parameters)?,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
@@ -110,223 +112,229 @@ fn protocol(spec: &NodeSpec) -> NodeProtocol {
         },
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
-fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
+fn interface(
+    kind: InterfaceKind,
+) -> Result<(Vec<PortSpec>, Vec<ParameterSpec>), BuiltinAssemblyError> {
     use InterfaceKind::*;
     match kind {
-        DataframeSource => (
+        DataframeSource => Ok((
             vec![streaming_output(
                 "dataframe",
-                dataframe_type(),
-                Some(derived_schema(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, vec![])),
-            )],
-            vec![resource_parameter("dataframe")],
-        ),
-        Limit => (
+                dataframe_type()?,
+                Some(derived_schema(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, vec![])?),
+            )?],
+            vec![resource_parameter("dataframe")?],
+        )),
+        Limit => Ok((
             vec![
-                streaming_input("source", dataframe_type(), None),
+                streaming_input("source", dataframe_type()?, None)?,
                 streaming_output(
                     "result",
-                    dataframe_type(),
-                    Some(SchemaExpr::Input(port_key("source"))),
-                ),
+                    dataframe_type()?,
+                    Some(SchemaExpr::Input(port_key("source")?)),
+                )?,
             ],
-            vec![bounded_positive_integer_parameter("rows", 100, 1_000_000)],
-        ),
-        Rename => (
+            vec![bounded_positive_integer_parameter("rows", 100, 1_000_000)?],
+        )),
+        Rename => Ok((
             vec![
-                streaming_input("source", dataframe_type(), None),
+                streaming_input("source", dataframe_type()?, None)?,
                 streaming_output(
                     "result",
-                    dataframe_type(),
+                    dataframe_type()?,
                     Some(SchemaExpr::Rename {
-                        input: Box::new(SchemaExpr::Input(port_key("source"))),
+                        input: Box::new(SchemaExpr::Input(port_key("source")?)),
                         mapping: RenameExpr::FromParameters {
-                            from: sid("from", ParameterKey::new),
-                            to: sid("to", ParameterKey::new),
+                            from: sid("from", ParameterKey::new)?,
+                            to: sid("to", ParameterKey::new)?,
                         },
                     }),
-                ),
+                )?,
             ],
             vec![
-                required_text_parameter("from"),
-                required_text_parameter("to"),
+                required_text_parameter("from")?,
+                required_text_parameter("to")?,
             ],
-        ),
-        Project => (
+        )),
+        Project => Ok((
             relational_ports(SchemaExpr::Project {
-                input: Box::new(SchemaExpr::Input(port_key("source"))),
-                columns: ColumnSelectionExpr::FromParameter(sid("columns", ParameterKey::new)),
-            }),
+                input: Box::new(SchemaExpr::Input(port_key("source")?)),
+                columns: ColumnSelectionExpr::FromParameter(sid("columns", ParameterKey::new)?),
+            })?,
             vec![nominal_parameter(
                 "columns",
                 crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
-            )],
-        ),
-        FilterRows => (
+            )?],
+        )),
+        FilterRows => Ok((
             relational_ports(SchemaExpr::Filter {
-                input: Box::new(SchemaExpr::Input(port_key("source"))),
-                predicate: Some(sid("predicate", ParameterKey::new)),
-            }),
+                input: Box::new(SchemaExpr::Input(port_key("source")?)),
+                predicate: Some(sid("predicate", ParameterKey::new)?),
+            })?,
             vec![nominal_parameter(
                 "predicate",
                 crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
-            )],
-        ),
-        Decompose => (
+            )?],
+        )),
+        Decompose => Ok((
             vec![
-                data_input("dataframe", dataframe_type(), None),
-                derived_output("columns", series_type(), DATAFRAME_COLUMNS_RESOLVER),
+                data_input("dataframe", dataframe_type()?, None)?,
+                derived_output("columns", series_type()?, DATAFRAME_COLUMNS_RESOLVER)?,
             ],
             vec![],
-        ),
-        Combine => (
+        )),
+        Combine => Ok((
             vec![
-                user_input("series", series_type(), 1),
+                user_input("series", series_type()?, 1)?,
                 data_output(
                     "dataframe",
-                    dataframe_type(),
+                    dataframe_type()?,
                     Some(SchemaExpr::Append {
-                        inputs: vec![SchemaExpr::Input(port_key("series"))],
+                        inputs: vec![SchemaExpr::Input(port_key("series")?)],
                     }),
-                ),
+                )?,
             ],
             vec![],
-        ),
-        Filter => (
+        )),
+        Filter => Ok((
             vec![
-                data_input("source", dataframe_type(), None),
-                data_input("condition", bool_series_type(), None),
+                data_input("source", dataframe_type()?, None)?,
+                data_input("condition", bool_series_type()?, None)?,
                 data_output(
                     "result",
-                    dataframe_type(),
+                    dataframe_type()?,
                     Some(SchemaExpr::Filter {
-                        input: Box::new(SchemaExpr::Input(port_key("source"))),
+                        input: Box::new(SchemaExpr::Input(port_key("source")?)),
                         predicate: None,
                     }),
-                ),
+                )?,
             ],
             vec![],
-        ),
-        SeriesSelect => (
+        )),
+        SeriesSelect => Ok((
             vec![
-                data_input("dataframe", dataframe_type(), None),
-                data_output("series", series_type(), None),
+                data_input("dataframe", dataframe_type()?, None)?,
+                data_output("series", series_type()?, None)?,
             ],
-            vec![column_parameter("column")],
-        ),
-        IntRange => (
+            vec![column_parameter("column")?],
+        )),
+        IntRange => Ok((
             vec![
-                scalar_input("start", "core.int64"),
-                scalar_input("end", "core.int64"),
-                scalar_input("step", "core.int64"),
-                data_output("series", int_series_type(), None),
-            ],
-            vec![],
-        ),
-        SeriesUnaryScalar => (
-            vec![
-                data_input("series", series_type(), None),
-                data_output("value", float_type(), None),
+                scalar_input("start", "core.int64")?,
+                scalar_input("end", "core.int64")?,
+                scalar_input("step", "core.int64")?,
+                data_output("series", int_series_type()?, None)?,
             ],
             vec![],
-        ),
-        SeriesCompare => (
+        )),
+        SeriesUnaryScalar => Ok((
             vec![
-                data_input("left", series_type(), None),
-                data_input("right", series_or_scalar_type(), None),
-                data_output("result", bool_series_type(), None),
+                data_input("series", series_type()?, None)?,
+                data_output("value", float_type()?, None)?,
             ],
             vec![],
-        ),
-        Standardize => (
+        )),
+        SeriesCompare => Ok((
             vec![
-                data_input("series", float_series_type(), None),
-                data_output("standardized", float_series_type(), None),
-                data_output("mean", float_type(), None),
-                data_output("standard_deviation", float_type(), None),
+                data_input("left", series_type()?, None)?,
+                data_input("right", series_or_scalar_type()?, None)?,
+                data_output("result", bool_series_type()?, None)?,
             ],
             vec![],
-        ),
-        InverseStandardize => (
+        )),
+        Standardize => Ok((
             vec![
-                data_input("standardized", float_series_type(), None),
-                scalar_input("mean", "core.float64"),
-                scalar_input("standard_deviation", "core.float64"),
-                data_output("series", float_series_type(), None),
+                data_input("series", float_series_type()?, None)?,
+                data_output("standardized", float_series_type()?, None)?,
+                data_output("mean", float_type()?, None)?,
+                data_output("standard_deviation", float_type()?, None)?,
             ],
             vec![],
-        ),
-        DummyInfo => (
+        )),
+        InverseStandardize => Ok((
             vec![
-                data_input("source", series_type(), None),
-                data_output("result", series_type(), None),
+                data_input("standardized", float_series_type()?, None)?,
+                scalar_input("mean", "core.float64")?,
+                scalar_input("standard_deviation", "core.float64")?,
+                data_output("series", float_series_type()?, None)?,
             ],
-            vec![text_parameter("base_level", false)],
-        ),
-        TimeAlign => (
+            vec![],
+        )),
+        DummyInfo => Ok((
             vec![
-                data_input("dataframe", dataframe_type(), None),
-                data_input("time", series_type(), None),
+                data_input("source", series_type()?, None)?,
+                data_output("result", series_type()?, None)?,
+            ],
+            vec![text_parameter("base_level", false)?],
+        )),
+        TimeAlign => Ok((
+            vec![
+                data_input("dataframe", dataframe_type()?, None)?,
+                data_input("time", series_type()?, None)?,
                 data_output(
                     "aligned",
-                    dataframe_type(),
-                    Some(SchemaExpr::Input(port_key("dataframe"))),
-                ),
+                    dataframe_type()?,
+                    Some(SchemaExpr::Input(port_key("dataframe")?)),
+                )?,
             ],
-            vec![select_parameter("frequency")],
-        ),
-        TimeUnary => (
+            vec![select_parameter("frequency")?],
+        )),
+        TimeUnary => Ok((
             vec![
-                data_input("series", float_series_type(), None),
-                data_output("result", float_series_type(), None),
+                data_input("series", float_series_type()?, None)?,
+                data_output("result", float_series_type()?, None)?,
             ],
-            vec![positive_integer_parameter("order", 1)],
-        ),
-        TimeWindow => (
+            vec![positive_integer_parameter("order", 1)?],
+        )),
+        TimeWindow => Ok((
             vec![
-                data_input("series", float_series_type(), None),
-                data_output("result", float_series_type(), None),
+                data_input("series", float_series_type()?, None)?,
+                data_output("result", float_series_type()?, None)?,
             ],
-            vec![positive_integer_parameter("window", 1)],
-        ),
-        PanelAlign => (
+            vec![positive_integer_parameter("window", 1)?],
+        )),
+        PanelAlign => Ok((
             vec![
-                data_input("dataframe", dataframe_type(), None),
-                data_input("entity", series_type(), None),
-                data_input("time", series_type(), None),
+                data_input("dataframe", dataframe_type()?, None)?,
+                data_input("entity", series_type()?, None)?,
+                data_input("time", series_type()?, None)?,
                 data_output(
                     "aligned",
-                    dataframe_type(),
+                    dataframe_type()?,
                     Some(derived_schema(
                         DATAFRAME_PANEL_SCHEMA_RESOLVER,
-                        vec![SchemaDependency::Port(port_key("dataframe"))],
-                    )),
-                ),
+                        vec![SchemaDependency::Port(port_key("dataframe")?)],
+                    )?),
+                )?,
             ],
             vec![],
-        ),
-        PanelDifference => (
+        )),
+        PanelDifference => Ok((
             vec![
-                data_input("aligned", dataframe_type(), None),
-                data_input("series", float_series_type(), None),
-                data_output("result", float_series_type(), None),
+                data_input("aligned", dataframe_type()?, None)?,
+                data_input("series", float_series_type()?, None)?,
+                data_output("result", float_series_type()?, None)?,
             ],
-            vec![positive_integer_parameter("order", 1)],
-        ),
+            vec![positive_integer_parameter("order", 1)?],
+        )),
     }
 }
 
-fn relational_ports(result_schema: SchemaExpr) -> Vec<PortSpec> {
-    vec![
-        streaming_input("source", dataframe_type(), None),
-        streaming_output("result", dataframe_type(), Some(result_schema)),
-    ]
+fn relational_ports(result_schema: SchemaExpr) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
+    Ok(vec![
+        streaming_input("source", dataframe_type()?, None)?,
+        streaming_output("result", dataframe_type()?, Some(result_schema))?,
+    ])
 }
 
-fn data_input(key: &'static str, value_type: TypeExpr, schema: Option<SchemaExpr>) -> PortSpec {
+fn data_input(
+    key: &'static str,
+    value_type: TypeExpr,
+    schema: Option<SchemaExpr>,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         PortDirection::Input,
@@ -340,17 +348,24 @@ fn streaming_input(
     key: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
-) -> PortSpec {
-    let mut spec = data_input(key, value_type, schema);
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    let mut spec = data_input(key, value_type, schema)?;
     spec.consumption = Some(InputConsumption::Streaming);
-    spec
+    Ok(spec)
 }
 
-fn scalar_input(key: &'static str, type_id: &'static str) -> PortSpec {
-    data_input(key, concrete(type_id), None)
+fn scalar_input(
+    key: &'static str,
+    type_id: &'static str,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    data_input(key, concrete(type_id)?, None)
 }
 
-fn user_input(key: &'static str, value_type: TypeExpr, min: u16) -> PortSpec {
+fn user_input(
+    key: &'static str,
+    value_type: TypeExpr,
+    min: u16,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         PortDirection::Input,
@@ -360,7 +375,11 @@ fn user_input(key: &'static str, value_type: TypeExpr, min: u16) -> PortSpec {
     )
 }
 
-fn data_output(key: &'static str, value_type: TypeExpr, schema: Option<SchemaExpr>) -> PortSpec {
+fn data_output(
+    key: &'static str,
+    value_type: TypeExpr,
+    schema: Option<SchemaExpr>,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         PortDirection::Output,
@@ -374,19 +393,23 @@ fn streaming_output(
     key: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
-) -> PortSpec {
-    let mut spec = data_output(key, value_type, schema);
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    let mut spec = data_output(key, value_type, schema)?;
     spec.production = Some(OutputProduction::Streaming);
-    spec
+    Ok(spec)
 }
 
-fn derived_output(key: &'static str, value_type: TypeExpr, resolver: &'static str) -> PortSpec {
+fn derived_output(
+    key: &'static str,
+    value_type: TypeExpr,
+    resolver: &'static str,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         PortDirection::Output,
         value_type,
         PortInstances::Derived {
-            resolver: sid(resolver, InterfaceResolverId::new),
+            resolver: sid(resolver, InterfaceResolverId::new)?,
         },
         None,
     )
@@ -398,10 +421,10 @@ fn port(
     value_type: TypeExpr,
     instances: PortInstances,
     schema: Option<SchemaExpr>,
-) -> PortSpec {
-    PortSpec {
-        key: port_key(key),
-        label_key: iid(leak(format!("ports.{key}.label"))),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: port_key(key)?,
+        label_key: iid(leak(format!("ports.{key}.label")))?,
         direction,
         kind: PortKind::Data,
         value_type,
@@ -417,76 +440,85 @@ fn port(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema,
-    }
+    })
 }
 
-fn resource_parameter(key: &'static str) -> ParameterSpec {
+fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string"),
+        concrete("core.string")?,
         ParameterEditorSpec::Resource,
         None,
         vec![ParameterConstraint::Required],
     )
 }
 
-fn column_parameter(key: &'static str) -> ParameterSpec {
+fn column_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string"),
+        concrete("core.string")?,
         ParameterEditorSpec::Select,
         None,
         vec![ParameterConstraint::Required],
     )
 }
 
-fn nominal_parameter(key: &'static str, type_id: &'static str) -> ParameterSpec {
+fn nominal_parameter(
+    key: &'static str,
+    type_id: &'static str,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete(type_id),
+        concrete(type_id)?,
         ParameterEditorSpec::Auto,
         None,
         vec![ParameterConstraint::Required],
     )
 }
 
-fn text_parameter(key: &'static str, multiline: bool) -> ParameterSpec {
+fn text_parameter(
+    key: &'static str,
+    multiline: bool,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string"),
+        concrete("core.string")?,
         ParameterEditorSpec::Text { multiline },
         None,
         vec![],
     )
 }
 
-fn required_text_parameter(key: &'static str) -> ParameterSpec {
+fn required_text_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string"),
+        concrete("core.string")?,
         ParameterEditorSpec::Text { multiline: false },
         None,
         vec![ParameterConstraint::Required],
     )
 }
 
-fn select_parameter(key: &'static str) -> ParameterSpec {
+fn select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string"),
+        concrete("core.string")?,
         ParameterEditorSpec::Select,
         None,
         vec![ParameterConstraint::Required],
     )
 }
 
-fn positive_integer_parameter(key: &'static str, default: i64) -> ParameterSpec {
+fn positive_integer_parameter(
+    key: &'static str,
+    default: i64,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.int64"),
+        concrete("core.int64")?,
         ParameterEditorSpec::Number,
         Some(ParameterValue {
-            value_type: concrete("core.int64"),
+            value_type: concrete("core.int64")?,
             value: Value::Integer(default),
         }),
         vec![ParameterConstraint::IntegerRange {
@@ -496,13 +528,17 @@ fn positive_integer_parameter(key: &'static str, default: i64) -> ParameterSpec 
     )
 }
 
-fn bounded_positive_integer_parameter(key: &'static str, default: i64, max: i64) -> ParameterSpec {
-    let mut spec = positive_integer_parameter(key, default);
+fn bounded_positive_integer_parameter(
+    key: &'static str,
+    default: i64,
+    max: i64,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    let mut spec = positive_integer_parameter(key, default)?;
     spec.constraints = vec![ParameterConstraint::IntegerRange {
         min: Some(1),
         max: Some(max),
     }];
-    spec
+    Ok(spec)
 }
 
 fn parameter(
@@ -511,19 +547,19 @@ fn parameter(
     editor: ParameterEditorSpec,
     default_value: Option<ParameterValue>,
     constraints: Vec<ParameterConstraint>,
-) -> ParameterSpec {
-    ParameterSpec {
-        key: sid(key, ParameterKey::new),
-        title_key: iid(leak(format!("parameters.{key}.title"))),
-        description_key: Some(iid(leak(format!("parameters.{key}.description")))),
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    Ok(ParameterSpec {
+        key: sid(key, ParameterKey::new)?,
+        title_key: iid(leak(format!("parameters.{key}.title")))?,
+        description_key: Some(iid(leak(format!("parameters.{key}.description")))?),
         value_type,
         default_value,
         constraints,
         editor,
-    }
+    })
 }
 
-fn dataframe_types() -> Vec<TypeRegistration> {
+fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     [
         ("tabular.dataframe", "types.dataframe.title"),
         ("tabular.series", "types.series.title"),
@@ -537,15 +573,17 @@ fn dataframe_types() -> Vec<TypeRegistration> {
         ),
     ]
     .into_iter()
-    .map(|(id, title)| TypeRegistration {
-        id: sid(id, TypeId::new),
-        title_key: iid(title),
-        classes: Default::default(),
+    .map(|(id, title)| {
+        Ok(TypeRegistration {
+            id: sid(id, TypeId::new)?,
+            title_key: iid(title)?,
+            classes: Default::default(),
+        })
     })
     .collect()
 }
 
-fn dataframe_categories() -> Vec<CategoryRegistration> {
+fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyError> {
     [
         ("dataframe", None, 60),
         ("dataframe.series", Some("dataframe"), 61),
@@ -553,11 +591,15 @@ fn dataframe_categories() -> Vec<CategoryRegistration> {
         ("dataframe.panel", Some("dataframe"), 63),
     ]
     .into_iter()
-    .map(|(id, parent, order)| CategoryRegistration {
-        id: sid(id, NodeCategoryId::new),
-        title_key: iid(leak(format!("categories.{id}.title"))),
-        parent: parent.map(|value| sid(value, NodeCategoryId::new)),
-        order,
+    .map(|(id, parent, order)| {
+        Ok(CategoryRegistration {
+            id: sid(id, NodeCategoryId::new)?,
+            title_key: iid(leak(format!("categories.{id}.title")))?,
+            parent: parent
+                .map(|value| sid(value, NodeCategoryId::new))
+                .transpose()?,
+            order,
+        })
     })
     .collect()
 }
@@ -580,13 +622,18 @@ fn category(kind: InterfaceKind) -> &'static str {
     }
 }
 
+fn lowering_parameter_key(value: &'static str) -> Result<ParameterKey, LoweringError> {
+    ParameterKey::new(value).map_err(|error| LoweringError::new(error.to_string()))
+}
+
 struct SourceLowerer;
 
 impl NodeLowerer for SourceLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let key = lowering_parameter_key("dataframe")?;
         let resource = context
             .parameters
-            .get(&ParameterKey::new("dataframe").expect("static parameter key"))
+            .get(&key)
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| {
                 LoweringError::new("source parameter 'dataframe' must be a resource id")
@@ -637,7 +684,7 @@ impl NodeLowerer for FilterRowsLowerer {
             context,
             RelationalOperator::Filter {
                 input: RelationalOperatorIndex::new(0),
-                predicate: lower_filter_predicate(predicate),
+                predicate: lower_filter_predicate(predicate)?,
             },
         )
     }
@@ -647,30 +694,32 @@ fn decode_parameter<T: serde::de::DeserializeOwned>(
     context: &LoweringContext<'_>,
     key: &'static str,
 ) -> Result<T, LoweringError> {
+    let parameter_key = lowering_parameter_key(key)?;
     let value = context
         .parameters
-        .get(&ParameterKey::new(key).expect("static parameter key"))
+        .get(&parameter_key)
         .ok_or_else(|| LoweringError::new(format!("required parameter '{key}' is missing")))?;
     serde_json::from_value(value.clone())
         .map_err(|error| LoweringError::new(format!("invalid parameter '{key}': {error}")))
 }
 
-fn lower_filter_predicate(predicate: FilterPredicate) -> RelationalExpression {
+fn lower_filter_predicate(
+    predicate: FilterPredicate,
+) -> Result<RelationalExpression, LoweringError> {
     let column = RelationalExpression::Column(predicate.column);
     match predicate.operator {
-        FilterOperator::IsNull => RelationalExpression::IsNull(Box::new(column)),
-        FilterOperator::IsNotNull => {
-            RelationalExpression::Not(Box::new(RelationalExpression::IsNull(Box::new(column))))
-        }
+        FilterOperator::IsNull => Ok(RelationalExpression::IsNull(Box::new(column))),
+        FilterOperator::IsNotNull => Ok(RelationalExpression::Not(Box::new(
+            RelationalExpression::IsNull(Box::new(column)),
+        ))),
         operator => {
-            let literal = RelationalExpression::Literal(lower_filter_literal(
-                predicate
-                    .value
-                    .expect("validated comparison predicate has a literal"),
-            ));
+            let value = predicate.value.ok_or_else(|| {
+                LoweringError::new("comparison filter predicate requires a literal")
+            })?;
+            let literal = RelationalExpression::Literal(lower_filter_literal(value));
             let column = Box::new(column);
             let literal = Box::new(literal);
-            match operator {
+            Ok(match operator {
                 FilterOperator::Equal => RelationalExpression::Equal(column, literal),
                 FilterOperator::NotEqual => RelationalExpression::NotEqual(column, literal),
                 FilterOperator::LessThan => RelationalExpression::LessThan(column, literal),
@@ -681,8 +730,11 @@ fn lower_filter_predicate(predicate: FilterPredicate) -> RelationalExpression {
                 FilterOperator::GreaterThanOrEqual => {
                     RelationalExpression::GreaterThanOrEqual(column, literal)
                 }
-                FilterOperator::IsNull | FilterOperator::IsNotNull => unreachable!(),
-            }
+                FilterOperator::IsNull => RelationalExpression::IsNull(column),
+                FilterOperator::IsNotNull => {
+                    RelationalExpression::Not(Box::new(RelationalExpression::IsNull(column)))
+                }
+            })
         }
     }
 }
@@ -792,9 +844,10 @@ fn rename_parameter(
     context: &LoweringContext<'_>,
     key: &'static str,
 ) -> Result<Box<str>, LoweringError> {
+    let parameter_key = lowering_parameter_key(key)?;
     context
         .parameters
-        .get(&ParameterKey::new(key).expect("static parameter key"))
+        .get(&parameter_key)
         .and_then(serde_json::Value::as_str)
         .map(Into::into)
         .ok_or_else(|| LoweringError::new(format!("rename parameter '{key}' must be a string")))
@@ -804,9 +857,10 @@ struct LimitLowerer;
 
 impl NodeLowerer for LimitLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let key = lowering_parameter_key("rows")?;
         let rows = context
             .parameters
-            .get(&ParameterKey::new("rows").expect("static parameter key"))
+            .get(&key)
             .and_then(serde_json::Value::as_u64)
             .filter(|rows| (1..=1_000_000).contains(rows))
             .ok_or_else(|| {
@@ -880,40 +934,43 @@ fn relational_node(
     })
 }
 
-fn dataframe_type() -> TypeExpr {
+fn dataframe_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("tabular.dataframe")
 }
-fn series_type() -> TypeExpr {
+fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("tabular.series")
 }
-fn float_type() -> TypeExpr {
+fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("core.float64")
 }
-fn int_series_type() -> TypeExpr {
+fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     series_type()
 }
-fn float_series_type() -> TypeExpr {
+fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     series_type()
 }
-fn bool_series_type() -> TypeExpr {
+fn bool_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     series_type()
 }
-fn series_or_scalar_type() -> TypeExpr {
-    TypeExpr::Union(vec![series_type(), float_type()])
+fn series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![series_type()?, float_type()?]))
 }
-fn concrete(id: &'static str) -> TypeExpr {
-    TypeExpr::Concrete(sid(id, TypeId::new))
+fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
-fn port_key(key: &'static str) -> PortKey {
+fn port_key(key: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
     sid(key, PortKey::new)
 }
-fn derived_schema(resolver: &'static str, dependencies: Vec<SchemaDependency>) -> SchemaExpr {
-    SchemaExpr::Derived {
-        resolver: sid(resolver, SchemaResolverId::new),
+fn derived_schema(
+    resolver: &'static str,
+    dependencies: Vec<SchemaDependency>,
+) -> Result<SchemaExpr, BuiltinAssemblyError> {
+    Ok(SchemaExpr::Derived {
+        resolver: sid(resolver, SchemaResolverId::new)?,
         dependencies,
-    }
+    })
 }
-fn node_key(id: &'static str, suffix: &'static str) -> I18nKey {
+fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     iid(leak(format!("nodes.{id}.{suffix}")))
 }
 fn leak(value: String) -> &'static str {

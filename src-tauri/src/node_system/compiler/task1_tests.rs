@@ -23,7 +23,7 @@ impl ResourceSnapshot for EmptyResources {
 }
 
 fn nominal_registry() -> NodeRegistry {
-    let (mut provider, _, _) = builtin_bundle_parts_for_test();
+    let (mut provider, _, _) = builtin_bundle_parts_for_test().unwrap();
     let source = provider
         .nodes
         .iter()

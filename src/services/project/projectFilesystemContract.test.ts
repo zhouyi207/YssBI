@@ -1,14 +1,15 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve } from 'node:path';
-import * as ts from 'typescript';
+import { extname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  moduleDependencies,
+  resolveSourceSpecifier,
+  type ArchitectureSource,
+} from '@/tests/helpers/moduleDependencyAudit';
 
 const sourceRoot = resolve('src');
 
-interface ArchitectureSource {
-  path: string;
-  source: string;
-}
+
 
 const legacyIdentityFacadePaths = [
   'src/services/project/projectIdentity.ts',
@@ -20,53 +21,17 @@ const legacyIdentityTargets = new Set(
 const projectPublicationTarget =
   'src/features/application/editorMutation/projectPublicationCoordinator';
 
-function sourceModuleSpecifiers(path: string, source: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    path,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const specifiers: string[] = [];
-  const addLiteral = (node: ts.Expression): void => {
-    if (ts.isStringLiteralLike(node)) specifiers.push(node.text);
-  };
-  const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-      if (node.moduleSpecifier) addLiteral(node.moduleSpecifier);
-    } else if (
-      ts.isImportEqualsDeclaration(node)
-      && ts.isExternalModuleReference(node.moduleReference)
-      && node.moduleReference.expression
-    ) {
-      addLiteral(node.moduleReference.expression);
-    } else if (ts.isCallExpression(node)) {
-      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
-        && node.arguments.length >= 1;
-      const isRequire = ts.isIdentifier(node.expression)
-        && node.expression.text === 'require'
-        && node.arguments.length === 1;
-      if (isDynamicImport || isRequire) addLiteral(node.arguments[0]);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
-  return specifiers;
-}
 
-function resolveSourceSpecifier(importerPath: string, specifier: string): string | null {
-  const absoluteTarget = specifier.startsWith('@/')
-    ? resolve(sourceRoot, specifier.slice(2))
-    : specifier.startsWith('.')
-      ? resolve(dirname(resolve(importerPath)), specifier)
-      : null;
-  if (absoluteTarget === null) return null;
-  return relative(resolve('.'), absoluteTarget).replace(/\\/g, '/');
+
+function hasUnresolvedRuntimeDependency({ path, source }: ArchitectureSource): boolean {
+  return moduleDependencies(path, source).some((dependency) => (
+    dependency.mode === 'runtime' && dependency.specifier === null
+  ));
 }
 
 function resolvedSourceTargets({ path, source }: ArchitectureSource): string[] {
-  return sourceModuleSpecifiers(path, source).flatMap((specifier) => {
+  return moduleDependencies(path, source).flatMap(({ specifier }) => {
+    if (specifier === null) return [];
     const target = resolveSourceSpecifier(path, specifier);
     return target === null ? [] : [target.replace(/\.(?:ts|tsx)$/, '')];
   });
@@ -78,10 +43,10 @@ function readArchitectureSource(path: string): ArchitectureSource {
 
 function serviceBoundaryViolations(sources: readonly ArchitectureSource[]): string[] {
   return sources
-    .filter(({ path, source }) => sourceModuleSpecifiers(path, source).some((specifier) => {
-      const target = resolveSourceSpecifier(path, specifier);
-      return target !== null && /^src\/(?:features|views)(?:\/|$)/.test(target);
-    }))
+    .filter((source) => hasUnresolvedRuntimeDependency(source)
+      || resolvedSourceTargets(source).some((target) => (
+        /^src\/(?:features|views)(?:\/|$)/.test(target)
+      )))
     .map(({ path }) => path);
 }
 
@@ -90,10 +55,8 @@ function legacyIdentityViolations(
   restoredFacadePaths: readonly string[] = [],
 ): string[] {
   const sourceViolations = sources
-    .filter(({ path, source }) => sourceModuleSpecifiers(path, source).some((specifier) => {
-      const target = resolveSourceSpecifier(path, specifier);
-      return target !== null && legacyIdentityTargets.has(target.replace(/\.(?:ts|tsx)$/, ''));
-    }))
+    .filter((source) => hasUnresolvedRuntimeDependency(source)
+      || resolvedSourceTargets(source).some((target) => legacyIdentityTargets.has(target)))
     .map(({ path }) => path);
   return [
     ...restoredFacadePaths.filter((path) => legacyIdentityFacadePaths.includes(
@@ -107,8 +70,10 @@ function graphProjectionLifecycleViolations(
   sources: readonly ArchitectureSource[],
 ): string[] {
   return sources
-    .filter((source) => resolvedSourceTargets(source).some((target) =>
-      target === projectPublicationTarget || legacyIdentityTargets.has(target)))
+    .filter((source) => hasUnresolvedRuntimeDependency(source)
+      || resolvedSourceTargets(source).some((target) => (
+        target === projectPublicationTarget || legacyIdentityTargets.has(target)
+      )))
     .map(({ path }) => path);
 }
 
@@ -242,13 +207,27 @@ describe('projectFilesystemContract', () => {
         path: 'src/services/project/allowedSharedFixture.ts',
         source: "export type { ProjectIndexDto } from '../../shared/types/dto/project';",
       },
-      {
-        path: 'src/services/project/nonLiteralDynamicFixture.ts',
-        source: "const modulePath = getModulePath(); void import(modulePath); require(modulePath);",
-      },
     ];
 
     expect(serviceBoundaryViolations(fixtures)).toEqual([]);
+  });
+
+  it.each([
+    ['dynamic import variable', "const path = getModulePath(); void import(path);"],
+    ['require function call', 'require(getModulePath());'],
+    ['dynamic import string concatenation', "void import('@/features/' + name);"],
+    ['export assignment require', 'export = require(modulePath);'],
+    [
+      'dynamic import attributes',
+      "void import(modulePath, { with: { type: 'json' } });",
+    ],
+  ])('rejects unresolved %s runtime dependency', (_label, source) => {
+    const fixture = {
+      path: 'src/services/project/unresolvedFixture.ts',
+      source,
+    };
+
+    expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);
   });
 
   it('centralizes production source filtering for tests, specs, and test directories', () => {
@@ -438,7 +417,10 @@ describe('projectFilesystemContract', () => {
       resolve('src-tauri/src/commands/command_project/lifecycle.rs'),
       'utf8',
     );
-    const event = readFileSync(resolve('src-tauri/src/event/event_project.rs'), 'utf8');
+    const event = readFileSync(
+      resolve('src-tauri/src/event/event_project.rs'),
+      'utf8',
+    ).replace(/\r\n/g, '\n');
 
     expect(service).toContain('Promise<ProjectActivationResult>');
     expect(command).toContain('Result<ProjectActivationResultDto, FrontendError>');

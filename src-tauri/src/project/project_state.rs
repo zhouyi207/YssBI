@@ -923,6 +923,30 @@ mod startup_tests {
     }
 
     #[test]
+    fn project_state_stops_before_construction_on_store_failure() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let later_constructions = AtomicUsize::new(0);
+        let source = crate::node_system::protocol::NodeTypeId::new("Bad State ID").unwrap_err();
+        let expected = crate::node_system::catalog::BuiltinInitializationError::Assembly(
+            crate::node_system::catalog::BuiltinAssemblyError::InvalidSemanticId {
+                value: "Bad State ID".into(),
+                source,
+            },
+        );
+        let result = ProjectState::try_with_store_factory_and_constructor(
+            || Err(expected.clone()),
+            |_, _| {
+                later_constructions.fetch_add(1, Ordering::SeqCst);
+                unreachable!("state construction must not run after store failure")
+            },
+        );
+
+        assert!(matches!(result, Err(error) if error == expected));
+        assert_eq!(later_constructions.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
     fn project_state_try_new_constructs_only_after_builtin_validation() {
         let state = ProjectState::try_new().unwrap();
         let store = state.project_store.read().unwrap();
@@ -1004,6 +1028,18 @@ impl ProjectState {
     #[cfg(test)]
     pub fn new() -> Self {
         Self::try_new().expect("test built-ins are valid")
+    }
+
+    #[cfg(test)]
+    fn try_with_store_factory_and_constructor(
+        factory: impl FnOnce() -> Result<
+            ProjectStore,
+            crate::node_system::catalog::BuiltinInitializationError,
+        >,
+        constructor: impl FnOnce(ProjectStore, ProjectFilesystemCoordinator) -> Self,
+    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+        let store = factory()?;
+        Ok(constructor(store, ProjectFilesystemCoordinator::default()))
     }
 
     #[cfg(test)]

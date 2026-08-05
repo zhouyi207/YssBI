@@ -1,4 +1,6 @@
-use super::builtin::ProviderFragment;
+use super::builtin::{
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, sid,
+};
 use super::localization::Message;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, KernelFragment as LoweredKernelFragment, LoweredKernel,
@@ -129,7 +131,7 @@ pub(crate) fn legacy_manifest() -> impl Iterator<Item = (&'static str, &'static 
     SPECS.iter().map(|spec| (spec.legacy_name, spec.id))
 }
 
-pub(crate) fn build_provider_fragment() -> ProviderFragment {
+pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
     let mut messages = vec![
         ("en-US", "categories.plot.title", Message::Text("Plots")),
@@ -146,117 +148,116 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
         ),
     ];
     let types = vec![TypeRegistration {
-        id: type_id(DATE_SERIES),
-        title_key: i18n_key("types.data_series.date.title"),
+        id: type_id(DATE_SERIES)?,
+        title_key: i18n_key("types.data_series.date.title")?,
         classes: BTreeSet::new(),
     }];
     let categories = vec![CategoryRegistration {
-        id: category_id(CATEGORY),
-        title_key: i18n_key("categories.plot.title"),
+        id: category_id(CATEGORY)?,
+        title_key: i18n_key("categories.plot.title")?,
         parent: None,
         order: 70,
     }];
     for spec in SPECS {
         add_messages(&mut messages, spec);
         nodes.push(RegisteredNode::leaf(
-            Arc::new(protocol(spec)),
+            Arc::new(protocol(spec)?),
             Arc::new(NodeImplementation::new(PlotLowerer {
                 kernel: spec.kernel,
             })),
         ));
     }
-    ProviderFragment {
+    Ok(ProviderFragment {
         types,
         categories,
         nodes,
         messages,
         ..ProviderFragment::default()
-    }
+    })
 }
 
-fn protocol(spec: &PlotSpec) -> NodeProtocol {
-    let mut ports = vec![control_port(spec.id, "enter", PortDirection::Input)];
+fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let mut ports = vec![control_port(spec.id, "enter", PortDirection::Input)?];
     match spec.inputs {
         PlotInputs::Pair => {
             ports.push(data_port(
                 spec.id,
                 "x",
                 PortDirection::Input,
-                pair_series_type(),
+                pair_series_type()?,
                 PortInstances::Declared,
                 None,
-            ));
+            )?);
             ports.push(data_port(
                 spec.id,
                 "y",
                 PortDirection::Input,
-                pair_series_type(),
+                pair_series_type()?,
                 PortInstances::Declared,
                 None,
-            ));
+            )?);
         }
         PlotInputs::NumericSeries => ports.push(data_port(
             spec.id,
             "values",
             PortDirection::Input,
-            numeric_series_type(),
+            numeric_series_type()?,
             PortInstances::Declared,
             None,
-        )),
+        )?),
         PlotInputs::CorrelationSeries => ports.push(data_port(
             spec.id,
             "series",
             PortDirection::Input,
-            numeric_series_type(),
+            numeric_series_type()?,
             PortInstances::UserCreated { min: 2, max: None },
             None,
-        )),
+        )?),
         PlotInputs::Correlogram => {
             ports.push(data_port(
                 spec.id,
                 "values",
                 PortDirection::Input,
-                concrete(FLOAT_SERIES),
+                concrete(FLOAT_SERIES)?,
                 PortInstances::Declared,
                 None,
-            ));
+            )?);
             ports.push(data_port(
                 spec.id,
                 "maximum_lag",
                 PortDirection::Input,
-                concrete("core.int64"),
+                concrete("core.int64")?,
                 PortInstances::Declared,
                 Some(TypedValue {
-                    value_type: concrete("core.int64"),
+                    value_type: concrete("core.int64")?,
                     value: Value::Integer(20),
                 }),
-            ));
+            )?);
         }
     }
-    ports.push(control_port(spec.id, "then", PortDirection::Output));
+    ports.push(control_port(spec.id, "then", PortDirection::Output)?);
     ports.push(data_port(
         spec.id,
         "result",
         PortDirection::Output,
-        concrete("core.string"),
+        concrete("core.string")?,
         PortInstances::Declared,
         None,
-    ));
-    NodeProtocol {
-        type_id: node_id(spec.id),
+    )?);
+    Ok(NodeProtocol {
+        type_id: node_id(spec.id)?,
         catalog: NodeCatalogProtocol {
-            title_key: node_key(spec.id, "title"),
-            description_key: Some(node_key(spec.id, "description")),
-            documentation_key: Some(node_key(spec.id, "documentation")),
-            aliases_key: Some(node_key(spec.id, "aliases")),
-            category_id: category_id(CATEGORY),
-            icon_id: icon_id("builtin.plot"),
-            style_id: style_id("builtin.plot"),
+            title_key: node_key(spec.id, "title")?,
+            description_key: Some(node_key(spec.id, "description")?),
+            documentation_key: Some(node_key(spec.id, "documentation")?),
+            aliases_key: Some(node_key(spec.id, "aliases")?),
+            category_id: category_id(CATEGORY)?,
+            icon_id: icon_id("builtin.plot")?,
+            style_id: style_id("builtin.plot")?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, vec![], vec![])
-            .expect("plot protocol interface"),
-        parameters: ParameterSchema::new(vec![]).expect("empty plot parameters"),
+        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        parameters: assembled_parameters(spec.id, vec![])?,
         execution: ExecutionSemantics {
             determinism: Determinism::EnvironmentDependent,
             purity: Purity::Effectful,
@@ -266,10 +267,14 @@ fn protocol(spec: &PlotSpec) -> NodeProtocol {
         },
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
-fn control_port(id: &'static str, key: &'static str, direction: PortDirection) -> PortSpec {
+fn control_port(
+    id: &'static str,
+    key: &'static str,
+    direction: PortDirection,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         id,
         key,
@@ -288,7 +293,7 @@ fn data_port(
     value_type: TypeExpr,
     instances: PortInstances,
     default_value: Option<TypedValue>,
-) -> PortSpec {
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         id,
         key,
@@ -308,10 +313,10 @@ fn port(
     value_type: TypeExpr,
     instances: PortInstances,
     default_value: Option<TypedValue>,
-) -> PortSpec {
-    PortSpec {
-        key: port_key(key),
-        label_key: node_port_key(id, key),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: port_key(key)?,
+        label_key: node_port_key(id, key)?,
         direction,
         kind,
         value_type,
@@ -336,7 +341,7 @@ fn port(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
 struct PlotLowerer {
@@ -358,7 +363,8 @@ impl NodeLowerer for PlotLowerer {
                 metadata: FragmentMetadata {
                     effect: EffectSemantics::Ordered,
                     resources: vec![CompiledResourceRequirement {
-                        resource: ResourceId::new(PLOT_SINK).expect("plot sink resource id"),
+                        resource: ResourceId::new(PLOT_SINK)
+                            .map_err(|error| LoweringError::new(error.to_string()))?,
                         kind: ResourceKind::ExternalArtifact,
                         access: ResourceAccess::Shared,
                         optional: false,
@@ -420,45 +426,48 @@ fn port_messages(inputs: PlotInputs) -> &'static [(&'static str, &'static str, &
     }
 }
 
-fn pair_series_type() -> TypeExpr {
-    TypeExpr::Union(vec![
-        concrete(FLOAT_SERIES),
-        concrete(INTEGER_SERIES),
-        concrete(DATE_SERIES),
-    ])
+fn pair_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![
+        concrete(FLOAT_SERIES)?,
+        concrete(INTEGER_SERIES)?,
+        concrete(DATE_SERIES)?,
+    ]))
 }
-fn numeric_series_type() -> TypeExpr {
-    TypeExpr::Union(vec![concrete(FLOAT_SERIES), concrete(INTEGER_SERIES)])
+fn numeric_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![
+        concrete(FLOAT_SERIES)?,
+        concrete(INTEGER_SERIES)?,
+    ]))
 }
-fn concrete(value: &'static str) -> TypeExpr {
-    TypeExpr::Concrete(type_id(value))
+fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(type_id(value)?))
 }
-fn node_id(value: &'static str) -> NodeTypeId {
-    NodeTypeId::new(value).expect("plot node id")
+fn node_id(value: &'static str) -> Result<NodeTypeId, BuiltinAssemblyError> {
+    sid(value, NodeTypeId::new)
 }
-fn type_id(value: &'static str) -> TypeId {
-    TypeId::new(value).expect("plot type id")
+fn type_id(value: &'static str) -> Result<TypeId, BuiltinAssemblyError> {
+    sid(value, TypeId::new)
 }
-fn port_key(value: &'static str) -> PortKey {
-    PortKey::new(value).expect("plot port key")
+fn port_key(value: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
+    sid(value, PortKey::new)
 }
-fn category_id(value: &'static str) -> NodeCategoryId {
-    NodeCategoryId::new(value).expect("plot category id")
+fn category_id(value: &'static str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
+    sid(value, NodeCategoryId::new)
 }
-fn icon_id(value: &'static str) -> IconId {
-    IconId::new(value).expect("plot icon id")
+fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
+    sid(value, IconId::new)
 }
-fn style_id(value: &'static str) -> NodeStyleId {
-    NodeStyleId::new(value).expect("plot style id")
+fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
+    sid(value, NodeStyleId::new)
 }
-fn i18n_key(value: &'static str) -> I18nKey {
-    I18nKey::new(value).expect("plot i18n key")
+fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(value, I18nKey::new)
 }
-fn node_key(id: &'static str, suffix: &'static str) -> I18nKey {
+fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n_key(key_text(id, suffix))
 }
-fn node_port_key(id: &'static str, port: &'static str) -> I18nKey {
-    I18nKey::new(port_label_text(id, port)).expect("plot port i18n key")
+fn node_port_key(id: &'static str, port: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(port_label_text(id, port), I18nKey::new)
 }
 fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
     Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
@@ -510,7 +519,7 @@ mod tests {
     #[test]
     fn every_view_declares_effect_resource_and_result() {
         for spec in SPECS {
-            let node = protocol(spec);
+            let node = protocol(spec).expect("plot built-in fixture must assemble");
             assert_eq!(node.execution.effects, EffectSemantics::Ordered);
             assert_eq!(node.execution.purity, Purity::Effectful);
             assert!(node.interface.ports.iter().any(

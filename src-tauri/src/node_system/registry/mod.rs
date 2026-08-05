@@ -1,9 +1,11 @@
+#![deny(unused_must_use)]
+
 mod fingerprint;
 mod model;
 mod validation;
 
 pub(crate) use fingerprint::hash_canonical;
-pub use fingerprint::{ProtocolFingerprint, RegistryFingerprint};
+pub use fingerprint::{CanonicalEncodingError, ProtocolFingerprint, RegistryFingerprint};
 pub use model::{
     CatalogManifest, CategoryRegistration, CategoryRegistry, I18nManifest, ImplementationKind,
     LeafImplementation, NodeImplementation, NodeImplementationCapability, NodeRegistry,
@@ -117,18 +119,18 @@ impl NodeRegistryBuilder {
             .nodes
             .iter()
             .map(|(id, node)| {
-                (
+                Ok((
                     id.clone(),
-                    fingerprint::protocol_fingerprint(&node.protocol),
-                )
+                    fingerprint::protocol_fingerprint(&node.protocol)?,
+                ))
             })
-            .collect();
+            .collect::<Result<_, CanonicalEncodingError>>()?;
         let canonical = canonical_registry(
             &self.providers,
             &protocol_fingerprints,
             &self.nominal_validators,
         );
-        let fingerprint = fingerprint::registry_fingerprint(&canonical);
+        let fingerprint = fingerprint::registry_fingerprint(&canonical)?;
         Ok(NodeRegistry {
             by_id: parts.nodes,
             node_providers: parts.node_providers,
@@ -149,6 +151,7 @@ impl NodeRegistryBuilder {
 pub enum NodeRegistrationError {
     InvalidProtocol(ProtocolError),
     InvalidRegistry(RegistryValidationError),
+    CanonicalEncoding(CanonicalEncodingError),
 }
 impl From<ProtocolError> for NodeRegistrationError {
     fn from(value: ProtocolError) -> Self {
@@ -160,17 +163,33 @@ impl From<RegistryValidationError> for NodeRegistrationError {
         Self::InvalidRegistry(value)
     }
 }
+impl From<CanonicalEncodingError> for NodeRegistrationError {
+    fn from(value: CanonicalEncodingError) -> Self {
+        Self::CanonicalEncoding(value)
+    }
+}
 impl std::fmt::Display for NodeRegistrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidProtocol(e) => e.fmt(f),
             Self::InvalidRegistry(e) => e.fmt(f),
+            Self::CanonicalEncoding(e) => e.fmt(f),
         }
     }
 }
-impl std::error::Error for NodeRegistrationError {}
+impl std::error::Error for NodeRegistrationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidProtocol(error) => Some(error),
+            Self::InvalidRegistry(error) => Some(error),
+            Self::CanonicalEncoding(error) => Some(error),
+        }
+    }
+}
 
-pub fn canonical_semantic_protocol_snapshot(registry: &NodeRegistry) -> String {
+pub fn canonical_semantic_protocol_snapshot(
+    registry: &NodeRegistry,
+) -> Result<String, CanonicalEncodingError> {
     let nodes = registry
         .iter()
         .map(|(id, node)| {
@@ -185,12 +204,12 @@ pub fn canonical_semantic_protocol_snapshot(registry: &NodeRegistry) -> String {
         "format": "yssbi.semantic-node-protocol.v1",
         "nodes": nodes,
     }))
-    .expect("canonical semantic protocol snapshot is serializable")
+    .map_err(CanonicalEncodingError::from_serde)
 }
 
-pub fn i18n_inventory(registry: &NodeRegistry) -> String {
+pub fn i18n_inventory(registry: &NodeRegistry) -> Result<String, CanonicalEncodingError> {
     serde_json::to_string_pretty(&registry.catalog_manifest.i18n.keys)
-        .expect("i18n inventory is serializable")
+        .map_err(CanonicalEncodingError::from_serde)
 }
 
 fn canonical_registry(

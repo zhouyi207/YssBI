@@ -1,7 +1,7 @@
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
+import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
 import { portAddressKey } from './portAddressKey';
 import type { EditorProjectionEntities } from './types';
-import { validateEditorGraphProjection } from './validateProjection';
 
 function emptyRecord<T>(): Record<string, T> {
   return Object.create(null) as Record<string, T>;

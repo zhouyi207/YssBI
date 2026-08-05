@@ -32,13 +32,16 @@ fn every_legacy_statistics_node_has_one_stable_id() {
 
 #[test]
 fn statistics_fragment_contains_every_migrated_protocol() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
     assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len());
 }
 
 #[test]
 fn statistics_protocols_have_unique_ports_and_valid_bindings() {
-    for node in build_provider_fragment().nodes {
+    for node in build_provider_fragment()
+        .expect("statistics built-in fixture must assemble")
+        .nodes
+    {
         let protocol = &node.protocol();
         let keys = protocol
             .interface

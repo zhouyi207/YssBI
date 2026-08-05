@@ -1,13 +1,21 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  moduleDependencies,
+  resolveSourceSpecifier,
+  type ArchitectureSource,
+  type ModuleDependency,
+  type ModuleDependencyMode,
+} from '@/tests/helpers/moduleDependencyAudit';
 import type {
   EditorGraphProjectionDto,
   PortAddressDto,
 } from '@/shared/types/dto/editorProjection';
+import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
 import {
   portAddressKey,
   toProjectionEntities,
-  validateEditorGraphProjection,
 } from './index';
 
 const declaredOutput: PortAddressDto = {
@@ -28,7 +36,7 @@ function validProjection(): EditorGraphProjectionDto {
     basis: {
       graphPath: 'functions/main',
       graphRevision: 7,
-      registryFingerprint: Array.from({ length: 32 }, () => 1),
+      registryFingerprint: '0101010101010101010101010101010101010101010101010101010101010101',
       resourceVersions: { 'functions/helper': '3' },
     },
     graphPath: 'functions/main',
@@ -147,23 +155,448 @@ function validProjection(): EditorGraphProjectionDto {
 }
 
 describe('editor projection architecture', () => {
-  it('keeps domain production modules independent from services', () => {
-    const productionModules = [
-      'portAddressKey.ts',
-      'toProjectionEntities.ts',
-      'types.ts',
-      'validateProjection.ts',
-    ];
-    const serviceImport = /from\s+['"]@\/services(?:\/|['"])/;
-    const offenders = productionModules.filter((fileName) => {
-      const source = readFileSync(new URL(fileName, import.meta.url), 'utf8');
-      return serviceImport.test(source);
-    });
+  type Edge = [string, string, ModuleDependencyMode];
 
-    expect(offenders).toEqual([]);
+  const moduleSources = [
+    ['dtoIndex.ts', 'src/shared/types/dto/index.ts'],
+    ['editorProjection.ts', 'src/shared/types/dto/editorProjection.ts'],
+    ['parameterEditorValidators.ts', 'src/shared/types/dto/parameterEditorValidators.ts'],
+    ['editorProjectionGuards.ts', 'src/shared/types/dto/editorProjectionGuards.ts'],
+    ['editorProjectionParser.ts', 'src/shared/types/dto/editorProjectionParser.ts'],
+    ['graphProjectionService.ts', 'src/services/nodeSystem/graphProjectionService.ts'],
+  ] as const;
+  const dtoBarrelRuntimeTargets = [
+    'src/shared/types/dto/database.ts',
+    'src/shared/types/dto/project.ts',
+    'src/shared/types/dto/graph.ts',
+    'src/shared/types/dto/graphCommands.ts',
+    'src/shared/types/dto/graphModel.ts',
+    'src/shared/types/dto/editorMutation.ts',
+    'src/shared/types/dto/runEvent.ts',
+    'src/shared/types/dto/executionDemand.ts',
+    'src/shared/types/dto/trace.ts',
+    'src/shared/types/dto/resultSource.ts',
+    'src/shared/types/dto/converters.ts',
+    'src/shared/types/dto/dataType.ts',
+    'src/shared/types/dto/dataValue.ts',
+    'src/shared/types/dto/variable.ts',
+    'src/shared/types/dto/graphConverters.ts',
+  ] as const;
+  const expectedEdges = [
+    ...dtoBarrelRuntimeTargets.map((target) => (
+      ['dtoIndex.ts', target, 'runtime'] as Edge
+    )),
+    ['dtoIndex.ts', 'editorProjection.ts', 'type-only'],
+    ['parameterEditorValidators.ts', 'editorProjection.ts', 'type-only'],
+    ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
+    ['editorProjectionGuards.ts', 'editorProjection.ts', 'type-only'],
+    ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
+    ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
+    ['editorProjectionParser.ts', 'editorProjection.ts', 'type-only'],
+    ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
+    ['graphProjectionService.ts', 'editorProjection.ts', 'type-only'],
+    ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
+  ] satisfies Edge[];
+  const allowedRuntimeTargets = new Map<string, ReadonlySet<string>>([
+    ['dtoIndex.ts', new Set(dtoBarrelRuntimeTargets)],
+    ['editorProjection.ts', new Set()],
+    ['parameterEditorValidators.ts', new Set()],
+    ['editorProjectionGuards.ts', new Set(['parameterEditorValidators.ts'])],
+    ['editorProjectionParser.ts', new Set([
+      'editorProjectionGuards.ts',
+      'parameterEditorValidators.ts',
+    ])],
+    ['graphProjectionService.ts', new Set([
+      'editorProjectionParser.ts',
+      'external:@tauri-apps/api/core',
+    ])],
+  ]);
+  const runtimeBypassFixtures = [
+    ['static import', "import value from '@/features/example';"],
+    ['side-effect import', "import '@/features/example';"],
+    ['re-export', "export { value } from '@/services/example';"],
+    ['dynamic import', "void import('@/views/example');"],
+    ['CommonJS require', "require('@/features/example');"],
+    ['TypeScript import equals', "import value = require('@/services/example');"],
+    ['TypeScript export assignment', "export = require('@/views/example');"],
+    ['alias traversal', "import value from '@/shared/../features/example';"],
+    ['relative import', "import value from '../../../services/example';"],
+  ] as const;
+  const unresolvedRuntimeFixtures = [
+    [
+      'dynamic import variable',
+      'dynamic-import',
+      4,
+      6,
+      'const modulePath =\n  getModulePath();\n\nvoid import(modulePath);',
+    ],
+    [
+      'require function call',
+      'require',
+      4,
+      16,
+      'const modulePath =\n  getModulePath();\n\nconst loaded = require(\n  getModulePath(),\n);',
+    ],
+    [
+      'dynamic import string concatenation',
+      'dynamic-import',
+      4,
+      6,
+      "const prefix = '@/features/';\nconst name = getName();\n\nvoid import(\n  prefix + name,\n);",
+    ],
+    [
+      'export assignment require',
+      'export-assignment',
+      4,
+      1,
+      'const modulePath =\n  getModulePath();\n\nexport = require(modulePath);',
+    ],
+    [
+      'dynamic import attributes',
+      'dynamic-import',
+      4,
+      6,
+      "const modulePath =\n  getModulePath();\n\nvoid import(\n  modulePath,\n  { with: { type: 'json' } },\n);",
+    ],
+  ] as const;
+
+  function readArchitectureSource(path: string): ArchitectureSource {
+    return { path, source: readFileSync(path, 'utf8') };
+  }
+
+  function normalizedTarget(importerPath: string, specifier: string): string | null {
+    return resolveSourceSpecifier(importerPath, specifier)?.replace(/\.(?:ts|tsx)$/, '') ?? null;
+  }
+
+  function unresolvedFinding(dependency: ModuleDependency): string {
+    return `unresolved:${dependency.kind}@${dependency.location.line}:${dependency.location.column}`;
+  }
+
+  function actualEdges(
+    fixtureModules: ReadonlyMap<string, string> = new Map(),
+  ): Edge[] {
+    const rootNames = new Map<string, string>(
+      moduleSources.map(([name, path]) => [path, name]),
+    );
+    const sourceFor = (path: string): string | null => {
+      const fixture = fixtureModules.get(path);
+      if (fixture !== undefined) return fixture;
+      return existsSync(path) && /\.tsx?$/.test(path)
+        ? readFileSync(path, 'utf8')
+        : null;
+    };
+    const displayName = (path: string): string => rootNames.get(path) ?? path;
+    const edges: Edge[] = [];
+    const visited = new Set<string>();
+    const visit = (path: string): void => {
+      if (visited.has(path)) return;
+      visited.add(path);
+      const source = sourceFor(path);
+      if (source === null) return;
+
+      for (const dependency of moduleDependencies(path, source)) {
+        if (dependency.specifier === null) {
+          edges.push([displayName(path), unresolvedFinding(dependency), dependency.mode]);
+          continue;
+        }
+        const localTarget = resolveSourceSpecifier(
+          path,
+          dependency.specifier,
+          resolve('src'),
+          fixtureModules,
+        );
+        if (localTarget === null) {
+          edges.push([
+            displayName(path),
+            `external:${dependency.specifier}`,
+            dependency.mode,
+          ]);
+          continue;
+        }
+        edges.push([displayName(path), displayName(localTarget), dependency.mode]);
+        if (rootNames.has(localTarget) || fixtureModules.has(localTarget)) visit(localTarget);
+      }
+    };
+
+    for (const [, path] of moduleSources) visit(path);
+    edges.sort((left, right) => {
+      const index = (edge: Edge): number => expectedEdges.findIndex((expected) => (
+        expected[0] === edge[0] && expected[1] === edge[1] && expected[2] === edge[2]
+      ));
+      const leftIndex = index(left);
+      const rightIndex = index(right);
+      if (leftIndex >= 0 || rightIndex >= 0) {
+        return (leftIndex < 0 ? expectedEdges.length : leftIndex)
+          - (rightIndex < 0 ? expectedEdges.length : rightIndex);
+      }
+      return JSON.stringify(left).localeCompare(JSON.stringify(right));
+    });
+    return edges;
+  }
+
+  function unexpectedRuntimeEdges(edges: readonly Edge[]): Edge[] {
+    return edges.filter(([from, to, mode]) => (
+      mode === 'runtime' && !(allowedRuntimeTargets.get(from)?.has(to) ?? false)
+    ));
+  }
+
+  function forbiddenRuntimeTargets(
+    source: ArchitectureSource,
+    forbiddenTarget: RegExp,
+  ): string[] {
+    return moduleDependencies(source.path, source.source)
+      .filter(({ mode }) => mode === 'runtime')
+      .flatMap((dependency) => {
+        if (dependency.specifier === null) return [unresolvedFinding(dependency)];
+        const target = normalizedTarget(source.path, dependency.specifier);
+        return target && forbiddenTarget.test(target) ? [target] : [];
+      });
+  }
+
+  function sourceFiles(directory: string): ArchitectureSource[] {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return sourceFiles(path);
+      return entry.isFile() && /\.tsx?$/.test(entry.name)
+        ? [readArchitectureSource(path)]
+        : [];
+    });
+  }
+
+  function hasDependencyCycle(edges: readonly Edge[]): boolean {
+    const adjacency = new Map<string, string[]>();
+    for (const [from, to] of edges) {
+      adjacency.set(from, [...(adjacency.get(from) ?? []), to]);
+    }
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (node: string): boolean => {
+      if (visiting.has(node)) return true;
+      if (visited.has(node)) return false;
+      visiting.add(node);
+      if ((adjacency.get(node) ?? []).some(visit)) return true;
+      visiting.delete(node);
+      visited.add(node);
+      return false;
+    };
+    return [...adjacency.keys()].some(visit);
+  }
+
+  it('resolves an unregistered local target from a fixture module map', () => {
+    const fixtureModules = new Map([
+      ['src/shared/types/dto/projectionRuntimeHelper.ts', 'export const helper = true;'],
+    ]);
+    expect(resolveSourceSpecifier(
+      'src/shared/types/dto/editorProjection.ts',
+      './projectionRuntimeHelper',
+      resolve('src'),
+      fixtureModules,
+    )).toBe('src/shared/types/dto/projectionRuntimeHelper.ts');
+  });
+
+  it('retains the explicitly allowed Tauri service external', () => {
+    expect(actualEdges()).toContainEqual([
+      'graphProjectionService.ts',
+      'external:@tauri-apps/api/core',
+      'runtime',
+    ]);
+  });
+
+  it('retains an unknown local runtime target as its real project path', () => {
+    const fixtureModules = new Map([
+      [
+        'src/shared/types/dto/editorProjectionParser.ts',
+        "import './projectionRuntimeHelper';",
+      ],
+      ['src/shared/types/dto/projectionRuntimeHelper.ts', 'export const helper = true;'],
+    ]);
+    const edges = actualEdges(fixtureModules);
+
+    expect(edges).toContainEqual([
+      'editorProjectionParser.ts',
+      'src/shared/types/dto/projectionRuntimeHelper.ts',
+      'runtime',
+    ]);
+    expect(unexpectedRuntimeEdges(edges)).toContainEqual([
+      'editorProjectionParser.ts',
+      'src/shared/types/dto/projectionRuntimeHelper.ts',
+      'runtime',
+    ]);
+  });
+
+  it('retains an unknown external runtime target as an unexpected edge', () => {
+    const fixtureModules = new Map([
+      [
+        'src/shared/types/dto/parameterEditorValidators.ts',
+        "import 'unknown-runtime-package';",
+      ],
+    ]);
+    const edges = actualEdges(fixtureModules);
+
+    expect(edges).toContainEqual([
+      'parameterEditorValidators.ts',
+      'external:unknown-runtime-package',
+      'runtime',
+    ]);
+    expect(unexpectedRuntimeEdges(edges)).toContainEqual([
+      'parameterEditorValidators.ts',
+      'external:unknown-runtime-package',
+      'runtime',
+    ]);
+  });
+
+  it('reports an indirect projection back-edge as unexpected and cyclic', () => {
+    const helperPath = 'src/shared/types/dto/projectionRuntimeHelper.ts';
+    const fixtureModules = new Map([
+      [
+        'src/shared/types/dto/editorProjection.ts',
+        "export { helper } from './projectionRuntimeHelper';",
+      ],
+      [
+        helperPath,
+        [
+          "export { isEditorGraphProjectionDto } from './editorProjectionGuards';",
+          "export { parseEditorGraphProjectionDto } from './editorProjectionParser';",
+        ].join('\n'),
+      ],
+    ]);
+    const edges = actualEdges(fixtureModules);
+
+    expect(unexpectedRuntimeEdges(edges)).toEqual(expect.arrayContaining([
+      ['editorProjection.ts', helperPath, 'runtime'],
+      [helperPath, 'editorProjectionGuards.ts', 'runtime'],
+      [helperPath, 'editorProjectionParser.ts', 'runtime'],
+    ]));
+    expect(hasDependencyCycle(edges)).toBe(true);
+  });
+
+  it.each(runtimeBypassFixtures)('rejects %s runtime dependency syntax', (_label, source) => {
+    const fixture = {
+      path: 'src/shared/types/dto/editorProjectionParser.ts',
+      source,
+    };
+
+    expect(forbiddenRuntimeTargets(fixture, /^src\/(?:features|services|views)(?:\/|$)/))
+      .toHaveLength(1);
+  });
+
+  it.each(unresolvedRuntimeFixtures)(
+    'reports unresolved %s exactly and fails closed through forbidden-target glue',
+    (_label, kind, line, column, source) => {
+      const fixture = {
+        path: 'src/shared/types/dto/editorProjectionParser.ts',
+        source,
+      };
+
+      expect(moduleDependencies(fixture.path, fixture.source)).toEqual([{
+        kind,
+        mode: 'runtime',
+        specifier: null,
+        location: { line, column },
+      }]);
+      expect(forbiddenRuntimeTargets(
+        fixture,
+        /^src\/(?:features|services|views)(?:\/|$)/,
+      )).toEqual([`unresolved:${kind}@${line}:${column}`]);
+    },
+  );
+
+  it('rejects a null-specifier glue mutation instead of treating it as no dependency', () => {
+    const fixture = {
+      path: 'src/shared/types/dto/editorProjectionParser.ts',
+      source: 'const target =\n  getModulePath();\n\nconst loaded = require(target);',
+    };
+    const [dependency] = moduleDependencies(fixture.path, fixture.source);
+
+    expect(dependency.specifier).toBeNull();
+    expect(forbiddenRuntimeTargets(
+      fixture,
+      /^src\/(?:features|services|views)(?:\/|$)/,
+    )).toEqual(['unresolved:require@4:16']);
+  });
+
+  it.each([
+    ['import type', "import type { Value } from '@/features/example';"],
+    ['named type import', "import { type Value } from '@/services/example';"],
+    ['type re-export', "export type { Value } from '@/views/example';"],
+    ['type star re-export', "export type * from '@/features/example';"],
+    ['type import equals', "import type Value = require('@/services/example');"],
+  ])('allows erased %s dependencies', (_label, source) => {
+    const fixture = {
+      path: 'src/shared/types/dto/editorProjectionParser.ts',
+      source,
+    };
+    const dependencies = moduleDependencies(fixture.path, fixture.source);
+
+    expect(dependencies).toHaveLength(1);
+    expect(dependencies[0].mode).toBe('type-only');
+    expect(forbiddenRuntimeTargets(fixture, /^src\/(?:features|services|views)(?:\/|$)/))
+      .toEqual([]);
+  });
+
+  it('enforces the complete erased and runtime projection dependency graph', () => {
+    const edges = actualEdges();
+
+    expect(edges).toEqual(expectedEdges);
+    expect(edges.filter(([, , mode]) => mode === 'runtime')).toEqual([
+      ...dtoBarrelRuntimeTargets.map((target) => (
+        ['dtoIndex.ts', target, 'runtime'] as Edge
+      )),
+      ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
+      ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
+      ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
+      ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
+      ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
+    ]);
+    expect(unexpectedRuntimeEdges(edges)).toEqual([]);
+    expect(hasDependencyCycle(edges)).toBe(false);
+  });
+
+  it('keeps every direct DTO barrel import consumer type-only', () => {
+    const runtimeImportConsumers = sourceFiles('src')
+      .filter(({ path }) => !/\.(?:test|spec)\.tsx?$/.test(path)
+        && !/(?:^|\/)__tests__(?:\/|$)/.test(path))
+      .flatMap((source) => (
+        moduleDependencies(source.path, source.source).flatMap((dependency) => {
+          if (dependency.mode !== 'runtime') return [];
+          if (dependency.specifier === null) return [source.path];
+          const target = normalizedTarget(source.path, dependency.specifier);
+          return dependency.kind !== 're-export' && target === 'src/shared/types/dto'
+            ? [source.path]
+            : [];
+        })
+      ));
+
+    expect(runtimeImportConsumers).toEqual([]);
+    expect(actualEdges()).toContainEqual([
+      'dtoIndex.ts', 'editorProjection.ts', 'type-only',
+    ]);
+  });
+
+  it('forbids reverse runtime production dependencies', () => {
+    const serviceSources = sourceFiles('src/services')
+      .filter(({ path }) => !/\.(?:test|spec)\.tsx?$/.test(path));
+    const sharedSources = moduleSources
+      .filter(([name]) => name !== 'graphProjectionService.ts')
+      .map(([, path]) => readArchitectureSource(path));
+    const serviceOffenders = serviceSources
+      .filter((source) => forbiddenRuntimeTargets(
+        source,
+        /^src\/(?:features|views)(?:\/|$)/,
+      ).length > 0)
+      .map(({ path }) => path);
+    const sharedOffenders = sharedSources
+      .filter((source) => forbiddenRuntimeTargets(
+        source,
+        /^src\/(?:features|services|views)(?:\/|$)/,
+      ).length > 0)
+      .map(({ path }) => path);
+
+    expect(serviceOffenders).toEqual([]);
+    expect(sharedOffenders).toEqual([]);
+    expect(existsSync('src/features/domain/editorProjection/validateProjection.ts')).toBe(false);
   });
 });
-
 
 
 describe('portAddressKey', () => {

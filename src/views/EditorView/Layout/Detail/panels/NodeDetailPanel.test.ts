@@ -8,7 +8,7 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
     basis: {
       graphPath,
       graphRevision: 1,
-      registryFingerprint: [],
+      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
       resourceVersions: {},
     },
     sourceRevision: 1,

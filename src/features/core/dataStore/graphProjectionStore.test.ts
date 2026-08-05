@@ -43,7 +43,7 @@ function projection(
     basis: {
       graphPath,
       graphRevision: sourceRevision,
-      registryFingerprint: [1, 2, 3],
+      registryFingerprint: '0102030000000000000000000000000000000000000000000000000000000000',
       resourceVersions: {},
     },
     graphPath,

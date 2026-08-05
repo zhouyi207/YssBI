@@ -1,15 +1,50 @@
 import { invoke } from '@tauri-apps/api/core';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import localizedCatalog from '@/tests/fixtures/node-system-contracts/localized-catalog.json';
 import type { LocalizedCatalogDto } from './catalogService';
 import { CatalogService } from './catalogService';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
+const registryFingerprint = '0000000000000000000000000000000000000000000000000000000000000000';
+
 describe('CatalogService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts the authoritative Rust Catalog fixture through mocked invoke', async () => {
+    vi.mocked(invoke).mockResolvedValue(localizedCatalog);
+
+    await expect(
+      CatalogService.getLocalizedCatalog(
+        localizedCatalog.projectInstanceId,
+        localizedCatalog.locale,
+      ),
+    ).resolves.toBe(localizedCatalog);
+    expect(invoke).toHaveBeenCalledWith('get_localized_node_catalog', {
+      projectInstanceId: localizedCatalog.projectInstanceId,
+      locale: localizedCatalog.locale,
+    });
+  });
+
+  it.each([
+    ['sideways direction', 'direction', 'sideways'],
+    ['execution kind', 'kind', 'execution'],
+  ])('rejects Catalog port %s', async (_label, field, malformed) => {
+    const catalog = structuredClone(localizedCatalog) as unknown as LocalizedCatalogDto;
+    Object.assign(catalog.items[0].ports[0], { [field]: malformed });
+    vi.mocked(invoke).mockResolvedValue(catalog);
+
+    await expect(
+      CatalogService.getLocalizedCatalog(catalog.projectInstanceId, catalog.locale),
+    ).rejects.toThrow('Invalid localized node catalog response');
+  });
+
   it('requests the localized catalog with the project identity and locale', async () => {
     const catalog: LocalizedCatalogDto = {
       projectInstanceId: 'project-instance-1',
-      registryFingerprint: 'registry-fingerprint-1',
+      registryFingerprint,
       resourcePublicationRevision: 7,
       locale: 'zh-CN',
       categories: [
@@ -66,7 +101,7 @@ describe('CatalogService', () => {
     };
     vi.mocked(invoke).mockResolvedValue({
       projectInstanceId: 'project-instance-1',
-      registryFingerprint: 'registry-fingerprint-1',
+      registryFingerprint,
       resourcePublicationRevision: 8,
       locale: 'en-US',
       categories: [{ categoryId: 'dataframe', title: 'DataFrame', searchText: 'dataframe' }],
@@ -94,7 +129,7 @@ describe('CatalogService', () => {
   it('accepts the exact resource-bound item metadata and descriptor', async () => {
     const catalog: LocalizedCatalogDto = {
       projectInstanceId: 'project-instance-1',
-      registryFingerprint: 'registry-fingerprint-1',
+      registryFingerprint,
       resourcePublicationRevision: 8,
       locale: 'en-US',
       categories: [{ categoryId: 'functions', title: 'Functions', searchText: 'functions' }],
@@ -108,7 +143,7 @@ describe('CatalogService', () => {
         styleId: 'call',
         aliases: ['Helper'],
         technicalTerms: [],
-        ports: [{ key: 'exec', label: 'Exec', direction: 'input', kind: 'execution' }],
+        ports: [{ key: 'exec', label: 'Exec', direction: 'input', kind: 'control' }],
         parameters: [{ key: 'target', title: 'Target', description: null }],
         resourcePath: 'functions/Helper.yssbi-function',
         resourceRevision: 3,
@@ -131,7 +166,7 @@ describe('CatalogService', () => {
   it('rejects resource metadata that does not exactly match its descriptor', async () => {
     vi.mocked(invoke).mockResolvedValue({
       projectInstanceId: 'project-instance-1',
-      registryFingerprint: 'registry-fingerprint-1',
+      registryFingerprint,
       resourcePublicationRevision: 8,
       locale: 'en-US',
       categories: [],
@@ -181,7 +216,7 @@ describe('CatalogService', () => {
   ])('rejects a descriptor with %s', async (_label, creation) => {
     vi.mocked(invoke).mockResolvedValue({
       projectInstanceId: 'project-instance-1',
-      registryFingerprint: 'registry-fingerprint-1',
+      registryFingerprint,
       resourcePublicationRevision: 8,
       locale: 'en-US',
       categories: [],

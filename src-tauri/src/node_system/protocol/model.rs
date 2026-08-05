@@ -1,6 +1,7 @@
 use super::{
-    I18nKey, IconId, InterfaceResolverId, NodeCategoryId, NodeStyleId, NodeTypeId, ParameterSchema,
-    PortKey, SchemaExpr, TypeConstraint, TypeExpr, TypeParameterId, TypedValue,
+    I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
+    NodeTypeId, ParameterSchema, PortKey, SchemaExpr, TypeConstraint, TypeExpr, TypeParameterId,
+    TypedValue,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -223,9 +224,16 @@ pub enum ManagedNodeRole {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtocolError {
     InvalidIdentity(String),
+    InvalidSemanticId {
+        value: Box<str>,
+        source: InvalidSemanticId,
+    },
     DuplicatePortKey(PortKey),
     DuplicateTypeParameter(TypeParameterId),
-    InvalidPortContract { key: PortKey, reason: &'static str },
+    InvalidPortContract {
+        key: PortKey,
+        reason: &'static str,
+    },
     InvalidPortMemberGroup(&'static str),
     InvalidExecutionSemantics(&'static str),
 }
@@ -234,6 +242,9 @@ impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidIdentity(error) => f.write_str(error),
+            Self::InvalidSemanticId { value, source } => {
+                write!(f, "invalid protocol semantic ID '{value}': {source}")
+            }
             Self::DuplicatePortKey(key) => write!(f, "duplicate port key '{key}'"),
             Self::DuplicateTypeParameter(id) => write!(f, "duplicate type parameter '{id}'"),
             Self::InvalidPortContract { key, reason } => {
@@ -249,7 +260,14 @@ impl std::fmt::Display for ProtocolError {
     }
 }
 
-impl std::error::Error for ProtocolError {}
+impl std::error::Error for ProtocolError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidSemanticId { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
 
 fn invalid_port(key: &PortKey, reason: &'static str) -> ProtocolError {
     ProtocolError::InvalidPortContract {

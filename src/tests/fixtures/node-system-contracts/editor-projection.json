@@ -1,0 +1,92 @@
+{
+  "basis": {
+    "graphPath": "events/contract.yssbi-event",
+    "graphRevision": 7,
+    "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+    "resourceVersions": {
+      "databases/contract-database": "13",
+      "functions/contract-function": "11"
+    }
+  },
+  "connections": [],
+  "diagnostics": [],
+  "graphPath": "events/contract.yssbi-event",
+  "hasBlockingDiagnostics": false,
+  "nodes": [
+    {
+      "capabilities": {
+        "canCopy": true,
+        "canDelete": true,
+        "canEditLabel": true,
+        "canEditParameters": true,
+        "hasDynamicPorts": false,
+        "managed": false,
+        "supportsInlineLiterals": false
+      },
+      "diagnostics": [],
+      "display": {
+        "description": "Built-in deterministic node.",
+        "iconId": "builtin.constants",
+        "styleId": "builtin.default",
+        "title": "Boolean Constant",
+        "userLabel": "Contract Boolean"
+      },
+      "graphPath": "events/contract.yssbi-event",
+      "nodeId": "00000000-0000-0000-0000-000000000002",
+      "nodeTypeId": "yssbi.constant.bool",
+      "parameterEditors": [
+        {
+          "configuration": null,
+          "display": {
+            "description": "The constant value.",
+            "title": "Value"
+          },
+          "editor": "auto",
+          "key": "value",
+          "multiline": false,
+          "value": {
+            "Bool": true
+          }
+        }
+      ],
+      "ports": [
+        {
+          "address": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "value"
+          },
+          "canRemove": false,
+          "connections": {
+            "canConnect": true,
+            "current": 0,
+            "maximum": 1,
+            "ordered": false
+          },
+          "direction": "output",
+          "display": {
+            "instanceLabel": null,
+            "label": "Value"
+          },
+          "input": null,
+          "instanceKind": "declared",
+          "kind": "data",
+          "orphan": false,
+          "resolvedSchema": null,
+          "resolvedType": {
+            "display": "core.bool",
+            "resolved": true
+          },
+          "status": "resolved",
+          "templateKey": "value"
+        }
+      ],
+      "position": {
+        "x": 120.5,
+        "y": -32.0
+      },
+      "sourceRevision": 7
+    }
+  ],
+  "sourceRevision": 7
+}

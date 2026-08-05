@@ -1,8 +1,16 @@
-import {
-  isSchemaAwareParameterEditorDto,
-  type EditorGraphProjectionDto,
-} from '@/shared/types/dto/editorProjection';
-import { portAddressKey } from './portAddressKey';
+import { isEditorGraphProjectionDto } from './editorProjectionGuards';
+import { isSchemaAwareParameterEditorDto } from './parameterEditorValidators';
+import type {
+  EditorGraphProjectionDto,
+  PortAddressDto,
+} from './editorProjection';
+
+export function parseEditorGraphProjectionDto(value: unknown): EditorGraphProjectionDto {
+  if (!isEditorGraphProjectionDto(value)) {
+    throw new Error('Invalid editor graph projection response');
+  }
+  return validateEditorGraphProjection(value);
+}
 
 export function validateEditorGraphProjection(
   projection: EditorGraphProjectionDto,
@@ -90,4 +98,10 @@ function validateNode(
     }
     portDirections.set(key, port.direction);
   }
+}
+
+function portAddressKey(address: PortAddressDto): string {
+  return address.kind === 'declared'
+    ? JSON.stringify(['declared', address.nodeId, address.portKey])
+    : JSON.stringify(['instance', address.nodeId, address.templateKey, address.instanceId]);
 }

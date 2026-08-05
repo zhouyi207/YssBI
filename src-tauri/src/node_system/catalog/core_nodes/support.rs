@@ -1,4 +1,7 @@
+pub(crate) use crate::node_system::catalog::builtin::BuiltinAssemblyError;
 pub(crate) use crate::node_system::catalog::builtin::ProviderFragment;
+pub(crate) use crate::node_system::catalog::builtin::assembled_decimal;
+use crate::node_system::catalog::builtin::{assembled_interface, assembled_parameters, sid};
 use crate::node_system::catalog::localization::{Aliases, Text};
 use crate::node_system::compiler::{
     FragmentMetadata, KernelFragment as CompiledKernelFragment, LoweredKernel, LoweredNode,
@@ -11,8 +14,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 impl ProviderFragment {
-    pub(crate) fn add_node_messages(&mut self, spec: &NodeTextSpec) {
-        let keys = NodeKeys::new(spec.id);
+    pub(crate) fn add_node_messages(
+        &mut self,
+        spec: &NodeTextSpec,
+    ) -> Result<(), BuiltinAssemblyError> {
+        let keys = NodeKeys::new(spec.id)?;
         for (locale, title, description, documentation, aliases) in [
             (
                 "en-US",
@@ -34,6 +40,7 @@ impl ProviderFragment {
             self.text(locale, keys.documentation.clone(), documentation);
             self.aliases(locale, keys.aliases.clone(), aliases);
         }
+        Ok(())
     }
 
     pub(crate) fn text(&mut self, locale: &'static str, key: I18nKey, value: &'static str) {
@@ -73,13 +80,13 @@ struct NodeKeys {
 }
 
 impl NodeKeys {
-    fn new(id: &'static str) -> Self {
-        Self {
-            title: i18n(leak(format!("nodes.{id}.title"))),
-            description: i18n(leak(format!("nodes.{id}.description"))),
-            documentation: i18n(leak(format!("nodes.{id}.documentation"))),
-            aliases: i18n(leak(format!("nodes.{id}.aliases"))),
-        }
+    fn new(id: &'static str) -> Result<Self, BuiltinAssemblyError> {
+        Ok(Self {
+            title: i18n(leak(format!("nodes.{id}.title")))?,
+            description: i18n(leak(format!("nodes.{id}.description")))?,
+            documentation: i18n(leak(format!("nodes.{id}.documentation")))?,
+            aliases: i18n(leak(format!("nodes.{id}.aliases")))?,
+        })
     }
 }
 
@@ -130,28 +137,26 @@ pub(crate) fn protocol(
     type_constraints: Vec<TypeConstraint>,
     parameters: Vec<ParameterSpec>,
     execution: ExecutionSemantics,
-) -> NodeProtocol {
-    let keys = NodeKeys::new(id);
-    NodeProtocol {
-        type_id: semantic(id, NodeTypeId::new),
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let keys = NodeKeys::new(id)?;
+    Ok(NodeProtocol {
+        type_id: semantic(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: keys.title,
             description_key: Some(keys.description),
             documentation_key: Some(keys.documentation),
             aliases_key: Some(keys.aliases),
-            category_id: semantic(category, NodeCategoryId::new),
-            icon_id: semantic(leak(format!("builtin.{category}")), IconId::new),
-            style_id: semantic("builtin.default", NodeStyleId::new),
+            category_id: semantic(category, NodeCategoryId::new)?,
+            icon_id: semantic(leak(format!("builtin.{category}")), IconId::new)?,
+            style_id: semantic("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, type_parameters, type_constraints)
-            .expect("core node family must produce a valid interface"),
-        parameters: ParameterSchema::new(parameters)
-            .expect("core node family must produce unique parameters"),
+        interface: assembled_interface(id, ports, type_parameters, type_constraints, vec![])?,
+        parameters: assembled_parameters(id, parameters)?,
         execution,
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
 pub(crate) fn data_port(
@@ -159,7 +164,7 @@ pub(crate) fn data_port(
     key: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-) -> PortSpec {
+) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port_with_instances(node_id, key, direction, value_type, PortInstances::Declared)
 }
 
@@ -169,10 +174,10 @@ pub(crate) fn data_port_with_instances(
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
-) -> PortSpec {
-    PortSpec {
-        key: semantic(key, PortKey::new),
-        label_key: port_key(node_id, key),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: semantic(key, PortKey::new)?,
+        label_key: port_key(node_id, key)?,
         direction,
         kind: PortKind::Data,
         value_type,
@@ -188,7 +193,7 @@ pub(crate) fn data_port_with_instances(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
 pub(crate) fn control_port(
@@ -196,10 +201,10 @@ pub(crate) fn control_port(
     key: &'static str,
     direction: PortDirection,
     instances: PortInstances,
-) -> PortSpec {
-    PortSpec {
-        key: semantic(key, PortKey::new),
-        label_key: port_key(node_id, key),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: semantic(key, PortKey::new)?,
+        label_key: port_key(node_id, key)?,
         direction,
         kind: PortKind::Control,
         value_type: TypeExpr::Unknown,
@@ -210,7 +215,7 @@ pub(crate) fn control_port(
         production: None,
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
 pub(crate) fn parameter(
@@ -220,27 +225,27 @@ pub(crate) fn parameter(
     default_value: Option<ParameterValue>,
     constraints: Vec<ParameterConstraint>,
     editor: ParameterEditorSpec,
-) -> ParameterSpec {
-    ParameterSpec {
-        key: semantic(key, ParameterKey::new),
-        title_key: parameter_key(node_id, key, "title"),
-        description_key: Some(parameter_key(node_id, key, "description")),
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    Ok(ParameterSpec {
+        key: semantic(key, ParameterKey::new)?,
+        title_key: parameter_key(node_id, key, "title")?,
+        description_key: Some(parameter_key(node_id, key, "description")?),
         value_type,
         default_value,
         constraints,
         editor,
-    }
+    })
 }
 
-pub(crate) fn concrete(id: &'static str) -> TypeExpr {
-    TypeExpr::Concrete(semantic(id, TypeId::new))
+pub(crate) fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(semantic(id, TypeId::new)?))
 }
 
-pub(crate) fn data_series(element: &'static str) -> TypeExpr {
-    TypeExpr::Applied {
-        constructor: semantic("core.data_series", TypeConstructorId::new),
-        arguments: vec![concrete(element)],
-    }
+pub(crate) fn data_series(element: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Applied {
+        constructor: semantic("core.data_series", TypeConstructorId::new)?,
+        arguments: vec![concrete(element)?],
+    })
 }
 
 pub(crate) fn pure() -> ExecutionSemantics {
@@ -263,7 +268,10 @@ pub(crate) fn effectful() -> ExecutionSemantics {
     }
 }
 
-pub(crate) fn port_key(node_id: &'static str, key: &'static str) -> I18nKey {
+pub(crate) fn port_key(
+    node_id: &'static str,
+    key: &'static str,
+) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n(leak(format!("nodes.{node_id}.ports.{key}.label")))
 }
 
@@ -271,7 +279,7 @@ pub(crate) fn parameter_key(
     node_id: &'static str,
     key: &'static str,
     suffix: &'static str,
-) -> I18nKey {
+) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n(leak(format!("nodes.{node_id}.parameters.{key}.{suffix}")))
 }
 
@@ -279,12 +287,13 @@ pub(crate) fn add_port_messages(
     fragment: &mut ProviderFragment,
     node_id: &'static str,
     entries: &[(&'static str, &'static str, &'static str)],
-) {
+) -> Result<(), BuiltinAssemblyError> {
     for (key, en, zh) in entries {
-        let message_key = port_key(node_id, key);
+        let message_key = port_key(node_id, key)?;
         fragment.text("en-US", message_key.clone(), en);
         fragment.text("zh-CN", message_key, zh);
     }
+    Ok(())
 }
 
 pub(crate) fn add_parameter_messages(
@@ -297,43 +306,44 @@ pub(crate) fn add_parameter_messages(
         &'static str,
         &'static str,
     )],
-) {
+) -> Result<(), BuiltinAssemblyError> {
     for (key, en, zh, description, zh_description) in entries {
-        let title_key = parameter_key(node_id, key, "title");
-        let description_key = parameter_key(node_id, key, "description");
+        let title_key = parameter_key(node_id, key, "title")?;
+        let description_key = parameter_key(node_id, key, "description")?;
         fragment.text("en-US", title_key.clone(), en);
         fragment.text("zh-CN", title_key, zh);
         fragment.text("en-US", description_key.clone(), description);
         fragment.text("zh-CN", description_key, zh_description);
     }
+    Ok(())
 }
 
 pub(crate) fn category(
     id: &'static str,
     title_key: &'static str,
     order: i32,
-) -> CategoryRegistration {
-    CategoryRegistration {
-        id: semantic(id, NodeCategoryId::new),
-        title_key: i18n(title_key),
+) -> Result<CategoryRegistration, BuiltinAssemblyError> {
+    Ok(CategoryRegistration {
+        id: semantic(id, NodeCategoryId::new)?,
+        title_key: i18n(title_key)?,
         parent: None,
         order,
-    }
+    })
 }
 
 pub(crate) fn empty_classes() -> BTreeSet<TypeClassId> {
     BTreeSet::new()
 }
 
-pub(crate) fn i18n(value: &'static str) -> I18nKey {
+pub(crate) fn i18n(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     semantic(value, I18nKey::new)
 }
 
 pub(crate) fn semantic<T>(
     value: &'static str,
     make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
-) -> T {
-    make(value).expect("core node semantic identifiers are static and valid")
+) -> Result<T, crate::node_system::catalog::BuiltinAssemblyError> {
+    sid(value, make)
 }
 
 pub(crate) fn leak(value: String) -> &'static str {

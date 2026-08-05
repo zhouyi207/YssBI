@@ -15,9 +15,17 @@ pub enum RegistryValidationError {
     DuplicateSchemaResolver(SchemaResolverId),
     DuplicateNominalValidator(TypeId),
     MissingNominalValidator(TypeId),
+    InvalidNominalTypeId {
+        value: Box<str>,
+        source: InvalidSemanticId,
+    },
     InvalidNode {
         node: NodeTypeId,
         reason: String,
+    },
+    InvalidNodeProtocol {
+        node: NodeTypeId,
+        source: ProtocolError,
     },
     InvalidType {
         id: TypeId,
@@ -58,7 +66,13 @@ impl std::fmt::Display for RegistryValidationError {
             MissingNominalValidator(id) => {
                 write!(f, "built-in nominal type '{id}' has no validator")
             }
+            InvalidNominalTypeId { value, source } => {
+                write!(f, "invalid built-in nominal type ID '{value}': {source}")
+            }
             InvalidNode { node, reason } => write!(f, "invalid node '{node}': {reason}"),
+            InvalidNodeProtocol { node, source } => {
+                write!(f, "invalid node protocol '{node}': {source}")
+            }
             InvalidType { id, reason } => write!(f, "invalid type '{id}': {reason}"),
             InvalidTypeConstructor { id, reason } => {
                 write!(f, "invalid type constructor '{id}': {reason}")
@@ -67,7 +81,38 @@ impl std::fmt::Display for RegistryValidationError {
         }
     }
 }
-impl std::error::Error for RegistryValidationError {}
+impl std::error::Error for RegistryValidationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidNominalTypeId { source, .. } => Some(source),
+            Self::InvalidNodeProtocol { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+struct BuiltinNominalTypeIds {
+    project_columns: TypeId,
+    filter_predicate: TypeId,
+}
+
+fn required_nominal_type_id(value: &str) -> Result<TypeId, RegistryValidationError> {
+    TypeId::new(value).map_err(|source| RegistryValidationError::InvalidNominalTypeId {
+        value: value.into(),
+        source,
+    })
+}
+
+fn builtin_nominal_type_ids() -> Result<BuiltinNominalTypeIds, RegistryValidationError> {
+    Ok(BuiltinNominalTypeIds {
+        project_columns: required_nominal_type_id(
+            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+        )?,
+        filter_predicate: required_nominal_type_id(
+            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+        )?,
+    })
+}
 
 pub(crate) struct ValidatedParts {
     pub nodes: BTreeMap<NodeTypeId, std::sync::Arc<RegisteredNode>>,
@@ -91,6 +136,7 @@ pub(crate) fn validate(
     let mut i18n = I18nManifest::default();
     let mut interface_resolvers = BTreeSet::new();
     let mut schema_resolvers = BTreeSet::new();
+    let nominal_type_ids = builtin_nominal_type_ids()?;
 
     for provider in providers {
         if !provider_ids.insert(provider.provider.clone()) {
@@ -196,13 +242,12 @@ pub(crate) fn validate(
         })?;
     }
     validate_categories(&categories, &i18n)?;
-    for required in [
-        crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
-        crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+    for id in [
+        &nominal_type_ids.project_columns,
+        &nominal_type_ids.filter_predicate,
     ] {
-        let id = TypeId::new(required).expect("built-in nominal type ID is valid");
-        if types.types.contains_key(&id) && !nominal_validators.contains_key(&id) {
-            return Err(RegistryValidationError::MissingNominalValidator(id));
+        if types.types.contains_key(id) && !nominal_validators.contains_key(id) {
+            return Err(RegistryValidationError::MissingNominalValidator(id.clone()));
         }
     }
     for node in nodes.values() {
@@ -213,6 +258,7 @@ pub(crate) fn validate(
             &i18n,
             &interface_resolvers,
             &schema_resolvers,
+            &nominal_type_ids,
         )?;
     }
     Ok(ValidatedParts {
@@ -264,6 +310,7 @@ fn validate_node(
     i18n: &I18nManifest,
     interface_resolvers: &BTreeSet<InterfaceResolverId>,
     schema_resolvers: &BTreeSet<SchemaResolverId>,
+    nominal_type_ids: &BuiltinNominalTypeIds,
 ) -> Result<(), RegistryValidationError> {
     let protocol = &node.protocol;
     let fail = |reason: String| RegistryValidationError::InvalidNode {
@@ -336,7 +383,10 @@ fn validate_node(
         protocol.interface.type_constraints.to_vec(),
     )
     .and_then(|interface| interface.with_member_groups(protocol.interface.member_groups.to_vec()))
-    .map_err(|e| fail(e.to_string()))?;
+    .map_err(|source| RegistryValidationError::InvalidNodeProtocol {
+        node: protocol.type_id.clone(),
+        source,
+    })?;
     let ports: BTreeMap<_, _> = protocol
         .interface
         .ports
@@ -369,6 +419,7 @@ fn validate_node(
                 &parameter_specs,
                 interface_resolvers,
                 schema_resolvers,
+                nominal_type_ids,
             )
             .map_err(&fail)?;
         }
@@ -520,10 +571,9 @@ fn validate_schema_parameter(
 fn validate_schema_parameter_type(
     key: &ParameterKey,
     parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
-    expected: &str,
+    expected: &TypeId,
 ) -> Result<(), String> {
     validate_schema_parameter(key, parameters)?;
-    let expected = TypeId::new(expected).expect("built-in nominal type ID is valid");
     if parameters[key].value_type == TypeExpr::Concrete(expected.clone()) {
         Ok(())
     } else {
@@ -536,6 +586,22 @@ fn validate_schema_parameter_type(
 #[cfg(test)]
 mod nominal_schema_tests {
     use super::*;
+
+    #[test]
+    fn invalid_builtin_nominal_type_id_preserves_identity_source() {
+        let error = required_nominal_type_id("Bad Nominal Type").unwrap_err();
+        assert!(matches!(
+            &error,
+            RegistryValidationError::InvalidNominalTypeId { value, source }
+                if value.as_ref() == "Bad Nominal Type"
+                    && source == &TypeId::new("Bad Nominal Type").unwrap_err()
+        ));
+        assert!(
+            std::error::Error::source(&error)
+                .and_then(|source| source.downcast_ref::<InvalidSemanticId>())
+                .is_some()
+        );
+    }
 
     fn parameter(key: &str, value_type: TypeExpr) -> ParameterSpec {
         ParameterSpec {
@@ -584,6 +650,7 @@ mod nominal_schema_tests {
         let port_map = ports();
         let interface_resolvers = BTreeSet::<InterfaceResolverId>::new();
         let schema_resolvers = BTreeSet::<SchemaResolverId>::new();
+        let nominal_type_ids = builtin_nominal_type_ids().unwrap();
 
         for (expression, key, expected_type) in [
             (
@@ -606,6 +673,7 @@ mod nominal_schema_tests {
                     &wrong_parameters,
                     &interface_resolvers,
                     &schema_resolvers,
+                    &nominal_type_ids,
                 )
                 .is_err()
             );
@@ -622,6 +690,7 @@ mod nominal_schema_tests {
                     &exact_parameters,
                     &interface_resolvers,
                     &schema_resolvers,
+                    &nominal_type_ids,
                 )
                 .is_ok()
             );
@@ -635,6 +704,7 @@ fn validate_schema(
     parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
     interface_resolvers: &BTreeSet<InterfaceResolverId>,
     schema_resolvers: &BTreeSet<SchemaResolverId>,
+    nominal_type_ids: &BuiltinNominalTypeIds,
 ) -> Result<(), String> {
     let input = |key: &PortKey| match ports.get(key) {
         Some(p) if p.direction == PortDirection::Input && p.kind == PortKind::Data => Ok(()),
@@ -653,13 +723,10 @@ fn validate_schema(
                 parameters,
                 interface_resolvers,
                 schema_resolvers,
+                nominal_type_ids,
             )?;
             if let ColumnSelectionExpr::FromParameter(key) = columns {
-                validate_schema_parameter_type(
-                    key,
-                    parameters,
-                    crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
-                )?;
+                validate_schema_parameter_type(key, parameters, &nominal_type_ids.project_columns)?;
             }
             Ok(())
         }
@@ -674,6 +741,7 @@ fn validate_schema(
                     parameters,
                     interface_resolvers,
                     schema_resolvers,
+                    nominal_type_ids,
                 )?;
             }
             Ok(())
@@ -688,6 +756,7 @@ fn validate_schema(
                 parameters,
                 interface_resolvers,
                 schema_resolvers,
+                nominal_type_ids,
             )?;
             match mapping {
                 RenameExpr::FromParameter(key) => {
@@ -709,7 +778,7 @@ fn validate_schema(
                 validate_schema_parameter_type(
                     predicate,
                     parameters,
-                    crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+                    &nominal_type_ids.filter_predicate,
                 )?;
             }
             validate_schema(
@@ -718,6 +787,7 @@ fn validate_schema(
                 parameters,
                 interface_resolvers,
                 schema_resolvers,
+                nominal_type_ids,
             )
         }
         SchemaExpr::Derived {

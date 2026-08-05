@@ -6,6 +6,8 @@
 
 mod assertions;
 mod builders;
+#[cfg(test)]
+pub(crate) mod contracts;
 mod determinism;
 mod protocol;
 mod runtime;

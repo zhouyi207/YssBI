@@ -91,7 +91,7 @@ struct LocaleState {
 #[test]
 fn semantic_protocol_and_i18n_exporters_are_canonical() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let semantic = canonical_semantic_protocol_snapshot(&registry);
+    let semantic = canonical_semantic_protocol_snapshot(&registry).unwrap();
     let semantic: serde_json::Value = serde_json::from_str(&semantic).unwrap();
     let node_ids = semantic["nodes"]
         .as_array()
@@ -101,13 +101,21 @@ fn semantic_protocol_and_i18n_exporters_are_canonical() {
         .collect::<Vec<_>>();
     assert!(node_ids.windows(2).all(|pair| pair[0] < pair[1]));
 
-    let inventory = i18n_inventory(&registry);
+    let inventory = i18n_inventory(&registry).unwrap();
     let keys: Vec<String> = serde_json::from_str(&inventory).unwrap();
     assert!(keys.windows(2).all(|pair| pair[0] < pair[1]));
     assert!(keys.iter().any(|key| key == "nodes.yssbi.logic.not.title"));
 
-    assert!(!canonical_semantic_protocol_snapshot(&registry).contains("Boolean Constant"));
-    assert!(!canonical_semantic_protocol_snapshot(&registry).contains("布尔常量"));
+    assert!(
+        !canonical_semantic_protocol_snapshot(&registry)
+            .unwrap()
+            .contains("Boolean Constant")
+    );
+    assert!(
+        !canonical_semantic_protocol_snapshot(&registry)
+            .unwrap()
+            .contains("布尔常量")
+    );
     assert!(!inventory.contains("Boolean Constant"));
     assert!(!inventory.contains("布尔常量"));
 }
@@ -118,15 +126,18 @@ fn localized_text_does_not_change_semantic_snapshot_or_fingerprint() {
     let registry = builtin.registry;
     let catalog = builtin.catalog;
     let fingerprint = registry.fingerprint().clone();
-    let semantic = canonical_semantic_protocol_snapshot(&registry);
-    let inventory = i18n_inventory(&registry);
+    let semantic = canonical_semantic_protocol_snapshot(&registry).unwrap();
+    let inventory = i18n_inventory(&registry).unwrap();
 
     let english = catalog.localize(&registry, "en-US");
     let chinese = catalog.localize(&registry, "zh-CN");
     assert_ne!(english.items[0].title, chinese.items[0].title);
     assert_eq!(registry.fingerprint(), &fingerprint);
-    assert_eq!(canonical_semantic_protocol_snapshot(&registry), semantic);
-    assert_eq!(i18n_inventory(&registry), inventory);
+    assert_eq!(
+        canonical_semantic_protocol_snapshot(&registry).unwrap(),
+        semantic
+    );
+    assert_eq!(i18n_inventory(&registry).unwrap(), inventory);
 }
 
 #[test]

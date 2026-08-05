@@ -461,7 +461,7 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 
 | Phase | 完成度 | 当前状态 |
 |---|---:|---|
-| Phase 1：身份、协议、Registry | **98%** | Stable NodeTypeId、strict executable Registry 与 sealed frozen internals 已完成；production 现仅通过 fallible validated built-in factory，在任何 editable state 前完成 Registry、nominal validator、default locale/aliases 校验，并保留 immutable node/type provider provenance；剩余旧 Rust label/category Registry 删除及 Rust↔TS golden contract |
+| Phase 1：身份、协议、Registry | **100%** | Stable IDs、strict executable Registry、typed fail-fast built-in assembly、provider provenance、legacy Registry/runtime removal、one-way editor projection parsing、Rust↔TS golden contracts、fixture immutability、whole-slice reviews and fresh full verification complete |
 | Phase 2：GraphDocument 和事务 | **98%** | Graph/document/resource transaction 已高度收敛；CreateNode 现仅接受 exact descriptor，snapshot/publication 双重 authority gate 与所有 rejection 零副作用已覆盖 |
 | Phase 3：编辑器权威投影 | **100%** | Exact descriptor、revisioned command snapshot、coherent database recovery 与唯一 Core lifecycle authority 已完成；identity cycle/shim 已移除，AST-resolved service boundary 与 stale command/event/graph/publication 行为通过最终审查 |
 | Phase 4：Rust 权威 History | **100%** | Rust 权威 History 已完成：direct/lifecycle graph cache unload 保留完整项目 History；unloaded Graph/Function/local variable 在单一 coordinator lease 下按需 hydration，并与 loaded/global resources 原子 Undo/Redo；policy/head/session/revision/residency races、rollback/recovery、精确 delta 与 post-finalize publication 均通过最终审查。History 仍为 process-local，project activation/reload/replacement 会清空 |

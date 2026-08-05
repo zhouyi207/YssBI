@@ -1,0 +1,341 @@
+{
+  "categories": [
+    {
+      "categoryId": "constants",
+      "searchText": "constants",
+      "title": "Constants"
+    },
+    {
+      "categoryId": "control",
+      "searchText": "flow control",
+      "title": "Flow Control"
+    },
+    {
+      "categoryId": "conversion",
+      "searchText": "conversion",
+      "title": "Conversion"
+    },
+    {
+      "categoryId": "dataframe",
+      "searchText": "dataframe",
+      "title": "DataFrame"
+    },
+    {
+      "categoryId": "dataframe.panel",
+      "searchText": "panel data",
+      "title": "Panel Data"
+    },
+    {
+      "categoryId": "dataframe.series",
+      "searchText": "dataseries",
+      "title": "DataSeries"
+    },
+    {
+      "categoryId": "dataframe.timeseries",
+      "searchText": "time series",
+      "title": "Time Series"
+    },
+    {
+      "categoryId": "debug",
+      "searchText": "debug",
+      "title": "Debug"
+    },
+    {
+      "categoryId": "distribution",
+      "searchText": "probability distributions",
+      "title": "Probability Distributions"
+    },
+    {
+      "categoryId": "logic",
+      "searchText": "logic",
+      "title": "Logic"
+    },
+    {
+      "categoryId": "numeric",
+      "searchText": "numeric",
+      "title": "Numeric"
+    },
+    {
+      "categoryId": "plot",
+      "searchText": "plots",
+      "title": "Plots"
+    },
+    {
+      "categoryId": "project",
+      "searchText": "project",
+      "title": "Project"
+    },
+    {
+      "categoryId": "statistics",
+      "searchText": "statistics",
+      "title": "Statistics"
+    },
+    {
+      "categoryId": "statistics.panel",
+      "searchText": "panel statistics",
+      "title": "Panel Statistics"
+    },
+    {
+      "categoryId": "statistics.regression",
+      "searchText": "regression",
+      "title": "Regression"
+    },
+    {
+      "categoryId": "statistics.timeseries",
+      "searchText": "time series statistics",
+      "title": "Time-Series Statistics"
+    }
+  ],
+  "items": [
+    {
+      "aliases": [
+        "constant",
+        "literal",
+        "value"
+      ],
+      "categoryId": "constants",
+      "creation": {
+        "kind": "static",
+        "nodeTypeId": "yssbi.constant.bool"
+      },
+      "description": "Built-in deterministic node.",
+      "documentation": "This node is part of the trusted built-in provider.",
+      "iconId": "builtin.constants",
+      "nodeTypeId": "yssbi.constant.bool",
+      "parameters": [
+        {
+          "description": "The constant value.",
+          "key": "value",
+          "title": "Value"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "output",
+          "key": "value",
+          "kind": "data",
+          "label": "Value"
+        }
+      ],
+      "searchText": "boolean constant constant literal value",
+      "styleId": "builtin.default",
+      "technicalTerms": [
+        "constant",
+        "literal",
+        "value"
+      ],
+      "title": "Boolean Constant"
+    },
+    {
+      "aliases": [
+        "select columns",
+        "projection",
+        "dataframe"
+      ],
+      "categoryId": "dataframe",
+      "creation": {
+        "kind": "parameterizedStatic",
+        "nodeTypeId": "yssbi.dataframe.project",
+        "requiredParameters": [
+          "columns"
+        ]
+      },
+      "description": "Selects DataFrame columns in an explicit order.",
+      "documentation": "Selects direct source columns without renaming or derived expressions.",
+      "iconId": "builtin.dataframe",
+      "nodeTypeId": "yssbi.dataframe.project",
+      "parameters": [
+        {
+          "description": "Source columns to keep, in output order.",
+          "key": "columns",
+          "title": "Columns"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "input",
+          "key": "source",
+          "kind": "data",
+          "label": "Source"
+        },
+        {
+          "direction": "output",
+          "key": "result",
+          "kind": "data",
+          "label": "Result"
+        }
+      ],
+      "searchText": "project dataframe select columns projection dataframe",
+      "styleId": "builtin.dataframe",
+      "technicalTerms": [
+        "select columns",
+        "projection",
+        "dataframe"
+      ],
+      "title": "Project DataFrame"
+    },
+    {
+      "aliases": [
+        "data frame",
+        "table",
+        "source"
+      ],
+      "categoryId": "dataframe",
+      "creation": {
+        "createArgs": {
+          "kind": "database"
+        },
+        "kind": "resourceBound",
+        "nodeTypeId": "yssbi.dataframe.source.get",
+        "resourcePath": "databases/contract-database",
+        "resourceRevision": 13
+      },
+      "description": "Performs a typed tabular operation.",
+      "documentation": "Uses stable ports and the tabular runtime API.",
+      "iconId": "builtin.dataframe",
+      "nodeTypeId": "yssbi.dataframe.source.get",
+      "parameters": [
+        {
+          "description": "Typed node parameter.",
+          "key": "dataframe",
+          "title": "dataframe"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "output",
+          "key": "dataframe",
+          "kind": "data",
+          "label": "dataframe"
+        }
+      ],
+      "resourcePath": "databases/contract-database",
+      "resourceRevision": 13,
+      "searchText": "contract database data frame table source",
+      "styleId": "builtin.dataframe",
+      "technicalTerms": [
+        "Contract Database",
+        "data frame",
+        "source",
+        "table"
+      ],
+      "title": "Contract Database"
+    },
+    {
+      "aliases": [
+        "call",
+        "invoke",
+        "function"
+      ],
+      "categoryId": "project",
+      "creation": {
+        "createArgs": {
+          "kind": "function"
+        },
+        "kind": "resourceBound",
+        "nodeTypeId": "yssbi.project.function.call",
+        "resourcePath": "functions/contract-function",
+        "resourceRevision": 11
+      },
+      "description": "Integrates project resources with graph execution.",
+      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "iconId": "builtin.project",
+      "nodeTypeId": "yssbi.project.function.call",
+      "parameters": [
+        {
+          "description": "Function resource to invoke.",
+          "key": "target",
+          "title": "Target Function"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "input",
+          "key": "enter",
+          "kind": "control",
+          "label": "Enter"
+        },
+        {
+          "direction": "input",
+          "key": "arguments",
+          "kind": "data",
+          "label": "Arguments"
+        },
+        {
+          "direction": "output",
+          "key": "results",
+          "kind": "data",
+          "label": "Results"
+        },
+        {
+          "direction": "output",
+          "key": "then",
+          "kind": "control",
+          "label": "Then"
+        }
+      ],
+      "resourcePath": "functions/contract-function",
+      "resourceRevision": 11,
+      "searchText": "contract function call invoke function",
+      "styleId": "builtin.default",
+      "technicalTerms": [
+        "Contract Function",
+        "call",
+        "function",
+        "invoke"
+      ],
+      "title": "Contract Function"
+    },
+    {
+      "aliases": [
+        "get",
+        "read",
+        "variable"
+      ],
+      "categoryId": "project",
+      "creation": {
+        "createArgs": {
+          "kind": "variable"
+        },
+        "kind": "resourceBound",
+        "nodeTypeId": "yssbi.project.variable.get",
+        "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
+        "resourceRevision": 12
+      },
+      "description": "Integrates project resources with graph execution.",
+      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "iconId": "builtin.project",
+      "nodeTypeId": "yssbi.project.variable.get",
+      "parameters": [
+        {
+          "description": "Bound project variable resource.",
+          "key": "variable",
+          "title": "Variable"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "output",
+          "key": "value",
+          "kind": "data",
+          "label": "Value"
+        }
+      ],
+      "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
+      "resourceRevision": 12,
+      "searchText": "contract variable get read variable",
+      "styleId": "builtin.default",
+      "technicalTerms": [
+        "Contract Variable",
+        "get",
+        "read",
+        "variable"
+      ],
+      "title": "Contract Variable"
+    }
+  ],
+  "locale": "en-US",
+  "projectInstanceId": "00000000-0000-0000-0000-000000000001",
+  "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+  "resourcePublicationRevision": 17
+}

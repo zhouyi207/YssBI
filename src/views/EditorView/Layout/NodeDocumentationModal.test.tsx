@@ -72,7 +72,7 @@ function catalog(locale: string, localized: {
       aliases: [localized.alias],
       technicalTerms: [],
       ports: [
-        { key: 'flow-in', label: locale === 'zh-CN' ? '执行' : 'Execute', direction: 'input', kind: 'flow' },
+        { key: 'flow-in', label: locale === 'zh-CN' ? '执行' : 'Execute', direction: 'input', kind: 'control' },
         { key: 'result', label: locale === 'zh-CN' ? '结果' : 'Result', direction: 'output', kind: 'data' },
       ],
       parameters: [{

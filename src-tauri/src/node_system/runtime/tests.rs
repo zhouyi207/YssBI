@@ -323,6 +323,77 @@ fn bound_input_operation_executes_downstream_and_publishes_result_without_fallba
 }
 
 #[test]
+fn bound_input_blocked_by_effect_dependency_reports_effect_error() {
+    let mut blocked = operation("blocked", &[0], &[]);
+    blocked.inputs[0].bound_value = Some(Value::Integer(7));
+    let mut execution_plan = plan(
+        vec![operation("required", &[], &[]), blocked],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            1,
+        ))])),
+    );
+    execution_plan.effect_dependencies = Box::new([EffectDependency {
+        before: OperationIndex::new(0),
+        after: OperationIndex::new(1),
+    }]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        RunError::UnsatisfiedEffectDependency {
+            operation,
+            required,
+        } if operation == OperationIndex::new(1) && required == OperationIndex::new(0)
+    ));
+}
+
+#[test]
+fn bound_input_blocked_by_value_dependency_reports_dependency_source() {
+    let mut blocked = operation("blocked", &[0], &[1]);
+    blocked.inputs[0].bound_value = Some(Value::Integer(7));
+    let mut execution_plan = plan(
+        vec![blocked],
+        3,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(2))]);
+    execution_plan.value_dependencies = Box::new([ValueDependency {
+        source: ValueRef::new(2),
+        destination: ValueRef::new(1),
+    }]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::MissingValue(value) if value == ValueRef::new(2)));
+}
+
+#[test]
+fn truly_missing_operation_input_still_reports_missing_value() {
+    let mut execution_plan = plan(
+        vec![operation("blocked", &[0], &[])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::MissingValue(value) if value == ValueRef::new(0)));
+}
+
+#[test]
 fn executes_sequence_deterministically() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut kernels = KernelRegistry::new();

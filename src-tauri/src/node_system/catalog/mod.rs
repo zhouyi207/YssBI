@@ -1,3 +1,5 @@
+#![deny(unused_must_use)]
+
 //! Trusted built-in node provider and localized catalog projections.
 
 mod builtin;
@@ -10,9 +12,12 @@ mod plot;
 mod project;
 mod statistics;
 
-pub use builtin::{BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system};
+pub use builtin::{
+    BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
+};
 #[cfg(test)]
 pub(crate) use builtin::{
+    BuiltinAssemblyTestFault, build_builtin_node_system_with_test_fault,
     builtin_bundle_parts_for_test, register_builtin_nominal_validators_for_test,
     validate_builtin_bundle_for_test,
 };

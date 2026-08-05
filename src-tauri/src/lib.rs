@@ -29,6 +29,24 @@ use tauri::Manager;
 
 // ==================== 应用入口 ====================
 
+fn initialize_project_state()
+-> Result<project::ProjectState, node_system::catalog::BuiltinInitializationError> {
+    project::ProjectState::try_new()
+}
+
+#[cfg(test)]
+fn initialize_project_state_before_manage(
+    initialize: impl FnOnce() -> Result<
+        project::ProjectState,
+        node_system::catalog::BuiltinInitializationError,
+    >,
+    manage: impl FnOnce(project::ProjectState),
+) -> Result<(), node_system::catalog::BuiltinInitializationError> {
+    let project_state = initialize()?;
+    manage(project_state);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let julia_worker = julia::worker::JuliaWorkerManager::new();
@@ -73,7 +91,7 @@ pub fn run() {
         .manage(julia_worker)
         .setup(move |app| {
             let project_state =
-                project::ProjectState::try_new().map_err(Box::<dyn std::error::Error>::from)?;
+                initialize_project_state().map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(project_state);
 
             // 初始化日志管理器
@@ -238,4 +256,31 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn project_state_failure_prevents_tauri_manage() {
+        let manage_calls = AtomicUsize::new(0);
+        let source = node_system::protocol::NodeTypeId::new("Bad Managed ID").unwrap_err();
+        let expected = node_system::catalog::BuiltinInitializationError::Assembly(
+            node_system::catalog::BuiltinAssemblyError::InvalidSemanticId {
+                value: "Bad Managed ID".into(),
+                source,
+            },
+        );
+        let result = initialize_project_state_before_manage(
+            || Err(expected.clone()),
+            |_| {
+                manage_calls.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        assert!(matches!(result, Err(error) if error == expected));
+        assert_eq!(manage_calls.load(Ordering::SeqCst), 0);
+    }
 }

@@ -46,13 +46,13 @@ fn every_legacy_dataframe_node_has_one_stable_id() {
 
 #[test]
 fn dataframe_fragment_contains_every_migrated_protocol() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
     assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 3);
 }
 
 #[test]
 fn rename_dataframe_freezes_exact_protocol_and_localization() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
     let rename_id = NodeTypeId::new("yssbi.dataframe.rename").unwrap();
     let rename = fragment
         .nodes
@@ -160,7 +160,7 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
 
 #[test]
 fn project_and_filter_rows_are_parameterized_catalog_nodes() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;
     let catalog = builtin.catalog;
@@ -457,7 +457,7 @@ fn filter_rows_lowerer_maps_every_operator_and_literal_exactly() {
 
 #[test]
 fn project_and_filter_rows_do_not_change_external_filter_or_decompose() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
     let filter = fragment
         .nodes
         .iter()
@@ -817,7 +817,10 @@ fn dataframe_native_lowerings_have_production_implementations() {
 
 #[test]
 fn dataframe_protocols_have_unique_ports_and_valid_bindings() {
-    for node in build_provider_fragment().nodes {
+    for node in build_provider_fragment()
+        .expect("dataframe built-in fixture must assemble")
+        .nodes
+    {
         let protocol = &node.protocol();
         let keys = protocol
             .interface

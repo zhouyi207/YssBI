@@ -271,15 +271,23 @@ pub(crate) fn authoritative_static_descriptor(
 }
 
 impl BuiltinCatalog {
-    pub(crate) fn new(entries: &[(&'static str, &'static str, Message)]) -> Self {
+    pub(crate) fn new(
+        entries: &[(&'static str, &'static str, Message)],
+    ) -> Result<Self, crate::node_system::protocol::ProtocolError> {
         let mut bundles = BTreeMap::<Box<str>, Bundle>::new();
         for (locale, key, message) in entries {
-            bundles.entry((*locale).into()).or_default().insert(
-                I18nKey::new(*key).expect("built-in i18n key"),
-                message.clone(),
-            );
+            let key = I18nKey::new(*key).map_err(|source| {
+                crate::node_system::protocol::ProtocolError::InvalidSemanticId {
+                    value: (*key).into(),
+                    source,
+                }
+            })?;
+            bundles
+                .entry((*locale).into())
+                .or_default()
+                .insert(key, message.clone());
         }
-        Self { bundles }
+        Ok(Self { bundles })
     }
 
     #[cfg(test)]
@@ -300,6 +308,11 @@ impl BuiltinCatalog {
             .entry(locale.into())
             .or_default()
             .insert(key, message);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_text_for_test(&mut self, locale: &str, key: I18nKey, text: &'static str) {
+        self.replace_message_for_test(locale, key, Message::Text(text));
     }
 
     pub fn localization(&self, locale: &str) -> BuiltinLocalizationBundle<'_> {
@@ -363,11 +376,10 @@ impl BuiltinCatalog {
         _alias_keys: &BTreeSet<I18nKey>,
     ) -> I18nBundleInventory {
         let required_keys = &required.keys;
-        let default_keys = self
-            .bundles
-            .get(DEFAULT_LOCALE)
-            .map(|bundle| bundle.keys().cloned().collect::<BTreeSet<_>>())
-            .unwrap_or_default();
+        let default_keys = match self.bundles.get(DEFAULT_LOCALE) {
+            Some(bundle) => bundle.keys().cloned().collect::<BTreeSet<_>>(),
+            None => BTreeSet::new(),
+        };
         let default_locale_missing = required_keys
             .difference(&default_keys)
             .map(|key| key.as_str().into())
@@ -439,12 +451,10 @@ impl BuiltinCatalog {
             .documentation_key
             .as_ref()
             .map(|key| self.text(locale, key));
-        let aliases = protocol
-            .catalog
-            .aliases_key
-            .as_ref()
-            .map(|key| self.aliases(locale, key))
-            .unwrap_or_default();
+        let aliases = match protocol.catalog.aliases_key.as_ref() {
+            Some(key) => self.aliases(locale, key),
+            None => Vec::new(),
+        };
         let technical_terms = self.technical_terms(protocol);
         let search_text = search(
             [title.as_ref()]
@@ -487,12 +497,10 @@ impl BuiltinCatalog {
             .documentation_key
             .as_ref()
             .map(|key| self.text(locale, key));
-        let aliases = protocol
-            .catalog
-            .aliases_key
-            .as_ref()
-            .map(|key| self.aliases(locale, key))
-            .unwrap_or_default();
+        let aliases = match protocol.catalog.aliases_key.as_ref() {
+            Some(key) => self.aliases(locale, key),
+            None => Vec::new(),
+        };
         let mut technical_terms = self.technical_terms(protocol);
         technical_terms.extend(entry.technical_terms.iter().cloned());
         technical_terms.sort();
@@ -582,21 +590,18 @@ impl BuiltinCatalog {
         &self,
         protocol: &crate::node_system::protocol::NodeProtocol,
     ) -> Vec<Box<str>> {
-        protocol
+        match protocol
             .catalog
             .aliases_key
             .as_ref()
             .and_then(|key| self.bundles.get(DEFAULT_LOCALE)?.get(key))
-            .and_then(|message| match message {
-                Message::Aliases(values) => Some(
-                    values
-                        .iter()
-                        .map(|value| Box::<str>::from(*value))
-                        .collect(),
-                ),
-                Message::Text(_) => None,
-            })
-            .unwrap_or_default()
+        {
+            Some(Message::Aliases(values)) => values
+                .iter()
+                .map(|value| Box::<str>::from(*value))
+                .collect(),
+            Some(Message::Text(_)) | None => Vec::new(),
+        }
     }
 
     fn message(&self, locale: &str, key: &I18nKey) -> Option<&Message> {
@@ -650,11 +655,10 @@ fn normalize_locale(locale: &str) -> String {
 
 fn locale_chain(locale: &str) -> Vec<String> {
     let normalized = normalize_locale(locale);
-    let language = normalized
-        .split('-')
-        .next()
-        .unwrap_or(&normalized)
-        .to_owned();
+    let language = match normalized.split('-').next() {
+        Some(language) => language.to_owned(),
+        None => normalized.clone(),
+    };
     let mut chain = vec![normalized];
     if !language.is_empty() && language != chain[0] {
         chain.push(language);
@@ -715,7 +719,10 @@ fn push_search_char(output: &mut String, character: char, separated: &mut bool) 
 fn fold_width(character: char) -> char {
     match character {
         '\u{3000}' => ' ',
-        '\u{ff01}'..='\u{ff5e}' => char::from_u32(character as u32 - 0xfee0).unwrap(),
+        '\u{ff01}'..='\u{ff5e}' => match char::from_u32(character as u32 - 0xfee0) {
+            Some(folded) => folded,
+            None => character,
+        },
         _ => character,
     }
 }

@@ -1,6 +1,7 @@
 use crate::node_system::protocol::NodeProtocol;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 
 macro_rules! fingerprint {
     ($name:ident) => {
@@ -35,11 +36,14 @@ macro_rules! fingerprint {
 fingerprint!(ProtocolFingerprint);
 fingerprint!(RegistryFingerprint);
 
-pub(crate) fn protocol_fingerprint(protocol: &NodeProtocol) -> ProtocolFingerprint {
-    ProtocolFingerprint(hash_canonical(
+pub(crate) fn protocol_fingerprint(
+    protocol: &NodeProtocol,
+) -> Result<ProtocolFingerprint, CanonicalEncodingError> {
+    hash_canonical(
         "yssbi.node-protocol.v1",
         &canonical_semantic_protocol(protocol),
-    ))
+    )
+    .map(ProtocolFingerprint)
 }
 
 pub(crate) fn canonical_semantic_protocol(protocol: &NodeProtocol) -> serde_json::Value {
@@ -53,17 +57,56 @@ pub(crate) fn canonical_semantic_protocol(protocol: &NodeProtocol) -> serde_json
     })
 }
 
-pub(crate) fn registry_fingerprint<T: Serialize>(value: &T) -> RegistryFingerprint {
-    RegistryFingerprint(hash_canonical("yssbi.node-registry.v1", value))
+pub(crate) fn registry_fingerprint<T: Serialize>(
+    value: &T,
+) -> Result<RegistryFingerprint, CanonicalEncodingError> {
+    hash_canonical("yssbi.node-registry.v1", value).map(RegistryFingerprint)
 }
 
-pub(crate) fn hash_canonical<T: Serialize>(domain: &str, value: &T) -> [u8; 32] {
-    let encoded = serde_json::to_vec(value).expect("registry canonical values are serializable");
+#[derive(Debug, Clone)]
+pub struct CanonicalEncodingError {
+    source: Arc<serde_json::Error>,
+}
+
+impl CanonicalEncodingError {
+    pub(crate) fn from_serde(source: serde_json::Error) -> Self {
+        Self {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl PartialEq for CanonicalEncodingError {
+    fn eq(&self, other: &Self) -> bool {
+        self.source.classify() == other.source.classify()
+            && self.source.to_string() == other.source.to_string()
+    }
+}
+
+impl Eq for CanonicalEncodingError {}
+
+impl std::fmt::Display for CanonicalEncodingError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.source.fmt(formatter)
+    }
+}
+
+impl std::error::Error for CanonicalEncodingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+pub(crate) fn hash_canonical<T: Serialize>(
+    domain: &str,
+    value: &T,
+) -> Result<[u8; 32], CanonicalEncodingError> {
+    let encoded = serde_json::to_vec(value).map_err(CanonicalEncodingError::from_serde)?;
     let mut bytes = Vec::with_capacity(domain.len() + encoded.len() + 9);
     bytes.extend_from_slice(&(domain.len() as u64).to_be_bytes());
     bytes.extend_from_slice(domain.as_bytes());
     bytes.extend_from_slice(&encoded);
-    sha256(&bytes)
+    Ok(sha256(&bytes))
 }
 
 // Small, dependency-free SHA-256 keeps fingerprints portable without changing Cargo.
@@ -100,7 +143,13 @@ fn sha256(input: &[u8]) -> [u8; 32] {
     for chunk in padded.chunks_exact(64) {
         let mut w = [0u32; 64];
         for (i, word) in w[..16].iter_mut().enumerate() {
-            *word = u32::from_be_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap());
+            let offset = i * 4;
+            *word = u32::from_be_bytes([
+                chunk[offset],
+                chunk[offset + 1],
+                chunk[offset + 2],
+                chunk[offset + 3],
+            ]);
         }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);

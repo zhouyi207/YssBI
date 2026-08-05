@@ -50,7 +50,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
       basis: {
         graphPath,
         graphRevision: sourceRevision,
-        registryFingerprint: [],
+        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
         resourceVersions: {},
       },
       graphPath,

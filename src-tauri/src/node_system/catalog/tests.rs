@@ -21,6 +21,7 @@ use crate::node_system::registry::{I18nManifest, ImplementationKind, StructuralN
 use crate::node_system::runtime::build_builtin_kernel_registry;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error as _;
 use uuid::Uuid;
 
 fn item<'a>(catalog: &'a LocalizedCatalog, id: &str) -> &'a LocalizedCatalogItemDto {
@@ -584,7 +585,8 @@ fn i18n_validation_uses_default_locale_not_the_locale_union() {
         ("en-US", "unused.key", Text("Unused")),
         ("zh-CN", "required.aliases", Aliases(&["一"])),
         ("zh-CN", "masked.title", Text("不能掩盖默认缺失")),
-    ]);
+    ])
+    .unwrap();
     let required = I18nManifest {
         keys: ["required.title", "required.aliases", "masked.title"]
             .into_iter()
@@ -614,7 +616,8 @@ fn i18n_validation_uses_default_locale_not_the_locale_union() {
 
 #[test]
 fn i18n_validation_requires_alias_messages_to_be_arrays() {
-    let catalog = BuiltinCatalog::new(&[("en-US", "required.aliases", Text("not an alias array"))]);
+    let catalog =
+        BuiltinCatalog::new(&[("en-US", "required.aliases", Text("not an alias array"))]).unwrap();
     let key = I18nKey::new("required.aliases").unwrap();
     let required = I18nManifest {
         keys: BTreeSet::from([key.clone()]),
@@ -641,7 +644,7 @@ fn builtin_factory_hides_raw_assembly_and_registry_shortcuts() {
         .nth(1)
         .and_then(|tail| tail.split("#[cfg(test)]").next())
         .expect("nominal installer source section");
-    assert!(nominal_installer.contains("Result<(), NodeRegistrationError>"));
+    assert!(nominal_installer.contains("Result<(), BuiltinAssemblyError>"));
     assert!(!nominal_installer.contains(".expect("));
     assert!(!nominal_installer.contains(".unwrap("));
     assert!(!nominal_installer.contains("panic!("));
@@ -665,19 +668,256 @@ fn builtin_nominal_validator_registration_propagates_duplicate_failure() {
 
     assert!(matches!(
         register_builtin_nominal_validators_for_test(&mut builder),
-        Err(BuiltinInitializationError::Registration(
-            crate::node_system::registry::NodeRegistrationError::InvalidRegistry(
-                crate::node_system::registry::RegistryValidationError::DuplicateNominalValidator(
-                    id,
+        Err(BuiltinInitializationError::Assembly(
+            BuiltinAssemblyError::Registration(
+                crate::node_system::registry::NodeRegistrationError::InvalidRegistry(
+                    crate::node_system::registry::RegistryValidationError::DuplicateNominalValidator(
+                        id,
+                    ),
                 ),
-            ),
+            )
         )) if id == project_columns
     ));
 }
 
 #[test]
+fn builtin_catalog_invalid_i18n_key_preserves_semantic_source() {
+    let expected_source = I18nKey::new("Bad Localization Key").unwrap_err();
+    let error =
+        BuiltinCatalog::new(&[("en-US", "Bad Localization Key", Text("invalid"))]).unwrap_err();
+
+    assert!(matches!(
+        &error,
+        crate::node_system::protocol::ProtocolError::InvalidSemanticId { value, source }
+            if value.as_ref() == "Bad Localization Key" && source == &expected_source
+    ));
+    assert!(
+        error
+            .source()
+            .and_then(
+                |source| source.downcast_ref::<crate::node_system::protocol::InvalidSemanticId>()
+            )
+            .is_some_and(|source| source == &expected_source)
+    );
+}
+
+#[test]
+fn builtin_assembly_rejects_invalid_semantic_id_with_source() {
+    let expected_source = NodeTypeId::new("Bad Display ID").unwrap_err();
+    let error = build_builtin_node_system_with_test_fault(
+        BuiltinAssemblyTestFault::InvalidSemanticId("Bad Display ID"),
+    )
+    .err()
+    .expect("invalid semantic ID must fail assembly");
+
+    assert!(matches!(
+        &error,
+        BuiltinInitializationError::Assembly(
+            BuiltinAssemblyError::InvalidSemanticId { value, source }
+        ) if value.as_ref() == "Bad Display ID" && source == &expected_source
+    ));
+    let assembly = std::error::Error::source(&error).unwrap();
+    assert!(
+        assembly
+            .source()
+            .and_then(
+                |source| source.downcast_ref::<crate::node_system::protocol::InvalidSemanticId>()
+            )
+            .is_some_and(|source| source == &expected_source)
+    );
+}
+
+#[test]
+fn builtin_assembly_rejects_invalid_protocol_without_fallback() {
+    let expected_key = crate::node_system::protocol::PortKey::new("duplicate").unwrap();
+    let error = build_builtin_node_system_with_test_fault(
+        BuiltinAssemblyTestFault::InvalidProtocol("yssbi.test.invalid_protocol"),
+    )
+    .err()
+    .expect("invalid protocol must fail assembly");
+
+    assert!(matches!(
+        &error,
+        BuiltinInitializationError::Assembly(
+            BuiltinAssemblyError::InvalidProtocol {
+                node_type,
+                source: crate::node_system::protocol::ProtocolError::DuplicatePortKey(key),
+            }
+        ) if node_type.as_ref() == "yssbi.test.invalid_protocol" && key.as_str() == expected_key.as_str()
+    ));
+    let assembly = std::error::Error::source(&error).unwrap();
+    assert!(
+        assembly
+            .source()
+            .and_then(|source| source.downcast_ref::<crate::node_system::protocol::ProtocolError>())
+            .is_some_and(|source| matches!(source, crate::node_system::protocol::ProtocolError::DuplicatePortKey(key) if key.as_str() == "duplicate"))
+    );
+}
+
+#[test]
+fn builtin_registry_revalidation_preserves_protocol_source_chain() {
+    let error = build_builtin_node_system_with_test_fault(
+        BuiltinAssemblyTestFault::InvalidRegistryProtocol,
+    )
+    .err()
+    .expect("invalid frozen protocol must fail Registry validation");
+
+    assert!(matches!(
+        &error,
+        BuiltinInitializationError::Assembly(BuiltinAssemblyError::Registration(
+            crate::node_system::registry::NodeRegistrationError::InvalidRegistry(
+                crate::node_system::registry::RegistryValidationError::InvalidNodeProtocol {
+                    node,
+                    source: crate::node_system::protocol::ProtocolError::DuplicatePortKey(key),
+                },
+            ),
+        )) if node.as_str() == "yssbi.constant.bool" && key.as_str() == "value"
+    ));
+
+    let assembly = error.source().unwrap();
+    let registration = assembly.source().unwrap();
+    let registry = registration.source().unwrap();
+    let protocol = registry.source().unwrap();
+    assert!(matches!(
+        protocol.downcast_ref::<crate::node_system::protocol::ProtocolError>(),
+        Some(crate::node_system::protocol::ProtocolError::DuplicatePortKey(key))
+            if key.as_str() == "value"
+    ));
+}
+
+#[test]
+fn builtin_assembly_rejects_conflicting_localization() {
+    let error =
+        build_builtin_node_system_with_test_fault(BuiltinAssemblyTestFault::LocalizationConflict)
+            .err()
+            .expect("localization conflict must fail assembly");
+    assert!(matches!(
+        &error,
+        BuiltinInitializationError::Assembly(
+            BuiltinAssemblyError::LocalizationConflict { locale, key }
+        ) if locale.as_ref() == "en-US" && key.as_ref() == "nodes.test.title"
+    ));
+    let assembly = std::error::Error::source(&error).unwrap();
+    assert!(assembly.source().is_none());
+}
+
+#[test]
+fn builtin_assembly_rejects_duplicate_registration() {
+    let error =
+        build_builtin_node_system_with_test_fault(BuiltinAssemblyTestFault::DuplicateRegistration)
+            .err()
+            .expect("duplicate registration must fail assembly");
+    assert!(matches!(
+        &error,
+        BuiltinInitializationError::Assembly(BuiltinAssemblyError::Registration(
+            crate::node_system::registry::NodeRegistrationError::InvalidRegistry(
+                crate::node_system::registry::RegistryValidationError::DuplicateNode(id),
+            ),
+        )) if id.as_str() == "yssbi.constant.bool"
+    ));
+
+    let assembly = std::error::Error::source(&error).unwrap();
+    let registration = assembly.source().unwrap();
+    assert!(
+        registration
+            .source()
+            .and_then(|source| source.downcast_ref::<crate::node_system::registry::RegistryValidationError>())
+            .is_some_and(|source| matches!(source, crate::node_system::registry::RegistryValidationError::DuplicateNode(id) if id.as_str() == "yssbi.constant.bool"))
+    );
+}
+
+#[test]
+fn builtin_assembly_preserves_parameter_decimal_and_default_sources() {
+    let builtin = build_builtin_node_system().unwrap();
+    let constant = builtin
+        .registry
+        .protocol(&NodeTypeId::new("yssbi.constant.bool").unwrap())
+        .unwrap();
+    let parameter = constant.parameters.parameters[0].clone();
+    let parameter_error = super::builtin::assembled_parameters(
+        "yssbi.test.parameters",
+        vec![parameter.clone(), parameter],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        &parameter_error,
+        BuiltinAssemblyError::InvalidParameterSchema { node_type, .. }
+            if node_type.as_ref() == "yssbi.test.parameters"
+    ));
+    let parameter_source = parameter_error
+        .source()
+        .and_then(|source| {
+            source.downcast_ref::<crate::node_system::protocol::ParameterSchemaError>()
+        })
+        .expect("parameter schema source");
+    assert!(matches!(
+        parameter_source,
+        crate::node_system::protocol::ParameterSchemaError::DuplicateKey(error)
+            if error.0.as_str() == "value"
+    ));
+    assert!(
+        parameter_source
+            .source()
+            .and_then(|source| source
+                .downcast_ref::<crate::node_system::protocol::DuplicateParameterKey>())
+            .is_some_and(|source| source.0.as_str() == "value")
+    );
+
+    let decimal_error = super::builtin::assembled_decimal("yssbi.test.decimal", "01").unwrap_err();
+    assert!(matches!(
+        &decimal_error,
+        BuiltinAssemblyError::InvalidDecimal { node_type, .. }
+            if node_type.as_ref() == "yssbi.test.decimal"
+    ));
+    assert!(
+        decimal_error
+            .source()
+            .and_then(|source| source.downcast_ref::<crate::node_system::protocol::InvalidDecimal>())
+            .is_some_and(|source| source.to_string() == "'01' is not a canonical decimal")
+    );
+
+    let mut port = constant.interface.ports[0].clone();
+    port.direction = PortDirection::Input;
+    port.input_binding = Some(crate::node_system::protocol::InputBindingSpec {
+        literal_policy: crate::node_system::protocol::LiteralPolicy::Allowed,
+        default_value: Some(crate::node_system::protocol::TypedValue {
+            value_type: TypeExpr::Concrete(
+                crate::node_system::protocol::TypeId::new("core.string").unwrap(),
+            ),
+            value: crate::node_system::protocol::Value::String("wrong".into()),
+        }),
+    });
+    port.consumption = Some(crate::node_system::protocol::InputConsumption::FullyMaterialized);
+    port.production = None;
+    let default_error = super::builtin::assembled_interface(
+        "yssbi.test.default",
+        vec![port],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        &default_error,
+        BuiltinAssemblyError::InvalidDefaultBinding { node_type, .. }
+            if node_type.as_ref() == "yssbi.test.default"
+    ));
+    assert!(
+        default_error
+            .source()
+            .and_then(|source| source.downcast_ref::<crate::node_system::protocol::ProtocolError>())
+            .is_some_and(|source| matches!(
+                source,
+                crate::node_system::protocol::ProtocolError::InvalidPortContract { key, reason }
+                    if key.as_str() == "value"
+                        && *reason == "typed default does not match the port value type"
+            ))
+    );
+}
+
+#[test]
 fn builtin_startup_rejects_missing_default_locale_key() {
-    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
     let missing = provider.i18n.keys.iter().next().unwrap().clone();
     catalog.remove_message_for_test("en-US", &missing);
 
@@ -691,7 +931,7 @@ fn builtin_startup_rejects_missing_default_locale_key() {
 
 #[test]
 fn builtin_startup_rejects_alias_stored_as_text() {
-    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
     let alias = alias_keys.iter().next().unwrap().clone();
     catalog.replace_message_for_test("en-US", alias.clone(), Text("malformed aliases"));
 
@@ -705,12 +945,14 @@ fn builtin_startup_rejects_alias_stored_as_text() {
 
 #[test]
 fn builtin_startup_rejects_invalid_registry_before_returning_a_bundle() {
-    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
     provider.types[0].title_key = "missing.type.title".parse().unwrap();
 
     assert!(matches!(
         validate_builtin_bundle_for_test(provider, catalog, alias_keys),
-        Err(BuiltinInitializationError::Registration(_))
+        Err(BuiltinInitializationError::Assembly(
+            BuiltinAssemblyError::Registration(_)
+        ))
     ));
 }
 

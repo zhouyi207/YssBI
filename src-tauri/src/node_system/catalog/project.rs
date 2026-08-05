@@ -1,4 +1,6 @@
-use super::builtin::{iid, leaf, sid};
+use super::builtin::{
+    BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
+};
 use super::localization::{Aliases, Message, Text};
 use crate::node_system::compiler::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
@@ -11,7 +13,7 @@ use std::sync::Arc;
 pub(super) fn register(
     nodes: &mut Vec<RegisteredNode>,
     messages: &mut Vec<(&'static str, &'static str, Message)>,
-) {
+) -> Result<(), BuiltinAssemblyError> {
     for (id, en, zh, aliases, zh_aliases) in [
         (
             "yssbi.project.event.begin",
@@ -61,28 +63,32 @@ pub(super) fn register(
 
     nodes.extend([
         RegisteredNode::structural(
-            Arc::new(event_begin_protocol()),
+            Arc::new(event_begin_protocol()?),
             StructuralNodeRole::EventBegin,
         ),
         RegisteredNode::structural(
-            Arc::new(function_entry_protocol()),
+            Arc::new(function_entry_protocol()?),
             StructuralNodeRole::FunctionEntry,
         ),
         RegisteredNode::structural(
-            Arc::new(function_return_protocol()),
+            Arc::new(function_return_protocol()?),
             StructuralNodeRole::FunctionReturn,
         ),
-        RegisteredNode::structural(Arc::new(function_call_protocol()), StructuralNodeRole::Call),
-        leaf(variable_get_protocol(), "project.variable.get"),
-        leaf(variable_set_protocol(), "project.variable.set"),
+        RegisteredNode::structural(
+            Arc::new(function_call_protocol()?),
+            StructuralNodeRole::Call,
+        ),
+        leaf(variable_get_protocol()?, "project.variable.get"),
+        leaf(variable_set_protocol()?, "project.variable.set"),
     ]);
     add_messages(messages);
+    Ok(())
 }
 
-fn event_begin_protocol() -> NodeProtocol {
+fn event_begin_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.event.begin",
-        vec![control_port("then", PortDirection::Output)],
+        vec![control_port("then", PortDirection::Output)?],
         vec![],
         vec![],
         NodeScope::Event,
@@ -91,71 +97,71 @@ fn event_begin_protocol() -> NodeProtocol {
     )
 }
 
-fn function_entry_protocol() -> NodeProtocol {
+fn function_entry_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.entry",
         vec![
-            control_port("then", PortDirection::Output),
+            control_port("then", PortDirection::Output)?,
             derived_data_port(
                 "parameters",
                 PortDirection::Output,
                 FUNCTION_ENTRY_PARAMETERS_RESOLVER,
-            ),
+            )?,
         ],
         vec![],
-        vec![resource_parameter("function")],
+        vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionEntry),
         structural(),
     )
 }
 
-fn function_return_protocol() -> NodeProtocol {
+fn function_return_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.return",
         vec![
-            control_port("enter", PortDirection::Input),
+            control_port("enter", PortDirection::Input)?,
             derived_data_port(
                 "results",
                 PortDirection::Input,
                 FUNCTION_RETURN_RESULTS_RESOLVER,
-            ),
+            )?,
         ],
         vec![],
-        vec![resource_parameter("function")],
+        vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionReturn),
         structural(),
     )
 }
 
-fn function_call_protocol() -> NodeProtocol {
+fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.call",
         vec![
-            control_port("enter", PortDirection::Input),
+            control_port("enter", PortDirection::Input)?,
             derived_data_port(
                 "arguments",
                 PortDirection::Input,
                 FUNCTION_CALL_ARGUMENTS_RESOLVER,
-            ),
+            )?,
             derived_data_port(
                 "results",
                 PortDirection::Output,
                 FUNCTION_CALL_RESULTS_RESOLVER,
-            ),
-            control_port("then", PortDirection::Output),
+            )?,
+            control_port("then", PortDirection::Output)?,
         ],
         vec![],
-        vec![resource_parameter("target")],
+        vec![resource_parameter("target")?],
         NodeScope::Any,
         None,
         structural(),
     )
 }
 
-fn variable_get_protocol() -> NodeProtocol {
-    let generic = sid("value", TypeParameterId::new);
+fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let generic = sid("value", TypeParameterId::new)?;
     protocol(
         "yssbi.project.variable.get",
         vec![data_port(
@@ -163,31 +169,31 @@ fn variable_get_protocol() -> NodeProtocol {
             PortDirection::Output,
             TypeExpr::Generic(generic.clone()),
             PortInstances::Declared,
-        )],
+        )?],
         vec![generic],
-        vec![resource_parameter("variable")],
+        vec![resource_parameter("variable")?],
         NodeScope::Any,
         None,
         pure(),
     )
 }
 
-fn variable_set_protocol() -> NodeProtocol {
-    let generic = sid("value", TypeParameterId::new);
+fn variable_set_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let generic = sid("value", TypeParameterId::new)?;
     protocol(
         "yssbi.project.variable.set",
         vec![
-            control_port("enter", PortDirection::Input),
+            control_port("enter", PortDirection::Input)?,
             data_port(
                 "value",
                 PortDirection::Input,
                 TypeExpr::Generic(generic.clone()),
                 PortInstances::Declared,
-            ),
-            control_port("then", PortDirection::Output),
+            )?,
+            control_port("then", PortDirection::Output)?,
         ],
         vec![generic],
-        vec![resource_parameter("variable")],
+        vec![resource_parameter("variable")?],
         NodeScope::Any,
         None,
         structural(),
@@ -202,29 +208,31 @@ fn protocol(
     scope: NodeScope,
     managed_role: Option<ManagedNodeRole>,
     execution: ExecutionSemantics,
-) -> NodeProtocol {
-    NodeProtocol {
-        type_id: sid(id, NodeTypeId::new),
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    Ok(NodeProtocol {
+        type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
-            title_key: node_key(id, "title"),
-            description_key: Some(node_key(id, "description")),
-            documentation_key: Some(node_key(id, "documentation")),
-            aliases_key: Some(node_key(id, "aliases")),
-            category_id: sid("project", NodeCategoryId::new),
-            icon_id: sid("builtin.project", IconId::new),
-            style_id: sid("builtin.default", NodeStyleId::new),
+            title_key: node_key(id, "title")?,
+            description_key: Some(node_key(id, "description")?),
+            documentation_key: Some(node_key(id, "documentation")?),
+            aliases_key: Some(node_key(id, "aliases")?),
+            category_id: sid("project", NodeCategoryId::new)?,
+            icon_id: sid("builtin.project", IconId::new)?,
+            style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, type_parameters, vec![])
-            .expect("built-in project interface"),
-        parameters: ParameterSchema::new(parameters).expect("built-in project parameters"),
+        interface: assembled_interface(id, ports, type_parameters, vec![], vec![])?,
+        parameters: assembled_parameters(id, parameters)?,
         execution,
         scope,
         managed_role,
-    }
+    })
 }
 
-fn control_port(key: &'static str, direction: PortDirection) -> PortSpec {
+fn control_port(
+    key: &'static str,
+    direction: PortDirection,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
         direction,
@@ -238,13 +246,13 @@ fn derived_data_port(
     key: &'static str,
     direction: PortDirection,
     resolver: &'static str,
-) -> PortSpec {
+) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
         direction,
         TypeExpr::Unknown,
         PortInstances::Derived {
-            resolver: sid(resolver, InterfaceResolverId::new),
+            resolver: sid(resolver, InterfaceResolverId::new)?,
         },
     )
 }
@@ -254,7 +262,7 @@ fn data_port(
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
-) -> PortSpec {
+) -> Result<PortSpec, BuiltinAssemblyError> {
     port(key, direction, PortKind::Data, value_type, instances)
 }
 
@@ -264,10 +272,10 @@ fn port(
     kind: PortKind,
     value_type: TypeExpr,
     instances: PortInstances,
-) -> PortSpec {
-    PortSpec {
-        key: sid(key, PortKey::new),
-        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str())),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: sid(key, PortKey::new)?,
+        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str()))?,
         direction,
         kind,
         value_type,
@@ -284,23 +292,23 @@ fn port(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
-fn resource_parameter(key: &'static str) -> ParameterSpec {
-    ParameterSpec {
-        key: sid(key, ParameterKey::new),
+fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    Ok(ParameterSpec {
+        key: sid(key, ParameterKey::new)?,
         title_key: iid(Box::leak(
             format!("parameters.{key}.title").into_boxed_str(),
-        )),
+        ))?,
         description_key: Some(iid(Box::leak(
             format!("parameters.{key}.description").into_boxed_str(),
-        ))),
-        value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)),
+        ))?),
+        value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)?),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Resource,
-    }
+    })
 }
 
 fn pure() -> ExecutionSemantics {
@@ -323,7 +331,7 @@ fn structural() -> ExecutionSemantics {
     }
 }
 
-fn node_key(id: &'static str, suffix: &'static str) -> I18nKey {
+fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     iid(Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str()))
 }
 

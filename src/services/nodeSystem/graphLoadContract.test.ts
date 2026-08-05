@@ -7,7 +7,7 @@ const explicitlyAuditedGraphLoadModules = [
   './graphProjectionService.ts',
   '../../features/core/dataStore/graphDataStore.ts',
   '../../features/domain/editorProjection/toProjectionEntities.ts',
-  '../../features/domain/editorProjection/validateProjection.ts',
+  '../../shared/types/dto/editorProjectionParser.ts',
 ] as const;
 
 const legacyLoadSymbols = [

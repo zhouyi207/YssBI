@@ -160,7 +160,7 @@ impl PublishedExecutionPlan {
         demand: &ExecutionDemand,
     ) -> Result<SelectedExecutionPlan, DemandPlanError> {
         let normalized_demand = self.execution_basis.normalize_demand(demand)?;
-        let selection_digest = normalized_demand.digest();
+        let selection_digest = normalized_demand.digest()?;
         if let Some(plan) = self
             .variants
             .lock()

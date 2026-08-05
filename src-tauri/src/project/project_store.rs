@@ -38,6 +38,15 @@ impl ProjectStore {
         Self::try_new().expect("test built-ins are valid")
     }
 
+    #[cfg(test)]
+    fn try_with_builtin_factory_and_constructor(
+        factory: impl FnOnce() -> Result<BuiltinNodeSystem, BuiltinInitializationError>,
+        constructor: impl FnOnce(BuiltinNodeSystem) -> Self,
+    ) -> Result<Self, BuiltinInitializationError> {
+        let bundle = factory()?;
+        Ok(constructor(bundle))
+    }
+
     pub(crate) fn validation_scratch(&self) -> Self {
         let project_session_id = self.project_session_id.clone();
         let function_plans = Arc::new(FunctionPlanStore::new(project_session_id.clone(), 64));
@@ -76,16 +85,6 @@ impl ProjectStore {
             #[cfg(test)]
             drop_test_hook: None,
         }
-    }
-
-    #[cfg(test)]
-    fn try_from_builtin_parts(
-        provider: crate::node_system::registry::ProviderRegistration,
-        catalog: BuiltinCatalog,
-        alias_keys: std::collections::BTreeSet<crate::node_system::protocol::I18nKey>,
-    ) -> Result<Self, BuiltinInitializationError> {
-        crate::node_system::catalog::validate_builtin_bundle_for_test(provider, catalog, alias_keys)
-            .map(Self::from_builtin)
     }
 
     #[cfg(test)]
@@ -137,15 +136,57 @@ mod tests {
     }
 
     #[test]
+    fn project_store_stops_before_construction_on_builtin_failure() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let later_constructions = AtomicUsize::new(0);
+        let source = crate::node_system::protocol::NodeTypeId::new("Bad Store ID").unwrap_err();
+        let expected = BuiltinInitializationError::Assembly(
+            crate::node_system::catalog::BuiltinAssemblyError::InvalidSemanticId {
+                value: "Bad Store ID".into(),
+                source,
+            },
+        );
+        let result = ProjectStore::try_with_builtin_factory_and_constructor(
+            || Err(expected.clone()),
+            |_| {
+                later_constructions.fetch_add(1, Ordering::SeqCst);
+                unreachable!("store construction must not run after assembly failure")
+            },
+        );
+
+        assert!(matches!(result, Err(error) if error == expected));
+        assert_eq!(later_constructions.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
     fn project_store_requires_validated_builtin_bundle() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let later_constructions = AtomicUsize::new(0);
         let (mut provider, catalog, alias_keys) =
-            crate::node_system::catalog::builtin_bundle_parts_for_test();
+            crate::node_system::catalog::builtin_bundle_parts_for_test().unwrap();
         provider.types[0].title_key = "missing.type.title".parse().unwrap();
 
+        let result = ProjectStore::try_with_builtin_factory_and_constructor(
+            || {
+                crate::node_system::catalog::validate_builtin_bundle_for_test(
+                    provider, catalog, alias_keys,
+                )
+            },
+            |_| {
+                later_constructions.fetch_add(1, Ordering::SeqCst);
+                unreachable!("store construction must not run after registration failure")
+            },
+        );
+
         assert!(matches!(
-            ProjectStore::try_from_builtin_parts(provider, catalog, alias_keys),
-            Err(BuiltinInitializationError::Registration(_))
+            result,
+            Err(BuiltinInitializationError::Assembly(
+                crate::node_system::catalog::BuiltinAssemblyError::Registration(_)
+            ))
         ));
+        assert_eq!(later_constructions.load(Ordering::SeqCst), 0);
     }
 }
 

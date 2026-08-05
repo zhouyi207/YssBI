@@ -1,4 +1,6 @@
-use super::builtin::ProviderFragment;
+use super::builtin::{
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, sid,
+};
 use super::localization::Message;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, KernelFragment as LoweredKernelFragment, LoweredKernel,
@@ -447,7 +449,7 @@ pub(crate) fn legacy_manifest() -> impl Iterator<Item = (&'static str, &'static 
     SPECS.iter().map(|spec| (spec.legacy_name, spec.id))
 }
 
-pub(crate) fn build_provider_fragment() -> ProviderFragment {
+pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
     let mut messages = vec![
         (
@@ -483,41 +485,41 @@ pub(crate) fn build_provider_fragment() -> ProviderFragment {
     ];
     let types = vec![
         TypeRegistration {
-            id: type_id(FLOAT_SERIES),
-            title_key: i18n_key("types.data_series.float64.title"),
+            id: type_id(FLOAT_SERIES)?,
+            title_key: i18n_key("types.data_series.float64.title")?,
             classes: BTreeSet::new(),
         },
         TypeRegistration {
-            id: type_id(INTEGER_SERIES),
-            title_key: i18n_key("types.data_series.int64.title"),
+            id: type_id(INTEGER_SERIES)?,
+            title_key: i18n_key("types.data_series.int64.title")?,
             classes: BTreeSet::new(),
         },
     ];
     let categories = vec![CategoryRegistration {
-        id: category_id(CATEGORY),
-        title_key: i18n_key("categories.distribution.title"),
+        id: category_id(CATEGORY)?,
+        title_key: i18n_key("categories.distribution.title")?,
         parent: None,
         order: 60,
     }];
     for spec in SPECS {
         add_messages(&mut messages, spec);
         nodes.push(RegisteredNode::leaf(
-            Arc::new(protocol(spec)),
+            Arc::new(protocol(spec)?),
             Arc::new(NodeImplementation::new(DistributionLowerer {
                 kernel: spec.kernel,
             })),
         ));
     }
-    ProviderFragment {
+    Ok(ProviderFragment {
         types,
         categories,
         nodes,
         messages,
         ..ProviderFragment::default()
-    }
+    })
 }
 
-fn protocol(spec: &DistributionSpec) -> NodeProtocol {
+fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let mut ports = spec
         .inputs
         .iter()
@@ -526,10 +528,10 @@ fn protocol(spec: &DistributionSpec) -> NodeProtocol {
                 spec.id,
                 input.key,
                 PortDirection::Input,
-                concrete(input.value_type.type_id()),
+                concrete(input.value_type.type_id())?,
             )
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
     let output_type = match spec.output {
         ScalarType::Float64 => FLOAT_SERIES,
         ScalarType::Int64 => INTEGER_SERIES,
@@ -538,23 +540,22 @@ fn protocol(spec: &DistributionSpec) -> NodeProtocol {
         spec.id,
         "samples",
         PortDirection::Output,
-        concrete(output_type),
-    ));
-    NodeProtocol {
-        type_id: node_id(spec.id),
+        concrete(output_type)?,
+    )?);
+    Ok(NodeProtocol {
+        type_id: node_id(spec.id)?,
         catalog: NodeCatalogProtocol {
-            title_key: node_key(spec.id, "title"),
-            description_key: Some(node_key(spec.id, "description")),
-            documentation_key: Some(node_key(spec.id, "documentation")),
-            aliases_key: Some(node_key(spec.id, "aliases")),
-            category_id: category_id(CATEGORY),
-            icon_id: icon_id("builtin.distribution"),
-            style_id: style_id("builtin.value"),
+            title_key: node_key(spec.id, "title")?,
+            description_key: Some(node_key(spec.id, "description")?),
+            documentation_key: Some(node_key(spec.id, "documentation")?),
+            aliases_key: Some(node_key(spec.id, "aliases")?),
+            category_id: category_id(CATEGORY)?,
+            icon_id: icon_id("builtin.distribution")?,
+            style_id: style_id("builtin.value")?,
             hidden: false,
         },
-        interface: NodeInterfaceProtocol::new(ports, vec![], vec![])
-            .expect("distribution protocol interface"),
-        parameters: ParameterSchema::new(vec![]).expect("empty distribution parameters"),
+        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        parameters: assembled_parameters(spec.id, vec![])?,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
             purity: Purity::Pure,
@@ -564,7 +565,7 @@ fn protocol(spec: &DistributionSpec) -> NodeProtocol {
         },
         scope: NodeScope::Any,
         managed_role: None,
-    }
+    })
 }
 
 fn data_port(
@@ -572,10 +573,10 @@ fn data_port(
     key: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
-) -> PortSpec {
-    PortSpec {
-        key: port_key(key),
-        label_key: node_port_key(id, key),
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: port_key(key)?,
+        label_key: node_port_key(id, key)?,
         direction,
         kind: PortKind::Data,
         value_type,
@@ -598,7 +599,7 @@ fn data_port(
             .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
-    }
+    })
 }
 
 struct DistributionLowerer {
@@ -658,35 +659,35 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Dis
     out.push(("zh-CN", samples, Message::Text("样本")));
 }
 
-fn concrete(value: &'static str) -> TypeExpr {
-    TypeExpr::Concrete(type_id(value))
+fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(type_id(value)?))
 }
-fn node_id(value: &'static str) -> NodeTypeId {
-    NodeTypeId::new(value).expect("distribution node id")
+fn node_id(value: &'static str) -> Result<NodeTypeId, BuiltinAssemblyError> {
+    sid(value, NodeTypeId::new)
 }
-fn type_id(value: &'static str) -> TypeId {
-    TypeId::new(value).expect("distribution type id")
+fn type_id(value: &'static str) -> Result<TypeId, BuiltinAssemblyError> {
+    sid(value, TypeId::new)
 }
-fn port_key(value: &'static str) -> PortKey {
-    PortKey::new(value).expect("distribution port key")
+fn port_key(value: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
+    sid(value, PortKey::new)
 }
-fn category_id(value: &'static str) -> NodeCategoryId {
-    NodeCategoryId::new(value).expect("distribution category id")
+fn category_id(value: &'static str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
+    sid(value, NodeCategoryId::new)
 }
-fn icon_id(value: &'static str) -> IconId {
-    IconId::new(value).expect("distribution icon id")
+fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
+    sid(value, IconId::new)
 }
-fn style_id(value: &'static str) -> NodeStyleId {
-    NodeStyleId::new(value).expect("distribution style id")
+fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
+    sid(value, NodeStyleId::new)
 }
-fn i18n_key(value: &'static str) -> I18nKey {
-    I18nKey::new(value).expect("distribution i18n key")
+fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(value, I18nKey::new)
 }
-fn node_key(id: &'static str, suffix: &'static str) -> I18nKey {
+fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n_key(key_text(id, suffix))
 }
-fn node_port_key(id: &'static str, port: &'static str) -> I18nKey {
-    I18nKey::new(port_label_text(id, port)).expect("distribution port i18n key")
+fn node_port_key(id: &'static str, port: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(port_label_text(id, port), I18nKey::new)
 }
 fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
     Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())

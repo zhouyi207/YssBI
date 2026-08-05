@@ -191,7 +191,7 @@ fn builtin_control_node(id: NodeId, node_type: &str) -> DocumentNode {
 }
 
 fn builtin_registry_with_branch_group_max(max: u16) -> NodeRegistry {
-    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
     let branch_index = provider
         .nodes
         .iter()

@@ -921,7 +921,7 @@ impl<'a> RunExecutor<'a> {
         if let Some(input) = operation
             .inputs
             .iter()
-            .find(|input| !frame.has(input.value))
+            .find(|input| !frame.has(input.value) && input.bound_value.is_none())
         {
             return RunError::MissingValue(input.value);
         }

@@ -309,21 +309,25 @@ mod tests {
             crate::node_system::registry::hash_canonical(
                 "yssbi.analysis-snapshot.test.v1",
                 &baseline,
-            ),
+            )
+            .unwrap(),
             crate::node_system::registry::hash_canonical(
                 "yssbi.analysis-snapshot.test.v1",
                 &reordered,
             )
+            .unwrap()
         );
         assert_eq!(
             crate::node_system::registry::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &baseline_semantic,
-            ),
+            )
+            .unwrap(),
             crate::node_system::registry::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &reordered_semantic,
             )
+            .unwrap()
         );
 
         let mut changed = baseline.clone();
@@ -352,21 +356,25 @@ mod tests {
             crate::node_system::registry::hash_canonical(
                 "yssbi.analysis-snapshot.test.v1",
                 &baseline,
-            ),
+            )
+            .unwrap(),
             crate::node_system::registry::hash_canonical(
                 "yssbi.analysis-snapshot.test.v1",
                 &changed,
             )
+            .unwrap()
         );
         assert_ne!(
             crate::node_system::registry::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &baseline_semantic,
-            ),
+            )
+            .unwrap(),
             crate::node_system::registry::hash_canonical(
                 "yssbi.validated-semantic-graph.test.v1",
                 &changed_semantic,
             )
+            .unwrap()
         );
     }
 

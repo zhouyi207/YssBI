@@ -68,7 +68,7 @@ fn legacy_core_catalog_has_an_explicit_complete_coverage_list() {
 
 #[test]
 fn migrated_coverage_entries_are_owned_by_the_provider_fragment() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("core built-in fixture must assemble");
     let node_ids = fragment
         .nodes
         .iter()
@@ -91,7 +91,7 @@ fn migrated_coverage_entries_are_owned_by_the_provider_fragment() {
 
 #[test]
 fn protocols_use_unique_stable_port_and_parameter_keys() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("core built-in fixture must assemble");
     for node in fragment.nodes {
         let ports = node
             .protocol()
@@ -382,7 +382,7 @@ fn every_legacy_core_entry_has_current_behavioral_or_structural_evidence() {
 
 #[test]
 fn every_migrated_node_has_localized_search_terms() {
-    let fragment = build_provider_fragment();
+    let fragment = build_provider_fragment().expect("core built-in fixture must assemble");
     let aliases = fragment
         .messages
         .iter()

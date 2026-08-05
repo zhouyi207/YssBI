@@ -9,11 +9,14 @@ export interface LocalizedCategoryDto {
   searchText: string;
 }
 
+export type LocalizedPortDirectionDto = 'input' | 'output';
+export type LocalizedPortKindDto = 'data' | 'control' | 'effect';
+
 export interface LocalizedPortDto {
   key: string;
   label: string;
-  direction: string;
-  kind: string;
+  direction: LocalizedPortDirectionDto;
+  kind: LocalizedPortKindDto;
 }
 
 export interface LocalizedParameterDto {
@@ -83,8 +86,8 @@ function isLocalizedPort(value: unknown): value is LocalizedPortDto {
   return hasExactKeys(candidate, ['key', 'label', 'direction', 'kind'])
     && typeof candidate.key === 'string'
     && typeof candidate.label === 'string'
-    && typeof candidate.direction === 'string'
-    && typeof candidate.kind === 'string';
+    && (candidate.direction === 'input' || candidate.direction === 'output')
+    && (candidate.kind === 'data' || candidate.kind === 'control' || candidate.kind === 'effect');
 }
 
 function isLocalizedParameter(value: unknown): value is LocalizedParameterDto {
@@ -140,6 +143,7 @@ export function isLocalizedCatalogDto(value: unknown): value is LocalizedCatalog
   ])
     && typeof candidate.projectInstanceId === 'string'
     && typeof candidate.registryFingerprint === 'string'
+    && /^[0-9a-f]{64}$/.test(candidate.registryFingerprint)
     && Number.isSafeInteger(candidate.resourcePublicationRevision)
     && (candidate.resourcePublicationRevision as number) >= 0
     && typeof candidate.locale === 'string'

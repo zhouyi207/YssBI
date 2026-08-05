@@ -1,3 +1,5 @@
+#![deny(unused_must_use)]
+
 mod identity;
 mod model;
 mod parameter;
@@ -20,7 +22,7 @@ pub use model::{
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterSchema,
-    ParameterSpec, ParameterValues,
+    ParameterSchemaError, ParameterSpec, ParameterValues,
 };
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
