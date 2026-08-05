@@ -236,6 +236,10 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use crate::graph::value::{DataType, DataValue};
+    use crate::node_system::document::{
+        ConnectionId, DocumentConnection, DocumentError, NodeId, PortAddress,
+    };
+    use crate::node_system::protocol::PortKey;
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectState,
@@ -263,6 +267,38 @@ mod tests {
         data.worksheets.insert(worksheet.id.clone(), worksheet);
         fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         (root, data)
+    }
+
+    #[test]
+    fn prepared_activation_rejects_structurally_invalid_graph_data() {
+        let graph_path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
+        let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x300));
+        let other_missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x301));
+        let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x302));
+        let mut resource = GraphResourceDocument::new("Invalid", GraphDocumentKind::Event);
+        resource.document.connections.insert(
+            connection_id,
+            DocumentConnection {
+                id: connection_id,
+                output: PortAddress::declared(missing_node_id, PortKey::new("value").unwrap()),
+                input: PortAddress::declared(other_missing_node_id, PortKey::new("value").unwrap()),
+                order: None,
+            },
+        );
+        let mut data = ProjectData::new();
+        data.graphs.insert(graph_path, resource);
+
+        let result = super::PreparedProjectActivation::from_data(None, data, None, false);
+        let error = match result {
+            Ok(_) => panic!("structurally invalid graph data was prepared"),
+            Err(error) => error,
+        };
+        let source = std::error::Error::source(&error)
+            .and_then(|source| source.downcast_ref::<DocumentError>());
+        assert_eq!(
+            source,
+            Some(&DocumentError::EndpointNodeNotFound(missing_node_id))
+        );
     }
 
     #[test]

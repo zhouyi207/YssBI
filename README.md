@@ -70,13 +70,13 @@
 
 ```bash
 # 安装依赖
-npm install
+pnpm install
 
 # 开发
-npm run tauri dev
+pnpm tauri:dev
 
 # 构建
-npm run tauri build
+pnpm tauri:build
 ```
 
 <!-- ## 致谢

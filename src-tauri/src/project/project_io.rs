@@ -1147,6 +1147,47 @@ mod tests {
     }
 
     #[test]
+    fn production_graph_io_rejects_structurally_invalid_document() {
+        let root = temp_project_dir();
+        let graph_path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
+        let mut project = ProjectData::new();
+        project
+            .graphs
+            .insert(graph_path.clone(), normalized_graph());
+        initialize_project_directory(&project, root.as_path()).unwrap();
+
+        let graph_file = root.join(graph_path.as_str());
+        let mut envelope: GraphDocument = read_json(&graph_file).unwrap();
+        let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x100));
+        let connection_id =
+            crate::node_system::document::ConnectionId::from_uuid(uuid::Uuid::from_u128(0x101));
+        let existing_node_id = *envelope.document.nodes.keys().next().unwrap();
+        envelope.document.connections.insert(
+            connection_id,
+            DocumentConnection {
+                id: connection_id,
+                output: PortAddress::declared(missing_node_id, PortKey::new("value").unwrap()),
+                input: PortAddress::declared(existing_node_id, PortKey::new("value").unwrap()),
+                order: None,
+            },
+        );
+        write_json(&graph_file, &envelope).unwrap();
+
+        let error =
+            load_project_graph_from_file(root.to_string_lossy().as_ref(), &graph_path).unwrap_err();
+        let source = std::error::Error::source(&error).and_then(|source| {
+            source.downcast_ref::<crate::node_system::document::DocumentError>()
+        });
+        assert_eq!(
+            source,
+            Some(
+                &crate::node_system::document::DocumentError::EndpointNodeNotFound(missing_node_id,)
+            )
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn production_graph_io_rejects_function_shape_mismatches() {
         let root = temp_project_dir();
         let function_path = GraphResourcePath::new("functions/Strict.yssbi-function").unwrap();

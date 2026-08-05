@@ -1,10 +1,11 @@
 use super::*;
 use crate::node_system::document::{
-    DocumentNode, EditorGraphMutationDto, GraphDocumentOperation, GraphDocumentPatch,
-    GraphMutation, GraphRevision, HistoryMutation, MutationConflict, MutationRequest, OperationId,
-    ParameterValues, ResourceKey,
+    ConnectionId, DocumentConnection, DocumentError, DocumentNode, EditorGraphMutationDto,
+    GraphDocumentOperation, GraphDocumentPatch, GraphMutation, GraphRevision, HistoryMutation,
+    MutationConflict, MutationRequest, NodeId, OperationId, ParameterValues, PortAddress,
+    ResourceKey,
 };
-use crate::node_system::protocol::NodeTypeId;
+use crate::node_system::protocol::{NodeTypeId, PortKey};
 use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
 
 fn graph_path() -> GraphResourcePath {
@@ -81,6 +82,151 @@ fn state_with_project_path(label: &str) -> (ProjectState, std::path::PathBuf) {
     let state = ProjectState::new();
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
     (state, root)
+}
+
+fn graph_with_dangling_endpoint(
+    name: &str,
+    kind: GraphDocumentKind,
+    missing_node_id: NodeId,
+) -> GraphResourceDocument {
+    let existing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x200));
+    let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x201));
+    let mut resource = GraphResourceDocument::new(name, kind);
+    resource.document.nodes.insert(
+        existing_node_id,
+        DocumentNode {
+            id: existing_node_id,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    resource.document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: PortAddress::declared(missing_node_id, PortKey::new("value").unwrap()),
+            input: PortAddress::declared(existing_node_id, PortKey::new("value").unwrap()),
+            order: None,
+        },
+    );
+    resource
+}
+
+fn document_error_source(error: &ProjectFilesystemError) -> Option<&DocumentError> {
+    std::error::Error::source(error).and_then(|source| source.downcast_ref::<DocumentError>())
+}
+
+#[test]
+fn structurally_invalid_insert_graph_has_zero_authoritative_effects() {
+    let state = state_with_empty_graph();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let before_history = state.history_status();
+    let before_history_head = state.history_head_id_for_test(true);
+    let before_history_lengths = state.history_lengths_for_test();
+    let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x202));
+
+    let error = state
+        .insert_graph(
+            graph_path(),
+            graph_with_dangling_endpoint(
+                "Invalid Replacement",
+                GraphDocumentKind::Event,
+                missing_node_id,
+            ),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        document_error_source(&error),
+        Some(&DocumentError::EndpointNodeNotFound(missing_node_id))
+    );
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_head_id_for_test(true), before_history_head);
+    assert_eq!(state.history_lengths_for_test(), before_history_lengths);
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+}
+
+#[test]
+fn structurally_invalid_resource_patch_insert_has_zero_authoritative_effects() {
+    let (state, root) = state_with_project_path("invalid-resource-patch");
+    state
+        .insert_graph(
+            graph_path(),
+            GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    let invalid_path = GraphResourcePath::new("functions/Invalid.yssbi-function").unwrap();
+    let invalid_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        invalid_path.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x203)),
+        affected_resources: vec![invalid_key.clone()],
+        expected_revisions: Default::default(),
+        expected_absent_resources: [invalid_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let before_history = state.history_status();
+    let before_history_head = state.history_head_id_for_test(true);
+    let before_history_lengths = state.history_lengths_for_test();
+    let completion_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let completion_for_hook = std::sync::Arc::clone(&completion_observed);
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        completion_for_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+    let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x204));
+
+    let error = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::InsertGraph {
+                path: invalid_path.clone(),
+                resource: graph_with_dangling_endpoint(
+                    "Invalid",
+                    GraphDocumentKind::Function,
+                    missing_node_id,
+                ),
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        document_error_source(&error),
+        Some(&DocumentError::EndpointNodeNotFound(missing_node_id))
+    );
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&invalid_path));
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_head_id_for_test(true), before_history_head);
+    assert_eq!(state.history_lengths_for_test(), before_history_lengths);
+    assert!(!completion_observed.load(std::sync::atomic::Ordering::Acquire));
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 fn insert_uncached_duckdb_declaration(state: &ProjectState, path: &str) {
