@@ -1178,7 +1178,7 @@ fn issue(node_id: NodeId, code: &'static str, detail: &str) -> ControlIssue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::protocol::{NodeInterfaceProtocol, NodeTypeId, PortKey};
     use uuid::Uuid;
 
@@ -1192,16 +1192,17 @@ mod tests {
 
     #[test]
     fn branch_postdom_ignores_sequence_outputs_the_walker_cannot_reach() {
-        let registry = build_builtin_registry();
-        let branch_protocol = &registry
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let branch_protocol = registry
             .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
             .unwrap()
-            .protocol;
-        let base_sequence_protocol = &registry
+            .protocol();
+        let base_sequence_protocol = registry
             .get(&NodeTypeId::new("yssbi.control.sequence").unwrap())
             .unwrap()
-            .protocol;
-        let mut sequence_protocol = base_sequence_protocol.as_ref().clone();
+            .protocol();
+        let mut sequence_protocol = base_sequence_protocol.clone();
         let mut ports = sequence_protocol.interface.ports.to_vec();
         let mut extra_output = ports
             .iter()

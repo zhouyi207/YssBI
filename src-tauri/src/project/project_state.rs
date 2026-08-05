@@ -18,7 +18,7 @@ use crate::project::{
     ProjectTransactionContext, ResourceDocumentPatch, StagedFilesystemMutation,
     load_project_graph_from_file,
 };
-use crate::tabular::{is_variable_handle, normalize_variable_tabular, sync_variable_cache};
+use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -31,9 +31,14 @@ type ProjectionEnvironmentCaptureTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type MutationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
+type DurableHistoryTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
 type CompilePublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type ExecutionTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
+type ProductionRelationalBackendFactory =
+    Arc<dyn Fn() -> Arc<dyn crate::node_system::runtime::RelationalBackend> + Send + Sync>;
 #[cfg(test)]
 type TraceQueryTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
@@ -45,6 +50,69 @@ type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectExecutionError {
+    message: Box<str>,
+    run_error: Option<crate::node_system::runtime::RunError>,
+}
+
+impl ProjectExecutionError {
+    pub fn message(message: impl Into<Box<str>>) -> Self {
+        Self {
+            message: message.into(),
+            run_error: None,
+        }
+    }
+
+    pub fn run_error(&self) -> Option<&crate::node_system::runtime::RunError> {
+        self.run_error.as_ref()
+    }
+
+    pub fn contains(&self, pattern: &str) -> bool {
+        self.message.contains(pattern)
+    }
+
+    pub fn starts_with(&self, pattern: &str) -> bool {
+        self.message.starts_with(pattern)
+    }
+}
+
+impl PartialEq<&str> for ProjectExecutionError {
+    fn eq(&self, other: &&str) -> bool {
+        self.message.as_ref() == *other
+    }
+}
+
+impl From<crate::node_system::runtime::RunError> for ProjectExecutionError {
+    fn from(error: crate::node_system::runtime::RunError) -> Self {
+        let message = crate::node_system::runtime::RunErrorCode::from(&error).public_message();
+        Self {
+            message: message.into(),
+            run_error: Some(error),
+        }
+    }
+}
+
+impl From<String> for ProjectExecutionError {
+    fn from(message: String) -> Self {
+        Self::message(message)
+    }
+}
+
+impl From<&str> for ProjectExecutionError {
+    fn from(message: &str) -> Self {
+        Self::message(message)
+    }
+}
+
+impl std::fmt::Display for ProjectExecutionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ProjectExecutionError {}
 
 enum CompileProductInvalidation {
     None,
@@ -773,6 +841,8 @@ pub struct ProjectState {
     production_relational_observer:
         Arc<RwLock<Option<Arc<crate::node_system::runtime::ProductionRelationalObserver>>>>,
     #[cfg(test)]
+    production_relational_backend_factory: Arc<RwLock<Option<ProductionRelationalBackendFactory>>>,
+    #[cfg(test)]
     project_resource_lease_observer:
         Arc<RwLock<Option<crate::node_system::runtime::ProjectResourceLeaseObserver>>>,
     #[cfg(test)]
@@ -788,6 +858,12 @@ pub struct ProjectState {
         Arc<RwLock<Option<ProjectionEnvironmentCaptureTestHook>>>,
     #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
+    #[cfg(test)]
+    history_after_routing_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
+    #[cfg(test)]
+    history_after_preparation_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
+    #[cfg(test)]
+    history_after_disk_commit_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
     #[cfg(test)]
     catalog_mutation_before_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
     #[cfg(test)]
@@ -818,9 +894,48 @@ pub struct ProjectState {
     activation_final_rebuild_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
 }
 
+#[cfg(test)]
 impl Default for ProjectState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+
+    #[test]
+    fn variable_effect_validation_does_not_reinitialize_builtins() {
+        let source = include_str!("project_state.rs");
+        let commit_marker = ["fn commit_variable_effects_", "receipt("].concat();
+        let end_marker = ["\n}\n\nfn install_variable_effect_", "snapshots"].concat();
+        let forbidden = ["ProjectStore::", "try_new()"].concat();
+        let scratch_api = ["validation_", "scratch"].concat();
+        let commit = source
+            .split(&commit_marker)
+            .nth(1)
+            .and_then(|tail| tail.split(&end_marker).next())
+            .expect("variable effect commit source section");
+
+        assert!(!commit.contains(&forbidden));
+        assert!(commit.contains(&scratch_api));
+    }
+
+    #[test]
+    fn project_state_try_new_constructs_only_after_builtin_validation() {
+        let state = ProjectState::try_new().unwrap();
+        let store = state.project_store.read().unwrap();
+        let node = crate::node_system::protocol::NodeTypeId::new("yssbi.constant.bool").unwrap();
+
+        assert_eq!(
+            store
+                .node_registry
+                .node_provider(&node)
+                .map(crate::node_system::protocol::ProviderId::as_str),
+            Some("yssbi.builtin")
+        );
+        assert!(state.project_data.read().unwrap().graphs.is_empty());
     }
 }
 
@@ -882,20 +997,34 @@ impl CommittedResourceMutation {
 }
 
 impl ProjectState {
+    pub fn try_new() -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+        Self::try_with_filesystem(ProjectFilesystemCoordinator::default())
+    }
+
+    #[cfg(test)]
     pub fn new() -> Self {
-        Self::with_filesystem(ProjectFilesystemCoordinator::default())
+        Self::try_new().expect("test built-ins are valid")
     }
 
     #[cfg(test)]
     pub(crate) fn with_shared_filesystem_for_test(
         filesystem: ProjectFilesystemCoordinator,
     ) -> Self {
-        Self::with_filesystem(filesystem)
+        Self::try_with_filesystem(filesystem).expect("test built-ins are valid")
     }
 
-    fn with_filesystem(filesystem: ProjectFilesystemCoordinator) -> Self {
+    fn try_with_filesystem(
+        filesystem: ProjectFilesystemCoordinator,
+    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+        let store = ProjectStore::try_new()?;
+        Ok(Self::from_store_and_filesystem(store, filesystem))
+    }
+
+    fn from_store_and_filesystem(
+        store: ProjectStore,
+        filesystem: ProjectFilesystemCoordinator,
+    ) -> Self {
         let publication = MutationPublication::default();
-        let store = ProjectStore::default();
         let activation_identity = ProjectionEnvironmentExpectation {
             project_instance_id: ProjectInstanceId::from_existing(
                 publication.project_instance_id.clone(),
@@ -938,6 +1067,8 @@ impl ProjectState {
             #[cfg(test)]
             production_relational_observer: Arc::new(RwLock::new(None)),
             #[cfg(test)]
+            production_relational_backend_factory: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
             project_resource_lease_observer: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             projection_test_hook: Arc::new(RwLock::new(None)),
@@ -949,6 +1080,12 @@ impl ProjectState {
             projection_environment_after_path_data_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            history_after_routing_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            history_after_preparation_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            history_after_disk_commit_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             catalog_mutation_before_publication_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1034,6 +1171,25 @@ impl ProjectState {
     pub fn history_status(&self) -> HistoryStatusDto {
         let _publication = self.mutation_publication.lock().unwrap();
         self.history.read().unwrap().status()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn history_lengths_for_test(&self) -> (usize, usize) {
+        let _publication = self.mutation_publication.lock().unwrap();
+        let history = self.history.read().unwrap();
+        (history.undo_len(), history.redo_len())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn history_head_id_for_test(&self, undo: bool) -> Option<HistoryEntryId> {
+        let _publication = self.mutation_publication.lock().unwrap();
+        let history = self.history.read().unwrap();
+        if undo {
+            history.next_undo()
+        } else {
+            history.next_redo()
+        }
+        .map(|transaction| transaction.history_id)
     }
 
     pub(super) fn current_projection_environment_expectation(
@@ -1320,6 +1476,46 @@ impl ProjectState {
     fn run_mutation_publication_test_hook(&self) {}
 
     #[cfg(test)]
+    fn run_history_after_routing_test_hook(&self) {
+        if let Some(hook) = self.history_after_routing_test_hook.read().unwrap().clone() {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_history_after_routing_test_hook(&self) {}
+
+    #[cfg(test)]
+    fn run_history_after_preparation_test_hook(&self) {
+        if let Some(hook) = self
+            .history_after_preparation_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_history_after_preparation_test_hook(&self) {}
+
+    #[cfg(test)]
+    fn run_history_after_disk_commit_test_hook(&self) {
+        if let Some(hook) = self
+            .history_after_disk_commit_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_history_after_disk_commit_test_hook(&self) {}
+
+    #[cfg(test)]
     fn run_catalog_mutation_before_publication_test_hook(&self) {
         if let Some(hook) = self
             .catalog_mutation_before_publication_test_hook
@@ -1425,6 +1621,14 @@ impl ProjectState {
     }
 
     #[cfg(test)]
+    pub(crate) fn set_production_relational_backend_factory(
+        &self,
+        factory: ProductionRelationalBackendFactory,
+    ) {
+        *self.production_relational_backend_factory.write().unwrap() = Some(factory);
+    }
+
+    #[cfg(test)]
     pub(crate) fn set_project_resource_lease_observer(
         &self,
         observer: crate::node_system::runtime::ProjectResourceLeaseObserver,
@@ -1490,6 +1694,21 @@ impl ProjectState {
     #[cfg(test)]
     pub(super) fn set_mutation_publication_test_hook(&self, hook: MutationPublicationTestHook) {
         *self.mutation_publication_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_history_after_routing_test_hook(&self, hook: DurableHistoryTestHook) {
+        *self.history_after_routing_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_history_after_preparation_test_hook(&self, hook: DurableHistoryTestHook) {
+        *self.history_after_preparation_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_history_after_disk_commit_test_hook(&self, hook: DurableHistoryTestHook) {
+        *self.history_after_disk_commit_test_hook.write().unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -1730,6 +1949,11 @@ impl ProjectState {
             publication.resource_revision,
             publication.authority_generation(),
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_active_root_for_test(&self, root: NormalizedProjectRoot) {
+        self.activation_identity.write().unwrap().project_root = Some(root);
     }
 
     #[cfg(test)]
@@ -2287,27 +2511,6 @@ impl ProjectState {
             )
         };
         detached.invalidate_all();
-    }
-
-    pub fn build_schema_provider(&self) -> crate::graph::core::SchemaProvider {
-        let store = Arc::clone(&self.project_store);
-        Arc::new(move |tabular_id: &str| {
-            if is_variable_handle(tabular_id) {
-                return store
-                    .read()
-                    .ok()?
-                    .variable_tabular
-                    .get(tabular_id)
-                    .map(|entry| entry.schema.clone());
-            }
-            store
-                .write()
-                .ok()?
-                .databases
-                .get_mut(tabular_id)?
-                .data_schema()
-                .ok()
-        })
     }
 
     pub fn insert_graph(
@@ -2927,6 +3130,7 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         self.ensure_project_operational()?;
         let removed = data.graphs.remove(graph_path);
+        let graph_removed = removed.is_some();
         let variable_count = data.variables.len();
         data.variables.retain(|_, variable| match &variable.scope {
             crate::variable::VariableScope::Global => true,
@@ -2935,16 +3139,19 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        self.history.write().unwrap().clear();
-        publication.advance_authority_generation();
-        if removed
-            .as_ref()
-            .is_some_and(|resource| resource.kind == crate::project::GraphDocumentKind::Function)
-            || data.variables.len() != variable_count
-        {
-            self.invalidate_all_compile_products();
-        } else {
-            self.invalidate_graph_compile_products(graph_path);
+        let variables_removed = data.variables.len() != variable_count;
+        let changed = graph_removed || variables_removed;
+        if changed {
+            publication.advance_authority_generation();
+            if variables_removed
+                || removed.as_ref().is_some_and(|resource| {
+                    resource.kind == crate::project::GraphDocumentKind::Function
+                })
+            {
+                self.invalidate_all_compile_products();
+            } else {
+                self.invalidate_graph_compile_products(graph_path);
+            }
         }
         Ok(())
     }
@@ -3738,7 +3945,6 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        self.history.write().unwrap().clear();
         lifecycle.commit_guard(&mut guard, GraphLifecycleIntent::Unload)?;
         let variables_removed = data.variables.len() != variable_count;
         let changed = graph_removed || variables_removed;
@@ -4125,6 +4331,7 @@ impl ProjectState {
             ));
         }
         let from_revision = function.revision;
+        let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         let mut documents = project_documents(&data, &revisions);
         let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
@@ -4146,6 +4353,12 @@ impl ProjectState {
         }]
         .revision;
         replace_project_documents(&mut data, &mut revisions, documents);
+        data.graphs
+            .get_mut(graph_path)
+            .expect("Function owner graph remains loaded")
+            .document
+            .revision = to_revision;
+        graph_revisions.insert(graph_path.clone(), to_revision);
         let deltas = vec![crate::node_system::document::ResourceDeltaEvent {
             resource: expected_resource,
             from_revision,
@@ -4206,6 +4419,119 @@ impl ProjectState {
         Ok(result)
     }
 
+    fn prepare_history_documents(
+        &self,
+        undo: bool,
+        request: &MutationRequest<HistoryMutation>,
+        expected_history_id: &HistoryEntryId,
+        expected_persistence: crate::node_system::document::HistoryPersistencePolicy,
+    ) -> Result<crate::project::history_hydration::PreparedHistoryDocuments, MutationConflict> {
+        self.ensure_mutation_operational()?;
+        let snapshot = {
+            let publication = self.mutation_publication.lock().unwrap();
+            let staging_basis = self
+                .capture_variable_staging_basis(&publication)
+                .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            let session = staging_basis.session;
+            if publication.project_instance_id != session.instance_id.as_str() {
+                return Err(MutationConflict::History(
+                    "project changed before History preparation snapshot".into(),
+                ));
+            }
+            let data = self.project_data.read().unwrap().clone();
+            let graph_revisions = self.graph_revisions.read().unwrap().clone();
+            let variable_revisions = self.variable_revisions.read().unwrap().clone();
+            let history = self.history.read().unwrap().clone();
+            let transaction = if undo {
+                history.next_undo()
+            } else {
+                history.next_redo()
+            }
+            .cloned()
+            .ok_or_else(|| {
+                MutationConflict::History(
+                    if undo {
+                        "there is no transaction to undo"
+                    } else {
+                        "there is no transaction to redo"
+                    }
+                    .into(),
+                )
+            })?;
+            if transaction.history_id != *expected_history_id
+                || transaction.persistence != expected_persistence
+            {
+                return Err(MutationConflict::History(
+                    crate::node_system::document::HistoryError::HistoryHeadChanged
+                        .to_string()
+                        .into(),
+                ));
+            }
+            crate::project::history_hydration::capture_history_preparation_snapshot(
+                session.clone(),
+                staging_basis.authority_generation,
+                undo,
+                transaction,
+                &request.resource,
+                data,
+                graph_revisions,
+                variable_revisions,
+                history,
+            )
+            .map_err(|error| MutationConflict::History(error.into()))?
+        };
+
+        crate::project::history_hydration::hydrate_history_preparation(
+            snapshot,
+            self.filesystem(),
+            request,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn prepare_history_for_test(
+        &self,
+        undo: bool,
+        request: MutationRequest<HistoryMutation>,
+    ) -> Result<crate::project::history_hydration::PreparedHistoryDocuments, MutationConflict> {
+        let transaction = {
+            let history = self.history.read().unwrap();
+            if undo {
+                history.next_undo()
+            } else {
+                history.next_redo()
+            }
+            .cloned()
+            .ok_or_else(|| MutationConflict::History("History is empty".into()))?
+        };
+        self.prepare_history_documents(
+            undo,
+            &request,
+            &transaction.history_id,
+            transaction.persistence,
+        )
+    }
+
+    fn history_transaction_contains_unloaded_graph(
+        &self,
+        transaction: &ProjectHistoryTransaction,
+        undo: bool,
+    ) -> Result<bool, MutationConflict> {
+        let data = self.project_data.read().unwrap();
+        let graph_revisions = self.graph_revisions.read().unwrap();
+        let known_graphs = graph_revisions.keys().cloned().collect();
+        let touched = crate::project::history_hydration::discover_touched_resources(
+            transaction,
+            undo,
+            &data,
+            &known_graphs,
+        )
+        .map_err(|error| MutationConflict::History(error.into()))?;
+        Ok(touched.graphs.values().any(|residency| {
+            *residency == crate::project::history_hydration::HistoryGraphResidency::Unloaded
+        }))
+    }
+
     fn commit_history_direction(
         &self,
         undo: bool,
@@ -4221,21 +4547,39 @@ impl ProjectState {
             }
             .cloned()
         };
-        if let Some(transaction) = next_transaction {
-            match transaction.persistence {
-                crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
-                    return self.commit_graph_move_history_direction(undo, request, transaction);
+        let transaction = next_transaction.ok_or_else(|| {
+            MutationConflict::History(
+                if undo {
+                    "there is no transaction to undo"
+                } else {
+                    "there is no transaction to redo"
                 }
-                crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
-                    return self.commit_variable_effect_history_direction(
+                .into(),
+            )
+        })?;
+        match transaction.persistence {
+            crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
+                return self.commit_graph_move_history_direction(undo, request, transaction);
+            }
+            crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
+                return self.commit_variable_effect_history_direction(undo, request, transaction);
+            }
+            crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {
+                self.run_history_after_routing_test_hook();
+                if self.history_transaction_contains_unloaded_graph(&transaction, undo)? {
+                    let prepared = self.prepare_history_documents(
                         undo,
-                        request,
-                        transaction,
-                    );
+                        &request,
+                        &transaction.history_id,
+                        transaction.persistence,
+                    )?;
+                    debug_assert!(prepared.contains_unloaded_graph);
+                    return self.commit_durable_history_documents(prepared, request);
                 }
-                crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {}
             }
         }
+        let routed_history_id = transaction.history_id.clone();
+        let routed_persistence = transaction.persistence;
         let expected_session = self.current_projection_environment_expectation();
         let projection_environment = self
             .capture_projection_environment(&expected_session)
@@ -4276,6 +4620,22 @@ impl ProjectState {
 
         let before = documents.clone();
         let mut history = self.history.write().unwrap();
+        let live_head = if undo {
+            history.next_undo()
+        } else {
+            history.next_redo()
+        };
+        if routed_persistence
+            != crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave
+            || live_head.map(|entry| (&entry.history_id, entry.persistence))
+                != Some((&routed_history_id, routed_persistence))
+        {
+            return Err(MutationConflict::History(
+                crate::node_system::document::HistoryError::HistoryHeadChanged
+                    .to_string()
+                    .into(),
+            ));
+        }
         let transaction = if undo {
             history.undo(&mut documents)
         } else {
@@ -4299,6 +4659,10 @@ impl ProjectState {
             })
             .collect::<Vec<_>>();
         replace_project_documents(&mut data, &mut revisions, documents);
+        crate::project::history_hydration::synchronize_function_owner_revisions(
+            &mut data,
+            &transaction,
+        );
         for (path, graph) in &data.graphs {
             graph_revisions.insert(path.clone(), graph.document.revision);
         }
@@ -4329,6 +4693,239 @@ impl ProjectState {
             #[cfg(test)]
             completion_test_hook,
         })
+    }
+
+    fn commit_durable_history_documents(
+        &self,
+        prepared: crate::project::history_hydration::PreparedHistoryDocuments,
+        request: MutationRequest<HistoryMutation>,
+    ) -> Result<CommittedResourceMutation, MutationConflict> {
+        if prepared.transaction.persistence
+            != crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave
+            || prepared.basis.persistence
+                != crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave
+        {
+            return Err(MutationConflict::History(
+                "durable graph hydration requires InMemoryUntilSave History policy".into(),
+            ));
+        }
+        let mutations = crate::project::history_hydration::durable_filesystem_mutations(&prepared)?;
+        let graph_revision_updates = prepared
+            .touched_graphs
+            .iter()
+            .map(|path| {
+                prepared
+                    .after_data
+                    .graphs
+                    .get(path)
+                    .map(|graph| (path.clone(), graph.document.revision))
+                    .ok_or_else(|| {
+                        MutationConflict::History(
+                            format!("prepared graph '{path}' is missing from durable state").into(),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let deltas = prepared
+            .transaction
+            .changes
+            .iter()
+            .map(|change| crate::node_system::document::ResourceDeltaEvent {
+                resource: change.resource.clone(),
+                from_revision: project_document_revision(&prepared.before, &change.resource),
+                to_revision: project_document_revision(&prepared.after, &change.resource),
+                caused_by: Some(request.operation_id),
+                payload: if prepared.basis.undo {
+                    change.inverse.clone()
+                } else {
+                    change.forward.clone()
+                },
+            })
+            .collect::<Vec<_>>();
+        let mut expected_graph_paths =
+            affected_projection_paths(&deltas, &prepared.loaded_after_data);
+        expected_graph_paths.retain(|path| {
+            GraphResourcePath::new(path)
+                .ok()
+                .is_some_and(|path| prepared.loaded_after_data.graphs.contains_key(&path))
+        });
+        let projection_environment = self
+            .capture_projection_environment_for_session(&prepared.basis.session)
+            .map_err(|error| MutationConflict::Projection(error.into()))?;
+        let projected_generation = prepared
+            .basis
+            .authority_generation
+            .checked_add(1)
+            .expect("project authority generation overflowed");
+        let projection_source = self.projection_source_snapshot(
+            &prepared.loaded_after_data,
+            projection_environment.clone(),
+            prepared.basis.session.instance_id.as_str().to_owned(),
+            projected_generation,
+        );
+        let history_status = prepared.proposed_history.status();
+        #[cfg(test)]
+        let completion_test_hook = self
+            .committed_resource_completion_test_hook
+            .read()
+            .unwrap()
+            .clone();
+        self.run_history_after_preparation_test_hook();
+        let context = ProjectTransactionContext {
+            session: prepared.basis.session.clone(),
+            operation_id: request.operation_id,
+            affected_resources: prepared.basis.expected_revisions.keys().cloned().collect(),
+            expected_revisions: prepared.basis.expected_revisions.clone(),
+            expected_absent_resources: Default::default(),
+            recovery_marker: Some(self.project_recovery_marker()),
+        };
+        let filesystem = ProjectFilesystemTransaction::prepare_with_validator(
+            context,
+            prepared.lease,
+            mutations,
+            crate::project::history_hydration::validate_durable_history_document,
+        )
+        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        let committed_filesystem = filesystem
+            .commit()
+            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+
+        self.run_history_after_disk_commit_test_hook();
+        let authority_result = (|| {
+            let mut publication = self.mutation_publication.lock().unwrap();
+            let identity = self.activation_identity.read().unwrap();
+            if publication.project_instance_id != prepared.basis.session.instance_id.as_str()
+                || publication.authority_generation() != prepared.basis.authority_generation
+                || identity.project_instance_id != prepared.basis.session.instance_id
+                || identity.project_root.as_ref() != Some(&prepared.basis.session.root)
+                || !projection_environment.matches_publication(&publication)
+            {
+                return Err(MutationConflict::History(
+                    "project session or authority changed before durable History commit".into(),
+                ));
+            }
+            drop(identity);
+            self.ensure_mutation_operational()?;
+            let mut data = self.project_data.write().unwrap();
+            let mut graph_revisions = self.graph_revisions.write().unwrap();
+            let mut variable_revisions = self.variable_revisions.write().unwrap();
+            let mut history = self.history.write().unwrap();
+            let current_head = if prepared.basis.undo {
+                history.next_undo()
+            } else {
+                history.next_redo()
+            };
+            if current_head.map(|entry| (&entry.history_id, entry.persistence))
+                != Some((&prepared.basis.history_id, prepared.basis.persistence))
+            {
+                return Err(MutationConflict::History(
+                    crate::node_system::document::HistoryError::HistoryHeadChanged
+                        .to_string()
+                        .into(),
+                ));
+            }
+            for (path, residency) in &prepared.basis.residency {
+                let is_loaded = data.graphs.contains_key(path);
+                let expected_loaded =
+                    *residency == crate::project::history_hydration::HistoryGraphResidency::Loaded;
+                if is_loaded != expected_loaded {
+                    return Err(MutationConflict::History(
+                        format!("graph '{path}' residency changed before durable History commit")
+                            .into(),
+                    ));
+                }
+            }
+            for (path, expected) in &prepared.basis.expected_graph_revisions {
+                if graph_revisions.get(path).copied() != Some(*expected) {
+                    return Err(MutationConflict::History(
+                        format!("owning Graph '{path}' changed before durable History commit")
+                            .into(),
+                    ));
+                }
+            }
+            for (resource, expected) in &prepared.basis.expected_revisions {
+                let actual = match resource {
+                    ResourceKey::Graph(path) => GraphResourcePath::new(path.0.as_ref())
+                        .ok()
+                        .and_then(|path| graph_revisions.get(&path).copied()),
+                    ResourceKey::Function(key) => GraphResourcePath::new(key.0.as_ref())
+                        .ok()
+                        .and_then(|path| {
+                            data.graphs
+                                .get(&path)
+                                .and_then(|graph| graph.function.as_ref())
+                                .map(|function| function.revision)
+                                .or_else(|| {
+                                    prepared
+                                        .before
+                                        .functions
+                                        .get(key)
+                                        .map(|function| function.revision)
+                                })
+                        }),
+                    ResourceKey::Variable(path) => path
+                        .0
+                        .strip_prefix("variables/")
+                        .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                        .map(crate::variable::VariableId::from)
+                        .and_then(|id| variable_revisions.get(&id))
+                        .and_then(|entry| {
+                            let expected_present = prepared
+                                .before
+                                .variables
+                                .get(path)
+                                .is_some_and(|document| document.value.is_some());
+                            (entry.is_present() == expected_present).then_some(entry.revision)
+                        }),
+                    ResourceKey::Database(_) | ResourceKey::Worksheet(_) => None,
+                };
+                if actual != Some(*expected) {
+                    return Err(MutationConflict::History(
+                        format!("resource {resource:?} changed before durable History commit")
+                            .into(),
+                    ));
+                }
+            }
+
+            *data = prepared.loaded_after_data;
+            for (path, revision) in graph_revision_updates {
+                graph_revisions.insert(path, revision);
+            }
+            *variable_revisions = prepared.after_variable_revisions;
+            *history = prepared.proposed_history;
+            let publication_revision = publication.allocate_resource_revision();
+            debug_assert_eq!(publication.authority_generation(), projected_generation);
+            self.invalidate_all_compile_products();
+            Ok((
+                publication.project_instance_id.clone(),
+                publication_revision,
+            ))
+        })();
+
+        match authority_result {
+            Ok((project_instance_id, publication_revision)) => {
+                committed_filesystem.finalize();
+                Ok(CommittedResourceMutation {
+                    operation_id: request.operation_id,
+                    project_instance_id,
+                    publication_revision,
+                    moves: Vec::new(),
+                    deltas,
+                    history: history_status,
+                    projection_source,
+                    expected_graph_paths,
+                    #[cfg(test)]
+                    completion_test_hook,
+                })
+            }
+            Err(error) => match committed_filesystem.rollback() {
+                Ok(()) => Err(error),
+                Err(rollback) if rollback.recovery_required() => Err(
+                    MutationConflict::RecoveryRequired(rollback.to_string().into()),
+                ),
+                Err(rollback) => Err(MutationConflict::History(rollback.to_string().into())),
+            },
+        }
     }
 
     fn commit_variable_effect_history_direction(
@@ -5049,7 +5646,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         demand: &crate::node_system::plan::ExecutionDemand,
         events: &dyn crate::node_system::runtime::RunEventSink,
-    ) -> Result<crate::node_system::runtime::RunResult, String> {
+    ) -> Result<crate::node_system::runtime::RunResult, ProjectExecutionError> {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
         let cancellation = crate::node_system::runtime::CancellationToken::new();
@@ -5127,17 +5724,35 @@ impl ProjectState {
         build_run_parameters(&mut compiled_parameters, &execution.document, plan.as_ref())?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
         #[cfg(test)]
-        let production_relational_backend = production_relational_observer
-            .map(crate::node_system::runtime::ProductionRelationalBackend::with_observer)
-            .unwrap_or_default();
+        let production_relational_backend = self
+            .production_relational_backend_factory
+            .read()
+            .unwrap()
+            .clone()
+            .map(|factory| factory())
+            .unwrap_or_else(|| {
+                Arc::new(
+                    production_relational_observer
+                        .map(
+                            crate::node_system::runtime::ProductionRelationalBackend::with_observer,
+                        )
+                        .unwrap_or_default(),
+                )
+            });
+        #[cfg(test)]
+        relational_backends
+            .register_shared_for_test(
+                crate::node_system::plan::RelationalBackendId::new("relational.default")
+                    .map_err(|error| error.to_string())?,
+                production_relational_backend,
+            )
+            .map_err(|error| error.to_string())?;
         #[cfg(not(test))]
-        let production_relational_backend =
-            crate::node_system::runtime::ProductionRelationalBackend::default();
         relational_backends
             .register(
                 crate::node_system::plan::RelationalBackendId::new("relational.default")
                     .map_err(|error| error.to_string())?,
-                production_relational_backend,
+                crate::node_system::runtime::ProductionRelationalBackend::default(),
             )
             .map_err(|error| error.to_string())?;
         self.run_execution_before_final_gate_test_hook();
@@ -5177,7 +5792,7 @@ impl ProjectState {
         .with_result_store(&execution.results)
         .with_success_finalizer(&finalize)
         .run(plan.as_ref(), cancellation)
-        .map_err(|error| error.to_string())
+        .map_err(ProjectExecutionError::from)
     }
 
     pub(super) fn commit_variable_effects(
@@ -5367,7 +5982,16 @@ impl ProjectState {
         );
         install_variable_effect_snapshots(&mut proposed_data, &transaction, false)
             .map_err(variable_effect_invalid_error)?;
-        let mut validation_store = ProjectStore::default();
+        let mut validation_store = {
+            let store = self.project_store.read().unwrap();
+            if &store.project_session_id != expected_session_id {
+                return Err(VariableEffectCommitError::SessionChanged {
+                    expected: expected_session_id.clone(),
+                    current: store.project_session_id.clone(),
+                });
+            }
+            store.validation_scratch()
+        };
         for id in &ids {
             let variable = proposed_data
                 .variables
@@ -5923,9 +6547,15 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
             crate::node_system::protocol::SchemaExpr::Input(
                 crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
             ),
-            fields.iter().map(|column| {
-                crate::node_system::protocol::SchemaColumnRef(column.name.clone().into())
-            }),
+            fields
+                .iter()
+                .map(|column| crate::node_system::protocol::SchemaField {
+                    name: crate::node_system::protocol::SchemaColumnRef(column.name.clone().into()),
+                    scalar_type:
+                        crate::node_system::protocol::RelationalScalarType::from_database_dtype(
+                            &column.dtype,
+                        ),
+                }),
         ))
     }
 }
@@ -6266,7 +6896,7 @@ pub(super) fn snapshot_project_resources(
     })
 }
 
-fn project_documents(
+pub(super) fn project_documents(
     data: &ProjectData,
     variable_revisions: &std::collections::HashMap<
         crate::variable::VariableId,
@@ -6345,7 +6975,7 @@ fn project_document_revision(
         .expect("history transaction resource remains present")
 }
 
-fn replace_project_documents(
+pub(super) fn replace_project_documents(
     data: &mut ProjectData,
     variable_revisions: &mut std::collections::HashMap<
         crate::variable::VariableId,
@@ -6644,11 +7274,13 @@ mod run_parameter_tests {
     use std::collections::BTreeMap;
 
     fn catalog_defaults(node_type: &NodeTypeId) -> BTreeMap<ParameterKey, serde_json::Value> {
-        let registry = crate::node_system::catalog::build_builtin_registry();
+        let registry = crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         registry
             .get(node_type)
             .unwrap()
-            .protocol
+            .protocol()
             .parameters
             .parameters
             .iter()
@@ -6754,7 +7386,9 @@ mod run_parameter_tests {
 
     #[test]
     fn function_plan_publication_uses_only_the_compile_resource_snapshot() {
-        let registry = crate::node_system::catalog::build_builtin_registry();
+        let registry = crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let session = crate::node_system::analysis::ProjectSessionId::new("coherent-run");
         let store = crate::node_system::runtime::FunctionPlanStore::new(session.clone(), 64);
         let resources = CompileResourceSnapshot {
@@ -6928,6 +7562,7 @@ mod run_parameter_tests {
                 inputs: Box::new([PlannedInput {
                     value: ValueRef::new(0),
                     consumption: InputConsumption::FullyMaterialized,
+                    bound_value: None,
                 }]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(1),
@@ -7076,10 +7711,12 @@ mod run_parameter_tests {
                 PlannedInput {
                     value: ValueRef::new(0),
                     consumption: InputConsumption::FullyMaterialized,
+                    bound_value: None,
                 },
                 PlannedInput {
                     value: ValueRef::new(1),
                     consumption: InputConsumption::FullyMaterialized,
+                    bound_value: None,
                 },
             ]),
             outputs: Box::new([

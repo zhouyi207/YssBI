@@ -12,6 +12,40 @@ use std::sync::Arc;
 
 const PROVIDER: &str = "yssbi.builtin";
 
+pub struct BuiltinNodeSystem {
+    pub registry: Arc<NodeRegistry>,
+    pub catalog: Arc<BuiltinCatalog>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuiltinInitializationError {
+    Registration(NodeRegistrationError),
+    Localization(super::localization::I18nBundleValidationError),
+}
+
+impl std::fmt::Display for BuiltinInitializationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Registration(error) => error.fmt(formatter),
+            Self::Localization(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for BuiltinInitializationError {}
+
+impl From<NodeRegistrationError> for BuiltinInitializationError {
+    fn from(error: NodeRegistrationError) -> Self {
+        Self::Registration(error)
+    }
+}
+
+impl From<super::localization::I18nBundleValidationError> for BuiltinInitializationError {
+    fn from(error: super::localization::I18nBundleValidationError) -> Self {
+        Self::Localization(error)
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct ProviderFragment {
     pub types: Vec<TypeRegistration>,
@@ -49,7 +83,7 @@ impl ProviderFragment {
         self.interface_resolvers.sort();
         self.schema_resolvers.sort();
         self.nodes
-            .sort_by(|left, right| left.protocol.type_id.cmp(&right.protocol.type_id));
+            .sort_by(|left, right| left.protocol().type_id.cmp(&right.protocol().type_id));
 
         let mut messages = BTreeMap::new();
         for (locale, key, message) in self.messages {
@@ -118,6 +152,7 @@ const COMPILER_DIAGNOSTIC_CODES: &[&str] = &[
     "compiler.lowering.result_port",
     "compiler.node.disappeared",
     "compiler.node.unknown",
+    "compiler.parameter.invalid",
     "compiler.parameter.required",
     "compiler.parameter.unknown",
     "compiler.plan.effect_consumer_missing",
@@ -132,10 +167,16 @@ const COMPILER_DIAGNOSTIC_CODES: &[&str] = &[
     "compiler.port.unknown",
     "compiler.registry.type_mismatch",
     "compiler.relational.backend_mismatch",
+    "compiler.relational.filter_column_missing",
+    "compiler.relational.filter_literal_forbidden",
+    "compiler.relational.filter_literal_missing",
+    "compiler.relational.filter_literal_type",
+    "compiler.relational.filter_operator_invalid",
     "compiler.relational.fragment_unplanned",
     "compiler.relational.input_binding_missing",
     "compiler.relational.planning_failed",
     "compiler.schema.parameter_invalid",
+    "compiler.schema.project_empty",
     "compiler.schema.project_field_duplicate",
     "compiler.schema.project_field_missing",
     "compiler.schema.rename_field_missing",
@@ -280,18 +321,79 @@ impl NodeLowerer for KernelLowerer {
     }
 }
 
-pub fn build_builtin_registry() -> NodeRegistry {
-    let (provider, _) = build_builtin_provider();
-    let mut builder = NodeRegistryBuilder::new();
-    builder
-        .register_provider(provider)
-        .expect("trusted built-in provider must register once");
-    builder
-        .freeze()
-        .expect("trusted built-in provider must pass registry validation")
+pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
+    let (provider, catalog, alias_keys) = assemble_builtin_parts();
+    validate_builtin_bundle(provider, catalog, alias_keys)
 }
 
-pub fn build_builtin_provider() -> (ProviderRegistration, BuiltinCatalog) {
+fn validate_builtin_bundle(
+    provider: ProviderRegistration,
+    catalog: BuiltinCatalog,
+    alias_keys: BTreeSet<I18nKey>,
+) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(provider)?;
+    register_builtin_nominal_validators(&mut builder)?;
+    let registry = Arc::new(builder.freeze()?);
+    catalog.validate(&registry.catalog_manifest().i18n, &alias_keys)?;
+    Ok(BuiltinNodeSystem {
+        registry,
+        catalog: Arc::new(catalog),
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn builtin_bundle_parts_for_test()
+-> (ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>) {
+    assemble_builtin_parts()
+}
+
+#[cfg(test)]
+pub(crate) fn validate_builtin_bundle_for_test(
+    provider: ProviderRegistration,
+    catalog: BuiltinCatalog,
+    alias_keys: BTreeSet<I18nKey>,
+) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
+    validate_builtin_bundle(provider, catalog, alias_keys)
+}
+
+fn register_builtin_nominal_validators(
+    builder: &mut NodeRegistryBuilder,
+) -> Result<(), NodeRegistrationError> {
+    let parse_type_id = |value| {
+        TypeId::new(value).map_err(|error| {
+            NodeRegistrationError::InvalidProtocol(ProtocolError::InvalidIdentity(
+                error.to_string(),
+            ))
+        })
+    };
+    builder.register_nominal_validator(
+        parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
+        parse_type_id(
+            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
+        )?,
+        crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+        crate::node_system::parameter_types::dataframe::validate_project_columns_json,
+    )?;
+    builder.register_nominal_validator(
+        parse_type_id(crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID)?,
+        parse_type_id(
+            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
+        )?,
+        crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+        crate::node_system::parameter_types::dataframe::validate_filter_predicate_json,
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn register_builtin_nominal_validators_for_test(
+    builder: &mut NodeRegistryBuilder,
+) -> Result<(), BuiltinInitializationError> {
+    register_builtin_nominal_validators(builder).map_err(Into::into)
+}
+
+fn assemble_builtin_parts() -> (ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>) {
     let mut fragment = ProviderFragment::default();
     let messages = &mut fragment.messages;
     let nodes = &mut fragment.nodes;
@@ -367,10 +469,12 @@ pub fn build_builtin_provider() -> (ProviderRegistration, BuiltinCatalog) {
             spec.aliases,
             spec.zh_aliases,
         );
-        nodes.push(leaf(
-            binary_protocol(id, "logic", "core.float64", "core.bool"),
-            spec.kernel,
-        ));
+        let protocol = if matches!(spec.id, "equal" | "not_equal") {
+            equality_protocol(id)
+        } else {
+            binary_protocol(id, "logic", "core.float64", "core.bool")
+        };
+        nodes.push(leaf(protocol, spec.kernel));
     }
     for spec in LOGIC {
         let id = leak(format!("yssbi.logic.{}", spec.id));
@@ -443,9 +547,6 @@ pub fn build_builtin_provider() -> (ProviderRegistration, BuiltinCatalog) {
     let mut i18n = fragment.i18n;
     i18n.keys.extend(required_i18n.keys);
     let catalog = BuiltinCatalog::new(&fragment.messages);
-    catalog
-        .validate(&i18n, &alias_keys)
-        .expect("trusted built-in localization must satisfy its default manifest");
     let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new));
     provider.types = fragment.types.into_boxed_slice();
     provider.type_constructors = fragment.type_constructors.into_boxed_slice();
@@ -454,7 +555,7 @@ pub fn build_builtin_provider() -> (ProviderRegistration, BuiltinCatalog) {
     provider.interface_resolvers = fragment.interface_resolvers.into_boxed_slice();
     provider.schema_resolvers = fragment.schema_resolvers.into_boxed_slice();
     provider.nodes = fragment.nodes.into_boxed_slice();
-    (provider, catalog)
+    (provider, catalog, alias_keys)
 }
 
 pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
@@ -503,6 +604,30 @@ fn binary_protocol(
         pure(),
     )
 }
+fn equality_protocol(id: &'static str) -> NodeProtocol {
+    let value = sid("value", TypeParameterId::new);
+    let mut protocol = protocol(id, "logic", vec![], vec![], pure());
+    protocol.interface = NodeInterfaceProtocol::new(
+        vec![
+            data_port_expr(
+                "left",
+                PortDirection::Input,
+                TypeExpr::Generic(value.clone()),
+            ),
+            data_port_expr(
+                "right",
+                PortDirection::Input,
+                TypeExpr::Generic(value.clone()),
+            ),
+            data_port("result", PortDirection::Output, "core.bool"),
+        ],
+        vec![value],
+        vec![],
+    )
+    .expect("equality interface");
+    protocol
+}
+
 fn unary_protocol(
     id: &'static str,
     category: &'static str,
@@ -549,12 +674,16 @@ fn protocol(
 }
 
 fn data_port(key: &'static str, direction: PortDirection, ty: &'static str) -> PortSpec {
+    data_port_expr(key, direction, concrete(ty))
+}
+
+fn data_port_expr(key: &'static str, direction: PortDirection, value_type: TypeExpr) -> PortSpec {
     PortSpec {
         key: sid(key, PortKey::new),
         label_key: iid(leak(format!("ports.{key}.label"))),
         direction,
         kind: PortKind::Data,
-        value_type: concrete(ty),
+        value_type,
         instances: PortInstances::Declared,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
@@ -605,7 +734,7 @@ fn i18n_requirements(
     keys.extend(types.iter().map(|item| item.title_key.clone()));
     keys.extend(categories.iter().map(|item| item.title_key.clone()));
     for node in nodes {
-        let protocol = &node.protocol;
+        let protocol = node.protocol();
         keys.insert(protocol.catalog.title_key.clone());
         keys.extend(protocol.catalog.description_key.iter().cloned());
         keys.extend(protocol.catalog.documentation_key.iter().cloned());

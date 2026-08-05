@@ -3,6 +3,7 @@ use crate::node_system::analysis::{CompilationBasis, ResolvedPortStatus};
 use crate::node_system::document::*;
 use crate::node_system::protocol::*;
 use crate::node_system::registry::RegistryFingerprint;
+use crate::node_system::testing::TestProtocolBuilder;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -39,50 +40,35 @@ fn locator(field: &str) -> DynamicMemberLocator {
 }
 
 fn protocol() -> NodeProtocol {
-    let mut protocol = NodeProtocol::from_static(Box::leak(Box::new(StaticNodeProtocol {
-        type_id: "yssbi.test.dynamic",
-        catalog: StaticNodeCatalogProtocol {
-            title_key: "nodes.test.dynamic.title",
-            description_key: None,
-            documentation_key: None,
-            aliases_key: None,
-            category_id: "test",
-            icon_id: "test",
-            style_id: "test",
-            hidden: false,
-        },
-        ports: Box::leak(
-            vec![StaticPortSpec {
-                key: "fields",
-                label_key: "nodes.test.dynamic.fields",
-                direction: PortDirection::Input,
-                kind: PortKind::Data,
-                instances: PortInstances::Derived {
-                    resolver: resolver_id(),
-                },
-                connections: ConnectionsPerPort::Single,
-                input_binding: Some(InputBindingSpec {
-                    literal_policy: LiteralPolicy::Allowed,
-                    default_value: None,
-                }),
-            }]
-            .into_boxed_slice(),
-        ),
-        execution: ExecutionSemantics {
+    TestProtocolBuilder::new("yssbi.test.dynamic", "test")
+        .style("test")
+        .ports(vec![PortSpec {
+            key: PortKey::new("fields").unwrap(),
+            label_key: I18nKey::new("nodes.test.dynamic.fields").unwrap(),
+            direction: PortDirection::Input,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Derived {
+                resolver: resolver_id(),
+            },
+            connections: ConnectionsPerPort::Single,
+            input_binding: Some(InputBindingSpec {
+                literal_policy: LiteralPolicy::Allowed,
+                default_value: None,
+            }),
+            consumption: None,
+            production: None,
+            editor: PortEditorSpec::Default,
+            schema: None,
+        }])
+        .execution(ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
             evaluation: EvaluationPolicy::DemandDriven,
             cache: CachePolicy::None,
             effects: EffectSemantics::None,
-        },
-        scope: NodeScope::Any,
-        managed_role: None,
-    })))
-    .unwrap();
-    protocol.interface.ports[0].instances = PortInstances::Derived {
-        resolver: resolver_id(),
-    };
-    protocol
+        })
+        .build()
 }
 
 fn document(binding: Option<(PortAddress, DynamicPortBinding)>) -> GraphDocument {

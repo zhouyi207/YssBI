@@ -21,6 +21,12 @@ pub use transaction::{
 pub(crate) use transaction::{metadata_is_redirect, read_secure_project_file};
 
 #[cfg(test)]
+pub(crate) use root::{
+    normalized_root_reconstruction_count_for_test,
+    reset_normalized_root_reconstruction_count_for_test,
+};
+
+#[cfg(test)]
 pub use transaction::{
     ProjectFilesystemFaultPoint, set_before_remove_mutation_hook, set_project_filesystem_fault,
     set_project_filesystem_rollback_fault, set_project_filesystem_rollback_test_hook,

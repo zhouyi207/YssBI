@@ -78,9 +78,9 @@ pub enum StructuralNodeRole {
 
 #[derive(Clone)]
 pub struct RegisteredNode {
-    pub(crate) protocol: Arc<NodeProtocol>,
-    pub(crate) implementation: Option<LeafImplementation>,
-    pub(crate) structural_role: Option<StructuralNodeRole>,
+    pub(super) protocol: Arc<NodeProtocol>,
+    pub(super) implementation: Option<LeafImplementation>,
+    pub(super) structural_role: Option<StructuralNodeRole>,
 }
 
 impl RegisteredNode {
@@ -101,6 +101,18 @@ impl RegisteredNode {
             implementation: None,
             structural_role: Some(role),
         }
+    }
+
+    pub fn protocol(&self) -> &NodeProtocol {
+        &self.protocol
+    }
+
+    pub fn implementation(&self) -> Option<&LeafImplementation> {
+        self.implementation.as_ref()
+    }
+
+    pub fn structural_role(&self) -> Option<StructuralNodeRole> {
+        self.structural_role
     }
 }
 
@@ -130,9 +142,9 @@ pub struct TypeConstructorRegistration {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TypeRegistry {
-    pub(crate) types: BTreeMap<TypeId, TypeRegistration>,
-    pub(crate) constructors: BTreeMap<TypeConstructorId, TypeConstructorRegistration>,
-    pub(crate) classes: BTreeSet<TypeClassId>,
+    pub(super) types: BTreeMap<TypeId, TypeRegistration>,
+    pub(super) constructors: BTreeMap<TypeConstructorId, TypeConstructorRegistration>,
+    pub(super) classes: BTreeSet<TypeClassId>,
 }
 
 impl TypeRegistry {
@@ -160,7 +172,7 @@ pub struct CategoryRegistration {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CategoryRegistry {
-    pub(crate) categories: BTreeMap<NodeCategoryId, CategoryRegistration>,
+    pub(super) categories: BTreeMap<NodeCategoryId, CategoryRegistration>,
 }
 
 impl CategoryRegistry {
@@ -215,11 +227,15 @@ impl ProviderRegistration {
 
 #[derive(Debug, Clone)]
 pub struct NodeRegistry {
-    pub(crate) by_id: BTreeMap<NodeTypeId, Arc<RegisteredNode>>,
-    pub(crate) type_index: TypeRegistry,
-    pub(crate) category_index: CategoryRegistry,
-    pub(crate) catalog_manifest: CatalogManifest,
-    pub(crate) fingerprint: RegistryFingerprint,
+    pub(super) by_id: BTreeMap<NodeTypeId, Arc<RegisteredNode>>,
+    pub(super) node_providers: BTreeMap<NodeTypeId, ProviderId>,
+    pub(super) type_index: TypeRegistry,
+    pub(super) type_providers: BTreeMap<TypeId, ProviderId>,
+    pub(super) category_index: CategoryRegistry,
+    pub(super) catalog_manifest: CatalogManifest,
+    pub(super) nominal_validators:
+        BTreeMap<crate::node_system::protocol::TypeId, super::NominalParameterValidator>,
+    pub(super) fingerprint: RegistryFingerprint,
 }
 
 impl NodeRegistry {
@@ -237,6 +253,12 @@ impl NodeRegistry {
     }
     pub fn types(&self) -> &TypeRegistry {
         &self.type_index
+    }
+    pub fn node_provider(&self, id: &NodeTypeId) -> Option<&ProviderId> {
+        self.node_providers.get(id)
+    }
+    pub fn type_provider(&self, id: &TypeId) -> Option<&ProviderId> {
+        self.type_providers.get(id)
     }
     pub fn categories(&self) -> &CategoryRegistry {
         &self.category_index

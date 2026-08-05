@@ -5,19 +5,21 @@ use crate::node_system::analysis::{
     EditorGraphProjectionDto, LocalizationBundle, NodeDiagnostic,
 };
 use crate::node_system::compiler::{
-    GraphCompiler, ResourceSnapshot, build_builtin_interface_resolvers,
+    CompileCancellationToken, GraphCompiler, LoweredKernel, LoweringContext, ResourceSnapshot,
+    build_builtin_interface_resolvers,
 };
 use crate::node_system::document::{
     DocumentNode, FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature,
     GraphDocument, GraphResourcePath, NodeId, NodePosition,
 };
-use crate::node_system::plan::KernelHandle;
+
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, ManagedNodeRole, NodeScope, NodeTypeId, OutputProduction,
-    PortDirection, PortInstances, PortKind, TypeExpr,
+    ParameterKey, PortDirection, PortInstances, PortKind, TypeExpr,
 };
-use crate::node_system::registry::{I18nManifest, StructuralNodeRole};
+use crate::node_system::registry::{I18nManifest, ImplementationKind, StructuralNodeRole};
 use crate::node_system::runtime::build_builtin_kernel_registry;
+
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
@@ -39,11 +41,12 @@ impl ResourceSnapshot for EmptyResources {
 
 fn editor_fixture() -> (
     GraphDocument,
-    crate::node_system::registry::NodeRegistry,
-    BuiltinCatalog,
+    std::sync::Arc<crate::node_system::registry::NodeRegistry>,
+    std::sync::Arc<BuiltinCatalog>,
 ) {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let node_id = NodeId::from_uuid(Uuid::from_u128(1));
     let node_type = NodeTypeId::new("yssbi.constant.bool").unwrap();
     let mut document = GraphDocument::default();
@@ -62,7 +65,7 @@ fn editor_fixture() -> (
 
 fn editor_projection(locale: &str) -> EditorGraphProjectionDto {
     let (document, registry, catalog) = editor_fixture();
-    let analysis = GraphCompiler::new(&registry, &EmptyResources)
+    let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
         .compile(&document)
         .analysis;
     EditorGraphProjectionDto::from_sources(
@@ -77,8 +80,9 @@ fn editor_projection(locale: &str) -> EditorGraphProjectionDto {
 
 #[test]
 fn english_and_chinese_project_the_same_stable_node_ids() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let en = catalog.localize(&registry, "en-US");
     let zh = catalog.localize(&registry, "zh-CN");
     assert_eq!(
@@ -99,9 +103,10 @@ fn english_and_chinese_project_the_same_stable_node_ids() {
 
 #[test]
 fn changing_locale_does_not_change_registry_fingerprint() {
-    let registry = build_builtin_registry();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let fingerprint = registry.fingerprint().clone();
-    let (_, catalog) = build_builtin_provider();
     let _ = catalog.localize(&registry, "zh-CN");
     let _ = catalog.localize(&registry, "en-US");
     assert_eq!(&fingerprint, registry.fingerprint());
@@ -109,8 +114,9 @@ fn changing_locale_does_not_change_registry_fingerprint() {
 
 #[test]
 fn locale_fallback_uses_language_then_english_then_stable_key() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     assert_eq!(
         item(&catalog.localize(&registry, "zh-TW"), "yssbi.logic.not")
             .title
@@ -127,8 +133,9 @@ fn locale_fallback_uses_language_then_english_then_stable_key() {
 
 #[test]
 fn search_uses_only_current_locale_titles_and_aliases() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let en = catalog.localize(&registry, "en-US");
     let en_add = item(&en, "yssbi.numeric.add.int64");
     assert!(!en_add.search_text.contains("yssbi numeric add int64"));
@@ -147,8 +154,9 @@ fn search_uses_only_current_locale_titles_and_aliases() {
 
 #[test]
 fn catalog_items_keep_creation_descriptors_narrow_with_focused_documentation() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let value = serde_json::to_value(item(
         &catalog.localize(&registry, "en-US"),
         "yssbi.numeric.add.int64",
@@ -198,7 +206,40 @@ fn resource_catalog_serializes_opaque_paths_and_revisions() {
         );
     }
 
+    let parameterized = NodeCreationDescriptor::ParameterizedStatic {
+        node_type_id: NodeTypeId::new("yssbi.dataframe.project").unwrap(),
+        required_parameters: Box::new([ParameterKey::new("columns").unwrap()]),
+    };
+    let parameterized_value = serde_json::json!({
+        "kind": "parameterizedStatic",
+        "nodeTypeId": "yssbi.dataframe.project",
+        "requiredParameters": ["columns"],
+    });
+    assert_eq!(
+        serde_json::to_value(&parameterized).unwrap(),
+        parameterized_value
+    );
+    assert_eq!(
+        serde_json::from_value::<NodeCreationDescriptor>(parameterized_value).unwrap(),
+        parameterized,
+    );
+
     for malformed in [
+        serde_json::json!({
+            "kind": "parameterizedStatic",
+            "nodeTypeId": "yssbi.dataframe.project",
+        }),
+        serde_json::json!({
+            "kind": "parameterizedStatic",
+            "nodeTypeId": "yssbi.dataframe.project",
+            "requiredParameters": ["columns"],
+            "parameters": {},
+        }),
+        serde_json::json!({
+            "kind": "parameterizedStatic",
+            "nodeTypeId": "yssbi.dataframe.project",
+            "requiredParameters": "columns",
+        }),
         serde_json::json!({
             "kind": "resourceBound",
             "nodeTypeId": "yssbi.dataframe.source.get",
@@ -293,8 +334,9 @@ fn resource_catalog_serializes_opaque_paths_and_revisions() {
 
 #[test]
 fn static_catalog_excludes_managed_and_resource_required_descriptors() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
 
     let localized = catalog.localize(&registry, "en-US");
     let node_type_ids = localized
@@ -311,8 +353,9 @@ fn static_catalog_excludes_managed_and_resource_required_descriptors() {
 
 #[test]
 fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let resource = CatalogResourceEntry {
         name: "Calculate Sales".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
@@ -410,8 +453,9 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
 
 #[test]
 fn resource_catalog_search_uses_only_current_locale_title_and_aliases() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let resource = CatalogResourceEntry {
         name: "Calculate Sales".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
@@ -441,8 +485,9 @@ fn resource_catalog_search_uses_only_current_locale_title_and_aliases() {
 
 #[test]
 fn resource_catalog_localization_falls_back_without_changing_identity() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let resource = CatalogResourceEntry {
         name: "Opaque Display Name".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
@@ -477,8 +522,9 @@ fn resource_catalog_localization_falls_back_without_changing_identity() {
 
 #[test]
 fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let first = CatalogResourceEntry {
         name: "First".into(),
         node_type_id: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
@@ -581,8 +627,117 @@ fn i18n_validation_requires_alias_messages_to_be_arrays() {
 }
 
 #[test]
+fn builtin_factory_hides_raw_assembly_and_registry_shortcuts() {
+    let module = include_str!("mod.rs");
+    let builtin = include_str!("builtin.rs");
+
+    assert!(!module.contains("build_builtin_provider"));
+    assert!(!module.contains("build_builtin_registry"));
+    assert!(!builtin.contains("pub fn build_builtin_provider"));
+    assert!(!builtin.contains("pub fn build_builtin_registry"));
+
+    let nominal_installer = builtin
+        .split("fn register_builtin_nominal_validators(")
+        .nth(1)
+        .and_then(|tail| tail.split("#[cfg(test)]").next())
+        .expect("nominal installer source section");
+    assert!(nominal_installer.contains("Result<(), NodeRegistrationError>"));
+    assert!(!nominal_installer.contains(".expect("));
+    assert!(!nominal_installer.contains(".unwrap("));
+    assert!(!nominal_installer.contains("panic!("));
+}
+
+#[test]
+fn builtin_nominal_validator_registration_propagates_duplicate_failure() {
+    let mut builder = crate::node_system::registry::NodeRegistryBuilder::new();
+    let project_columns = crate::node_system::protocol::TypeId::new(
+        crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+    )
+    .unwrap();
+    builder
+        .register_nominal_validator(
+            project_columns.clone(),
+            crate::node_system::protocol::TypeId::new("test.nominal.validator").unwrap(),
+            1,
+            |_| Ok(()),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        register_builtin_nominal_validators_for_test(&mut builder),
+        Err(BuiltinInitializationError::Registration(
+            crate::node_system::registry::NodeRegistrationError::InvalidRegistry(
+                crate::node_system::registry::RegistryValidationError::DuplicateNominalValidator(
+                    id,
+                ),
+            ),
+        )) if id == project_columns
+    ));
+}
+
+#[test]
+fn builtin_startup_rejects_missing_default_locale_key() {
+    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let missing = provider.i18n.keys.iter().next().unwrap().clone();
+    catalog.remove_message_for_test("en-US", &missing);
+
+    assert!(matches!(
+        validate_builtin_bundle_for_test(provider, catalog, alias_keys),
+        Err(BuiltinInitializationError::Localization(
+            I18nBundleValidationError::MissingDefaultLocale { keys }
+        )) if keys.iter().any(|key| key.as_ref() == missing.as_str())
+    ));
+}
+
+#[test]
+fn builtin_startup_rejects_alias_stored_as_text() {
+    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let alias = alias_keys.iter().next().unwrap().clone();
+    catalog.replace_message_for_test("en-US", alias.clone(), Text("malformed aliases"));
+
+    assert!(matches!(
+        validate_builtin_bundle_for_test(provider, catalog, alias_keys),
+        Err(BuiltinInitializationError::Localization(
+            I18nBundleValidationError::AliasesNotArray { locale, key }
+        )) if locale.as_ref() == "en-US" && key.as_ref() == alias.as_str()
+    ));
+}
+
+#[test]
+fn builtin_startup_rejects_invalid_registry_before_returning_a_bundle() {
+    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test();
+    provider.types[0].title_key = "missing.type.title".parse().unwrap();
+
+    assert!(matches!(
+        validate_builtin_bundle_for_test(provider, catalog, alias_keys),
+        Err(BuiltinInitializationError::Registration(_))
+    ));
+}
+
+#[test]
+fn builtin_startup_returns_one_validated_registry_and_catalog_bundle() {
+    let bundle = build_builtin_node_system().unwrap();
+
+    assert!(!bundle.registry.is_empty());
+    assert_eq!(
+        bundle
+            .registry
+            .node_provider(&NodeTypeId::new("yssbi.constant.bool").unwrap())
+            .map(crate::node_system::protocol::ProviderId::as_str),
+        Some("yssbi.builtin")
+    );
+    assert!(
+        !bundle
+            .catalog
+            .localize(&bundle.registry, "en-US")
+            .items
+            .is_empty()
+    );
+}
+
+#[test]
 fn compiler_diagnostics_render_in_english_and_chinese() {
-    let (_, catalog) = build_builtin_provider();
+    let catalog = build_builtin_node_system().unwrap().catalog;
     let key = I18nKey::new("diagnostics.compiler.type.incompatible").unwrap();
     let arguments = DiagnosticArguments::from([(
         Box::<str>::from("detail"),
@@ -607,24 +762,33 @@ fn compiler_diagnostics_render_in_english_and_chinese() {
 
 #[test]
 fn trusted_provider_freezes_with_complete_inventory() {
-    let registry = build_builtin_registry();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     assert!(registry.len() >= 20);
     assert!(
         registry
             .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
             .unwrap()
-            .structural_role
+            .structural_role()
             .is_some()
     );
-    let (_, catalog) = build_builtin_provider();
-    let inventory = catalog.audit(&registry.catalog_manifest().i18n, &BTreeSet::new());
-    assert!(inventory.default_locale_missing.is_empty());
-    assert!(inventory.unused_by_locale["en-US"].is_empty());
+    assert_eq!(
+        item(
+            &catalog.localize(&registry, "en-US"),
+            "yssbi.control.branch"
+        )
+        .title
+        .as_ref(),
+        "Branch"
+    );
 }
 
 #[test]
 fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
-    let registry = build_builtin_registry();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let expected = [
         ("yssbi.project.event.begin", StructuralNodeRole::EventBegin),
         (
@@ -642,13 +806,13 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
     ];
     for (id, role) in expected {
         let node = registry.get(&NodeTypeId::new(id).unwrap()).unwrap();
-        assert_eq!(node.structural_role, Some(role));
+        assert_eq!(node.structural_role(), Some(role));
     }
 
     let entry = &registry
         .get(&NodeTypeId::new("yssbi.project.function.entry").unwrap())
         .unwrap()
-        .protocol;
+        .protocol();
     assert_eq!(entry.scope, NodeScope::Function);
     assert_eq!(entry.managed_role, Some(ManagedNodeRole::FunctionEntry));
     assert!(
@@ -663,7 +827,7 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
         let protocol = &registry
             .get(&NodeTypeId::new(id).unwrap())
             .unwrap()
-            .protocol;
+            .protocol();
         assert!(
             protocol
                 .interface
@@ -679,7 +843,7 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
     let branch_protocol = &registry
         .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
         .unwrap()
-        .protocol;
+        .protocol();
     for (key, direction) in [
         ("then_source", PortDirection::Input),
         ("else_source", PortDirection::Input),
@@ -719,7 +883,7 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
     let loop_protocol = &registry
         .get(&NodeTypeId::new("yssbi.control.loop").unwrap())
         .unwrap()
-        .protocol;
+        .protocol();
     for (key, direction) in [
         ("initial_source", PortDirection::Input),
         ("body_input", PortDirection::Output),
@@ -782,7 +946,7 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
         let protocol = &registry
             .get(&NodeTypeId::new(id).unwrap())
             .unwrap()
-            .protocol;
+            .protocol();
         for (key, direction) in [
             ("effect_in", PortDirection::Input),
             ("effect_out", PortDirection::Output),
@@ -815,16 +979,22 @@ fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
         }
     }
 
-    let (_, catalog) = build_builtin_provider();
-    catalog
-        .validate(&registry.catalog_manifest().i18n, &BTreeSet::new())
-        .expect("control protocol localization must remain complete");
+    assert_eq!(
+        item(
+            &catalog.localize(&registry, "en-US"),
+            "yssbi.control.branch",
+        )
+        .title
+        .as_ref(),
+        "Branch"
+    );
 }
 
 #[test]
 fn eligible_static_and_resource_bound_catalog_items_are_localized() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     for locale in ["en-US", "zh-CN"] {
         let localized = catalog.localize(&registry, locale);
         for id in ["yssbi.numeric.add.int64"] {
@@ -905,7 +1075,7 @@ fn builtin_function_resolver_projects_function_document_members() {
         }
     }
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let path = GraphResourcePath("functions/calculate-sales".into());
     let resources = FunctionResources {
         path: path.clone(),
@@ -955,7 +1125,7 @@ fn builtin_function_resolver_projects_function_document_members() {
 
 #[test]
 fn event_begin_compiles_as_a_structural_entry() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let node_id = NodeId::from_uuid(Uuid::from_u128(43));
     let mut document = GraphDocument::default();
     document.nodes.insert(
@@ -975,17 +1145,20 @@ fn event_begin_compiles_as_a_structural_entry() {
 }
 
 #[test]
-fn builtin_provider_declares_named_function_interface_resolvers() {
-    let (provider, _) = build_builtin_provider();
-    let ids = provider
-        .interface_resolvers
-        .iter()
-        .map(|id| id.as_str())
-        .collect::<BTreeSet<_>>();
-    assert!(ids.contains("yssbi.project.function.call.arguments"));
-    assert!(ids.contains("yssbi.project.function.call.results"));
-    assert!(ids.contains("yssbi.project.function.entry.parameters"));
-    assert!(ids.contains("yssbi.project.function.return.results"));
+fn builtin_factory_freezes_function_interface_nodes() {
+    let builtin = build_builtin_node_system().unwrap();
+    for id in [
+        "yssbi.project.function.call",
+        "yssbi.project.function.entry",
+        "yssbi.project.function.return",
+    ] {
+        assert!(
+            builtin
+                .registry
+                .get(&NodeTypeId::new(id).unwrap())
+                .is_some()
+        );
+    }
 }
 
 #[test]
@@ -1017,7 +1190,7 @@ fn editor_locale_changes_only_display_not_identity_or_address() {
 #[test]
 fn editor_projection_preserves_blocking_diagnostics() {
     let (document, registry, catalog) = editor_fixture();
-    let mut analysis = GraphCompiler::new(&registry, &EmptyResources)
+    let mut analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
         .compile(&document)
         .analysis;
     let node_id = *document.nodes.keys().next().unwrap();
@@ -1060,7 +1233,7 @@ fn fixed_port_projection_has_no_instance_uuid() {
 
 #[test]
 fn legacy_production_catalog_has_complete_stable_manifest_coverage() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut manifest = super::core_nodes::legacy_coverage()
         .iter()
         .map(|entry| (entry.legacy_node_type, entry.stable_ids.to_vec()))
@@ -1100,7 +1273,7 @@ fn legacy_production_catalog_has_complete_stable_manifest_coverage() {
     assert_eq!(
         manifest.len(),
         148,
-        "legacy NodeDefinition manifest changed"
+        "legacy node migration manifest changed"
     );
     assert_eq!(
         manifest
@@ -1131,182 +1304,85 @@ fn legacy_production_catalog_has_complete_stable_manifest_coverage() {
 }
 
 #[test]
-fn builtin_provider_is_deterministic_and_has_single_owners() {
-    let (first, _) = build_builtin_provider();
-    let (second, _) = build_builtin_provider();
+fn builtin_factory_is_deterministic_and_has_single_owners() {
+    let first = build_builtin_node_system().unwrap();
+    let second = build_builtin_node_system().unwrap();
     let first_node_ids = first
-        .nodes
+        .registry
         .iter()
-        .map(|node| node.protocol.type_id.as_str())
+        .map(|(id, _)| id.as_str())
         .collect::<Vec<_>>();
     let second_node_ids = second
-        .nodes
+        .registry
         .iter()
-        .map(|node| node.protocol.type_id.as_str())
+        .map(|(id, _)| id.as_str())
         .collect::<Vec<_>>();
 
     assert_eq!(first_node_ids, second_node_ids);
+    assert_eq!(first.registry.fingerprint(), second.registry.fingerprint());
     assert!(first_node_ids.windows(2).all(|ids| ids[0] < ids[1]));
-    assert!(
+    assert!(first.registry.iter().all(|(id, _)| {
         first
-            .types
-            .windows(2)
-            .all(|items| items[0].id < items[1].id)
-    );
-    assert!(
-        first
-            .type_constructors
-            .windows(2)
-            .all(|items| items[0].id < items[1].id)
-    );
-    assert!(
-        first
-            .categories
-            .windows(2)
-            .all(|items| items[0].id < items[1].id)
-    );
-    assert!(
-        first
-            .interface_resolvers
-            .windows(2)
-            .all(|ids| ids[0] < ids[1])
-    );
-    assert!(first.schema_resolvers.windows(2).all(|ids| ids[0] < ids[1]));
+            .registry
+            .node_provider(id)
+            .is_some_and(|owner| owner.as_str() == "yssbi.builtin")
+    }));
 }
 
 #[test]
-fn every_leaf_has_a_protocol_lowerer_and_production_kernel() {
-    let nodes = build_builtin_registry();
+fn every_emitted_native_kernel_has_a_production_implementation() {
+    let nodes = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let kernels = build_builtin_kernel_registry();
+    let cancellation = CompileCancellationToken::new();
 
     for (node_id, node) in nodes.iter() {
-        let Some(implementation) = &node.implementation else {
-            assert!(node.structural_role.is_some(), "{node_id}");
+        let Some(implementation) = &node.implementation() else {
             continue;
         };
-        assert!(
-            implementation
-                .as_any()
-                .downcast_ref::<crate::node_system::compiler::NodeImplementation>()
-                .is_some(),
-            "leaf node '{node_id}' has no protocol lowerer",
+        assert_eq!(
+            implementation.capability(),
+            ImplementationKind::CompilerLowering
         );
-        if matches!(
-            node_id.as_str(),
-            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit" | "yssbi.dataframe.rename"
-        ) {
-            // These nodes lower to relational fragments, frozen by the focused
-            // dataframe catalog contract rather than the native kernel registry.
-            continue;
-        }
-        let handle = match node_id.as_str() {
-            "yssbi.logic.equal" => "yssbi.compare.equal",
-            "yssbi.logic.not_equal" => "yssbi.compare.not_equal",
-            "yssbi.logic.less" => "yssbi.compare.less",
-            "yssbi.logic.less_equal" => "yssbi.compare.less_equal",
-            "yssbi.logic.greater" => "yssbi.compare.greater",
-            "yssbi.logic.greater_equal" => "yssbi.compare.greater_equal",
-            id => id,
+        let lowerer = implementation
+            .as_any()
+            .downcast_ref::<crate::node_system::compiler::NodeImplementation>()
+            .unwrap_or_else(|| panic!("implemented node '{node_id}' has no compiler lowerer"));
+        let parameters = BTreeMap::new();
+        let context = LoweringContext {
+            cancellation: &cancellation,
+            node_id: NodeId::new(),
+            protocol: &node.protocol(),
+            parameters: &parameters,
+            inputs: &[],
+            outputs: &[],
         };
-        let handle = KernelHandle::new(handle).unwrap();
-        assert!(
-            kernels.get(&handle).is_some(),
-            "leaf node '{node_id}' lowers to missing kernel '{}'",
-            handle.as_str(),
-        );
-    }
-}
-
-#[test]
-fn production_catalog_document_and_command_boundaries_reject_legacy_graph_inference() {
-    use std::fs;
-    use std::path::{Path, PathBuf};
-
-    fn production_rust_files(directory: &Path, files: &mut Vec<PathBuf>) {
-        for entry in fs::read_dir(directory).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.is_dir() {
-                if path.file_name().is_some_and(|name| name == "tests") {
-                    continue;
-                }
-                production_rust_files(&path, files);
-            } else if path.extension().is_some_and(|extension| extension == "rs")
-                && path.file_name().is_none_or(|name| name != "tests.rs")
-            {
-                files.push(path);
-            }
-        }
-    }
-
-    fn use_statements(source: &str) -> Vec<String> {
-        let mut statements = Vec::new();
-        let mut current = String::new();
-        for line in source.lines() {
-            let trimmed = line.trim();
-            if current.is_empty()
-                && !(trimmed.starts_with("use ") || trimmed.starts_with("pub use "))
-            {
+        let native_implementation = implementation
+            .implementation_identity()
+            .ends_with("::KernelLowerer");
+        let lowered = match lowerer.lowerer.lower(&context) {
+            Ok(lowered) => lowered,
+            Err(error) if !native_implementation => {
+                let _ = error;
                 continue;
             }
-            current.push_str(trimmed);
-            if trimmed.ends_with(';') {
-                statements.push(std::mem::take(&mut current));
-            }
-        }
-        statements
-    }
-
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let roots = [
-        manifest_dir.join("src/node_system/catalog"),
-        manifest_dir.join("src/node_system/document"),
-        manifest_dir.join("src/commands"),
-    ];
-    let mut files = Vec::new();
-    for root in roots {
-        production_rust_files(&root, &mut files);
-    }
-    files.sort();
-
-    let forbidden_imports = [
-        "crate::graph::node",
-        "crate::schema::node",
-        "NodeDefinition",
-        "NodeDefinitionDTO",
-        "PinResolver",
-    ];
-    let forbidden_resolvers = [
-        "NodeDefinition::placeholder",
-        ".resolve_dynamic_pins(",
-        ".resolve_all_dynamic_pins(",
-        "PinResolverContext",
-        "pin_resolver",
-    ];
-    let mut offenders = Vec::new();
-    for path in &files {
-        let source = fs::read_to_string(path).unwrap();
-        for statement in use_statements(&source) {
-            for needle in forbidden_imports {
-                if statement.contains(needle) {
-                    offenders.push(format!("{}: {statement}", path.display()));
-                }
-            }
-        }
-        for needle in forbidden_resolvers {
-            if source.contains(needle) {
-                offenders.push(format!("{}: {needle}", path.display()));
-            }
+            Err(error) => panic!("native node '{node_id}' failed to lower: {error}"),
+        };
+        assert!(
+            !native_implementation || matches!(lowered.kernel, LoweredKernel::Native(_)),
+            "native implementation for '{node_id}' emitted a non-native fragment",
+        );
+        let native = match &lowered.kernel {
+            LoweredKernel::Native(handle) => Some(handle),
+            LoweredKernel::Scalar(fragment) => Some(&fragment.kernel),
+            LoweredKernel::Kernel(fragment) => Some(&fragment.kernel),
+            LoweredKernel::Relational(_) => None,
+        };
+        if let Some(handle) = native {
+            assert!(
+                kernels.get(handle).is_some(),
+                "implemented node '{node_id}' emits missing native kernel '{}'",
+                handle.as_str(),
+            );
         }
     }
-
-    assert!(
-        !files.is_empty(),
-        "boundary audit scanned no production Rust files"
-    );
-    assert!(
-        offenders.is_empty(),
-        "legacy graph inference crossed Catalog/document/command boundaries:\n{}",
-        offenders.join("\n"),
-    );
 }

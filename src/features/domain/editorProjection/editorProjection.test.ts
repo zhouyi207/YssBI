@@ -65,7 +65,7 @@ function validProjection(): EditorGraphProjectionDto {
             },
             input: null,
             resolvedType: { display: 'Model', resolved: true },
-            resolvedSchema: { kind: 'derived' },
+            resolvedSchema: { kind: 'derived', fields: [] },
             status: 'resolved',
           },
           {
@@ -89,7 +89,7 @@ function validProjection(): EditorGraphProjectionDto {
               effective: 'connections',
             },
             resolvedType: { display: 'Float64', resolved: true },
-            resolvedSchema: { kind: 'input' },
+            resolvedSchema: { kind: 'input', fields: [] },
             status: 'resolved',
           },
         ],
@@ -100,6 +100,7 @@ function validProjection(): EditorGraphProjectionDto {
             editor: 'text',
             multiline: true,
             value: 'y ~ x',
+            configuration: null,
           },
         ],
         capabilities: {
@@ -224,6 +225,39 @@ describe('validateEditorGraphProjection', () => {
     const duplicateConnection = validProjection();
     duplicateConnection.connections.push(structuredClone(duplicateConnection.connections[0]));
     expect(() => validateEditorGraphProjection(duplicateConnection)).toThrow(/duplicate connection/);
+  });
+
+  it('strictly validates Rust-issued schema-aware editor wire data', () => {
+    const projection = validProjection();
+    projection.nodes[0].parameterEditors[0].configuration = {
+      kind: 'filterPredicate',
+      available: true,
+      unavailableReason: null,
+      columns: [{
+        name: 'amount',
+        dataType: 'float64',
+        operators: ['equal', 'greaterThan', 'isNull'],
+        literalTypes: ['integer', 'decimal'],
+      }],
+      value: {
+        column: 'amount',
+        operator: 'greaterThan',
+        value: { type: 'decimal', value: '9007199254740993.5' },
+      },
+    };
+    expect(validateEditorGraphProjection(projection)).toBe(projection);
+
+    const extra = structuredClone(projection);
+    Object.assign(extra.nodes[0].parameterEditors[0].configuration!, { compatibility: true });
+    expect(() => validateEditorGraphProjection(extra)).toThrow(/parameter editor/);
+
+    const lossy = structuredClone(projection);
+    const configuration = lossy.nodes[0].parameterEditors[0].configuration;
+    if (configuration?.kind !== 'filterPredicate' || !configuration.value?.value) {
+      throw new Error('test fixture mismatch');
+    }
+    configuration.value.value.value = 9007199254740994 as never;
+    expect(() => validateEditorGraphProjection(lossy)).toThrow(/parameter editor/);
   });
 
   it('rejects a port address owned by a different node', () => {

@@ -37,6 +37,9 @@ pub struct AnalysisSnapshot<
         )
     )]
     pub partial_schemas: SchemaFacts<PortAddress, SchemaFact>,
+    #[serde(with = "ordered_map_entries")]
+    pub resolved_schemas:
+        SchemaFacts<PortAddress, crate::node_system::protocol::ResolvedSchemaFact>,
     pub diagnostics: Box<[NodeDiagnostic<NodeId, PortAddress, ConnectionId, ResourceIdentity>]>,
 }
 
@@ -75,7 +78,7 @@ pub enum ValidationError {
     BasisMismatch,
 }
 
-mod ordered_map_entries {
+pub(super) mod ordered_map_entries {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::collections::BTreeMap;
 
@@ -142,6 +145,15 @@ mod tests {
         TypeExpr,
         SchemaExpr,
     >;
+    type TestSemantic = ValidatedSemanticGraph<
+        GraphRevision,
+        NodeId,
+        PortAddress,
+        ConnectionId,
+        serde_json::Value,
+        TypeExpr,
+        SchemaExpr,
+    >;
 
     fn address(node: u128, port: &str) -> PortAddress {
         PortAddress::declared(
@@ -163,8 +175,36 @@ mod tests {
             TypeExpr::Concrete(TypeId::new("core.integer").unwrap()),
         );
         let mut partial_schemas = BTreeMap::new();
-        partial_schemas.insert(second, SchemaExpr::Input(PortKey::new("source_b").unwrap()));
-        partial_schemas.insert(first, SchemaExpr::Input(PortKey::new("source_a").unwrap()));
+        partial_schemas.insert(
+            second.clone(),
+            SchemaExpr::Input(PortKey::new("source_b").unwrap()),
+        );
+        partial_schemas.insert(
+            first.clone(),
+            SchemaExpr::Input(PortKey::new("source_a").unwrap()),
+        );
+        let resolved_schemas = BTreeMap::from([
+            (
+                second,
+                crate::node_system::protocol::ResolvedSchemaFact::new(
+                    SchemaExpr::Input(PortKey::new("source_b").unwrap()),
+                    [crate::node_system::protocol::SchemaField {
+                        name: crate::node_system::protocol::SchemaColumnRef("name".into()),
+                        scalar_type: crate::node_system::protocol::RelationalScalarType::String,
+                    }],
+                ),
+            ),
+            (
+                first,
+                crate::node_system::protocol::ResolvedSchemaFact::new(
+                    SchemaExpr::Input(PortKey::new("source_a").unwrap()),
+                    [crate::node_system::protocol::SchemaField {
+                        name: crate::node_system::protocol::SchemaColumnRef("amount".into()),
+                        scalar_type: crate::node_system::protocol::RelationalScalarType::Float64,
+                    }],
+                ),
+            ),
+        ]);
 
         AnalysisSnapshot {
             basis: CompilationBasis {
@@ -179,6 +219,7 @@ mod tests {
             resolved_interfaces: Box::new([]),
             partial_types,
             partial_schemas,
+            resolved_schemas,
             diagnostics: Box::new([]),
         }
     }
@@ -211,6 +252,13 @@ mod tests {
             ])
         );
         assert_eq!(
+            json["resolved_schemas"],
+            serde_json::Value::Array(vec![
+                json_entry(&first, &snapshot.resolved_schemas[&first]),
+                json_entry(&second, &snapshot.resolved_schemas[&second]),
+            ])
+        );
+        assert_eq!(
             json["partial_schemas"],
             serde_json::Value::Array(vec![
                 json_entry(
@@ -222,6 +270,103 @@ mod tests {
                     &SchemaExpr::Input(PortKey::new("source_b").unwrap()),
                 ),
             ])
+        );
+    }
+
+    #[test]
+    fn non_empty_typed_schema_serialization_and_digest_are_deterministic_and_sensitive() {
+        let baseline = snapshot();
+        let mut reordered = baseline.clone();
+        reordered.resolved_schemas = baseline
+            .resolved_schemas
+            .iter()
+            .rev()
+            .map(|(address, fact)| (address.clone(), fact.clone()))
+            .collect();
+
+        let baseline_semantic = TestSemantic {
+            basis: baseline.basis.clone(),
+            nodes: Box::new([]),
+            dependencies: Box::new([]),
+            resolved_schemas: baseline.resolved_schemas.clone(),
+        };
+        let reordered_semantic = TestSemantic {
+            basis: reordered.basis.clone(),
+            nodes: Box::new([]),
+            dependencies: Box::new([]),
+            resolved_schemas: reordered.resolved_schemas.clone(),
+        };
+
+        assert_eq!(
+            serde_json::to_vec(&baseline).unwrap(),
+            serde_json::to_vec(&reordered).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_vec(&baseline_semantic).unwrap(),
+            serde_json::to_vec(&reordered_semantic).unwrap()
+        );
+        assert_eq!(
+            crate::node_system::registry::hash_canonical(
+                "yssbi.analysis-snapshot.test.v1",
+                &baseline,
+            ),
+            crate::node_system::registry::hash_canonical(
+                "yssbi.analysis-snapshot.test.v1",
+                &reordered,
+            )
+        );
+        assert_eq!(
+            crate::node_system::registry::hash_canonical(
+                "yssbi.validated-semantic-graph.test.v1",
+                &baseline_semantic,
+            ),
+            crate::node_system::registry::hash_canonical(
+                "yssbi.validated-semantic-graph.test.v1",
+                &reordered_semantic,
+            )
+        );
+
+        let mut changed = baseline.clone();
+        changed
+            .resolved_schemas
+            .get_mut(&address(1, "first"))
+            .unwrap()
+            .fields[0]
+            .scalar_type = crate::node_system::protocol::RelationalScalarType::Int64;
+        let changed_semantic = TestSemantic {
+            basis: changed.basis.clone(),
+            nodes: Box::new([]),
+            dependencies: Box::new([]),
+            resolved_schemas: changed.resolved_schemas.clone(),
+        };
+
+        assert_ne!(
+            serde_json::to_vec(&baseline).unwrap(),
+            serde_json::to_vec(&changed).unwrap()
+        );
+        assert_ne!(
+            serde_json::to_vec(&baseline_semantic).unwrap(),
+            serde_json::to_vec(&changed_semantic).unwrap()
+        );
+        assert_ne!(
+            crate::node_system::registry::hash_canonical(
+                "yssbi.analysis-snapshot.test.v1",
+                &baseline,
+            ),
+            crate::node_system::registry::hash_canonical(
+                "yssbi.analysis-snapshot.test.v1",
+                &changed,
+            )
+        );
+        assert_ne!(
+            crate::node_system::registry::hash_canonical(
+                "yssbi.validated-semantic-graph.test.v1",
+                &baseline_semantic,
+            ),
+            crate::node_system::registry::hash_canonical(
+                "yssbi.validated-semantic-graph.test.v1",
+                &changed_semantic,
+            )
         );
     }
 

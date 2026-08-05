@@ -1,14 +1,20 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId,
+    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, SpanEvent, SpanKind,
+    SpanStatus, TraceSink,
 };
-use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
+use crate::node_system::document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
+    GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
+};
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
     CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 struct NoFunctions;
 
@@ -68,6 +74,7 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
                 consumption: InputConsumption::FullyMaterialized,
+                bound_value: None,
             })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -77,6 +84,36 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
         }]),
         params: handle(params, CompiledParameterHandle::new),
     }
+}
+
+fn effect_operation(kernel: &str, params: &str, inputs: &[u32]) -> PlannedOperation {
+    let mut operation = operation(kernel, params, inputs, 0);
+    operation.outputs = Box::new([]);
+    operation
+}
+
+fn execute_kernel_direct(
+    kernel: &str,
+    params: &CompiledParameterHandle,
+    compiled_parameters: Option<&CompiledParameterStore>,
+    inputs: &[RuntimeValue],
+) -> Result<Vec<RuntimeValue>, KernelError> {
+    let registry = build_builtin_kernel_registry();
+    let resources = RunResourceSet::acquire(&[], &NoResources).unwrap();
+    let cancellation = CancellationToken::new();
+    let context = KernelContext {
+        run_id: RunId::new(1),
+        frame_id: FrameId::next(),
+        activation_id: ActivationId::next(),
+        params,
+        compiled_parameters,
+        resources: &resources,
+        cancellation: &cancellation,
+    };
+    registry
+        .get(&handle(kernel, KernelHandle::new))
+        .expect("production kernel handle")
+        .execute(&context, inputs)
 }
 
 fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) -> ExecutionPlan {
@@ -434,6 +471,617 @@ fn compare_and_logic_kernels_execute_through_the_run_scheduler() {
         let key = format!("value_{value}");
         assert_eq!(result.values[key.as_str()], Value::Bool(expected).into());
     }
+}
+
+#[test]
+fn equal_kernel_covers_bool_int_string_and_float() {
+    for (label, left, right, expected) in [
+        ("bool", Value::Bool(true), Value::Bool(true), true),
+        ("int", Value::Integer(7), Value::Integer(7), true),
+        (
+            "string",
+            Value::String("same".into()),
+            Value::String("different".into()),
+            false,
+        ),
+        ("float", decimal("1.25"), decimal("1.25"), true),
+    ] {
+        let mut parameters = CompiledParameterStore::new();
+        insert_constant(&mut parameters, &format!("{label}.left"), left);
+        insert_constant(&mut parameters, &format!("{label}.right"), right);
+        let execution_plan = plan(
+            vec![
+                operation("yssbi.constant.bool", &format!("{label}.left"), &[], 0),
+                operation("yssbi.constant.bool", &format!("{label}.right"), &[], 1),
+                operation("yssbi.compare.equal", "unused.equal", &[0, 1], 2),
+            ],
+            3,
+            &[2],
+        );
+        let constant_kind = match label {
+            "bool" => "yssbi.constant.bool",
+            "int" => "yssbi.constant.int64",
+            "string" => "yssbi.constant.string",
+            "float" => "yssbi.constant.float64",
+            _ => unreachable!(),
+        };
+        let mut operations = execution_plan.operations.into_vec();
+        operations[0].kernel = PlannedKernel::Native(handle(constant_kind, KernelHandle::new));
+        operations[1].kernel = PlannedKernel::Native(handle(constant_kind, KernelHandle::new));
+        let execution_plan = plan(operations, 3, &[2]);
+        let result = execute(&execution_plan, &parameters).unwrap();
+        assert_eq!(
+            result.values["value_2"],
+            Value::Bool(expected).into(),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn scalar_convert_kernel_covers_supported_targets_and_errors() {
+    for (label, input, target, expected) in [
+        (
+            "bool",
+            Value::String("yes".into()),
+            ConvertTarget::Bool,
+            Value::Bool(true),
+        ),
+        (
+            "int",
+            decimal("7.9"),
+            ConvertTarget::Int64,
+            Value::Integer(7),
+        ),
+        (
+            "float",
+            Value::Integer(5),
+            ConvertTarget::Float64,
+            decimal("5"),
+        ),
+        (
+            "string",
+            Value::Bool(true),
+            ConvertTarget::String,
+            Value::String("true".into()),
+        ),
+    ] {
+        let mut parameters = CompiledParameterStore::new();
+        let params = handle(&format!("convert.{label}"), CompiledParameterHandle::new);
+        parameters
+            .insert(params.clone(), ConvertParameters { target })
+            .unwrap();
+        let output = execute_kernel_direct(
+            "yssbi.value.convert",
+            &params,
+            Some(&parameters),
+            &[input.into()],
+        )
+        .unwrap();
+        assert_eq!(output, vec![expected.into()], "{label}");
+    }
+
+    let mut parameters = CompiledParameterStore::new();
+    let params = handle("convert.error", CompiledParameterHandle::new);
+    parameters
+        .insert(
+            params.clone(),
+            ConvertParameters {
+                target: ConvertTarget::Int64,
+            },
+        )
+        .unwrap();
+    let error = execute_kernel_direct(
+        "yssbi.value.convert",
+        &params,
+        Some(&parameters),
+        &[Value::String("not-an-int".into()).into()],
+    )
+    .unwrap_err();
+    assert_eq!(error.message(), "cannot parse 'not-an-int' as Int64");
+
+    for (target, input, expected) in [
+        (
+            ConvertTarget::Bool,
+            Value::String("maybe".into()),
+            "cannot parse 'maybe' as Boolean",
+        ),
+        (
+            ConvertTarget::Float64,
+            Value::String("not-a-float".into()),
+            "cannot parse 'not-a-float' as Float64",
+        ),
+        (
+            ConvertTarget::String,
+            Value::List(vec![]),
+            "cannot convert List to String",
+        ),
+    ] {
+        let mut parameters = CompiledParameterStore::new();
+        let params = handle("convert.target-error", CompiledParameterHandle::new);
+        parameters
+            .insert(params.clone(), ConvertParameters { target })
+            .unwrap();
+        let error = execute_kernel_direct(
+            "yssbi.value.convert",
+            &params,
+            Some(&parameters),
+            &[input.into()],
+        )
+        .unwrap_err();
+        assert_eq!(error.message(), expected);
+    }
+
+    let error = execute_kernel_direct(
+        "yssbi.value.convert",
+        &params,
+        Some(&parameters),
+        &[RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Replayable,
+            vec![Value::Integer(1)],
+        ))],
+    )
+    .unwrap_err();
+    assert_eq!(error.message(), "value conversion expects a scalar input");
+}
+
+#[test]
+fn series_conversion_kernels_cover_every_legacy_conversion() {
+    let cases = [
+        (
+            "yssbi.data_series.convert.string_to_categorical",
+            Value::String("blue".into()),
+            Value::String("blue".into()),
+        ),
+        (
+            "yssbi.data_series.convert.string_to_float64",
+            Value::String("2.5".into()),
+            decimal("2.5"),
+        ),
+        (
+            "yssbi.data_series.convert.string_to_int64",
+            Value::String("2".into()),
+            Value::Integer(2),
+        ),
+        (
+            "yssbi.data_series.convert.int64_to_string",
+            Value::Integer(2),
+            Value::String("2".into()),
+        ),
+        (
+            "yssbi.data_series.convert.float64_to_string",
+            decimal("2.5"),
+            Value::String("2.5".into()),
+        ),
+        (
+            "yssbi.data_series.convert.int64_to_float64",
+            Value::Integer(2),
+            decimal("2"),
+        ),
+        (
+            "yssbi.data_series.convert.float64_to_int64",
+            decimal("2.9"),
+            Value::Integer(2),
+        ),
+        (
+            "yssbi.data_series.convert.int64_to_bool",
+            Value::Integer(1),
+            Value::Bool(true),
+        ),
+        (
+            "yssbi.data_series.convert.float64_to_bool",
+            decimal("0"),
+            Value::Bool(false),
+        ),
+        (
+            "yssbi.data_series.convert.categorical_to_string",
+            Value::String("blue".into()),
+            Value::String("blue".into()),
+        ),
+        (
+            "yssbi.data_series.convert.int64_to_categorical",
+            Value::Integer(2),
+            Value::String("2".into()),
+        ),
+        (
+            "yssbi.data_series.convert.categorical_to_int64",
+            Value::String("2".into()),
+            Value::Integer(2),
+        ),
+        (
+            "yssbi.data_series.convert.float64_to_categorical",
+            decimal("2.5"),
+            Value::String("2.5".into()),
+        ),
+        (
+            "yssbi.data_series.convert.categorical_to_float64",
+            Value::String("2.5".into()),
+            decimal("2.5"),
+        ),
+    ];
+    let params = handle("series.convert", CompiledParameterHandle::new);
+    for (kernel, input, expected) in cases {
+        let output = execute_kernel_direct(
+            kernel,
+            &params,
+            None,
+            &[RuntimeValue::Artifact(Artifact::new(
+                ArtifactKind::Replayable,
+                vec![input, Value::Null],
+            ))],
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            vec![RuntimeValue::Artifact(Artifact::new(
+                ArtifactKind::Replayable,
+                vec![expected, Value::Null],
+            ))],
+            "{kernel}",
+        );
+    }
+
+    let parse_error = execute_kernel_direct(
+        "yssbi.data_series.convert.string_to_int64",
+        &params,
+        None,
+        &[RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Replayable,
+            vec![Value::String("bad".into())],
+        ))],
+    )
+    .unwrap_err();
+    assert_eq!(
+        parse_error.message(),
+        "DataSeries element 0: cannot parse 'bad' as Int64"
+    );
+
+    let source_type_error = execute_kernel_direct(
+        "yssbi.data_series.convert.string_to_float64",
+        &params,
+        None,
+        &[RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Replayable,
+            vec![Value::Integer(1)],
+        ))],
+    )
+    .unwrap_err();
+    assert_eq!(
+        source_type_error.message(),
+        "DataSeries element 0: expected String, got Int64"
+    );
+
+    let materialization_error = execute_kernel_direct(
+        "yssbi.data_series.convert.int64_to_string",
+        &params,
+        None,
+        &[Value::Integer(1).into()],
+    )
+    .unwrap_err();
+    assert_eq!(
+        materialization_error.message(),
+        "DataSeries conversion expects a fully materialized artifact"
+    );
+}
+
+#[test]
+fn unary_math_kernels_execute_each_legacy_operation() {
+    let params = handle("unary", CompiledParameterHandle::new);
+    for (kernel, input, expected) in [
+        ("yssbi.numeric.ln", "1", "0"),
+        ("yssbi.numeric.log2", "8", "3"),
+        ("yssbi.numeric.log10", "100", "2"),
+        ("yssbi.numeric.exp", "0", "1"),
+        ("yssbi.numeric.sqrt", "9", "3"),
+        ("yssbi.numeric.square", "4", "16"),
+    ] {
+        let output =
+            execute_kernel_direct(kernel, &params, None, &[decimal(input).into()]).unwrap();
+        assert_eq!(output, vec![decimal(expected).into()], "{kernel}");
+    }
+}
+
+#[test]
+fn do_sleep_print_and_view_leaf_kernels_preserve_contracts() {
+    let params = handle("effects", CompiledParameterHandle::new);
+    assert!(
+        execute_kernel_direct("yssbi.control.do", &params, None, &[])
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        execute_kernel_direct("yssbi.control.sleep", &params, None, &[decimal("0").into()])
+            .unwrap()
+            .is_empty()
+    );
+    let sleep_error = execute_kernel_direct(
+        "yssbi.control.sleep",
+        &params,
+        None,
+        &[decimal("-0.01").into()],
+    )
+    .unwrap_err();
+    assert_eq!(
+        sleep_error.message(),
+        "Sleep duration must be between zero and sixty seconds"
+    );
+    assert!(
+        execute_kernel_direct(
+            "yssbi.debug.print",
+            &params,
+            None,
+            &[Value::String("message".into()).into()],
+        )
+        .unwrap()
+        .is_empty()
+    );
+    let print_error = execute_kernel_direct(
+        "yssbi.debug.print",
+        &params,
+        None,
+        &[Value::Integer(1).into()],
+    )
+    .unwrap_err();
+    assert_eq!(
+        print_error.message(),
+        "Print message must be a String scalar"
+    );
+    let viewed = execute_kernel_direct(
+        "yssbi.debug.view",
+        &params,
+        None,
+        &[Value::Integer(9).into()],
+    )
+    .unwrap();
+    assert_eq!(
+        viewed,
+        vec![RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Replayable,
+            vec![Value::Integer(9)],
+        ))]
+    );
+
+    let mut parameters = CompiledParameterStore::new();
+    for (name, message) in [("first", "First"), ("second", "Second"), ("third", "Third")] {
+        insert_constant(&mut parameters, name, Value::String(message.into()));
+    }
+    let chain = plan(
+        vec![
+            operation("yssbi.constant.string", "first", &[], 0),
+            operation("yssbi.constant.string", "second", &[], 1),
+            operation("yssbi.constant.string", "third", &[], 2),
+            effect_operation("yssbi.debug.print", "unused.print.1", &[0]),
+            effect_operation("yssbi.control.do", "unused.do", &[]),
+            effect_operation("yssbi.debug.print", "unused.print.2", &[1]),
+            effect_operation("yssbi.debug.print", "unused.print.3", &[2]),
+        ],
+        3,
+        &[],
+    );
+    execute(&chain, &parameters).unwrap();
+}
+
+#[test]
+fn print_observer_and_trace_preserve_exact_first_second_third_order() {
+    #[derive(Default)]
+    struct Events(Mutex<Vec<RunEvent>>);
+    impl RunEventSink for Events {
+        fn record(&self, event: RunEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+    #[derive(Default)]
+    struct Trace(Mutex<Vec<SpanEvent>>);
+    impl TraceSink for Trace {
+        fn record(&self, event: SpanEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    let mut parameters = CompiledParameterStore::new();
+    for (name, message) in [("first", "First"), ("second", "Second"), ("third", "Third")] {
+        insert_constant(&mut parameters, name, Value::String(message.into()));
+    }
+    let mut operations = vec![
+        operation("yssbi.constant.string", "first", &[], 0),
+        operation("yssbi.constant.string", "second", &[], 1),
+        operation("yssbi.constant.string", "third", &[], 2),
+        effect_operation("yssbi.debug.print", "unused.print.1", &[0]),
+        effect_operation("yssbi.control.do", "unused.do", &[]),
+        effect_operation("yssbi.debug.print", "unused.print.2", &[1]),
+        effect_operation("yssbi.debug.print", "unused.print.3", &[2]),
+    ];
+    for (index, node) in [(3, 101_u128), (5, 102), (6, 103)] {
+        operations[index].source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(node));
+        operations[index].source_node_type_id = NodeTypeId::new("yssbi.debug.print").unwrap();
+    }
+    let execution_plan = plan(operations, 3, &[]);
+    let events = Events::default();
+    let trace = Trace::default();
+    let kernels = build_builtin_kernel_registry();
+
+    RunExecutor::new(&kernels, &NoResources, &NoFunctions)
+        .with_compiled_parameters(&parameters)
+        .with_event_sink(&events)
+        .with_trace_sink(&trace)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    let label = |node_id: NodeId| match node_id.as_uuid().as_u128() {
+        101 => Some("First"),
+        102 => Some("Second"),
+        103 => Some("Third"),
+        _ => None,
+    };
+    let event_order = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+        .filter_map(|event| event.correlation.node_id.and_then(label))
+        .collect::<Vec<_>>();
+    let trace_order = trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event.kind == SpanKind::Operation && event.status == SpanStatus::Succeeded)
+        .filter_map(|event| event.correlation.node_id.and_then(label))
+        .collect::<Vec<_>>();
+    assert_eq!(event_order, ["First", "Second", "Third"]);
+    assert_eq!(trace_order, ["First", "Second", "Third"]);
+}
+
+#[test]
+fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
+    struct Resources;
+    impl ResourceSnapshot for Resources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::new()
+        }
+    }
+    struct CapturePrint(Arc<Mutex<Vec<Value>>>);
+    impl Kernel for CapturePrint {
+        fn execute(
+            &self,
+            _: &KernelContext<'_>,
+            inputs: &[RuntimeValue],
+        ) -> Result<Vec<RuntimeValue>, KernelError> {
+            let [RuntimeValue::Scalar(value)] = inputs else {
+                return Err(KernelError::new("expected one scalar print input"));
+            };
+            self.0.lock().unwrap().push(value.clone());
+            Ok(Vec::new())
+        }
+    }
+
+    let system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let registry = Arc::unwrap_or_clone(system.registry);
+    let constant_id = NodeId::from_uuid(uuid::Uuid::from_u128(201));
+    let print_id = NodeId::from_uuid(uuid::Uuid::from_u128(202));
+    let mut constant_parameters = ParameterValues::new();
+    constant_parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("value").unwrap(),
+        serde_json::json!("Connected message"),
+    );
+    let mut graph = GraphDocument::default();
+    graph.nodes.insert(
+        constant_id,
+        DocumentNode {
+            id: constant_id,
+            node_type: NodeTypeId::new("yssbi.constant.string").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: constant_parameters,
+            user_label: None,
+        },
+    );
+    graph.nodes.insert(
+        print_id,
+        DocumentNode {
+            id: print_id,
+            node_type: NodeTypeId::new("yssbi.debug.print").unwrap(),
+            position: NodePosition { x: 1.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    graph.connections.insert(
+        ConnectionId::from_uuid(uuid::Uuid::from_u128(203)),
+        DocumentConnection {
+            id: ConnectionId::from_uuid(uuid::Uuid::from_u128(203)),
+            output: PortAddress::declared(constant_id, PortKey::new("value").unwrap()),
+            input: PortAddress::declared(print_id, PortKey::new("message").unwrap()),
+            order: None,
+        },
+    );
+
+    let compiled = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let mut execution_plan = compiled
+        .plan
+        .unwrap_or_else(|| panic!("print diagnostics: {:?}", compiled.analysis.diagnostics));
+    let constant_index = execution_plan
+        .operations
+        .iter()
+        .position(|operation| operation.source_node_id == constant_id)
+        .unwrap();
+    let print_index = execution_plan
+        .operations
+        .iter()
+        .position(|operation| operation.source_node_id == print_id)
+        .unwrap();
+    assert_eq!(execution_plan.operations[print_index].inputs.len(), 1);
+    assert_eq!(
+        execution_plan.operations[print_index].inputs[0].bound_value,
+        None
+    );
+    assert!(execution_plan.value_dependencies.iter().any(|dependency| {
+        dependency.source == execution_plan.operations[constant_index].outputs[0].value
+            && dependency.destination == execution_plan.operations[print_index].inputs[0].value
+    }));
+
+    let capture_handle = handle("test.capture.print", KernelHandle::new);
+    execution_plan.operations[print_index].kernel = PlannedKernel::Native(capture_handle.clone());
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let mut kernels = build_builtin_kernel_registry();
+    kernels
+        .register(capture_handle, CapturePrint(Arc::clone(&captured)))
+        .unwrap();
+    let mut parameters = CompiledParameterStore::new();
+    parameters
+        .insert(
+            execution_plan.operations[constant_index].params.clone(),
+            BuiltinConstantParameters::new(Value::String("Connected message".into())),
+        )
+        .unwrap();
+
+    RunExecutor::new(&kernels, &NoResources, &NoFunctions)
+        .with_compiled_parameters(&parameters)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(
+        captured.lock().unwrap().as_slice(),
+        [Value::String("Connected message".into())]
+    );
+}
+
+#[test]
+fn print_protocol_has_default_and_ordered_chain_contract() {
+    use crate::node_system::catalog::build_builtin_node_system;
+    use crate::node_system::protocol::{EffectSemantics, ParameterKey, PortKey, Purity};
+
+    let system = build_builtin_node_system().unwrap();
+    let print = system
+        .registry
+        .get(&NodeTypeId::new("yssbi.debug.print").unwrap())
+        .unwrap();
+    assert_eq!(print.protocol().execution.effects, EffectSemantics::Ordered);
+    assert_eq!(print.protocol().execution.purity, Purity::Effectful);
+    let message = print
+        .protocol()
+        .interface
+        .ports
+        .iter()
+        .find(|port| port.key == PortKey::new("message").unwrap())
+        .unwrap();
+    assert_eq!(
+        message
+            .input_binding
+            .as_ref()
+            .and_then(|binding| binding.default_value.as_ref())
+            .map(|value| &value.value),
+        Some(&Value::String("Hello, World!".into()))
+    );
+    let _ = ParameterKey::new("unused").unwrap();
+
+    let mut default_print = effect_operation("yssbi.debug.print", "unused.default", &[0]);
+    default_print.inputs[0].bound_value = Some(Value::String("Hello, World!".into()));
+    execute(
+        &plan(vec![default_print], 1, &[]),
+        &CompiledParameterStore::new(),
+    )
+    .unwrap();
 }
 
 #[test]

@@ -9,19 +9,21 @@ pub use identity::{
     NodeTypeId, ParameterKey, PortKey, ProviderId, SchemaResolverId, TypeClassId,
     TypeConstructorId, TypeId, TypeParameterId,
 };
+#[cfg(test)]
+pub(crate) use model::validate_execution;
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     ExecutionSemantics, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
     NodeCatalogProtocol, NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction,
     PortDirection, PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec, PortSpec,
-    ProtocolError, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
+    ProtocolError, Purity,
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterSchema,
     ParameterSpec, ParameterValues,
 };
 pub use types::{
-    ColumnRename, ColumnSelectionExpr, RenameExpr, SchemaColumnRef, SchemaDependency, SchemaExpr,
-    TypeConstraint, TypeExpr, TypeTerm,
+    ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
+    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, TypeConstraint, TypeExpr, TypeTerm,
 };
 pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};

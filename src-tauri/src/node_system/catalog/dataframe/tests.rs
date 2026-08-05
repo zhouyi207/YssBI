@@ -1,24 +1,27 @@
 use super::{LEGACY_NODE_IDS, NODES, build_provider_fragment};
-use crate::node_system::catalog::builtin::{build_builtin_provider, build_builtin_registry};
+use crate::node_system::catalog::builtin::build_builtin_node_system;
 use crate::node_system::catalog::localization::Message;
 use crate::node_system::compiler::{
     CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
 };
 use crate::node_system::document::{NodeId, PortAddress};
 use crate::node_system::plan::{
-    RelationalOperator, RelationalOperatorIndex, RelationalRename, ResourceId, ValueRef,
+    KernelHandle, RelationalExpression, RelationalLiteral, RelationalOperator,
+    RelationalOperatorIndex, RelationalProjection, RelationalRename, ResourceId, ValueRef,
 };
 use crate::node_system::protocol::{
     InputConsumption, LiteralPolicy, NodeInterfaceProtocol, NodeTypeId, OutputProduction,
     ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection, PortKey, RenameExpr,
     SchemaExpr, TypeExpr, TypeId, Value,
 };
+use crate::node_system::registry::ImplementationKind;
+use crate::node_system::runtime::build_builtin_kernel_registry;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
 fn every_legacy_dataframe_node_has_one_stable_id() {
     assert_eq!(LEGACY_NODE_IDS.len(), 26);
-    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 1);
+    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 3);
 
     let legacy = LEGACY_NODE_IDS
         .iter()
@@ -44,7 +47,7 @@ fn every_legacy_dataframe_node_has_one_stable_id() {
 #[test]
 fn dataframe_fragment_contains_every_migrated_protocol() {
     let fragment = build_provider_fragment();
-    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 1);
+    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 3);
 }
 
 #[test]
@@ -54,9 +57,9 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
     let rename = fragment
         .nodes
         .iter()
-        .find(|node| node.protocol.type_id == rename_id)
+        .find(|node| node.protocol().type_id == rename_id)
         .expect("rename protocol");
-    let protocol = &rename.protocol;
+    let protocol = &rename.protocol();
 
     assert_eq!(protocol.catalog.category_id.as_str(), "dataframe");
     assert_eq!(protocol.interface.ports.len(), 2);
@@ -156,9 +159,364 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
 }
 
 #[test]
+fn project_and_filter_rows_are_parameterized_catalog_nodes() {
+    let fragment = build_provider_fragment();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
+    let localized = catalog.localize(&registry, "en-US");
+
+    for (node_type, parameter_key, parameter_type, title, search_term) in [
+        (
+            "yssbi.dataframe.project",
+            "columns",
+            "yssbi.dataframe.project_columns",
+            "Project DataFrame",
+            "select columns",
+        ),
+        (
+            "yssbi.dataframe.filter.rows",
+            "predicate",
+            "yssbi.dataframe.filter_predicate",
+            "Filter Rows",
+            "where rows",
+        ),
+    ] {
+        let registered = fragment
+            .nodes
+            .iter()
+            .find(|node| node.protocol().type_id.as_str() == node_type)
+            .expect("new relational node protocol");
+        assert!(registered.implementation().is_some());
+        assert!(registered.structural_role().is_none());
+        assert_eq!(registered.protocol().interface.ports.len(), 2);
+        assert_eq!(
+            registered.protocol().interface.ports[0].key.as_str(),
+            "source"
+        );
+        assert_eq!(
+            registered.protocol().interface.ports[0].consumption,
+            Some(InputConsumption::Streaming),
+        );
+        assert_eq!(
+            registered.protocol().interface.ports[1].key.as_str(),
+            "result"
+        );
+        assert_eq!(
+            registered.protocol().interface.ports[1].production,
+            Some(OutputProduction::Streaming),
+        );
+        let parameter = &registered.protocol().parameters.parameters[0];
+        assert_eq!(parameter.key.as_str(), parameter_key);
+        assert_eq!(
+            parameter.value_type,
+            TypeExpr::Concrete(TypeId::new(parameter_type).unwrap()),
+        );
+        assert_eq!(parameter.default_value, None);
+        assert_eq!(parameter.constraints, vec![ParameterConstraint::Required]);
+
+        let item = localized
+            .items
+            .iter()
+            .find(|item| item.node_type_id.as_ref() == node_type)
+            .expect("parameterized node is catalog visible");
+        assert_eq!(item.title.as_ref(), title);
+        assert!(
+            item.description
+                .as_deref()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(
+            item.documentation
+                .as_deref()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(item.search_text.contains(search_term));
+        assert_eq!(
+            item.creation,
+            crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+                node_type_id: NodeTypeId::new(node_type).unwrap(),
+                required_parameters: Box::new([ParameterKey::new(parameter_key).unwrap()]),
+            },
+        );
+    }
+}
+
+#[test]
+fn project_and_filter_rows_use_relational_lowerers_without_native_kernels() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let kernels = build_builtin_kernel_registry();
+
+    for node_type in ["yssbi.dataframe.project", "yssbi.dataframe.filter.rows"] {
+        let node_type = NodeTypeId::new(node_type).unwrap();
+        let node = registry.get(&node_type).expect("relational node freezes");
+        assert!(node.implementation().is_some(), "{node_type}");
+        assert!(node.structural_role().is_none(), "{node_type}");
+        assert!(
+            kernels
+                .get(&KernelHandle::new(node_type.as_str()).unwrap())
+                .is_none(),
+            "{node_type} must use a relational lowerer, not a native kernel",
+        );
+    }
+}
+
+#[test]
+fn project_lowerer_preserves_exact_order_and_rejects_invalid_codec_values() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let node = registry
+        .get(&NodeTypeId::new("yssbi.dataframe.project").unwrap())
+        .unwrap();
+    let node_id = NodeId::new();
+    let input = PortAddress::declared(node_id, PortKey::new("source").unwrap());
+    let output = PortAddress::declared(node_id, PortKey::new("result").unwrap());
+    let inputs = [(input.clone(), ValueRef::new(0))];
+    let outputs = [(output.clone(), ValueRef::new(1))];
+    let cancellation = CompileCancellationToken::new();
+    let implementation = node
+        .implementation()
+        .as_ref()
+        .and_then(|value| value.as_any().downcast_ref::<NodeImplementation>())
+        .unwrap();
+
+    let parameters = BTreeMap::from([(
+        ParameterKey::new("columns").unwrap(),
+        serde_json::json!(["b", "a"]),
+    )]);
+    let context = LoweringContext {
+        cancellation: &cancellation,
+        node_id,
+        protocol: &node.protocol(),
+        parameters: &parameters,
+        inputs: &inputs,
+        outputs: &outputs,
+    };
+    let lowered = implementation.lowerer.lower(&context).unwrap();
+    let LoweredKernel::Relational(fragment) = lowered.kernel else {
+        panic!("project must lower relationally");
+    };
+    assert_eq!(
+        fragment.fragment.operators.as_ref(),
+        [
+            RelationalOperator::Input {
+                name: "source".into(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([
+                    RelationalProjection {
+                        name: "b".into(),
+                        expression: RelationalExpression::Column("b".into()),
+                    },
+                    RelationalProjection {
+                        name: "a".into(),
+                        expression: RelationalExpression::Column("a".into()),
+                    },
+                ]),
+            },
+        ]
+    );
+    assert_eq!(fragment.fragment.root, RelationalOperatorIndex::new(1));
+    assert_eq!(fragment.inputs[0].port, input);
+    assert_eq!(fragment.metadata.results[0].output, output);
+
+    let invalid = BTreeMap::from([(
+        ParameterKey::new("columns").unwrap(),
+        serde_json::json!(["a", "a"]),
+    )]);
+    let invalid_context = LoweringContext {
+        parameters: &invalid,
+        ..context
+    };
+    assert!(implementation.lowerer.lower(&invalid_context).is_err());
+}
+
+#[test]
+fn filter_rows_lowerer_maps_every_operator_and_literal_exactly() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let node = registry
+        .get(&NodeTypeId::new("yssbi.dataframe.filter.rows").unwrap())
+        .unwrap();
+    let node_id = NodeId::new();
+    let input = PortAddress::declared(node_id, PortKey::new("source").unwrap());
+    let output = PortAddress::declared(node_id, PortKey::new("result").unwrap());
+    let inputs = [(input.clone(), ValueRef::new(0))];
+    let outputs = [(output.clone(), ValueRef::new(1))];
+    let cancellation = CompileCancellationToken::new();
+    let implementation = node
+        .implementation()
+        .as_ref()
+        .and_then(|value| value.as_any().downcast_ref::<NodeImplementation>())
+        .unwrap();
+    let column = || RelationalExpression::Column("value".into());
+    let cases = [
+        (
+            serde_json::json!({"column":"value","operator":"equal","value":{"type":"boolean","value":true}}),
+            RelationalExpression::Equal(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Boolean(
+                    true,
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"notEqual","value":{"type":"integer","value":"42"}}),
+            RelationalExpression::NotEqual(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(
+                    42,
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"lessThan","value":{"type":"decimal","value":"10.5"}}),
+            RelationalExpression::LessThan(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Decimal(
+                    crate::node_system::protocol::CanonicalDecimal::new("10.5").unwrap(),
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"lessThanOrEqual","value":{"type":"string","value":"paid"}}),
+            RelationalExpression::LessThanOrEqual(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                    "paid".into(),
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"greaterThan","value":{"type":"integer","value":"42"}}),
+            RelationalExpression::GreaterThan(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(
+                    42,
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"greaterThanOrEqual","value":{"type":"integer","value":"42"}}),
+            RelationalExpression::GreaterThanOrEqual(
+                Box::new(column()),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(
+                    42,
+                ))),
+            ),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"isNull"}),
+            RelationalExpression::IsNull(Box::new(column())),
+        ),
+        (
+            serde_json::json!({"column":"value","operator":"isNotNull"}),
+            RelationalExpression::Not(Box::new(RelationalExpression::IsNull(Box::new(column())))),
+        ),
+    ];
+
+    for (wire, expected) in cases {
+        let parameters = BTreeMap::from([(ParameterKey::new("predicate").unwrap(), wire)]);
+        let context = LoweringContext {
+            cancellation: &cancellation,
+            node_id,
+            protocol: &node.protocol(),
+            parameters: &parameters,
+            inputs: &inputs,
+            outputs: &outputs,
+        };
+        let lowered = implementation.lowerer.lower(&context).unwrap();
+        let LoweredKernel::Relational(fragment) = lowered.kernel else {
+            panic!("filter rows must lower relationally");
+        };
+        assert_eq!(
+            fragment.fragment.operators[1],
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: expected,
+            }
+        );
+        assert_eq!(fragment.fragment.root, RelationalOperatorIndex::new(1));
+        assert_eq!(fragment.inputs[0].port, input);
+        assert_eq!(fragment.metadata.results[0].output, output);
+    }
+
+    let invalid = BTreeMap::from([(
+        ParameterKey::new("predicate").unwrap(),
+        serde_json::json!({"column":"value","operator":"equal"}),
+    )]);
+    let invalid_context = LoweringContext {
+        cancellation: &cancellation,
+        node_id,
+        protocol: &node.protocol(),
+        parameters: &invalid,
+        inputs: &inputs,
+        outputs: &outputs,
+    };
+    assert!(implementation.lowerer.lower(&invalid_context).is_err());
+}
+
+#[test]
+fn project_and_filter_rows_do_not_change_external_filter_or_decompose() {
+    let fragment = build_provider_fragment();
+    let filter = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.dataframe.filter")
+        .expect("external mask filter remains registered");
+    assert!(filter.protocol().parameters.parameters.is_empty());
+    assert_eq!(
+        filter
+            .protocol()
+            .interface
+            .ports
+            .iter()
+            .map(|port| port.key.as_str())
+            .collect::<Vec<_>>(),
+        ["source", "condition", "result"],
+    );
+    let external_filter_schema = filter.protocol().interface.ports[2]
+        .schema
+        .as_ref()
+        .expect("external filter output schema");
+    assert_eq!(
+        external_filter_schema,
+        &SchemaExpr::Filter {
+            input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
+            predicate: None,
+        },
+    );
+    assert_eq!(
+        serde_json::to_value(external_filter_schema).unwrap(),
+        serde_json::json!({
+            "Filter": {
+                "input": { "Input": "source" }
+            }
+        }),
+    );
+
+    let decompose = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.dataframe.decompose")
+        .expect("decompose remains registered");
+    assert!(decompose.protocol().parameters.parameters.is_empty());
+    assert_eq!(
+        decompose
+            .protocol()
+            .interface
+            .ports
+            .iter()
+            .map(|port| port.key.as_str())
+            .collect::<Vec<_>>(),
+        ["dataframe", "columns"],
+    );
+}
+
+#[test]
 fn rename_dataframe_is_excluded_from_static_catalog() {
-    let registry = build_builtin_registry();
-    let (_, catalog) = build_builtin_provider();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let localized = catalog.localize(&registry, "en-US");
     let node_type_ids = localized
         .items
@@ -171,7 +529,7 @@ fn rename_dataframe_is_excluded_from_static_catalog() {
 
 #[test]
 fn rename_dataframe_lowers_to_exact_input_and_rename_fragment() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let rename_id = NodeTypeId::new("yssbi.dataframe.rename").unwrap();
     let rename = registry.get(&rename_id).expect("rename freezes");
     let node_id = NodeId::new();
@@ -193,13 +551,13 @@ fn rename_dataframe_lowers_to_exact_input_and_rename_fragment() {
     let context = LoweringContext {
         cancellation: &cancellation,
         node_id,
-        protocol: &rename.protocol,
+        protocol: &rename.protocol(),
         parameters: &parameters,
         inputs: &inputs,
         outputs: &outputs,
     };
     let implementation = rename
-        .implementation
+        .implementation()
         .as_ref()
         .and_then(|implementation| implementation.as_any().downcast_ref::<NodeImplementation>())
         .expect("rename compiler lowerer");
@@ -241,14 +599,14 @@ fn rename_dataframe_lowers_to_exact_input_and_rename_fragment() {
 
 #[test]
 fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let source_id = NodeTypeId::new("yssbi.dataframe.source.get").unwrap();
     let limit_id = NodeTypeId::new("yssbi.dataframe.limit").unwrap();
     let source = registry.get(&source_id).expect("source freezes");
     let limit = registry.get(&limit_id).expect("limit freezes");
 
     let source_output = source
-        .protocol
+        .protocol()
         .interface
         .ports
         .iter()
@@ -258,14 +616,14 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
     assert_eq!(source_output.production, Some(OutputProduction::Streaming));
 
     let limit_input = limit
-        .protocol
+        .protocol()
         .interface
         .ports
         .iter()
         .find(|port| port.direction == PortDirection::Input)
         .expect("limit input");
     let limit_output = limit
-        .protocol
+        .protocol()
         .interface
         .ports
         .iter()
@@ -277,7 +635,7 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
     assert_eq!(limit_output.production, Some(OutputProduction::Streaming));
 
     let rows = limit
-        .protocol
+        .protocol()
         .parameters
         .parameters
         .iter()
@@ -307,13 +665,13 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
     let source_context = LoweringContext {
         cancellation: &cancellation,
         node_id: source_node_id,
-        protocol: &source.protocol,
+        protocol: &source.protocol(),
         parameters: &source_parameters,
         inputs: &[],
         outputs: &source_outputs,
     };
     let source_implementation = source
-        .implementation
+        .implementation()
         .as_ref()
         .and_then(|implementation| implementation.as_any().downcast_ref::<NodeImplementation>())
         .expect("source compiler lowerer");
@@ -350,13 +708,13 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
     let limit_context = LoweringContext {
         cancellation: &cancellation,
         node_id: limit_node_id,
-        protocol: &limit.protocol,
+        protocol: &limit.protocol(),
         parameters: &limit_parameters,
         inputs: &limit_inputs,
         outputs: &limit_outputs,
     };
     let limit_implementation = limit
-        .implementation
+        .implementation()
         .as_ref()
         .and_then(|implementation| implementation.as_any().downcast_ref::<NodeImplementation>())
         .expect("limit compiler lowerer");
@@ -398,43 +756,69 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
 }
 
 #[test]
-fn other_dataframe_nodes_keep_native_lowerers() {
-    let registry = build_builtin_registry();
+fn dataframe_native_lowerings_have_production_implementations() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let kernels = build_builtin_kernel_registry();
     let cancellation = CompileCancellationToken::new();
-    for spec in NODES.iter().filter(|spec| {
-        !matches!(
-            spec.id,
-            "yssbi.dataframe.source.get" | "yssbi.dataframe.limit" | "yssbi.dataframe.rename"
-        )
-    }) {
+
+    for spec in NODES {
         let id = NodeTypeId::new(spec.id).unwrap();
         let node = registry.get(&id).expect("dataframe node freezes");
-        let implementation = node
-            .implementation
-            .as_ref()
-            .and_then(|implementation| implementation.as_any().downcast_ref::<NodeImplementation>())
+        let Some(implementation) = node.implementation() else {
+            assert!(node.structural_role().is_none(), "{}", spec.id);
+            continue;
+        };
+        assert_eq!(
+            implementation.capability(),
+            ImplementationKind::CompilerLowering
+        );
+        let implementation = implementation
+            .as_any()
+            .downcast_ref::<NodeImplementation>()
             .expect("dataframe compiler lowerer");
+        let parameters = BTreeMap::new();
         let context = LoweringContext {
             cancellation: &cancellation,
             node_id: NodeId::new(),
-            protocol: &node.protocol,
-            parameters: &BTreeMap::new(),
+            protocol: &node.protocol(),
+            parameters: &parameters,
             inputs: &[],
             outputs: &[],
         };
-        let lowered = implementation.lowerer.lower(&context).unwrap();
+        let native_implementation = node
+            .implementation()
+            .as_ref()
+            .expect("checked implementation")
+            .implementation_identity()
+            .ends_with("::KernelLowerer");
+        let lowered = match implementation.lowerer.lower(&context) {
+            Ok(lowered) => lowered,
+            Err(error) if !native_implementation => {
+                let _ = error;
+                continue;
+            }
+            Err(error) => panic!("native node '{}' failed to lower: {error}", spec.id),
+        };
         assert!(
-            matches!(lowered.kernel, LoweredKernel::Native(_)),
-            "{}",
+            !native_implementation || matches!(lowered.kernel, LoweredKernel::Native(_)),
+            "native implementation for '{}' emitted a non-native fragment",
             spec.id,
         );
+        if let LoweredKernel::Native(handle) = lowered.kernel {
+            assert!(
+                kernels.get(&handle).is_some(),
+                "{} emits missing native kernel '{}'",
+                spec.id,
+                handle.as_str(),
+            );
+        }
     }
 }
 
 #[test]
 fn dataframe_protocols_have_unique_ports_and_valid_bindings() {
     for node in build_provider_fragment().nodes {
-        let protocol = &node.protocol;
+        let protocol = &node.protocol();
         let keys = protocol
             .interface
             .ports

@@ -18,7 +18,9 @@ mod tests {
         CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceVersionSet,
     };
     use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
-    use crate::node_system::protocol::{NodeTypeId, OutputProduction, PortKey};
+    use crate::node_system::protocol::{
+        InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+    };
     use crate::node_system::registry::RegistryFingerprint;
 
     fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
@@ -969,6 +971,97 @@ mod tests {
     }
 
     #[test]
+    fn rejects_forged_or_stale_predicate_lineage_hints_purely() {
+        let (mut plan, _) = valid_bridged_plan();
+        let predicate = RelationalExpression::Equal(
+            Box::new(RelationalExpression::Column("status".into())),
+            Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                "paid".into(),
+            ))),
+        );
+        let compiled = &mut plan.relational_subplans[0].compiled_plan;
+        compiled.operators = Box::new([
+            RelationalOperator::Source {
+                resource: id("database.main", ResourceId::new),
+                relation: "items".into(),
+            },
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: predicate.clone(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(1),
+                columns: Box::new([RelationalProjection {
+                    name: "amount".into(),
+                    expression: RelationalExpression::Column("amount".into()),
+                }]),
+            },
+        ]);
+        compiled.fragment_roots[0].operator = RelationalOperatorIndex::new(2);
+        compiled.roots = Box::new([RelationalOperatorIndex::new(2)]);
+        compiled.pushdown_hints = Box::new([
+            RelationalPushdownHint::Projection {
+                source: RelationalOperatorIndex::new(0),
+                columns: Box::new(["amount".into(), "status".into()]),
+            },
+            RelationalPushdownHint::Predicate {
+                source: RelationalOperatorIndex::new(0),
+                predicate: predicate.clone(),
+            },
+        ]);
+        plan.validate().expect("exact inferred hints validate");
+
+        let semantic_operators = plan.relational_subplans[0].compiled_plan.operators.clone();
+        let semantic_roots = plan.relational_subplans[0].compiled_plan.roots.clone();
+        let mut removed = plan.clone();
+        removed.relational_subplans[0].compiled_plan.pushdown_hints = Box::new([]);
+        assert_eq!(
+            removed.relational_subplans[0].compiled_plan.operators,
+            semantic_operators
+        );
+        assert_eq!(
+            removed.relational_subplans[0].compiled_plan.roots,
+            semantic_roots
+        );
+        assert!(
+            removed
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::RelationalPushdownHintsMismatch { subplan }
+                        if *subplan == RelationalSubplanIndex::new(0)
+                ))
+        );
+
+        let mut forged = plan;
+        forged.relational_subplans[0].compiled_plan.pushdown_hints[1] =
+            RelationalPushdownHint::Predicate {
+                source: RelationalOperatorIndex::new(0),
+                predicate: RelationalExpression::Equal(
+                    Box::new(RelationalExpression::Column("forged".into())),
+                    Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                        "paid".into(),
+                    ))),
+                ),
+            };
+        assert!(
+            forged
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::RelationalPushdownHintsMismatch { subplan }
+                        if *subplan == RelationalSubplanIndex::new(0)
+                ))
+        );
+    }
+
+    #[test]
     fn rejects_invalid_requested_relational_fragment_outputs() {
         let mut plan = valid_plan();
         let fragment = id("fragment.test", RelationalFragmentId::new);
@@ -1238,6 +1331,7 @@ mod tests {
         external.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(8),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
+            bound_value: None,
         }]);
         external.value_dependencies = Box::new([]);
         assert_eq!(external.validate(), Ok(()));
@@ -1246,9 +1340,40 @@ mod tests {
         control_produced.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(5),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
+            bound_value: None,
         }]);
         control_produced.value_dependencies = Box::new([]);
         assert_eq!(control_produced.validate(), Ok(()));
+    }
+
+    #[test]
+    fn bound_input_operation_propagates_outputs_to_downstream_and_result_validation() {
+        let mut first = operation(1);
+        first.inputs = Box::new([PlannedInput {
+            value: ValueRef::new(0),
+            consumption: InputConsumption::FullyMaterialized,
+            bound_value: Some(Value::Integer(7)),
+        }]);
+        let mut second = operation(2);
+        second.inputs = Box::new([PlannedInput {
+            value: ValueRef::new(1),
+            consumption: InputConsumption::FullyMaterialized,
+            bound_value: None,
+        }]);
+        let mut plan = valid_plan();
+        plan.value_count = 3;
+        plan.operations = Box::new([first, second]);
+        plan.value_sources = Box::new([]);
+        plan.value_dependencies = Box::new([]);
+        plan.root_region = StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ]));
+        plan.effect_dependencies = Box::new([]);
+        plan.resources = Box::new([]);
+        plan.results[0].value = ValueRef::new(2);
+
+        assert_eq!(plan.validate(), Ok(()));
     }
 
     #[test]
@@ -1258,6 +1383,7 @@ mod tests {
         plan.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(9),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
+            bound_value: None,
         }]);
         plan.value_dependencies = Box::new([ValueDependency {
             source: ValueRef::new(8),

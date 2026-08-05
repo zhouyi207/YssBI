@@ -305,7 +305,8 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
 
     let variables_path = root.join(GLOBAL_VARIABLES_FILE);
     if variables_path.exists() {
-        let document: GlobalVariablesDocument = read_json(variables_path.as_path())?;
+        let contents = std::fs::read(&variables_path)?;
+        let document = parse_global_variables_document(&contents)?;
         project_data.variables.extend(document.variables);
     }
 
@@ -352,7 +353,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
     })
 }
 
-/// 轻量 Call 扫描结果：仅 node id + 目标函数 id（不构建 `GraphInstance`）。
+/// 轻量 Call 扫描结果：仅 node id + 目标函数 id，不构建运行图。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphCallSiteStub {
     pub node_id: NodeId,
@@ -491,13 +492,19 @@ fn local_variables_for_graph(
         .collect()
 }
 
-fn read_graph_document(
+pub(crate) fn parse_global_variables_document(
+    contents: &[u8],
+) -> Result<GlobalVariablesDocument, ProjectError> {
+    serde_json::from_slice(contents).map_err(ProjectError::Deserialize)
+}
+
+pub(crate) fn parse_graph_resource_document(
+    contents: &[u8],
     path: &Path,
     expected_kind: GraphDocumentKind,
 ) -> Result<GraphDocument, ProjectError> {
-    let content = std::fs::read_to_string(path)?;
-    let mut document: GraphDocument =
-        serde_json::from_str(&content).map_err(ProjectError::Deserialize)?;
+    let document: GraphDocument =
+        serde_json::from_slice(contents).map_err(ProjectError::Deserialize)?;
     if document.schema_version != SCHEMA_VERSION {
         return Err(ProjectError::InvalidProjectFormat(format!(
             "graph file '{}' uses unsupported schema version {}; expected {}",
@@ -513,6 +520,15 @@ fn read_graph_document(
         )));
     }
     validate_function_shape(path, document.kind, document.function.as_ref())?;
+    Ok(document)
+}
+
+fn read_graph_document(
+    path: &Path,
+    expected_kind: GraphDocumentKind,
+) -> Result<GraphDocument, ProjectError> {
+    let contents = std::fs::read(path)?;
+    let mut document = parse_graph_resource_document(&contents, path, expected_kind)?;
     if let Some(name) = graph_name_from_file_path(path) {
         document.name = name;
     }

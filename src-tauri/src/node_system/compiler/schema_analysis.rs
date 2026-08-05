@@ -1,8 +1,9 @@
 use crate::node_system::analysis::DiagnosticLocation;
 use crate::node_system::document::{ConnectionId, NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
-    ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RenameExpr,
-    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaResolverId,
+    ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RelationalScalarType,
+    RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField,
+    SchemaResolverId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -20,20 +21,7 @@ impl SchemaResolutionError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SchemaFact {
-    pub expression: SchemaExpr,
-    pub fields: Vec<SchemaColumnRef>,
-}
-
-impl SchemaFact {
-    pub fn new(expression: SchemaExpr, fields: impl IntoIterator<Item = SchemaColumnRef>) -> Self {
-        Self {
-            expression,
-            fields: fields.into_iter().collect(),
-        }
-    }
-}
+pub type SchemaFact = ResolvedSchemaFact;
 
 pub struct SchemaResolutionContext<'a> {
     pub node_id: NodeId,
@@ -91,6 +79,7 @@ pub(crate) struct SchemaAnalyzer<'a> {
     nodes: BTreeMap<NodeId, SchemaNode<'a>>,
     sources: BTreeMap<PortAddress, PortAddress>,
     facts: BTreeMap<PortAddress, SchemaFact>,
+    evaluated: BTreeSet<PortAddress>,
     active: BTreeSet<PortAddress>,
     issues: Vec<SchemaAnalysisIssue>,
 }
@@ -102,6 +91,7 @@ impl<'a> SchemaAnalyzer<'a> {
             nodes: BTreeMap::new(),
             sources: BTreeMap::new(),
             facts: BTreeMap::new(),
+            evaluated: BTreeSet::new(),
             active: BTreeSet::new(),
             issues: Vec::new(),
         }
@@ -128,7 +118,13 @@ impl<'a> SchemaAnalyzer<'a> {
         self.sources.insert(input, output);
     }
 
-    pub fn analyze(mut self) -> (BTreeMap<PortAddress, SchemaExpr>, Vec<SchemaAnalysisIssue>) {
+    pub fn analyze(
+        mut self,
+    ) -> (
+        BTreeMap<PortAddress, SchemaExpr>,
+        BTreeMap<PortAddress, SchemaFact>,
+        Vec<SchemaAnalysisIssue>,
+    ) {
         let addresses = self
             .nodes
             .values()
@@ -137,53 +133,75 @@ impl<'a> SchemaAnalyzer<'a> {
         for address in addresses {
             self.evaluate_port(&address);
         }
-        let facts = self
+        let expressions = self
             .facts
-            .into_iter()
-            .map(|(address, fact)| (address, fact.expression))
+            .iter()
+            .map(|(address, fact)| (address.clone(), fact.expression.clone()))
             .collect();
-        (facts, self.issues)
+        (expressions, self.facts, self.issues)
     }
 
     fn evaluate_port(&mut self, address: &PortAddress) -> Option<SchemaFact> {
         if let Some(fact) = self.facts.get(address) {
             return Some(fact.clone());
         }
-        if !self.active.insert(address.clone()) {
+        if self.evaluated.contains(address) || !self.active.insert(address.clone()) {
             return None;
         }
 
         let expression = self.port_schema(address).cloned();
         let result = if let Some(expression) = expression {
-            self.evaluate_expr(address.node_id, &expression)
+            self.evaluate_expr(address, address.node_id, &expression)
         } else if let Some(source) = self.sources.get(address).cloned() {
             self.evaluate_port(&source)
         } else {
             None
         };
         self.active.remove(address);
+        self.evaluated.insert(address.clone());
         if let Some(fact) = result.clone() {
             self.facts.insert(address.clone(), fact);
         }
         result
     }
 
-    fn evaluate_expr(&mut self, node_id: NodeId, expression: &SchemaExpr) -> Option<SchemaFact> {
+    fn evaluate_expr(
+        &mut self,
+        address: &PortAddress,
+        node_id: NodeId,
+        expression: &SchemaExpr,
+    ) -> Option<SchemaFact> {
         match expression {
             SchemaExpr::Input(key) => self
                 .port_address(node_id, key)
                 .and_then(|address| self.sources.get(&address).cloned().or(Some(address)))
                 .and_then(|address| self.evaluate_port(&address)),
-            SchemaExpr::Filter { input } => self.evaluate_expr(node_id, input),
+            SchemaExpr::Filter { input, predicate } => {
+                let input = self.evaluate_expr(address, node_id, input)?;
+                match predicate {
+                    Some(predicate) => self.filter(node_id, input, predicate),
+                    None => Some(SchemaFact::new(
+                        SchemaExpr::Filter {
+                            input: Box::new(input.expression),
+                            predicate: None,
+                        },
+                        input.fields,
+                    )),
+                }
+            }
             SchemaExpr::Project { input, columns } => {
-                let input = self.evaluate_expr(node_id, input)?;
+                let input = self.evaluate_expr(address, node_id, input)?;
+                let parameter = match columns {
+                    ColumnSelectionExpr::FromParameter(key) => Some(key),
+                    _ => None,
+                };
                 let columns = self.resolve_columns(node_id, columns)?;
-                self.project(node_id, input, columns)
+                self.project(node_id, input, columns, parameter)
             }
             SchemaExpr::Append { inputs } => {
                 let inputs = inputs
                     .iter()
-                    .map(|input| self.evaluate_expr(node_id, input))
+                    .map(|input| self.evaluate_expr(address, node_id, input))
                     .collect::<Option<Vec<_>>>()?;
                 let fields = inputs
                     .first()
@@ -197,19 +215,20 @@ impl<'a> SchemaAnalyzer<'a> {
                 ))
             }
             SchemaExpr::Rename { input, mapping } => {
-                let input = self.evaluate_expr(node_id, input)?;
+                let input = self.evaluate_expr(address, node_id, input)?;
                 let mapping = self.resolve_rename(node_id, mapping)?;
                 self.rename(node_id, input, mapping)
             }
             SchemaExpr::Derived {
                 resolver,
                 dependencies,
-            } => self.resolve_derived(node_id, resolver, dependencies),
+            } => self.resolve_derived(address, node_id, resolver, dependencies),
         }
     }
 
     fn resolve_derived(
         &mut self,
+        address: &PortAddress,
         node_id: NodeId,
         resolver_id: &SchemaResolverId,
         dependencies: &[SchemaDependency],
@@ -217,7 +236,7 @@ impl<'a> SchemaAnalyzer<'a> {
         let Some(resolver) = self.resolvers.get(resolver_id) else {
             self.issues.push(SchemaAnalysisIssue {
                 code: "compiler.schema.resolver_missing",
-                location: DiagnosticLocation::Node(node_id),
+                location: DiagnosticLocation::Port(address.clone()),
                 detail: resolver_id.to_string(),
             });
             return None;
@@ -249,7 +268,7 @@ impl<'a> SchemaAnalyzer<'a> {
             Err(error) => {
                 self.issues.push(SchemaAnalysisIssue {
                     code: "compiler.schema.resolver_failed",
-                    location: DiagnosticLocation::Node(node_id),
+                    location: DiagnosticLocation::Port(address.clone()),
                     detail: error.message.into_string(),
                 });
                 None
@@ -342,34 +361,113 @@ impl<'a> SchemaAnalyzer<'a> {
         Some(SchemaColumnRef(name.into()))
     }
 
+    fn filter(
+        &mut self,
+        node_id: NodeId,
+        input: SchemaFact,
+        predicate_key: &ParameterKey,
+    ) -> Option<SchemaFact> {
+        let value = self.nodes.get(&node_id)?.parameters.get(predicate_key)?;
+        let predicate = match serde_json::from_value::<
+            crate::node_system::parameter_types::dataframe::FilterPredicate,
+        >(value.clone())
+        {
+            Ok(predicate) => predicate,
+            Err(error) => {
+                let code = filter_shape_error_code(value);
+                self.schema_issue_at_parameter(
+                    node_id,
+                    Some(predicate_key),
+                    code,
+                    error.to_string(),
+                );
+                return None;
+            }
+        };
+        let Some(field) = input
+            .fields
+            .iter()
+            .find(|field| field.name.0 == predicate.column)
+        else {
+            self.schema_issue_at_parameter(
+                node_id,
+                Some(predicate_key),
+                "compiler.relational.filter_column_missing",
+                predicate.column.into_string(),
+            );
+            return None;
+        };
+        if !filter_operator_supported(field.scalar_type, predicate.operator) {
+            self.schema_issue_at_parameter(
+                node_id,
+                Some(predicate_key),
+                "compiler.relational.filter_operator_invalid",
+                field.name.0.to_string(),
+            );
+            return None;
+        }
+        if !crate::node_system::parameter_types::dataframe::filter_comparison_is_compatible(
+            field.scalar_type,
+            predicate.operator,
+            predicate.value.as_ref(),
+        ) {
+            self.schema_issue_at_parameter(
+                node_id,
+                Some(predicate_key),
+                "compiler.relational.filter_literal_type",
+                field.name.0.to_string(),
+            );
+            return None;
+        }
+        Some(SchemaFact::new(
+            SchemaExpr::Filter {
+                input: Box::new(input.expression),
+                predicate: Some(predicate_key.clone()),
+            },
+            input.fields,
+        ))
+    }
+
     fn project(
         &mut self,
         node_id: NodeId,
         input: SchemaFact,
         columns: ColumnSelectionExpr,
+        parameter: Option<&ParameterKey>,
     ) -> Option<SchemaFact> {
         let ColumnSelectionExpr::Explicit(columns) = columns else {
             return Some(input);
         };
+        if columns.is_empty() {
+            self.schema_issue_at_parameter(
+                node_id,
+                parameter,
+                "compiler.schema.project_empty",
+                "project columns must not be empty".into(),
+            );
+            return None;
+        }
         let available = input
             .fields
             .iter()
-            .map(|field| field.0.as_ref())
-            .collect::<BTreeSet<_>>();
+            .map(|field| (field.name.0.as_ref(), field))
+            .collect::<BTreeMap<_, _>>();
         let mut seen = BTreeSet::new();
         let mut valid = true;
         for column in &columns {
-            if !available.contains(column.0.as_ref()) {
-                self.schema_issue(
+            if !available.contains_key(column.0.as_ref()) {
+                self.schema_issue_at_parameter(
                     node_id,
+                    parameter,
                     "compiler.schema.project_field_missing",
                     column.0.to_string(),
                 );
                 valid = false;
             }
             if !seen.insert(column.0.as_ref()) {
-                self.schema_issue(
+                self.schema_issue_at_parameter(
                     node_id,
+                    parameter,
                     "compiler.schema.project_field_duplicate",
                     column.0.to_string(),
                 );
@@ -377,12 +475,16 @@ impl<'a> SchemaAnalyzer<'a> {
             }
         }
         valid.then(|| {
+            let fields = columns
+                .iter()
+                .map(|column| available[column.0.as_ref()].clone())
+                .collect::<Vec<_>>();
             SchemaFact::new(
                 SchemaExpr::Project {
                     input: Box::new(input.expression),
-                    columns: ColumnSelectionExpr::Explicit(columns.clone()),
+                    columns: ColumnSelectionExpr::Explicit(columns),
                 },
-                columns,
+                fields,
             )
         })
     }
@@ -399,7 +501,7 @@ impl<'a> SchemaAnalyzer<'a> {
         let available = input
             .fields
             .iter()
-            .map(|field| field.0.as_ref())
+            .map(|field| field.name.0.as_ref())
             .collect::<BTreeSet<_>>();
         let renamed_sources = renames
             .iter()
@@ -447,11 +549,12 @@ impl<'a> SchemaAnalyzer<'a> {
             .iter()
             .map(|rename| (rename.from.0.clone(), rename.to.clone()))
             .collect::<BTreeMap<_, _>>();
-        let fields = input.fields.iter().map(|field| {
-            by_source
-                .get(field.0.as_ref())
+        let fields = input.fields.iter().map(|field| SchemaField {
+            name: by_source
+                .get(field.name.0.as_ref())
                 .cloned()
-                .unwrap_or_else(|| field.clone())
+                .unwrap_or_else(|| field.name.clone()),
+            scalar_type: field.scalar_type,
         });
         Some(SchemaFact::new(
             SchemaExpr::Rename {
@@ -463,9 +566,24 @@ impl<'a> SchemaAnalyzer<'a> {
     }
 
     fn schema_issue(&mut self, node_id: NodeId, code: &'static str, detail: String) {
+        self.schema_issue_at_parameter(node_id, None, code, detail);
+    }
+
+    fn schema_issue_at_parameter(
+        &mut self,
+        node_id: NodeId,
+        parameter: Option<&ParameterKey>,
+        code: &'static str,
+        detail: String,
+    ) {
         self.issues.push(SchemaAnalysisIssue {
             code,
-            location: DiagnosticLocation::Node(node_id),
+            location: parameter.map_or(DiagnosticLocation::Node(node_id), |key| {
+                DiagnosticLocation::Parameter {
+                    node_id,
+                    key: key.clone(),
+                }
+            }),
             detail,
         });
     }
@@ -502,6 +620,58 @@ impl<'a> SchemaAnalyzer<'a> {
     }
 }
 
+fn filter_operator_supported(
+    scalar_type: RelationalScalarType,
+    operator: crate::node_system::parameter_types::dataframe::FilterOperator,
+) -> bool {
+    use crate::node_system::parameter_types::dataframe::FilterOperator;
+    if matches!(scalar_type, RelationalScalarType::Unknown) {
+        return false;
+    }
+    if matches!(operator, FilterOperator::IsNull | FilterOperator::IsNotNull) {
+        return true;
+    }
+    match scalar_type {
+        RelationalScalarType::Boolean => {
+            matches!(operator, FilterOperator::Equal | FilterOperator::NotEqual)
+        }
+        RelationalScalarType::Int64
+        | RelationalScalarType::Float64
+        | RelationalScalarType::String => true,
+        RelationalScalarType::Date
+        | RelationalScalarType::DateTime
+        | RelationalScalarType::Unknown => false,
+    }
+}
+
+fn filter_shape_error_code(value: &serde_json::Value) -> &'static str {
+    let Some(object) = value.as_object() else {
+        return "compiler.relational.filter_literal_type";
+    };
+    if object
+        .get("column")
+        .and_then(serde_json::Value::as_str)
+        .is_none_or(|column| column.is_empty() || column.trim() != column)
+    {
+        return "compiler.relational.filter_column_missing";
+    }
+    let operator = object.get("operator").and_then(serde_json::Value::as_str);
+    match operator {
+        Some("isNull" | "isNotNull") if object.contains_key("value") => {
+            "compiler.relational.filter_literal_forbidden"
+        }
+        Some(
+            "equal" | "notEqual" | "lessThan" | "lessThanOrEqual" | "greaterThan"
+            | "greaterThanOrEqual",
+        ) if !object.contains_key("value") => "compiler.relational.filter_literal_missing",
+        Some(
+            "equal" | "notEqual" | "lessThan" | "lessThanOrEqual" | "greaterThan"
+            | "greaterThanOrEqual" | "isNull" | "isNotNull",
+        ) => "compiler.relational.filter_literal_type",
+        _ => "compiler.relational.filter_operator_invalid",
+    }
+}
+
 fn port_template(address: &PortAddress) -> &PortKey {
     match &address.port {
         PortRef::Declared { key } => key,
@@ -513,7 +683,7 @@ fn port_template(address: &PortAddress) -> &PortKey {
 mod tests {
     use super::*;
     use crate::node_system::analysis::DiagnosticLocation;
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::protocol::NodeTypeId;
 
     fn parameter_key(value: &str) -> ParameterKey {
@@ -531,7 +701,8 @@ mod tests {
         from: serde_json::Value,
         to: serde_json::Value,
     ) -> (Option<RenameExpr>, Vec<SchemaAnalysisIssue>) {
-        let registry = build_builtin_registry();
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
         let rename = registry
             .get(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
             .unwrap();
@@ -539,7 +710,7 @@ mod tests {
         let resolvers = SchemaResolverSet::new();
         let node_id = NodeId::new();
         let mut analyzer = SchemaAnalyzer::new(&resolvers);
-        analyzer.add_node(node_id, &rename.protocol, &parameters, std::iter::empty());
+        analyzer.add_node(node_id, rename.protocol(), &parameters, std::iter::empty());
         let mapping = analyzer.resolve_rename(node_id, &two_parameter_mapping());
         (mapping, analyzer.issues)
     }
@@ -574,8 +745,14 @@ mod tests {
         assert_eq!(
             renamed.fields,
             vec![
-                SchemaColumnRef("renamed".into()),
-                SchemaColumnRef("b".into())
+                SchemaField {
+                    name: SchemaColumnRef("renamed".into()),
+                    scalar_type: RelationalScalarType::Unknown,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("b".into()),
+                    scalar_type: RelationalScalarType::Unknown,
+                },
             ]
         );
         assert!(matches!(
@@ -611,7 +788,8 @@ mod tests {
 
     #[test]
     fn rename_dataframe_preserves_existing_object_parameter_mapping() {
-        let registry = build_builtin_registry();
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
         let rename = registry
             .get(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
             .unwrap();
@@ -621,7 +799,7 @@ mod tests {
         let resolvers = SchemaResolverSet::new();
         let node_id = NodeId::new();
         let mut analyzer = SchemaAnalyzer::new(&resolvers);
-        analyzer.add_node(node_id, &rename.protocol, &parameters, std::iter::empty());
+        analyzer.add_node(node_id, rename.protocol(), &parameters, std::iter::empty());
 
         let mapping = analyzer
             .resolve_rename(node_id, &RenameExpr::FromParameter(mapping_key))
@@ -635,6 +813,285 @@ mod tests {
             }])
         );
         assert!(analyzer.issues.is_empty());
+    }
+
+    #[test]
+    fn project_and_rename_preserve_resolved_scalar_types() {
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        let input = SchemaFact::new(
+            SchemaExpr::Input(PortKey::new("raw").unwrap()),
+            [
+                SchemaField {
+                    name: SchemaColumnRef("amount".into()),
+                    scalar_type: RelationalScalarType::Float64,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("status".into()),
+                    scalar_type: RelationalScalarType::String,
+                },
+            ],
+        );
+
+        let projected = analyzer
+            .project(
+                NodeId::new(),
+                input,
+                ColumnSelectionExpr::Explicit(vec![SchemaColumnRef("amount".into())]),
+                None,
+            )
+            .unwrap();
+        let renamed = analyzer
+            .rename(
+                NodeId::new(),
+                projected,
+                RenameExpr::Explicit(vec![ColumnRename {
+                    from: SchemaColumnRef("amount".into()),
+                    to: SchemaColumnRef("total".into()),
+                }]),
+            )
+            .unwrap();
+
+        assert_eq!(
+            renamed.fields,
+            vec![SchemaField {
+                name: SchemaColumnRef("total".into()),
+                scalar_type: RelationalScalarType::Float64,
+            }]
+        );
+    }
+
+    fn filter_with(
+        input: SchemaFact,
+        predicate: serde_json::Value,
+    ) -> (Option<SchemaFact>, Vec<SchemaAnalysisIssue>) {
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let protocol = registry
+            .protocol(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+            .unwrap();
+        let key = parameter_key("predicate");
+        let parameters = BTreeMap::from([(key.clone(), predicate)]);
+        let resolvers = SchemaResolverSet::new();
+        let node_id = NodeId::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        analyzer.add_node(node_id, protocol, &parameters, std::iter::empty());
+        let fact = analyzer.filter(node_id, input, &key);
+        (fact, analyzer.issues)
+    }
+
+    fn typed_input() -> SchemaFact {
+        SchemaFact::new(
+            SchemaExpr::Input(PortKey::new("raw").unwrap()),
+            [
+                SchemaField {
+                    name: SchemaColumnRef("total".into()),
+                    scalar_type: RelationalScalarType::Float64,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("active".into()),
+                    scalar_type: RelationalScalarType::Boolean,
+                },
+            ],
+        )
+    }
+
+    #[test]
+    fn filter_diagnostics_use_exact_predicate_parameter_and_renamed_fields() {
+        for (predicate, code) in [
+            (
+                serde_json::json!({"column":"amount","operator":"equal","value":{"type":"decimal","value":"1.5"}}),
+                "compiler.relational.filter_column_missing",
+            ),
+            (
+                serde_json::json!({"column":"active","operator":"lessThan","value":{"type":"boolean","value":true}}),
+                "compiler.relational.filter_operator_invalid",
+            ),
+            (
+                serde_json::json!({"column":"total","operator":"equal","value":{"type":"string","value":"x"}}),
+                "compiler.relational.filter_literal_type",
+            ),
+            (
+                serde_json::json!({"column":"total","operator":"equal"}),
+                "compiler.relational.filter_literal_missing",
+            ),
+            (
+                serde_json::json!({"column":"total","operator":"isNull","value":{"type":"decimal","value":"1.5"}}),
+                "compiler.relational.filter_literal_forbidden",
+            ),
+            (
+                serde_json::json!({"column":"","operator":"isNull"}),
+                "compiler.relational.filter_column_missing",
+            ),
+        ] {
+            let (fact, issues) = filter_with(typed_input(), predicate);
+            assert!(fact.is_none());
+            assert_eq!(issues.len(), 1);
+            assert_eq!(issues[0].code, code);
+            assert!(matches!(
+                &issues[0].location,
+                DiagnosticLocation::Parameter { key, .. } if key.as_str() == "predicate"
+            ));
+        }
+
+        let (fact, issues) = filter_with(
+            typed_input(),
+            serde_json::json!({"column":"total","operator":"greaterThan","value":{"type":"decimal","value":"1.5"}}),
+        );
+        assert!(issues.is_empty());
+        assert_eq!(fact.unwrap().fields[0].name.0.as_ref(), "total");
+    }
+
+    #[test]
+    fn project_diagnostics_use_exact_columns_parameter() {
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        let key = parameter_key("columns");
+
+        assert!(
+            analyzer
+                .project(
+                    NodeId::new(),
+                    typed_input(),
+                    ColumnSelectionExpr::Explicit(vec![SchemaColumnRef("missing".into())]),
+                    Some(&key),
+                )
+                .is_none()
+        );
+        assert!(matches!(
+            &analyzer.issues[0].location,
+            DiagnosticLocation::Parameter { key, .. } if key.as_str() == "columns"
+        ));
+    }
+
+    #[test]
+    fn connected_filter_with_unavailable_source_schema_emits_one_port_dependency_issue() {
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let source_protocol = registry
+            .protocol(&NodeTypeId::new("yssbi.dataframe.source.get").unwrap())
+            .unwrap()
+            .clone();
+        let mut filter_protocol = registry
+            .protocol(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+            .unwrap()
+            .clone();
+        filter_protocol.interface.ports[1].schema = Some(SchemaExpr::Filter {
+            input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
+            predicate: Some(parameter_key("predicate")),
+        });
+        let source_parameters = BTreeMap::from([(
+            parameter_key("dataframe"),
+            serde_json::json!("databases/missing"),
+        )]);
+        let filter_parameters = BTreeMap::from([(
+            parameter_key("predicate"),
+            serde_json::json!({"column":"missing","operator":"equal","value":{"type":"string","value":"x"}}),
+        )]);
+        let source_node = NodeId::new();
+        let filter_node = NodeId::new();
+        let source_output = PortAddress::declared(source_node, PortKey::new("dataframe").unwrap());
+        let filter_source = PortAddress::declared(filter_node, PortKey::new("source").unwrap());
+        let filter_result = PortAddress::declared(filter_node, PortKey::new("result").unwrap());
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        analyzer.add_node(
+            source_node,
+            &source_protocol,
+            &source_parameters,
+            [source_output.clone()].into_iter(),
+        );
+        analyzer.add_node(
+            filter_node,
+            &filter_protocol,
+            &filter_parameters,
+            [filter_source.clone(), filter_result].into_iter(),
+        );
+        analyzer.add_connection(source_output.clone(), filter_source);
+
+        let (_, _, issues) = analyzer.analyze();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "compiler.schema.resolver_missing");
+        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
+        assert!(
+            !issues
+                .iter()
+                .any(|issue| issue.code.starts_with("compiler.relational.filter_"))
+        );
+    }
+
+    struct FailingConnectedSourceResolver;
+
+    impl SchemaResolver for FailingConnectedSourceResolver {
+        fn resolve(
+            &self,
+            _: &SchemaResolutionContext<'_>,
+        ) -> Result<SchemaFact, SchemaResolutionError> {
+            Err(SchemaResolutionError::new("source schema unavailable"))
+        }
+    }
+
+    #[test]
+    fn connected_filter_with_failed_source_schema_emits_one_port_dependency_issue() {
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let source_protocol = registry
+            .protocol(&NodeTypeId::new("yssbi.dataframe.source.get").unwrap())
+            .unwrap()
+            .clone();
+        let mut filter_protocol = registry
+            .protocol(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+            .unwrap()
+            .clone();
+        filter_protocol.interface.ports[1].schema = Some(SchemaExpr::Filter {
+            input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
+            predicate: Some(parameter_key("predicate")),
+        });
+        let source_parameters = BTreeMap::from([(
+            parameter_key("dataframe"),
+            serde_json::json!("databases/missing"),
+        )]);
+        let filter_parameters = BTreeMap::from([(
+            parameter_key("predicate"),
+            serde_json::json!({"column":"missing","operator":"equal","value":{"type":"string","value":"x"}}),
+        )]);
+        let source_node = NodeId::new();
+        let filter_node = NodeId::new();
+        let source_output = PortAddress::declared(source_node, PortKey::new("dataframe").unwrap());
+        let filter_source = PortAddress::declared(filter_node, PortKey::new("source").unwrap());
+        let filter_result = PortAddress::declared(filter_node, PortKey::new("result").unwrap());
+        let mut resolvers = SchemaResolverSet::new();
+        resolvers.insert(
+            SchemaResolverId::new(crate::node_system::catalog::DATAFRAME_RESOURCE_SCHEMA_RESOLVER)
+                .unwrap(),
+            FailingConnectedSourceResolver,
+        );
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+        analyzer.add_node(
+            source_node,
+            &source_protocol,
+            &source_parameters,
+            [source_output.clone()].into_iter(),
+        );
+        analyzer.add_node(
+            filter_node,
+            &filter_protocol,
+            &filter_parameters,
+            [filter_source.clone(), filter_result].into_iter(),
+        );
+        analyzer.add_connection(source_output.clone(), filter_source);
+
+        let (_, _, issues) = analyzer.analyze();
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "compiler.schema.resolver_failed");
+        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
+        assert!(
+            !issues
+                .iter()
+                .any(|issue| issue.code.starts_with("compiler.relational.filter_"))
+        );
     }
 
     #[test]

@@ -3,8 +3,8 @@ use crate::execution::{
     PlotChart, Presentation, ReportKind, ResultSource, ResultSourceRecord, SourceDescriptor,
     SourceId, SourceKind,
 };
-use crate::graph::register::catalog::dataframe::OLSResult;
 use crate::graph::value::{DataType, DataValue};
+use crate::sci::models::regression::OLSResult;
 use polars::prelude::{DataFrame, Series};
 use serde_json::json;
 use std::any::Any;

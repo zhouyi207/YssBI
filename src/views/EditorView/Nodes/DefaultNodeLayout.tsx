@@ -6,6 +6,10 @@ import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
+import {
+  isDatabaseResourceNodeType,
+  isVariableNodeType,
+} from "@/features/domain/nodeCatalog";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
@@ -19,13 +23,6 @@ interface DefaultNodeLayoutProps {
   onPinValueChange?: (pinId: string, value: unknown) => void;
 }
 
-function isVariableNode(nodeType: string | undefined): boolean {
-  return nodeType === "Variables:Get Variable" || nodeType === "Variables:Set Variable";
-}
-
-function isDataframeNode(nodeType: string | undefined): boolean {
-  return nodeType === "Data:Get DataFrame";
-}
 
 /**
  * Default Node Layout Component
@@ -46,12 +43,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinValueChange,
 }) => {
   const variable = useVariableStore((s) =>
-    node.variableId && isVariableNode(node.nodeType)
+    node.variableId && isVariableNodeType(node.nodeType)
       ? s.variables[node.variableId]
       : null
   );
   const database = useDatabaseStore((s) =>
-    node.dataframeId && isDataframeNode(node.nodeType)
+    node.dataframeId && isDatabaseResourceNodeType(node.nodeType)
       ? s.databases[node.dataframeId]
       : null
   );
@@ -59,10 +56,10 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   const isConstantNode = node.category?.[1] === "Constants";
   const resolveResourcePin = useCallback((pin: PinModel): PinModel => {
     if (isExecPin(pin)) return pin;
-    if (variable && isVariableNode(node.nodeType)) {
+    if (variable && isVariableNodeType(node.nodeType)) {
       return { ...pin, name: variable.name };
     }
-    if (database && isDataframeNode(node.nodeType)) {
+    if (database && isDatabaseResourceNodeType(node.nodeType)) {
       const name = database.name;
       return name ? { ...pin, name } : pin;
     }

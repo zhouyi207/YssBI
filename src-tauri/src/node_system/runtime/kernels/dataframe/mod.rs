@@ -163,14 +163,22 @@ fn source_dataframe(
 pub fn dataframe_to_protocol_value(
     dataframe: &polars::prelude::DataFrame,
 ) -> Result<Value, KernelError> {
+    dataframe_to_protocol_value_with_checkpoint(dataframe, || Ok(()))
+}
+
+pub(crate) fn dataframe_to_protocol_value_with_checkpoint(
+    dataframe: &polars::prelude::DataFrame,
+    mut checkpoint: impl FnMut() -> Result<(), KernelError>,
+) -> Result<Value, KernelError> {
     let mut columns = BTreeMap::new();
     for column in dataframe.columns() {
         let values = (0..dataframe.height())
             .map(|row| {
+                checkpoint()?;
                 column
                     .get(row)
-                    .map(|value| any_value(value.to_string()))
                     .map_err(|error| KernelError::new(error.to_string()))
+                    .and_then(any_value)
             })
             .collect::<Result<Vec<_>, _>>()?;
         columns.insert(
@@ -181,18 +189,37 @@ pub fn dataframe_to_protocol_value(
     Ok(Value::Object(columns))
 }
 
-fn any_value(value: String) -> Value {
-    if value == "null" {
-        Value::Null
-    } else if value == "true" || value == "false" {
-        Value::Bool(value == "true")
-    } else if let Ok(integer) = value.parse::<i64>() {
-        Value::Integer(integer)
-    } else if CanonicalDecimal::new(value.as_str()).is_ok() && value.contains('.') {
-        Value::Decimal(CanonicalDecimal::new(value).expect("checked decimal"))
-    } else {
-        Value::String(value.into())
+fn any_value(value: polars::prelude::AnyValue<'_>) -> Result<Value, KernelError> {
+    use polars::prelude::AnyValue;
+
+    match value {
+        AnyValue::Null => Ok(Value::Null),
+        AnyValue::Boolean(value) => Ok(Value::Bool(value)),
+        AnyValue::Int8(value) => Ok(Value::Integer(value.into())),
+        AnyValue::Int16(value) => Ok(Value::Integer(value.into())),
+        AnyValue::Int32(value) => Ok(Value::Integer(value.into())),
+        AnyValue::Int64(value) => Ok(Value::Integer(value)),
+        AnyValue::UInt8(value) => Ok(Value::Unsigned(value.into())),
+        AnyValue::UInt16(value) => Ok(Value::Unsigned(value.into())),
+        AnyValue::UInt32(value) => Ok(Value::Unsigned(value.into())),
+        AnyValue::UInt64(value) => Ok(Value::Unsigned(value)),
+        AnyValue::Float32(value) => protocol_decimal_value(value as f64),
+        AnyValue::Float64(value) => protocol_decimal_value(value),
+        AnyValue::String(value) => Ok(Value::String(value.into())),
+        AnyValue::StringOwned(value) => Ok(Value::String(value.as_str().into())),
+        value => Ok(Value::String(value.to_string().into())),
     }
+}
+
+fn protocol_decimal_value(value: f64) -> Result<Value, KernelError> {
+    if !value.is_finite() {
+        return Err(KernelError::new(
+            "dataframe float value is not finite and cannot cross the runtime boundary",
+        ));
+    }
+    CanonicalDecimal::new(value.to_string())
+        .map(Value::Decimal)
+        .map_err(|error| KernelError::new(error.to_string()))
 }
 
 fn dataframe_columns(value: &Value) -> Result<BTreeMap<Box<str>, Value>, KernelError> {

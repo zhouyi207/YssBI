@@ -42,6 +42,31 @@ describe('createNodeFromDescriptor', () => {
     });
   });
 
+  it('sends the exact parameterized-static descriptor unchanged', async () => {
+    const outcome = { status: 'conflict' as const };
+    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    const descriptor: NodeCreationDescriptor = {
+      kind: 'parameterizedStatic',
+      nodeTypeId: 'yssbi.dataframe.project',
+      requiredParameters: ['columns'],
+    };
+
+    await expect(createNodeFromDescriptor({
+      graphPath: 'events/Main.yssbi-event',
+      locale: 'en-US',
+      descriptor,
+      position: { x: 3, y: 7 },
+    })).resolves.toBe(outcome);
+
+    expect(executeEditorMutation).toHaveBeenCalledOnce();
+    expect(executeEditorMutation).toHaveBeenCalledWith(expect.objectContaining({
+      mutation: {
+        type: 'createNode',
+        payload: { descriptor, position: { x: 3, y: 7 }, userLabel: null },
+      },
+    }));
+  });
+
   it('sends the exact resource-bound descriptor unchanged', async () => {
     const outcome = { status: 'conflict' as const };
     vi.mocked(executeEditorMutation).mockResolvedValue(outcome);

@@ -18,6 +18,7 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailBadge, DetailText } from '../shared/DetailText';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
+import { NodeParameterEditor } from '../node/parameterEditors/NodeParameterEditor';
 
 const EMPTY_PINS: PinData[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
@@ -46,7 +47,7 @@ interface NodeDetailPanelProps {
 }
 
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
   const pinObjs = useGraphDataStore(
     useShallow((state) => {
@@ -132,12 +133,18 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         </DetailReadonlyField>
       </DetailForm>
       {node.parameterEditors && node.parameterEditors.length > 0 && (
-        <DetailCollapsibleSection title="Parameters" defaultOpen>
+        <DetailCollapsibleSection title={t('detail.parameters')} defaultOpen>
           <DetailForm>
             {node.parameterEditors.map((parameter) => (
-              <DetailReadonlyField key={parameter.key} label={parameter.display.title}>
-                {formatProjectedValue(parameter.value)}
-              </DetailReadonlyField>
+              <NodeParameterEditor
+                key={parameter.key}
+                graphPath={graphPath}
+                nodeId={nodeId}
+                locale={i18n.language}
+                parameter={parameter}
+                diagnostics={node.diagnostics ?? []}
+                formatFallback={formatProjectedValue}
+              />
             ))}
           </DetailForm>
         </DetailCollapsibleSection>

@@ -1,4 +1,4 @@
-use super::{ResultSourceId, RunError};
+use super::{RelationalErrorCode, ResultSourceId, RunError};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::GraphOutputRef;
@@ -56,8 +56,11 @@ pub enum RunErrorCode {
     KernelNotFound,
     KernelFailed,
     RelationalBackendNotFound,
-    RelationalAcquire,
-    RelationalFailed,
+    RelationalOperatorInvalid,
+    RelationalColumnMissing,
+    RelationalTypeMismatch,
+    RelationalInputShapeInvalid,
+    RelationalHintInvalid,
     MissingRelationalFragment,
     BridgeFailed,
     Stream,
@@ -75,6 +78,38 @@ pub enum RunErrorCode {
     ResourceAcquire,
 }
 
+impl RunErrorCode {
+    pub const fn public_message(self) -> &'static str {
+        match self {
+            Self::InvalidPlan => "execution plan is invalid",
+            Self::Cancelled => "run was cancelled",
+            Self::KernelNotFound => "required kernel is unavailable",
+            Self::KernelFailed => "operation failed",
+            Self::RelationalBackendNotFound => "relational backend is unavailable",
+            Self::RelationalOperatorInvalid => "relational operator is invalid",
+            Self::RelationalColumnMissing => "relational column is missing",
+            Self::RelationalTypeMismatch => "relational types do not match",
+            Self::RelationalInputShapeInvalid => "relational input shape is invalid",
+            Self::RelationalHintInvalid => "relational pushdown metadata is invalid",
+            Self::MissingRelationalFragment => "relational result is unavailable",
+            Self::BridgeFailed => "relational bridge failed",
+            Self::Stream => "runtime stream failed",
+            Self::MissingValue => "runtime value is unavailable",
+            Self::InvalidCondition => "runtime condition is invalid",
+            Self::OutputCount => "operation returned an invalid output count",
+            Self::OperationAlreadyExecuted => "operation executed more than once",
+            Self::UnsatisfiedEffectDependency => "effect dependency is unsatisfied",
+            Self::LoopLimitExceeded => "loop iteration limit exceeded",
+            Self::FunctionPlanNotFound => "function plan is unavailable",
+            Self::FunctionPlanFailed => "function plan failed",
+            Self::RecursionLimitExceeded => "call recursion limit exceeded",
+            Self::ProjectDraining => "project is draining",
+            Self::ResourceSnapshotMismatch => "project resource snapshot changed",
+            Self::ResourceAcquire => "run resource is unavailable",
+        }
+    }
+}
+
 impl From<&RunError> for RunErrorCode {
     fn from(error: &RunError) -> Self {
         match error {
@@ -83,8 +118,16 @@ impl From<&RunError> for RunErrorCode {
             RunError::KernelNotFound(_) => Self::KernelNotFound,
             RunError::KernelFailed { .. } => Self::KernelFailed,
             RunError::RelationalBackendNotFound(_) => Self::RelationalBackendNotFound,
-            RunError::RelationalAcquire { .. } => Self::RelationalAcquire,
-            RunError::RelationalFailed { .. } => Self::RelationalFailed,
+            RunError::RelationalAcquire { code, .. } | RunError::RelationalFailed { code, .. } => {
+                match code {
+                    RelationalErrorCode::OperatorInvalid => Self::RelationalOperatorInvalid,
+                    RelationalErrorCode::ColumnMissing => Self::RelationalColumnMissing,
+                    RelationalErrorCode::TypeMismatch => Self::RelationalTypeMismatch,
+                    RelationalErrorCode::InputShapeInvalid => Self::RelationalInputShapeInvalid,
+                    RelationalErrorCode::HintInvalid => Self::RelationalHintInvalid,
+                    RelationalErrorCode::Cancelled => Self::Cancelled,
+                }
+            }
             RunError::MissingRelationalFragment(_) => Self::MissingRelationalFragment,
             RunError::BridgeFailed(_) => Self::BridgeFailed,
             RunError::Stream(_) => Self::Stream,
@@ -166,12 +209,21 @@ mod tests {
             operation: crate::node_system::plan::OperationIndex::new(3),
             message: "sensitive literal".into(),
         };
+        let relational = RunError::RelationalFailed {
+            operation: crate::node_system::plan::OperationIndex::new(4),
+            code: RelationalErrorCode::TypeMismatch,
+            message: "sensitive backend detail".into(),
+        };
 
         assert_eq!(RunErrorCode::from(&error), RunErrorCode::KernelFailed);
-        assert!(
-            !serde_json::to_string(&RunErrorCode::from(&error))
-                .unwrap()
-                .contains("sensitive literal")
+        assert_eq!(
+            RunErrorCode::from(&relational),
+            RunErrorCode::RelationalTypeMismatch
         );
+        let wire = serde_json::to_string(&RunErrorCode::from(&relational)).unwrap();
+        assert_eq!(wire, "\"relationalTypeMismatch\"");
+        assert!(!wire.contains("sensitive backend detail"));
+        assert!(serde_json::from_str::<RunErrorCode>("\"relationalAcquire\"").is_err());
+        assert!(serde_json::from_str::<RunErrorCode>("\"relationalFailed\"").is_err());
     }
 }

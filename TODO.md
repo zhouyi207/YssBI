@@ -461,14 +461,14 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 
 | Phase | 完成度 | 当前状态 |
 |---|---:|---|
-| Phase 1：身份、协议、Registry | **96%** | 稳定 ID、Node Protocol、Registry 与 opaque Function/Variable/Database resource descriptor 已冻结；严格 serde、operation identity 与 891 项基线验证已覆盖 |
+| Phase 1：身份、协议、Registry | **98%** | Stable NodeTypeId、strict executable Registry 与 sealed frozen internals 已完成；production 现仅通过 fallible validated built-in factory，在任何 editable state 前完成 Registry、nominal validator、default locale/aliases 校验，并保留 immutable node/type provider provenance；剩余旧 Rust label/category Registry 删除及 Rust↔TS golden contract |
 | Phase 2：GraphDocument 和事务 | **98%** | Graph/document/resource transaction 已高度收敛；CreateNode 现仅接受 exact descriptor，snapshot/publication 双重 authority gate 与所有 rejection 零副作用已覆盖 |
 | Phase 3：编辑器权威投影 | **100%** | Exact descriptor、revisioned command snapshot、coherent database recovery 与唯一 Core lifecycle authority 已完成；identity cycle/shim 已移除，AST-resolved service boundary 与 stale command/event/graph/publication 行为通过最终审查 |
-| Phase 4：Rust 权威 History | **99%** | global/local variable durable history、presence tombstone、graph unload 与跨资源 undo/redo 已统一；absent local scope 可正确重写所属 graph 并通过 reload 验证 |
+| Phase 4：Rust 权威 History | **100%** | Rust 权威 History 已完成：direct/lifecycle graph cache unload 保留完整项目 History；unloaded Graph/Function/local variable 在单一 coordinator lease 下按需 hydration，并与 loaded/global resources 原子 Undo/Redo；policy/head/session/revision/residency races、rollback/recovery、精确 delta 与 post-finalize publication 均通过最终审查。History 仍为 process-local，project activation/reload/replacement 会清空 |
 | Phase 5：确定性语义分析 | **99%** | 类型/Schema/依赖/编译发布与 descriptor mutation validation 已收敛；immutable resource facts、scope/parameter validation 和 authority races 均有生产级覆盖 |
-| Phase 6：无环数据执行计划 | **99%** | Stable GraphOutputRef、structured specialization、bounded basis variants、canonical execution correlation 与顶层 Event Pin preview 已完成；普通运行/预览生命周期隔离、资源剪枝及前端 1137 项已覆盖，等待 fresh `pnpm verify` 与整片最终审查 |
-| Phase 7：Relational island | **95%** | Source→Rename→Limit、严格 pushdown metadata、单 island/backend/零 bridge 已通过审查和完整 Rust 套件；后续继续 Project/Filter lineage |
-| Phase 8：结构化控制与副作用 | **94%** | Branch、Loop、Call、Effect、取消、资源清理、最终化竞态及加载期 drain 已完成生产验证，并纳入 891 项完整 Rust 套件全绿覆盖 |
+| Phase 6：无环数据执行计划 | **100%** | Demand-driven roots 已完成：Stable GraphOutputRef、full-analysis/specialized-plan 分离、bounded DemandKey variants、pure/Call/structured/relational/resource 剪枝、canonical selection correlation 与顶层 Event Pin preview 均通过最终审查；前端 1137 项及完整串行 `pnpm verify` 通过。CachePolicy memoization、deadline、并行调度与 Filter/Project lineage 仍属后续 Phase 7/8 能力 |
+| Phase 7：Relational island | **100%** | Project/Filter strict authority、Catalog/UI、typed schema、exact lowering、safe lineage、stable demand 与 DataFrame-native runtime 全部完成；真实 built-in Registry/database final/preview production chain、磁盘参数回读、内部 order/dtype/nulls、UUID determinism、取消/资源清理及同节点 ParameterizedStatic UI route 通过 whole-slice 最终审查与完整 `pnpm verify`，legacy external-mask Filter/Decompose 和外部 RuntimeValue 合约保持不变 |
+| Phase 8：结构化控制与副作用 | **100%** | Branch、Loop、Call、Effect、显式 effect dependencies、64 层递归边界、独立 frame、carried values、typed cancellation、RAII 资源清理、最终化竞态及加载期 drain 均完成生产验证；独立架构审计与 fresh structured/compiler/plan/runtime/RunRegistry 串行矩阵通过，stream transport、cache、deadline 与并行调度属于后续运行平台能力 |
 | Phase 9：Catalog、搜索、可观测性 | **100%** | Static/resource Catalog、current-locale title+aliases search/docs、database recovery、canonical delta strict-wire 与 legacy inference audits 已完成；frontend 287、database integration 11 及 Rust focused matrix通过最终审查 |
 
 

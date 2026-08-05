@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 pub struct ValidatedSemanticGraph<
     GraphRevision,
     NodeId,
-    PortAddress,
+    PortAddress: Ord,
     ConnectionId,
     ParameterValue,
     ResolvedType,
@@ -25,6 +25,8 @@ pub struct ValidatedSemanticGraph<
         >],
     >,
     pub dependencies: Box<[SemanticDependency<NodeId, PortAddress, ConnectionId>]>,
+    #[serde(with = "super::snapshot::ordered_map_entries")]
+    pub resolved_schemas: BTreeMap<PortAddress, crate::node_system::protocol::ResolvedSchemaFact>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

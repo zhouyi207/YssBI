@@ -16,73 +16,6 @@ pub struct NodeProtocol {
     pub managed_role: Option<ManagedNodeRole>,
 }
 
-impl NodeProtocol {
-    pub fn from_static(protocol: &'static StaticNodeProtocol) -> Result<Self, ProtocolError> {
-        let type_id = parse_id(NodeTypeId::new(protocol.type_id))?;
-        let catalog = NodeCatalogProtocol::from_static(protocol.catalog)?;
-        let mut keys = BTreeSet::new();
-        let mut ports = Vec::with_capacity(protocol.ports.len());
-
-        for port in protocol.ports {
-            let key = parse_id(PortKey::new(port.key))?;
-            if !keys.insert(key.clone()) {
-                return Err(ProtocolError::DuplicatePortKey(key));
-            }
-            let spec = PortSpec {
-                key,
-                label_key: parse_i18n_key(port.label_key)?,
-                direction: port.direction,
-                kind: port.kind,
-                value_type: TypeExpr::Unknown,
-                instances: port.instances.clone(),
-                connections: port.connections,
-                input_binding: port.input_binding.clone(),
-                consumption: None,
-                production: None,
-                editor: PortEditorSpec::Default,
-                schema: None,
-            };
-            validate_port_contract(&spec)?;
-            ports.push(spec);
-        }
-
-        validate_execution(protocol.execution)?;
-        Ok(Self {
-            type_id,
-            catalog,
-            interface: NodeInterfaceProtocol::new(ports, Vec::new(), Vec::new())?,
-            parameters: ParameterSchema::default(),
-            execution: protocol.execution,
-            scope: protocol.scope,
-            managed_role: protocol.managed_role,
-        })
-    }
-}
-
-/// Source-level compatibility form. Registry startup interns this into the
-/// complete owned protocol and validates all contracts.
-#[derive(Debug, Clone, Copy)]
-pub struct StaticNodeProtocol {
-    pub type_id: &'static str,
-    pub catalog: StaticNodeCatalogProtocol,
-    pub ports: &'static [StaticPortSpec],
-    pub execution: ExecutionSemantics,
-    pub scope: NodeScope,
-    pub managed_role: Option<ManagedNodeRole>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct StaticNodeCatalogProtocol {
-    pub title_key: &'static str,
-    pub description_key: Option<&'static str>,
-    pub documentation_key: Option<&'static str>,
-    pub aliases_key: Option<&'static str>,
-    pub category_id: &'static str,
-    pub icon_id: &'static str,
-    pub style_id: &'static str,
-    pub hidden: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeCatalogProtocol {
     pub title_key: I18nKey,
@@ -93,32 +26,6 @@ pub struct NodeCatalogProtocol {
     pub icon_id: IconId,
     pub style_id: NodeStyleId,
     pub hidden: bool,
-}
-
-impl NodeCatalogProtocol {
-    fn from_static(catalog: StaticNodeCatalogProtocol) -> Result<Self, ProtocolError> {
-        Ok(Self {
-            title_key: parse_i18n_key(catalog.title_key)?,
-            description_key: catalog.description_key.map(parse_i18n_key).transpose()?,
-            documentation_key: catalog.documentation_key.map(parse_i18n_key).transpose()?,
-            aliases_key: catalog.aliases_key.map(parse_i18n_key).transpose()?,
-            category_id: parse_id(NodeCategoryId::new(catalog.category_id))?,
-            icon_id: parse_id(IconId::new(catalog.icon_id))?,
-            style_id: parse_id(NodeStyleId::new(catalog.style_id))?,
-            hidden: catalog.hidden,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StaticPortSpec {
-    pub key: &'static str,
-    pub label_key: &'static str,
-    pub direction: PortDirection,
-    pub kind: PortKind,
-    pub instances: PortInstances,
-    pub connections: ConnectionsPerPort,
-    pub input_binding: Option<InputBindingSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -344,14 +251,6 @@ impl std::fmt::Display for ProtocolError {
 
 impl std::error::Error for ProtocolError {}
 
-fn parse_id<T>(value: Result<T, super::InvalidSemanticId>) -> Result<T, ProtocolError> {
-    value.map_err(|error| ProtocolError::InvalidIdentity(error.to_string()))
-}
-
-fn parse_i18n_key(value: &str) -> Result<I18nKey, ProtocolError> {
-    parse_id(I18nKey::new(value))
-}
-
 fn invalid_port(key: &PortKey, reason: &'static str) -> ProtocolError {
     ProtocolError::InvalidPortContract {
         key: key.clone(),
@@ -470,7 +369,8 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
+#[cfg(test)]
+pub(crate) fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
     match (execution.purity, execution.effects) {
         (Purity::Pure, EffectSemantics::None)
         | (Purity::Effectful, EffectSemantics::Ordered | EffectSemantics::Exclusive) => Ok(()),

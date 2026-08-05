@@ -1557,6 +1557,2392 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
 }
 
 #[test]
+fn graph_cache_unload_preserves_complete_project_history() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-history-cache-unload-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let unloaded = graph_path();
+    let retained = GraphResourcePath::new("events/Retained.yssbi-event").unwrap();
+    let mut local_variable = test_variable("Unloaded local");
+    local_variable.scope = crate::variable::VariableScope::Event {
+        event_path: unloaded.as_str().into(),
+    };
+    let local_variable_id = local_variable.id;
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        unloaded.clone(),
+        GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+    );
+    project.graphs.insert(
+        retained.clone(),
+        GraphResourceDocument::new("Retained", GraphDocumentKind::Event),
+    );
+    project.variables.insert(local_variable_id, local_variable);
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &unloaded).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &retained).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+
+    for path in [&unloaded, &retained] {
+        state
+            .apply_graph_patch(
+                path,
+                MutationRequest::new(
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        path.as_str().into(),
+                    )),
+                    GraphRevision::INITIAL,
+                    OperationId::new(),
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                        node: node("yssbi.constant.int64"),
+                    }]),
+                ),
+            )
+            .unwrap();
+    }
+    crate::project::fixtures::write_state_graph(&state, &unloaded).unwrap();
+    state.graph_projection(&unloaded, "en-US").unwrap();
+    state.graph_projection(&retained, "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    let retained_document_path =
+        crate::node_system::document::GraphResourcePath(retained.as_str().into());
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    assert!(coordinator.contains_slot_for_test(&retained_document_path));
+
+    let before_status = state.history_status();
+    let before_lengths = state.history_lengths_for_test();
+    let before_head = state.history_head_id_for_test(true);
+    let before_revisions = state.revision_state_for_test();
+    let before_generation = state.authority_generation_for_test();
+    assert_eq!(before_lengths, (2, 0));
+
+    state.unload_graph_resource(&unloaded).unwrap();
+
+    let data = state.get_data().unwrap();
+    assert!(!data.graphs.contains_key(&unloaded));
+    assert!(data.graphs.contains_key(&retained));
+    assert!(!data.variables.contains_key(&local_variable_id));
+    assert_eq!(state.history_status(), before_status);
+    assert_eq!(state.history_lengths_for_test(), before_lengths);
+    assert_eq!(state.history_head_id_for_test(true), before_head);
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.authority_generation_for_test(), before_generation + 1);
+    assert!(!coordinator.contains_slot_for_test(&document_path()));
+    assert!(!coordinator.contains_slot_for_test(&retained_document_path));
+
+    state.graph_projection(&retained, "en-US").unwrap();
+    let before_noop_retained_slot = coordinator.contains_slot_for_test(&retained_document_path);
+    assert!(before_noop_retained_slot);
+    let before_noop_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_noop_status = state.history_status();
+    let before_noop_lengths = state.history_lengths_for_test();
+    let before_noop_head = state.history_head_id_for_test(true);
+    let before_noop_revisions = state.revision_state_for_test();
+    let before_noop_generation = state.authority_generation_for_test();
+
+    state.unload_graph_resource(&unloaded).unwrap();
+
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_noop_data
+    );
+    assert_eq!(state.history_status(), before_noop_status);
+    assert_eq!(state.history_lengths_for_test(), before_noop_lengths);
+    assert_eq!(state.history_head_id_for_test(true), before_noop_head);
+    assert_eq!(state.revision_state_for_test(), before_noop_revisions);
+    assert_eq!(
+        state.authority_generation_for_test(),
+        before_noop_generation
+    );
+    assert_eq!(
+        coordinator.contains_slot_for_test(&retained_document_path),
+        before_noop_retained_slot
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
+    let root =
+        std::env::temp_dir().join(format!("yssbi-history-hydration-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let graph_path = GraphResourcePath::new("events/Hydrated.yssbi-event").unwrap();
+    let document_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let mut local_variable = test_variable("Hydrated local");
+    local_variable.scope = crate::variable::VariableScope::Event {
+        event_path: graph_path.as_str().into(),
+    };
+    let local_variable_id = local_variable.id;
+    let local_variable_key = crate::node_system::document::VariableResourceKey(
+        format!("variables/{local_variable_id}").into(),
+    );
+    let inserted_node = node("yssbi.constant.int64");
+    let inserted_node_id = inserted_node.id;
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("Hydrated", GraphDocumentKind::Event),
+    );
+    project.variables.insert(local_variable_id, local_variable);
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &graph_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    state
+        .apply_graph_patch(
+            &graph_path,
+            MutationRequest::new(
+                ResourceKey::Graph(document_path.clone()),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: inserted_node,
+                }]),
+            ),
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &graph_path).unwrap();
+    state.unload_graph_resource(&graph_path).unwrap();
+    let before_history = state.history_status();
+    let before_lengths = state.history_lengths_for_test();
+    let before_head = state.history_head_id_for_test(true);
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let acquisition = state.filesystem().observe_acquire_many_attempts();
+    crate::project::filesystem::reset_normalized_root_reconstruction_count_for_test();
+
+    let prepared = state
+        .prepare_history_for_test(
+            true,
+            MutationRequest::new(
+                ResourceKey::Graph(document_path.clone()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+        )
+        .unwrap();
+    let acquired_roots = acquisition
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("History hydration must acquire the project root lease");
+
+    assert_eq!(
+        crate::project::filesystem::normalized_root_reconstruction_count_for_test(),
+        0,
+        "History preparation must clone the already-normalized active root"
+    );
+    assert_eq!(acquired_roots, vec![prepared.basis.session.root.clone()]);
+    assert!(prepared.contains_unloaded_graph);
+    assert_eq!(
+        prepared.touched_graphs,
+        std::collections::BTreeSet::from([graph_path.clone()])
+    );
+    assert!(
+        prepared.before.graphs[&document_path]
+            .nodes
+            .contains_key(&inserted_node_id)
+    );
+    assert!(prepared.before.variables.contains_key(&local_variable_key));
+    assert!(
+        !prepared.after.graphs[&document_path]
+            .nodes
+            .contains_key(&inserted_node_id)
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .variables
+            .contains_key(&local_variable_id)
+    );
+    assert_eq!(prepared.basis.history_id, before_head.unwrap());
+    assert_eq!(
+        prepared.basis.expected_revisions[&ResourceKey::Graph(document_path.clone())],
+        GraphRevision::new(1)
+    );
+    drop(prepared);
+
+    let graph_file = root.join(graph_path.as_str());
+    std::fs::remove_file(&graph_file).unwrap();
+    let missing_error = match state.prepare_history_for_test(
+        true,
+        MutationRequest::new(
+            ResourceKey::Graph(document_path.clone()),
+            GraphRevision::new(1),
+            OperationId::new(),
+            HistoryMutation {},
+        ),
+    ) {
+        Ok(_) => panic!("missing graph hydration unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert!(matches!(missing_error, MutationConflict::History(_)));
+    assert!(!graph_file.exists());
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_lengths_for_test(), before_lengths);
+    assert_eq!(state.history_head_id_for_test(true), before_head);
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+
+    let corrupt = b"{not valid graph json";
+    std::fs::write(&graph_file, corrupt).unwrap();
+    let corrupt_error = match state.prepare_history_for_test(
+        true,
+        MutationRequest::new(
+            ResourceKey::Graph(document_path),
+            GraphRevision::new(1),
+            OperationId::new(),
+            HistoryMutation {},
+        ),
+    ) {
+        Ok(_) => panic!("corrupt graph hydration unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert!(matches!(corrupt_error, MutationConflict::History(_)));
+    assert_eq!(std::fs::read(&graph_file).unwrap(), corrupt);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_lengths_for_test(), before_lengths);
+    assert_eq!(state.history_head_id_for_test(true), before_head);
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+fn durable_unloaded_history_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    String,
+    GraphResourcePath,
+    ResourceKey,
+    crate::node_system::document::NodeId,
+) {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();
+    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        graph_path.as_str().into(),
+    ));
+    let inserted_node = node("yssbi.constant.int64");
+    let inserted_node_id = inserted_node.id;
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new(label, GraphDocumentKind::Event),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &graph_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    state
+        .apply_graph_patch(
+            &graph_path,
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: inserted_node,
+                }]),
+            ),
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &graph_path).unwrap();
+    state.unload_graph_resource(&graph_path).unwrap();
+    (
+        state,
+        root,
+        root_text,
+        graph_path,
+        resource,
+        inserted_node_id,
+    )
+}
+
+fn durable_graph_global_history_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    GraphResourcePath,
+    ResourceKey,
+    crate::variable::VariableId,
+) {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();
+    let function_path =
+        GraphResourcePath::new(format!("functions/{label}Observer.yssbi-function")).unwrap();
+    let graph_key = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let graph_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+        node: node("yssbi.constant.int64"),
+    }]);
+    let before_variable = test_variable("Before global History");
+    let mut after_variable = before_variable.clone();
+    after_variable.name = "After global History".into();
+    let variable_id = before_variable.id;
+    let variable_key = crate::node_system::document::VariableResourceKey(
+        format!("variables/{variable_id}").into(),
+    );
+    let variable_patch = crate::node_system::document::VariableDocumentPatch::new(
+        Some(serde_json::to_value(&before_variable).unwrap()),
+        Some(serde_json::to_value(&after_variable).unwrap()),
+    );
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new(label, GraphDocumentKind::Event),
+    );
+    project.graphs.insert(
+        function_path.clone(),
+        GraphResourceDocument::new(format!("{label}Observer"), GraphDocumentKind::Function),
+    );
+    project.variables.insert(variable_id, before_variable);
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &graph_path).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &function_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
+        OperationId::new(),
+        vec![
+            crate::node_system::document::ResourcePatch::graph(
+                graph_key.clone(),
+                GraphRevision::INITIAL,
+                graph_patch,
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                variable_key,
+                GraphRevision::INITIAL,
+                variable_patch,
+            ),
+        ],
+    );
+    {
+        let mut data = state.project_data.write().unwrap();
+        let mut revisions = state.variable_revisions.write().unwrap();
+        let mut documents = super::project_state::project_documents(&data, &revisions);
+        let mut history = crate::node_system::document::ProjectHistory::default();
+        history
+            .apply_transaction(&mut documents, transaction)
+            .unwrap();
+        super::project_state::replace_project_documents(&mut data, &mut revisions, documents);
+        state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(graph_path.clone(), GraphRevision::new(1));
+        *state.history.write().unwrap() = history;
+    }
+    crate::project::fixtures::write_project(&state.get_data().unwrap(), &root_text).unwrap();
+    crate::project::fixtures::write_state_graph(&state, &graph_path).unwrap();
+    state.unload_graph_resource(&graph_path).unwrap();
+    (
+        state,
+        root,
+        graph_path,
+        ResourceKey::Graph(graph_key),
+        variable_id,
+    )
+}
+
+fn assert_unloaded_post_disk_race_rejected(
+    label: &str,
+    mutate: impl FnOnce(&ProjectState, &GraphResourcePath, &str),
+) {
+    let (state, root, root_text, graph_path, resource, _) = durable_unloaded_history_fixture(label);
+    let graph_file = root.join(graph_path.as_str());
+    let before_file = std::fs::read(&graph_file).unwrap();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("bounded post-disk checkpoint release");
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_thread = observed.clone();
+    let history_state = state.clone();
+    let history_thread = std::thread::spawn(move || {
+        history_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {
+                observed_thread.store(true, std::sync::atomic::Ordering::SeqCst);
+            },
+        )
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("History reached post-disk checkpoint");
+    mutate(&state, &graph_path, &root_text);
+    let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let raced_status = state.history_status();
+    let raced_lengths = state.history_lengths_for_test();
+    let raced_head = state.history_head_id_for_test(true);
+    let raced_revisions = state.revision_state_for_test();
+    let raced_publication = state.publication_state_for_test();
+    release_tx.send(()).unwrap();
+
+    let error = history_thread.join().unwrap().unwrap_err();
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        raced_data
+    );
+    assert_eq!(state.history_status(), raced_status);
+    assert_eq!(state.history_lengths_for_test(), raced_lengths);
+    assert_eq!(state.history_head_id_for_test(true), raced_head);
+    assert_eq!(state.revision_state_for_test(), raced_revisions);
+    assert_eq!(state.publication_state_for_test(), raced_publication);
+    assert_eq!(std::fs::read(&graph_file).unwrap(), before_file);
+    assert!(!root.join(".yssbi-transaction").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_history_post_disk_authority_race_matrix_rejects_without_publication() {
+    assert_unloaded_post_disk_race_rejected("HistoryHeadRace", |state, _, _| {
+        state.append_history_head_for_test();
+    });
+    assert_unloaded_post_disk_race_rejected("HistoryDirectionRace", |state, _, _| {
+        state
+            .history
+            .write()
+            .unwrap()
+            .move_undo_head_to_redo_for_test();
+    });
+    assert_unloaded_post_disk_race_rejected("GraphRevisionRace", |state, path, _| {
+        state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(path.clone(), GraphRevision::new(7));
+    });
+    assert_unloaded_post_disk_race_rejected("AuthorityGenerationRace", |state, _, _| {
+        state
+            .mutation_publication
+            .lock()
+            .unwrap()
+            .advance_authority_generation();
+    });
+    assert_unloaded_post_disk_race_rejected("ProjectInstanceRace", |state, _, _| {
+        state
+            .mutation_publication
+            .lock()
+            .unwrap()
+            .project_instance_id = uuid::Uuid::new_v4().to_string();
+    });
+    assert_unloaded_post_disk_race_rejected("ProjectSessionRace", |state, _, root_text| {
+        let replacement = std::path::PathBuf::from(root_text).join("replacement-session");
+        std::fs::create_dir_all(&replacement).unwrap();
+        state.replace_active_root_for_test(
+            crate::project::NormalizedProjectRoot::from_project_path(replacement).unwrap(),
+        );
+    });
+    assert_unloaded_post_disk_race_rejected("ResidencyRace", |state, path, root_text| {
+        let graph =
+            crate::project::project_io::load_project_graph_from_file(root_text, path).unwrap();
+        state
+            .project_data
+            .write()
+            .unwrap()
+            .graphs
+            .insert(path.clone(), graph);
+    });
+}
+
+#[test]
+fn mixed_residency_history_rejects_variable_revision_and_tombstone_race() {
+    let (state, root, graph_path, resource, variable_id) =
+        durable_graph_global_history_fixture("VariableTombstoneRace");
+    let graph_file = root.join(graph_path.as_str());
+    let variables_file = root.join(crate::project::GLOBAL_VARIABLES_FILE);
+    let before_graph = std::fs::read(&graph_file).unwrap();
+    let before_variables = std::fs::read(&variables_file).unwrap();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_thread = observed.clone();
+    let history_state = state.clone();
+    let history_thread = std::thread::spawn(move || {
+        history_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| observed_thread.store(true, std::sync::atomic::Ordering::SeqCst),
+        )
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .variables
+        .remove(&variable_id);
+    state.variable_revisions.write().unwrap().insert(
+        variable_id,
+        super::project_state::VariableRevisionEntry::deleted(GraphRevision::new(7)),
+    );
+    let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let raced_history = (
+        state.history_status(),
+        state.history_lengths_for_test(),
+        state.history_head_id_for_test(true),
+    );
+    let raced_revisions = state.revision_state_for_test();
+    let raced_entry = state.variable_revision_entry_for_test(&variable_id);
+    let raced_publication = state.publication_state_for_test();
+    release_tx.send(()).unwrap();
+
+    assert!(matches!(
+        history_thread.join().unwrap(),
+        Err(MutationConflict::History(_))
+    ));
+    assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        raced_data
+    );
+    assert_eq!(
+        (
+            state.history_status(),
+            state.history_lengths_for_test(),
+            state.history_head_id_for_test(true),
+        ),
+        raced_history
+    );
+    assert_eq!(state.revision_state_for_test(), raced_revisions);
+    assert_eq!(
+        state.variable_revision_entry_for_test(&variable_id),
+        raced_entry
+    );
+    assert_eq!(state.publication_state_for_test(), raced_publication);
+    assert_eq!(std::fs::read(&graph_file).unwrap(), before_graph);
+    assert_eq!(std::fs::read(&variables_file).unwrap(), before_variables);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn loaded_only_history_routing_rejects_specialized_policy_races() {
+    for (label, policy) in [
+        (
+            "LoadedVariablePolicyRace",
+            crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects,
+        ),
+        (
+            "LoadedMovePolicyRace",
+            crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove,
+        ),
+    ] {
+        let (state, root, _root_text, graph_path, resource, _) =
+            durable_unloaded_history_fixture(label);
+        load_graph(&state, &graph_path).unwrap();
+        let graph_file = root.join(graph_path.as_str());
+        let before_file = std::fs::read(&graph_file).unwrap();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release_rx = std::sync::Mutex::new(release_rx);
+        state.set_history_after_routing_test_hook(std::sync::Arc::new(move || {
+            entered_tx.send(()).unwrap();
+            release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("bounded loaded-only routing checkpoint release");
+        }));
+        let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed_thread = observed.clone();
+        let history_state = state.clone();
+        let request_resource = resource.clone();
+        let history_thread = std::thread::spawn(move || {
+            history_state.undo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    request_resource,
+                    GraphRevision::new(1),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| observed_thread.store(true, std::sync::atomic::Ordering::SeqCst),
+            )
+        });
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("loaded-only History reached routing checkpoint");
+        let mut specialized_head = state.history.read().unwrap().next_undo().cloned().unwrap();
+        specialized_head.history_id = crate::node_system::document::HistoryEntryId::new();
+        specialized_head.persistence = policy;
+        match policy {
+            crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
+                specialized_head.variable_effect_snapshots = Some(Default::default());
+                specialized_head.graph_resource_move = None;
+            }
+            crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
+                let ResourceKey::Graph(path) = resource.clone() else {
+                    unreachable!();
+                };
+                specialized_head.variable_effect_snapshots = None;
+                specialized_head.graph_resource_move = Some(
+                    crate::node_system::document::GraphResourceMoveHistoryPatch {
+                        from: path.clone(),
+                        to: path,
+                        payload: serde_json::Value::Null,
+                    },
+                );
+            }
+            crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {
+                unreachable!();
+            }
+        }
+        state
+            .history
+            .write()
+            .unwrap()
+            .record_committed_transaction(specialized_head);
+        let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let raced_history = (
+            state.history_status(),
+            state.history_lengths_for_test(),
+            state.history_head_id_for_test(true),
+            state.history_head_id_for_test(false),
+        );
+        let raced_revisions = state.revision_state_for_test();
+        let raced_publication = state.publication_state_for_test();
+        release_tx.send(()).unwrap();
+
+        let error = history_thread.join().unwrap().unwrap_err();
+
+        assert!(matches!(error, MutationConflict::History(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            raced_data
+        );
+        assert_eq!(
+            (
+                state.history_status(),
+                state.history_lengths_for_test(),
+                state.history_head_id_for_test(true),
+                state.history_head_id_for_test(false),
+            ),
+            raced_history
+        );
+        assert_eq!(state.revision_state_for_test(), raced_revisions);
+        assert_eq!(state.publication_state_for_test(), raced_publication);
+        assert_eq!(std::fs::read(&graph_file).unwrap(), before_file);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn unloaded_graph_history_routing_rejects_specialized_head_race() {
+    let (state, root, _root_text, graph_path, resource, _) =
+        durable_unloaded_history_fixture("RoutingPolicyRace");
+    let graph_file = root.join(graph_path.as_str());
+    let before_file = std::fs::read(&graph_file).unwrap();
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_history_after_routing_test_hook(std::sync::Arc::new(move || {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("bounded routing checkpoint release");
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_thread = observed.clone();
+    let history_state = state.clone();
+    let history_thread = std::thread::spawn(move || {
+        history_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {
+                observed_thread.store(true, std::sync::atomic::Ordering::SeqCst);
+            },
+        )
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("History reached routing checkpoint");
+    let mut specialized_head = state.history.read().unwrap().next_undo().cloned().unwrap();
+    specialized_head.history_id = crate::node_system::document::HistoryEntryId::new();
+    specialized_head.persistence =
+        crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects;
+    specialized_head.variable_effect_snapshots = Some(Default::default());
+    state
+        .history
+        .write()
+        .unwrap()
+        .record_committed_transaction(specialized_head);
+    let raced_head = state.history_head_id_for_test(true);
+    let raced_lengths = state.history_lengths_for_test();
+    release_tx.send(()).unwrap();
+
+    let error = history_thread.join().unwrap().unwrap_err();
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(state.history_head_id_for_test(true), raced_head);
+    assert_eq!(state.history_lengths_for_test(), raced_lengths);
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(std::fs::read(&graph_file).unwrap(), before_file);
+    assert!(!root.join(".yssbi-transaction").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_history_rejects_stale_function_owner_graph_revision() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-function-owner-revision-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let function_path = GraphResourcePath::new("functions/OwnerRevision.yssbi-function").unwrap();
+    let function_key =
+        crate::node_system::document::FunctionResourceKey(function_path.as_str().into());
+    let resource = ResourceKey::Function(function_key);
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        function_path.clone(),
+        GraphResourceDocument::new("OwnerRevision", GraphDocumentKind::Function),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &function_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                test_signature(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .graphs
+        .get_mut(&function_path)
+        .unwrap()
+        .document
+        .revision = GraphRevision::new(1);
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(function_path.clone(), GraphRevision::new(1));
+    crate::project::fixtures::write_state_graph(&state, &function_path).unwrap();
+    state.unload_graph_resource(&function_path).unwrap();
+    let graph_file = root.join(function_path.as_str());
+    let before_file = std::fs::read(&graph_file).unwrap();
+    let before_history = state.history_status();
+    let before_publication = state.publication_state_for_test();
+    let hook_state = state.clone();
+    let hook_path = function_path.clone();
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        hook_state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(hook_path.clone(), GraphRevision::new(7));
+    }));
+    let mut observed = false;
+
+    let error = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| observed = true,
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert!(!observed);
+    assert_eq!(std::fs::read(&graph_file).unwrap(), before_file);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(
+        state
+            .revision_state_for_test()
+            .0
+            .get(&function_path)
+            .copied(),
+        Some(GraphRevision::new(7))
+    );
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn mixed_residency_history_rejects_loaded_function_revision_race() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-loaded-function-race-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let event_path = GraphResourcePath::new("events/FunctionRace.yssbi-event").unwrap();
+    let function_path =
+        GraphResourcePath::new("functions/LoadedFunctionRace.yssbi-function").unwrap();
+    let event_key = crate::node_system::document::GraphResourcePath(event_path.as_str().into());
+    let function_key =
+        crate::node_system::document::FunctionResourceKey(function_path.as_str().into());
+    let event_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+        node: node("yssbi.constant.int64"),
+    }]);
+    let function_patch = crate::node_system::document::FunctionDocumentPatch::new(
+        Default::default(),
+        test_signature(),
+    );
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        event_path.clone(),
+        GraphResourceDocument::new("FunctionRace", GraphDocumentKind::Event),
+    );
+    project.graphs.insert(
+        function_path.clone(),
+        GraphResourceDocument::new("LoadedFunctionRace", GraphDocumentKind::Function),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &event_path).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &function_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
+        OperationId::new(),
+        vec![
+            crate::node_system::document::ResourcePatch::graph(
+                event_key.clone(),
+                GraphRevision::INITIAL,
+                event_patch,
+            ),
+            crate::node_system::document::ResourcePatch::function(
+                function_key.clone(),
+                GraphRevision::INITIAL,
+                function_patch,
+            ),
+        ],
+    );
+    {
+        let mut data = state.project_data.write().unwrap();
+        let mut revisions = state.variable_revisions.write().unwrap();
+        let mut documents = super::project_state::project_documents(&data, &revisions);
+        let mut history = crate::node_system::document::ProjectHistory::default();
+        history
+            .apply_transaction(&mut documents, transaction)
+            .unwrap();
+        super::project_state::replace_project_documents(&mut data, &mut revisions, documents);
+        data.graphs
+            .get_mut(&function_path)
+            .unwrap()
+            .document
+            .revision = GraphRevision::new(1);
+        *state.history.write().unwrap() = history;
+    }
+    {
+        let mut graph_revisions = state.graph_revisions.write().unwrap();
+        graph_revisions.insert(event_path.clone(), GraphRevision::new(1));
+        graph_revisions.insert(function_path.clone(), GraphRevision::new(1));
+    }
+    crate::project::fixtures::write_state_graph(&state, &event_path).unwrap();
+    crate::project::fixtures::write_state_graph(&state, &function_path).unwrap();
+    state.unload_graph_resource(&event_path).unwrap();
+    let event_file = root.join(event_path.as_str());
+    let function_file = root.join(function_path.as_str());
+    let before_event = std::fs::read(&event_file).unwrap();
+    let before_function = std::fs::read(&function_file).unwrap();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+    }));
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_thread = observed.clone();
+    let history_state = state.clone();
+    let history_thread = std::thread::spawn(move || {
+        history_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(event_key),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| observed_thread.store(true, std::sync::atomic::Ordering::SeqCst),
+        )
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .graphs
+        .get_mut(&function_path)
+        .unwrap()
+        .function
+        .as_mut()
+        .unwrap()
+        .revision = GraphRevision::new(7);
+    let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let raced_revisions = state.revision_state_for_test();
+    let raced_history = state.history_status();
+    let raced_publication = state.publication_state_for_test();
+    release_tx.send(()).unwrap();
+
+    assert!(matches!(
+        history_thread.join().unwrap(),
+        Err(MutationConflict::History(_))
+    ));
+    assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        raced_data
+    );
+    assert_eq!(state.revision_state_for_test(), raced_revisions);
+    assert_eq!(state.history_status(), raced_history);
+    assert_eq!(state.publication_state_for_test(), raced_publication);
+    assert_eq!(std::fs::read(&event_file).unwrap(), before_event);
+    assert_eq!(std::fs::read(&function_file).unwrap(), before_function);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-unloaded-function-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let function_path = GraphResourcePath::new("functions/DurableAbi.yssbi-function").unwrap();
+    let function_key =
+        crate::node_system::document::FunctionResourceKey(function_path.as_str().into());
+    let resource = ResourceKey::Function(function_key.clone());
+    let signature = crate::node_system::document::FunctionSignature {
+        parameters: vec![
+            crate::node_system::document::FunctionParameter {
+                id: crate::node_system::document::FunctionParameterId("request_id".into()),
+                name: "Request ID".into(),
+                type_name: "string".into(),
+            },
+            crate::node_system::document::FunctionParameter {
+                id: crate::node_system::document::FunctionParameterId("payload".into()),
+                name: "Payload".into(),
+                type_name: "json".into(),
+            },
+        ],
+        return_type: Some("boolean".into()),
+    };
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        function_path.clone(),
+        GraphResourceDocument::new("Durable ABI", GraphDocumentKind::Function),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &function_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    state
+        .update_function_signature_observed(
+            &function_path,
+            "en-US",
+            function_signature_request(
+                resource.clone(),
+                GraphRevision::INITIAL,
+                Default::default(),
+                signature.clone(),
+            ),
+            |_| {},
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &function_path).unwrap();
+    state.unload_graph_resource(&function_path).unwrap();
+    let before_publication = state.publication_state_for_test();
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    let undo_operation = OperationId::new();
+    let (checkpoint_tx, checkpoint_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(Some(release_rx));
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        let Some(release_rx) = release_rx.lock().unwrap().take() else {
+            return;
+        };
+        checkpoint_tx.send(()).unwrap();
+        release_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+    }));
+    let (observed_tx, observed_rx) = std::sync::mpsc::channel();
+    let undo_state = state.clone();
+    let undo_resource = resource.clone();
+    let undo_thread = std::thread::spawn(move || {
+        undo_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                undo_resource,
+                GraphRevision::new(1),
+                undo_operation,
+                HistoryMutation {},
+            ),
+            move |result| observed_tx.send(result.clone()).unwrap(),
+        )
+    });
+
+    checkpoint_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("Function History reached the post-disk/pre-authority checkpoint");
+    assert!(matches!(
+        observed_rx.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert!(state.history_status().can_undo);
+    assert!(!state.history_status().can_redo);
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    let staged_undo = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &function_path,
+    )
+    .unwrap();
+    assert_eq!(
+        staged_undo.function.as_ref().unwrap().revision,
+        GraphRevision::new(2)
+    );
+    assert_eq!(
+        staged_undo.function.as_ref().unwrap().signature,
+        crate::node_system::document::FunctionSignature::default()
+    );
+    release_tx.send(()).unwrap();
+
+    let undo = undo_thread.join().unwrap().unwrap();
+    let observed_undo = observed_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    assert_eq!(observed_undo, undo);
+    assert_eq!(undo.operation_id, undo_operation);
+    assert_eq!(undo.project_instance_id, project_instance_id.as_str());
+    assert_eq!(undo.publication_revision, before_publication.1 + 1);
+    assert_eq!(undo.deltas.len(), 1);
+    assert_eq!(undo.deltas[0].resource, resource);
+    assert_eq!(undo.deltas[0].from_revision, GraphRevision::new(1));
+    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(undo.deltas[0].caused_by, Some(undo_operation));
+    assert_eq!(undo.history, state.history_status());
+    assert_eq!(
+        undo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: Vec::new(),
+        }
+    );
+    assert!(undo.projection_replacements.is_empty());
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    assert_eq!(
+        state.revision_state_for_test().0[&function_path],
+        GraphRevision::new(2),
+        "the owner graph ledger mirrors the embedded Function revision without a Function ledger"
+    );
+    let undo_disk = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &function_path,
+    )
+    .unwrap();
+    assert_eq!(
+        undo_disk.function.as_ref().unwrap().revision,
+        undo.deltas[0].to_revision
+    );
+    assert_eq!(
+        undo_disk.function.as_ref().unwrap().signature,
+        crate::node_system::document::FunctionSignature::default()
+    );
+    let hydrated_redo = state
+        .prepare_history_for_test(
+            false,
+            MutationRequest::new(
+                resource.clone(),
+                undo.deltas[0].to_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        hydrated_redo.before.functions[&function_key].revision,
+        undo.deltas[0].to_revision
+    );
+    assert_eq!(
+        hydrated_redo.before.functions[&function_key].signature,
+        crate::node_system::document::FunctionSignature::default()
+    );
+    assert_eq!(
+        hydrated_redo.after.functions[&function_key].signature,
+        signature
+    );
+    drop(hydrated_redo);
+
+    let redo_operation = OperationId::new();
+    let mut redo_observed = Vec::new();
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(2),
+                redo_operation,
+                HistoryMutation {},
+            ),
+            |result| redo_observed.push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(redo_observed, vec![redo.clone()]);
+    assert_eq!(redo.operation_id, redo_operation);
+    assert_eq!(redo.project_instance_id, project_instance_id.as_str());
+    assert_eq!(redo.publication_revision, undo.publication_revision + 1);
+    assert_eq!(redo.deltas.len(), 1);
+    assert_eq!(redo.deltas[0].resource, resource);
+    assert_eq!(redo.deltas[0].from_revision, GraphRevision::new(2));
+    assert_eq!(redo.deltas[0].to_revision, GraphRevision::new(3));
+    assert_eq!(redo.deltas[0].caused_by, Some(redo_operation));
+    assert_eq!(redo.history, state.history_status());
+    assert_eq!(
+        redo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: Vec::new(),
+        }
+    );
+    assert!(redo.projection_replacements.is_empty());
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    let redo_disk = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &function_path,
+    )
+    .unwrap();
+    let redo_function = redo_disk.function.as_ref().unwrap();
+    assert_eq!(redo_function.revision, redo.deltas[0].to_revision);
+    assert_eq!(redo_disk.revision, redo.deltas[0].to_revision);
+    assert_eq!(
+        state.revision_state_for_test().0[&function_path],
+        redo.deltas[0].to_revision
+    );
+    assert_eq!(redo_function.signature, signature);
+    assert_eq!(
+        redo_function
+            .signature
+            .parameters
+            .iter()
+            .map(|parameter| parameter.id.0.as_ref())
+            .collect::<Vec<_>>(),
+        vec!["request_id", "payload"]
+    );
+    assert_eq!(
+        redo_function.signature.return_type.as_deref(),
+        Some("boolean")
+    );
+    let hydrated_undo = state
+        .prepare_history_for_test(
+            true,
+            MutationRequest::new(
+                resource,
+                redo.deltas[0].to_revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        hydrated_undo.before.functions[&function_key].revision,
+        redo.deltas[0].to_revision
+    );
+    assert_eq!(
+        hydrated_undo.before.functions[&function_key].signature,
+        signature
+    );
+    drop(hydrated_undo);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_projection() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-unloaded-local-variable-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let event_path = GraphResourcePath::new("events/LocalOwner.yssbi-event").unwrap();
+    let function_path = GraphResourcePath::new("functions/LocalOwner.yssbi-function").unwrap();
+    let loaded_path = GraphResourcePath::new("events/LoadedProjection.yssbi-event").unwrap();
+    let loaded_key = crate::node_system::document::GraphResourcePath(loaded_path.as_str().into());
+    let loaded_node = node("yssbi.constant.int64");
+    let loaded_node_id = loaded_node.id;
+
+    let mut created = test_variable("Created local");
+    created.scope = crate::variable::VariableScope::Event {
+        event_path: event_path.as_str().into(),
+    };
+    let mut updated_before = test_variable("Function local before");
+    updated_before.scope = crate::variable::VariableScope::Function {
+        function_path: function_path.as_str().into(),
+    };
+    let mut updated_after = updated_before.clone();
+    updated_after.name = "Function local after".into();
+    let mut removed = test_variable("Removed local");
+    removed.scope = crate::variable::VariableScope::Event {
+        event_path: event_path.as_str().into(),
+    };
+    let global_before = test_variable("Global before");
+    let mut global_after = global_before.clone();
+    global_after.name = "Global after".into();
+
+    let variable_key = |id: crate::variable::VariableId| {
+        crate::node_system::document::VariableResourceKey(format!("variables/{id}").into())
+    };
+    let created_key = variable_key(created.id);
+    let updated_key = variable_key(updated_before.id);
+    let removed_key = variable_key(removed.id);
+    let global_key = variable_key(global_before.id);
+    let mut project = ProjectData::new();
+    for (path, name, kind) in [
+        (&event_path, "Event local owner", GraphDocumentKind::Event),
+        (
+            &function_path,
+            "Function local owner",
+            GraphDocumentKind::Function,
+        ),
+        (&loaded_path, "Loaded projection", GraphDocumentKind::Event),
+    ] {
+        project
+            .graphs
+            .insert(path.clone(), GraphResourceDocument::new(name, kind));
+    }
+    project
+        .variables
+        .insert(updated_before.id, updated_before.clone());
+    project.variables.insert(removed.id, removed.clone());
+    project
+        .variables
+        .insert(global_before.id, global_before.clone());
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    for path in [&event_path, &function_path, &loaded_path] {
+        crate::project::fixtures::write_graph(&project, &root_text, path).unwrap();
+    }
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    state.variable_revisions.write().unwrap().insert(
+        created.id,
+        super::project_state::VariableRevisionEntry::deleted(GraphRevision::INITIAL),
+    );
+    let initial_operation = OperationId::new();
+    let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
+        initial_operation,
+        vec![
+            crate::node_system::document::ResourcePatch::graph(
+                loaded_key.clone(),
+                GraphRevision::INITIAL,
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: loaded_node.clone(),
+                }]),
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                created_key.clone(),
+                GraphRevision::INITIAL,
+                crate::node_system::document::VariableDocumentPatch::new(
+                    None,
+                    Some(serde_json::to_value(&created).unwrap()),
+                ),
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                updated_key.clone(),
+                GraphRevision::INITIAL,
+                crate::node_system::document::VariableDocumentPatch::new(
+                    Some(serde_json::to_value(&updated_before).unwrap()),
+                    Some(serde_json::to_value(&updated_after).unwrap()),
+                ),
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                removed_key.clone(),
+                GraphRevision::INITIAL,
+                crate::node_system::document::VariableDocumentPatch::new(
+                    Some(serde_json::to_value(&removed).unwrap()),
+                    None,
+                ),
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                global_key.clone(),
+                GraphRevision::INITIAL,
+                crate::node_system::document::VariableDocumentPatch::new(
+                    Some(serde_json::to_value(&global_before).unwrap()),
+                    Some(serde_json::to_value(&global_after).unwrap()),
+                ),
+            ),
+        ],
+    );
+    {
+        let mut data = state.project_data.write().unwrap();
+        let mut revisions = state.variable_revisions.write().unwrap();
+        let mut documents = super::project_state::project_documents(&data, &revisions);
+        let mut history = crate::node_system::document::ProjectHistory::default();
+        history
+            .apply_transaction(&mut documents, transaction)
+            .unwrap();
+        super::project_state::replace_project_documents(&mut data, &mut revisions, documents);
+        *state.history.write().unwrap() = history;
+    }
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(loaded_path.clone(), GraphRevision::new(1));
+    crate::project::fixtures::write_project(&state.get_data().unwrap(), &root_text).unwrap();
+    for path in [&event_path, &function_path, &loaded_path] {
+        crate::project::fixtures::write_state_graph(&state, path).unwrap();
+    }
+    state.unload_graph_resource(&event_path).unwrap();
+    state.unload_graph_resource(&function_path).unwrap();
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    for id in [created.id, updated_before.id, removed.id] {
+        assert!(!state.get_data().unwrap().variables.contains_key(&id));
+    }
+    assert_eq!(
+        state.get_data().unwrap().variables[&global_before.id].name,
+        global_after.name
+    );
+
+    let undo_operation = OperationId::new();
+    let mut undo_observed = Vec::new();
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(loaded_key.clone()),
+                GraphRevision::new(1),
+                undo_operation,
+                HistoryMutation {},
+            ),
+            |result| undo_observed.push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(undo_observed, vec![undo.clone()]);
+    assert_eq!(undo.operation_id, undo_operation);
+    assert_eq!(undo.project_instance_id, project_instance_id.as_str());
+    assert_eq!(
+        undo.deltas,
+        vec![
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Graph(loaded_key.clone()),
+                from_revision: GraphRevision::new(1),
+                to_revision: GraphRevision::new(2),
+                caused_by: Some(undo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Graph(
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::RemoveNode {
+                        node: loaded_node.clone(),
+                    }]),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(created_key.clone()),
+                from_revision: GraphRevision::new(1),
+                to_revision: GraphRevision::new(2),
+                caused_by: Some(undo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&created).unwrap()),
+                        None,
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(updated_key.clone()),
+                from_revision: GraphRevision::new(1),
+                to_revision: GraphRevision::new(2),
+                caused_by: Some(undo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&updated_after).unwrap()),
+                        Some(serde_json::to_value(&updated_before).unwrap()),
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(removed_key.clone()),
+                from_revision: GraphRevision::new(1),
+                to_revision: GraphRevision::new(2),
+                caused_by: Some(undo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        None,
+                        Some(serde_json::to_value(&removed).unwrap()),
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(global_key.clone()),
+                from_revision: GraphRevision::new(1),
+                to_revision: GraphRevision::new(2),
+                caused_by: Some(undo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&global_after).unwrap()),
+                        Some(serde_json::to_value(&global_before).unwrap()),
+                    ),
+                ),
+            },
+        ]
+    );
+    assert_eq!(undo.history, state.history_status());
+    assert_eq!(
+        undo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![loaded_path.as_str().to_string()],
+        }
+    );
+    assert_eq!(undo.projection_replacements.len(), 1);
+    assert_eq!(
+        undo.projection_replacements[0].graph_path.as_str(),
+        loaded_path.as_str()
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&event_path));
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    for id in [created.id, updated_before.id, removed.id] {
+        assert!(!state.get_data().unwrap().variables.contains_key(&id));
+    }
+    let created_revision = state.variable_revision_entry_for_test(&created.id).unwrap();
+    let updated_revision = state
+        .variable_revision_entry_for_test(&updated_before.id)
+        .unwrap();
+    let removed_revision = state.variable_revision_entry_for_test(&removed.id).unwrap();
+    let global_revision = state
+        .variable_revision_entry_for_test(&global_before.id)
+        .unwrap();
+    assert_eq!(created_revision.revision, GraphRevision::new(2));
+    assert!(!created_revision.is_present());
+    for revision in [updated_revision, removed_revision, global_revision] {
+        assert_eq!(revision.revision, GraphRevision::new(2));
+        assert!(revision.is_present());
+    }
+    let undo_event =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &event_path)
+            .unwrap();
+    let undo_function = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &function_path,
+    )
+    .unwrap();
+    assert!(!undo_event.local_variables.contains_key(&created.id));
+    assert_eq!(
+        undo_event.local_variables[&removed.id].scope,
+        crate::variable::VariableScope::Event {
+            event_path: event_path.as_str().into(),
+        }
+    );
+    assert_eq!(
+        undo_function.local_variables[&updated_before.id].scope,
+        crate::variable::VariableScope::Function {
+            function_path: function_path.as_str().into(),
+        }
+    );
+    assert_eq!(
+        undo_function.local_variables[&updated_before.id].name,
+        updated_before.name
+    );
+    let undo_globals = crate::project::project_io::parse_global_variables_document(
+        &std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        undo_globals.variables[&global_before.id].name,
+        global_before.name
+    );
+
+    let redo_operation = OperationId::new();
+    let mut redo_observed = Vec::new();
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(loaded_key.clone()),
+                GraphRevision::new(2),
+                redo_operation,
+                HistoryMutation {},
+            ),
+            |result| redo_observed.push(result.clone()),
+        )
+        .unwrap();
+    assert_eq!(redo_observed, vec![redo.clone()]);
+    assert_eq!(redo.operation_id, redo_operation);
+    assert_eq!(redo.project_instance_id, project_instance_id.as_str());
+    assert_eq!(redo.publication_revision, undo.publication_revision + 1);
+    assert_eq!(
+        redo.deltas,
+        vec![
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Graph(loaded_key.clone()),
+                from_revision: GraphRevision::new(2),
+                to_revision: GraphRevision::new(3),
+                caused_by: Some(redo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Graph(
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                        node: loaded_node.clone(),
+                    }]),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(created_key.clone()),
+                from_revision: GraphRevision::new(2),
+                to_revision: GraphRevision::new(3),
+                caused_by: Some(redo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        None,
+                        Some(serde_json::to_value(&created).unwrap()),
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(updated_key.clone()),
+                from_revision: GraphRevision::new(2),
+                to_revision: GraphRevision::new(3),
+                caused_by: Some(redo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&updated_before).unwrap()),
+                        Some(serde_json::to_value(&updated_after).unwrap()),
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(removed_key.clone()),
+                from_revision: GraphRevision::new(2),
+                to_revision: GraphRevision::new(3),
+                caused_by: Some(redo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&removed).unwrap()),
+                        None,
+                    ),
+                ),
+            },
+            crate::node_system::document::ResourceDeltaEvent {
+                resource: ResourceKey::Variable(global_key.clone()),
+                from_revision: GraphRevision::new(2),
+                to_revision: GraphRevision::new(3),
+                caused_by: Some(redo_operation),
+                payload: crate::node_system::document::ResourceDocumentPatch::Variable(
+                    crate::node_system::document::VariableDocumentPatch::new(
+                        Some(serde_json::to_value(&global_before).unwrap()),
+                        Some(serde_json::to_value(&global_after).unwrap()),
+                    ),
+                ),
+            },
+        ]
+    );
+    assert_eq!(redo.history, state.history_status());
+    assert_eq!(
+        redo.projection_status,
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![loaded_path.as_str().to_string()],
+        }
+    );
+    assert_eq!(redo.projection_replacements.len(), 1);
+    assert_eq!(
+        redo.projection_replacements[0].graph_path.as_str(),
+        loaded_path.as_str()
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&event_path));
+    assert!(
+        !state
+            .get_data()
+            .unwrap()
+            .graphs
+            .contains_key(&function_path)
+    );
+    for id in [created.id, updated_before.id, removed.id] {
+        assert!(!state.get_data().unwrap().variables.contains_key(&id));
+    }
+    let created_revision = state.variable_revision_entry_for_test(&created.id).unwrap();
+    let updated_revision = state
+        .variable_revision_entry_for_test(&updated_before.id)
+        .unwrap();
+    let removed_revision = state.variable_revision_entry_for_test(&removed.id).unwrap();
+    let global_revision = state
+        .variable_revision_entry_for_test(&global_before.id)
+        .unwrap();
+    for revision in [created_revision, updated_revision, global_revision] {
+        assert_eq!(revision.revision, GraphRevision::new(3));
+        assert!(revision.is_present());
+    }
+    assert_eq!(removed_revision.revision, GraphRevision::new(3));
+    assert!(!removed_revision.is_present());
+    let redo_event =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &event_path)
+            .unwrap();
+    let redo_function = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &function_path,
+    )
+    .unwrap();
+    assert_eq!(
+        redo_event.local_variables[&created.id].scope,
+        crate::variable::VariableScope::Event {
+            event_path: event_path.as_str().into(),
+        }
+    );
+    assert!(!redo_event.local_variables.contains_key(&removed.id));
+    assert_eq!(
+        redo_function.local_variables[&updated_before.id].scope,
+        crate::variable::VariableScope::Function {
+            function_path: function_path.as_str().into(),
+        }
+    );
+    assert_eq!(
+        redo_function.local_variables[&updated_before.id].name,
+        updated_after.name
+    );
+    let redo_globals = crate::project::project_io::parse_global_variables_document(
+        &std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        redo_globals.variables[&global_before.id].name,
+        global_after.name
+    );
+    assert!(
+        state.get_data().unwrap().graphs[&loaded_path]
+            .document
+            .nodes
+            .contains_key(&loaded_node_id)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-unloaded-graph-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let graph_path = GraphResourcePath::new("events/DurableHistory.yssbi-event").unwrap();
+    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        graph_path.as_str().into(),
+    ));
+    let inserted_node = node("yssbi.constant.int64");
+    let inserted_node_id = inserted_node.id;
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("DurableHistory", GraphDocumentKind::Event),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &graph_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    state
+        .apply_graph_patch(
+            &graph_path,
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+                    node: inserted_node,
+                }]),
+            ),
+        )
+        .unwrap();
+    crate::project::fixtures::write_state_graph(&state, &graph_path).unwrap();
+    state.unload_graph_resource(&graph_path).unwrap();
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let undo_disk =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &graph_path)
+            .unwrap();
+    assert!(!undo_disk.document.nodes.contains_key(&inserted_node_id));
+    assert_eq!(undo.deltas.len(), 1);
+    assert_eq!(undo.deltas[0].from_revision, GraphRevision::new(1));
+    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(undo_disk.revision, undo.deltas[0].to_revision);
+    assert_eq!(
+        state.revision_state_for_test().0.get(&graph_path).copied(),
+        Some(undo_disk.revision)
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    assert!(undo.projection_replacements.is_empty());
+
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                undo_disk.revision,
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let redo_disk =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &graph_path)
+            .unwrap();
+    assert!(redo_disk.document.nodes.contains_key(&inserted_node_id));
+    assert_eq!(redo.deltas.len(), 1);
+    assert_eq!(redo.deltas[0].from_revision, undo_disk.revision);
+    assert!(redo.deltas[0].to_revision > undo.deltas[0].to_revision);
+    assert_eq!(redo_disk.revision, redo.deltas[0].to_revision);
+    assert_eq!(
+        state.revision_state_for_test().0.get(&graph_path).copied(),
+        Some(redo_disk.revision)
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    assert!(redo.projection_replacements.is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_history_staging_and_live_replace_faults_preserve_state() {
+    for (label, fault) in [
+        (
+            "StagedSerializationFault",
+            crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
+        ),
+        (
+            "SecondLiveReplacementFault",
+            crate::project::ProjectFilesystemFaultPoint::SecondLiveReplacement,
+        ),
+    ] {
+        let (state, root, graph_path, resource, variable_id) =
+            durable_graph_global_history_fixture(label);
+        let graph_file = root.join(graph_path.as_str());
+        let variables_file = root.join(crate::project::GLOBAL_VARIABLES_FILE);
+        let before_graph = std::fs::read(&graph_file).unwrap();
+        let before_variables = std::fs::read(&variables_file).unwrap();
+        let before_loaded_data = state.get_data().unwrap();
+        let before_function_revisions = before_loaded_data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph
+                    .function
+                    .as_ref()
+                    .map(|function| (path.clone(), function.revision))
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let before_data = serde_json::to_value(before_loaded_data).unwrap();
+        let before_history = (
+            state.history_status(),
+            state.history_lengths_for_test(),
+            state.history_head_id_for_test(true),
+            state.history_head_id_for_test(false),
+        );
+        let before_revisions = state.revision_state_for_test();
+        let before_variable_entry = state.variable_revision_entry_for_test(&variable_id);
+        let before_publication = state.publication_state_for_test();
+        crate::project::set_project_filesystem_fault(Some(fault));
+        let mut observed = false;
+
+        let error = state
+            .undo_last_transaction_observed(
+                "en-US",
+                MutationRequest::new(
+                    resource,
+                    GraphRevision::new(1),
+                    OperationId::new(),
+                    HistoryMutation {},
+                ),
+                |_| observed = true,
+            )
+            .unwrap_err();
+
+        assert!(matches!(error, MutationConflict::History(_)));
+        assert!(!observed);
+        assert_eq!(std::fs::read(&graph_file).unwrap(), before_graph);
+        assert_eq!(std::fs::read(&variables_file).unwrap(), before_variables);
+        let after_loaded_data = state.get_data().unwrap();
+        let after_function_revisions = after_loaded_data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph
+                    .function
+                    .as_ref()
+                    .map(|function| (path.clone(), function.revision))
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(after_function_revisions, before_function_revisions);
+        assert_eq!(
+            serde_json::to_value(after_loaded_data).unwrap(),
+            before_data
+        );
+        assert_eq!(
+            (
+                state.history_status(),
+                state.history_lengths_for_test(),
+                state.history_head_id_for_test(true),
+                state.history_head_id_for_test(false),
+            ),
+            before_history
+        );
+        assert_eq!(state.revision_state_for_test(), before_revisions);
+        assert_eq!(
+            state.variable_revision_entry_for_test(&variable_id),
+            before_variable_entry
+        );
+        assert_eq!(state.publication_state_for_test(), before_publication);
+        assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+        assert!(!root.join(".yssbi-transaction").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn unloaded_graph_post_disk_commit_revision_mismatch_rolls_back() {
+    let (state, root, _root_text, graph_path, resource, _) =
+        durable_unloaded_history_fixture("PostDiskMismatch");
+    let graph_file = root.join(graph_path.as_str());
+    let before_file = std::fs::read(&graph_file).unwrap();
+    let before_history = state.history_status();
+    let before_publication = state.publication_state_for_test();
+    let hook_state = state.clone();
+    let hook_path = graph_path.clone();
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        hook_state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(hook_path.clone(), GraphRevision::new(7));
+    }));
+    let mut observed = false;
+
+    let error = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| observed = true,
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert!(!observed);
+    assert_eq!(std::fs::read(&graph_file).unwrap(), before_file);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(
+        state.revision_state_for_test().0.get(&graph_path).copied(),
+        Some(GraphRevision::new(7))
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
+    let (state, root, _root_text, graph_path, resource, _) =
+        durable_unloaded_history_fixture("RollbackRecovery");
+    let hook_state = state.clone();
+    let hook_path = graph_path.clone();
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        hook_state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(hook_path.clone(), GraphRevision::new(7));
+    }));
+    crate::project::set_project_filesystem_rollback_fault(true);
+    let mut observed = false;
+
+    let error = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource.clone(),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| observed = true,
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::RecoveryRequired(_)));
+    assert_eq!(error.code(), "project_recovery_required");
+    assert!(!observed);
+    assert!(matches!(
+        state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(7),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        ),
+        Err(MutationConflict::RecoveryRequired(_))
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unloaded_graph_history_lease_excludes_coordinator_operation_until_finalize() {
+    let (state, root, _root_text, graph_path, resource, _) =
+        durable_unloaded_history_fixture("LeaseExclusion");
+    let session = state.capture_project_session().unwrap();
+    let coordinator = state.filesystem().clone();
+    let (checkpoint_tx, checkpoint_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.set_history_after_preparation_test_hook(std::sync::Arc::new(move || {
+        checkpoint_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("bounded after-hydration checkpoint release");
+    }));
+    let history_state = state.clone();
+    let history_thread = std::thread::spawn(move || {
+        history_state.undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+    });
+    checkpoint_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("History reached after-hydration/pre-filesystem checkpoint");
+
+    let (lease_tx, lease_rx) = std::sync::mpsc::channel();
+    let lease_thread = std::thread::spawn(move || {
+        let lease = coordinator.acquire(session.root).unwrap();
+        lease_tx.send(()).unwrap();
+        drop(lease);
+    });
+    assert!(
+        lease_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err(),
+        "coordinator operation entered while History still owned the preparation lease"
+    );
+    release_tx.send(()).unwrap();
+    history_thread.join().unwrap().unwrap();
+    lease_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("coordinator operation entered after History finalization");
+    lease_thread.join().unwrap();
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-mixed-residency-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let loaded_path = GraphResourcePath::new("events/LoadedHistory.yssbi-event").unwrap();
+    let unloaded_path = GraphResourcePath::new("events/UnloadedHistory.yssbi-event").unwrap();
+    let loaded_key = crate::node_system::document::GraphResourcePath(loaded_path.as_str().into());
+    let unloaded_key =
+        crate::node_system::document::GraphResourcePath(unloaded_path.as_str().into());
+    let loaded_node = node("yssbi.constant.int64");
+    let unloaded_node = node("yssbi.constant.int64");
+    let loaded_node_id = loaded_node.id;
+    let unloaded_node_id = unloaded_node.id;
+    let loaded_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+        node: loaded_node,
+    }]);
+    let unloaded_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+        node: unloaded_node,
+    }]);
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        loaded_path.clone(),
+        GraphResourceDocument::new("LoadedHistory", GraphDocumentKind::Event),
+    );
+    project.graphs.insert(
+        unloaded_path.clone(),
+        GraphResourceDocument::new("UnloadedHistory", GraphDocumentKind::Event),
+    );
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &loaded_path).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &unloaded_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    for (path, key, patch) in [
+        (&loaded_path, &loaded_key, loaded_patch.clone()),
+        (&unloaded_path, &unloaded_key, unloaded_patch.clone()),
+    ] {
+        state
+            .apply_graph_patch(
+                path,
+                MutationRequest::new(
+                    ResourceKey::Graph(key.clone()),
+                    GraphRevision::INITIAL,
+                    OperationId::new(),
+                    patch,
+                ),
+            )
+            .unwrap();
+        crate::project::fixtures::write_state_graph(&state, path).unwrap();
+    }
+    let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
+        OperationId::new(),
+        vec![
+            crate::node_system::document::ResourcePatch::graph(
+                loaded_key.clone(),
+                GraphRevision::INITIAL,
+                loaded_patch,
+            ),
+            crate::node_system::document::ResourcePatch::graph(
+                unloaded_key.clone(),
+                GraphRevision::INITIAL,
+                unloaded_patch,
+            ),
+        ],
+    );
+    *state.history.write().unwrap() = crate::node_system::document::ProjectHistory::default();
+    state
+        .history
+        .write()
+        .unwrap()
+        .record_committed_transaction(transaction);
+    state.unload_graph_resource(&unloaded_path).unwrap();
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(loaded_key.clone()),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let undo_loaded =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &loaded_path)
+            .unwrap();
+    let undo_unloaded = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &unloaded_path,
+    )
+    .unwrap();
+    assert!(!undo_loaded.document.nodes.contains_key(&loaded_node_id));
+    assert!(!undo_unloaded.document.nodes.contains_key(&unloaded_node_id));
+    assert!(
+        !state.project_data.read().unwrap().graphs[&loaded_path]
+            .document
+            .nodes
+            .contains_key(&loaded_node_id)
+    );
+    assert!(
+        !state
+            .project_data
+            .read()
+            .unwrap()
+            .graphs
+            .contains_key(&unloaded_path)
+    );
+    assert_eq!(undo.deltas.len(), 2);
+    assert_eq!(undo.projection_replacements.len(), 1);
+    assert_eq!(
+        undo.projection_replacements[0].graph_path,
+        loaded_path.as_str()
+    );
+    assert!(undo.deltas.iter().all(|delta| {
+        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+    }));
+
+    let redo = state
+        .redo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(loaded_key),
+                GraphRevision::new(2),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let redo_loaded =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &loaded_path)
+            .unwrap();
+    let redo_unloaded = crate::project::project_io::load_project_graph_document_from_file(
+        &root_text,
+        &unloaded_path,
+    )
+    .unwrap();
+    assert!(redo_loaded.document.nodes.contains_key(&loaded_node_id));
+    assert!(redo_unloaded.document.nodes.contains_key(&unloaded_node_id));
+    assert!(
+        state.project_data.read().unwrap().graphs[&loaded_path]
+            .document
+            .nodes
+            .contains_key(&loaded_node_id)
+    );
+    assert!(
+        !state
+            .project_data
+            .read()
+            .unwrap()
+            .graphs
+            .contains_key(&unloaded_path)
+    );
+    assert_eq!(redo.deltas.len(), 2);
+    assert_eq!(redo.projection_replacements.len(), 1);
+    assert!(redo.deltas.iter().all(|delta| {
+        delta.from_revision == GraphRevision::new(2) && delta.to_revision == GraphRevision::new(3)
+    }));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-graph-global-history-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let graph_path = GraphResourcePath::new("events/GraphGlobal.yssbi-event").unwrap();
+    let graph_key = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let inserted_node = node("yssbi.constant.int64");
+    let inserted_node_id = inserted_node.id;
+    let graph_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+        node: inserted_node,
+    }]);
+    let before_variable = test_variable("Before global History");
+    let mut after_variable = before_variable.clone();
+    after_variable.name = "After global History".into();
+    let variable_id = before_variable.id;
+    let variable_key = crate::node_system::document::VariableResourceKey(
+        format!("variables/{variable_id}").into(),
+    );
+    let variable_patch = crate::node_system::document::VariableDocumentPatch::new(
+        Some(serde_json::to_value(&before_variable).unwrap()),
+        Some(serde_json::to_value(&after_variable).unwrap()),
+    );
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("GraphGlobal", GraphDocumentKind::Event),
+    );
+    project
+        .variables
+        .insert(variable_id, before_variable.clone());
+    let root_text = root.to_string_lossy().into_owned();
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    crate::project::fixtures::write_graph(&project, &root_text, &graph_path).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text.clone(), project);
+    let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
+        OperationId::new(),
+        vec![
+            crate::node_system::document::ResourcePatch::graph(
+                graph_key.clone(),
+                GraphRevision::INITIAL,
+                graph_patch,
+            ),
+            crate::node_system::document::ResourcePatch::variable(
+                variable_key,
+                GraphRevision::INITIAL,
+                variable_patch,
+            ),
+        ],
+    );
+    {
+        let mut data = state.project_data.write().unwrap();
+        let mut revisions = state.variable_revisions.write().unwrap();
+        let mut documents = super::project_state::project_documents(&data, &revisions);
+        let mut history = crate::node_system::document::ProjectHistory::default();
+        history
+            .apply_transaction(&mut documents, transaction)
+            .unwrap();
+        super::project_state::replace_project_documents(&mut data, &mut revisions, documents);
+        state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(graph_path.clone(), GraphRevision::new(1));
+        *state.history.write().unwrap() = history;
+    }
+    crate::project::fixtures::write_project(&state.get_data().unwrap(), &root_text).unwrap();
+    crate::project::fixtures::write_state_graph(&state, &graph_path).unwrap();
+    state.unload_graph_resource(&graph_path).unwrap();
+
+    let undo = state
+        .undo_last_transaction_observed(
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(graph_key),
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| {},
+        )
+        .unwrap();
+    let graph_disk =
+        crate::project::project_io::load_project_graph_document_from_file(&root_text, &graph_path)
+            .unwrap();
+    let globals = crate::project::project_io::parse_global_variables_document(
+        &std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+    )
+    .unwrap();
+    assert!(!graph_disk.document.nodes.contains_key(&inserted_node_id));
+    let expected_variable = serde_json::to_value(&before_variable).unwrap();
+    assert_eq!(
+        serde_json::to_value(&globals.variables[&variable_id]).unwrap(),
+        expected_variable
+    );
+    assert_eq!(
+        serde_json::to_value(&state.get_data().unwrap().variables[&variable_id]).unwrap(),
+        expected_variable
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
+    assert_eq!(undo.deltas.len(), 2);
+    assert!(undo.projection_replacements.is_empty());
+    assert!(undo.deltas.iter().all(|delta| {
+        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+    }));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn project_reload_clears_history_status() {
     let state = state_with_empty_graph();
     state
@@ -3219,6 +5605,14 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
     assert_eq!(undo_deltas[0].from_revision, GraphRevision::new(1));
     assert_eq!(undo_deltas[0].to_revision, GraphRevision::new(2));
     assert_eq!(undo_deltas[0].caused_by, Some(undo_operation));
+    assert_eq!(
+        state.get_data().unwrap().graphs[&path].document.revision,
+        undo_deltas[0].to_revision
+    );
+    assert_eq!(
+        state.revision_state_for_test().0[&path],
+        undo_deltas[0].to_revision
+    );
 
     let stale_redo = MutationRequest::new(
         undo_deltas[0].resource.clone(),
@@ -3248,6 +5642,14 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
     assert_eq!(redo_deltas[0].from_revision, GraphRevision::new(2));
     assert_eq!(redo_deltas[0].to_revision, GraphRevision::new(3));
     assert_eq!(redo_deltas[0].caused_by, Some(redo_operation));
+    assert_eq!(
+        state.get_data().unwrap().graphs[&path].document.revision,
+        redo_deltas[0].to_revision
+    );
+    assert_eq!(
+        state.revision_state_for_test().0[&path],
+        redo_deltas[0].to_revision
+    );
     assert_eq!(
         state.get_data().unwrap().graphs[&path]
             .function
@@ -3860,9 +6262,11 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     let data = state.get_data().unwrap();
     let resources =
         super::project_state::compile_resources_from_data(&data, Default::default()).unwrap();
-    let registry = crate::node_system::catalog::build_builtin_registry();
+    let registry = crate::node_system::catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
     let compiler = crate::node_system::compiler::GraphCompiler::with_interface_resolvers(
-        &registry,
+        registry.as_ref(),
         &resources,
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     );
@@ -6767,6 +9171,204 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
 }
 
 #[test]
+fn predicate_cancellation_publishes_no_result_and_releases_project_resources() {
+    use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
+    use crate::node_system::protocol::{ParameterKey, PortKey};
+    use crate::node_system::runtime::{
+        ProductionRelationalBackend, ProductionRelationalCheckpoint, ProjectResourceLeaseObserver,
+    };
+
+    let fixture = SourceRenameLimitFixture::new("project-predicate-cancellation");
+    let source = fixture.nodes[0].clone();
+    let rename = fixture.nodes[1].clone();
+    let mut filter = node("yssbi.dataframe.filter.rows");
+    filter.parameters.insert(
+        ParameterKey::new("predicate").unwrap(),
+        serde_json::json!({
+            "column": "old_name",
+            "operator": "greaterThan",
+            "value": { "type": "integer", "value": "20" }
+        }),
+    );
+    let mut project = node("yssbi.dataframe.project");
+    project.parameters.insert(
+        ParameterKey::new("columns").unwrap(),
+        serde_json::json!(["old_name", "untouched"]),
+    );
+    let connect = |output_node, output, input_node, input| {
+        let id = ConnectionId::new();
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(output_node, PortKey::new(output).unwrap()),
+            input: PortAddress::declared(input_node, PortKey::new(input).unwrap()),
+            order: None,
+        }
+    };
+    let connections = [
+        connect(source.id, "dataframe", filter.id, "source"),
+        connect(filter.id, "result", project.id, "source"),
+        connect(project.id, "result", rename.id, "source"),
+    ];
+    let mut graph = GraphResourceDocument::new("Predicate cancellation", GraphDocumentKind::Event);
+    for node in [source, filter, project, rename] {
+        graph.document.nodes.insert(node.id, node);
+    }
+    for connection in connections {
+        graph.document.connections.insert(connection.id, connection);
+    }
+    fixture
+        .state
+        .insert_graph(fixture.path.clone(), graph)
+        .unwrap();
+
+    let (checkpoint_tx, checkpoint_rx) = std::sync::mpsc::sync_channel(1);
+    let checkpoint: std::sync::Arc<
+        dyn Fn(ProductionRelationalCheckpoint, &crate::node_system::runtime::CancellationToken)
+            + Send
+            + Sync,
+    > = std::sync::Arc::new(move |point, cancellation| {
+        if point == ProductionRelationalCheckpoint::PredicateEvaluation {
+            checkpoint_tx.try_send(()).unwrap();
+            cancellation.cancel();
+        }
+    });
+    fixture
+        .state
+        .set_production_relational_backend_factory(std::sync::Arc::new(move || {
+            std::sync::Arc::new(
+                ProductionRelationalBackend::default()
+                    .with_test_checkpoint(std::sync::Arc::clone(&checkpoint)),
+            ) as std::sync::Arc<dyn crate::node_system::runtime::RelationalBackend>
+        }));
+    let leases = ProjectResourceLeaseObserver::default();
+    fixture
+        .state
+        .set_project_resource_lease_observer(leases.clone());
+    let events = DemandRunEvents::default();
+
+    let error = fixture
+        .state
+        .execute_graph(
+            &fixture.path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .unwrap_err();
+
+    checkpoint_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("predicate checkpoint was reached");
+    assert!(matches!(
+        error.run_error(),
+        Some(crate::node_system::runtime::RunError::Cancelled)
+    ));
+    let events = events.0.lock().unwrap();
+    assert!(events.iter().any(|event| matches!(
+        event.kind,
+        crate::node_system::runtime::RunEventKind::RunCancelled
+    )));
+    assert!(events.iter().all(|event| !matches!(
+        event.kind,
+        crate::node_system::runtime::RunEventKind::ResultReady { .. }
+            | crate::node_system::runtime::RunEventKind::RunCompleted
+    )));
+    drop(events);
+    let store = fixture.state.project_store.read().unwrap();
+    assert_eq!(store.runs.active_run_count(), 0);
+    assert_eq!(store.results.source_count(), 0);
+    drop(store);
+    assert!(leases.acquired() > 0);
+    assert_eq!(leases.acquired(), leases.dropped());
+    assert_eq!(leases.active(), 0);
+
+    drop(fixture.state);
+    std::fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() {
+    struct FailingBackend(crate::node_system::runtime::RelationalErrorCode);
+
+    impl crate::node_system::runtime::RelationalBackend for FailingBackend {
+        fn execute(
+            &self,
+            _: &crate::node_system::runtime::RelationalContext<'_>,
+            _: &crate::node_system::plan::CompiledRelationalPlan,
+            _: &[crate::node_system::runtime::RuntimeValue],
+            _: &[crate::node_system::runtime::RelationalInput],
+        ) -> Result<
+            crate::node_system::runtime::RelationalExecution,
+            crate::node_system::runtime::RelationalError,
+        > {
+            Err(crate::node_system::runtime::RelationalError::new(
+                self.0,
+                "sensitive backend detail",
+            ))
+        }
+    }
+
+    for (relational_code, run_code, public_message) in [
+        (
+            crate::node_system::runtime::RelationalErrorCode::HintInvalid,
+            crate::node_system::runtime::RunErrorCode::RelationalHintInvalid,
+            "relational pushdown metadata is invalid",
+        ),
+        (
+            crate::node_system::runtime::RelationalErrorCode::TypeMismatch,
+            crate::node_system::runtime::RunErrorCode::RelationalTypeMismatch,
+            "relational types do not match",
+        ),
+    ] {
+        let fixture = SourceRenameLimitFixture::new("project-relational-error-code");
+        fixture
+            .state
+            .insert_graph(fixture.path.clone(), fixture.document(false))
+            .unwrap();
+        fixture
+            .state
+            .set_production_relational_backend_factory(std::sync::Arc::new(move || {
+                std::sync::Arc::new(FailingBackend(relational_code))
+                    as std::sync::Arc<dyn crate::node_system::runtime::RelationalBackend>
+            }));
+        let events = DemandRunEvents::default();
+
+        let error = fixture
+            .state
+            .execute_graph(
+                &fixture.path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &events,
+            )
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), public_message);
+        assert!(!error.to_string().contains("sensitive backend detail"));
+        assert!(matches!(
+            error.run_error(),
+            Some(crate::node_system::runtime::RunError::RelationalFailed {
+                code,
+                ..
+            }) if *code == relational_code
+        ));
+        let events = events.0.lock().unwrap();
+        assert!(events.iter().any(|event| matches!(
+            event.kind,
+            crate::node_system::runtime::RunEventKind::RunErrored { code }
+                if code == run_code
+        )));
+        assert!(events.iter().all(|event| !matches!(
+            event.kind,
+            crate::node_system::runtime::RunEventKind::ResultReady { .. }
+                | crate::node_system::runtime::RunEventKind::RunCompleted
+        )));
+
+        drop(events);
+        drop(fixture.state);
+        std::fs::remove_dir_all(fixture.root).unwrap();
+    }
+}
+
+#[test]
 fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
     use crate::node_system::protocol::{ParameterKey, PortKey, Value};
@@ -6853,4 +9455,1174 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
 
     drop(state);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProductionChainOutput {
+    Filter,
+    Project,
+    Limit,
+}
+
+struct ProductionRelationalChainFixture {
+    state: ProjectState,
+    root: std::path::PathBuf,
+    path: GraphResourcePath,
+    nodes: [DocumentNode; 5],
+}
+
+impl ProductionRelationalChainFixture {
+    fn new(label: &str, reverse_uuid_order: bool) -> Self {
+        use crate::node_system::document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
+        use crate::node_system::protocol::{ParameterKey, PortKey};
+
+        let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("database")).unwrap();
+        let duckdb = root.join("database/project.duckdb");
+        let mut dataframe = polars::df!(
+            "amount" => [10_i64, 20, 30, 40, 50],
+            "region" => [Some("east"), None, Some("west"), Some("north"), Some("south")],
+            "active" => [true, false, true, false, true],
+        )
+        .unwrap();
+        crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &duckdb, "main").unwrap();
+
+        let ids = if reverse_uuid_order {
+            [5_u128, 4, 3, 2, 1]
+        } else {
+            [1_u128, 2, 3, 4, 5]
+        };
+        let mut source = node("yssbi.dataframe.source.get");
+        source.id = NodeId::from_uuid(uuid::Uuid::from_u128(ids[0]));
+        source.parameters.insert(
+            ParameterKey::new("dataframe").unwrap(),
+            serde_json::json!("databases/main"),
+        );
+        let mut filter = node("yssbi.dataframe.filter.rows");
+        filter.id = NodeId::from_uuid(uuid::Uuid::from_u128(ids[1]));
+        filter.parameters.insert(
+            ParameterKey::new("predicate").unwrap(),
+            serde_json::json!({
+                "column": "amount",
+                "operator": "greaterThan",
+                "value": { "type": "integer", "value": "10" }
+            }),
+        );
+        let mut project = node("yssbi.dataframe.project");
+        project.id = NodeId::from_uuid(uuid::Uuid::from_u128(ids[2]));
+        project.parameters.insert(
+            ParameterKey::new("columns").unwrap(),
+            serde_json::json!(["amount", "region"]),
+        );
+        let mut rename = node("yssbi.dataframe.rename");
+        rename.id = NodeId::from_uuid(uuid::Uuid::from_u128(ids[3]));
+        rename.parameters.insert(
+            ParameterKey::new("from").unwrap(),
+            serde_json::json!("amount"),
+        );
+        rename.parameters.insert(
+            ParameterKey::new("to").unwrap(),
+            serde_json::json!("selected_amount"),
+        );
+        let mut limit = node("yssbi.dataframe.limit");
+        limit.id = NodeId::from_uuid(uuid::Uuid::from_u128(ids[4]));
+        limit
+            .parameters
+            .insert(ParameterKey::new("rows").unwrap(), serde_json::json!(2));
+        let nodes = [source, filter, project, rename, limit];
+
+        let mut graph = GraphResourceDocument::new("Production chain", GraphDocumentKind::Event);
+        for node in nodes.iter().rev() {
+            graph.document.nodes.insert(node.id, node.clone());
+        }
+        let links = [
+            (0, "dataframe", 1, "source"),
+            (1, "result", 2, "source"),
+            (2, "result", 3, "source"),
+            (3, "result", 4, "source"),
+        ];
+        for (offset, (output_node, output, input_node, input)) in links.into_iter().enumerate() {
+            let id = ConnectionId::from_uuid(uuid::Uuid::from_u128(100 + offset as u128));
+            graph.document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output: PortAddress::declared(
+                        nodes[output_node].id,
+                        PortKey::new(output).unwrap(),
+                    ),
+                    input: PortAddress::declared(
+                        nodes[input_node].id,
+                        PortKey::new(input).unwrap(),
+                    ),
+                    order: None,
+                },
+            );
+        }
+
+        let path = GraphResourcePath::new("events/ProductionChain.yssbi-event").unwrap();
+        let mut project_data = ProjectData::new();
+        project_data.databases.insert(
+            "main".into(),
+            crate::database::DatabaseDecl {
+                id: "main".into(),
+                engine: crate::database::DatabaseEngine::DuckDb {
+                    path: "database/project.duckdb".into(),
+                    table: "main".into(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some("Main".into()),
+            },
+        );
+        project_data.graphs.insert(path.clone(), graph);
+        crate::project::fixtures::write_project(&project_data, root.to_string_lossy().as_ref())
+            .unwrap();
+        crate::project::fixtures::write_graph(
+            &project_data,
+            root.to_string_lossy().as_ref(),
+            &path,
+        )
+        .unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project_data);
+
+        let fixture = Self {
+            state,
+            root,
+            path,
+            nodes,
+        };
+        fixture.assert_persisted_parameters();
+        fixture
+    }
+
+    fn node_id(&self, output: ProductionChainOutput) -> crate::node_system::document::NodeId {
+        self.nodes[match output {
+            ProductionChainOutput::Filter => 1,
+            ProductionChainOutput::Project => 2,
+            ProductionChainOutput::Limit => 4,
+        }]
+        .id
+    }
+
+    fn output_ref(
+        &self,
+        output: ProductionChainOutput,
+    ) -> crate::node_system::plan::GraphOutputRef {
+        crate::node_system::plan::GraphOutputRef {
+            graph_path: crate::node_system::document::GraphResourcePath(self.path.as_str().into()),
+            port: crate::node_system::document::PortAddress::declared(
+                self.node_id(output),
+                crate::node_system::protocol::PortKey::new("result").unwrap(),
+            ),
+        }
+    }
+
+    fn demand(&self, output: ProductionChainOutput) -> crate::node_system::plan::ExecutionDemand {
+        crate::node_system::plan::ExecutionDemand::Outputs {
+            outputs: Box::new([self.output_ref(output)]),
+            include_default_results: false,
+        }
+    }
+
+    fn install(
+        &self,
+        observer: &std::sync::Arc<crate::node_system::runtime::ProductionRelationalObserver>,
+        leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) {
+        self.state
+            .set_production_relational_observer(std::sync::Arc::clone(observer));
+        self.state
+            .set_project_resource_lease_observer(leases.clone());
+    }
+
+    fn assert_persisted_parameters(&self) {
+        use crate::node_system::protocol::ParameterKey;
+
+        let reloaded = ProjectState::new();
+        reloaded.activate_project_from_path(&self.root).unwrap();
+        let loaded = load_graph(&reloaded, &self.path).unwrap();
+        let graph = &loaded.document;
+        assert_eq!(
+            graph.nodes[&self.nodes[0].id].parameters,
+            [(
+                ParameterKey::new("dataframe").unwrap(),
+                serde_json::json!("databases/main")
+            )]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(
+            graph.nodes[&self.nodes[1].id].parameters,
+            [(
+                ParameterKey::new("predicate").unwrap(),
+                serde_json::json!({
+                    "column": "amount",
+                    "operator": "greaterThan",
+                    "value": { "type": "integer", "value": "10" }
+                })
+            )]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(
+            graph.nodes[&self.nodes[2].id].parameters,
+            [(
+                ParameterKey::new("columns").unwrap(),
+                serde_json::json!(["amount", "region"])
+            )]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(
+            graph.nodes[&self.nodes[3].id].parameters,
+            [
+                (
+                    ParameterKey::new("from").unwrap(),
+                    serde_json::json!("amount")
+                ),
+                (
+                    ParameterKey::new("to").unwrap(),
+                    serde_json::json!("selected_amount"),
+                ),
+            ]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(
+            graph.nodes[&self.nodes[4].id].parameters,
+            [(ParameterKey::new("rows").unwrap(), serde_json::json!(2))]
+                .into_iter()
+                .collect()
+        );
+    }
+
+    fn expected_value(output: ProductionChainOutput) -> crate::node_system::runtime::RuntimeValue {
+        use crate::node_system::protocol::Value;
+        use crate::node_system::runtime::RuntimeValue;
+
+        let amount_name = if output == ProductionChainOutput::Limit {
+            "selected_amount"
+        } else {
+            "amount"
+        };
+        let amount_values = if output == ProductionChainOutput::Limit {
+            vec![Value::Integer(20), Value::Integer(30)]
+        } else {
+            vec![
+                Value::Integer(20),
+                Value::Integer(30),
+                Value::Integer(40),
+                Value::Integer(50),
+            ]
+        };
+        let region_values = if output == ProductionChainOutput::Limit {
+            vec![Value::Null, Value::String("west".into())]
+        } else {
+            vec![
+                Value::Null,
+                Value::String("west".into()),
+                Value::String("north".into()),
+                Value::String("south".into()),
+            ]
+        };
+        let mut columns = std::collections::BTreeMap::from([
+            (amount_name.into(), Value::List(amount_values)),
+            ("region".into(), Value::List(region_values)),
+        ]);
+        if output == ProductionChainOutput::Filter {
+            columns.insert(
+                "active".into(),
+                Value::List(vec![
+                    Value::Bool(false),
+                    Value::Bool(true),
+                    Value::Bool(false),
+                    Value::Bool(true),
+                ]),
+            );
+        }
+        RuntimeValue::Scalar(Value::Object(columns))
+    }
+
+    fn assert_common_success(
+        &self,
+        output: ProductionChainOutput,
+        result: &crate::node_system::runtime::RunResult,
+        events: &DemandRunEvents,
+        leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) {
+        assert_eq!(result.values.len(), 1);
+        assert_eq!(
+            result.values.values().next(),
+            Some(&Self::expected_value(output))
+        );
+        let expected_output = self.output_ref(output);
+        let expected_name = format!("node.{}.result", self.node_id(output));
+        let events = events.0.lock().unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    event.kind,
+                    crate::node_system::runtime::RunEventKind::RunCompleted
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    event.kind,
+                    crate::node_system::runtime::RunEventKind::ResultReady { .. }
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    event.kind,
+                    crate::node_system::runtime::RunEventKind::OutputReady { .. }
+                ))
+                .count(),
+            1
+        );
+        assert!(events.iter().any(|event| matches!(
+            &event.kind,
+            crate::node_system::runtime::RunEventKind::ResultReady { name, .. }
+                if name.as_ref() == expected_name
+        )));
+        assert!(events.iter().any(|event| matches!(
+            &event.kind,
+            crate::node_system::runtime::RunEventKind::OutputReady { output, .. }
+                if output == &expected_output
+        )));
+        drop(events);
+        let store = self.state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 2);
+        drop(store);
+        assert_eq!(leases.acquired(), 1);
+        assert_eq!(leases.dropped(), 1);
+        assert_eq!(leases.active(), 0);
+    }
+
+    fn assert_final_only_acceptance(
+        &self,
+        result: &crate::node_system::runtime::RunResult,
+        events: &DemandRunEvents,
+        observer: &crate::node_system::runtime::ProductionRelationalObserver,
+        leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) {
+        use crate::node_system::plan::{RelationalOperator, RelationalOperatorIndex};
+
+        self.assert_common_success(ProductionChainOutput::Limit, result, events, leases);
+        let observation = observer.snapshot();
+        assert_eq!(observation.relational_islands, Some(1));
+        assert_eq!(observation.materialization_bridges, Some(0));
+        assert_eq!(observation.backend_invocations, 1);
+        assert_eq!(observation.bridge_inputs, vec![0]);
+        assert_eq!(observation.relational_subplans.len(), 1);
+        let plan = &observation.relational_subplans[0].compiled_plan;
+        assert_eq!(plan.operators.len(), 5);
+        assert_eq!(plan.roots.as_ref(), &[RelationalOperatorIndex::new(4)]);
+        assert!(matches!(
+            plan.operators[0],
+            RelationalOperator::Source { .. }
+        ));
+        assert!(
+            matches!(plan.operators[1], RelationalOperator::Filter { input, .. } if input == RelationalOperatorIndex::new(0))
+        );
+        assert!(
+            matches!(plan.operators[2], RelationalOperator::Project { input, .. } if input == RelationalOperatorIndex::new(1))
+        );
+        assert!(
+            matches!(plan.operators[3], RelationalOperator::Rename { input, .. } if input == RelationalOperatorIndex::new(2))
+        );
+        assert!(
+            matches!(plan.operators[4], RelationalOperator::Limit { input, rows: 2 } if input == RelationalOperatorIndex::new(3))
+        );
+        assert!(plan.bridge_inputs.is_empty());
+        assert!(plan.requested_fragment_outputs.is_empty());
+
+        let dataframes = observer.materialized_dataframes();
+        assert_eq!(dataframes.len(), 1);
+        let dataframe = &dataframes[0];
+        assert_eq!(
+            dataframe
+                .get_column_names()
+                .iter()
+                .map(|name| name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["selected_amount", "region"]
+        );
+        assert_eq!(
+            dataframe.column("selected_amount").unwrap().dtype(),
+            &polars::prelude::DataType::Int64
+        );
+        assert_eq!(
+            dataframe.column("region").unwrap().dtype(),
+            &polars::prelude::DataType::String
+        );
+        assert_eq!(dataframe.column("selected_amount").unwrap().null_count(), 0);
+        assert_eq!(dataframe.column("region").unwrap().null_count(), 1);
+        assert_eq!(
+            dataframe
+                .column("selected_amount")
+                .unwrap()
+                .i64()
+                .unwrap()
+                .into_no_null_iter()
+                .collect::<Vec<_>>(),
+            vec![20, 30]
+        );
+        assert_eq!(
+            dataframe
+                .column("region")
+                .unwrap()
+                .str()
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec![None, Some("west")]
+        );
+    }
+
+    fn assert_exact_preview_plan(
+        &self,
+        output: ProductionChainOutput,
+        observer: &crate::node_system::runtime::ProductionRelationalObserver,
+    ) {
+        use crate::node_system::plan::{
+            RelationalExpression, RelationalLiteral, RelationalOperator, RelationalOperatorIndex,
+            RelationalProjection, ResourceId,
+        };
+
+        let source = RelationalOperator::Source {
+            resource: ResourceId::new("databases/main").unwrap(),
+            relation: "databases/main".into(),
+        };
+        let filter = RelationalOperator::Filter {
+            input: RelationalOperatorIndex::new(0),
+            predicate: RelationalExpression::GreaterThan(
+                Box::new(RelationalExpression::Column("amount".into())),
+                Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(
+                    10,
+                ))),
+            ),
+        };
+        let project = RelationalOperator::Project {
+            input: RelationalOperatorIndex::new(1),
+            columns: Box::new([
+                RelationalProjection {
+                    name: "amount".into(),
+                    expression: RelationalExpression::Column("amount".into()),
+                },
+                RelationalProjection {
+                    name: "region".into(),
+                    expression: RelationalExpression::Column("region".into()),
+                },
+            ]),
+        };
+        let (operators, root) = match output {
+            ProductionChainOutput::Filter => {
+                (vec![source, filter], RelationalOperatorIndex::new(1))
+            }
+            ProductionChainOutput::Project => (
+                vec![source, filter, project],
+                RelationalOperatorIndex::new(2),
+            ),
+            ProductionChainOutput::Limit => panic!("Limit is not a preview prefix"),
+        };
+        let observation = observer.snapshot();
+        let plan = &observation.relational_subplans[0].compiled_plan;
+
+        assert_eq!(plan.operators.as_ref(), operators.as_slice());
+        assert_eq!(plan.roots.as_ref(), &[root]);
+        assert_eq!(
+            observation.relational_result_bindings,
+            vec![(
+                format!("node.{}.result", self.node_id(output)).into_boxed_str(),
+                root,
+            )]
+        );
+        assert_eq!(
+            plan.fragment_roots
+                .iter()
+                .map(|binding| binding.operator)
+                .collect::<Vec<_>>(),
+            (0..operators.len())
+                .map(|index| RelationalOperatorIndex::new(index as u32))
+                .collect::<Vec<_>>()
+        );
+        assert!(plan.operators.iter().all(|operator| !matches!(
+            operator,
+            RelationalOperator::Rename { .. } | RelationalOperator::Limit { .. }
+        )));
+        assert!(plan.bridge_inputs.is_empty());
+        assert!(plan.requested_fragment_outputs.is_empty());
+    }
+
+    fn assert_preview(
+        &self,
+        output: ProductionChainOutput,
+        expected_operators: usize,
+        result: &crate::node_system::runtime::RunResult,
+        events: &DemandRunEvents,
+        observer: &crate::node_system::runtime::ProductionRelationalObserver,
+        leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) {
+        self.assert_common_success(output, result, events, leases);
+        let observation = observer.snapshot();
+        assert_eq!(observation.relational_islands, Some(1));
+        assert_eq!(observation.materialization_bridges, Some(0));
+        assert_eq!(observation.backend_invocations, 1);
+        let plan = &observation.relational_subplans[0].compiled_plan;
+        assert_eq!(plan.operators.len(), expected_operators);
+        assert_eq!(plan.roots.len(), 1);
+        assert_eq!(plan.roots[0].index(), expected_operators - 1);
+        assert_eq!(plan.fragment_order.len(), expected_operators);
+        assert_eq!(plan.fragment_roots.len(), expected_operators);
+        assert!(plan.bridge_inputs.is_empty());
+        assert!(plan.requested_fragment_outputs.is_empty());
+        assert_eq!(observer.materialized_dataframes().len(), 1);
+        self.assert_exact_preview_plan(output, observer);
+    }
+
+    fn normalized_execution(
+        &self,
+        result: &crate::node_system::runtime::RunResult,
+        events: &DemandRunEvents,
+        observer: &crate::node_system::runtime::ProductionRelationalObserver,
+        leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
+    ) -> serde_json::Value {
+        self.assert_common_success(ProductionChainOutput::Limit, result, events, leases);
+        let plan = observer.execution_plan();
+        let role = |node_id| {
+            self.nodes
+                .iter()
+                .position(|node| node.id == node_id)
+                .map(|index| ["source", "filter", "project", "rename", "limit"][index])
+                .unwrap()
+        };
+        serde_json::json!({
+            "operators": plan.relational_subplans[0].compiled_plan.operators,
+            "roots": plan.relational_subplans[0].compiled_plan.roots,
+            "hints": plan.relational_subplans[0].compiled_plan.pushdown_hints,
+            "bridges": plan.relational_subplans[0].materialization_bridges,
+            "resources": plan.resources,
+            "operations": plan.operations.iter().map(|operation| serde_json::json!({
+                "sourceRole": role(operation.source_node_id),
+                "nodeType": operation.source_node_type_id,
+                "kernel": operation.kernel,
+                "inputConsumption": operation.inputs.iter().map(|input| input.consumption).collect::<Vec<_>>(),
+                "outputProduction": operation.outputs.iter().map(|output| output.production).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+            "results": plan.results.iter().map(|result| serde_json::json!({
+                "role": role(result.output.port.node_id),
+                "port": result.output.port.port,
+            })).collect::<Vec<_>>(),
+            "values": format!("{:?}", result.values.values().collect::<Vec<_>>()),
+            "eventKinds": {
+                "completed": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::RunCompleted)).count(),
+                "resultReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::ResultReady { .. })).count(),
+                "outputReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::OutputReady { .. })).count(),
+            },
+            "leases": [leases.acquired(), leases.dropped(), leases.active()],
+        })
+    }
+
+    fn assert_bounded_cancellation(
+        &self,
+        expected_checkpoint: crate::node_system::runtime::ProductionRelationalCheckpoint,
+    ) {
+        use crate::node_system::runtime::{
+            CancellationToken, ProductionRelationalBackend, ProductionRelationalCheckpoint,
+            ProjectResourceLeaseObserver, RelationalBackend, RunError, RunEventKind,
+        };
+
+        let (checkpoint_tx, checkpoint_rx) = std::sync::mpsc::sync_channel(1);
+        let sent = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let sent_for_hook = std::sync::Arc::clone(&sent);
+        let checkpoint = std::sync::Arc::new(
+            move |point: ProductionRelationalCheckpoint, cancellation: &CancellationToken| {
+                if point == expected_checkpoint
+                    && !sent_for_hook.swap(true, std::sync::atomic::Ordering::AcqRel)
+                {
+                    checkpoint_tx.try_send(()).unwrap();
+                    cancellation.cancel();
+                }
+            },
+        );
+        self.state
+            .set_production_relational_backend_factory(std::sync::Arc::new(move || {
+                std::sync::Arc::new(
+                    ProductionRelationalBackend::default().with_test_checkpoint(checkpoint.clone()),
+                ) as std::sync::Arc<dyn RelationalBackend>
+            }));
+        let leases = ProjectResourceLeaseObserver::default();
+        self.state
+            .set_project_resource_lease_observer(leases.clone());
+        let state = self.state.clone();
+        let path = self.path.clone();
+        let demand = self.demand(ProductionChainOutput::Limit);
+        let events = std::sync::Arc::new(DemandRunEvents::default());
+        let thread_events = std::sync::Arc::clone(&events);
+        let (result_tx, result_rx) = std::sync::mpsc::sync_channel(1);
+        let execution = std::thread::spawn(move || {
+            result_tx
+                .send(state.execute_graph(&path, &demand, thread_events.as_ref()))
+                .unwrap();
+        });
+
+        checkpoint_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("requested relational checkpoint was reached");
+        let error = result_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("cancelled execution terminated within the bound")
+            .unwrap_err();
+        execution.join().unwrap();
+        assert!(matches!(error.run_error(), Some(RunError::Cancelled)));
+        let events = events.0.lock().unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.kind, RunEventKind::RunCancelled))
+                .count(),
+            1
+        );
+        assert!(events.iter().all(|event| !matches!(
+            event.kind,
+            RunEventKind::ResultReady { .. }
+                | RunEventKind::OutputReady { .. }
+                | RunEventKind::RunCompleted
+        )));
+        drop(events);
+        let store = self.state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 0);
+        drop(store);
+        assert_eq!(leases.acquired(), 1);
+        assert_eq!(leases.dropped(), 1);
+        assert_eq!(leases.active(), 0);
+    }
+
+    fn assert_defensive_failure(&self, code: crate::node_system::runtime::RelationalErrorCode) {
+        use crate::node_system::runtime::{
+            ProjectResourceLeaseObserver, RelationalBackend, RunEventKind,
+        };
+
+        struct ForcedFailure(crate::node_system::runtime::RelationalErrorCode);
+        impl RelationalBackend for ForcedFailure {
+            fn execute(
+                &self,
+                _: &crate::node_system::runtime::RelationalContext<'_>,
+                _: &crate::node_system::plan::CompiledRelationalPlan,
+                _: &[crate::node_system::runtime::RuntimeValue],
+                _: &[crate::node_system::runtime::RelationalInput],
+            ) -> Result<
+                crate::node_system::runtime::RelationalExecution,
+                crate::node_system::runtime::RelationalError,
+            > {
+                Err(crate::node_system::runtime::RelationalError::new(
+                    self.0,
+                    "defensive acceptance failure",
+                ))
+            }
+        }
+
+        self.state
+            .set_production_relational_backend_factory(std::sync::Arc::new(move || {
+                std::sync::Arc::new(ForcedFailure(code)) as std::sync::Arc<dyn RelationalBackend>
+            }));
+        let leases = ProjectResourceLeaseObserver::default();
+        self.state
+            .set_project_resource_lease_observer(leases.clone());
+        let events = DemandRunEvents::default();
+        let error = self
+            .state
+            .execute_graph(
+                &self.path,
+                &self.demand(ProductionChainOutput::Limit),
+                &events,
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error.run_error(),
+            Some(crate::node_system::runtime::RunError::RelationalFailed {
+                code: actual,
+                ..
+            }) if *actual == code
+        ));
+        let events = events.0.lock().unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.kind, RunEventKind::RunErrored { .. }))
+                .count(),
+            1
+        );
+        assert!(events.iter().all(|event| !matches!(
+            event.kind,
+            RunEventKind::ResultReady { .. }
+                | RunEventKind::OutputReady { .. }
+                | RunEventKind::RunCompleted
+        )));
+        drop(events);
+        let store = self.state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 0);
+        drop(store);
+        assert_eq!(leases.acquired(), 1);
+        assert_eq!(leases.dropped(), 1);
+        assert_eq!(leases.active(), 0);
+    }
+
+    fn cleanup(self) {
+        drop(self.state);
+        std::fs::remove_dir_all(self.root).unwrap();
+    }
+}
+
+fn parameterized_static_ui_route_fixture() -> serde_json::Value {
+    use crate::node_system::document::{ConnectionId, NodePosition, PortAddress};
+    use crate::node_system::protocol::ParameterKey;
+
+    fn normalize_string(value: &mut serde_json::Value, from: &str, to: &str) {
+        match value {
+            serde_json::Value::String(text) if text.contains(from) => {
+                *text = text.replace(from, to)
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    normalize_string(value, from, to);
+                }
+            }
+            serde_json::Value::Object(values) => {
+                for value in values.values_mut() {
+                    normalize_string(value, from, to);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let fixture = ProductionRelationalChainFixture::new("ui-route-fixture", false);
+    let session = fixture.state.capture_project_session().unwrap();
+    let mut catalog = fixture
+        .state
+        .localized_catalog_snapshot(&session.instance_id, "en-US")
+        .unwrap();
+    let project_item = catalog
+        .items
+        .iter()
+        .find(|item| item.node_type_id.as_ref() == "yssbi.dataframe.project")
+        .unwrap()
+        .clone();
+    let project_category = catalog
+        .categories
+        .iter()
+        .find(|category| category.category_id == project_item.category_id)
+        .unwrap()
+        .clone();
+    catalog.project_instance_id = "fixture-project".into();
+    catalog.categories = vec![project_category];
+    catalog.items = vec![project_item.clone()];
+
+    let prepare_result = fixture
+        .state
+        .apply_editor_graph_mutation(
+            &fixture.path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    fixture.path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::from_uuid(uuid::Uuid::from_u128(199)),
+                EditorGraphMutationDto::Disconnect {
+                    connection_id: ConnectionId::from_uuid(uuid::Uuid::from_u128(100)),
+                },
+            ),
+        )
+        .unwrap();
+    let initial_projection = prepare_result.projection_replacement.projection;
+    let create_operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(200));
+    let create_mutation = EditorGraphMutationDto::CreateNode {
+        descriptor: project_item.creation,
+        position: NodePosition { x: 320.0, y: 180.0 },
+        user_label: None,
+    };
+    let before_ids = fixture.state.get_data().unwrap().graphs[&fixture.path]
+        .document
+        .nodes
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let create_result = fixture
+        .state
+        .apply_editor_graph_mutation(
+            &fixture.path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    fixture.path.as_str().into(),
+                )),
+                GraphRevision::new(1),
+                create_operation_id,
+                create_mutation.clone(),
+            ),
+        )
+        .unwrap();
+    let created_node_id = fixture.state.get_data().unwrap().graphs[&fixture.path]
+        .document
+        .nodes
+        .keys()
+        .find(|node_id| !before_ids.contains(node_id))
+        .copied()
+        .unwrap();
+    assert_eq!(
+        fixture.state.get_data().unwrap().graphs[&fixture.path]
+            .document
+            .nodes[&created_node_id]
+            .node_type
+            .as_str(),
+        "yssbi.dataframe.project"
+    );
+    assert!(
+        fixture.state.get_data().unwrap().graphs[&fixture.path]
+            .document
+            .nodes[&created_node_id]
+            .parameters
+            .is_empty()
+    );
+
+    let source_output = PortAddress::declared(
+        fixture.nodes[0].id,
+        crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
+    );
+    let project_input = PortAddress::declared(
+        created_node_id,
+        crate::node_system::protocol::PortKey::new("source").unwrap(),
+    );
+    let connect_operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(201));
+    let connect_mutation = EditorGraphMutationDto::Connect {
+        output: source_output.clone().into(),
+        input: project_input.clone().into(),
+        order: None,
+    };
+    let connect_result = fixture
+        .state
+        .apply_editor_graph_mutation(
+            &fixture.path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    fixture.path.as_str().into(),
+                )),
+                GraphRevision::new(2),
+                connect_operation_id,
+                connect_mutation.clone(),
+            ),
+        )
+        .unwrap();
+    let connected_projection =
+        serde_json::to_value(&connect_result.projection_replacement).unwrap();
+    let connected_node = connected_projection["projection"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["nodeId"] == created_node_id.to_string())
+        .unwrap();
+    let connected_editor = connected_node["parameterEditors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|editor| editor["key"] == "columns")
+        .unwrap();
+    assert_eq!(connected_editor["configuration"]["available"], true);
+    assert_eq!(
+        connected_editor["configuration"]["value"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        connected_editor["configuration"]["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|option| option["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["amount", "region", "active"]
+    );
+
+    let submit_operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(202));
+    let submit_mutation = EditorGraphMutationDto::SetParameters {
+        node_id: created_node_id,
+        parameters: [(
+            ParameterKey::new("columns").unwrap(),
+            serde_json::json!(["region", "amount"]),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    let submit_result = fixture
+        .state
+        .apply_editor_graph_mutation(
+            &fixture.path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    fixture.path.as_str().into(),
+                )),
+                GraphRevision::new(3),
+                submit_operation_id,
+                submit_mutation.clone(),
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        fixture.state.get_data().unwrap().graphs[&fixture.path]
+            .document
+            .nodes[&created_node_id]
+            .parameters,
+        [(
+            ParameterKey::new("columns").unwrap(),
+            serde_json::json!(["region", "amount"]),
+        )]
+        .into_iter()
+        .collect()
+    );
+
+    let mut create_result = serde_json::to_value(create_result).unwrap();
+    let mut connect_result = serde_json::to_value(connect_result).unwrap();
+    let mut submit_result = serde_json::to_value(submit_result).unwrap();
+    let created_node_id = created_node_id.to_string();
+    let connection_id = connect_result["delta"]["payload"]["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|operation| operation["connection"]["id"].as_str())
+        .unwrap()
+        .to_owned();
+    let normalized_created_node_id = "00000000-0000-0000-0000-000000000009";
+    let normalized_connection_id = "00000000-0000-0000-0000-000000000068";
+    for result in [&mut create_result, &mut connect_result, &mut submit_result] {
+        normalize_string(result, &created_node_id, normalized_created_node_id);
+        normalize_string(result, &connection_id, normalized_connection_id);
+    }
+
+    let mut result = serde_json::json!({
+        "catalog": catalog,
+        "graphPath": fixture.path.as_str(),
+        "projectNodeId": normalized_created_node_id,
+        "initialProjection": initial_projection,
+        "create": {
+            "locale": "en-US",
+            "position": { "x": 320.0, "y": 180.0 },
+            "operationId": create_operation_id,
+            "mutation": create_mutation,
+            "result": create_result,
+        },
+        "connect": {
+            "locale": "en-US",
+            "operationId": connect_operation_id,
+            "mutation": connect_mutation,
+            "result": connect_result,
+        },
+        "submit": {
+            "locale": "en-US",
+            "operationId": submit_operation_id,
+            "selectedColumns": ["region", "amount"],
+            "mutation": submit_mutation,
+            "result": submit_result,
+        },
+        "sourceOutput": source_output,
+        "projectInput": project_input,
+    });
+    normalize_string(&mut result, &created_node_id, normalized_created_node_id);
+    normalize_string(&mut result, &connection_id, normalized_connection_id);
+    fixture.cleanup();
+    result
+}
+
+#[test]
+fn parameterized_static_ui_route_fixture_is_rust_authoritative() {
+    let actual = parameterized_static_ui_route_fixture();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../src/tests/fixtures/parameterized-static-production-route.json");
+    if std::env::var_os("YSSBI_UPDATE_PARAMETERIZED_STATIC_ROUTE_FIXTURE").is_some() {
+        std::fs::write(
+            &path,
+            format!("{}\n", serde_json::to_string_pretty(&actual).unwrap()),
+        )
+        .unwrap();
+    }
+    let expected = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("shared fixture is missing at {}: {error}", path.display()));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&expected).unwrap(),
+        actual
+    );
+}
+
+#[test]
+fn production_relational_chain_persisted_parameters_reload_from_disk_authority() {
+    use crate::node_system::protocol::ParameterKey;
+
+    let fixture = ProductionRelationalChainFixture::new("persisted-reload", false);
+    {
+        let mut data = fixture.state.project_data.write().unwrap();
+        let graph = &mut data.graphs.get_mut(&fixture.path).unwrap().document;
+        graph
+            .nodes
+            .get_mut(&fixture.nodes[1].id)
+            .unwrap()
+            .parameters
+            .insert(
+                ParameterKey::new("predicate").unwrap(),
+                serde_json::json!({ "column": "corrupted" }),
+            );
+        graph
+            .nodes
+            .get_mut(&fixture.nodes[2].id)
+            .unwrap()
+            .parameters
+            .insert(
+                ParameterKey::new("columns").unwrap(),
+                serde_json::json!(["corrupted"]),
+            );
+    }
+
+    fixture.assert_persisted_parameters();
+    fixture.cleanup();
+}
+
+#[test]
+fn production_relational_chain_final_only_demand_publishes_only_exact_final_value() {
+    let fixture = ProductionRelationalChainFixture::new("final-only", false);
+    let events = DemandRunEvents::default();
+    let observer =
+        std::sync::Arc::new(crate::node_system::runtime::ProductionRelationalObserver::default());
+    let leases = crate::node_system::runtime::ProjectResourceLeaseObserver::default();
+    fixture.install(&observer, &leases);
+
+    let result = fixture
+        .state
+        .execute_graph(
+            &fixture.path,
+            &fixture.demand(ProductionChainOutput::Limit),
+            &events,
+        )
+        .expect("final-only production chain executes");
+
+    fixture.assert_final_only_acceptance(&result, &events, &observer, &leases);
+    fixture.cleanup();
+}
+
+#[test]
+fn production_relational_chain_filter_and_project_previews_prune_suffixes() {
+    for (output, expected_operators) in [
+        (ProductionChainOutput::Filter, 2),
+        (ProductionChainOutput::Project, 3),
+    ] {
+        let fixture = ProductionRelationalChainFixture::new("preview", false);
+        let events = DemandRunEvents::default();
+        let observer = std::sync::Arc::new(
+            crate::node_system::runtime::ProductionRelationalObserver::default(),
+        );
+        let leases = crate::node_system::runtime::ProjectResourceLeaseObserver::default();
+        fixture.install(&observer, &leases);
+
+        let result = fixture
+            .state
+            .execute_graph(&fixture.path, &fixture.demand(output), &events)
+            .expect("stable preview demand executes");
+
+        fixture.assert_preview(
+            output,
+            expected_operators,
+            &result,
+            &events,
+            &observer,
+            &leases,
+        );
+        fixture.cleanup();
+    }
+}
+
+#[test]
+fn production_relational_chain_previews_freeze_exact_operator_prefixes() {
+    for output in [
+        ProductionChainOutput::Filter,
+        ProductionChainOutput::Project,
+    ] {
+        let fixture = ProductionRelationalChainFixture::new("preview-shape", false);
+        let events = DemandRunEvents::default();
+        let observer = std::sync::Arc::new(
+            crate::node_system::runtime::ProductionRelationalObserver::default(),
+        );
+        let leases = crate::node_system::runtime::ProjectResourceLeaseObserver::default();
+        fixture.install(&observer, &leases);
+        fixture
+            .state
+            .execute_graph(&fixture.path, &fixture.demand(output), &events)
+            .unwrap();
+
+        fixture.assert_exact_preview_plan(output, &observer);
+        fixture.cleanup();
+    }
+}
+
+#[test]
+fn production_relational_chain_is_uuid_sort_order_independent() {
+    let execute = |reverse_uuid_order| {
+        let fixture = ProductionRelationalChainFixture::new("determinism", reverse_uuid_order);
+        let events = DemandRunEvents::default();
+        let observer = std::sync::Arc::new(
+            crate::node_system::runtime::ProductionRelationalObserver::default(),
+        );
+        let leases = crate::node_system::runtime::ProjectResourceLeaseObserver::default();
+        fixture.install(&observer, &leases);
+        let result = fixture
+            .state
+            .execute_graph(
+                &fixture.path,
+                &fixture.demand(ProductionChainOutput::Limit),
+                &events,
+            )
+            .expect("determinism fixture executes");
+        let normalized = fixture.normalized_execution(&result, &events, &observer, &leases);
+        fixture.cleanup();
+        normalized
+    };
+
+    assert_eq!(execute(false), execute(true));
+}
+
+#[test]
+fn production_relational_chain_cancellation_is_bounded_and_cleans_up_exactly() {
+    for checkpoint in [
+        crate::node_system::runtime::ProductionRelationalCheckpoint::PredicateEvaluation,
+        crate::node_system::runtime::ProductionRelationalCheckpoint::ResultConversion,
+    ] {
+        let fixture = ProductionRelationalChainFixture::new("cancellation", false);
+        fixture.assert_bounded_cancellation(checkpoint);
+        fixture.cleanup();
+    }
+}
+
+#[test]
+fn production_relational_chain_defensive_failures_publish_nothing_and_clean_up() {
+    for code in [
+        crate::node_system::runtime::RelationalErrorCode::HintInvalid,
+        crate::node_system::runtime::RelationalErrorCode::TypeMismatch,
+    ] {
+        let fixture = ProductionRelationalChainFixture::new("defensive-failure", false);
+        fixture.assert_defensive_failure(code);
+        fixture.cleanup();
+    }
 }

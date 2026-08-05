@@ -105,13 +105,13 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
   ], ['pinyin', 'resourcePath', 'resourceRevision'])) return false;
   if (!isNodeCreationDescriptorDto(candidate.creation)) return false;
   const creation = candidate.creation;
-  const coherent = creation.kind === 'static'
-    ? candidate.resourcePath === undefined
-      && candidate.resourceRevision === undefined
-      && creation.nodeTypeId === candidate.nodeTypeId
-    : creation.nodeTypeId === candidate.nodeTypeId
+  const coherent = creation.kind === 'resourceBound'
+    ? creation.nodeTypeId === candidate.nodeTypeId
       && creation.resourcePath === candidate.resourcePath
-      && creation.resourceRevision === candidate.resourceRevision;
+      && creation.resourceRevision === candidate.resourceRevision
+    : candidate.resourcePath === undefined
+      && candidate.resourceRevision === undefined
+      && creation.nodeTypeId === candidate.nodeTypeId;
   return coherent
     && typeof candidate.nodeTypeId === 'string'
     && typeof candidate.title === 'string'

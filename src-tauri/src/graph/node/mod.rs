@@ -1,20 +1,5 @@
-//! Node 模块
-//!
-//! Node 仅作为定义/行为模板，不持有运行态状态。
-//! 所有运行态数据由 Graph 管理。
-//!
-//!
-//!
-//! 在这里能不能使用 DashMap
+//! Identity-neutral tabular schema values retained outside the node system.
 
-pub mod node_definition;
-pub mod node_id;
-pub mod node_instance;
-pub mod node_position;
-pub mod node_scope;
+pub mod data_schema;
 
-pub use node_definition::*;
-pub use node_id::*;
-pub use node_instance::*;
-pub use node_position::*;
-pub use node_scope::*;
+pub use data_schema::*;

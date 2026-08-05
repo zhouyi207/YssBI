@@ -1,6 +1,6 @@
 //! JSON serialization for runtime Struct handles shown in View nodes.
 
-use crate::graph::register::catalog::dataframe::{
+use crate::sci::models::regression::{
     LogitConfigure, LogitModel, OLSClusterConfig, OLSConfigure, OLSFixedScaleConfig, OLSHACConfig,
     OLSModel, OLSNeweyConfig, OLSResult, PraisConfigure, PraisModel, ProbitConfigure, ProbitModel,
     VCEHC0, VCEHC1, VCEHC2, VCEHC3, VCENonRobust,

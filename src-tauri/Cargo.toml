@@ -66,5 +66,8 @@ duckdb = { version = "1.10504.0", default-features = false, features = ["bundled
 trash = "5.2"
 notify = "8.2.0"
 
+[dev-dependencies]
+syn = { version = "2", features = ["full", "visit"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem"] }

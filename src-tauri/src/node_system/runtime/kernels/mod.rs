@@ -5,6 +5,7 @@ mod plot;
 mod statistics;
 
 pub use core_nodes::{ConvertParameters, ConvertTarget};
+pub(crate) use dataframe::dataframe_to_protocol_value_with_checkpoint;
 pub use dataframe::{DataframeKernelParameters, dataframe_to_protocol_value};
 pub(crate) use plot::PLOT_SINK;
 pub use plot::{PlotKind, PlotPublishError, PlotSink, PlotSinkResource};

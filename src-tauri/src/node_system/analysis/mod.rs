@@ -93,6 +93,7 @@ mod tests {
             resolved_interfaces: Box::new([]),
             partial_types: BTreeMap::new(),
             partial_schemas: BTreeMap::new(),
+            resolved_schemas: BTreeMap::new(),
             diagnostics: diagnostics.into_boxed_slice(),
         }
     }
@@ -102,6 +103,7 @@ mod tests {
             basis: basis(revision),
             nodes: Box::new([]),
             dependencies: Box::new([]),
+            resolved_schemas: BTreeMap::new(),
         }
     }
 

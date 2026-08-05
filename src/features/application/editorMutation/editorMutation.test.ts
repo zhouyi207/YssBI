@@ -103,6 +103,37 @@ describe('mutation and history services', () => {
     });
   });
 
+  it('sends one exact atomic parameter mutation without numeric coercion', async () => {
+    const request: MutationRequestDto<EditorGraphMutationDto> = {
+      resource: { kind: 'graph', key: graphPath },
+      baseRevision: 4,
+      operationId: '00000000-0000-0000-0000-000000000390',
+      payload: {
+        type: 'setParameters',
+        payload: {
+          nodeId: '00000000-0000-0000-0000-000000000385',
+          parameters: {
+            predicate: {
+              column: 'count',
+              operator: 'greaterThan',
+              value: { type: 'integer', value: '9007199254740993' },
+            },
+          },
+        },
+      },
+    };
+    vi.mocked(invoke).mockResolvedValue(graphResult(request.operationId, 4, 5));
+
+    await GraphMutationService.mutateGraph(graphPath, 'en-US', request);
+
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith('mutate_graph_document', {
+      graphPath,
+      locale: 'en-US',
+      request,
+    });
+  });
+
   it('sends the canonical dynamic instance mutation JSON', async () => {
     const request: MutationRequestDto<EditorGraphMutationDto> = {
       resource: { kind: 'graph', key: graphPath },

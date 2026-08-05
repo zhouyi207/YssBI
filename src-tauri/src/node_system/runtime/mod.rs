@@ -12,10 +12,10 @@ mod kernel;
 mod kernels;
 mod parameters;
 mod production_relational;
-mod production_relational_value;
 mod project_resource;
 mod project_run;
 mod relational;
+mod relational_dataframe;
 mod resource;
 mod result_store;
 mod run;
@@ -39,6 +39,7 @@ pub use function_plan::{
 pub use kernel::{
     Kernel, KernelContext, KernelError, KernelErrorKind, KernelRegistrationError, KernelRegistry,
 };
+pub(crate) use kernels::dataframe_to_protocol_value_with_checkpoint;
 pub use kernels::{
     ConvertParameters, ConvertTarget, DataframeKernelParameters, PlotKind, PlotPublishError,
     PlotSink, PlotSinkResource, StatisticsKernelParameters, dataframe_to_protocol_value,
@@ -48,7 +49,9 @@ pub use parameters::{
 };
 pub use production_relational::ProductionRelationalBackend;
 #[cfg(test)]
-pub(crate) use production_relational::ProductionRelationalObserver;
+pub(crate) use production_relational::{
+    ProductionRelationalCheckpoint, ProductionRelationalObserver,
+};
 #[cfg(test)]
 pub(crate) use project_resource::ProjectResourceLeaseObserver;
 pub use project_resource::{
@@ -63,7 +66,7 @@ pub use project_run::{
 pub use relational::{
     RelationalBackend, RelationalBackendLease, RelationalBackendProvider,
     RelationalBackendRegistrationError, RelationalBackendRegistry, RelationalContext,
-    RelationalError, RelationalExecution, RelationalInput, materialize_bridge,
+    RelationalError, RelationalErrorCode, RelationalExecution, RelationalInput, materialize_bridge,
 };
 pub use resource::{
     ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,

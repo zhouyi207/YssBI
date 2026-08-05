@@ -13,6 +13,8 @@ pub enum RegistryValidationError {
     DuplicateI18nKey(I18nKey),
     DuplicateInterfaceResolver(InterfaceResolverId),
     DuplicateSchemaResolver(SchemaResolverId),
+    DuplicateNominalValidator(TypeId),
+    MissingNominalValidator(TypeId),
     InvalidNode {
         node: NodeTypeId,
         reason: String,
@@ -50,6 +52,12 @@ impl std::fmt::Display for RegistryValidationError {
             DuplicateSchemaResolver(id) => {
                 write!(f, "schema resolver '{id}' is already registered")
             }
+            DuplicateNominalValidator(id) => {
+                write!(f, "nominal validator '{id}' is already registered")
+            }
+            MissingNominalValidator(id) => {
+                write!(f, "built-in nominal type '{id}' has no validator")
+            }
             InvalidNode { node, reason } => write!(f, "invalid node '{node}': {reason}"),
             InvalidType { id, reason } => write!(f, "invalid type '{id}': {reason}"),
             InvalidTypeConstructor { id, reason } => {
@@ -63,17 +71,22 @@ impl std::error::Error for RegistryValidationError {}
 
 pub(crate) struct ValidatedParts {
     pub nodes: BTreeMap<NodeTypeId, std::sync::Arc<RegisteredNode>>,
+    pub node_providers: BTreeMap<NodeTypeId, ProviderId>,
     pub types: TypeRegistry,
+    pub type_providers: BTreeMap<TypeId, ProviderId>,
     pub categories: CategoryRegistry,
     pub i18n: I18nManifest,
 }
 
 pub(crate) fn validate(
     providers: &[ProviderRegistration],
+    nominal_validators: &BTreeMap<TypeId, super::NominalParameterValidator>,
 ) -> Result<ValidatedParts, RegistryValidationError> {
     let mut provider_ids = BTreeSet::new();
     let mut nodes = BTreeMap::new();
+    let mut node_providers = BTreeMap::new();
     let mut types = TypeRegistry::default();
+    let mut type_providers = BTreeMap::new();
     let mut categories = CategoryRegistry::default();
     let mut i18n = I18nManifest::default();
     let mut interface_resolvers = BTreeSet::new();
@@ -86,8 +99,14 @@ pub(crate) fn validate(
             ));
         }
         for item in &provider.types {
-            if types.types.insert(item.id.clone(), item.clone()).is_some() {
-                return Err(RegistryValidationError::DuplicateType(item.id.clone()));
+            match types.types.entry(item.id.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(item.clone());
+                    type_providers.insert(item.id.clone(), provider.provider.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {
+                    return Err(RegistryValidationError::DuplicateType(item.id.clone()));
+                }
             }
         }
         for item in &provider.type_constructors {
@@ -140,11 +159,14 @@ pub(crate) fn validate(
         }
         for node in &provider.nodes {
             let id = node.protocol.type_id.clone();
-            if nodes
-                .insert(id.clone(), std::sync::Arc::new(node.clone()))
-                .is_some()
-            {
-                return Err(RegistryValidationError::DuplicateNode(id));
+            match nodes.entry(id.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(std::sync::Arc::new(node.clone()));
+                    node_providers.insert(id, provider.provider.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {
+                    return Err(RegistryValidationError::DuplicateNode(id));
+                }
             }
         }
     }
@@ -174,6 +196,15 @@ pub(crate) fn validate(
         })?;
     }
     validate_categories(&categories, &i18n)?;
+    for required in [
+        crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+        crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+    ] {
+        let id = TypeId::new(required).expect("built-in nominal type ID is valid");
+        if types.types.contains_key(&id) && !nominal_validators.contains_key(&id) {
+            return Err(RegistryValidationError::MissingNominalValidator(id));
+        }
+    }
     for node in nodes.values() {
         validate_node(
             node,
@@ -186,7 +217,9 @@ pub(crate) fn validate(
     }
     Ok(ValidatedParts {
         nodes,
+        node_providers,
         types,
+        type_providers,
         categories,
         i18n,
     })
@@ -238,15 +271,15 @@ fn validate_node(
         reason,
     };
     match (&node.implementation, node.structural_role) {
-        (Some(implementation), None) => {
-            if implementation.capability() != ImplementationKind::CompilerLowering {
-                return Err(fail(
-                    "leaf implementation does not provide lowerer capability".into(),
-                ));
-            }
+        (Some(implementation), None)
+            if implementation.capability() == ImplementationKind::CompilerLowering => {}
+        (Some(_), None) => {
+            return Err(fail(
+                "leaf implementation does not provide lowerer capability".into(),
+            ));
         }
         (None, Some(_)) => {}
-        (None, None) => return Err(fail("leaf node has no implementation".into())),
+        (None, None) => return Err(fail("node has no executable interpretation".into())),
         (Some(_), Some(_)) => {
             return Err(fail(
                 "leaf implementation and structural role are mutually exclusive".into(),
@@ -310,13 +343,14 @@ fn validate_node(
         .iter()
         .map(|p| (&p.key, p))
         .collect();
-    let parameters: BTreeSet<_> = protocol
+    let parameter_specs: BTreeMap<_, _> = protocol
         .parameters
         .parameters
         .iter()
-        .map(|p| &p.key)
+        .map(|parameter| (&parameter.key, parameter))
         .collect();
-    if parameters.len() != protocol.parameters.parameters.len() {
+    let parameters = parameter_specs.keys().copied().collect::<BTreeSet<_>>();
+    if parameter_specs.len() != protocol.parameters.parameters.len() {
         return Err(fail("duplicate parameter key".into()));
     }
     for port in &protocol.interface.ports {
@@ -332,7 +366,7 @@ fn validate_node(
             validate_schema(
                 schema,
                 &ports,
-                &parameters,
+                &parameter_specs,
                 interface_resolvers,
                 schema_resolvers,
             )
@@ -475,18 +509,130 @@ fn validate_constraint(
 
 fn validate_schema_parameter(
     key: &ParameterKey,
-    parameters: &BTreeSet<&ParameterKey>,
+    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
 ) -> Result<(), String> {
     parameters
-        .contains(key)
+        .contains_key(key)
         .then_some(())
         .ok_or_else(|| format!("schema references unknown parameter '{key}'"))
+}
+
+fn validate_schema_parameter_type(
+    key: &ParameterKey,
+    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+    expected: &str,
+) -> Result<(), String> {
+    validate_schema_parameter(key, parameters)?;
+    let expected = TypeId::new(expected).expect("built-in nominal type ID is valid");
+    if parameters[key].value_type == TypeExpr::Concrete(expected.clone()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "schema parameter '{key}' must have nominal type '{expected}'"
+        ))
+    }
+}
+
+#[cfg(test)]
+mod nominal_schema_tests {
+    use super::*;
+
+    fn parameter(key: &str, value_type: TypeExpr) -> ParameterSpec {
+        ParameterSpec {
+            key: ParameterKey::new(key).unwrap(),
+            title_key: I18nKey::new(format!("parameters.{key}.title")).unwrap(),
+            description_key: None,
+            value_type,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Auto,
+        }
+    }
+
+    fn ports() -> BTreeMap<&'static PortKey, &'static PortSpec> {
+        let key: &'static PortKey = Box::leak(Box::new(PortKey::new("source").unwrap()));
+        let port: &'static PortSpec = Box::leak(Box::new(PortSpec {
+            key: key.clone(),
+            label_key: I18nKey::new("ports.source.title").unwrap(),
+            direction: PortDirection::Input,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Declared,
+            connections: ConnectionsPerPort::Single,
+            input_binding: None,
+            consumption: Some(InputConsumption::Streaming),
+            production: None,
+            editor: PortEditorSpec::Default,
+            schema: None,
+        }));
+        BTreeMap::from([(key, port)])
+    }
+
+    #[test]
+    fn project_and_filter_schema_require_exact_nominal_parameter_types() {
+        let source = || Box::new(SchemaExpr::Input(PortKey::new("source").unwrap()));
+        let project_key = ParameterKey::new("columns").unwrap();
+        let filter_key = ParameterKey::new("predicate").unwrap();
+        let project = SchemaExpr::Project {
+            input: source(),
+            columns: ColumnSelectionExpr::FromParameter(project_key.clone()),
+        };
+        let filter = SchemaExpr::Filter {
+            input: source(),
+            predicate: Some(filter_key.clone()),
+        };
+        let port_map = ports();
+        let interface_resolvers = BTreeSet::<InterfaceResolverId>::new();
+        let schema_resolvers = BTreeSet::<SchemaResolverId>::new();
+
+        for (expression, key, expected_type) in [
+            (
+                project,
+                project_key,
+                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            ),
+            (
+                filter,
+                filter_key,
+                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            ),
+        ] {
+            let wrong = parameter(key.as_str(), TypeExpr::Unknown);
+            let wrong_parameters = BTreeMap::from([(&wrong.key, &wrong)]);
+            assert!(
+                validate_schema(
+                    &expression,
+                    &port_map,
+                    &wrong_parameters,
+                    &interface_resolvers,
+                    &schema_resolvers,
+                )
+                .is_err()
+            );
+
+            let exact = parameter(
+                key.as_str(),
+                TypeExpr::Concrete(TypeId::new(expected_type).unwrap()),
+            );
+            let exact_parameters = BTreeMap::from([(&exact.key, &exact)]);
+            assert!(
+                validate_schema(
+                    &expression,
+                    &port_map,
+                    &exact_parameters,
+                    &interface_resolvers,
+                    &schema_resolvers,
+                )
+                .is_ok()
+            );
+        }
+    }
 }
 
 fn validate_schema(
     expr: &SchemaExpr,
     ports: &BTreeMap<&PortKey, &PortSpec>,
-    parameters: &BTreeSet<&ParameterKey>,
+    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
     interface_resolvers: &BTreeSet<InterfaceResolverId>,
     schema_resolvers: &BTreeSet<SchemaResolverId>,
 ) -> Result<(), String> {
@@ -509,9 +655,11 @@ fn validate_schema(
                 schema_resolvers,
             )?;
             if let ColumnSelectionExpr::FromParameter(key) = columns {
-                if !parameters.contains(key) {
-                    return Err(format!("schema references unknown parameter '{key}'"));
-                }
+                validate_schema_parameter_type(
+                    key,
+                    parameters,
+                    crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                )?;
             }
             Ok(())
         }
@@ -553,13 +701,25 @@ fn validate_schema(
             }
             Ok(())
         }
-        SchemaExpr::Filter { input: nested } => validate_schema(
-            nested,
-            ports,
-            parameters,
-            interface_resolvers,
-            schema_resolvers,
-        ),
+        SchemaExpr::Filter {
+            input: nested,
+            predicate,
+        } => {
+            if let Some(predicate) = predicate {
+                validate_schema_parameter_type(
+                    predicate,
+                    parameters,
+                    crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+                )?;
+            }
+            validate_schema(
+                nested,
+                ports,
+                parameters,
+                interface_resolvers,
+                schema_resolvers,
+            )
+        }
         SchemaExpr::Derived {
             resolver,
             dependencies,
@@ -570,7 +730,7 @@ fn validate_schema(
             for dependency in dependencies {
                 match dependency {
                     SchemaDependency::Port(key) => input(key)?,
-                    SchemaDependency::Parameter(key) if !parameters.contains(key) => {
+                    SchemaDependency::Parameter(key) if !parameters.contains_key(key) => {
                         return Err(format!("schema references unknown parameter '{key}'"));
                     }
                     SchemaDependency::Interface(id) if !interface_resolvers.contains(id) => {

@@ -559,6 +559,12 @@ impl ProjectHistory {
         self.redo.clear();
     }
 
+    #[cfg(test)]
+    pub(crate) fn move_undo_head_to_redo_for_test(&mut self) {
+        let transaction = self.undo.pop().expect("test History has an undo head");
+        self.redo.push(transaction);
+    }
+
     pub fn reload(&mut self, state: &mut ProjectDocumentState, replacement: ProjectDocumentState) {
         *state = replacement;
         self.clear();

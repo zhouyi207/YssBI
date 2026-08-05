@@ -3,7 +3,6 @@ import { useGraphDataStore } from '@/features/core/dataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
   cascadeGraphPathReferences,
@@ -29,8 +28,8 @@ describe('cascadeGraphPathReferences', () => {
     const fixture = makeEditorProjectionFixture({
       graphPath,
       nodeId: 'call-1',
-      nodeTypeId: CALL_FUNCTION_NODE_TYPE,
-      title: 'Call',
+      nodeTypeId: 'yssbi.project.function.call',
+      title: 'Localized call title',
     });
     useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
     useGraphDataStore.setState((state) => ({
@@ -41,6 +40,13 @@ describe('cascadeGraphPathReferences', () => {
           nodes: {
             ...state.graphEntities[graphPath].nodes,
             'call-1': { ...state.graphEntities[graphPath].nodes['call-1'], subGraphPath: from },
+            'legacy-call': {
+              ...state.graphEntities[graphPath].nodes['call-1'],
+              id: 'legacy-call',
+              nodeType: 'Functions:Call Function',
+              subGraphPath: from,
+              title: 'Legacy call label',
+            },
           },
         },
       },
@@ -51,6 +57,8 @@ describe('cascadeGraphPathReferences', () => {
     const node =
       useGraphDataStore.getState().graphEntities['events/Caller.yssbi-event']?.nodes['call-1'];
     expect(node?.subGraphPath).toBe(to);
+    expect(useGraphDataStore.getState().graphEntities[graphPath]?.nodes['legacy-call']?.subGraphPath)
+      .toBe(from);
   });
 
   it('remaps graph meta, variable scope, and editor focus', () => {

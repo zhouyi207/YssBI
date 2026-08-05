@@ -413,7 +413,7 @@ fn compile_component(
         })
         .map(|id| roots[id])
         .collect::<Vec<_>>();
-    let pushdown_hints = infer_pushdown_hints(&operators);
+    let pushdown_hints = infer_pushdown_hints(&operators, &exposed_roots);
 
     let fragment_roots = fragment_ids
         .iter()
@@ -470,8 +470,11 @@ fn remap_operator(
     }
 }
 
-fn infer_pushdown_hints(operators: &[RelationalOperator]) -> Vec<RelationalPushdownHint> {
-    infer_relational_pushdown_hints(operators)
+fn infer_pushdown_hints(
+    operators: &[RelationalOperator],
+    roots: &[RelationalOperatorIndex],
+) -> Vec<RelationalPushdownHint> {
+    infer_relational_pushdown_hints(operators, roots)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -771,6 +774,415 @@ mod tests {
         );
     }
 
+    fn input_operator(operator: RelationalOperator) -> Box<[RelationalOperator]> {
+        Box::new([
+            RelationalOperator::Input {
+                name: "source".into(),
+            },
+            operator,
+        ])
+    }
+
+    fn direct_projection(name: &str) -> RelationalProjection {
+        RelationalProjection {
+            name: name.into(),
+            expression: RelationalExpression::Column(name.into()),
+        }
+    }
+
+    #[test]
+    fn full_relational_chain_is_one_deterministic_zero_bridge_island() {
+        let predicate = RelationalExpression::GreaterThan(
+            Box::new(RelationalExpression::Column("amount".into())),
+            Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(
+                10,
+            ))),
+        );
+        let fragments = [
+            source("source"),
+            RelationalFragment {
+                id: fragment_id("filter"),
+                operators: input_operator(RelationalOperator::Filter {
+                    input: RelationalOperatorIndex::new(0),
+                    predicate: predicate.clone(),
+                }),
+                root: RelationalOperatorIndex::new(1),
+            },
+            RelationalFragment {
+                id: fragment_id("project"),
+                operators: input_operator(RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([direct_projection("amount")]),
+                }),
+                root: RelationalOperatorIndex::new(1),
+            },
+            RelationalFragment {
+                id: fragment_id("rename"),
+                operators: input_operator(RelationalOperator::Rename {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([crate::node_system::plan::RelationalRename {
+                        from: "amount".into(),
+                        to: "total".into(),
+                    }]),
+                }),
+                root: RelationalOperatorIndex::new(1),
+            },
+            RelationalFragment {
+                id: fragment_id("limit"),
+                operators: input_operator(RelationalOperator::Limit {
+                    input: RelationalOperatorIndex::new(0),
+                    rows: 25,
+                }),
+                root: RelationalOperatorIndex::new(1),
+            },
+        ];
+        let connections = [
+            connection("source", "filter"),
+            connection("filter", "project"),
+            connection("project", "rename"),
+            connection("rename", "limit"),
+        ];
+
+        let first = RelationalPlanner::new(backend())
+            .plan(&fragments, &connections)
+            .unwrap();
+        let reversed = RelationalPlanner::new(backend())
+            .plan(
+                &fragments.iter().cloned().rev().collect::<Vec<_>>(),
+                &connections.iter().cloned().rev().collect::<Vec<_>>(),
+            )
+            .unwrap();
+
+        assert_eq!(first, reversed);
+        assert_eq!(first.subplans.len(), 1);
+        assert!(first.bridges.is_empty());
+        let plan = &first.subplans[0].compiled_plan;
+        assert_eq!(plan.operators.len(), 5);
+        assert_eq!(
+            plan.fragment_order.as_ref(),
+            ["source", "filter", "project", "rename", "limit"]
+                .map(fragment_id)
+                .as_slice()
+        );
+        assert!(
+            plan.operators
+                .iter()
+                .all(|operator| !matches!(operator, RelationalOperator::Input { .. }))
+        );
+        assert_eq!(plan.roots.as_ref(), [RelationalOperatorIndex::new(4)]);
+        for (index, operator) in plan.operators.iter().enumerate().skip(1) {
+            assert_eq!(
+                operator_inputs(operator),
+                vec![RelationalOperatorIndex::new(index as u32 - 1)]
+            );
+        }
+    }
+
+    #[test]
+    fn projection_lineage_preserves_declared_column_order() {
+        let fragment = RelationalFragment {
+            id: fragment_id("ordered-project"),
+            operators: Box::new([
+                RelationalOperator::Source {
+                    resource: ResourceId::new("database.main").unwrap(),
+                    relation: "orders".into(),
+                },
+                RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([direct_projection("b"), direct_projection("a")]),
+                },
+            ]),
+            root: RelationalOperatorIndex::new(1),
+        };
+
+        let result = RelationalPlanner::new(backend())
+            .plan(&[fragment], &[])
+            .unwrap();
+
+        assert_eq!(
+            result.subplans[0].compiled_plan.pushdown_hints.as_ref(),
+            [RelationalPushdownHint::Projection {
+                source: RelationalOperatorIndex::new(0),
+                columns: Box::new(["b".into(), "a".into()]),
+            }]
+        );
+    }
+
+    #[test]
+    fn infers_exact_projection_and_predicate_lineage_through_rename() {
+        let predicate = RelationalExpression::Equal(
+            Box::new(RelationalExpression::Column("visible_status".into())),
+            Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                "paid".into(),
+            ))),
+        );
+        let fragment = RelationalFragment {
+            id: fragment_id("lineage"),
+            operators: Box::new([
+                RelationalOperator::Source {
+                    resource: ResourceId::new("database.main").unwrap(),
+                    relation: "orders".into(),
+                },
+                RelationalOperator::Rename {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([crate::node_system::plan::RelationalRename {
+                        from: "status".into(),
+                        to: "visible_status".into(),
+                    }]),
+                },
+                RelationalOperator::Filter {
+                    input: RelationalOperatorIndex::new(1),
+                    predicate,
+                },
+                RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(2),
+                    columns: Box::new([direct_projection("amount")]),
+                },
+            ]),
+            root: RelationalOperatorIndex::new(3),
+        };
+
+        let result = RelationalPlanner::new(backend())
+            .plan(&[fragment], &[])
+            .unwrap();
+
+        assert_eq!(
+            result.subplans[0].compiled_plan.pushdown_hints.as_ref(),
+            [
+                RelationalPushdownHint::Projection {
+                    source: RelationalOperatorIndex::new(0),
+                    columns: Box::new(["amount".into(), "status".into()]),
+                },
+                RelationalPushdownHint::Predicate {
+                    source: RelationalOperatorIndex::new(0),
+                    predicate: RelationalExpression::Equal(
+                        Box::new(RelationalExpression::Column("status".into())),
+                        Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                            "paid".into(),
+                        ))),
+                    ),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn multiple_roots_union_lineage_and_boundaries_stop_it() {
+        let operators = Box::new([
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.main").unwrap(),
+                relation: "orders".into(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([direct_projection("amount")]),
+            },
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: RelationalExpression::IsNull(Box::new(RelationalExpression::Column(
+                    "status".into(),
+                ))),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(2),
+                columns: Box::new([direct_projection("id")]),
+            },
+        ]);
+        let fragments = [
+            RelationalFragment {
+                id: fragment_id("project-root"),
+                operators: operators.clone(),
+                root: RelationalOperatorIndex::new(1),
+            },
+            RelationalFragment {
+                id: fragment_id("filter-root"),
+                operators,
+                root: RelationalOperatorIndex::new(3),
+            },
+        ];
+        let inferred = infer_relational_pushdown_hints(
+            &fragments[0].operators,
+            &[
+                RelationalOperatorIndex::new(3),
+                RelationalOperatorIndex::new(1),
+            ],
+        );
+        assert_eq!(
+            inferred,
+            vec![
+                RelationalPushdownHint::Projection {
+                    source: RelationalOperatorIndex::new(0),
+                    columns: Box::new(["amount".into(), "id".into(), "status".into()]),
+                },
+                RelationalPushdownHint::Predicate {
+                    source: RelationalOperatorIndex::new(0),
+                    predicate: RelationalExpression::IsNull(Box::new(
+                        RelationalExpression::Column("status".into()),
+                    )),
+                },
+            ]
+        );
+
+        let input_boundary = [
+            RelationalOperator::Input {
+                name: "bridge".into(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([direct_projection("amount")]),
+            },
+        ];
+        assert!(
+            infer_relational_pushdown_hints(&input_boundary, &[RelationalOperatorIndex::new(1)])
+                .is_empty()
+        );
+
+        let union_boundary = [
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.a").unwrap(),
+                relation: "a".into(),
+            },
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.b").unwrap(),
+                relation: "b".into(),
+            },
+            RelationalOperator::Union {
+                inputs: Box::new([
+                    RelationalOperatorIndex::new(0),
+                    RelationalOperatorIndex::new(1),
+                ]),
+                all: true,
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(2),
+                columns: Box::new([direct_projection("amount")]),
+            },
+        ];
+        assert!(
+            infer_relational_pushdown_hints(&union_boundary, &[RelationalOperatorIndex::new(3)])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn derived_project_makes_shared_source_unhintable_in_any_root_order() {
+        let operators = [
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.main").unwrap(),
+                relation: "orders".into(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([RelationalProjection {
+                    name: "derived".into(),
+                    expression: RelationalExpression::Literal(RelationalLiteral::Integer(1)),
+                }]),
+            },
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: RelationalExpression::IsNull(Box::new(RelationalExpression::Column(
+                    "status".into(),
+                ))),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(2),
+                columns: Box::new([direct_projection("amount")]),
+            },
+        ];
+
+        for roots in [
+            [
+                RelationalOperatorIndex::new(1),
+                RelationalOperatorIndex::new(3),
+            ],
+            [
+                RelationalOperatorIndex::new(3),
+                RelationalOperatorIndex::new(1),
+            ],
+        ] {
+            assert!(infer_relational_pushdown_hints(&operators, &roots).is_empty());
+        }
+    }
+
+    #[test]
+    fn opaque_metadata_lineage_preserves_direct_source_limit_hint() {
+        let operators = [
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.main").unwrap(),
+                relation: "orders".into(),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns: Box::new([RelationalProjection {
+                    name: "derived".into(),
+                    expression: RelationalExpression::Literal(RelationalLiteral::Integer(1)),
+                }]),
+            },
+            RelationalOperator::Limit {
+                input: RelationalOperatorIndex::new(0),
+                rows: 25,
+            },
+        ];
+
+        assert_eq!(
+            infer_relational_pushdown_hints(
+                &operators,
+                &[
+                    RelationalOperatorIndex::new(1),
+                    RelationalOperatorIndex::new(2)
+                ],
+            ),
+            vec![RelationalPushdownHint::Limit {
+                source: RelationalOperatorIndex::new(0),
+                rows: 25,
+            }]
+        );
+    }
+
+    #[test]
+    fn union_makes_shared_descendant_source_unhintable_in_any_root_order() {
+        let operators = [
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.shared").unwrap(),
+                relation: "shared".into(),
+            },
+            RelationalOperator::Source {
+                resource: ResourceId::new("database.other").unwrap(),
+                relation: "other".into(),
+            },
+            RelationalOperator::Union {
+                inputs: Box::new([
+                    RelationalOperatorIndex::new(0),
+                    RelationalOperatorIndex::new(1),
+                ]),
+                all: true,
+            },
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: RelationalExpression::IsNull(Box::new(RelationalExpression::Column(
+                    "status".into(),
+                ))),
+            },
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(3),
+                columns: Box::new([direct_projection("amount")]),
+            },
+        ];
+
+        for roots in [
+            [
+                RelationalOperatorIndex::new(2),
+                RelationalOperatorIndex::new(4),
+            ],
+            [
+                RelationalOperatorIndex::new(4),
+                RelationalOperatorIndex::new(2),
+            ],
+        ] {
+            assert!(infer_relational_pushdown_hints(&operators, &roots).is_empty());
+        }
+    }
+
     #[test]
     fn emits_only_safe_projection_pushdown_hints() {
         let fragment = RelationalFragment {
@@ -803,10 +1215,19 @@ mod tests {
             .unwrap();
         assert_eq!(
             result.subplans[0].compiled_plan.pushdown_hints.as_ref(),
-            &[RelationalPushdownHint::Projection {
-                source: RelationalOperatorIndex::new(0),
-                columns: Box::new([Box::<str>::from("order_id")]),
-            }]
+            &[
+                RelationalPushdownHint::Projection {
+                    source: RelationalOperatorIndex::new(0),
+                    columns: Box::new([Box::<str>::from("order_id")]),
+                },
+                RelationalPushdownHint::Predicate {
+                    source: RelationalOperatorIndex::new(0),
+                    predicate: RelationalExpression::Equal(
+                        Box::new(RelationalExpression::Column("order_id".into())),
+                        Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(1))),
+                    ),
+                },
+            ]
         );
     }
 }

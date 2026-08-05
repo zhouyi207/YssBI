@@ -72,7 +72,7 @@ fn migrated_coverage_entries_are_owned_by_the_provider_fragment() {
     let node_ids = fragment
         .nodes
         .iter()
-        .map(|node| node.protocol.type_id.as_str())
+        .map(|node| node.protocol().type_id.as_str())
         .collect::<BTreeSet<_>>();
 
     for entry in legacy_coverage() {
@@ -94,22 +94,289 @@ fn protocols_use_unique_stable_port_and_parameter_keys() {
     let fragment = build_provider_fragment();
     for node in fragment.nodes {
         let ports = node
-            .protocol
+            .protocol()
             .interface
             .ports
             .iter()
             .map(|port| port.key.as_str())
             .collect::<BTreeSet<_>>();
-        assert_eq!(ports.len(), node.protocol.interface.ports.len());
+        assert_eq!(ports.len(), node.protocol().interface.ports.len());
 
         let parameters = node
-            .protocol
+            .protocol()
             .parameters
             .parameters
             .iter()
             .map(|parameter| parameter.key.as_str())
             .collect::<BTreeSet<_>>();
-        assert_eq!(parameters.len(), node.protocol.parameters.parameters.len());
+        assert_eq!(
+            parameters.len(),
+            node.protocol().parameters.parameters.len()
+        );
+    }
+}
+
+#[test]
+fn every_legacy_core_entry_has_current_behavioral_or_structural_evidence() {
+    const RUNTIME: &str = "node_system::runtime::builtin_tests";
+    const COMPILER: &str = "node_system::compiler::tests";
+    const PRODUCTION: &str = "project::structured_control_production_tests";
+    const COVERAGE: &[(&str, &str, &[&str])] = &[
+        (
+            "Value:Constants:Boolean",
+            RUNTIME,
+            &["constant_kernels_resolve_compiled_parameters_by_plan_handle"],
+        ),
+        (
+            "Value:Constants:Int64",
+            RUNTIME,
+            &["constant_kernels_resolve_compiled_parameters_by_plan_handle"],
+        ),
+        (
+            "Value:Constants:Float64",
+            RUNTIME,
+            &["constant_kernels_resolve_compiled_parameters_by_plan_handle"],
+        ),
+        (
+            "Value:Constants:String",
+            RUNTIME,
+            &["constant_kernels_resolve_compiled_parameters_by_plan_handle"],
+        ),
+        (
+            "Value:Conversion:Convert",
+            RUNTIME,
+            &["scalar_convert_kernel_covers_supported_targets_and_errors"],
+        ),
+        (
+            "Data:Conversion:String to Categorical",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:String to Float64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:String to Int64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Int64 to String",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Float64 to String",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Int64 to Float64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Float64 to Int64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Int64 to Boolean",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Float64 to Boolean",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Categorical to String",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Int64 to Categorical",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Categorical to Int64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Float64 to Categorical",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Data:Conversion:Categorical to Float64",
+            RUNTIME,
+            &["series_conversion_kernels_cover_every_legacy_conversion"],
+        ),
+        (
+            "Math:Operators:Add (+)",
+            RUNTIME,
+            &["numeric_kernels_execute_int64_and_float64_operations"],
+        ),
+        (
+            "Math:Operators:Subtract (-)",
+            RUNTIME,
+            &["numeric_kernels_execute_int64_and_float64_operations"],
+        ),
+        (
+            "Math:Operators:Multiply (*)",
+            RUNTIME,
+            &["numeric_kernels_execute_int64_and_float64_operations"],
+        ),
+        (
+            "Math:Operators:Divide (/)",
+            RUNTIME,
+            &[
+                "numeric_kernels_execute_int64_and_float64_operations",
+                "builtin_kernels_report_division_by_zero_and_type_errors",
+            ],
+        ),
+        (
+            "Math:Functions:Ln",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Math:Functions:Log2",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Math:Functions:Log10",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Math:Functions:Exp",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Math:Functions:Sqrt",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Math:Functions:Square",
+            RUNTIME,
+            &["unary_math_kernels_execute_each_legacy_operation"],
+        ),
+        (
+            "Logic:Comparison:Equal (==)",
+            RUNTIME,
+            &["equal_kernel_covers_bool_int_string_and_float"],
+        ),
+        (
+            "Logic:Comparison:Not Equal (!=)",
+            RUNTIME,
+            &["compare_and_logic_kernels_execute_through_the_run_scheduler"],
+        ),
+        (
+            "Logic:Boolean:And (&&)",
+            RUNTIME,
+            &["compare_and_logic_kernels_execute_through_the_run_scheduler"],
+        ),
+        (
+            "Logic:Boolean:Or (||)",
+            RUNTIME,
+            &["compare_and_logic_kernels_execute_through_the_run_scheduler"],
+        ),
+        (
+            "Logic:Boolean:Not (!)",
+            RUNTIME,
+            &["compare_and_logic_kernels_execute_through_the_run_scheduler"],
+        ),
+        (
+            "Control Flow:Branch",
+            PRODUCTION,
+            &[
+                "builtin_branch_executes_only_selected_effect_branch_and_binds_result",
+                "builtin_branch_false_path_executes_only_selected_effect_and_binds_result",
+            ],
+        ),
+        (
+            "Control Flow:Sequence",
+            COMPILER,
+            &["builtin_multi_output_sequence_outside_branch_keeps_walker_order"],
+        ),
+        (
+            "Control Flow:Do",
+            PRODUCTION,
+            &["builtin_effect_edge_orders_real_builtins_independent_of_document_insertion"],
+        ),
+        (
+            "Control Flow:Merge",
+            COMPILER,
+            &["branch_continuation_allows_multi_output_sequence_suffix_after_merge"],
+        ),
+        (
+            "Control Flow:Sleep",
+            RUNTIME,
+            &["do_sleep_print_and_view_leaf_kernels_preserve_contracts"],
+        ),
+        (
+            "Control Flow:For Loop",
+            PRODUCTION,
+            &["builtin_loop_carries_initial_and_subsequent_values_across_observable_iterations"],
+        ),
+        (
+            "Control Flow:Switch",
+            RUNTIME,
+            &[
+                "nested_branch_sequence_switch_executes_only_n_way_match",
+                "nested_branch_sequence_switch_executes_default_when_no_case_matches",
+            ],
+        ),
+        (
+            "Control Flow:While Loop",
+            PRODUCTION,
+            &["builtin_loop_reports_iteration_limit_without_committing_result"],
+        ),
+        (
+            "Debug:Print",
+            RUNTIME,
+            &[
+                "do_sleep_print_and_view_leaf_kernels_preserve_contracts",
+                "print_observer_and_trace_preserve_exact_first_second_third_order",
+                "real_graph_connection_overrides_print_protocol_default_at_runtime",
+                "print_protocol_has_default_and_ordered_chain_contract",
+            ],
+        ),
+        (
+            "Debug:Data:View",
+            RUNTIME,
+            &["do_sleep_print_and_view_leaf_kernels_preserve_contracts"],
+        ),
+    ];
+
+    let expected = LEGACY_CORE_NODES.iter().copied().collect::<BTreeSet<_>>();
+    let actual = COVERAGE
+        .iter()
+        .map(|(legacy, _, _)| *legacy)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        actual, expected,
+        "behavior evidence must classify every legacy core entry"
+    );
+    let focused_suites = BTreeSet::from([RUNTIME, COMPILER, PRODUCTION]);
+    for (legacy, suite, tests) in COVERAGE {
+        assert!(
+            focused_suites.contains(suite),
+            "legacy core entry '{legacy}' must name a runnable focused suite"
+        );
+        assert!(
+            !tests.is_empty() && tests.iter().all(|test| !test.trim().is_empty()),
+            "legacy core entry '{legacy}' must name explicit behavior or structural evidence"
+        );
     }
 }
 
@@ -125,7 +392,7 @@ fn every_migrated_node_has_localized_search_terms() {
 
     for node in fragment.nodes {
         let key = node
-            .protocol
+            .protocol()
             .catalog
             .aliases_key
             .as_ref()

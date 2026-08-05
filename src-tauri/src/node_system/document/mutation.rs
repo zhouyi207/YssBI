@@ -274,6 +274,10 @@ pub enum EditorGraphMutationDto {
     DeleteNode {
         node_id: NodeId,
     },
+    SetParameters {
+        node_id: NodeId,
+        parameters: ParameterValues,
+    },
     MoveNodes {
         positions: Vec<NodePositionMutationDto>,
     },
@@ -330,32 +334,61 @@ impl EditorGraphMutationDto {
                 user_label,
             } => {
                 validate_position(position)?;
-                let (node_type_id, parameters, resource_bound) = match descriptor {
-                    NodeCreationDescriptor::Static { node_type_id } => {
-                        (node_type_id, ParameterValues::new(), false)
-                    }
-                    NodeCreationDescriptor::ResourceBound {
-                        node_type_id,
-                        resource_path,
-                        resource_revision,
-                        create_args,
-                    } => (
-                        node_type_id.clone(),
-                        materialize_resource_descriptor(
-                            graph_path,
-                            &node_type_id,
-                            &resource_path,
+                let (node_type_id, parameters, resource_bound, allow_missing_parameters) =
+                    match descriptor {
+                        descriptor @ NodeCreationDescriptor::Static { .. }
+                        | descriptor @ NodeCreationDescriptor::ParameterizedStatic { .. } => {
+                            let node_type_id = match &descriptor {
+                                NodeCreationDescriptor::Static { node_type_id }
+                                | NodeCreationDescriptor::ParameterizedStatic {
+                                    node_type_id,
+                                    ..
+                                } => node_type_id.clone(),
+                                NodeCreationDescriptor::ResourceBound { .. } => unreachable!(),
+                            };
+                            let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
+                                catalog_descriptor_invalid(format!(
+                                    "unknown node type '{node_type_id}'"
+                                ))
+                            })?;
+                            let authoritative =
+                                crate::node_system::catalog::authoritative_static_descriptor(
+                                    registry, protocol,
+                                );
+                            if authoritative.as_ref() != Some(&descriptor) {
+                                return Err(catalog_descriptor_invalid(
+                                    "catalog creation descriptor does not match registry authority",
+                                ));
+                            }
+                            let allow_missing = matches!(
+                                descriptor,
+                                NodeCreationDescriptor::ParameterizedStatic { .. }
+                            );
+                            (node_type_id, ParameterValues::new(), false, allow_missing)
+                        }
+                        NodeCreationDescriptor::ResourceBound {
+                            node_type_id,
+                            resource_path,
                             resource_revision,
                             create_args,
-                            catalog_validation.ok_or_else(|| {
-                                catalog_resource_stale(
-                                    "resource validation snapshot is unavailable",
-                                )
-                            })?,
-                        )?,
-                        true,
-                    ),
-                };
+                        } => (
+                            node_type_id.clone(),
+                            materialize_resource_descriptor(
+                                graph_path,
+                                &node_type_id,
+                                &resource_path,
+                                resource_revision,
+                                create_args,
+                                catalog_validation.ok_or_else(|| {
+                                    catalog_resource_stale(
+                                        "resource validation snapshot is unavailable",
+                                    )
+                                })?,
+                            )?,
+                            true,
+                            false,
+                        ),
+                    };
                 let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
                     if resource_bound {
                         catalog_descriptor_invalid(format!("unknown node type '{node_type_id}'"))
@@ -366,16 +399,40 @@ impl EditorGraphMutationDto {
                 if resource_bound {
                     validate_node_scope(graph_path, protocol)
                         .map_err(catalog_descriptor_validation_error)?;
-                    validate_parameters(protocol, &parameters)
+                    validate_parameters_with_registry(registry, protocol, &parameters)
                         .map_err(catalog_descriptor_validation_error)?;
                 } else {
                     validate_node_scope(graph_path, protocol)?;
-                    validate_parameters(protocol, &parameters)?;
+                    if !allow_missing_parameters {
+                        validate_parameters_with_registry(registry, protocol, &parameters)?;
+                    }
                 }
                 create_node_operations(protocol, node_type_id, position, parameters, user_label)
             }
             Self::DeleteNode { node_id } => {
                 delete_editor_node_operations(document, registry, node_id)?
+            }
+            Self::SetParameters {
+                node_id,
+                parameters,
+            } => {
+                let before = document
+                    .nodes
+                    .get(&node_id)
+                    .cloned()
+                    .ok_or(DocumentError::NodeNotFound(node_id))?;
+                let protocol = registry.protocol(&before.node_type).ok_or_else(|| {
+                    invalid_editor_mutation(format!("unknown node type '{}'", before.node_type))
+                })?;
+                if protocol.managed_role.is_some() {
+                    return Err(invalid_editor_mutation(
+                        "managed node parameters cannot be edited",
+                    ));
+                }
+                validate_parameters_with_registry(registry, protocol, &parameters)?;
+                let mut after = before.clone();
+                after.parameters = parameters;
+                vec![GraphDocumentOperation::UpdateNode { before, after }]
             }
             Self::MoveNodes { positions } => move_node_operations(document, positions)?,
             Self::Connect {
@@ -700,6 +757,28 @@ fn validate_position(position: NodePosition) -> Result<(), MutationConflict> {
     } else {
         Err(invalid_editor_mutation("node position must be finite"))
     }
+}
+
+pub(super) fn validate_parameters_with_registry(
+    registry: &NodeRegistry,
+    protocol: &NodeProtocol,
+    parameters: &ParameterValues,
+) -> Result<(), MutationConflict> {
+    validate_parameters(protocol, parameters)?;
+    for spec in protocol.parameters.parameters.iter() {
+        let (Some(value), TypeExpr::Concrete(type_id)) =
+            (parameters.get(&spec.key), &spec.value_type)
+        else {
+            continue;
+        };
+        if let Some(Err(detail)) = registry.validate_nominal_parameter(type_id, value) {
+            return Err(invalid_editor_mutation(format!(
+                "parameter '{}' is invalid: {detail}",
+                spec.key
+            )));
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn validate_parameters(

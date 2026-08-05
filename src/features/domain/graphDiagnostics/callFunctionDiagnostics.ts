@@ -1,6 +1,6 @@
 import { lookupGraphResource } from '@/features/core/resource/resourceSelectors';
 import type { ProjectResourceMeta, ResourceKey } from '@/features/core/resource/resourceTypes';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import type { NodeData } from '@/shared/types/store/graph';
 
@@ -37,7 +37,7 @@ export function getCallFunctionIssueForNode(
   node: Pick<NodeData, 'id' | 'nodeType' | 'subGraphPath'>,
   resources: Record<ResourceKey, ProjectResourceMeta>,
 ): CallFunctionIssue | null {
-  if (node.nodeType !== CALL_FUNCTION_NODE_TYPE) return null;
+  if (!isCallFunctionNodeType(node.nodeType)) return null;
 
   const subGraphPath = node.subGraphPath?.trim();
   if (!subGraphPath) {

@@ -872,7 +872,10 @@ impl<'a> RunExecutor<'a> {
         frame: &Frame,
     ) -> bool {
         let operation = &plan.operations[operation_index.index()];
-        let inputs_ready = operation.inputs.iter().all(|input| frame.has(input.value));
+        let inputs_ready = operation
+            .inputs
+            .iter()
+            .all(|input| frame.has(input.value) || input.bound_value.is_some());
         let values_ready = operation.outputs.iter().all(|output| {
             plan.value_dependencies
                 .iter()
@@ -1099,7 +1102,15 @@ impl<'a> RunExecutor<'a> {
         let inputs = operation
             .inputs
             .iter()
-            .map(|input| frame.value(input.value).cloned())
+            .map(|input| {
+                if frame.has(input.value) {
+                    frame.value(input.value).cloned()
+                } else if let Some(value) = &input.bound_value {
+                    Ok(RuntimeValue::Scalar(value.clone()))
+                } else {
+                    frame.value(input.value).cloned()
+                }
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let outputs = match &operation.kernel {
             PlannedKernel::Native(handle) => {
@@ -1164,7 +1175,10 @@ impl<'a> RunExecutor<'a> {
                         Ok(value) => value,
                         Err(error) => {
                             cancellation.check()?;
-                            return Err(RunError::BridgeFailed(error.0));
+                            if error.code() == super::RelationalErrorCode::Cancelled {
+                                return Err(RunError::Cancelled);
+                            }
+                            return Err(RunError::BridgeFailed(error.message().into()));
                         }
                     };
                     bridge_inputs.push(RelationalInput {
@@ -1205,10 +1219,7 @@ impl<'a> RunExecutor<'a> {
                     Ok(execution) => execution,
                     Err(error) => {
                         cancellation.check()?;
-                        return Err(RunError::RelationalFailed {
-                            operation: operation_index,
-                            message: error.0,
-                        });
+                        return Err(RunError::from_relational(operation_index, error));
                     }
                 };
                 for (fragment, value) in execution.fragment_outputs {

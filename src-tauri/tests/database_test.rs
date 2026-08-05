@@ -38,7 +38,8 @@ fn setup_iris_duckdb_project() -> (PathBuf, String) {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::new()
+    ProjectState::try_new()
+        .expect("initialize built-in node system")
         .create_project_transaction("Database test", &project_root, OperationId::new())
         .expect("create project fixture");
 
@@ -114,7 +115,7 @@ fn test_duckdb_query_page_and_schema_without_full_load() {
 #[test]
 fn test_project_reload_discovers_duckdb_from_directory() {
     let (project_root, db_id) = setup_iris_duckdb_project();
-    let state = ProjectState::new();
+    let state = ProjectState::try_new().expect("initialize built-in node system");
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(databases.len(), 1);
     assert_eq!(
@@ -141,7 +142,8 @@ fn test_single_project_duckdb_multiple_tables() {
         uuid::Uuid::new_v4()
     ));
     let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::new()
+    ProjectState::try_new()
+        .expect("initialize built-in node system")
         .create_project_transaction("Multi database test", &project_root, OperationId::new())
         .expect("create project fixture");
     let duckdb_path = project_duckdb_abs(&project_root);
@@ -259,7 +261,7 @@ fn test_edit_save_persists_to_duckdb() {
     use yssbi_lib::application::database::save_database_changes;
 
     let (project_root, db_id) = setup_iris_duckdb_project();
-    let state = ProjectState::new();
+    let state = ProjectState::try_new().expect("initialize built-in node system");
     state.activate_project_from_path(&project_root).unwrap();
 
     let (project_instance_id, edit_expected_revision) = database_authority(&state, &db_id);

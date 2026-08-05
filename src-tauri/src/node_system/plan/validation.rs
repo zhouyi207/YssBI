@@ -314,7 +314,21 @@ fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValid
         for root in &compiled.roots {
             check_index(errors, "relational root", root.index(), operator_count);
         }
-        let inferred_pushdown_hints = infer_relational_pushdown_hints(&compiled.operators);
+        let mut lineage_roots = compiled.roots.to_vec();
+        lineage_roots.extend(
+            compiled
+                .requested_fragment_outputs
+                .iter()
+                .filter_map(|fragment| {
+                    compiled
+                        .fragment_roots
+                        .iter()
+                        .find(|root| &root.fragment == fragment)
+                        .map(|root| root.operator)
+                }),
+        );
+        let inferred_pushdown_hints =
+            infer_relational_pushdown_hints(&compiled.operators, &lineage_roots);
         if compiled.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
             errors.push(PlanValidationError::RelationalPushdownHintsMismatch {
                 subplan: RelationalSubplanIndex::new(subplan_index as u32),
@@ -504,6 +518,9 @@ fn validate_input_sources(
     for (operation, planned) in plan.operations.iter().enumerate() {
         let operation = OperationIndex::new(operation as u32);
         for input in &planned.inputs {
+            if input.bound_value.is_some() {
+                continue;
+            }
             let value = input.value.index();
             if value >= value_count {
                 continue;
@@ -751,23 +768,22 @@ fn validate_operation_block(
         .collect::<BTreeSet<_>>();
     loop {
         extend_available_dependencies(plan, available);
-        let ready = pending
-            .iter()
-            .copied()
-            .filter(|operation| {
-                let operation = &plan.operations[operation.index()];
-                operation
-                    .inputs
-                    .iter()
-                    .all(|input| available.contains(&input.value))
-                    && operation.outputs.iter().all(|output| {
+        let ready =
+            pending
+                .iter()
+                .copied()
+                .filter(|operation| {
+                    let operation = &plan.operations[operation.index()];
+                    operation.inputs.iter().all(|input| {
+                        input.bound_value.is_some() || available.contains(&input.value)
+                    }) && operation.outputs.iter().all(|output| {
                         plan.value_dependencies
                             .iter()
                             .filter(|dependency| dependency.destination == output.value)
                             .all(|dependency| available.contains(&dependency.source))
                     })
-            })
-            .collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>();
         if ready.is_empty() {
             break;
         }
@@ -784,7 +800,9 @@ fn validate_operation_block(
     for operation in pending {
         let operation = &plan.operations[operation.index()];
         for input in &operation.inputs {
-            require_available("operation input", input.value, available, errors);
+            if input.bound_value.is_none() {
+                require_available("operation input", input.value, available, errors);
+            }
         }
         for output in &operation.outputs {
             for dependency in plan

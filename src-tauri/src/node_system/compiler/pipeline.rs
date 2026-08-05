@@ -76,6 +76,7 @@ pub struct RegistryNode<'a> {
 #[derive(Clone, Copy)]
 pub enum RegistryNodeBehavior<'a> {
     Leaf(&'a NodeImplementation),
+    ProtocolOnly,
     Structural(StructuralNodeRole),
 }
 
@@ -83,13 +84,13 @@ impl RegistryNode<'_> {
     fn implementation(&self) -> Option<&NodeImplementation> {
         match self.behavior {
             RegistryNodeBehavior::Leaf(implementation) => Some(implementation),
-            RegistryNodeBehavior::Structural(_) => None,
+            RegistryNodeBehavior::ProtocolOnly | RegistryNodeBehavior::Structural(_) => None,
         }
     }
 
     fn structural_role(&self) -> Option<StructuralNodeRole> {
         match self.behavior {
-            RegistryNodeBehavior::Leaf(_) => None,
+            RegistryNodeBehavior::Leaf(_) | RegistryNodeBehavior::ProtocolOnly => None,
             RegistryNodeBehavior::Structural(role) => Some(role),
         }
     }
@@ -99,6 +100,14 @@ impl RegistryNode<'_> {
 pub trait CompilerRegistry: TypeEnvironment {
     fn fingerprint(&self) -> &RegistryFingerprint;
     fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>>;
+
+    fn validate_nominal_parameter(
+        &self,
+        _type_id: &TypeId,
+        _value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        None
+    }
 }
 
 impl TypeEnvironment for NodeRegistry {
@@ -122,18 +131,21 @@ impl CompilerRegistry for NodeRegistry {
 
     fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>> {
         let registered = self.get(node_type)?;
-        let behavior = match (&registered.implementation, registered.structural_role) {
+        let behavior = match (registered.implementation(), registered.structural_role()) {
             (Some(implementation), None) => RegistryNodeBehavior::Leaf(
                 implementation
                     .as_any()
                     .downcast_ref::<NodeImplementation>()
                     .expect("registry freeze guarantees compiler lowering capability"),
             ),
+            (None, None) => RegistryNodeBehavior::ProtocolOnly,
             (None, Some(role)) => RegistryNodeBehavior::Structural(role),
-            _ => unreachable!("registry freeze guarantees one validated node behavior"),
+            (Some(_), Some(_)) => {
+                unreachable!("registry freeze guarantees one validated node behavior")
+            }
         };
         Some(RegistryNode {
-            protocol: &registered.protocol,
+            protocol: registered.protocol(),
             protocol_fingerprint: self
                 .catalog_manifest()
                 .node_protocols
@@ -141,6 +153,14 @@ impl CompilerRegistry for NodeRegistry {
                 .clone(),
             behavior,
         })
+    }
+
+    fn validate_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        NodeRegistry::validate_nominal_parameter(self, type_id, value)
     }
 }
 
@@ -449,6 +469,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         };
         let (semantic, execution_basis, plan) = match lower_graph(
             self.registry,
+            &snapshot.document,
             &semantic,
             &interface_projection,
             &function_abis,
@@ -599,6 +620,7 @@ struct AnalysisState<'a> {
     diagnostics: Vec<NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>>,
     type_facts: BTreeMap<PortAddress, TypeExpr>,
     schema_facts: BTreeMap<PortAddress, crate::node_system::protocol::SchemaExpr>,
+    resolved_schema_facts: BTreeMap<PortAddress, crate::node_system::protocol::ResolvedSchemaFact>,
     projection_only_ports: BTreeSet<PortAddress>,
     interface_projections: BTreeMap<NodeId, ValidatedNodeInterfaceProjection>,
 }
@@ -617,6 +639,7 @@ impl<'a> AnalysisState<'a> {
             diagnostics: Vec::new(),
             type_facts: BTreeMap::new(),
             schema_facts: BTreeMap::new(),
+            resolved_schema_facts: BTreeMap::new(),
             projection_only_ports: BTreeSet::new(),
             interface_projections: BTreeMap::new(),
         }
@@ -675,7 +698,7 @@ impl<'a> AnalysisState<'a> {
                 );
                 continue;
             }
-            let parameters = self.normalize_parameters(node_id, resolved.protocol);
+            let parameters = self.normalize_parameters(node_id, resolved.protocol, registry);
             let ports =
                 self.resolve_ports(node_id, resolved.protocol, resources, interface_resolvers);
             self.nodes.insert(
@@ -1049,10 +1072,11 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn normalize_parameters(
+    fn normalize_parameters<R: CompilerRegistry>(
         &mut self,
         node_id: NodeId,
         protocol: &NodeProtocol,
+        registry: &R,
     ) -> BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value> {
         let supplied = &self.document.nodes[&node_id].parameters;
         let specs: BTreeMap<_, _> = protocol
@@ -1077,6 +1101,20 @@ impl<'a> AnalysisState<'a> {
             }
         }
         for spec in protocol.parameters.parameters.iter() {
+            if let (Some(value), TypeExpr::Concrete(type_id)) =
+                (normalized.get(&spec.key), &spec.value_type)
+            {
+                if let Some(Err(detail)) = registry.validate_nominal_parameter(type_id, value) {
+                    self.push(
+                        "compiler.parameter.invalid",
+                        DiagnosticLocation::Parameter {
+                            node_id,
+                            key: spec.key.clone(),
+                        },
+                        detail,
+                    );
+                }
+            }
             if !normalized.contains_key(&spec.key) {
                 if let Some(default) = &spec.default_value {
                     if let Ok(value) = serde_json::to_value(default) {
@@ -1462,8 +1500,9 @@ impl<'a> AnalysisState<'a> {
                 analyzer.add_connection(connection.output.clone(), connection.input.clone());
             }
         }
-        let (facts, issues) = analyzer.analyze();
-        self.schema_facts = facts;
+        let (expressions, facts, issues) = analyzer.analyze();
+        self.schema_facts = expressions;
+        self.resolved_schema_facts = facts;
         for issue in issues {
             self.push(issue.code, issue.location, issue.detail);
         }
@@ -1537,6 +1576,7 @@ impl<'a> AnalysisState<'a> {
             resolved_interfaces,
             partial_types: self.type_facts.clone(),
             partial_schemas: self.schema_facts.clone(),
+            resolved_schemas: self.resolved_schema_facts.clone(),
             diagnostics: self.diagnostics.clone().into_boxed_slice(),
         }
     }
@@ -1601,6 +1641,7 @@ impl<'a> AnalysisState<'a> {
             basis: self.basis.clone(),
             nodes,
             dependencies,
+            resolved_schemas: self.resolved_schema_facts.clone(),
         }
     }
 }
@@ -1750,6 +1791,7 @@ fn derive_function_abi<R: CompilerRegistry>(
 
 fn lower_graph<R: CompilerRegistry>(
     registry: &R,
+    document: &GraphDocument,
     graph: &CompilerSemanticGraph,
     interface_projection: &ValidatedInterfaceProjection,
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
@@ -1849,11 +1891,42 @@ fn lower_graph<R: CompilerRegistry>(
                 }
                 PortDirection::Input => {
                     inputs.push((port.address.clone(), value));
+                    let has_connection = document
+                        .connections
+                        .values()
+                        .any(|connection| connection.input == port.address);
+                    let bound_value = if has_connection {
+                        None
+                    } else if let Some(literal) = document
+                        .input_states
+                        .get(&port.address)
+                        .and_then(|state| state.literal_override.as_ref())
+                    {
+                        Some(
+                            serde_json::from_value::<crate::node_system::protocol::TypedValue>(
+                                literal.clone(),
+                            )
+                            .map_err(|error| {
+                                diagnostic(
+                                    "compiler.lowering.failed",
+                                    DiagnosticLocation::Port(port.address.clone()),
+                                    format!("invalid literal binding: {error}"),
+                                )
+                            })?
+                            .value,
+                        )
+                    } else {
+                        spec.input_binding
+                            .as_ref()
+                            .and_then(|binding| binding.default_value.as_ref())
+                            .map(|default| default.value.clone())
+                    };
                     planned_inputs.push(PlannedInput {
                         value,
                         consumption: spec
                             .consumption
                             .unwrap_or(InputConsumption::FullyMaterialized),
+                        bound_value,
                     });
                 }
             }

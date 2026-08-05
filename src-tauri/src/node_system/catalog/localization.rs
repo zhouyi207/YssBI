@@ -132,6 +132,13 @@ pub enum NodeCreationDescriptor {
         #[serde(rename = "nodeTypeId")]
         node_type_id: NodeTypeId,
     },
+    #[serde(rename = "parameterizedStatic")]
+    ParameterizedStatic {
+        #[serde(rename = "nodeTypeId")]
+        node_type_id: NodeTypeId,
+        #[serde(rename = "requiredParameters")]
+        required_parameters: Box<[crate::node_system::protocol::ParameterKey]>,
+    },
     #[serde(rename = "resourceBound")]
     ResourceBound {
         #[serde(rename = "nodeTypeId")]
@@ -222,15 +229,45 @@ impl std::fmt::Display for I18nBundleValidationError {
 
 impl std::error::Error for I18nBundleValidationError {}
 
-fn static_descriptor_is_eligible(protocol: &crate::node_system::protocol::NodeProtocol) -> bool {
-    !protocol.catalog.hidden
-        && protocol.managed_role.is_none()
-        && !protocol.parameters.parameters.iter().any(|parameter| {
+pub(crate) fn authoritative_static_descriptor(
+    registry: &NodeRegistry,
+    protocol: &crate::node_system::protocol::NodeProtocol,
+) -> Option<NodeCreationDescriptor> {
+    if protocol.catalog.hidden || protocol.managed_role.is_some() {
+        return None;
+    }
+    let required_parameters = protocol
+        .parameters
+        .parameters
+        .iter()
+        .filter(|parameter| {
             parameter.default_value.is_none()
                 && parameter
                     .constraints
                     .contains(&crate::node_system::protocol::ParameterConstraint::Required)
         })
+        .collect::<Vec<_>>();
+    if required_parameters.is_empty() {
+        return Some(NodeCreationDescriptor::Static {
+            node_type_id: protocol.type_id.clone(),
+        });
+    }
+    if !required_parameters.iter().all(|parameter| {
+        matches!(
+            &parameter.value_type,
+            crate::node_system::protocol::TypeExpr::Concrete(type_id)
+                if registry.has_nominal_parameter_validator(type_id)
+        )
+    }) {
+        return None;
+    }
+    Some(NodeCreationDescriptor::ParameterizedStatic {
+        node_type_id: protocol.type_id.clone(),
+        required_parameters: required_parameters
+            .into_iter()
+            .map(|parameter| parameter.key.clone())
+            .collect(),
+    })
 }
 
 impl BuiltinCatalog {
@@ -243,6 +280,26 @@ impl BuiltinCatalog {
             );
         }
         Self { bundles }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn remove_message_for_test(&mut self, locale: &str, key: &I18nKey) {
+        if let Some(bundle) = self.bundles.get_mut(locale) {
+            bundle.remove(key);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_message_for_test(
+        &mut self,
+        locale: &str,
+        key: I18nKey,
+        message: Message,
+    ) {
+        self.bundles
+            .entry(locale.into())
+            .or_default()
+            .insert(key, message);
     }
 
     pub fn localization(&self, locale: &str) -> BuiltinLocalizationBundle<'_> {
@@ -277,8 +334,10 @@ impl BuiltinCatalog {
             .collect();
         let mut items = registry
             .iter()
-            .filter(|(_, node)| static_descriptor_is_eligible(&node.protocol))
-            .map(|(id, node)| self.static_item(id, &node.protocol, &locale))
+            .filter_map(|(_, node)| {
+                let descriptor = authoritative_static_descriptor(registry, node.protocol())?;
+                Some(self.static_item(node.protocol(), &locale, descriptor))
+            })
             .collect::<Vec<_>>();
         let mut resources = resources.iter().collect::<Vec<_>>();
         resources.sort_by(|left, right| {
@@ -288,8 +347,8 @@ impl BuiltinCatalog {
         });
         items.extend(resources.into_iter().filter_map(|entry| {
             let node = registry.get(&entry.node_type_id)?;
-            (!node.protocol.catalog.hidden)
-                .then(|| self.resource_item(entry, &node.protocol, &locale))
+            (!node.protocol().catalog.hidden)
+                .then(|| self.resource_item(entry, node.protocol(), &locale))
         }));
         LocalizedCatalog {
             locale: locale.into(),
@@ -365,9 +424,9 @@ impl BuiltinCatalog {
 
     fn static_item(
         &self,
-        id: &NodeTypeId,
         protocol: &crate::node_system::protocol::NodeProtocol,
         locale: &str,
+        creation: NodeCreationDescriptor,
     ) -> LocalizedCatalogItemDto {
         let title = self.text(locale, &protocol.catalog.title_key);
         let description = protocol
@@ -393,7 +452,7 @@ impl BuiltinCatalog {
                 .chain(aliases.iter().map(AsRef::as_ref)),
         );
         LocalizedCatalogItemDto {
-            node_type_id: id.as_str().into(),
+            node_type_id: protocol.type_id.as_str().into(),
             title,
             description,
             documentation,
@@ -407,9 +466,7 @@ impl BuiltinCatalog {
             parameters: self.localized_parameters(protocol, locale),
             resource_path: None,
             resource_revision: None,
-            creation: NodeCreationDescriptor::Static {
-                node_type_id: id.clone(),
-            },
+            creation,
             search_text,
         }
     }

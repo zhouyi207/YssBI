@@ -512,12 +512,12 @@ mod tests {
         assert!(cancellation.is_cancelled());
         assert!(drained_rx.try_recv().is_err());
 
-        let (provider, _) = crate::node_system::catalog::build_builtin_provider();
-        let mut registry_builder = crate::node_system::registry::NodeRegistryBuilder::new();
-        registry_builder.register_provider(provider).unwrap();
-        let node_registry = registry_builder.freeze().unwrap();
+        let node_registry = crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let resources = EmptyResources;
-        let compiler = crate::node_system::compiler::GraphCompiler::new(&node_registry, &resources);
+        let compiler =
+            crate::node_system::compiler::GraphCompiler::new(node_registry.as_ref(), &resources);
         let snapshot = compiler.snapshot(
             crate::node_system::document::GraphResourcePath("events/cancelled".into()),
             &crate::node_system::document::GraphDocument::default(),

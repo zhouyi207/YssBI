@@ -8,7 +8,7 @@ use crate::node_system::document::{
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, ParameterEditorSpec, PortDirection, PortEditorSpec, PortInstances,
-    PortKind, SchemaExpr, TypeExpr,
+    PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact, SchemaExpr, TypeExpr,
 };
 use crate::node_system::registry::{NodeRegistry, RegistryFingerprint};
 use serde::{Deserialize, Serialize};
@@ -198,6 +198,26 @@ pub struct TypeSummaryDto {
 #[serde(rename_all = "camelCase")]
 pub struct SchemaSummaryDto {
     pub kind: SchemaSummaryKindDto,
+    pub fields: Vec<SchemaFieldDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchemaFieldDto {
+    pub name: Box<str>,
+    pub scalar_type: RelationalScalarTypeDto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RelationalScalarTypeDto {
+    Boolean,
+    Int64,
+    Float64,
+    String,
+    Date,
+    DateTime,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -226,6 +246,53 @@ pub struct ParameterEditorDto {
     pub editor: ParameterEditorKindDto,
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
+    pub configuration: Option<SchemaAwareParameterEditorDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SchemaAwareParameterEditorDto {
+    ProjectColumns {
+        available: bool,
+        unavailable_reason: Option<Box<str>>,
+        options: Vec<DataframeColumnOptionDto>,
+        value: Vec<Box<str>>,
+    },
+    FilterPredicate {
+        available: bool,
+        unavailable_reason: Option<Box<str>>,
+        columns: Vec<FilterColumnOptionDto>,
+        value: Option<serde_json::Value>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataframeColumnOptionDto {
+    pub name: Box<str>,
+    pub data_type: RelationalScalarTypeDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterColumnOptionDto {
+    pub name: Box<str>,
+    pub data_type: RelationalScalarTypeDto,
+    pub operators: Vec<crate::node_system::parameter_types::dataframe::FilterOperator>,
+    pub literal_types: Vec<FilterLiteralTypeDto>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterLiteralTypeDto {
+    Boolean,
+    Integer,
+    Decimal,
+    String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -404,7 +471,7 @@ impl EditorGraphProjectionDto {
             .nodes
             .values()
             .map(|node| {
-                let protocol = registry.get(&node.node_type).map(|entry| &entry.protocol);
+                let protocol = registry.get(&node.node_type).map(|entry| entry.protocol());
                 let normalized = analyzed_nodes
                     .get(&node.id)
                     .map(|node| &node.normalized_parameters);
@@ -518,7 +585,12 @@ impl EditorGraphProjectionDto {
                                     resolved_schema: analysis
                                         .partial_schemas
                                         .get(&port.address)
-                                        .map(project_schema_summary),
+                                        .map(|expression| {
+                                            project_schema_summary(
+                                                expression,
+                                                analysis.resolved_schemas.get(&port.address),
+                                            )
+                                        }),
                                     status: port.status.into(),
                                 })
                             })
@@ -534,6 +606,20 @@ impl EditorGraphProjectionDto {
                             .filter_map(|parameter| {
                                 let (editor, multiline) =
                                     project_parameter_editor(&parameter.editor)?;
+                                let value = normalized
+                                    .and_then(|values| values.get(&parameter.key))
+                                    .cloned()
+                                    .or_else(|| node.parameters.get(&parameter.key).cloned());
+                                let source_schema =
+                                    analysis.resolved_schemas.get(&PortAddress::declared(
+                                        node.id,
+                                        PortKey::new("source").expect("static source port key"),
+                                    ));
+                                let unavailable_reason = localization.text(
+                                    &I18nKey::new("editors.dataframe.connect_source")
+                                        .expect("static editor localization key"),
+                                    &DiagnosticArguments::new(),
+                                );
                                 Some(ParameterEditorDto {
                                     key: parameter.key.as_str().into(),
                                     display: ParameterDisplayDto {
@@ -549,10 +635,13 @@ impl EditorGraphProjectionDto {
                                     },
                                     editor,
                                     multiline,
-                                    value: normalized
-                                        .and_then(|values| values.get(&parameter.key))
-                                        .cloned()
-                                        .or_else(|| node.parameters.get(&parameter.key).cloned()),
+                                    value: value.clone(),
+                                    configuration: project_schema_aware_editor(
+                                        node.node_type.as_str(),
+                                        value.as_ref(),
+                                        source_schema,
+                                        unavailable_reason,
+                                    ),
                                 })
                             })
                             .collect()
@@ -585,7 +674,7 @@ impl EditorGraphProjectionDto {
                         style_id: Some(protocol.catalog.style_id.as_str().into()),
                     },
                 );
-                let capabilities = project_node_capabilities(protocol.map(|value| value.as_ref()));
+                let capabilities = project_node_capabilities(protocol);
                 EditorNodeProjectionDto {
                     graph_path: graph_path.clone(),
                     source_revision,
@@ -867,7 +956,10 @@ fn type_is_resolved(value: &TypeExpr) -> bool {
     }
 }
 
-fn project_schema_summary(value: &SchemaExpr) -> SchemaSummaryDto {
+fn project_schema_summary(
+    value: &SchemaExpr,
+    resolved: Option<&ResolvedSchemaFact>,
+) -> SchemaSummaryDto {
     let kind = match value {
         SchemaExpr::Input(_) => SchemaSummaryKindDto::Input,
         SchemaExpr::Project { .. } => SchemaSummaryKindDto::Project,
@@ -876,7 +968,15 @@ fn project_schema_summary(value: &SchemaExpr) -> SchemaSummaryDto {
         SchemaExpr::Filter { .. } => SchemaSummaryKindDto::Filter,
         SchemaExpr::Derived { .. } => SchemaSummaryKindDto::Derived,
     };
-    SchemaSummaryDto { kind }
+    let fields = resolved
+        .into_iter()
+        .flat_map(|fact| fact.fields.iter())
+        .map(|field| SchemaFieldDto {
+            name: field.name.0.clone(),
+            scalar_type: relational_scalar_type_dto(field.scalar_type),
+        })
+        .collect();
+    SchemaSummaryDto { kind, fields }
 }
 
 fn orphan_label(document: &GraphDocument, address: &PortAddress) -> Option<Box<str>> {
@@ -885,6 +985,111 @@ fn orphan_label(document: &GraphDocument, address: &PortAddress) -> Option<Box<s
             Some(last_known.label.as_str().into())
         }
         _ => None,
+    }
+}
+
+fn project_schema_aware_editor(
+    node_type_id: &str,
+    value: Option<&serde_json::Value>,
+    source_schema: Option<&ResolvedSchemaFact>,
+    unavailable_reason: Box<str>,
+) -> Option<SchemaAwareParameterEditorDto> {
+    use crate::node_system::parameter_types::dataframe::{FilterPredicate, ProjectColumns};
+
+    let available = source_schema.is_some();
+    let unavailable_reason = (!available).then_some(unavailable_reason);
+    match node_type_id {
+        "yssbi.dataframe.project" => Some(SchemaAwareParameterEditorDto::ProjectColumns {
+            available,
+            unavailable_reason,
+            options: source_schema
+                .into_iter()
+                .flat_map(|fact| fact.fields.iter())
+                .map(project_dataframe_column_option)
+                .collect(),
+            value: value
+                .and_then(|value| serde_json::from_value::<ProjectColumns>(value.clone()).ok())
+                .map(|columns| columns.as_slice().to_vec())
+                .unwrap_or_default(),
+        }),
+        "yssbi.dataframe.filter.rows" => Some(SchemaAwareParameterEditorDto::FilterPredicate {
+            available,
+            unavailable_reason,
+            columns: source_schema
+                .into_iter()
+                .flat_map(|fact| fact.fields.iter())
+                .map(|field| FilterColumnOptionDto {
+                    name: field.name.0.clone(),
+                    data_type: relational_scalar_type_dto(field.scalar_type),
+                    operators: filter_operators(field.scalar_type),
+                    literal_types: filter_literal_types(field.scalar_type),
+                })
+                .collect(),
+            value: value
+                .and_then(|value| serde_json::from_value::<FilterPredicate>(value.clone()).ok())
+                .and_then(|predicate| serde_json::to_value(predicate).ok()),
+        }),
+        _ => return None,
+    }
+}
+
+fn project_dataframe_column_option(
+    field: &crate::node_system::protocol::SchemaField,
+) -> DataframeColumnOptionDto {
+    DataframeColumnOptionDto {
+        name: field.name.0.clone(),
+        data_type: relational_scalar_type_dto(field.scalar_type),
+    }
+}
+
+fn relational_scalar_type_dto(value: RelationalScalarType) -> RelationalScalarTypeDto {
+    match value {
+        RelationalScalarType::Boolean => RelationalScalarTypeDto::Boolean,
+        RelationalScalarType::Int64 => RelationalScalarTypeDto::Int64,
+        RelationalScalarType::Float64 => RelationalScalarTypeDto::Float64,
+        RelationalScalarType::String => RelationalScalarTypeDto::String,
+        RelationalScalarType::Date => RelationalScalarTypeDto::Date,
+        RelationalScalarType::DateTime => RelationalScalarTypeDto::DateTime,
+        RelationalScalarType::Unknown => RelationalScalarTypeDto::Unknown,
+    }
+}
+
+fn filter_literal_types(scalar_type: RelationalScalarType) -> Vec<FilterLiteralTypeDto> {
+    match scalar_type {
+        RelationalScalarType::Boolean => vec![FilterLiteralTypeDto::Boolean],
+        RelationalScalarType::Int64 => vec![FilterLiteralTypeDto::Integer],
+        RelationalScalarType::Float64 => {
+            vec![FilterLiteralTypeDto::Integer, FilterLiteralTypeDto::Decimal]
+        }
+        RelationalScalarType::String => vec![FilterLiteralTypeDto::String],
+        RelationalScalarType::Date
+        | RelationalScalarType::DateTime
+        | RelationalScalarType::Unknown => vec![],
+    }
+}
+
+fn filter_operators(
+    scalar_type: RelationalScalarType,
+) -> Vec<crate::node_system::parameter_types::dataframe::FilterOperator> {
+    use crate::node_system::parameter_types::dataframe::FilterOperator::*;
+    match scalar_type {
+        RelationalScalarType::Boolean => vec![Equal, NotEqual, IsNull, IsNotNull],
+        RelationalScalarType::Int64
+        | RelationalScalarType::Float64
+        | RelationalScalarType::String => vec![
+            Equal,
+            NotEqual,
+            LessThan,
+            LessThanOrEqual,
+            GreaterThan,
+            GreaterThanOrEqual,
+            IsNull,
+            IsNotNull,
+        ],
+        RelationalScalarType::Date | RelationalScalarType::DateTime => {
+            vec![IsNull, IsNotNull]
+        }
+        RelationalScalarType::Unknown => vec![],
     }
 }
 
@@ -1005,7 +1210,7 @@ impl From<DiagnosticSeverity> for DiagnosticSeverityDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
     use crate::node_system::document::{
         DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -1116,6 +1321,159 @@ mod tests {
     }
 
     #[test]
+    fn schema_aware_editors_are_unavailable_without_source_schema() {
+        for (node_type, value, expected_kind) in [
+            (
+                "yssbi.dataframe.project",
+                Some(json!(["amount"])),
+                "projectColumns",
+            ),
+            (
+                "yssbi.dataframe.filter.rows",
+                Some(json!({
+                    "column": "amount",
+                    "operator": "greaterThan",
+                    "value": { "type": "decimal", "value": "10.5" }
+                })),
+                "filterPredicate",
+            ),
+        ] {
+            let editor = project_schema_aware_editor(
+                node_type,
+                value.as_ref(),
+                None,
+                "Connect DataFrame input".into(),
+            )
+            .expect("schema-aware editor");
+            let serialized = serde_json::to_value(editor).unwrap();
+            assert_eq!(serialized["kind"], expected_kind);
+            assert_eq!(serialized["available"], false);
+            assert_eq!(serialized["unavailableReason"], "Connect DataFrame input");
+            let options = serialized
+                .get("options")
+                .or_else(|| serialized.get("columns"))
+                .unwrap();
+            assert_eq!(options, &json!([]));
+        }
+    }
+
+    #[test]
+    fn schema_aware_editors_project_typed_options_and_operator_matrix() {
+        use crate::node_system::protocol::{
+            RelationalScalarType, ResolvedSchemaFact, SchemaColumnRef, SchemaField,
+        };
+
+        let fact = ResolvedSchemaFact::new(
+            SchemaExpr::Input(PortKey::new("source").unwrap()),
+            [
+                SchemaField {
+                    name: SchemaColumnRef("active".into()),
+                    scalar_type: RelationalScalarType::Boolean,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("count".into()),
+                    scalar_type: RelationalScalarType::Int64,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("amount".into()),
+                    scalar_type: RelationalScalarType::Float64,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("status".into()),
+                    scalar_type: RelationalScalarType::String,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("day".into()),
+                    scalar_type: RelationalScalarType::Date,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("created".into()),
+                    scalar_type: RelationalScalarType::DateTime,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("opaque".into()),
+                    scalar_type: RelationalScalarType::Unknown,
+                },
+            ],
+        );
+        let project = project_schema_aware_editor(
+            "yssbi.dataframe.project",
+            Some(&json!(["status", "count"])),
+            Some(&fact),
+            "unused".into(),
+        )
+        .unwrap();
+        let project = serde_json::to_value(project).unwrap();
+        assert_eq!(project["value"], json!(["status", "count"]));
+        assert_eq!(
+            project["options"][0],
+            json!({ "name": "active", "dataType": "boolean" })
+        );
+        assert_eq!(
+            project["options"][6],
+            json!({ "name": "opaque", "dataType": "unknown" })
+        );
+
+        let predicate = json!({
+            "column": "count",
+            "operator": "greaterThan",
+            "value": { "type": "integer", "value": "9007199254740993" }
+        });
+        let filter = project_schema_aware_editor(
+            "yssbi.dataframe.filter.rows",
+            Some(&predicate),
+            Some(&fact),
+            "unused".into(),
+        )
+        .unwrap();
+        let filter = serde_json::to_value(filter).unwrap();
+        assert_eq!(filter["value"], predicate);
+        assert_eq!(
+            filter["columns"][0]["operators"],
+            json!(["equal", "notEqual", "isNull", "isNotNull"])
+        );
+        assert_eq!(
+            filter["columns"][1]["operators"],
+            json!([
+                "equal",
+                "notEqual",
+                "lessThan",
+                "lessThanOrEqual",
+                "greaterThan",
+                "greaterThanOrEqual",
+                "isNull",
+                "isNotNull"
+            ])
+        );
+        assert_eq!(
+            filter["columns"][2]["operators"],
+            filter["columns"][1]["operators"]
+        );
+        assert_eq!(
+            filter["columns"][3]["operators"],
+            filter["columns"][1]["operators"]
+        );
+        assert_eq!(
+            filter["columns"][4]["operators"],
+            json!(["isNull", "isNotNull"])
+        );
+        assert_eq!(
+            filter["columns"][5]["operators"],
+            json!(["isNull", "isNotNull"])
+        );
+        assert_eq!(filter["columns"][6]["operators"], json!([]));
+        assert_eq!(filter["columns"][0]["literalTypes"], json!(["boolean"]));
+        assert_eq!(filter["columns"][1]["literalTypes"], json!(["integer"]));
+        assert_eq!(
+            filter["columns"][2]["literalTypes"],
+            json!(["integer", "decimal"])
+        );
+        assert_eq!(filter["columns"][3]["literalTypes"], json!(["string"]));
+        assert_eq!(filter["columns"][4]["literalTypes"], json!([]));
+        assert_eq!(filter["columns"][6]["literalTypes"], json!([]));
+    }
+
+    #[test]
     fn diagnostic_locations_serialize_struct_fields_as_camel_case() {
         let locations = vec![
             DiagnosticLocationDto::Node {
@@ -1156,8 +1514,9 @@ mod tests {
 
     #[test]
     fn editor_projection_includes_positions_connections_and_input_bindings() {
-        let registry = build_builtin_registry();
-        let (_, catalog) = build_builtin_provider();
+        let builtin = build_builtin_node_system().unwrap();
+        let registry = builtin.registry;
+        let catalog = builtin.catalog;
         let branch_id = NodeId::from_uuid(Uuid::from_u128(1));
         let sleep_id = NodeId::from_uuid(Uuid::from_u128(2));
         let connection_id = ConnectionId::from_uuid(Uuid::from_u128(3));
@@ -1201,7 +1560,7 @@ mod tests {
                 literal_override: Some(json!(true)),
             },
         );
-        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+        let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
             .compile(&document)
             .analysis;
         let localization = catalog.localization("en-US");
@@ -1323,8 +1682,9 @@ mod tests {
 
     #[test]
     fn grouped_port_removal_capability_distinguishes_complete_and_partial_members() {
-        let registry = build_builtin_registry();
-        let (_, catalog) = build_builtin_provider();
+        let builtin = build_builtin_node_system().unwrap();
+        let registry = builtin.registry;
+        let catalog = builtin.catalog;
         let loop_id = NodeId::from_uuid(Uuid::from_u128(20));
         let complete_id = PortInstanceId::from_uuid(Uuid::from_u128(21));
         let partial_id = PortInstanceId::from_uuid(Uuid::from_u128(22));
@@ -1356,7 +1716,7 @@ mod tests {
                 )
                 .unwrap();
         }
-        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+        let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
             .compile(&document)
             .analysis;
         let projection = EditorGraphProjectionDto::from_sources(
@@ -1387,8 +1747,9 @@ mod tests {
 
     #[test]
     fn grouped_port_capability_ignores_non_user_created_siblings() {
-        let registry = build_builtin_registry();
-        let (_, catalog) = build_builtin_provider();
+        let builtin = build_builtin_node_system().unwrap();
+        let registry = builtin.registry;
+        let catalog = builtin.catalog;
         let loop_id = NodeId::from_uuid(Uuid::from_u128(30));
         let complete_id = PortInstanceId::from_uuid(Uuid::from_u128(31));
         let mixed_id = PortInstanceId::from_uuid(Uuid::from_u128(32));
@@ -1458,7 +1819,7 @@ mod tests {
                 .unwrap();
         }
 
-        let analysis = GraphCompiler::new(&registry, &EmptyResources)
+        let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
             .compile(&document)
             .analysis;
         let projection = EditorGraphProjectionDto::from_sources(
@@ -1546,6 +1907,30 @@ mod tests {
 
         current.apply_delta(delta).unwrap();
         assert_eq!(current, next);
+    }
+
+    #[test]
+    fn editor_schema_summary_projects_transformed_typed_fields() {
+        let fact = crate::node_system::protocol::ResolvedSchemaFact::new(
+            SchemaExpr::Rename {
+                input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
+                mapping: crate::node_system::protocol::RenameExpr::Explicit(vec![]),
+            },
+            [crate::node_system::protocol::SchemaField {
+                name: crate::node_system::protocol::SchemaColumnRef("total".into()),
+                scalar_type: crate::node_system::protocol::RelationalScalarType::Float64,
+            }],
+        );
+
+        let summary = project_schema_summary(&fact.expression, Some(&fact));
+
+        assert_eq!(
+            summary.fields,
+            vec![SchemaFieldDto {
+                name: "total".into(),
+                scalar_type: RelationalScalarTypeDto::Float64,
+            }]
+        );
     }
 
     #[test]

@@ -169,7 +169,7 @@ impl ProjectState {
             activation_data,
             Some(authority_basis),
             false,
-        );
+        )?;
         committed.finalize();
         root_guard.disarm();
         Ok(PreparedProjectCopy {
@@ -258,7 +258,8 @@ impl ProjectState {
             active.as_ref().map(|session| session.instance_id.clone());
         let cleared_activation = cleared_project_instance_id
             .as_ref()
-            .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false));
+            .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false))
+            .transpose()?;
         root_binding.revalidate()?;
         rename_project_root(normalized.as_path(), &tombstone_path)?;
         let post_tombstone_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -570,6 +571,55 @@ mod tests {
         (state, root, instance_id)
     }
 
+    fn record_graph_transaction(state: &ProjectState, graph_path: &GraphResourcePath) {
+        let node = DocumentNode {
+            id: NodeId::new(),
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        state
+            .apply_graph_patch(
+                graph_path,
+                MutationRequest::new(
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        graph_path.as_str().into(),
+                    )),
+                    ResourceRevision::INITIAL,
+                    OperationId::new(),
+                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node }]),
+                ),
+            )
+            .unwrap();
+    }
+
+    fn assert_lifecycle_unload_snapshot(
+        state: &ProjectState,
+        graph_path: &GraphResourcePath,
+        before_data: &serde_json::Value,
+        before_history: crate::node_system::document::HistoryStatusDto,
+        before_lengths: (usize, usize),
+        before_head: Option<crate::node_system::document::HistoryEntryId>,
+        before_revisions: &(
+            std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+            std::collections::HashMap<crate::variable::VariableId, ResourceRevision>,
+            std::collections::HashMap<String, ResourceRevision>,
+        ),
+        before_generation: u64,
+    ) {
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            *before_data
+        );
+        assert!(state.get_data().unwrap().graphs.contains_key(graph_path));
+        assert_eq!(state.history_status(), before_history);
+        assert_eq!(state.history_lengths_for_test(), before_lengths);
+        assert_eq!(state.history_head_id_for_test(true), before_head);
+        assert_eq!(&state.revision_state_for_test(), before_revisions);
+        assert_eq!(state.authority_generation_for_test(), before_generation);
+    }
+
     #[test]
     fn lifecycle_unload_retains_exact_graph_revision() {
         let (state, root, instance_id) = active_state("unload-revision");
@@ -612,6 +662,161 @@ mod tests {
             Some(&ResourceRevision::new(1))
         );
 
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_graph_cache_unload_preserves_complete_project_history() {
+        let (state, root, instance_id) = active_state("history-unload");
+        let unloaded = state
+            .create_graph_resource_fixture("Unloaded", GraphDocumentKind::Event)
+            .unwrap();
+        let retained = state
+            .create_graph_resource_fixture("Retained", GraphDocumentKind::Event)
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &unloaded, 1, "en-US")
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &retained, 1, "en-US")
+            .unwrap();
+        let local_variable = state
+            .add_variable(
+                "Unloaded local",
+                DataType::Int64,
+                DataValue::Int64(1),
+                "",
+                VariableScope::Event {
+                    event_path: unloaded.as_str().into(),
+                },
+                Vec::new(),
+            )
+            .unwrap();
+        record_graph_transaction(&state, &unloaded);
+        record_graph_transaction(&state, &retained);
+        fixtures::write_state_graph(&state, &unloaded).unwrap();
+        state.graph_projection(&unloaded, "en-US").unwrap();
+        state.graph_projection(&retained, "en-US").unwrap();
+        let coordinator = state.compile_coordinator.read().unwrap().clone();
+        let document_path =
+            crate::node_system::document::GraphResourcePath(unloaded.as_str().into());
+        let retained_document_path =
+            crate::node_system::document::GraphResourcePath(retained.as_str().into());
+        assert!(coordinator.contains_slot_for_test(&document_path));
+        assert!(coordinator.contains_slot_for_test(&retained_document_path));
+        let before_status = state.history_status();
+        let before_lengths = state.history_lengths_for_test();
+        let before_head = state.history_head_id_for_test(true);
+        let before_revisions = state.revision_state_for_test();
+        let before_generation = state.authority_generation_for_test();
+        assert_eq!(before_lengths, (2, 0));
+
+        assert!(
+            state
+                .unload_graph_resource_for_lifecycle(&instance_id, &unloaded, 2)
+                .unwrap()
+        );
+
+        let data = state.get_data().unwrap();
+        assert!(!data.graphs.contains_key(&unloaded));
+        assert!(data.graphs.contains_key(&retained));
+        assert!(!data.variables.contains_key(&local_variable.id));
+        assert_eq!(state.history_status(), before_status);
+        assert_eq!(state.history_lengths_for_test(), before_lengths);
+        assert_eq!(state.history_head_id_for_test(true), before_head);
+        assert_eq!(state.revision_state_for_test(), before_revisions);
+        assert_eq!(state.authority_generation_for_test(), before_generation + 1);
+        assert!(!coordinator.contains_slot_for_test(&document_path));
+        assert!(!coordinator.contains_slot_for_test(&retained_document_path));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_lifecycle_unload_token_preserves_history_and_residency() {
+        let (state, root, instance_id) = active_state("stale-unload-token");
+        let unloaded = state
+            .create_graph_resource_fixture("Unloaded", GraphDocumentKind::Event)
+            .unwrap();
+        let retained = state
+            .create_graph_resource_fixture("Retained", GraphDocumentKind::Event)
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &unloaded, 1, "en-US")
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &retained, 1, "en-US")
+            .unwrap();
+        state
+            .load_graph_projection(&instance_id, &unloaded, 3, "en-US")
+            .unwrap();
+        record_graph_transaction(&state, &unloaded);
+        record_graph_transaction(&state, &retained);
+        let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let before_history = state.history_status();
+        let before_lengths = state.history_lengths_for_test();
+        let before_head = state.history_head_id_for_test(true);
+        let before_revisions = state.revision_state_for_test();
+        let before_generation = state.authority_generation_for_test();
+
+        let error = state
+            .unload_graph_resource_for_lifecycle(&instance_id, &unloaded, 2)
+            .unwrap_err();
+
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert_lifecycle_unload_snapshot(
+            &state,
+            &unloaded,
+            &before_data,
+            before_history,
+            before_lengths,
+            before_head,
+            &before_revisions,
+            before_generation,
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_project_lifecycle_unload_preserves_history_and_residency() {
+        let (state, root, stale_instance_id) = active_state("stale-unload-project");
+        let unloaded = GraphResourcePath::new("events/Unloaded.yssbi-event").unwrap();
+        let retained = GraphResourcePath::new("events/Retained.yssbi-event").unwrap();
+        let mut replacement = ProjectData::new();
+        replacement.graphs.insert(
+            unloaded.clone(),
+            GraphResourceDocument::new("Unloaded", GraphDocumentKind::Event),
+        );
+        replacement.graphs.insert(
+            retained.clone(),
+            GraphResourceDocument::new("Retained", GraphDocumentKind::Event),
+        );
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), replacement);
+        let current_instance_id = state.capture_project_session().unwrap().instance_id;
+        assert_ne!(current_instance_id, stale_instance_id);
+        record_graph_transaction(&state, &unloaded);
+        record_graph_transaction(&state, &retained);
+        let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let before_history = state.history_status();
+        let before_lengths = state.history_lengths_for_test();
+        let before_head = state.history_head_id_for_test(true);
+        let before_revisions = state.revision_state_for_test();
+        let before_generation = state.authority_generation_for_test();
+
+        let error = state
+            .unload_graph_resource_for_lifecycle(&stale_instance_id, &unloaded, 2)
+            .unwrap_err();
+
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert_lifecycle_unload_snapshot(
+            &state,
+            &unloaded,
+            &before_data,
+            before_history,
+            before_lengths,
+            before_head,
+            &before_revisions,
+            before_generation,
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

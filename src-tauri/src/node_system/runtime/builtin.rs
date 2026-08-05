@@ -402,18 +402,35 @@ impl Kernel for CompareKernel {
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 2)?;
-        let left = float64_input(inputs, 0)?;
-        let right = float64_input(inputs, 1)?;
-        let ordering = left
-            .partial_cmp(&right)
-            .ok_or_else(|| KernelError::new("float64 values are not comparable"))?;
         let result = match self.operation {
-            CompareOperation::Equal => ordering == Ordering::Equal,
-            CompareOperation::NotEqual => ordering != Ordering::Equal,
-            CompareOperation::Less => ordering == Ordering::Less,
-            CompareOperation::LessEqual => ordering != Ordering::Greater,
-            CompareOperation::Greater => ordering == Ordering::Greater,
-            CompareOperation::GreaterEqual => ordering != Ordering::Less,
+            CompareOperation::Equal | CompareOperation::NotEqual => {
+                let RuntimeValue::Scalar(left) = &inputs[0] else {
+                    return Err(KernelError::new("comparison input 0 must be a scalar"));
+                };
+                let RuntimeValue::Scalar(right) = &inputs[1] else {
+                    return Err(KernelError::new("comparison input 1 must be a scalar"));
+                };
+                let equal = left == right;
+                if matches!(self.operation, CompareOperation::Equal) {
+                    equal
+                } else {
+                    !equal
+                }
+            }
+            operation => {
+                let left = float64_input(inputs, 0)?;
+                let right = float64_input(inputs, 1)?;
+                let ordering = left
+                    .partial_cmp(&right)
+                    .ok_or_else(|| KernelError::new("float64 values are not comparable"))?;
+                match operation {
+                    CompareOperation::Less => ordering == Ordering::Less,
+                    CompareOperation::LessEqual => ordering != Ordering::Greater,
+                    CompareOperation::Greater => ordering == Ordering::Greater,
+                    CompareOperation::GreaterEqual => ordering != Ordering::Less,
+                    CompareOperation::Equal | CompareOperation::NotEqual => unreachable!(),
+                }
+            }
         };
         Ok(vec![Value::Bool(result).into()])
     }

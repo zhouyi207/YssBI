@@ -1,19 +1,25 @@
 use super::materialization::ProjectedMemberRef;
 use super::mutation::{create_node_operations, validate_parameters};
 use super::*;
-use crate::node_system::catalog::{build_builtin_provider, build_builtin_registry};
+use crate::node_system::analysis::ResourceVersionSet;
+use crate::node_system::catalog::{
+    build_builtin_node_system, builtin_bundle_parts_for_test, validate_builtin_bundle_for_test,
+};
 use crate::node_system::compiler::{
-    LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    GraphCompiler, LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    ResourceSnapshot,
 };
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy, I18nKey,
-    NodeCategoryId, NodeScope, NodeTypeId, ParameterKey, PortDirection, PortInstances, PortKey,
-    PortKind, ProviderId, Purity, StaticNodeCatalogProtocol, StaticNodeProtocol, StaticPortSpec,
+    InputBindingSpec, LiteralPolicy, NodeCategoryId, NodeScope, NodeTypeId, ParameterKey,
+    PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec, ProviderId, Purity,
+    TypeExpr,
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
     RegisteredNode,
 };
+use crate::node_system::testing::TestProtocolBuilder;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -94,54 +100,50 @@ fn editor_mutation_registry() -> NodeRegistry {
 }
 
 fn editor_mutation_registry_with(scope: NodeScope, minimum_inputs: u16) -> NodeRegistry {
-    let protocol = StaticNodeProtocol {
-        type_id: "yssbi.test.editor_mutation",
-        catalog: StaticNodeCatalogProtocol {
-            title_key: "nodes.test.editor_mutation.title",
-            description_key: None,
-            documentation_key: None,
-            aliases_key: None,
-            category_id: "test",
-            icon_id: "test",
-            style_id: "test",
-            hidden: false,
-        },
-        ports: Box::leak(
-            vec![
-                StaticPortSpec {
-                    key: "output",
-                    label_key: "nodes.test.editor_mutation.output",
-                    direction: PortDirection::Output,
-                    kind: PortKind::Data,
-                    instances: PortInstances::Declared,
-                    connections: ConnectionsPerPort::Multiple {
-                        max: None,
-                        ordered: false,
-                    },
-                    input_binding: None,
+    let protocol = TestProtocolBuilder::new("yssbi.test.editor_mutation", "test")
+        .style("test")
+        .ports(vec![
+            PortSpec {
+                key: PortKey::new("output").unwrap(),
+                label_key: I18nKey::new("nodes.test.editor_mutation.output").unwrap(),
+                direction: PortDirection::Output,
+                kind: PortKind::Data,
+                value_type: TypeExpr::Unknown,
+                instances: PortInstances::Declared,
+                connections: ConnectionsPerPort::Multiple {
+                    max: None,
+                    ordered: false,
                 },
-                StaticPortSpec {
-                    key: "inputs",
-                    label_key: "nodes.test.editor_mutation.inputs",
-                    direction: PortDirection::Input,
-                    kind: PortKind::Data,
-                    instances: PortInstances::UserCreated {
-                        min: minimum_inputs,
-                        max: Some(minimum_inputs.max(2)),
-                    },
-                    connections: ConnectionsPerPort::Single,
-                    input_binding: Some(crate::node_system::protocol::InputBindingSpec {
-                        literal_policy: crate::node_system::protocol::LiteralPolicy::Allowed,
-                        default_value: None,
-                    }),
+                input_binding: None,
+                consumption: None,
+                production: None,
+                editor: PortEditorSpec::Default,
+                schema: None,
+            },
+            PortSpec {
+                key: PortKey::new("inputs").unwrap(),
+                label_key: I18nKey::new("nodes.test.editor_mutation.inputs").unwrap(),
+                direction: PortDirection::Input,
+                kind: PortKind::Data,
+                value_type: TypeExpr::Unknown,
+                instances: PortInstances::UserCreated {
+                    min: minimum_inputs,
+                    max: Some(minimum_inputs.max(2)),
                 },
-            ]
-            .into_boxed_slice(),
-        ),
-        execution: EDITOR_MUTATION_EXECUTION,
-        scope,
-        managed_role: None,
-    };
+                connections: ConnectionsPerPort::Single,
+                input_binding: Some(InputBindingSpec {
+                    literal_policy: LiteralPolicy::Allowed,
+                    default_value: None,
+                }),
+                consumption: None,
+                production: None,
+                editor: PortEditorSpec::Default,
+                schema: None,
+            },
+        ])
+        .execution(EDITOR_MUTATION_EXECUTION)
+        .scope(scope)
+        .build();
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi").unwrap());
     provider.categories = vec![CategoryRegistration {
         id: NodeCategoryId::new("test").unwrap(),
@@ -159,10 +161,7 @@ fn editor_mutation_registry_with(scope: NodeScope, minimum_inputs: u16) -> NodeR
         ]),
     };
     provider.nodes = vec![RegisteredNode::leaf(
-        Arc::new(
-            crate::node_system::protocol::NodeProtocol::from_static(Box::leak(Box::new(protocol)))
-                .unwrap(),
-        ),
+        Arc::new(protocol),
         Arc::new(NodeImplementation::new(EditorMutationTestLowerer)),
     )]
     .into_boxed_slice();
@@ -192,16 +191,23 @@ fn builtin_control_node(id: NodeId, node_type: &str) -> DocumentNode {
 }
 
 fn builtin_registry_with_branch_group_max(max: u16) -> NodeRegistry {
-    let (mut provider, _) = build_builtin_provider();
-    let branch = provider
+    let (mut provider, catalog, alias_keys) = builtin_bundle_parts_for_test();
+    let branch_index = provider
         .nodes
-        .iter_mut()
-        .find(|node| node.protocol.type_id.as_str() == "yssbi.control.branch")
+        .iter()
+        .position(|node| node.protocol().type_id.as_str() == "yssbi.control.branch")
         .unwrap();
-    Arc::make_mut(&mut branch.protocol).interface.member_groups[0].max = Some(max);
-    let mut builder = NodeRegistryBuilder::new();
-    builder.register_provider(provider).unwrap();
-    builder.freeze().unwrap()
+    let mut protocol = provider.nodes[branch_index].protocol().clone();
+    protocol.interface.member_groups[0].max = Some(max);
+    provider.nodes[branch_index] = RegisteredNode::structural(
+        Arc::new(protocol),
+        crate::node_system::registry::StructuralNodeRole::Branch,
+    );
+    Arc::unwrap_or_clone(
+        validate_builtin_bundle_for_test(provider, catalog, alias_keys)
+            .unwrap()
+            .registry,
+    )
 }
 
 fn bind_user_port(
@@ -413,6 +419,198 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
 }
 
 #[test]
+fn parameterized_static_creation_is_editable_with_empty_parameters() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let patch = EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: NodeTypeId::new("yssbi.dataframe.project").unwrap(),
+            required_parameters: Box::new([ParameterKey::new("columns").unwrap()]),
+        },
+        position: NodePosition { x: 1.0, y: 2.0 },
+        user_label: None,
+    }
+    .into_patch(
+        &graph_path("events/parameterized"),
+        &GraphDocument::default(),
+        &registry,
+    )
+    .unwrap();
+
+    let GraphDocumentOperation::InsertNode { node } = &patch.operations[0] else {
+        panic!("parameterized creation must insert a node");
+    };
+    assert_eq!(node.node_type.as_str(), "yssbi.dataframe.project");
+    assert!(node.parameters.is_empty());
+}
+
+#[test]
+fn parameterized_static_missing_parameter_remains_compile_blocking() {
+    struct EmptyResources;
+    impl ResourceSnapshot for EmptyResources {
+        fn versions(&self) -> ResourceVersionSet {
+            ResourceVersionSet::new()
+        }
+    }
+
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let node_id = node_id(989);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.dataframe.project").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+
+    let compiled = GraphCompiler::new(&registry, &EmptyResources).compile(&document);
+
+    assert!(compiled.semantic.is_none());
+    assert!(compiled.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.parameter.required"
+            && matches!(
+                &diagnostic.primary,
+                crate::node_system::analysis::DiagnosticLocation::Parameter {
+                    node_id: diagnostic_node,
+                    key,
+                } if *diagnostic_node == node_id && key.as_str() == "columns"
+            )
+    }));
+}
+
+#[test]
+fn forged_parameterized_static_descriptors_have_zero_effects() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let document = GraphDocument::default();
+    let project = NodeTypeId::new("yssbi.dataframe.project").unwrap();
+    let filter = NodeTypeId::new("yssbi.dataframe.filter.rows").unwrap();
+    let columns = ParameterKey::new("columns").unwrap();
+    let predicate = ParameterKey::new("predicate").unwrap();
+    let descriptors = [
+        crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: project.clone(),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: project.clone(),
+            required_parameters: Box::new([]),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: project.clone(),
+            required_parameters: Box::new([columns.clone(), predicate.clone()]),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: project.clone(),
+            required_parameters: Box::new([columns.clone(), columns.clone()]),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: project,
+            required_parameters: Box::new([predicate]),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: filter,
+            required_parameters: Box::new([columns]),
+        },
+        crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {
+            node_type_id: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
+            required_parameters: Box::new([]),
+        },
+    ];
+
+    for descriptor in descriptors {
+        let result = EditorGraphMutationDto::CreateNode {
+            descriptor,
+            position: NodePosition { x: 1.0, y: 2.0 },
+            user_label: None,
+        }
+        .into_patch(&graph_path("events/forged"), &document, &registry);
+        assert!(result.is_err());
+        assert!(document.nodes.is_empty());
+    }
+}
+
+#[test]
+fn set_parameters_atomically_replaces_and_validates_the_complete_map() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let node_id = node_id(990);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.dataframe.project").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let parameters = ParameterValues::from([(
+        ParameterKey::new("columns").unwrap(),
+        json!(["status", "amount"]),
+    )]);
+    let mutation = EditorGraphMutationDto::SetParameters {
+        node_id,
+        parameters: parameters.clone(),
+    };
+    assert_eq!(
+        serde_json::to_value(&mutation).unwrap(),
+        json!({
+            "type": "setParameters",
+            "payload": {
+                "nodeId": node_id,
+                "parameters": { "columns": ["status", "amount"] }
+            }
+        }),
+    );
+
+    let patch = mutation
+        .into_patch(&graph_path("events/parameters"), &document, &registry)
+        .unwrap();
+    assert_eq!(patch.operations.len(), 1);
+    let GraphDocumentOperation::UpdateNode { before, after } = &patch.operations[0] else {
+        panic!("parameter update must be one node replacement");
+    };
+    assert!(before.parameters.is_empty());
+    assert_eq!(after.parameters, parameters);
+}
+
+#[test]
+fn invalid_atomic_parameter_mutations_have_zero_effects() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let node_id = node_id(991);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.dataframe.filter.rows").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    for parameters in [
+        ParameterValues::new(),
+        ParameterValues::from([(
+            ParameterKey::new("predicate").unwrap(),
+            json!({
+                "column": "count",
+                "operator": "greaterThan",
+                "value": { "type": "integer", "value": 9007199254740993_i64 }
+            }),
+        )]),
+        ParameterValues::from([(ParameterKey::new("columns").unwrap(), json!(["forged"]))]),
+    ] {
+        let result = EditorGraphMutationDto::SetParameters {
+            node_id,
+            parameters,
+        }
+        .into_patch(&graph_path("events/parameters"), &document, &registry);
+        assert!(result.is_err());
+        assert!(document.nodes[&node_id].parameters.is_empty());
+    }
+}
+
+#[test]
 fn create_node_rejects_protocol_scope_mismatch() {
     let registry = editor_mutation_registry_with(NodeScope::Event, 0);
     let mutation = EditorGraphMutationDto::CreateNode {
@@ -474,7 +672,7 @@ fn create_node_materializes_required_user_created_ports() {
 
 #[test]
 fn builtin_loop_create_materializes_one_complete_carried_member() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut parameters = ParameterValues::new();
     parameters.insert(ParameterKey::new("max_iterations").unwrap(), json!(100));
     let node_type_id = NodeTypeId::new("yssbi.control.loop").unwrap();
@@ -510,7 +708,7 @@ fn builtin_loop_create_materializes_one_complete_carried_member() {
 
 #[test]
 fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let path = graph_path("events/grouped-branch");
     let owner = node_id(905);
     let templates = ["then_source", "else_source", "result"];
@@ -592,7 +790,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
 
 #[test]
 fn removing_any_group_member_atomically_removes_the_complete_member() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let path = graph_path("events/grouped-remove");
     let owner = node_id(906);
     let source = node_id(907);
@@ -674,7 +872,7 @@ fn instance_identity_if_present(address: &PortAddress) -> Option<PortInstanceId>
 
 #[test]
 fn loop_partial_member_does_not_inflate_complete_count_or_block_repair() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let path = graph_path("events/partial-loop");
     let owner = node_id(909);
     let complete_id = instance_id(910);
@@ -723,7 +921,7 @@ fn loop_partial_member_does_not_inflate_complete_count_or_block_repair() {
 
 #[test]
 fn loop_with_only_a_partial_member_can_remove_it_below_group_minimum() {
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let path = graph_path("events/partial-only-loop");
     let owner = node_id(912);
     let partial_id = instance_id(913);

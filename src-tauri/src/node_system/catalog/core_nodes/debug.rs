@@ -28,13 +28,22 @@ fn register_print(fragment: &mut ProviderFragment) {
             ("then", "Then", "然后"),
         ],
     );
+    let mut message = data_port(ID, "message", PortDirection::Input, concrete("core.string"));
+    message
+        .input_binding
+        .as_mut()
+        .expect("data input binding")
+        .default_value = Some(TypedValue {
+        value_type: concrete("core.string"),
+        value: Value::String("Hello, World!".into()),
+    });
     fragment.nodes.push(leaf(
         protocol(
             ID,
             "debug",
             vec![
                 control_port(ID, "enter", PortDirection::Input, PortInstances::Declared),
-                data_port(ID, "message", PortDirection::Input, concrete("core.string")),
+                message,
                 control_port(ID, "then", PortDirection::Output, PortInstances::Declared),
             ],
             vec![],

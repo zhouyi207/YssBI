@@ -5,6 +5,11 @@ use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(test)]
+thread_local! {
+    static NORMALIZED_ROOT_RECONSTRUCTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 #[cfg(windows)]
 use super::windows_path_identity::WindowsPathIdentity;
 
@@ -96,6 +101,8 @@ pub struct NormalizedProjectRoot {
 
 impl NormalizedProjectRoot {
     pub fn from_project_path(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+        #[cfg(test)]
+        NORMALIZED_ROOT_RECONSTRUCTIONS.set(NORMALIZED_ROOT_RECONSTRUCTIONS.get() + 1);
         let original = path.as_ref().to_path_buf();
         let trimmed = trim_path(&original);
         if trimmed.as_os_str().is_empty() {
@@ -134,6 +141,16 @@ impl NormalizedProjectRoot {
     pub fn as_path(&self) -> &Path {
         &self.path
     }
+}
+
+#[cfg(test)]
+pub(crate) fn reset_normalized_root_reconstruction_count_for_test() {
+    NORMALIZED_ROOT_RECONSTRUCTIONS.set(0);
+}
+
+#[cfg(test)]
+pub(crate) fn normalized_root_reconstruction_count_for_test() -> usize {
+    NORMALIZED_ROOT_RECONSTRUCTIONS.get()
 }
 
 impl PartialEq for NormalizedProjectRoot {

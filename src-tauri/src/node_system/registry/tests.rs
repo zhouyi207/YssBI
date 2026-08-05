@@ -1,34 +1,37 @@
 use super::*;
 use crate::node_system::compiler::{LoweredNode, LoweringContext, LoweringError, NodeLowerer};
 use crate::node_system::protocol::*;
+use crate::node_system::testing::TestProtocolBuilder;
 use std::any::Any;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-const EXECUTION: ExecutionSemantics = ExecutionSemantics {
-    determinism: Determinism::Deterministic,
-    purity: Purity::Pure,
-    evaluation: EvaluationPolicy::DemandDriven,
-    cache: CachePolicy::PerRun,
-    effects: EffectSemantics::None,
-};
-const PROTOCOL: StaticNodeProtocol = StaticNodeProtocol {
-    type_id: "yssbi.test.empty",
-    catalog: StaticNodeCatalogProtocol {
-        title_key: "nodes.test.empty.title",
-        description_key: None,
-        documentation_key: None,
-        aliases_key: None,
-        category_id: "test",
-        icon_id: "test",
-        style_id: "default",
-        hidden: false,
-    },
-    ports: &[],
-    execution: EXECUTION,
-    scope: NodeScope::Any,
-    managed_role: None,
-};
+#[test]
+fn frozen_registry_state_is_scoped_to_the_registry_module() {
+    let source = include_str!("model.rs");
+    for exposed_field in [
+        "pub(crate) protocol:",
+        "pub(crate) implementation:",
+        "pub(crate) structural_role:",
+        "pub(crate) by_id:",
+        "pub(crate) type_index:",
+        "pub(crate) category_index:",
+        "pub(crate) catalog_manifest:",
+        "pub(crate) nominal_validators:",
+        "pub(crate) fingerprint:",
+    ] {
+        assert!(
+            !source.contains(exposed_field),
+            "frozen Registry state remains crate-wide: {exposed_field}"
+        );
+    }
+}
+
+fn protocol() -> NodeProtocol {
+    TestProtocolBuilder::new("yssbi.test.empty", "test")
+        .managed_role(None)
+        .build()
+}
 
 fn id<T>(value: &str) -> T
 where
@@ -84,7 +87,7 @@ fn provider_with(node: RegisteredNode) -> ProviderRegistration {
     provider
 }
 fn valid_provider() -> ProviderRegistration {
-    provider_with(RegisteredNode::leaf_static(&PROTOCOL, implementation()).unwrap())
+    provider_with(RegisteredNode::leaf(Arc::new(protocol()), implementation()))
 }
 fn error(provider: ProviderRegistration) -> RegistryValidationError {
     let mut builder = NodeRegistryBuilder::new();
@@ -133,6 +136,172 @@ fn provider_with_member_groups(groups: serde_json::Value) -> ProviderRegistratio
     interface["member_groups"] = groups;
     node.interface = serde_json::from_value(interface).unwrap();
     provider
+}
+
+fn provider_with_nominal_type(type_name: &str) -> ProviderRegistration {
+    let mut provider = valid_provider();
+    let title: I18nKey = id(&format!("types.{type_name}.title"));
+    provider.types = vec![TypeRegistration {
+        id: id(type_name),
+        title_key: title.clone(),
+        classes: BTreeSet::new(),
+    }]
+    .into_boxed_slice();
+    provider.i18n.keys.insert(title);
+    provider
+}
+
+fn accepts_any_json(_: &serde_json::Value) -> Result<(), String> {
+    Ok(())
+}
+
+fn rejects_null(value: &serde_json::Value) -> Result<(), String> {
+    if value.is_null() {
+        Err("null rejected by first validator".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[test]
+fn nominal_validators_are_registered_and_looked_up_generically() {
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_nominal_type("acme.nominal"))
+        .unwrap();
+    builder
+        .register_nominal_validator(
+            id("acme.nominal"),
+            id("acme.nominal.accept_any"),
+            1,
+            accepts_any_json,
+        )
+        .unwrap();
+
+    let registry = builder.freeze().unwrap();
+
+    assert_eq!(
+        registry.validate_nominal_parameter(&id("acme.nominal"), &serde_json::json!({"any": true})),
+        Some(Ok(()))
+    );
+}
+
+#[test]
+fn duplicate_nominal_validator_registration_preserves_first_validator() {
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_nominal_type("acme.nominal"))
+        .unwrap();
+    builder
+        .register_nominal_validator(
+            id("acme.nominal"),
+            id("acme.nominal.reject_null"),
+            1,
+            rejects_null,
+        )
+        .unwrap();
+
+    assert!(matches!(
+        builder.register_nominal_validator(
+            id("acme.nominal"),
+            id("acme.nominal.accept_any"),
+            2,
+            accepts_any_json,
+        ),
+        Err(NodeRegistrationError::InvalidRegistry(
+            RegistryValidationError::DuplicateNominalValidator(ref value)
+        )) if value.as_str() == "acme.nominal"
+    ));
+
+    let registry = builder.freeze().unwrap();
+    assert!(matches!(
+        registry.validate_nominal_parameter(&id("acme.nominal"), &serde_json::Value::Null),
+        Some(Err(ref error)) if error == "null rejected by first validator"
+    ));
+}
+
+#[test]
+fn nominal_validator_identity_and_version_change_registry_fingerprint() {
+    fn freeze(identity: &'static str, version: u32) -> NodeRegistry {
+        let mut builder = NodeRegistryBuilder::new();
+        builder
+            .register_provider(provider_with_nominal_type("acme.nominal"))
+            .unwrap();
+        builder
+            .register_nominal_validator(id("acme.nominal"), id(identity), version, accepts_any_json)
+            .unwrap();
+        builder.freeze().unwrap()
+    }
+
+    let baseline = freeze("acme.nominal.codec", 1);
+    let same = freeze("acme.nominal.codec", 1);
+    let changed_identity = freeze("acme.nominal.codec_v2", 1);
+    let changed_version = freeze("acme.nominal.codec", 2);
+
+    assert_eq!(baseline.fingerprint(), same.fingerprint());
+    assert_ne!(baseline.fingerprint(), changed_identity.fingerprint());
+    assert_ne!(baseline.fingerprint(), changed_version.fingerprint());
+}
+
+#[test]
+fn built_in_nominal_types_require_registered_validators() {
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_nominal_type(
+            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+        ))
+        .unwrap();
+
+    assert!(matches!(
+        builder.freeze(),
+        Err(NodeRegistrationError::InvalidRegistry(
+            RegistryValidationError::MissingNominalValidator(ref value)
+        )) if value.as_str()
+            == crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID
+    ));
+}
+
+#[test]
+fn unrelated_custom_types_preserve_permissive_parameter_behavior() {
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_nominal_type("acme.unvalidated"))
+        .unwrap();
+
+    let registry = builder.freeze().unwrap();
+
+    assert_eq!(
+        registry.validate_nominal_parameter(
+            &id("acme.unvalidated"),
+            &serde_json::json!({"legacy": ["shape"]}),
+        ),
+        None
+    );
+}
+
+#[test]
+fn built_in_registry_exposes_strict_dataframe_nominal_validators() {
+    let registry = crate::node_system::catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
+    let project_type = id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID);
+    let filter_type = id(crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID);
+
+    assert_eq!(
+        registry.validate_nominal_parameter(&project_type, &serde_json::json!(["a"])),
+        Some(Ok(()))
+    );
+    assert!(matches!(
+        registry.validate_nominal_parameter(&project_type, &serde_json::json!([])),
+        Some(Err(_))
+    ));
+    assert!(matches!(
+        registry.validate_nominal_parameter(
+            &filter_type,
+            &serde_json::json!({"column":"a","operator":"equal"}),
+        ),
+        Some(Err(_))
+    ));
 }
 
 #[test]
@@ -414,13 +583,49 @@ fn freeze_rejects_an_implementation_without_lowerer_capability() {
 }
 
 #[test]
+fn freeze_rejects_node_without_executable_interpretation() {
+    let node = RegisteredNode {
+        protocol: Arc::new(protocol()),
+        implementation: None,
+        structural_role: None,
+    };
+
+    assert!(matches!(
+        error(provider_with(node)),
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason == "node has no executable interpretation"
+    ));
+}
+
+#[test]
+fn freeze_rejects_node_with_both_leaf_and_structural_interpretations() {
+    let mut node = RegisteredNode::leaf(Arc::new(protocol()), implementation());
+    node.structural_role = Some(StructuralNodeRole::Branch);
+
+    assert!(matches!(
+        error(provider_with(node)),
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason == "leaf implementation and structural role are mutually exclusive"
+    ));
+}
+
+#[test]
+fn leaf_and_structural_nodes_are_the_only_frozen_forms() {
+    for node in [
+        RegisteredNode::leaf(Arc::new(protocol()), implementation()),
+        RegisteredNode::structural(Arc::new(protocol()), StructuralNodeRole::Branch),
+    ] {
+        let mut builder = NodeRegistryBuilder::new();
+        builder.register_provider(provider_with(node)).unwrap();
+        builder.freeze().expect("executable node freezes");
+    }
+}
+
+#[test]
 fn leaf_constructor_requires_an_explicit_leaf_implementation() {
     let implementation: LeafImplementation =
         crate::node_system::compiler::NodeImplementation::new(RegistryTestLowerer).into();
-    let node = RegisteredNode::leaf(
-        Arc::new(NodeProtocol::from_static(&PROTOCOL).unwrap()),
-        implementation,
-    );
+    let node = RegisteredNode::leaf(Arc::new(protocol()), implementation);
 
     assert_eq!(
         node.implementation.unwrap().capability(),
@@ -537,25 +742,116 @@ fn protocol_snapshot_and_i18n_inventory_are_deterministic() {
     );
 }
 
-#[test]
-fn provider_order_does_not_change_fingerprint() {
-    let mut second = valid_provider();
-    second.provider = id("acme");
-    second.categories[0].id = id("acme_test");
-    second.categories[0].title_key = id("categories.acme_test.title");
-    second.i18n = keys(&["categories.acme_test.title", "nodes.acme.empty.title"]);
-    let protocol = Arc::make_mut(&mut second.nodes[0].protocol);
+fn provenance_providers() -> [ProviderRegistration; 2] {
+    let mut builtin = provider_with_nominal_type("yssbi.value");
+    builtin.provider = id("yssbi.builtin");
+
+    let mut acme = provider_with_nominal_type("acme.value");
+    acme.provider = id("acme.nodes");
+    acme.categories[0].id = id("acme_test");
+    acme.categories[0].title_key = id("categories.acme_test.title");
+    acme.i18n = keys(&[
+        "categories.acme_test.title",
+        "nodes.acme.empty.title",
+        "types.acme.value.title",
+    ]);
+    let protocol = Arc::make_mut(&mut acme.nodes[0].protocol);
     protocol.type_id = id("acme.test.empty");
     protocol.catalog.category_id = id("acme_test");
     protocol.catalog.title_key = id("nodes.acme.empty.title");
-    let mut a = NodeRegistryBuilder::new();
-    a.register_provider(valid_provider()).unwrap();
-    a.register_provider(second.clone()).unwrap();
-    let mut b = NodeRegistryBuilder::new();
-    b.register_provider(second).unwrap();
-    b.register_provider(valid_provider()).unwrap();
-    assert_eq!(
-        a.freeze().unwrap().fingerprint(),
-        b.freeze().unwrap().fingerprint()
-    );
+
+    [builtin, acme]
+}
+
+fn freeze_provenance_providers(
+    providers: impl IntoIterator<Item = ProviderRegistration>,
+) -> Result<NodeRegistry, NodeRegistrationError> {
+    let mut builder = NodeRegistryBuilder::new();
+    for provider in providers {
+        builder.register_provider(provider).unwrap();
+    }
+    builder.freeze()
+}
+
+#[test]
+fn provider_provenance_is_exact_and_registration_order_independent() {
+    let [builtin, acme] = provenance_providers();
+    let forward = freeze_provenance_providers([builtin.clone(), acme.clone()]).unwrap();
+    let reverse = freeze_provenance_providers([acme, builtin]).unwrap();
+
+    for registry in [&forward, &reverse] {
+        assert_eq!(
+            registry
+                .node_provider(&id("yssbi.test.empty"))
+                .map(ProviderId::as_str),
+            Some("yssbi.builtin")
+        );
+        assert_eq!(
+            registry
+                .type_provider(&id("yssbi.value"))
+                .map(ProviderId::as_str),
+            Some("yssbi.builtin")
+        );
+        assert_eq!(
+            registry
+                .node_provider(&id("acme.test.empty"))
+                .map(ProviderId::as_str),
+            Some("acme.nodes")
+        );
+        assert_eq!(
+            registry
+                .type_provider(&id("acme.value"))
+                .map(ProviderId::as_str),
+            Some("acme.nodes")
+        );
+    }
+    assert_eq!(forward.fingerprint(), reverse.fingerprint());
+}
+
+#[test]
+fn provider_provenance_duplicate_node_returns_no_registry() {
+    let [builtin, mut acme] = provenance_providers();
+    let duplicate = builtin.nodes[0].protocol().type_id.clone();
+    Arc::make_mut(&mut acme.nodes[0].protocol).type_id = duplicate.clone();
+
+    assert!(matches!(
+        freeze_provenance_providers([builtin, acme]),
+        Err(NodeRegistrationError::InvalidRegistry(
+            RegistryValidationError::DuplicateNode(id)
+        )) if id == duplicate
+    ));
+}
+
+#[test]
+fn provider_provenance_duplicate_type_returns_no_registry() {
+    let [builtin, mut acme] = provenance_providers();
+    let duplicate = builtin.types[0].id.clone();
+    acme.types[0].id = duplicate.clone();
+
+    assert!(matches!(
+        freeze_provenance_providers([builtin, acme]),
+        Err(NodeRegistrationError::InvalidRegistry(
+            RegistryValidationError::DuplicateType(id)
+        )) if id == duplicate
+    ));
+}
+
+#[test]
+fn provider_provenance_covers_every_builtin_node_and_type() {
+    let registry = crate::node_system::catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
+
+    for (id, _) in registry.iter() {
+        assert_eq!(
+            registry.node_provider(id).map(ProviderId::as_str),
+            Some("yssbi.builtin")
+        );
+    }
+    for (id, _) in registry.types().iter() {
+        assert_eq!(
+            registry.type_provider(id).map(ProviderId::as_str),
+            Some("yssbi.builtin")
+        );
+    }
 }

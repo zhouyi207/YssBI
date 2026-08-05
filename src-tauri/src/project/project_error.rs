@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
+    #[error("built-in node system initialization failed: {0}")]
+    BuiltinInitialization(#[from] crate::node_system::catalog::BuiltinInitializationError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
     #[error("stale project lifecycle: {message}")]
@@ -31,6 +33,7 @@ pub enum ProjectFilesystemError {
 impl ProjectFilesystemError {
     pub const fn code(&self) -> &'static str {
         match self {
+            Self::BuiltinInitialization(_) => "builtin_initialization_failed",
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",

@@ -1,4 +1,7 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
+import {
+  isSchemaAwareParameterEditorDto,
+  type EditorGraphProjectionDto,
+} from '@/shared/types/dto/editorProjection';
 import { portAddressKey } from './portAddressKey';
 
 export function validateEditorGraphProjection(
@@ -65,6 +68,13 @@ function validateNode(
     throw new Error(
       `projection node '${node.nodeId}' revision ${node.sourceRevision} does not match source revision ${projection.sourceRevision}`,
     );
+  }
+
+  for (const parameter of node.parameterEditors) {
+    if (parameter.configuration !== null
+      && !isSchemaAwareParameterEditorDto(parameter.configuration)) {
+      throw new Error(`projection parameter editor '${parameter.key}' is invalid`);
+    }
   }
 
   for (const port of node.ports) {

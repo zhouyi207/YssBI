@@ -1,7 +1,7 @@
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
 import type { ResourceMoveDto } from '@/shared/types/dto/editorMutation';
 import type { Variable } from '@/shared/types';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
 import { normalizeGraphResourcePath } from '@/shared/types/domain/graphResourcePath';
 import { useGraphDataStore, useGraphMetaStore, useVariableStore } from '@/features/core/dataStore';
@@ -165,7 +165,7 @@ function prepareReferences(from: string, to: string): PreparedGraphReferenceMove
   const callers: PreparedCallerReference[] = [];
   for (const [graphPath, bucket] of Object.entries(useGraphDataStore.getState().graphEntities)) {
     for (const node of Object.values(bucket.nodes)) {
-      if (node.nodeType === CALL_FUNCTION_NODE_TYPE
+      if (isCallFunctionNodeType(node.nodeType)
         && node.subGraphPath
         && normalizeGraphResourcePath(node.subGraphPath) === normalizedFrom) {
         callers.push({

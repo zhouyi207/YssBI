@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraphResourceMeta } from '@/features/core/resource';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
   collectCallFunctionIssuesForBucket,
   getCallFunctionIssueForNode,
@@ -22,6 +22,14 @@ describe('callFunctionDiagnostics', () => {
 
   it('detects empty and missing Call Function targets', () => {
     const graphPath = 'events/Main.yssbi-event';
+    const call = makeEditorProjectionFixture({
+      graphPath,
+      nodeId: 'call-1',
+      nodeTypeId: 'yssbi.project.function.call',
+      title: 'Localized call title',
+    });
+    const stableNodeType = call.projection.nodes[0].nodeTypeId;
+    const stableTitle = call.projection.nodes[0].display.title;
     const bucket = {
       basis: {
         graphPath,
@@ -37,8 +45,8 @@ describe('callFunctionDiagnostics', () => {
         'call-empty': {
           id: 'call-empty',
           graphPath,
-          nodeType: CALL_FUNCTION_NODE_TYPE,
-          title: 'Call',
+          nodeType: stableNodeType,
+          title: stableTitle,
           category: [],
           position: { x: 0, y: 0 },
           inputs: [],
@@ -47,9 +55,20 @@ describe('callFunctionDiagnostics', () => {
         'call-missing': {
           id: 'call-missing',
           graphPath,
-          nodeType: CALL_FUNCTION_NODE_TYPE,
+          nodeType: stableNodeType,
           subGraphPath: 'functions/Gone.yssbi-function',
-          title: 'Call',
+          title: stableTitle,
+          category: [],
+          position: { x: 0, y: 0 },
+          inputs: [],
+          outputs: [],
+        },
+        'legacy-call': {
+          id: 'legacy-call',
+          graphPath,
+          nodeType: 'Functions:Call Function',
+          subGraphPath: 'functions/Gone.yssbi-function',
+          title: 'Legacy call label',
           category: [],
           position: { x: 0, y: 0 },
           inputs: [],
@@ -58,9 +77,9 @@ describe('callFunctionDiagnostics', () => {
         'call-ok': {
           id: 'call-ok',
           graphPath,
-          nodeType: CALL_FUNCTION_NODE_TYPE,
+          nodeType: stableNodeType,
           subGraphPath: 'functions/A.yssbi-function',
-          title: 'Call',
+          title: stableTitle,
           category: [],
           position: { x: 0, y: 0 },
           inputs: [],
@@ -69,7 +88,7 @@ describe('callFunctionDiagnostics', () => {
       },
       pins: {},
       connections: {},
-      graphNodes: ['call-empty', 'call-missing', 'call-ok'],
+      graphNodes: ['call-empty', 'call-missing', 'legacy-call', 'call-ok'],
       nodePins: {},
       pinConnections: {},
     } satisfies GraphEntityBucket;
@@ -81,6 +100,7 @@ describe('callFunctionDiagnostics', () => {
       'missing_target',
     );
     expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['call-ok'], resources)).toBeNull();
+    expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['legacy-call'], resources)).toBeNull();
 
     expect(collectCallFunctionIssuesForBucket('events/Main.yssbi-event', bucket, resources)).toHaveLength(2);
   });

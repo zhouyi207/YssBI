@@ -17,7 +17,6 @@ use std::sync::Mutex;
 use std::time::Duration;
 use uuid::Uuid;
 
-#[path = "structured_control_production_tests/function_fixtures.rs"]
 mod function_fixtures;
 
 const EVENT_PATH: &str = "events/BranchProduction.yssbi-event";
@@ -800,11 +799,14 @@ fn run_loop(
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let events = RecordingRunEvents::default();
-    let run = fixture.state().execute_graph(
-        &graph_path,
-        &crate::node_system::plan::ExecutionDemand::Default,
-        &events,
-    );
+    let run = fixture
+        .state()
+        .execute_graph(
+            &graph_path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &events,
+        )
+        .map_err(|error| error.to_string());
     let result = fixture.state().get_data().unwrap().variables[&result_variable.id]
         .data_value
         .clone();
@@ -1299,7 +1301,15 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
         .unwrap_err();
     let recorded = events.events();
 
-    assert_eq!(error, "call recursion exceeded its 64 frame limit");
+    assert_eq!(error.to_string(), "call recursion limit exceeded");
+    assert!(matches!(
+        error.run_error(),
+        Some(
+            crate::node_system::runtime::RunError::RecursionLimitExceeded {
+                recursion_limit: 64
+            }
+        )
+    ));
     let root_started_run_id = root_run_id(&recorded, RunEventKind::RunStarted);
     let root_errored_run_id = root_run_id(
         &recorded,
@@ -1417,10 +1427,12 @@ fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
         .set_execution_before_commit_gate_test_hook(std::sync::Arc::new(|| {}));
     let recorded = events.events();
 
-    assert!(
-        error.contains("project resource snapshot does not match the plan"),
-        "unexpected execution error: {error}"
-    );
+    assert_eq!(error.to_string(), "project resource snapshot changed");
+    assert!(matches!(
+        error.run_error(),
+        Some(crate::node_system::runtime::RunError::ResourceSnapshotMismatch(message))
+            if message.contains("revision")
+    ));
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&variable.id].data_value,
         crate::graph::value::DataValue::Int64(99)
@@ -1606,7 +1618,7 @@ fn builtin_loop_reports_iteration_limit_without_committing_result() {
     let variable = float64_result_variable("Loop Limit Result");
     let (run, result, events) = run_loop(loop_fixture(true, "yssbi.control.do", 3), variable);
 
-    assert_eq!(run.unwrap_err(), "loop exceeded its 3 iteration limit");
+    assert_eq!(run.unwrap_err(), "loop iteration limit exceeded");
     assert_eq!(result, crate::graph::value::DataValue::Float64(0.0));
     assert_eq!(
         event_count(&events, LOOP_BODY_NODE, "yssbi.control.do", true),
@@ -1911,7 +1923,12 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
         )
         .unwrap_err();
 
-    assert!(error.contains("int64 division by zero"), "{error}");
+    assert_eq!(error.to_string(), "operation failed");
+    assert!(matches!(
+        error.run_error(),
+        Some(crate::node_system::runtime::RunError::KernelFailed { message, .. })
+            if message.contains("int64 division by zero")
+    ));
     assert_eq!(
         event_count(
             &events.events(),

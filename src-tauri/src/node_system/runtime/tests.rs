@@ -42,6 +42,7 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
                 consumption: InputConsumption::FullyMaterialized,
+                bound_value: None,
             })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -279,6 +280,49 @@ fn requirement(name: &str) -> CompiledResourceRequirement {
 }
 
 #[test]
+fn bound_input_operation_executes_downstream_and_publishes_result_without_fallback() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("bound_source", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| Ok(vec![inputs[0].clone()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("increment", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Scalar(Value::Integer(value)) = inputs[0] else {
+                    return Err(KernelError::new("expected integer"));
+                };
+                Ok(vec![Value::Integer(value + 1).into()])
+            }),
+        )
+        .unwrap();
+    let mut source = operation("bound_source", &[0], &[1]);
+    source.inputs[0].bound_value = Some(Value::Integer(7));
+    let mut execution_plan = plan(
+        vec![source, operation("increment", &[1], &[2])],
+        3,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(2),
+    }]);
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(result.values["result"], Value::Integer(8).into());
+}
+
+#[test]
 fn executes_sequence_deterministically() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut kernels = KernelRegistry::new();
@@ -432,6 +476,112 @@ fn if_executes_only_selected_branch() {
 
     assert_eq!(counts.lock().unwrap().get("then"), Some(&1));
     assert_eq!(counts.lock().unwrap().get("else"), None);
+}
+
+fn execute_nested_branch_sequence_switch(
+    first_matches: bool,
+    second_matches: bool,
+) -> (RunResult, Vec<&'static str>) {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let mut kernels = KernelRegistry::new();
+    for (name, selected) in [
+        ("first_condition", first_matches),
+        ("second_condition", second_matches),
+    ] {
+        kernels
+            .register(
+                id(name, KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| Ok(vec![Value::Bool(selected).into()])),
+            )
+            .unwrap();
+    }
+    for (name, value) in [("first_case", 10_i64), ("second_case", 20), ("default", 30)] {
+        let observed = Arc::clone(&observed);
+        kernels
+            .register(
+                id(name, KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    observed.lock().unwrap().push(name);
+                    Ok(vec![Value::Integer(value).into()])
+                }),
+            )
+            .unwrap();
+    }
+
+    let inner_switch = StructuredControlRegion::If {
+        condition: ValueRef::new(2),
+        then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(3)),
+        ]))),
+        else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(4)),
+        ]))),
+        results: Box::new([BranchResultBinding {
+            destination: ValueRef::new(5),
+            then_source: ValueRef::new(3),
+            else_source: ValueRef::new(4),
+        }]),
+    };
+    let outer_switch = StructuredControlRegion::If {
+        condition: ValueRef::new(0),
+        then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(1)),
+        ]))),
+        else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(2)),
+            ControlStep::Region(Box::new(inner_switch)),
+        ]))),
+        results: Box::new([BranchResultBinding {
+            destination: ValueRef::new(6),
+            then_source: ValueRef::new(1),
+            else_source: ValueRef::new(5),
+        }]),
+    };
+    let mut execution_plan = plan(
+        vec![
+            operation("first_condition", &[], &[0]),
+            operation("first_case", &[], &[1]),
+            operation("second_condition", &[], &[2]),
+            operation("second_case", &[], &[3]),
+            operation("default", &[], &[4]),
+        ],
+        7,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(outer_switch)),
+        ])),
+    );
+    execution_plan.value_sources = Box::new([
+        PlanValueSource::ControlProduced(ValueRef::new(5)),
+        PlanValueSource::ControlProduced(ValueRef::new(6)),
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "selected".into(),
+        output: stable_output("selected"),
+        value: ValueRef::new(6),
+    }]);
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    let observed = observed.lock().unwrap().clone();
+    (result, observed)
+}
+
+#[test]
+fn nested_branch_sequence_switch_executes_only_n_way_match() {
+    let (result, observed) = execute_nested_branch_sequence_switch(false, true);
+
+    assert_eq!(observed, vec!["second_case"]);
+    assert_eq!(result.values["selected"], Value::Integer(20).into());
+}
+
+#[test]
+fn nested_branch_sequence_switch_executes_default_when_no_case_matches() {
+    let (result, observed) = execute_nested_branch_sequence_switch(false, false);
+
+    assert_eq!(observed, vec!["default"]);
+    assert_eq!(result.values["selected"], Value::Integer(30).into());
 }
 
 #[test]
@@ -1627,10 +1777,14 @@ impl RelationalBackend for TraceRelationalBackend {
                 outputs: vec![Value::Integer(41).into()],
                 fragment_outputs: BTreeMap::new(),
             }),
-            TraceRelationalOutcome::Fail => Err(RelationalError::new("backend failed")),
+            TraceRelationalOutcome::Fail => {
+                Err(RelationalError::operator_invalid("backend failed"))
+            }
             TraceRelationalOutcome::Cancel => {
                 context.cancellation.cancel();
-                Err(RelationalError::new("secret row must not be traced"))
+                Err(RelationalError::cancelled(
+                    "relational execution was cancelled",
+                ))
             }
         }
     }
@@ -1768,13 +1922,15 @@ fn assert_production_source_cancellation(
         ResourceKey::new(resource.as_str()),
         ResourceVersion::new("1"),
     )]);
-    let provider = ProjectResourceProvider::new(
+    let lease_observer = ProjectResourceLeaseObserver::default();
+    let mut provider = ProjectResourceProvider::new(
         ProjectResourceSnapshot::new(
             ProjectSessionId::new("test-session"),
             resource_versions.clone(),
         )
         .with_database(resource.clone(), Arc::new(dataframe)),
     );
+    provider.set_lease_observer(lease_observer.clone());
     let scan_limits = Arc::new(Mutex::new(Vec::new()));
     let observed = Arc::new(Mutex::new(Vec::new()));
     let observed_for_hook = Arc::clone(&observed);
@@ -1845,6 +2001,8 @@ fn assert_production_source_cancellation(
     assert_eq!(scan_limits.lock().unwrap().as_slice(), expected_scan_limits);
     assert_cancelled_without_completion(&events);
     assert_eq!(results.source_count(), 0);
+    assert_eq!(lease_observer.acquired(), lease_observer.dropped());
+    assert_eq!(lease_observer.active(), 0);
 }
 
 #[test]
@@ -1882,6 +2040,22 @@ fn cancellation_at_production_result_materialization_prevents_publication_and_co
             ProductionRelationalCheckpoint::OperatorEvaluation,
             ProductionRelationalCheckpoint::SourceScan,
             ProductionRelationalCheckpoint::ResultMaterialization,
+        ],
+        &[None],
+    );
+}
+
+#[test]
+fn cancellation_during_production_result_conversion_stops_without_publication_or_leaks() {
+    use super::production_relational::ProductionRelationalCheckpoint;
+
+    assert_production_source_cancellation(
+        ProductionRelationalCheckpoint::ResultConversion,
+        &[
+            ProductionRelationalCheckpoint::OperatorEvaluation,
+            ProductionRelationalCheckpoint::SourceScan,
+            ProductionRelationalCheckpoint::ResultMaterialization,
+            ProductionRelationalCheckpoint::ResultConversion,
         ],
         &[None],
     );
@@ -2000,7 +2174,18 @@ fn exact_bridge_scheduler_fixture() -> (KernelRegistry, RelationalBackendRegistr
         .register(
             id("bridge_values", KernelHandle::new),
             FnKernel(|_: &[RuntimeValue]| {
-                Ok(vec![Value::Integer(13).into(), Value::Integer(41).into()])
+                Ok(vec![
+                    RuntimeValue::Scalar(Value::Object(
+                        [("value".into(), Value::List(vec![Value::Integer(13)]))]
+                            .into_iter()
+                            .collect(),
+                    )),
+                    RuntimeValue::Scalar(Value::Object(
+                        [("value".into(), Value::List(vec![Value::Integer(41)]))]
+                            .into_iter()
+                            .collect(),
+                    )),
+                ])
             }),
         )
         .unwrap();
@@ -2015,10 +2200,12 @@ fn exact_bridge_scheduler_fixture() -> (KernelRegistry, RelationalBackendRegistr
         PlannedInput {
             value: ValueRef::new(0),
             consumption: InputConsumption::FullyMaterialized,
+            bound_value: None,
         },
         PlannedInput {
             value: ValueRef::new(1),
             consumption: InputConsumption::FullyMaterialized,
+            bound_value: None,
         },
     ]);
     let consumer_operation = relational_operation(1, &[4]);
@@ -2113,11 +2300,14 @@ fn scheduler_publishes_and_consumes_exact_relational_fragment_bridges() {
         .run(&execution_plan, CancellationToken::new())
         .unwrap();
 
-    let RuntimeValue::Artifact(value) = &result.values["result"] else {
-        panic!("consumer output must be a materialized bridge artifact");
-    };
-    assert_eq!(value.kind(), ArtifactKind::Collected);
-    assert_eq!(value.values(), &[Value::Integer(41)]);
+    assert_eq!(
+        result.values["result"],
+        RuntimeValue::Scalar(Value::Object(
+            [("value".into(), Value::List(vec![Value::Integer(41)]))]
+                .into_iter()
+                .collect(),
+        ))
+    );
 }
 
 #[test]
@@ -2157,21 +2347,93 @@ fn cancellation_during_exact_bridge_stream_collection_is_cancelled() {
     use super::scheduler::SchedulerCheckpoint;
 
     let cancellation = CancellationToken::new();
-    let stream = StreamValue::from_values([Value::Integer(41)], cancellation.clone()).unwrap();
-    let (mut kernels, relational, mut execution_plan) = exact_bridge_scheduler_fixture();
+    let stream = StreamValue::from_values(
+        [Value::Object(
+            [("value".into(), Value::List(vec![Value::Integer(41)]))]
+                .into_iter()
+                .collect(),
+        )],
+        cancellation.clone(),
+    )
+    .unwrap();
+    let (mut kernels, _, mut execution_plan) = exact_bridge_scheduler_fixture();
     kernels
         .register(
             id("bridge_stream", KernelHandle::new),
             FnKernel(move |_: &[RuntimeValue]| {
                 Ok(vec![
-                    Value::Integer(13).into(),
-                    RuntimeValue::Stream(stream.clone()),
+                    RuntimeValue::Scalar(Value::Object(
+                        [("value".into(), Value::List(vec![Value::Integer(13)]))]
+                            .into_iter()
+                            .collect(),
+                    )),
+                    RuntimeValue::Scalar(Value::Object(
+                        [("value".into(), Value::List(vec![Value::Integer(41)]))]
+                            .into_iter()
+                            .collect(),
+                    )),
                 ])
             }),
         )
         .unwrap();
     execution_plan.operations[0].kernel =
         PlannedKernel::Native(id("bridge_stream", KernelHandle::new));
+
+    struct StreamFragmentBackend {
+        stream: StreamValue,
+    }
+
+    impl RelationalBackend for StreamFragmentBackend {
+        fn execute(
+            &self,
+            context: &RelationalContext<'_>,
+            plan: &CompiledRelationalPlan,
+            operation_inputs: &[RuntimeValue],
+            bridge_inputs: &[RelationalInput],
+        ) -> Result<RelationalExecution, RelationalError> {
+            if !plan.bridge_inputs.is_empty() {
+                return ProductionRelationalBackend::default().execute(
+                    context,
+                    plan,
+                    operation_inputs,
+                    bridge_inputs,
+                );
+            }
+            let object = || {
+                RuntimeValue::Scalar(Value::Object(
+                    [("value".into(), Value::List(vec![Value::Integer(13)]))]
+                        .into_iter()
+                        .collect(),
+                ))
+            };
+            let fragment_outputs = plan
+                .requested_fragment_outputs
+                .iter()
+                .map(|fragment| {
+                    let value = if fragment.as_str() == "producer-exact" {
+                        RuntimeValue::Stream(self.stream.clone())
+                    } else {
+                        object()
+                    };
+                    (fragment.clone(), value)
+                })
+                .collect();
+            Ok(RelationalExecution {
+                outputs: vec![object(), object()],
+                fragment_outputs,
+            })
+        }
+    }
+
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            execution_plan.relational_subplans[0].backend.clone(),
+            StreamFragmentBackend {
+                stream: stream.clone(),
+            },
+        )
+        .unwrap();
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
     let collected = Arc::new(AtomicUsize::new(0));
@@ -2479,6 +2741,13 @@ fn materialization_bridges_preserve_their_explicit_semantics() {
         roots: Box::new([RelationalOperatorIndex::new(0)]),
         pushdown_hints: Box::new([]),
     };
+    let tabular = |value| {
+        RuntimeValue::from(Value::Object(
+            [("value".into(), Value::List(vec![Value::Integer(value)]))]
+                .into_iter()
+                .collect(),
+        ))
+    };
     let resources = RunResourceSet::acquire(&[], &no_resources()).unwrap();
     let context = RelationalContext {
         run_id: RunId::new(1),
@@ -2489,24 +2758,23 @@ fn materialization_bridges_preserve_their_explicit_semantics() {
         .execute(
             &context,
             &plan,
-            &[RuntimeValue::from(Value::Integer(99))],
+            &[tabular(99)],
             &[
                 RelationalInput {
                     bridge: decoy_bridge,
-                    value: RuntimeValue::from(Value::Integer(13)),
+                    value: materialize_bridge(MaterializationBridge::Collect, tabular(13), &token)
+                        .unwrap(),
                 },
                 RelationalInput {
                     bridge: expected_bridge,
-                    value: RuntimeValue::from(Value::Integer(41)),
+                    value: materialize_bridge(MaterializationBridge::Collect, tabular(41), &token)
+                        .unwrap(),
                 },
             ],
         )
         .unwrap();
 
-    assert_eq!(
-        execution.outputs,
-        vec![RuntimeValue::from(Value::Integer(41))]
-    );
+    assert_eq!(execution.outputs, vec![tabular(41)]);
 }
 
 #[test]
@@ -2542,7 +2810,7 @@ impl RelationalBackend for StreamingRelationalBackend {
         _: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
         let (sender, receiver) = bounded_stream_channel(1, context.cancellation.clone())
-            .map_err(|error| RelationalError::new(error.to_string()))?;
+            .map_err(|_| RelationalError::operator_invalid("stream setup failed"))?;
         let stream = StreamValue::from_receiver(receiver);
         *self.sender.lock().unwrap() = Some(sender);
         *self.observed.lock().unwrap() = Some(stream.clone());
@@ -2597,7 +2865,9 @@ impl RelationalBackend for FailingRelationalBackend {
         _: &[RuntimeValue],
         _: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
-        Err(RelationalError::new("relational execution failed"))
+        Err(RelationalError::operator_invalid(
+            "relational execution failed",
+        ))
     }
 }
 

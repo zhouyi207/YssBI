@@ -100,6 +100,31 @@ describe('project publication graph resource move plan', () => {
   });
 
   it('prepares the complete move without mutating path-owned stores', () => {
+    useGraphDataStore.setState((state) => ({
+      graphEntities: {
+        ...state.graphEntities,
+        [from]: {
+          ...state.graphEntities[from],
+          nodes: {
+            ...state.graphEntities[from].nodes,
+            'stable-call': {
+              ...state.graphEntities[from].nodes['local-node'],
+              id: 'stable-call',
+              nodeType: 'yssbi.project.function.call',
+              subGraphPath: from,
+              title: 'Localized call title',
+            },
+            'legacy-call': {
+              ...state.graphEntities[from].nodes['local-node'],
+              id: 'legacy-call',
+              nodeType: 'Functions:Call Function',
+              subGraphPath: from,
+              title: 'Legacy call label',
+            },
+          },
+        },
+      },
+    }));
     const before = snapshotPathOwnedState();
     const destination = makeEditorProjectionFixture({ graphPath: to, title: 'New' }).projection;
 
@@ -113,6 +138,12 @@ describe('project publication graph resource move plan', () => {
     expect(snapshotPathOwnedState()).toEqual(before);
     expect(plan).toMatchObject({ from, to, kind: 'event', name: 'New' });
     expect(plan.destinationProjection).toBe(destination);
+    expect(plan.referenceSnapshot.callers).toEqual([{
+      graphPath: from,
+      nodeId: 'stable-call',
+      before: from,
+      after: to,
+    }]);
   });
 
   it('commits the prepared move synchronously and preserves document flags and owners', () => {

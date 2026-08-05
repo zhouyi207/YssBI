@@ -1,5 +1,5 @@
 export type { CreateNodeFn } from './createNodeFn';
-export type { VariableDropMenu, VariableNodeType } from './variableDrop';
+export type { VariableDropMenu } from './variableDrop';
 export {
   buildVariableDropMenu,
   clientToWorldInCanvas,

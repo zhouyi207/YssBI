@@ -40,9 +40,9 @@ export function SidebarNodesTab() {
             </p>
           ) : items.map((item) => (
             <div
-              key={item.creation.kind === 'static'
-                ? `static:${item.nodeTypeId}`
-                : `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`}
+              key={item.creation.kind === 'resourceBound'
+                ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
+                : `${item.creation.kind}:${item.nodeTypeId}`}
               className="rounded-sm px-2 py-1.5"
             >
               <div className="truncate text-xs text-foreground">{item.title}</div>

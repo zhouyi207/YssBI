@@ -1,0 +1,3505 @@
+{
+  "catalog": {
+    "categories": [
+      {
+        "categoryId": "dataframe",
+        "searchText": "dataframe",
+        "title": "DataFrame"
+      }
+    ],
+    "items": [
+      {
+        "aliases": [
+          "select columns",
+          "projection",
+          "dataframe"
+        ],
+        "categoryId": "dataframe",
+        "creation": {
+          "kind": "parameterizedStatic",
+          "nodeTypeId": "yssbi.dataframe.project",
+          "requiredParameters": [
+            "columns"
+          ]
+        },
+        "description": "Selects DataFrame columns in an explicit order.",
+        "documentation": "Selects direct source columns without renaming or derived expressions.",
+        "iconId": "builtin.dataframe",
+        "nodeTypeId": "yssbi.dataframe.project",
+        "parameters": [
+          {
+            "description": "Source columns to keep, in output order.",
+            "key": "columns",
+            "title": "Columns"
+          }
+        ],
+        "ports": [
+          {
+            "direction": "input",
+            "key": "source",
+            "kind": "data",
+            "label": "Source"
+          },
+          {
+            "direction": "output",
+            "key": "result",
+            "kind": "data",
+            "label": "Result"
+          }
+        ],
+        "searchText": "project dataframe select columns projection dataframe",
+        "styleId": "builtin.dataframe",
+        "technicalTerms": [
+          "select columns",
+          "projection",
+          "dataframe"
+        ],
+        "title": "Project DataFrame"
+      }
+    ],
+    "locale": "en-US",
+    "projectInstanceId": "fixture-project",
+    "registryFingerprint": "15f5cf6e31be4ffb7a5b4282d167b497187b5828efa6758778fab06df1916f70",
+    "resourcePublicationRevision": 0
+  },
+  "connect": {
+    "locale": "en-US",
+    "mutation": {
+      "payload": {
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000009",
+          "portKey": "source"
+        },
+        "order": null,
+        "output": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000001",
+          "portKey": "dataframe"
+        }
+      },
+      "type": "connect"
+    },
+    "operationId": "00000000-0000-0000-0000-0000000000c9",
+    "result": {
+      "delta": {
+        "causedBy": "00000000-0000-0000-0000-0000000000c9",
+        "fromRevision": 2,
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "payload": {
+          "operations": [
+            {
+              "connection": {
+                "id": "00000000-0000-0000-0000-000000000068",
+                "input": {
+                  "node_id": "00000000-0000-0000-0000-000000000009",
+                  "port": {
+                    "key": "source",
+                    "kind": "declared"
+                  }
+                },
+                "order": null,
+                "output": {
+                  "node_id": "00000000-0000-0000-0000-000000000001",
+                  "port": {
+                    "key": "dataframe",
+                    "kind": "declared"
+                  }
+                }
+              },
+              "operation": "insert_connection"
+            }
+          ]
+        },
+        "toRevision": 3
+      },
+      "history": {
+        "canRedo": false,
+        "canUndo": true
+      },
+      "projectionReplacement": {
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "projection": {
+          "basis": {
+            "graphPath": "events/ProductionChain.yssbi-event",
+            "graphRevision": 3,
+            "registryFingerprint": [
+              21,
+              245,
+              207,
+              110,
+              49,
+              190,
+              79,
+              251,
+              122,
+              91,
+              66,
+              130,
+              209,
+              103,
+              180,
+              151,
+              24,
+              123,
+              88,
+              40,
+              239,
+              166,
+              117,
+              135,
+              120,
+              250,
+              176,
+              109,
+              241,
+              145,
+              111,
+              112
+            ],
+            "resourceVersions": {
+              "databases/main": "[{\"id\":\"main\",\"engine\":{\"duckDb\":{\"path\":\"database/project.duckdb\",\"table\":\"main\"}},\"schemaVersion\":1,\"required\":true,\"name\":\"Main\"},[{\"name\":\"amount\",\"type\":\"Int64\"},{\"name\":\"region\",\"type\":\"String\"},{\"name\":\"active\",\"type\":\"Boolean\"}]]"
+            }
+          },
+          "connections": [
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000065",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000066",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000067",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000005",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000068",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000009",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000001",
+                "portKey": "dataframe"
+              }
+            }
+          ],
+          "diagnostics": [
+            {
+              "blocking": true,
+              "code": "compiler.input.unbound",
+              "location": {
+                "address": {
+                  "kind": "declared",
+                  "nodeId": "00000000-0000-0000-0000-000000000002",
+                  "portKey": "source"
+                },
+                "kind": "port"
+              },
+              "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+              "related": [],
+              "severity": "error"
+            },
+            {
+              "blocking": true,
+              "code": "compiler.parameter.required",
+              "location": {
+                "key": "columns",
+                "kind": "parameter",
+                "nodeId": "00000000-0000-0000-0000-000000000009"
+              },
+              "message": "Compiler diagnostic: columns",
+              "related": [],
+              "severity": "error"
+            }
+          ],
+          "graphPath": "events/ProductionChain.yssbi-event",
+          "hasBlockingDiagnostics": true,
+          "nodes": [
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Get DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000001",
+              "nodeTypeId": "yssbi.dataframe.source.get",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "dataframe"
+                  },
+                  "editor": "resource",
+                  "key": "dataframe",
+                  "multiline": false,
+                  "value": "databases/main"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000001",
+                    "portKey": "dataframe"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "dataframe"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      },
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "active",
+                        "scalarType": "boolean"
+                      }
+                    ],
+                    "kind": "input"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "dataframe"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 3
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [
+                {
+                  "blocking": true,
+                  "code": "compiler.input.unbound",
+                  "location": {
+                    "address": {
+                      "kind": "declared",
+                      "nodeId": "00000000-0000-0000-0000-000000000002",
+                      "portKey": "source"
+                    },
+                    "kind": "port"
+                  },
+                  "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+                  "related": [],
+                  "severity": "error"
+                }
+              ],
+              "display": {
+                "description": "Filters DataFrame rows with a typed predicate.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Filter Rows",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "nodeTypeId": "yssbi.dataframe.filter.rows",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "columns": [],
+                    "kind": "filterPredicate",
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": {
+                      "column": "amount",
+                      "operator": "greaterThan",
+                      "value": {
+                        "type": "integer",
+                        "value": "10"
+                      }
+                    }
+                  },
+                  "display": {
+                    "description": "Typed condition used to keep matching rows.",
+                    "title": "Predicate"
+                  },
+                  "editor": "auto",
+                  "key": "predicate",
+                  "multiline": false,
+                  "value": {
+                    "column": "amount",
+                    "operator": "greaterThan",
+                    "value": {
+                      "type": "integer",
+                      "value": "10"
+                    }
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "unbound",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 3
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "kind": "projectColumns",
+                    "options": [],
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": [
+                      "amount",
+                      "region"
+                    ]
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": [
+                    "amount",
+                    "region"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 3
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Renames one DataFrame column.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Rename DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "nodeTypeId": "yssbi.dataframe.rename",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Column name to rename.",
+                    "title": "Source column"
+                  },
+                  "editor": "text",
+                  "key": "from",
+                  "multiline": false,
+                  "value": "amount"
+                },
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "New column name.",
+                    "title": "Destination column"
+                  },
+                  "editor": "text",
+                  "key": "to",
+                  "multiline": false,
+                  "value": "selected_amount"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 3
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Limit DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "nodeTypeId": "yssbi.dataframe.limit",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "rows"
+                  },
+                  "editor": "number",
+                  "key": "rows",
+                  "multiline": false,
+                  "value": 2
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 3
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [
+                {
+                  "blocking": true,
+                  "code": "compiler.parameter.required",
+                  "location": {
+                    "key": "columns",
+                    "kind": "parameter",
+                    "nodeId": "00000000-0000-0000-0000-000000000009"
+                  },
+                  "message": "Compiler diagnostic: columns",
+                  "related": [],
+                  "severity": "error"
+                }
+              ],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000009",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": true,
+                    "kind": "projectColumns",
+                    "options": [
+                      {
+                        "dataType": "int64",
+                        "name": "amount"
+                      },
+                      {
+                        "dataType": "string",
+                        "name": "region"
+                      },
+                      {
+                        "dataType": "boolean",
+                        "name": "active"
+                      }
+                    ],
+                    "unavailableReason": null,
+                    "value": []
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": null
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      },
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "active",
+                        "scalarType": "boolean"
+                      }
+                    ],
+                    "kind": "input"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 320.0,
+                "y": 180.0
+              },
+              "sourceRevision": 3
+            }
+          ],
+          "sourceRevision": 3
+        }
+      }
+    }
+  },
+  "create": {
+    "locale": "en-US",
+    "mutation": {
+      "payload": {
+        "descriptor": {
+          "kind": "parameterizedStatic",
+          "nodeTypeId": "yssbi.dataframe.project",
+          "requiredParameters": [
+            "columns"
+          ]
+        },
+        "position": {
+          "x": 320.0,
+          "y": 180.0
+        },
+        "userLabel": null
+      },
+      "type": "createNode"
+    },
+    "operationId": "00000000-0000-0000-0000-0000000000c8",
+    "position": {
+      "x": 320.0,
+      "y": 180.0
+    },
+    "result": {
+      "delta": {
+        "causedBy": "00000000-0000-0000-0000-0000000000c8",
+        "fromRevision": 1,
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "payload": {
+          "operations": [
+            {
+              "node": {
+                "id": "00000000-0000-0000-0000-000000000009",
+                "node_type": "yssbi.dataframe.project",
+                "parameters": {},
+                "position": {
+                  "x": 320.0,
+                  "y": 180.0
+                },
+                "user_label": null
+              },
+              "operation": "insert_node"
+            }
+          ]
+        },
+        "toRevision": 2
+      },
+      "history": {
+        "canRedo": false,
+        "canUndo": true
+      },
+      "projectionReplacement": {
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "projection": {
+          "basis": {
+            "graphPath": "events/ProductionChain.yssbi-event",
+            "graphRevision": 2,
+            "registryFingerprint": [
+              21,
+              245,
+              207,
+              110,
+              49,
+              190,
+              79,
+              251,
+              122,
+              91,
+              66,
+              130,
+              209,
+              103,
+              180,
+              151,
+              24,
+              123,
+              88,
+              40,
+              239,
+              166,
+              117,
+              135,
+              120,
+              250,
+              176,
+              109,
+              241,
+              145,
+              111,
+              112
+            ],
+            "resourceVersions": {
+              "databases/main": "[{\"id\":\"main\",\"engine\":{\"duckDb\":{\"path\":\"database/project.duckdb\",\"table\":\"main\"}},\"schemaVersion\":1,\"required\":true,\"name\":\"Main\"},[{\"name\":\"amount\",\"type\":\"Int64\"},{\"name\":\"region\",\"type\":\"String\"},{\"name\":\"active\",\"type\":\"Boolean\"}]]"
+            }
+          },
+          "connections": [
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000065",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000066",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000067",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000005",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "result"
+              }
+            }
+          ],
+          "diagnostics": [
+            {
+              "blocking": true,
+              "code": "compiler.input.unbound",
+              "location": {
+                "address": {
+                  "kind": "declared",
+                  "nodeId": "00000000-0000-0000-0000-000000000002",
+                  "portKey": "source"
+                },
+                "kind": "port"
+              },
+              "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+              "related": [],
+              "severity": "error"
+            },
+            {
+              "blocking": true,
+              "code": "compiler.input.unbound",
+              "location": {
+                "address": {
+                  "kind": "declared",
+                  "nodeId": "00000000-0000-0000-0000-000000000009",
+                  "portKey": "source"
+                },
+                "kind": "port"
+              },
+              "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000009:source",
+              "related": [],
+              "severity": "error"
+            },
+            {
+              "blocking": true,
+              "code": "compiler.parameter.required",
+              "location": {
+                "key": "columns",
+                "kind": "parameter",
+                "nodeId": "00000000-0000-0000-0000-000000000009"
+              },
+              "message": "Compiler diagnostic: columns",
+              "related": [],
+              "severity": "error"
+            }
+          ],
+          "graphPath": "events/ProductionChain.yssbi-event",
+          "hasBlockingDiagnostics": true,
+          "nodes": [
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Get DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000001",
+              "nodeTypeId": "yssbi.dataframe.source.get",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "dataframe"
+                  },
+                  "editor": "resource",
+                  "key": "dataframe",
+                  "multiline": false,
+                  "value": "databases/main"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000001",
+                    "portKey": "dataframe"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "dataframe"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      },
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "active",
+                        "scalarType": "boolean"
+                      }
+                    ],
+                    "kind": "input"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "dataframe"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 2
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [
+                {
+                  "blocking": true,
+                  "code": "compiler.input.unbound",
+                  "location": {
+                    "address": {
+                      "kind": "declared",
+                      "nodeId": "00000000-0000-0000-0000-000000000002",
+                      "portKey": "source"
+                    },
+                    "kind": "port"
+                  },
+                  "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+                  "related": [],
+                  "severity": "error"
+                }
+              ],
+              "display": {
+                "description": "Filters DataFrame rows with a typed predicate.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Filter Rows",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "nodeTypeId": "yssbi.dataframe.filter.rows",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "columns": [],
+                    "kind": "filterPredicate",
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": {
+                      "column": "amount",
+                      "operator": "greaterThan",
+                      "value": {
+                        "type": "integer",
+                        "value": "10"
+                      }
+                    }
+                  },
+                  "display": {
+                    "description": "Typed condition used to keep matching rows.",
+                    "title": "Predicate"
+                  },
+                  "editor": "auto",
+                  "key": "predicate",
+                  "multiline": false,
+                  "value": {
+                    "column": "amount",
+                    "operator": "greaterThan",
+                    "value": {
+                      "type": "integer",
+                      "value": "10"
+                    }
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "unbound",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 2
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "kind": "projectColumns",
+                    "options": [],
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": [
+                      "amount",
+                      "region"
+                    ]
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": [
+                    "amount",
+                    "region"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 2
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Renames one DataFrame column.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Rename DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "nodeTypeId": "yssbi.dataframe.rename",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Column name to rename.",
+                    "title": "Source column"
+                  },
+                  "editor": "text",
+                  "key": "from",
+                  "multiline": false,
+                  "value": "amount"
+                },
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "New column name.",
+                    "title": "Destination column"
+                  },
+                  "editor": "text",
+                  "key": "to",
+                  "multiline": false,
+                  "value": "selected_amount"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 2
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Limit DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "nodeTypeId": "yssbi.dataframe.limit",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "rows"
+                  },
+                  "editor": "number",
+                  "key": "rows",
+                  "multiline": false,
+                  "value": 2
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 2
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [
+                {
+                  "blocking": true,
+                  "code": "compiler.input.unbound",
+                  "location": {
+                    "address": {
+                      "kind": "declared",
+                      "nodeId": "00000000-0000-0000-0000-000000000009",
+                      "portKey": "source"
+                    },
+                    "kind": "port"
+                  },
+                  "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000009:source",
+                  "related": [],
+                  "severity": "error"
+                },
+                {
+                  "blocking": true,
+                  "code": "compiler.parameter.required",
+                  "location": {
+                    "key": "columns",
+                    "kind": "parameter",
+                    "nodeId": "00000000-0000-0000-0000-000000000009"
+                  },
+                  "message": "Compiler diagnostic: columns",
+                  "related": [],
+                  "severity": "error"
+                }
+              ],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000009",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "kind": "projectColumns",
+                    "options": [],
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": []
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": null
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "unbound",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 320.0,
+                "y": 180.0
+              },
+              "sourceRevision": 2
+            }
+          ],
+          "sourceRevision": 2
+        }
+      }
+    }
+  },
+  "graphPath": "events/ProductionChain.yssbi-event",
+  "initialProjection": {
+    "basis": {
+      "graphPath": "events/ProductionChain.yssbi-event",
+      "graphRevision": 1,
+      "registryFingerprint": [
+        21,
+        245,
+        207,
+        110,
+        49,
+        190,
+        79,
+        251,
+        122,
+        91,
+        66,
+        130,
+        209,
+        103,
+        180,
+        151,
+        24,
+        123,
+        88,
+        40,
+        239,
+        166,
+        117,
+        135,
+        120,
+        250,
+        176,
+        109,
+        241,
+        145,
+        111,
+        112
+      ],
+      "resourceVersions": {
+        "databases/main": "[{\"id\":\"main\",\"engine\":{\"duckDb\":{\"path\":\"database/project.duckdb\",\"table\":\"main\"}},\"schemaVersion\":1,\"required\":true,\"name\":\"Main\"},[{\"name\":\"amount\",\"type\":\"Int64\"},{\"name\":\"region\",\"type\":\"String\"},{\"name\":\"active\",\"type\":\"Boolean\"}]]"
+      }
+    },
+    "connections": [
+      {
+        "connectionId": "00000000-0000-0000-0000-000000000065",
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000003",
+          "portKey": "source"
+        },
+        "order": null,
+        "output": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000002",
+          "portKey": "result"
+        }
+      },
+      {
+        "connectionId": "00000000-0000-0000-0000-000000000066",
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000004",
+          "portKey": "source"
+        },
+        "order": null,
+        "output": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000003",
+          "portKey": "result"
+        }
+      },
+      {
+        "connectionId": "00000000-0000-0000-0000-000000000067",
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000005",
+          "portKey": "source"
+        },
+        "order": null,
+        "output": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000004",
+          "portKey": "result"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "blocking": true,
+        "code": "compiler.input.unbound",
+        "location": {
+          "address": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "source"
+          },
+          "kind": "port"
+        },
+        "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+        "related": [],
+        "severity": "error"
+      }
+    ],
+    "graphPath": "events/ProductionChain.yssbi-event",
+    "hasBlockingDiagnostics": true,
+    "nodes": [
+      {
+        "capabilities": {
+          "canCopy": true,
+          "canDelete": true,
+          "canEditLabel": true,
+          "canEditParameters": true,
+          "hasDynamicPorts": false,
+          "managed": false,
+          "supportsInlineLiterals": false
+        },
+        "diagnostics": [],
+        "display": {
+          "description": "Performs a typed tabular operation.",
+          "iconId": "builtin.dataframe",
+          "styleId": "builtin.dataframe",
+          "title": "Get DataFrame",
+          "userLabel": null
+        },
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "nodeId": "00000000-0000-0000-0000-000000000001",
+        "nodeTypeId": "yssbi.dataframe.source.get",
+        "parameterEditors": [
+          {
+            "configuration": null,
+            "display": {
+              "description": "Typed node parameter.",
+              "title": "dataframe"
+            },
+            "editor": "resource",
+            "key": "dataframe",
+            "multiline": false,
+            "value": "databases/main"
+          }
+        ],
+        "ports": [
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000001",
+              "portKey": "dataframe"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": true,
+              "current": 0,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "dataframe"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": {
+              "fields": [
+                {
+                  "name": "amount",
+                  "scalarType": "int64"
+                },
+                {
+                  "name": "region",
+                  "scalarType": "string"
+                },
+                {
+                  "name": "active",
+                  "scalarType": "boolean"
+                }
+              ],
+              "kind": "input"
+            },
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "dataframe"
+          }
+        ],
+        "position": {
+          "x": 10.0,
+          "y": 20.0
+        },
+        "sourceRevision": 1
+      },
+      {
+        "capabilities": {
+          "canCopy": true,
+          "canDelete": true,
+          "canEditLabel": true,
+          "canEditParameters": true,
+          "hasDynamicPorts": false,
+          "managed": false,
+          "supportsInlineLiterals": false
+        },
+        "diagnostics": [
+          {
+            "blocking": true,
+            "code": "compiler.input.unbound",
+            "location": {
+              "address": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "source"
+              },
+              "kind": "port"
+            },
+            "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+            "related": [],
+            "severity": "error"
+          }
+        ],
+        "display": {
+          "description": "Filters DataFrame rows with a typed predicate.",
+          "iconId": "builtin.dataframe",
+          "styleId": "builtin.dataframe",
+          "title": "Filter Rows",
+          "userLabel": null
+        },
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "nodeId": "00000000-0000-0000-0000-000000000002",
+        "nodeTypeId": "yssbi.dataframe.filter.rows",
+        "parameterEditors": [
+          {
+            "configuration": {
+              "available": false,
+              "columns": [],
+              "kind": "filterPredicate",
+              "unavailableReason": "Connect DataFrame input",
+              "value": {
+                "column": "amount",
+                "operator": "greaterThan",
+                "value": {
+                  "type": "integer",
+                  "value": "10"
+                }
+              }
+            },
+            "display": {
+              "description": "Typed condition used to keep matching rows.",
+              "title": "Predicate"
+            },
+            "editor": "auto",
+            "key": "predicate",
+            "multiline": false,
+            "value": {
+              "column": "amount",
+              "operator": "greaterThan",
+              "value": {
+                "type": "integer",
+                "value": "10"
+              }
+            }
+          }
+        ],
+        "ports": [
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "portKey": "source"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": true,
+              "current": 0,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "input",
+            "display": {
+              "instanceLabel": null,
+              "label": "Source"
+            },
+            "input": {
+              "effective": "unbound",
+              "literalOverride": null,
+              "protocolDefault": null
+            },
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "source"
+          }
+        ],
+        "position": {
+          "x": 10.0,
+          "y": 20.0
+        },
+        "sourceRevision": 1
+      },
+      {
+        "capabilities": {
+          "canCopy": true,
+          "canDelete": true,
+          "canEditLabel": true,
+          "canEditParameters": true,
+          "hasDynamicPorts": false,
+          "managed": false,
+          "supportsInlineLiterals": false
+        },
+        "diagnostics": [],
+        "display": {
+          "description": "Selects DataFrame columns in an explicit order.",
+          "iconId": "builtin.dataframe",
+          "styleId": "builtin.dataframe",
+          "title": "Project DataFrame",
+          "userLabel": null
+        },
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "nodeId": "00000000-0000-0000-0000-000000000003",
+        "nodeTypeId": "yssbi.dataframe.project",
+        "parameterEditors": [
+          {
+            "configuration": {
+              "available": false,
+              "kind": "projectColumns",
+              "options": [],
+              "unavailableReason": "Connect DataFrame input",
+              "value": [
+                "amount",
+                "region"
+              ]
+            },
+            "display": {
+              "description": "Source columns to keep, in output order.",
+              "title": "Columns"
+            },
+            "editor": "auto",
+            "key": "columns",
+            "multiline": false,
+            "value": [
+              "amount",
+              "region"
+            ]
+          }
+        ],
+        "ports": [
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "portKey": "source"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "input",
+            "display": {
+              "instanceLabel": null,
+              "label": "Source"
+            },
+            "input": {
+              "effective": "connections",
+              "literalOverride": null,
+              "protocolDefault": null
+            },
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "source"
+          }
+        ],
+        "position": {
+          "x": 10.0,
+          "y": 20.0
+        },
+        "sourceRevision": 1
+      },
+      {
+        "capabilities": {
+          "canCopy": true,
+          "canDelete": true,
+          "canEditLabel": true,
+          "canEditParameters": true,
+          "hasDynamicPorts": false,
+          "managed": false,
+          "supportsInlineLiterals": false
+        },
+        "diagnostics": [],
+        "display": {
+          "description": "Renames one DataFrame column.",
+          "iconId": "builtin.dataframe",
+          "styleId": "builtin.dataframe",
+          "title": "Rename DataFrame",
+          "userLabel": null
+        },
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "nodeId": "00000000-0000-0000-0000-000000000004",
+        "nodeTypeId": "yssbi.dataframe.rename",
+        "parameterEditors": [
+          {
+            "configuration": null,
+            "display": {
+              "description": "Column name to rename.",
+              "title": "Source column"
+            },
+            "editor": "text",
+            "key": "from",
+            "multiline": false,
+            "value": "amount"
+          },
+          {
+            "configuration": null,
+            "display": {
+              "description": "New column name.",
+              "title": "Destination column"
+            },
+            "editor": "text",
+            "key": "to",
+            "multiline": false,
+            "value": "selected_amount"
+          }
+        ],
+        "ports": [
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "portKey": "source"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "input",
+            "display": {
+              "instanceLabel": null,
+              "label": "Source"
+            },
+            "input": {
+              "effective": "connections",
+              "literalOverride": null,
+              "protocolDefault": null
+            },
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "source"
+          }
+        ],
+        "position": {
+          "x": 10.0,
+          "y": 20.0
+        },
+        "sourceRevision": 1
+      },
+      {
+        "capabilities": {
+          "canCopy": true,
+          "canDelete": true,
+          "canEditLabel": true,
+          "canEditParameters": true,
+          "hasDynamicPorts": false,
+          "managed": false,
+          "supportsInlineLiterals": false
+        },
+        "diagnostics": [],
+        "display": {
+          "description": "Performs a typed tabular operation.",
+          "iconId": "builtin.dataframe",
+          "styleId": "builtin.dataframe",
+          "title": "Limit DataFrame",
+          "userLabel": null
+        },
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "nodeId": "00000000-0000-0000-0000-000000000005",
+        "nodeTypeId": "yssbi.dataframe.limit",
+        "parameterEditors": [
+          {
+            "configuration": null,
+            "display": {
+              "description": "Typed node parameter.",
+              "title": "rows"
+            },
+            "editor": "number",
+            "key": "rows",
+            "multiline": false,
+            "value": 2
+          }
+        ],
+        "ports": [
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": true,
+              "current": 0,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "portKey": "source"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "input",
+            "display": {
+              "instanceLabel": null,
+              "label": "Source"
+            },
+            "input": {
+              "effective": "connections",
+              "literalOverride": null,
+              "protocolDefault": null
+            },
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "source"
+          }
+        ],
+        "position": {
+          "x": 10.0,
+          "y": 20.0
+        },
+        "sourceRevision": 1
+      }
+    ],
+    "sourceRevision": 1
+  },
+  "projectInput": {
+    "node_id": "00000000-0000-0000-0000-000000000009",
+    "port": {
+      "key": "source",
+      "kind": "declared"
+    }
+  },
+  "projectNodeId": "00000000-0000-0000-0000-000000000009",
+  "sourceOutput": {
+    "node_id": "00000000-0000-0000-0000-000000000001",
+    "port": {
+      "key": "dataframe",
+      "kind": "declared"
+    }
+  },
+  "submit": {
+    "locale": "en-US",
+    "mutation": {
+      "payload": {
+        "nodeId": "00000000-0000-0000-0000-000000000009",
+        "parameters": {
+          "columns": [
+            "region",
+            "amount"
+          ]
+        }
+      },
+      "type": "setParameters"
+    },
+    "operationId": "00000000-0000-0000-0000-0000000000ca",
+    "result": {
+      "delta": {
+        "causedBy": "00000000-0000-0000-0000-0000000000ca",
+        "fromRevision": 3,
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "payload": {
+          "operations": [
+            {
+              "after": {
+                "id": "00000000-0000-0000-0000-000000000009",
+                "node_type": "yssbi.dataframe.project",
+                "parameters": {
+                  "columns": [
+                    "region",
+                    "amount"
+                  ]
+                },
+                "position": {
+                  "x": 320.0,
+                  "y": 180.0
+                },
+                "user_label": null
+              },
+              "before": {
+                "id": "00000000-0000-0000-0000-000000000009",
+                "node_type": "yssbi.dataframe.project",
+                "parameters": {},
+                "position": {
+                  "x": 320.0,
+                  "y": 180.0
+                },
+                "user_label": null
+              },
+              "operation": "update_node"
+            }
+          ]
+        },
+        "toRevision": 4
+      },
+      "history": {
+        "canRedo": false,
+        "canUndo": true
+      },
+      "projectionReplacement": {
+        "graphPath": "events/ProductionChain.yssbi-event",
+        "projection": {
+          "basis": {
+            "graphPath": "events/ProductionChain.yssbi-event",
+            "graphRevision": 4,
+            "registryFingerprint": [
+              21,
+              245,
+              207,
+              110,
+              49,
+              190,
+              79,
+              251,
+              122,
+              91,
+              66,
+              130,
+              209,
+              103,
+              180,
+              151,
+              24,
+              123,
+              88,
+              40,
+              239,
+              166,
+              117,
+              135,
+              120,
+              250,
+              176,
+              109,
+              241,
+              145,
+              111,
+              112
+            ],
+            "resourceVersions": {
+              "databases/main": "[{\"id\":\"main\",\"engine\":{\"duckDb\":{\"path\":\"database/project.duckdb\",\"table\":\"main\"}},\"schemaVersion\":1,\"required\":true,\"name\":\"Main\"},[{\"name\":\"amount\",\"type\":\"Int64\"},{\"name\":\"region\",\"type\":\"String\"},{\"name\":\"active\",\"type\":\"Boolean\"}]]"
+            }
+          },
+          "connections": [
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000065",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000066",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000003",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000067",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000005",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000004",
+                "portKey": "result"
+              }
+            },
+            {
+              "connectionId": "00000000-0000-0000-0000-000000000068",
+              "input": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000009",
+                "portKey": "source"
+              },
+              "order": null,
+              "output": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000001",
+                "portKey": "dataframe"
+              }
+            }
+          ],
+          "diagnostics": [
+            {
+              "blocking": true,
+              "code": "compiler.input.unbound",
+              "location": {
+                "address": {
+                  "kind": "declared",
+                  "nodeId": "00000000-0000-0000-0000-000000000002",
+                  "portKey": "source"
+                },
+                "kind": "port"
+              },
+              "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+              "related": [],
+              "severity": "error"
+            }
+          ],
+          "graphPath": "events/ProductionChain.yssbi-event",
+          "hasBlockingDiagnostics": true,
+          "nodes": [
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Get DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000001",
+              "nodeTypeId": "yssbi.dataframe.source.get",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "dataframe"
+                  },
+                  "editor": "resource",
+                  "key": "dataframe",
+                  "multiline": false,
+                  "value": "databases/main"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000001",
+                    "portKey": "dataframe"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "dataframe"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      },
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "active",
+                        "scalarType": "boolean"
+                      }
+                    ],
+                    "kind": "input"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "dataframe"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 4
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [
+                {
+                  "blocking": true,
+                  "code": "compiler.input.unbound",
+                  "location": {
+                    "address": {
+                      "kind": "declared",
+                      "nodeId": "00000000-0000-0000-0000-000000000002",
+                      "portKey": "source"
+                    },
+                    "kind": "port"
+                  },
+                  "message": "Compiler diagnostic: 00000000-0000-0000-0000-000000000002:source",
+                  "related": [],
+                  "severity": "error"
+                }
+              ],
+              "display": {
+                "description": "Filters DataFrame rows with a typed predicate.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Filter Rows",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "nodeTypeId": "yssbi.dataframe.filter.rows",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "columns": [],
+                    "kind": "filterPredicate",
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": {
+                      "column": "amount",
+                      "operator": "greaterThan",
+                      "value": {
+                        "type": "integer",
+                        "value": "10"
+                      }
+                    }
+                  },
+                  "display": {
+                    "description": "Typed condition used to keep matching rows.",
+                    "title": "Predicate"
+                  },
+                  "editor": "auto",
+                  "key": "predicate",
+                  "multiline": false,
+                  "value": {
+                    "column": "amount",
+                    "operator": "greaterThan",
+                    "value": {
+                      "type": "integer",
+                      "value": "10"
+                    }
+                  }
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "unbound",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 4
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": false,
+                    "kind": "projectColumns",
+                    "options": [],
+                    "unavailableReason": "Connect DataFrame input",
+                    "value": [
+                      "amount",
+                      "region"
+                    ]
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": [
+                    "amount",
+                    "region"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 4
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Renames one DataFrame column.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Rename DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "nodeTypeId": "yssbi.dataframe.rename",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Column name to rename.",
+                    "title": "Source column"
+                  },
+                  "editor": "text",
+                  "key": "from",
+                  "multiline": false,
+                  "value": "amount"
+                },
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "New column name.",
+                    "title": "Destination column"
+                  },
+                  "editor": "text",
+                  "key": "to",
+                  "multiline": false,
+                  "value": "selected_amount"
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 4
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Performs a typed tabular operation.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Limit DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "nodeTypeId": "yssbi.dataframe.limit",
+              "parameterEditors": [
+                {
+                  "configuration": null,
+                  "display": {
+                    "description": "Typed node parameter.",
+                    "title": "rows"
+                  },
+                  "editor": "number",
+                  "key": "rows",
+                  "multiline": false,
+                  "value": 2
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 10.0,
+                "y": 20.0
+              },
+              "sourceRevision": 4
+            },
+            {
+              "capabilities": {
+                "canCopy": true,
+                "canDelete": true,
+                "canEditLabel": true,
+                "canEditParameters": true,
+                "hasDynamicPorts": false,
+                "managed": false,
+                "supportsInlineLiterals": false
+              },
+              "diagnostics": [],
+              "display": {
+                "description": "Selects DataFrame columns in an explicit order.",
+                "iconId": "builtin.dataframe",
+                "styleId": "builtin.dataframe",
+                "title": "Project DataFrame",
+                "userLabel": null
+              },
+              "graphPath": "events/ProductionChain.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000009",
+              "nodeTypeId": "yssbi.dataframe.project",
+              "parameterEditors": [
+                {
+                  "configuration": {
+                    "available": true,
+                    "kind": "projectColumns",
+                    "options": [
+                      {
+                        "dataType": "int64",
+                        "name": "amount"
+                      },
+                      {
+                        "dataType": "string",
+                        "name": "region"
+                      },
+                      {
+                        "dataType": "boolean",
+                        "name": "active"
+                      }
+                    ],
+                    "unavailableReason": null,
+                    "value": [
+                      "region",
+                      "amount"
+                    ]
+                  },
+                  "display": {
+                    "description": "Source columns to keep, in output order.",
+                    "title": "Columns"
+                  },
+                  "editor": "auto",
+                  "key": "columns",
+                  "multiline": false,
+                  "value": [
+                    "region",
+                    "amount"
+                  ]
+                }
+              ],
+              "ports": [
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      }
+                    ],
+                    "kind": "project"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "source"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "input",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Source"
+                  },
+                  "input": {
+                    "effective": "connections",
+                    "literalOverride": null,
+                    "protocolDefault": null
+                  },
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      },
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "active",
+                        "scalarType": "boolean"
+                      }
+                    ],
+                    "kind": "input"
+                  },
+                  "resolvedType": {
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "source"
+                }
+              ],
+              "position": {
+                "x": 320.0,
+                "y": 180.0
+              },
+              "sourceRevision": 4
+            }
+          ],
+          "sourceRevision": 4
+        }
+      }
+    },
+    "selectedColumns": [
+      "region",
+      "amount"
+    ]
+  }
+}

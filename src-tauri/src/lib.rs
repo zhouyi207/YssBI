@@ -68,11 +68,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // 注册全局状态管理器
-        .manage(project::ProjectState::new())
         .manage(project::ProjectWatcherState::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {
+            let project_state =
+                project::ProjectState::try_new().map_err(Box::<dyn std::error::Error>::from)?;
+            app.manage(project_state);
+
             // 初始化日志管理器
             log::init_log_manager(app.handle().clone());
             let app_dir = app.path().app_data_dir()?;

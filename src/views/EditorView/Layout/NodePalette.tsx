@@ -9,9 +9,9 @@ import { Input } from '@/components/ui/input';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 
 export function nodePaletteItemKey(item: LocalizedCatalogItem): string {
-  return item.creation.kind === 'static'
-    ? item.nodeTypeId
-    : `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`;
+  return item.creation.kind === 'resourceBound'
+    ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
+    : `${item.creation.kind}:${item.nodeTypeId}`;
 }
 
 export function NodePalette({

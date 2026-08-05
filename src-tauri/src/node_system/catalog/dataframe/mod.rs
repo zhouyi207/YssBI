@@ -1,7 +1,7 @@
 //! DataFrame node protocols staged for aggregation into the built-in provider.
 //!
 //! This module intentionally depends only on the new node-system IR. It does not
-//! use legacy `NodeDefinition`, `PinRole`, `GraphInstance`, or `Executor` types.
+//! use legacy graph authoring, pin-reconciliation, or execution types.
 
 mod families;
 
@@ -12,9 +12,13 @@ use crate::node_system::compiler::{
     NodeImplementation, NodeLowerer, RelationalInputBinding, RelationalNodeFragment,
 };
 use crate::node_system::document::PortRef;
+use crate::node_system::parameter_types::dataframe::{
+    FilterLiteral, FilterOperator, FilterPredicate, ProjectColumns,
+};
 use crate::node_system::plan::{
-    CompiledParameterHandle, RelationalBackendId, RelationalFragmentId, RelationalOperator,
-    RelationalOperatorIndex, RelationalRename, ResourceId,
+    CompiledParameterHandle, RelationalBackendId, RelationalExpression, RelationalFragmentId,
+    RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalProjection,
+    RelationalRename, ResourceId,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
@@ -67,6 +71,14 @@ fn registered_node(spec: &NodeSpec) -> RegisteredNode {
         InterfaceKind::Rename => RegisteredNode::leaf(
             Arc::new(protocol),
             Arc::new(NodeImplementation::new(RenameLowerer)),
+        ),
+        InterfaceKind::Project => RegisteredNode::leaf(
+            Arc::new(protocol),
+            Arc::new(NodeImplementation::new(ProjectLowerer)),
+        ),
+        InterfaceKind::FilterRows => RegisteredNode::leaf(
+            Arc::new(protocol),
+            Arc::new(NodeImplementation::new(FilterRowsLowerer)),
         ),
         _ => leaf(protocol, spec.kernel),
     }
@@ -143,6 +155,26 @@ fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
                 required_text_parameter("to"),
             ],
         ),
+        Project => (
+            relational_ports(SchemaExpr::Project {
+                input: Box::new(SchemaExpr::Input(port_key("source"))),
+                columns: ColumnSelectionExpr::FromParameter(sid("columns", ParameterKey::new)),
+            }),
+            vec![nominal_parameter(
+                "columns",
+                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            )],
+        ),
+        FilterRows => (
+            relational_ports(SchemaExpr::Filter {
+                input: Box::new(SchemaExpr::Input(port_key("source"))),
+                predicate: Some(sid("predicate", ParameterKey::new)),
+            }),
+            vec![nominal_parameter(
+                "predicate",
+                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            )],
+        ),
         Decompose => (
             vec![
                 data_input("dataframe", dataframe_type(), None),
@@ -172,6 +204,7 @@ fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
                     dataframe_type(),
                     Some(SchemaExpr::Filter {
                         input: Box::new(SchemaExpr::Input(port_key("source"))),
+                        predicate: None,
                     }),
                 ),
             ],
@@ -284,6 +317,13 @@ fn interface(kind: InterfaceKind) -> (Vec<PortSpec>, Vec<ParameterSpec>) {
             vec![positive_integer_parameter("order", 1)],
         ),
     }
+}
+
+fn relational_ports(result_schema: SchemaExpr) -> Vec<PortSpec> {
+    vec![
+        streaming_input("source", dataframe_type(), None),
+        streaming_output("result", dataframe_type(), Some(result_schema)),
+    ]
 }
 
 fn data_input(key: &'static str, value_type: TypeExpr, schema: Option<SchemaExpr>) -> PortSpec {
@@ -400,6 +440,16 @@ fn column_parameter(key: &'static str) -> ParameterSpec {
     )
 }
 
+fn nominal_parameter(key: &'static str, type_id: &'static str) -> ParameterSpec {
+    parameter(
+        key,
+        concrete(type_id),
+        ParameterEditorSpec::Auto,
+        None,
+        vec![ParameterConstraint::Required],
+    )
+}
+
 fn text_parameter(key: &'static str, multiline: bool) -> ParameterSpec {
     parameter(
         key,
@@ -477,6 +527,14 @@ fn dataframe_types() -> Vec<TypeRegistration> {
     [
         ("tabular.dataframe", "types.dataframe.title"),
         ("tabular.series", "types.series.title"),
+        (
+            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            "types.dataframe_project_columns.title",
+        ),
+        (
+            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            "types.dataframe_filter_predicate.title",
+        ),
     ]
     .into_iter()
     .map(|(id, title)| TypeRegistration {
@@ -509,6 +567,8 @@ fn category(kind: InterfaceKind) -> &'static str {
         InterfaceKind::DataframeSource
         | InterfaceKind::Limit
         | InterfaceKind::Rename
+        | InterfaceKind::Project
+        | InterfaceKind::FilterRows
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
         | InterfaceKind::Filter => "dataframe",
@@ -542,6 +602,141 @@ impl NodeLowerer for SourceLowerer {
             FragmentMetadata::default(),
         )
     }
+}
+
+struct ProjectLowerer;
+
+impl NodeLowerer for ProjectLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let columns = decode_parameter::<ProjectColumns>(context, "columns")?;
+        let columns = columns
+            .as_slice()
+            .iter()
+            .map(|name| RelationalProjection {
+                name: name.clone(),
+                expression: RelationalExpression::Column(name.clone()),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        relational_transform_node(
+            context,
+            RelationalOperator::Project {
+                input: RelationalOperatorIndex::new(0),
+                columns,
+            },
+        )
+    }
+}
+
+struct FilterRowsLowerer;
+
+impl NodeLowerer for FilterRowsLowerer {
+    fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        let predicate = decode_parameter::<FilterPredicate>(context, "predicate")?;
+        relational_transform_node(
+            context,
+            RelationalOperator::Filter {
+                input: RelationalOperatorIndex::new(0),
+                predicate: lower_filter_predicate(predicate),
+            },
+        )
+    }
+}
+
+fn decode_parameter<T: serde::de::DeserializeOwned>(
+    context: &LoweringContext<'_>,
+    key: &'static str,
+) -> Result<T, LoweringError> {
+    let value = context
+        .parameters
+        .get(&ParameterKey::new(key).expect("static parameter key"))
+        .ok_or_else(|| LoweringError::new(format!("required parameter '{key}' is missing")))?;
+    serde_json::from_value(value.clone())
+        .map_err(|error| LoweringError::new(format!("invalid parameter '{key}': {error}")))
+}
+
+fn lower_filter_predicate(predicate: FilterPredicate) -> RelationalExpression {
+    let column = RelationalExpression::Column(predicate.column);
+    match predicate.operator {
+        FilterOperator::IsNull => RelationalExpression::IsNull(Box::new(column)),
+        FilterOperator::IsNotNull => {
+            RelationalExpression::Not(Box::new(RelationalExpression::IsNull(Box::new(column))))
+        }
+        operator => {
+            let literal = RelationalExpression::Literal(lower_filter_literal(
+                predicate
+                    .value
+                    .expect("validated comparison predicate has a literal"),
+            ));
+            let column = Box::new(column);
+            let literal = Box::new(literal);
+            match operator {
+                FilterOperator::Equal => RelationalExpression::Equal(column, literal),
+                FilterOperator::NotEqual => RelationalExpression::NotEqual(column, literal),
+                FilterOperator::LessThan => RelationalExpression::LessThan(column, literal),
+                FilterOperator::LessThanOrEqual => {
+                    RelationalExpression::LessThanOrEqual(column, literal)
+                }
+                FilterOperator::GreaterThan => RelationalExpression::GreaterThan(column, literal),
+                FilterOperator::GreaterThanOrEqual => {
+                    RelationalExpression::GreaterThanOrEqual(column, literal)
+                }
+                FilterOperator::IsNull | FilterOperator::IsNotNull => unreachable!(),
+            }
+        }
+    }
+}
+
+fn lower_filter_literal(literal: FilterLiteral) -> RelationalLiteral {
+    match literal {
+        FilterLiteral::Boolean(value) => RelationalLiteral::Boolean(value),
+        FilterLiteral::Integer(value) => RelationalLiteral::Integer(value),
+        FilterLiteral::Decimal(value) => RelationalLiteral::Decimal(value),
+        FilterLiteral::String(value) => RelationalLiteral::String(value),
+    }
+}
+
+fn relational_transform_node(
+    context: &LoweringContext<'_>,
+    operator: RelationalOperator,
+) -> Result<LoweredNode, LoweringError> {
+    let input = context
+        .inputs
+        .iter()
+        .find(|(address, _)| {
+            matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
+        })
+        .map(|(address, _)| address.clone())
+        .ok_or_else(|| LoweringError::new("relational input 'source' was not materialized"))?;
+    let result = context
+        .outputs
+        .iter()
+        .find(|(address, _)| {
+            matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
+        })
+        .map(|(address, _)| address.clone())
+        .ok_or_else(|| LoweringError::new("relational output 'result' was not materialized"))?;
+    relational_node(
+        context,
+        vec![
+            RelationalOperator::Input {
+                name: "source".into(),
+            },
+            operator,
+        ],
+        RelationalOperatorIndex::new(1),
+        Box::new([RelationalInputBinding {
+            port: input,
+            operator: RelationalOperatorIndex::new(0),
+        }]),
+        FragmentMetadata {
+            results: Box::new([FragmentResult {
+                name: format!("node.{}.result", context.node_id).into(),
+                output: result,
+            }]),
+            ..FragmentMetadata::default()
+        },
+    )
 }
 
 struct RenameLowerer;
@@ -730,22 +925,33 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
     let description = leak(format!("nodes.{}.description", spec.id));
     let documentation = leak(format!("nodes.{}.documentation", spec.id));
     let aliases = leak(format!("nodes.{}.aliases", spec.id));
-    let (en_description, zh_description, en_documentation, zh_documentation) =
-        if spec.interface == InterfaceKind::Rename {
-            (
-                "Renames one DataFrame column.",
-                "重命名数据框中的一列。",
-                "Renames the column identified by 'from' to 'to'.",
-                "将“源列”指定的列重命名为“目标列”。",
-            )
-        } else {
-            (
-                "Performs a typed tabular operation.",
-                "执行类型化的表格数据操作。",
-                "Uses stable ports and the tabular runtime API.",
-                "使用稳定端口和表格运行时 API。",
-            )
-        };
+    let (en_description, zh_description, en_documentation, zh_documentation) = match spec.interface
+    {
+        InterfaceKind::Rename => (
+            "Renames one DataFrame column.",
+            "重命名数据框中的一列。",
+            "Renames the column identified by 'from' to 'to'.",
+            "将“源列”指定的列重命名为“目标列”。",
+        ),
+        InterfaceKind::Project => (
+            "Selects DataFrame columns in an explicit order.",
+            "按明确顺序选择数据框列。",
+            "Selects direct source columns without renaming or derived expressions.",
+            "选择源数据框中的直接列，不执行重命名或派生表达式。",
+        ),
+        InterfaceKind::FilterRows => (
+            "Filters DataFrame rows with a typed predicate.",
+            "使用类型化谓词筛选数据框行。",
+            "Filters rows by one source column and a Rust-issued compatible operator.",
+            "按一个源列和 Rust 提供的兼容运算符筛选行。",
+        ),
+        _ => (
+            "Performs a typed tabular operation.",
+            "执行类型化的表格数据操作。",
+            "Uses stable ports and the tabular runtime API.",
+            "使用稳定端口和表格运行时 API。",
+        ),
+    };
     out.extend([
         ("en-US", title, Text(spec.title)),
         ("zh-CN", title, Text(spec.zh_title)),
@@ -762,6 +968,16 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
         ("types.dataframe.title", "DataFrame", "数据框"),
         ("types.series.title", "DataSeries", "数据序列"),
+        (
+            "types.dataframe_project_columns.title",
+            "DataFrame Project Columns",
+            "数据框投影列",
+        ),
+        (
+            "types.dataframe_filter_predicate.title",
+            "DataFrame Filter Predicate",
+            "数据框筛选谓词",
+        ),
         ("categories.dataframe.title", "DataFrame", "数据框"),
         (
             "categories.dataframe.series.title",
@@ -774,6 +990,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "时间序列",
         ),
         ("categories.dataframe.panel.title", "Panel Data", "面板数据"),
+        (
+            "editors.dataframe.connect_source",
+            "Connect DataFrame input",
+            "连接数据框输入",
+        ),
     ] {
         out.push(("en-US", key, Text(en)));
         out.push(("zh-CN", key, Text(zh)));
@@ -821,6 +1042,20 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", description, Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "columns",
+            "Columns",
+            "列",
+            "Source columns to keep, in output order.",
+            "按输出顺序保留的源列。",
+        ),
+        (
+            "predicate",
+            "Predicate",
+            "谓词",
+            "Typed condition used to keep matching rows.",
+            "用于保留匹配行的类型化条件。",
+        ),
         (
             "from",
             "Source column",

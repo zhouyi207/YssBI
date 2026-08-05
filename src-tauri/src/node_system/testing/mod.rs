@@ -7,14 +7,17 @@
 mod assertions;
 mod builders;
 mod determinism;
+mod protocol;
 mod runtime;
 mod snapshots;
+pub(crate) mod source_audit;
 
 pub use assertions::{CompileAssertions, RunAssertions, compile_assertions, run_assertions};
 pub use builders::{
     EmptyResourceSnapshot, TestGraphBuilder, TestNode, TestProvider, TestProviderBuilder,
 };
 pub use determinism::{assert_locale_invariance, assert_random_insertion_order_determinism};
+pub(crate) use protocol::TestProtocolBuilder;
 pub use runtime::{
     KernelRecord, KernelRecorder, NoFunctionPlans, ResourceLeakTracker, tracked_requirement,
 };

@@ -33,6 +33,10 @@ export type EditorGraphMutationDto =
     }
   | { type: 'deleteNode'; payload: { nodeId: string } }
   | {
+      type: 'setParameters';
+      payload: { nodeId: string; parameters: Record<string, unknown> };
+    }
+  | {
       type: 'moveNodes';
       payload: { positions: Array<{ nodeId: string; position: NodePositionDto }> };
     }

@@ -86,8 +86,8 @@ impl PreparedProjectActivation {
         mut data: ProjectData,
         authority_basis: Option<PreparedAuthorityBasis>,
         requires_final_rebuild: bool,
-    ) -> Self {
-        let mut store = ProjectStore::default();
+    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+        let mut store = ProjectStore::try_new()?;
         for (id, declaration) in &data.databases {
             let instance = if matches!(declaration.engine, DatabaseEngine::DuckDb { .. }) {
                 bind_duckdb_instance(
@@ -132,7 +132,7 @@ impl PreparedProjectActivation {
             .iter()
             .map(|(id, document)| (id.clone(), document.revision))
             .collect();
-        Self {
+        Ok(Self {
             session_root,
             data,
             store,
@@ -141,7 +141,7 @@ impl PreparedProjectActivation {
             worksheet_revisions,
             authority_basis,
             requires_final_rebuild,
-        }
+        })
     }
 }
 
@@ -151,12 +151,8 @@ impl ProjectState {
         path: Option<&Path>,
     ) -> Result<PreparedProjectActivation, ProjectFilesystemError> {
         let Some(path) = path else {
-            return Ok(PreparedProjectActivation::from_data(
-                None,
-                ProjectData::new(),
-                None,
-                false,
-            ));
+            return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false)
+                .map_err(Into::into);
         };
         let root = NormalizedProjectRoot::from_project_path(path)?;
         let lease = self.filesystem().acquire(root.clone())?;
@@ -170,7 +166,7 @@ impl ProjectState {
             });
         }
         let prepared =
-            PreparedProjectActivation::from_data(Some(root), data, authority_after, true);
+            PreparedProjectActivation::from_data(Some(root), data, authority_after, true)?;
         drop(lease);
         Ok(prepared)
     }
@@ -200,7 +196,7 @@ impl ProjectState {
                 data,
                 authority_basis,
                 true,
-            );
+            )?;
         }
         self.run_activation_final_rebuild_test_hook();
         let published = self.publish_project_activation(prepared)?;
@@ -230,12 +226,9 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn activate_project_fixture(&self, path: String, data: ProjectData) {
         let root = NormalizedProjectRoot::from_project_path(path).unwrap();
-        self.activate_prepared_project(PreparedProjectActivation::from_data(
-            Some(root),
-            data,
-            None,
-            false,
-        ))
+        self.activate_prepared_project(
+            PreparedProjectActivation::from_data(Some(root), data, None, false).unwrap(),
+        )
         .unwrap();
     }
 }
@@ -308,7 +301,8 @@ mod tests {
             new_data.clone(),
             None,
             false,
-        );
+        )
+        .expect("test built-ins are valid");
         let prepared_revisions = (
             prepared.graph_revisions.clone(),
             prepared

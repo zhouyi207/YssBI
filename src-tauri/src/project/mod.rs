@@ -5,6 +5,7 @@ pub mod filesystem;
 pub mod graph_lifecycle;
 pub mod graph_resource_index;
 pub mod graph_resource_path;
+mod history_hydration;
 pub mod path_format;
 pub mod project_data;
 pub mod project_error;

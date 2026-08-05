@@ -11,7 +11,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
 import { useResourceStore } from '@/features/core/resource';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
 import { getFunctionResourceName } from '@/features/domain/graphDiagnostics';
 import { toUiNode } from './nodeView';
 
@@ -21,12 +21,12 @@ export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
   // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
   // 名称以 ResourceStore 为准（重命名的单一事实来源）。
   const callFunctionName = useResourceStore((s) => {
-    if (nodeData?.nodeType !== CALL_FUNCTION_NODE_TYPE || !nodeData.subGraphPath) return undefined;
+    if (!nodeData || !isCallFunctionNodeType(nodeData.nodeType) || !nodeData.subGraphPath) return undefined;
     return getFunctionResourceName(s.resources, nodeData.subGraphPath);
   });
 
   const callTitleOverride =
-    nodeData?.nodeType === CALL_FUNCTION_NODE_TYPE && nodeData.subGraphPath
+    nodeData && isCallFunctionNodeType(nodeData.nodeType) && nodeData.subGraphPath
       ? (callFunctionName ?? '(missing function)')
       : callFunctionName;
 

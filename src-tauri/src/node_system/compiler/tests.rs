@@ -12,15 +12,16 @@ use crate::node_system::plan::{
     BranchResultBinding, CallArgumentBinding, CallResultBinding, CompiledParameterHandle,
     CompiledResourceRequirement, ControlStep, ExecutionDemand, FunctionPlanHandle, GraphOutputRef,
     KernelHandle, LoopCarriedBinding, MaterializationBridge, PlanResult, PlanValueSource,
-    RelationalBackendId, RelationalBridgeInput, RelationalFragmentId, RelationalOperator,
-    RelationalOperatorIndex, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
-    ValueRef,
+    RelationalBackendId, RelationalBridgeInput, RelationalExpression, RelationalFragmentId,
+    RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint,
+    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueRef,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProtocolFingerprint,
     ProviderRegistration, RegisteredNode, RegistryFingerprint, StructuralNodeRole,
 };
+use crate::node_system::testing::TestProtocolBuilder;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -57,46 +58,125 @@ fn node_id(value: u128) -> NodeId {
 fn key(value: &str) -> PortKey {
     PortKey::new(value).unwrap()
 }
-fn protocol() -> NodeProtocol {
-    NodeProtocol::from_static(Box::leak(Box::new(StaticNodeProtocol {
-        type_id: "yssbi.test.constant",
-        catalog: StaticNodeCatalogProtocol {
-            title_key: "nodes.test.constant.title",
-            description_key: None,
-            documentation_key: None,
-            aliases_key: None,
-            category_id: "test",
-            icon_id: "test",
-            style_id: "test",
-            hidden: false,
-        },
-        ports: Box::leak(
-            vec![StaticPortSpec {
-                key: "value",
-                label_key: "nodes.test.constant.value",
-                direction: PortDirection::Output,
-                kind: PortKind::Data,
-                instances: PortInstances::Declared,
-                connections: ConnectionsPerPort::Multiple {
-                    max: None,
-                    ordered: false,
-                },
-                input_binding: None,
-            }]
-            .into_boxed_slice(),
-        ),
-        execution: ExecutionSemantics {
-            determinism: Determinism::Deterministic,
-            purity: Purity::Pure,
-            evaluation: EvaluationPolicy::DemandDriven,
-            cache: CachePolicy::PerRun,
-            effects: EffectSemantics::None,
-        },
-        scope: NodeScope::Any,
-        managed_role: None,
-    })))
-    .unwrap()
+#[test]
+fn owned_protocol_fixture_preserves_catalog_style_and_fingerprint() {
+    let first = registry();
+    let second = registry();
+    let type_id = NodeTypeId::new("yssbi.test.constant").unwrap();
+
+    assert_eq!(
+        first.catalog_manifest().node_protocols.get(&type_id),
+        second.catalog_manifest().node_protocols.get(&type_id),
+        "the owned fixture must retain a stable protocol fingerprint"
+    );
+    assert_eq!(
+        first.protocol(&type_id).unwrap().catalog.style_id.as_str(),
+        "test"
+    );
 }
+
+fn protocol() -> NodeProtocol {
+    TestProtocolBuilder::new("yssbi.test.constant", "test")
+        .style("test")
+        .ports(vec![PortSpec {
+            key: PortKey::new("value").unwrap(),
+            label_key: I18nKey::new("nodes.test.constant.value").unwrap(),
+            direction: PortDirection::Output,
+            kind: PortKind::Data,
+            value_type: TypeExpr::Unknown,
+            instances: PortInstances::Declared,
+            connections: ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            },
+            input_binding: None,
+            consumption: None,
+            production: None,
+            editor: PortEditorSpec::Default,
+            schema: None,
+        }])
+        .build()
+}
+
+struct CorruptCompilerRegistrySnapshot {
+    frozen: NodeRegistry,
+}
+
+impl TypeEnvironment for CorruptCompilerRegistrySnapshot {
+    fn concrete_implements(&self, value_type: &TypeId, class: &TypeClassId) -> Option<bool> {
+        self.frozen
+            .types()
+            .get(value_type)
+            .map(|registration| registration.classes.contains(class))
+    }
+
+    fn constructor_arity(&self, constructor: &TypeConstructorId) -> Option<usize> {
+        self.frozen
+            .types()
+            .constructor(constructor)
+            .map(|registration| registration.arity as usize)
+    }
+}
+
+impl CompilerRegistry for CorruptCompilerRegistrySnapshot {
+    fn fingerprint(&self) -> &RegistryFingerprint {
+        self.frozen.fingerprint()
+    }
+
+    fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>> {
+        let registered = self.frozen.get(node_type)?;
+        Some(RegistryNode {
+            protocol: registered.protocol(),
+            protocol_fingerprint: self
+                .frozen
+                .catalog_manifest()
+                .node_protocols
+                .get(node_type)?
+                .clone(),
+            behavior: RegistryNodeBehavior::ProtocolOnly,
+        })
+    }
+}
+
+struct ProtocolOverrideCompilerRegistry<'a> {
+    frozen: &'a NodeRegistry,
+    node_type: NodeTypeId,
+    protocol: NodeProtocol,
+    structural_role: StructuralNodeRole,
+}
+
+impl TypeEnvironment for ProtocolOverrideCompilerRegistry<'_> {
+    fn concrete_implements(&self, value_type: &TypeId, class: &TypeClassId) -> Option<bool> {
+        self.frozen.concrete_implements(value_type, class)
+    }
+
+    fn constructor_arity(&self, constructor: &TypeConstructorId) -> Option<usize> {
+        self.frozen.constructor_arity(constructor)
+    }
+}
+
+impl CompilerRegistry for ProtocolOverrideCompilerRegistry<'_> {
+    fn fingerprint(&self) -> &RegistryFingerprint {
+        self.frozen.fingerprint()
+    }
+
+    fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>> {
+        if node_type != &self.node_type {
+            return self.frozen.resolve(node_type);
+        }
+        Some(RegistryNode {
+            protocol: &self.protocol,
+            protocol_fingerprint: self
+                .frozen
+                .catalog_manifest()
+                .node_protocols
+                .get(node_type)?
+                .clone(),
+            behavior: RegistryNodeBehavior::Structural(self.structural_role),
+        })
+    }
+}
+
 fn registry() -> NodeRegistry {
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi").unwrap());
     provider.categories = vec![CategoryRegistration {
@@ -140,6 +220,19 @@ fn document(node_type: NodeTypeId) -> GraphDocument {
         connections: BTreeMap::new(),
         input_states: BTreeMap::new(),
     }
+}
+
+#[test]
+fn corrupt_registry_snapshot_produces_missing_lowering_blocking_diagnostic() {
+    let registry = CorruptCompilerRegistrySnapshot { frozen: registry() };
+    let result = GraphCompiler::new(&registry, &Resources)
+        .compile(&document(NodeTypeId::new("yssbi.test.constant").unwrap()));
+
+    assert!(result.plan.is_none());
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.lowering.implementation_missing"
+            && diagnostic.severity.is_blocking()
+    }));
 }
 
 #[test]
@@ -2595,7 +2688,16 @@ impl SchemaResolver for SourceSchemaResolver {
     ) -> Result<SchemaFact, SchemaResolutionError> {
         Ok(SchemaFact::new(
             SchemaExpr::Input(key("raw")),
-            [SchemaColumnRef("a".into()), SchemaColumnRef("b".into())],
+            [
+                SchemaField {
+                    name: SchemaColumnRef("a".into()),
+                    scalar_type: RelationalScalarType::Int64,
+                },
+                SchemaField {
+                    name: SchemaColumnRef("b".into()),
+                    scalar_type: RelationalScalarType::String,
+                },
+            ],
         ))
     }
 }
@@ -2605,9 +2707,11 @@ fn compile_builtin_rename(
     to: serde_json::Value,
     include_source_schema: bool,
 ) -> CompileResult {
-    use crate::node_system::catalog::{DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_builtin_registry};
+    use crate::node_system::catalog::{
+        DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_builtin_node_system,
+    };
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.dataframe.source.get"),
         (2, "yssbi.dataframe.rename"),
@@ -2682,6 +2786,158 @@ fn rename_dataframe_configured_builtin_reaches_relational_plan() {
             },
         ]
     );
+}
+
+fn compile_builtin_relational_chain(graph_path: &str) -> CompileResult {
+    use crate::node_system::catalog::{
+        DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_builtin_node_system,
+    };
+
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.dataframe.source.get"),
+        (2, "yssbi.dataframe.filter.rows"),
+        (3, "yssbi.dataframe.project"),
+        (4, "yssbi.dataframe.rename"),
+        (5, "yssbi.dataframe.limit"),
+    ]);
+    graph.nodes.get_mut(&node_id(1)).unwrap().parameters = BTreeMap::from([(
+        ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    )]);
+    graph.nodes.get_mut(&node_id(2)).unwrap().parameters = BTreeMap::from([(
+        ParameterKey::new("predicate").unwrap(),
+        serde_json::json!({
+            "column": "b",
+            "operator": "equal",
+            "value": { "type": "string", "value": "paid" }
+        }),
+    )]);
+    graph.nodes.get_mut(&node_id(3)).unwrap().parameters = BTreeMap::from([(
+        ParameterKey::new("columns").unwrap(),
+        serde_json::json!(["a"]),
+    )]);
+    graph.nodes.get_mut(&node_id(4)).unwrap().parameters = BTreeMap::from([
+        (ParameterKey::new("from").unwrap(), serde_json::json!("a")),
+        (ParameterKey::new("to").unwrap(), serde_json::json!("total")),
+    ]);
+    graph.nodes.get_mut(&node_id(5)).unwrap().parameters =
+        BTreeMap::from([(ParameterKey::new("rows").unwrap(), serde_json::json!(5))]);
+    connect(&mut graph, 10, 1, "dataframe", 2, "source");
+    connect(&mut graph, 11, 2, "result", 3, "source");
+    connect(&mut graph, 12, 3, "result", 4, "source");
+    connect(&mut graph, 13, 4, "result", 5, "source");
+
+    let mut resolvers = SchemaResolverSet::new();
+    resolvers.insert(
+        SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+        SourceSchemaResolver,
+    );
+    let compiler = GraphCompiler::with_schema_resolvers(&registry, &Resources, resolvers);
+    let snapshot = compiler.snapshot(GraphResourcePath(graph_path.into()), &graph);
+    compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap()
+}
+
+#[test]
+fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
+    let graph_path = "events/task-3-fix-round-1";
+    let result = compile_builtin_relational_chain(graph_path);
+    assert!(
+        result.analysis.diagnostics.is_empty(),
+        "{:?}",
+        result.analysis.diagnostics
+    );
+    let basis = result.execution_basis.expect("chain keeps demand basis");
+    assert_eq!(
+        basis.provenance.graph_path,
+        GraphResourcePath(graph_path.into())
+    );
+    assert!(!basis.provenance.basis.resource_versions.is_empty());
+
+    let final_plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output(graph_path, 5, "result")]),
+            include_default_results: false,
+        })
+        .unwrap();
+    assert_eq!(final_plan.operations.len(), 1);
+    assert_eq!(final_plan.relational_subplans.len(), 1);
+    assert!(
+        final_plan.relational_subplans[0]
+            .materialization_bridges
+            .is_empty()
+    );
+    let final_relational = &final_plan.relational_subplans[0].compiled_plan;
+    assert_eq!(final_relational.operators.len(), 5);
+    assert_eq!(
+        final_relational.roots.as_ref(),
+        [RelationalOperatorIndex::new(4)]
+    );
+    assert_eq!(
+        final_relational.fragment_order.as_ref(),
+        [1_u128, 2, 3, 4, 5]
+            .map(|id| RelationalFragmentId::new(format!("node.{}", node_id(id))).unwrap())
+            .as_slice()
+    );
+    assert_eq!(
+        final_relational.pushdown_hints.as_ref(),
+        [
+            RelationalPushdownHint::Projection {
+                source: RelationalOperatorIndex::new(0),
+                columns: Box::new(["a".into(), "b".into()]),
+            },
+            RelationalPushdownHint::Predicate {
+                source: RelationalOperatorIndex::new(0),
+                predicate: RelationalExpression::Equal(
+                    Box::new(RelationalExpression::Column("b".into())),
+                    Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                        "paid".into(),
+                    ))),
+                ),
+            },
+        ]
+    );
+    final_plan.validate().unwrap();
+
+    for (node, expected_fragments, expected_operators) in [(2, 2, 2), (3, 3, 3)] {
+        let selected_output = demand_output(graph_path, node, "result");
+        let plan = basis
+            .derive_plan(&ExecutionDemand::Outputs {
+                outputs: Box::new([selected_output.clone()]),
+                include_default_results: false,
+            })
+            .unwrap();
+        assert_eq!(plan.operations.len(), 1);
+        assert_eq!(plan.results.len(), 1);
+        assert_eq!(plan.results[0].output, selected_output);
+        assert_eq!(plan.results[0].output.graph_path.0.as_ref(), graph_path);
+        assert_eq!(
+            plan.results[0].output.port,
+            PortAddress::declared(node_id(node), key("result"))
+        );
+        let relational = &plan.relational_subplans[0].compiled_plan;
+        let expected_prefix = (1..=node)
+            .map(|id| RelationalFragmentId::new(format!("node.{}", node_id(id))).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(relational.fragment_order.as_ref(), expected_prefix);
+        assert_eq!(relational.operators.len(), expected_operators);
+        assert_eq!(relational.roots.len(), 1);
+        for suffix_node in (node + 1)..=5 {
+            let suffix =
+                RelationalFragmentId::new(format!("node.{}", node_id(suffix_node))).unwrap();
+            assert!(!relational.fragment_order.contains(&suffix));
+            assert!(
+                relational
+                    .fragment_roots
+                    .iter()
+                    .all(|root| root.fragment != suffix)
+            );
+        }
+        assert_eq!(relational.fragment_order.len(), expected_fragments);
+        plan.validate().unwrap();
+    }
 }
 
 #[test]
@@ -2781,7 +3037,7 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         vec![],
         vec![],
     );
-    let filter = test_protocol(
+    let mut filter = test_protocol(
         "schema_filter",
         vec![
             data_port("in", PortDirection::Input, TypeExpr::Unknown, None),
@@ -2791,12 +3047,23 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
                 TypeExpr::Unknown,
                 Some(SchemaExpr::Filter {
                     input: Box::new(SchemaExpr::Input(key("in"))),
+                    predicate: Some(ParameterKey::new("predicate").unwrap()),
                 }),
             ),
         ],
         vec![],
         vec![],
     );
+    filter.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: ParameterKey::new("predicate").unwrap(),
+        title_key: I18nKey::new("parameters.predicate.title").unwrap(),
+        description_key: None,
+        value_type: TypeExpr::Unknown,
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Auto,
+    }])
+    .unwrap();
     let project = test_protocol(
         "schema_project",
         vec![
@@ -2843,6 +3110,14 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         (3, "schema_project"),
         (4, "schema_rename"),
     ]);
+    graph.nodes.get_mut(&node_id(2)).unwrap().parameters.insert(
+        ParameterKey::new("predicate").unwrap(),
+        serde_json::json!({
+            "column": "a",
+            "operator": "greaterThan",
+            "value": {"type": "integer", "value": "0"}
+        }),
+    );
     connect(&mut graph, 10, 1, "out", 2, "in");
     connect(&mut graph, 11, 2, "out", 3, "in");
     connect(&mut graph, 12, 3, "out", 4, "in");
@@ -2852,15 +3127,19 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
 
     assert!(result.plan.is_some(), "{:?}", result.analysis.diagnostics);
     let source_fact = SchemaExpr::Input(key("raw"));
+    let filtered = SchemaExpr::Filter {
+        input: Box::new(source_fact),
+        predicate: Some(ParameterKey::new("predicate").unwrap()),
+    };
     assert_eq!(
         result
             .analysis
             .partial_schemas
             .get(&PortAddress::declared(node_id(2), key("out"))),
-        Some(&source_fact)
+        Some(&filtered)
     );
     let projected = SchemaExpr::Project {
-        input: Box::new(source_fact),
+        input: Box::new(filtered),
         columns: ColumnSelectionExpr::Explicit(vec![SchemaColumnRef("a".into())]),
     };
     assert_eq!(
@@ -2882,6 +3161,19 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
                 to: SchemaColumnRef("renamed".into()),
             }]),
         })
+    );
+    let output = PortAddress::declared(node_id(4), key("out"));
+    let expected_fields = vec![SchemaField {
+        name: SchemaColumnRef("renamed".into()),
+        scalar_type: RelationalScalarType::Int64,
+    }];
+    assert_eq!(
+        result.analysis.resolved_schemas[&output].fields,
+        expected_fields
+    );
+    assert_eq!(
+        result.semantic.as_ref().unwrap().resolved_schemas[&output].fields,
+        expected_fields
     );
 }
 
@@ -3177,9 +3469,9 @@ fn region_contains_operation(
 
 #[test]
 fn builtin_multi_output_sequence_outside_branch_keeps_walker_order() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.control.sequence"),
         (2, "yssbi.control.do"),
@@ -3206,22 +3498,49 @@ fn builtin_multi_output_sequence_outside_branch_keeps_walker_order() {
         .unwrap_or_else(|| panic!("sequence diagnostics: {:?}", result.analysis.diagnostics));
 
     assert_eq!(plan.operations.len(), 2);
-    assert!(region_contains_operation(
-        &plan.root_region,
-        operation_index_for_node(&plan, 2)
-    ));
-    assert!(region_contains_operation(
-        &plan.root_region,
-        operation_index_for_node(&plan, 3)
-    ));
+    let first = operation_index_for_node(&plan, 2);
+    let second = operation_index_for_node(&plan, 3);
+    let StructuredControlRegion::Sequence(steps) = &plan.root_region else {
+        panic!("expected root sequence, got {:?}", plan.root_region);
+    };
+    let first_position = steps
+        .iter()
+        .position(|step| matches!(step, ControlStep::Operation(operation) if *operation == first))
+        .expect("first Sequence output operation");
+    let second_position = steps
+        .iter()
+        .position(|step| matches!(step, ControlStep::Operation(operation) if *operation == second))
+        .expect("second Sequence output operation");
+    assert!(first_position < second_position);
+}
+
+#[test]
+fn print_protocol_default_lowers_to_effective_runtime_binding() {
+    use crate::node_system::catalog::build_builtin_node_system;
+
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let graph = builtin_graph_with_nodes(&[(1, "yssbi.debug.print")]);
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result
+        .plan
+        .unwrap_or_else(|| panic!("print diagnostics: {:?}", result.analysis.diagnostics));
+    let print = &plan.operations[operation_index_for_node(&plan, 1).index()];
+
+    assert_eq!(print.inputs.len(), 1);
+    assert_eq!(
+        print.inputs[0].bound_value,
+        Some(Value::String("Hello, World!".into()))
+    );
+    plan.validate().unwrap();
 }
 
 #[test]
 fn branch_builds_exclusive_true_and_false_regions() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.int64"),
@@ -3481,9 +3800,9 @@ fn branch_builds_exclusive_true_and_false_regions() {
 
 #[test]
 fn nested_branch_with_one_terminating_arm_blocks_unstructured_continuation() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.bool"),
@@ -3527,10 +3846,10 @@ fn nested_branch_with_one_terminating_arm_blocks_unstructured_continuation() {
 
 #[test]
 fn branch_postdom_uses_last_walker_successor_for_multi_output_sequence() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.control.branch"),
@@ -3601,10 +3920,10 @@ fn branch_postdom_uses_last_walker_successor_for_multi_output_sequence() {
 
 #[test]
 fn branch_continuation_allows_multi_output_sequence_suffix_after_merge() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.control.branch"),
@@ -3676,10 +3995,10 @@ fn branch_continuation_allows_multi_output_sequence_suffix_after_merge() {
 
 #[test]
 fn nested_branch_postdom_stops_before_outer_multi_output_sequence_suffix() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.bool"),
@@ -3769,10 +4088,10 @@ fn nested_branch_postdom_stops_before_outer_multi_output_sequence_suffix() {
 
 #[test]
 fn nested_complete_diamond_uses_the_true_common_continuation() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.bool"),
@@ -3860,9 +4179,9 @@ fn nested_complete_diamond_uses_the_true_common_continuation() {
 
 #[test]
 fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut branch = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.int64"),
@@ -3943,10 +4262,10 @@ fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
 
 #[test]
 fn loop_uses_explicit_condition_limit_and_carried_bindings() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::StructuredControlRegion;
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut graph = builtin_graph_with_nodes(&[
         (1, "yssbi.constant.bool"),
         (2, "yssbi.constant.int64"),
@@ -4148,7 +4467,7 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
 
 #[test]
 fn call_binds_exact_function_locators_across_different_value_layouts() {
-    use crate::node_system::catalog::build_builtin_registry;
+    use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::plan::StructuredControlRegion;
 
     struct FunctionResources {
@@ -4173,7 +4492,7 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         }
     }
 
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let function_path = GraphResourcePath("functions/exact-layout".into());
     let parameter_id = FunctionParameterId("amount".into());
     let return_id = FunctionParameterId("return".into());
@@ -4314,19 +4633,17 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         &|region| matches!(region, StructuredControlRegion::Call { .. })
     ));
 
-    let mut pure_call_registry = registry.clone();
     let call_type = NodeTypeId::new("yssbi.project.function.call").unwrap();
-    let mut pure_call_protocol = pure_call_registry.protocol(&call_type).unwrap().clone();
+    let mut pure_call_protocol = registry.protocol(&call_type).unwrap().clone();
     pure_call_protocol.execution.purity = Purity::Pure;
     pure_call_protocol.execution.evaluation = EvaluationPolicy::DemandDriven;
     pure_call_protocol.execution.effects = EffectSemantics::None;
-    pure_call_registry.by_id.insert(
-        call_type,
-        Arc::new(RegisteredNode::structural(
-            Arc::new(pure_call_protocol),
-            StructuralNodeRole::Call,
-        )),
-    );
+    let pure_call_registry = ProtocolOverrideCompilerRegistry {
+        frozen: &registry,
+        node_type: call_type,
+        protocol: pure_call_protocol,
+        structural_role: StructuralNodeRole::Call,
+    };
     let pure_compiler = GraphCompiler::with_interface_resolvers(
         &pure_call_registry,
         &resources,
@@ -4381,6 +4698,48 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         );
         pruned.validate().unwrap();
     }
+
+    let mut controlled_caller = caller.clone();
+    controlled_caller.nodes.insert(
+        node_id(11),
+        DocumentNode {
+            id: node_id(11),
+            node_type: NodeTypeId::new("yssbi.project.event.begin").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        },
+    );
+    connect(&mut controlled_caller, 501, 11, "then", 10, "enter");
+    let controlled_snapshot = pure_compiler.snapshot(
+        GraphResourcePath("events/controlled-caller".into()),
+        &controlled_caller,
+    );
+    let controlled_products = pure_compiler
+        .compile_snapshot(&controlled_snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let controlled_plan = controlled_products
+        .execution_basis
+        .expect("control-connected caller has a specialization basis")
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([]),
+            include_default_results: false,
+        })
+        .expect("control-connected Call remains mandatory");
+    assert!(contains_region(
+        &controlled_plan.root_region,
+        &|region| matches!(region, StructuredControlRegion::Call { .. })
+    ));
+    assert_eq!(
+        controlled_plan
+            .operations
+            .iter()
+            .map(|operation| operation.source_node_id)
+            .collect::<Vec<_>>(),
+        vec![node_id(1)],
+        "a retained control-connected Call keeps its complete argument closure"
+    );
+
     let requested_output = GraphOutputRef {
         graph_path: pure_caller_snapshot.provenance.graph_path.clone(),
         port: call_result.clone(),
@@ -4415,72 +4774,6 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         "caller specialization must not demand-specialize the callee plan"
     );
     specialized.validate().unwrap();
-
-    fn remove_call_regions(region: &StructuredControlRegion) -> StructuredControlRegion {
-        match region {
-            StructuredControlRegion::Sequence(steps) => StructuredControlRegion::Sequence(
-                steps
-                    .iter()
-                    .filter_map(|step| match step {
-                        ControlStep::Operation(operation) => {
-                            Some(ControlStep::Operation(*operation))
-                        }
-                        ControlStep::Region(region)
-                            if matches!(region.as_ref(), StructuredControlRegion::Call { .. }) =>
-                        {
-                            None
-                        }
-                        ControlStep::Region(region) => {
-                            Some(ControlStep::Region(Box::new(remove_call_regions(region))))
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            ),
-            StructuredControlRegion::If {
-                condition,
-                then_region,
-                else_region,
-                results,
-            } => StructuredControlRegion::If {
-                condition: *condition,
-                then_region: Box::new(remove_call_regions(then_region)),
-                else_region: Box::new(remove_call_regions(else_region)),
-                results: results.clone(),
-            },
-            StructuredControlRegion::Loop {
-                body,
-                carried,
-                continue_condition,
-                max_iterations,
-            } => StructuredControlRegion::Loop {
-                body: Box::new(remove_call_regions(body)),
-                carried: carried.clone(),
-                continue_condition: *continue_condition,
-                max_iterations: *max_iterations,
-            },
-            StructuredControlRegion::Call { .. } => StructuredControlRegion::Sequence(Box::new([])),
-        }
-    }
-    let mut deleted_call_basis = caller_products.execution_basis.as_ref().unwrap().clone();
-    deleted_call_basis.root_region = remove_call_regions(&deleted_call_basis.root_region);
-    let deleted_call = deleted_call_basis
-        .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/caller", 2, "value")]),
-            include_default_results: false,
-        })
-        .expect("a projected-out Call deletes its result declarations");
-    assert!(!contains_region(
-        &deleted_call.root_region,
-        &|region| matches!(region, StructuredControlRegion::Call { .. })
-    ));
-    assert!(
-        deleted_call
-            .value_sources
-            .iter()
-            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
-    );
-    deleted_call.validate().unwrap();
 
     let plan = caller_products.plan.expect("caller should compile");
     fn find_call(

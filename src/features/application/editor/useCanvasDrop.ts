@@ -5,6 +5,10 @@ import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import {
+  BUILTIN_NODE_TYPE_IDS,
+  type VariableNodeTypeId,
+} from '@/features/domain/nodeCatalog';
 import { RESOURCE_CATALOG_REFRESH_MESSAGE } from './editorMutationAvailability';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
@@ -21,7 +25,6 @@ import {
   spawnNodeFromTemplate,
   type CreateNodeFn,
   type VariableDropMenu,
-  type VariableNodeType,
 } from "./canvasDrop";
 
 export type { VariableDropMenu } from "./canvasDrop";
@@ -46,6 +49,7 @@ export function useCanvasDrop({
   canvasElementRef,
   groupId,
   graphPath,
+  variables,
   setContextMenu,
   setPendingConnection,
   createNode,
@@ -129,19 +133,33 @@ export function useCanvasDrop({
   );
 
   const spawnFromVariableMenu = useCallback(
-    async (_menu: VariableDropMenu, _nodeType: VariableNodeType) => {
+    async (menu: VariableDropMenu, nodeTypeId: VariableNodeTypeId) => {
       setVariableDropMenu(null);
+      const resourcePath = variables[menu.variableId]?.resourcePath;
+      const template = resourcePath && catalog
+        ? findResourceNodeSpawnTemplate(catalog.items, resourcePath, 'variable', nodeTypeId)
+        : null;
+      if (!template) {
+        refreshCatalog();
+        uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+        return;
+      }
+      await spawnNodeFromTemplate(
+        template,
+        { x: menu.worldX, y: menu.worldY },
+        { createNode },
+      );
     },
-    [],
+    [catalog, createNode, refreshCatalog, variables],
   );
 
   const handleVariableDropGet = useCallback(
-    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, "Variables:Get Variable"),
+    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, BUILTIN_NODE_TYPE_IDS.getVariable),
     [spawnFromVariableMenu],
   );
 
   const handleVariableDropSet = useCallback(
-    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, "Variables:Set Variable"),
+    (menu: VariableDropMenu) => spawnFromVariableMenu(menu, BUILTIN_NODE_TYPE_IDS.setVariable),
     [spawnFromVariableMenu],
   );
 

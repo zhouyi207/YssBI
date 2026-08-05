@@ -1,4 +1,5 @@
 use super::*;
+use crate::node_system::plan::infer_relational_pushdown_hints;
 
 impl ExecutionPlanBasis {
     pub(super) fn finalize(
@@ -148,8 +149,24 @@ impl ExecutionPlanBasis {
                             }
                         }
                     }
-                    relational_subplans[subplan.index()].compiled_plan.roots =
-                        roots.into_boxed_slice();
+                    let compiled_plan = &mut relational_subplans[subplan.index()].compiled_plan;
+                    compiled_plan.roots = roots.into_boxed_slice();
+                    let mut lineage_roots = compiled_plan.roots.to_vec();
+                    lineage_roots.extend(
+                        compiled_plan
+                            .requested_fragment_outputs
+                            .iter()
+                            .filter_map(|fragment| {
+                                compiled_plan
+                                    .fragment_roots
+                                    .iter()
+                                    .find(|root| &root.fragment == fragment)
+                                    .map(|root| root.operator)
+                            }),
+                    );
+                    compiled_plan.pushdown_hints =
+                        infer_relational_pushdown_hints(&compiled_plan.operators, &lineage_roots)
+                            .into_boxed_slice();
                     operations.push(PlannedOperation {
                         source_node_id: representative.source_node_id,
                         source_node_type_id: representative.source_node_type_id.clone(),

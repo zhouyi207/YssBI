@@ -1,4 +1,7 @@
-use super::{BoundedStreamReceiver, StreamReceiveError, bounded_stream_channel};
+use super::{
+    BoundedStreamReceiver, RelationalError, RelationalErrorCode, StreamReceiveError,
+    bounded_stream_channel,
+};
 use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
 use crate::node_system::plan::{
     OperationIndex, RelationalBackendId, RelationalFragmentId, ResourceId, ValueRef,
@@ -247,10 +250,12 @@ pub enum RunError {
     RelationalBackendNotFound(RelationalBackendId),
     RelationalAcquire {
         backend: RelationalBackendId,
+        code: RelationalErrorCode,
         message: Box<str>,
     },
     RelationalFailed {
         operation: OperationIndex,
+        code: RelationalErrorCode,
         message: Box<str>,
     },
     MissingRelationalFragment(RelationalFragmentId),
@@ -289,6 +294,32 @@ pub enum RunError {
     },
 }
 
+impl RunError {
+    pub fn from_relational_acquire(backend: RelationalBackendId, error: RelationalError) -> Self {
+        if error.code() == RelationalErrorCode::Cancelled {
+            Self::Cancelled
+        } else {
+            Self::RelationalAcquire {
+                backend,
+                code: error.code(),
+                message: error.message().into(),
+            }
+        }
+    }
+
+    pub fn from_relational(operation: OperationIndex, error: RelationalError) -> Self {
+        if error.code() == RelationalErrorCode::Cancelled {
+            Self::Cancelled
+        } else {
+            Self::RelationalFailed {
+                operation,
+                code: error.code(),
+                message: error.message().into(),
+            }
+        }
+    }
+}
+
 impl fmt::Display for RunError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -307,12 +338,16 @@ impl fmt::Display for RunError {
                 "relational backend '{}' is not registered",
                 backend.as_str()
             ),
-            Self::RelationalAcquire { backend, message } => write!(
+            Self::RelationalAcquire {
+                backend, message, ..
+            } => write!(
                 formatter,
                 "failed to acquire relational backend '{}': {message}",
                 backend.as_str()
             ),
-            Self::RelationalFailed { operation, message } => write!(
+            Self::RelationalFailed {
+                operation, message, ..
+            } => write!(
                 formatter,
                 "relational operation {} failed: {message}",
                 operation.index()

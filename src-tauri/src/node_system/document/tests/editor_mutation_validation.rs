@@ -1,6 +1,7 @@
 use super::*;
-use crate::node_system::catalog::build_builtin_registry;
+use crate::node_system::catalog::build_builtin_node_system;
 use crate::node_system::compiler::NodeImplementation;
+use crate::node_system::document::mutation::validate_parameters_with_registry;
 use crate::node_system::protocol::{
     InputBindingSpec, InterfaceResolverId, LiteralPolicy, ParameterConstraint, ParameterEditorSpec,
     ParameterKey, ParameterSchema, ParameterSpec, TypeExpr, TypeId, Value,
@@ -10,24 +11,29 @@ use crate::node_system::registry::TypeRegistration;
 const NODE_TYPE: &str = "yssbi.test.editor_validation";
 
 fn port(
-    key: &'static str,
+    key: &str,
     direction: PortDirection,
     kind: PortKind,
     instances: PortInstances,
     connections: ConnectionsPerPort,
     literal_policy: Option<LiteralPolicy>,
-) -> StaticPortSpec {
-    StaticPortSpec {
-        key,
-        label_key: Box::leak(format!("nodes.test.editor_validation.{key}").into_boxed_str()),
+) -> PortSpec {
+    PortSpec {
+        key: PortKey::new(key).unwrap(),
+        label_key: I18nKey::new(format!("nodes.test.editor_validation.{key}")).unwrap(),
         direction,
         kind,
+        value_type: TypeExpr::Unknown,
         instances,
         connections,
         input_binding: literal_policy.map(|literal_policy| InputBindingSpec {
             literal_policy,
             default_value: None,
         }),
+        consumption: None,
+        production: None,
+        editor: PortEditorSpec::Default,
+        schema: None,
     }
 }
 
@@ -102,27 +108,7 @@ fn validation_registry() -> NodeRegistry {
             Some(LiteralPolicy::Allowed),
         ),
     ];
-    let mut protocol = crate::node_system::protocol::NodeProtocol::from_static(Box::leak(
-        Box::new(StaticNodeProtocol {
-            type_id: NODE_TYPE,
-            catalog: StaticNodeCatalogProtocol {
-                title_key: "nodes.test.editor_validation.title",
-                description_key: None,
-                documentation_key: None,
-                aliases_key: None,
-                category_id: "test",
-                icon_id: "test",
-                style_id: "test",
-                hidden: false,
-            },
-            ports: Box::leak(ports.into_boxed_slice()),
-            execution: EDITOR_MUTATION_EXECUTION,
-            scope: NodeScope::Any,
-            managed_role: None,
-        }),
-    ))
-    .unwrap();
-    protocol.parameters = ParameterSchema::new(vec![
+    let parameters = vec![
         ParameterSpec {
             key: ParameterKey::new("count").unwrap(),
             title_key: I18nKey::new("nodes.test.editor_validation.count").unwrap(),
@@ -162,8 +148,13 @@ fn validation_registry() -> NodeRegistry {
             }],
             editor: ParameterEditorSpec::Text { multiline: false },
         },
-    ])
-    .unwrap();
+    ];
+    let protocol = TestProtocolBuilder::new(NODE_TYPE, "test")
+        .style("test")
+        .ports(ports)
+        .parameters(parameters)
+        .execution(EDITOR_MUTATION_EXECUTION)
+        .build();
 
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi").unwrap());
     provider.types = vec![
@@ -217,6 +208,46 @@ fn validation_registry() -> NodeRegistry {
     let mut builder = NodeRegistryBuilder::new();
     builder.register_provider(provider).unwrap();
     builder.freeze().unwrap()
+}
+
+#[test]
+fn editor_parameter_validation_applies_registered_nominal_codec() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let mut protocol = registry
+        .protocol(&NodeTypeId::new("yssbi.dataframe.rename").unwrap())
+        .unwrap()
+        .clone();
+    let columns = ParameterKey::new("columns").unwrap();
+    protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: columns.clone(),
+        title_key: I18nKey::new("parameters.columns.title").unwrap(),
+        description_key: None,
+        value_type: TypeExpr::Concrete(
+            TypeId::new(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)
+                .unwrap(),
+        ),
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Auto,
+    }])
+    .unwrap();
+
+    assert!(
+        validate_parameters_with_registry(
+            &registry,
+            &protocol,
+            &ParameterValues::from([(columns.clone(), serde_json::json!(["b", "a"]))]),
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_parameters_with_registry(
+            &registry,
+            &protocol,
+            &ParameterValues::from([(columns, serde_json::json!([]))]),
+        )
+        .is_err()
+    );
 }
 
 fn validation_node(id: NodeId) -> DocumentNode {
@@ -315,7 +346,7 @@ fn resource_descriptor_materializes_only_function_variable_and_database_bindings
 
     let variable_id = crate::variable::VariableId::new();
     let snapshot = resource_descriptor_snapshot(variable_id);
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let document = GraphDocument::default();
     let cases = [
         (
@@ -376,7 +407,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
 
     let variable_id = crate::variable::VariableId::new();
     let snapshot = resource_descriptor_snapshot(variable_id);
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let document = GraphDocument::default();
     let invalid = [
         resource_create(
@@ -480,7 +511,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
 
     let variable_id = crate::variable::VariableId::new();
     let snapshot = resource_descriptor_snapshot(variable_id);
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let document = GraphDocument::default();
     let variable = variable_id.to_string();
     let noncanonical = [
@@ -587,7 +618,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
 #[test]
 fn editor_delete_rejects_managed_protocol_and_preserves_required_shell_node() {
     let managed_id = node_id(1_001);
-    let registry = build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let mut document = GraphDocument::default();
     document
         .create_node(DocumentNode {

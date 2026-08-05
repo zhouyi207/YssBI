@@ -1,7 +1,9 @@
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-
-export type VariableNodeType = 'Variables:Get Variable' | 'Variables:Set Variable';
+import {
+  BUILTIN_NODE_TYPE_IDS,
+  type VariableNodeTypeId,
+} from '@/features/domain/nodeCatalog';
 
 export interface VariableDropMenu {
   x: number;
@@ -45,14 +47,14 @@ export function resolveVariableSpawnType(
   event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey'>,
   clientX: number,
   clientY: number,
-): VariableNodeType | 'menu' {
-  if (event.altKey) return 'Variables:Set Variable';
-  if (event.ctrlKey) return 'Variables:Get Variable';
+): VariableNodeTypeId | 'menu' {
+  if (event.altKey) return BUILTIN_NODE_TYPE_IDS.setVariable;
+  if (event.ctrlKey) return BUILTIN_NODE_TYPE_IDS.getVariable;
 
   const elements = document.elementsFromPoint(clientX, clientY);
   const pinEl = elements.find((el) => el.closest('[data-pin-id]'))?.closest('[data-pin-id]');
   if (pinEl?.getAttribute('data-pin-id')) {
-    return 'Variables:Get Variable';
+    return BUILTIN_NODE_TYPE_IDS.getVariable;
   }
 
   return 'menu';

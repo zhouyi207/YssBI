@@ -39,7 +39,7 @@ fn statistics_fragment_contains_every_migrated_protocol() {
 #[test]
 fn statistics_protocols_have_unique_ports_and_valid_bindings() {
     for node in build_provider_fragment().nodes {
-        let protocol = &node.protocol;
+        let protocol = &node.protocol();
         let keys = protocol
             .interface
             .ports

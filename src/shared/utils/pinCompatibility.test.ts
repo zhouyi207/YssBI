@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PinDirection } from '@/shared/types/domain/pin';
+import type { PinSlot } from '@/shared/types/domain/node';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
 import {
@@ -10,7 +11,7 @@ import {
   findAutoConnectPinIndex,
   type ConnectionCandidatePin,
 } from './pinCompatibility';
-import { defaultFunctionSignature, resolveEffectiveDefinition, CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 
 const FLOAT64: DataType = { kind: 'Float64' };
 const STRING: DataType = { kind: 'String' };
@@ -128,28 +129,33 @@ describe('pinAcceptsType - Struct family matching', () => {
   });
 });
 
-describe('findAutoConnectPinIndex via effective call definition', () => {
-  const callBase = {
-    name: 'Call Function',
-    category: ['Functions'],
-    nodeType: CALL_FUNCTION_NODE_TYPE,
-    nodeMetadata: {
-      uiStyle: 'function',
-      supports_dynamic_pins: true,
-      graph_scope: 'any' as const,
-      shell_role: null,
-    },
-    pinSlots: [],
-    typeCapabilities: [],
-  };
-
-  it('connects exec output drag to exec input on projected call pinSlots', () => {
-    const effective = resolveEffectiveDefinition(callBase, {
-      subGraphPath: 'fn-1',
-      ...defaultFunctionSignature(),
+describe('findAutoConnectPinIndex via Rust-shaped editor projection', () => {
+  it('connects a data output to projected input pin slots without rebuilding a function signature', () => {
+    const fixture = makeEditorProjectionFixture({
+      graphPath: 'events/Main.yssbi-event',
+      nodeId: 'projected-target',
+      nodeTypeId: 'tests.projected-target',
+      title: 'Projected target',
     });
-    const draggedExecOutput = pin({ direction: 'output', type: 'exec' });
-    expect(findAutoConnectPinIndex(effective.pinSlots, draggedExecOutput)).toBe(0);
+    const projectedInput = fixture.projection.nodes[0].ports.find(
+      (port) => port.direction === 'input',
+    );
+    if (!projectedInput) throw new Error('expected projected input');
+    const pinSlots: PinSlot[] = [{
+      slotKind: 'fixed',
+      pin: {
+        name: projectedInput.display.label,
+        direction: projectedInput.direction,
+        kind: 'Data',
+        role: { Data: { Custom: projectedInput.templateKey } },
+        dataType: { Concrete: FLOAT64 },
+        optional: false,
+        metaData: { showWidget: false, widgetType: null, isDynamic: false },
+      },
+    }];
+    const draggedOutput = pin({ direction: 'output', dataType: FLOAT64 });
+
+    expect(findAutoConnectPinIndex(pinSlots, draggedOutput)).toBe(0);
   });
 });
 

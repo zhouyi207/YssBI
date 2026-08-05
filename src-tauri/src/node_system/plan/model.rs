@@ -1,8 +1,10 @@
 use crate::node_system::analysis::CompileProvenance;
 use crate::node_system::document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
-use crate::node_system::protocol::{InputConsumption, NodeTypeId, OutputProduction};
+use crate::node_system::protocol::{
+    CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, Value,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 macro_rules! index_type {
@@ -144,6 +146,8 @@ pub struct PlannedOperation {
 pub struct PlannedInput {
     pub value: ValueRef,
     pub consumption: InputConsumption,
+    /// Compiled literal or protocol default used only when no frame value is connected.
+    pub bound_value: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -336,6 +340,7 @@ pub enum RelationalLiteral {
     Null,
     Boolean(bool),
     Integer(i64),
+    Decimal(CanonicalDecimal),
     String(Box<str>),
 }
 
@@ -345,53 +350,303 @@ pub enum RelationalPushdownHint {
         source: RelationalOperatorIndex,
         columns: Box<[Box<str>]>,
     },
+    Predicate {
+        source: RelationalOperatorIndex,
+        predicate: RelationalExpression,
+    },
     Limit {
         source: RelationalOperatorIndex,
         rows: u64,
     },
 }
 
+#[derive(Default)]
+struct SourceLineage {
+    projection: Option<Vec<Box<str>>>,
+    has_unbounded_projection: bool,
+    predicates: Vec<RelationalExpression>,
+    limits: BTreeSet<u64>,
+}
+
+struct LineageRequest {
+    projection: Option<Vec<Box<str>>>,
+    predicates: Vec<RelationalExpression>,
+}
+
 pub(crate) fn infer_relational_pushdown_hints(
     operators: &[RelationalOperator],
+    roots: &[RelationalOperatorIndex],
 ) -> Vec<RelationalPushdownHint> {
+    let mut lineage = BTreeMap::<RelationalOperatorIndex, SourceLineage>::new();
+    let roots = roots.iter().copied().collect::<BTreeSet<_>>();
+    let mut unhintable_sources = BTreeSet::new();
+    for root in &roots {
+        collect_opaque_descendant_sources(operators, *root, false, &mut unhintable_sources);
+    }
+    for root in roots {
+        trace_relational_lineage(
+            operators,
+            root,
+            LineageRequest {
+                projection: None,
+                predicates: Vec::new(),
+            },
+            &mut lineage,
+        );
+    }
+
     let mut hints = Vec::new();
-    for operator in operators {
-        match operator {
-            RelationalOperator::Project { input, columns }
-                if matches!(
-                    operators.get(input.index()),
-                    Some(RelationalOperator::Source { .. })
-                ) && columns.iter().all(|column| {
-                    matches!(&column.expression, RelationalExpression::Column(_))
-                }) =>
-            {
-                let columns = columns
-                    .iter()
-                    .filter_map(|column| match &column.expression {
-                        RelationalExpression::Column(name) => Some(name.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-                hints.push(RelationalPushdownHint::Projection {
-                    source: *input,
-                    columns: columns.into_boxed_slice(),
-                });
-            }
-            RelationalOperator::Limit { input, rows }
-                if matches!(
-                    operators.get(input.index()),
-                    Some(RelationalOperator::Source { .. })
-                ) =>
-            {
-                hints.push(RelationalPushdownHint::Limit {
-                    source: *input,
-                    rows: *rows,
-                });
-            }
-            _ => {}
+    for (source, lineage) in lineage {
+        let metadata_hintable = !unhintable_sources.contains(&source);
+        if metadata_hintable
+            && !lineage.has_unbounded_projection
+            && let Some(columns) = lineage.projection
+            && !columns.is_empty()
+        {
+            hints.push(RelationalPushdownHint::Projection {
+                source,
+                columns: columns.into_boxed_slice(),
+            });
         }
+        if metadata_hintable {
+            hints.extend(
+                lineage
+                    .predicates
+                    .into_iter()
+                    .map(|predicate| RelationalPushdownHint::Predicate { source, predicate }),
+            );
+        }
+        hints.extend(
+            lineage
+                .limits
+                .into_iter()
+                .map(|rows| RelationalPushdownHint::Limit { source, rows }),
+        );
     }
     hints
+}
+
+fn collect_opaque_descendant_sources(
+    operators: &[RelationalOperator],
+    index: RelationalOperatorIndex,
+    opaque: bool,
+    sources: &mut BTreeSet<RelationalOperatorIndex>,
+) {
+    let Some(operator) = operators.get(index.index()) else {
+        return;
+    };
+    match operator {
+        RelationalOperator::Input { .. } => {}
+        RelationalOperator::Source { .. } => {
+            if opaque {
+                sources.insert(index);
+            }
+        }
+        RelationalOperator::Project { input, columns } => {
+            collect_opaque_descendant_sources(
+                operators,
+                *input,
+                opaque || direct_projection_mapping(columns).is_none(),
+                sources,
+            );
+        }
+        RelationalOperator::Filter { input, .. }
+        | RelationalOperator::Rename { input, .. }
+        | RelationalOperator::Limit { input, .. } => {
+            collect_opaque_descendant_sources(operators, *input, opaque, sources);
+        }
+        RelationalOperator::Union { inputs, .. } => {
+            for input in inputs {
+                collect_opaque_descendant_sources(operators, *input, true, sources);
+            }
+        }
+    }
+}
+
+fn trace_relational_lineage(
+    operators: &[RelationalOperator],
+    index: RelationalOperatorIndex,
+    mut request: LineageRequest,
+    lineage: &mut BTreeMap<RelationalOperatorIndex, SourceLineage>,
+) {
+    let Some(operator) = operators.get(index.index()) else {
+        return;
+    };
+    match operator {
+        RelationalOperator::Input { .. } | RelationalOperator::Union { .. } => {}
+        RelationalOperator::Source { .. } => {
+            let source = lineage.entry(index).or_default();
+            match request.projection {
+                Some(mut columns) if !source.has_unbounded_projection => {
+                    for predicate in &request.predicates {
+                        collect_expression_columns(predicate, &mut columns);
+                    }
+                    let projection = source.projection.get_or_insert_default();
+                    for column in columns {
+                        push_unique(projection, column);
+                    }
+                }
+                Some(_) => {}
+                None => source.has_unbounded_projection = true,
+            }
+            for predicate in request.predicates {
+                if !source.predicates.contains(&predicate) {
+                    source.predicates.push(predicate);
+                }
+            }
+        }
+        RelationalOperator::Project { input, columns } => {
+            let Some((mapping, ordered_sources)) = direct_projection_mapping(columns) else {
+                return;
+            };
+            request.projection = Some(match request.projection {
+                Some(demanded) => demanded
+                    .into_iter()
+                    .filter_map(|name| mapping.get(&name).cloned())
+                    .fold(Vec::new(), |mut columns, name| {
+                        push_unique(&mut columns, name);
+                        columns
+                    }),
+                None => ordered_sources,
+            });
+            request.predicates = request
+                .predicates
+                .into_iter()
+                .map(|predicate| rewrite_expression_columns(predicate, &mapping))
+                .collect();
+            trace_relational_lineage(operators, *input, request, lineage);
+        }
+        RelationalOperator::Filter { input, predicate } => {
+            if !request.predicates.contains(predicate) {
+                request.predicates.push(predicate.clone());
+            }
+            trace_relational_lineage(operators, *input, request, lineage);
+        }
+        RelationalOperator::Rename { input, columns } => {
+            let mapping = columns
+                .iter()
+                .map(|rename| (rename.to.clone(), rename.from.clone()))
+                .collect::<BTreeMap<_, _>>();
+            if let Some(projection) = request.projection.as_mut() {
+                *projection = projection
+                    .iter()
+                    .map(|name| mapping.get(name).cloned().unwrap_or_else(|| name.clone()))
+                    .fold(Vec::new(), |mut columns, name| {
+                        push_unique(&mut columns, name);
+                        columns
+                    });
+            }
+            request.predicates = request
+                .predicates
+                .into_iter()
+                .map(|predicate| rewrite_expression_columns(predicate, &mapping))
+                .collect();
+            trace_relational_lineage(operators, *input, request, lineage);
+        }
+        RelationalOperator::Limit { input, rows } => {
+            trace_relational_lineage(operators, *input, request, lineage);
+            if matches!(
+                operators.get(input.index()),
+                Some(RelationalOperator::Source { .. })
+            ) {
+                lineage.entry(*input).or_default().limits.insert(*rows);
+            }
+        }
+    }
+}
+
+fn direct_projection_mapping(
+    columns: &[RelationalProjection],
+) -> Option<(BTreeMap<Box<str>, Box<str>>, Vec<Box<str>>)> {
+    let mut mapping = BTreeMap::new();
+    let mut ordered_sources = Vec::new();
+    for projection in columns {
+        let RelationalExpression::Column(source) = &projection.expression else {
+            return None;
+        };
+        mapping.insert(projection.name.clone(), source.clone());
+        push_unique(&mut ordered_sources, source.clone());
+    }
+    Some((mapping, ordered_sources))
+}
+
+fn push_unique(values: &mut Vec<Box<str>>, value: Box<str>) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+fn collect_expression_columns(expression: &RelationalExpression, columns: &mut Vec<Box<str>>) {
+    match expression {
+        RelationalExpression::Column(name) => push_unique(columns, name.clone()),
+        RelationalExpression::Literal(_) => {}
+        RelationalExpression::Equal(left, right)
+        | RelationalExpression::NotEqual(left, right)
+        | RelationalExpression::LessThan(left, right)
+        | RelationalExpression::LessThanOrEqual(left, right)
+        | RelationalExpression::GreaterThan(left, right)
+        | RelationalExpression::GreaterThanOrEqual(left, right) => {
+            collect_expression_columns(left, columns);
+            collect_expression_columns(right, columns);
+        }
+        RelationalExpression::And(expressions) | RelationalExpression::Or(expressions) => {
+            for expression in expressions {
+                collect_expression_columns(expression, columns);
+            }
+        }
+        RelationalExpression::Not(expression) | RelationalExpression::IsNull(expression) => {
+            collect_expression_columns(expression, columns);
+        }
+    }
+}
+
+fn rewrite_expression_columns(
+    expression: RelationalExpression,
+    mapping: &BTreeMap<Box<str>, Box<str>>,
+) -> RelationalExpression {
+    let rewrite = |expression| Box::new(rewrite_expression_columns(expression, mapping));
+    match expression {
+        RelationalExpression::Column(name) => {
+            RelationalExpression::Column(mapping.get(&name).cloned().unwrap_or(name))
+        }
+        RelationalExpression::Literal(value) => RelationalExpression::Literal(value),
+        RelationalExpression::Equal(left, right) => {
+            RelationalExpression::Equal(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::NotEqual(left, right) => {
+            RelationalExpression::NotEqual(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::LessThan(left, right) => {
+            RelationalExpression::LessThan(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::LessThanOrEqual(left, right) => {
+            RelationalExpression::LessThanOrEqual(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::GreaterThan(left, right) => {
+            RelationalExpression::GreaterThan(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::GreaterThanOrEqual(left, right) => {
+            RelationalExpression::GreaterThanOrEqual(rewrite(*left), rewrite(*right))
+        }
+        RelationalExpression::And(expressions) => RelationalExpression::And(
+            expressions
+                .into_vec()
+                .into_iter()
+                .map(|expression| rewrite_expression_columns(expression, mapping))
+                .collect(),
+        ),
+        RelationalExpression::Or(expressions) => RelationalExpression::Or(
+            expressions
+                .into_vec()
+                .into_iter()
+                .map(|expression| rewrite_expression_columns(expression, mapping))
+                .collect(),
+        ),
+        RelationalExpression::Not(expression) => RelationalExpression::Not(rewrite(*expression)),
+        RelationalExpression::IsNull(expression) => {
+            RelationalExpression::IsNull(rewrite(*expression))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -431,4 +686,25 @@ pub struct PlanResult {
     pub name: Box<str>,
     pub output: GraphOutputRef,
     pub value: ValueRef,
+}
+
+#[cfg(test)]
+mod task1_tests {
+    use super::*;
+    use crate::node_system::protocol::CanonicalDecimal;
+
+    #[test]
+    fn relational_decimal_literal_roundtrips_without_float_loss() {
+        let literal = RelationalLiteral::Decimal(CanonicalDecimal::new("10.5").unwrap());
+
+        let encoded = serde_json::to_value(&literal).unwrap();
+        let decoded: RelationalLiteral = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(decoded, literal);
+        assert_eq!(encoded, serde_json::json!({"Decimal":"10.5"}));
+        assert!(
+            serde_json::from_value::<RelationalLiteral>(serde_json::json!({"Decimal":"1.0"}))
+                .is_err()
+        );
+    }
 }

@@ -527,7 +527,11 @@ impl RunEventSink for ChannelRunEvents {
     }
 }
 
-fn execution_app_error(message: String, terminal: Option<TerminalRunEvent>) -> AppError {
+fn execution_app_error(
+    error: crate::project::ProjectExecutionError,
+    terminal: Option<TerminalRunEvent>,
+) -> AppError {
+    let message = error.to_string();
     let Some(terminal) = terminal else {
         if message.starts_with("invalid_execution_demand:") {
             return AppError {
@@ -538,14 +542,35 @@ fn execution_app_error(message: String, terminal: Option<TerminalRunEvent>) -> A
         }
         return AppError::internal(message);
     };
+    let code = match terminal {
+        TerminalRunEvent::Cancelled => "run_cancelled",
+        TerminalRunEvent::Errored => error
+            .run_error()
+            .map(crate::node_system::runtime::RunErrorCode::from)
+            .and_then(relational_run_app_error_code)
+            .unwrap_or("run_failed"),
+    };
     AppError {
-        code: match terminal {
-            TerminalRunEvent::Errored => "run_failed",
-            TerminalRunEvent::Cancelled => "run_cancelled",
-        }
-        .into(),
+        code: code.into(),
         message,
         details: Some(serde_json::json!({ "terminalRunEventSent": true })),
+    }
+}
+
+fn relational_run_app_error_code(
+    code: crate::node_system::runtime::RunErrorCode,
+) -> Option<&'static str> {
+    use crate::node_system::runtime::RunErrorCode;
+
+    match code {
+        RunErrorCode::RelationalBackendNotFound => Some("relational_backend_not_found"),
+        RunErrorCode::RelationalOperatorInvalid => Some("relational_operator_invalid"),
+        RunErrorCode::RelationalColumnMissing => Some("relational_column_missing"),
+        RunErrorCode::RelationalTypeMismatch => Some("relational_type_mismatch"),
+        RunErrorCode::RelationalInputShapeInvalid => Some("relational_input_shape_invalid"),
+        RunErrorCode::RelationalHintInvalid => Some("relational_hint_invalid"),
+        RunErrorCode::MissingRelationalFragment => Some("missing_relational_fragment"),
+        _ => None,
     }
 }
 
@@ -700,14 +725,23 @@ mod tests {
     #[test]
     fn execution_errors_report_terminal_delivery_and_stable_codes() {
         let cancelled = execution_app_error(
-            "run was cancelled".into(),
+            crate::project::ProjectExecutionError::from(
+                crate::node_system::runtime::RunError::Cancelled,
+            ),
             Some(TerminalRunEvent::Cancelled),
         );
-        let failed =
-            execution_app_error("operation failed".into(), Some(TerminalRunEvent::Errored));
-        let pre_run = execution_app_error("compile failed".into(), None);
+        let failed = execution_app_error(
+            crate::project::ProjectExecutionError::message("operation failed"),
+            Some(TerminalRunEvent::Errored),
+        );
+        let pre_run = execution_app_error(
+            crate::project::ProjectExecutionError::message("compile failed"),
+            None,
+        );
         let invalid_demand = execution_app_error(
-            "invalid_execution_demand: requested output node is missing".into(),
+            crate::project::ProjectExecutionError::message(
+                "invalid_execution_demand: requested output node is missing",
+            ),
             None,
         );
 
@@ -724,6 +758,40 @@ mod tests {
             Some(serde_json::json!({ "terminalRunEventSent": true })),
         );
         assert!(pre_run.details.is_none());
+    }
+
+    #[test]
+    fn relational_execution_errors_keep_exact_command_codes() {
+        for (relational, expected_code, expected_message) in [
+            (
+                crate::node_system::runtime::RelationalErrorCode::HintInvalid,
+                "relational_hint_invalid",
+                "relational pushdown metadata is invalid",
+            ),
+            (
+                crate::node_system::runtime::RelationalErrorCode::TypeMismatch,
+                "relational_type_mismatch",
+                "relational types do not match",
+            ),
+        ] {
+            let error = crate::project::ProjectExecutionError::from(
+                crate::node_system::runtime::RunError::RelationalFailed {
+                    operation: crate::node_system::plan::OperationIndex::new(2),
+                    code: relational,
+                    message: "sensitive detail".into(),
+                },
+            );
+
+            let mapped = execution_app_error(error, Some(TerminalRunEvent::Errored));
+
+            assert_eq!(mapped.code, expected_code);
+            assert_eq!(mapped.message, expected_message);
+            assert!(!mapped.message.contains("sensitive detail"));
+            assert_eq!(
+                mapped.details,
+                Some(serde_json::json!({ "terminalRunEventSent": true })),
+            );
+        }
     }
 
     #[test]

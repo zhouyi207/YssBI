@@ -4,7 +4,7 @@ import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { remapEditorViewStateGraphPath } from '@/features/core/viewport/editorViewStateMemento';
 import { remapGraphViewport } from '@/features/core/viewport/useViewportStore';
-import { CALL_FUNCTION_NODE_TYPE } from '@/features/domain/nodeDefinition';
+import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
 import { normalizeGraphResourcePath } from '@/shared/types/domain/graphResourcePath';
 
 function pathsEqual(a: string, b: string): boolean {
@@ -27,7 +27,7 @@ export function cascadeSubGraphPathInLoadedGraphs(from: string, to: string): voi
 
       for (const [nodeId, node] of Object.entries(nodes)) {
         if (
-          node.nodeType === CALL_FUNCTION_NODE_TYPE &&
+          isCallFunctionNodeType(node.nodeType) &&
           node.subGraphPath &&
           normalizeGraphResourcePath(node.subGraphPath) === fromNorm
         ) {

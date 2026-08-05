@@ -9403,6 +9403,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "statrs",
+ "syn 2.0.114",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

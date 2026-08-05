@@ -11,3 +11,4 @@ pub mod backends;
 pub mod engine;
 pub mod error;
 pub mod kde;
+pub mod models;

@@ -1,18 +1,17 @@
-use super::production_relational_value::{
-    limit_protocol_value, relational_expression, relational_filter, relational_object,
-    runtime_scalar,
+use super::relational_dataframe::{
+    filter_dataframe, project_dataframe, rename_dataframe, tabular_runtime_to_dataframe,
 };
 use super::{
-    CancellationToken, ProjectResourceLease, RelationalBackend, RelationalContext, RelationalError,
-    RelationalExecution, RelationalInput, RuntimeValue, dataframe_to_protocol_value,
+    CancellationToken, KernelError, ProjectResourceLease, RelationalBackend, RelationalContext,
+    RelationalError, RelationalErrorCode, RelationalExecution, RelationalInput, RuntimeValue,
+    dataframe_to_protocol_value_with_checkpoint,
 };
 use crate::node_system::plan::{
     CompiledRelationalPlan, PlannedMaterializationBridge, RelationalOperator,
-    RelationalOperatorIndex, RelationalRename, infer_relational_pushdown_hints,
+    RelationalOperatorIndex, infer_relational_pushdown_hints,
 };
-use crate::node_system::protocol::Value;
 use polars::prelude::DataFrame;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -20,7 +19,9 @@ use std::sync::Arc;
 pub(crate) enum ProductionRelationalCheckpoint {
     OperatorEvaluation,
     SourceScan,
+    PredicateEvaluation,
     ResultMaterialization,
+    ResultConversion,
 }
 
 #[cfg(test)]
@@ -40,11 +41,14 @@ pub(crate) struct ProductionRelationalObservation {
 #[derive(Debug, Default)]
 pub(crate) struct ProductionRelationalObserver {
     observation: std::sync::Mutex<ProductionRelationalObservation>,
+    execution_plan: std::sync::Mutex<Option<crate::node_system::plan::ExecutionPlan>>,
+    materialized_dataframes: std::sync::Mutex<Vec<DataFrame>>,
 }
 
 #[cfg(test)]
 impl ProductionRelationalObserver {
     pub(crate) fn observe_plan(&self, plan: &crate::node_system::plan::ExecutionPlan) {
+        *self.execution_plan.lock().unwrap() = Some(plan.clone());
         let mut observation = self.observation.lock().unwrap();
         observation.relational_islands = Some(plan.relational_subplans.len());
         observation.materialization_bridges = Some(
@@ -86,6 +90,25 @@ impl ProductionRelationalObserver {
 
     fn observe_scan(&self, limit: Option<usize>) {
         self.observation.lock().unwrap().scan_limits.push(limit);
+    }
+
+    fn observe_materialization(&self, dataframe: &DataFrame) {
+        self.materialized_dataframes
+            .lock()
+            .unwrap()
+            .push(dataframe.clone());
+    }
+
+    pub(crate) fn materialized_dataframes(&self) -> Vec<DataFrame> {
+        self.materialized_dataframes.lock().unwrap().clone()
+    }
+
+    pub(crate) fn execution_plan(&self) -> crate::node_system::plan::ExecutionPlan {
+        self.execution_plan
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("production relational plan was not observed")
     }
 
     pub(crate) fn snapshot(&self) -> ProductionRelationalObservation {
@@ -165,11 +188,7 @@ impl ProductionRelationalBackend {
     }
 }
 
-#[derive(Clone)]
-enum EvaluatedValue {
-    DataFrame(Arc<DataFrame>),
-    Runtime(RuntimeValue),
-}
+type EvaluatedValue = Arc<DataFrame>;
 
 struct Evaluator<'a> {
     backend: &'a ProductionRelationalBackend,
@@ -242,7 +261,12 @@ impl<'a> Evaluator<'a> {
             .plan
             .operators
             .get(index.index())
-            .ok_or_else(|| RelationalError::new("relational operator index is invalid"))?
+            .ok_or_else(|| {
+                RelationalError::new(
+                    RelationalErrorCode::OperatorInvalid,
+                    "relational operator index is invalid",
+                )
+            })?
             .clone();
         let value = match operator {
             RelationalOperator::Input { .. } => {
@@ -257,8 +281,13 @@ impl<'a> Evaluator<'a> {
                         .and_then(|position| self.operation_inputs.get(*position))
                         .cloned()
                 }
-                .ok_or_else(|| RelationalError::new("relational input is missing"))?;
-                EvaluatedValue::Runtime(value)
+                .ok_or_else(|| {
+                    RelationalError::new(
+                        RelationalErrorCode::InputShapeInvalid,
+                        "relational input is missing",
+                    )
+                })?;
+                Arc::new(tabular_runtime_to_dataframe(value)?)
             }
             RelationalOperator::Source { resource, .. } => {
                 self.backend.checkpoint(
@@ -278,70 +307,76 @@ impl<'a> Evaluator<'a> {
                     .get(&resource)
                     .and_then(|lease| lease.as_any().downcast_ref::<ProjectResourceLease>())
                     .ok_or_else(|| {
-                        RelationalError::new(format!(
-                            "relational source '{}' is unavailable",
-                            resource.as_str()
-                        ))
+                        RelationalError::new(
+                            RelationalErrorCode::OperatorInvalid,
+                            format!("relational source '{}' is unavailable", resource.as_str()),
+                        )
                     })?;
                 let scan = lease
                     .scan_dataframe(limit)
-                    .map_err(RelationalError::new)?
+                    .map_err(|_| {
+                        RelationalError::new(
+                            RelationalErrorCode::OperatorInvalid,
+                            "relational source scan failed",
+                        )
+                    })?
                     .ok_or_else(|| {
-                        RelationalError::new(format!(
-                            "relational source '{}' is unavailable",
-                            resource.as_str()
-                        ))
+                        RelationalError::new(
+                            RelationalErrorCode::OperatorInvalid,
+                            format!("relational source '{}' is unavailable", resource.as_str()),
+                        )
                     })?;
-                EvaluatedValue::DataFrame(scan.dataframe)
+                scan.dataframe
             }
-            RelationalOperator::Limit { input, rows } => match self.evaluate(input)? {
-                EvaluatedValue::DataFrame(dataframe) => EvaluatedValue::DataFrame(Arc::new(
-                    dataframe.head(Some(rows.min(usize::MAX as u64) as usize)),
-                )),
-                EvaluatedValue::Runtime(value) => EvaluatedValue::Runtime(RuntimeValue::Scalar(
-                    limit_protocol_value(runtime_scalar(&value)?, rows)?,
-                )),
-            },
+            RelationalOperator::Limit { input, rows } => {
+                let dataframe = self.evaluate(input)?;
+                Arc::new(dataframe.head(Some(rows.min(usize::MAX as u64) as usize)))
+            }
             RelationalOperator::Project { input, columns } => {
-                let source = self.materialize_index(input)?;
-                let mut projected = BTreeMap::new();
-                for column in columns {
-                    projected.insert(
-                        column.name,
-                        relational_expression(&column.expression, runtime_scalar(&source)?)?,
-                    );
-                }
-                EvaluatedValue::Runtime(RuntimeValue::Scalar(Value::Object(projected)))
+                let source = self.evaluate(input)?;
+                Arc::new(project_dataframe(source.as_ref().clone(), &columns)?)
             }
             RelationalOperator::Filter { input, predicate } => {
-                let source = self.materialize_index(input)?;
-                let source = runtime_scalar(&source)?;
-                let mask = relational_expression(&predicate, source)?;
-                EvaluatedValue::Runtime(RuntimeValue::Scalar(relational_filter(source, &mask)?))
+                let source = self.evaluate(input)?;
+                self.backend.checkpoint(
+                    #[cfg(test)]
+                    ProductionRelationalCheckpoint::PredicateEvaluation,
+                    self.context.cancellation,
+                );
+                self.context
+                    .cancellation
+                    .check()
+                    .map_err(RelationalError::from)?;
+                let filtered = filter_dataframe(source.as_ref().clone(), &predicate)?;
+                self.context
+                    .cancellation
+                    .check()
+                    .map_err(RelationalError::from)?;
+                Arc::new(filtered)
             }
             RelationalOperator::Rename { input, columns } => {
-                let source = self.materialize_index(input)?;
-                let source = relational_object(runtime_scalar(&source)?)?;
-                let renamed = rename_relational_columns(source, &columns)?;
-                EvaluatedValue::Runtime(RuntimeValue::Scalar(Value::Object(renamed)))
+                let source = self.evaluate(input)?;
+                Arc::new(rename_dataframe(source.as_ref().clone(), &columns)?)
             }
             RelationalOperator::Union { inputs, all: _ } => {
-                let mut combined = BTreeMap::<Box<str>, Vec<Value>>::new();
+                let mut inputs = inputs.iter();
+                let first = inputs.next().ok_or_else(|| {
+                    RelationalError::new(
+                        RelationalErrorCode::OperatorInvalid,
+                        "union requires at least one input",
+                    )
+                })?;
+                let mut combined = self.evaluate(*first)?.as_ref().clone();
                 for input in inputs {
-                    let value = self.materialize_index(input)?;
-                    for (name, value) in relational_object(runtime_scalar(&value)?)? {
-                        let Value::List(column) = value else {
-                            return Err(RelationalError::new("union expects dataframe columns"));
-                        };
-                        combined.entry(name).or_default().extend(column);
-                    }
+                    let dataframe = self.evaluate(*input)?;
+                    combined.vstack_mut(dataframe.as_ref()).map_err(|_| {
+                        RelationalError::new(
+                            RelationalErrorCode::TypeMismatch,
+                            "union inputs have incompatible schemas",
+                        )
+                    })?;
                 }
-                EvaluatedValue::Runtime(RuntimeValue::Scalar(Value::Object(
-                    combined
-                        .into_iter()
-                        .map(|(name, values)| (name, Value::List(values)))
-                        .collect(),
-                )))
+                Arc::new(combined)
             }
         };
         self.values[index.index()] = Some(value.clone());
@@ -366,12 +401,31 @@ impl<'a> Evaluator<'a> {
             .cancellation
             .check()
             .map_err(RelationalError::from)?;
-        match value {
-            EvaluatedValue::Runtime(value) => Ok(value),
-            EvaluatedValue::DataFrame(dataframe) => dataframe_to_protocol_value(dataframe.as_ref())
-                .map(RuntimeValue::Scalar)
-                .map_err(|error| RelationalError::new(error.to_string())),
+        #[cfg(test)]
+        if let Some(observer) = &self.backend.observer {
+            observer.observe_materialization(value.as_ref());
         }
+        let converted = dataframe_to_protocol_value_with_checkpoint(value.as_ref(), || {
+            self.backend.checkpoint(
+                #[cfg(test)]
+                ProductionRelationalCheckpoint::ResultConversion,
+                self.context.cancellation,
+            );
+            self.context
+                .cancellation
+                .check()
+                .map_err(|_| KernelError::cancelled("relational result conversion was cancelled"))
+        });
+        self.context
+            .cancellation
+            .check()
+            .map_err(RelationalError::from)?;
+        converted.map(RuntimeValue::Scalar).map_err(|_| {
+            RelationalError::new(
+                RelationalErrorCode::TypeMismatch,
+                "relational result conversion failed",
+            )
+        })
     }
 }
 
@@ -383,9 +437,22 @@ impl RelationalBackend for ProductionRelationalBackend {
         operation_inputs: &[RuntimeValue],
         bridge_inputs: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
-        let inferred_pushdown_hints = infer_relational_pushdown_hints(&plan.operators);
+        let mut lineage_roots = plan.roots.to_vec();
+        lineage_roots.extend(
+            plan.requested_fragment_outputs
+                .iter()
+                .filter_map(|fragment| {
+                    plan.fragment_roots
+                        .iter()
+                        .find(|root| &root.fragment == fragment)
+                        .map(|root| root.operator)
+                }),
+        );
+        let inferred_pushdown_hints =
+            infer_relational_pushdown_hints(&plan.operators, &lineage_roots);
         if plan.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
             return Err(RelationalError::new(
+                RelationalErrorCode::HintInvalid,
                 "compiled relational pushdown hints do not match operator inference",
             ));
         }
@@ -403,10 +470,13 @@ impl RelationalBackend for ProductionRelationalBackend {
                     .find(|root| &root.fragment == fragment)
                     .map(|root| root.operator)
                     .ok_or_else(|| {
-                        RelationalError::new(format!(
-                            "requested relational fragment '{}' has no compiled root",
-                            fragment.as_str()
-                        ))
+                        RelationalError::new(
+                            RelationalErrorCode::OperatorInvalid,
+                            format!(
+                                "requested relational fragment '{}' has no compiled root",
+                                fragment.as_str()
+                            ),
+                        )
                     })?;
                 Ok((fragment.clone(), root))
             })
@@ -425,77 +495,6 @@ impl RelationalBackend for ProductionRelationalBackend {
             fragment_outputs,
         })
     }
-}
-
-fn rename_relational_columns(
-    source: BTreeMap<Box<str>, Value>,
-    columns: &[RelationalRename],
-) -> Result<BTreeMap<Box<str>, Value>, RelationalError> {
-    for rename in columns {
-        validate_rename_column_name("source", rename.from.as_ref())?;
-        validate_rename_column_name("destination", rename.to.as_ref())?;
-    }
-
-    let source_fields = source.keys().map(AsRef::as_ref).collect::<BTreeSet<&str>>();
-    let mut renamed_sources = BTreeSet::new();
-    let mut destinations = BTreeSet::new();
-
-    for rename in columns {
-        if !source_fields.contains(rename.from.as_ref()) {
-            return Err(RelationalError::new(format!(
-                "rename source column '{}' does not exist",
-                rename.from
-            )));
-        }
-        if !renamed_sources.insert(rename.from.as_ref()) {
-            return Err(RelationalError::new(format!(
-                "rename source column '{}' is mapped more than once",
-                rename.from
-            )));
-        }
-        if !destinations.insert(rename.to.as_ref()) {
-            return Err(RelationalError::new(format!(
-                "rename destination column '{}' is mapped more than once",
-                rename.to
-            )));
-        }
-    }
-    if let Some(destination) = destinations.iter().find(|destination| {
-        source_fields.contains(**destination) && !renamed_sources.contains(**destination)
-    }) {
-        return Err(RelationalError::new(format!(
-            "rename destination column '{destination}' already exists"
-        )));
-    }
-
-    let destinations_by_source = columns
-        .iter()
-        .map(|rename| (rename.from.as_ref(), rename.to.as_ref()))
-        .collect::<BTreeMap<_, _>>();
-    Ok(source
-        .into_iter()
-        .map(|(name, value)| {
-            let destination = destinations_by_source
-                .get(name.as_ref())
-                .copied()
-                .unwrap_or(name.as_ref());
-            (Box::<str>::from(destination), value)
-        })
-        .collect())
-}
-
-fn validate_rename_column_name(role: &str, name: &str) -> Result<(), RelationalError> {
-    if name.is_empty() {
-        return Err(RelationalError::new(format!(
-            "rename {role} column name must not be empty"
-        )));
-    }
-    if name.trim() != name {
-        return Err(RelationalError::new(format!(
-            "rename {role} column name must not have leading or trailing whitespace"
-        )));
-    }
-    Ok(())
 }
 
 fn source_limits(plan: &CompiledRelationalPlan) -> BTreeMap<RelationalOperatorIndex, usize> {
@@ -573,13 +572,13 @@ fn collect_source_requirements(
 
 #[cfg(test)]
 mod tests {
-    use super::{ProductionRelationalBackend, ProductionRelationalCheckpoint};
+    use super::{Evaluator, ProductionRelationalBackend, ProductionRelationalCheckpoint};
     use crate::node_system::analysis::{ProjectSessionId, RunId};
     use crate::node_system::plan::{
         CompiledRelationalPlan, CompiledResourceRequirement, RelationalExpression,
         RelationalFragmentId, RelationalFragmentRoot, RelationalLiteral, RelationalOperator,
-        RelationalOperatorIndex, RelationalPushdownHint, RelationalRename, ResourceAccess,
-        ResourceId, ResourceKind,
+        RelationalOperatorIndex, RelationalProjection, RelationalPushdownHint, RelationalRename,
+        ResourceAccess, ResourceId, ResourceKind,
     };
     use crate::node_system::protocol::Value;
     use crate::node_system::runtime::{
@@ -642,6 +641,10 @@ mod tests {
 
         let error = backend.execute(&context, &plan, &[], &[]).unwrap_err();
 
+        assert_eq!(
+            error.code(),
+            crate::node_system::runtime::RelationalErrorCode::HintInvalid
+        );
         assert!(error.to_string().contains("pushdown hints"));
         assert!(observed.lock().unwrap().is_empty());
     }
@@ -773,6 +776,279 @@ mod tests {
         assert_eq!(observed.lock().unwrap().as_slice(), &[Some(10)]);
         assert_eq!(output_len(&execution.outputs[0]), 2);
         assert_eq!(output_len(&execution.outputs[1]), 10);
+    }
+
+    #[test]
+    fn projection_and_predicate_hints_do_not_change_evaluated_values() {
+        let predicate = RelationalExpression::Equal(
+            Box::new(RelationalExpression::Column("status".into())),
+            Box::new(RelationalExpression::Literal(RelationalLiteral::String(
+                "paid".into(),
+            ))),
+        );
+        let plan = CompiledRelationalPlan {
+            fragment_order: Box::new([]),
+            operators: Box::new([
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Filter {
+                    input: RelationalOperatorIndex::new(0),
+                    predicate: predicate.clone(),
+                },
+                RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(1),
+                    columns: Box::new([RelationalProjection {
+                        name: "amount".into(),
+                        expression: RelationalExpression::Column("amount".into()),
+                    }]),
+                },
+            ]),
+            fragment_roots: Box::new([]),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
+            roots: Box::new([RelationalOperatorIndex::new(2)]),
+            pushdown_hints: Box::new([
+                RelationalPushdownHint::Projection {
+                    source: RelationalOperatorIndex::new(0),
+                    columns: Box::new(["amount".into(), "status".into()]),
+                },
+                RelationalPushdownHint::Predicate {
+                    source: RelationalOperatorIndex::new(0),
+                    predicate,
+                },
+            ]),
+        };
+        let input = dataframe_value(&[
+            ("amount", vec![Value::Integer(10), Value::Integer(20)]),
+            ("status", vec![string("paid"), string("open")]),
+        ]);
+
+        let with_hints = evaluate_without_plan_validation(&plan, input.clone()).unwrap();
+        let mut without_hints = plan;
+        without_hints.pushdown_hints = Box::new([]);
+        let without_hints = evaluate_without_plan_validation(&without_hints, input).unwrap();
+
+        assert_eq!(with_hints, without_hints);
+        assert_eq!(
+            with_hints,
+            dataframe_value(&[("amount", vec![Value::Integer(10)])])
+        );
+    }
+
+    fn evaluate_without_plan_validation(
+        plan: &CompiledRelationalPlan,
+        input: RuntimeValue,
+    ) -> Result<RuntimeValue, RelationalError> {
+        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
+            ProjectSessionId::new("metadata-hint-test"),
+            Default::default(),
+        ));
+        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
+        let cancellation = CancellationToken::new();
+        let context = RelationalContext {
+            run_id: RunId::new(1),
+            resources: &resources,
+            cancellation: &cancellation,
+        };
+        let backend = ProductionRelationalBackend::default();
+        let operation_inputs = [input];
+        let mut evaluator = Evaluator::new(&backend, &context, plan, &operation_inputs, &[]);
+        evaluator.materialize_index(plan.roots[0])
+    }
+
+    #[test]
+    fn bridge_ingress_stays_dataframe_native_through_filter_project_and_rename() {
+        let producer_fragment = RelationalFragmentId::new("producer").unwrap();
+        let consumer_fragment = RelationalFragmentId::new("consumer").unwrap();
+        let bridge = crate::node_system::plan::PlannedMaterializationBridge {
+            producer_fragment,
+            consumer_fragment,
+            producer_subplan: crate::node_system::plan::RelationalSubplanIndex::new(0),
+            consumer_subplan: crate::node_system::plan::RelationalSubplanIndex::new(1),
+            bridge: crate::node_system::plan::MaterializationBridge::Collect,
+        };
+        let predicate = RelationalExpression::GreaterThan(
+            Box::new(RelationalExpression::Column("amount".into())),
+            Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(1))),
+        );
+        let mut plan = CompiledRelationalPlan {
+            fragment_order: Box::new([]),
+            operators: Box::new([
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Filter {
+                    input: RelationalOperatorIndex::new(0),
+                    predicate,
+                },
+                RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(1),
+                    columns: Box::new([
+                        RelationalProjection {
+                            name: "city".into(),
+                            expression: RelationalExpression::Column("city".into()),
+                        },
+                        RelationalProjection {
+                            name: "amount".into(),
+                            expression: RelationalExpression::Column("amount".into()),
+                        },
+                    ]),
+                },
+                RelationalOperator::Rename {
+                    input: RelationalOperatorIndex::new(2),
+                    columns: Box::new([rename("city", "location")]),
+                },
+            ]),
+            fragment_roots: Box::new([]),
+            bridge_inputs: Box::new([crate::node_system::plan::RelationalBridgeInput {
+                operator: RelationalOperatorIndex::new(0),
+                bridge: bridge.clone(),
+            }]),
+            requested_fragment_outputs: Box::new([]),
+            roots: Box::new([RelationalOperatorIndex::new(3)]),
+            pushdown_hints: Box::new([]),
+        };
+        plan.pushdown_hints =
+            crate::node_system::plan::infer_relational_pushdown_hints(&plan.operators, &plan.roots)
+                .into_boxed_slice();
+        let input = dataframe_value(&[
+            ("amount", vec![Value::Integer(1), Value::Integer(2)]),
+            ("city", vec![string("Paris"), string("Tokyo")]),
+        ]);
+        let RuntimeValue::Scalar(value) = input else {
+            unreachable!()
+        };
+        let artifact = RuntimeValue::Artifact(crate::node_system::runtime::Artifact::new(
+            crate::node_system::runtime::ArtifactKind::Collected,
+            [value],
+        ));
+
+        let output = execute_bridge_plan(
+            &plan,
+            crate::node_system::runtime::RelationalInput {
+                bridge,
+                value: artifact,
+            },
+            ProductionRelationalBackend::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            output,
+            dataframe_value(&[
+                ("amount", vec![Value::Integer(2)]),
+                ("location", vec![string("Tokyo")]),
+            ])
+        );
+    }
+
+    #[test]
+    fn observer_sees_dataframe_schema_order_and_nulls_before_external_conversion() {
+        let mut plan = CompiledRelationalPlan {
+            fragment_order: Box::new([]),
+            operators: Box::new([
+                RelationalOperator::Input {
+                    name: "source".into(),
+                },
+                RelationalOperator::Project {
+                    input: RelationalOperatorIndex::new(0),
+                    columns: Box::new([
+                        RelationalProjection {
+                            name: "z".into(),
+                            expression: RelationalExpression::Column("z".into()),
+                        },
+                        RelationalProjection {
+                            name: "a".into(),
+                            expression: RelationalExpression::Column("a".into()),
+                        },
+                    ]),
+                },
+            ]),
+            fragment_roots: Box::new([]),
+            bridge_inputs: Box::new([]),
+            requested_fragment_outputs: Box::new([]),
+            roots: Box::new([RelationalOperatorIndex::new(1)]),
+            pushdown_hints: Box::new([]),
+        };
+        plan.pushdown_hints =
+            crate::node_system::plan::infer_relational_pushdown_hints(&plan.operators, &plan.roots)
+                .into_boxed_slice();
+        let observer = Arc::new(super::ProductionRelationalObserver::default());
+        let backend = ProductionRelationalBackend::with_observer(Arc::clone(&observer));
+
+        let output = execute_input_plan(
+            &plan,
+            dataframe_value(&[
+                ("a", vec![Value::Integer(1), Value::Null]),
+                ("z", vec![string("first"), string("second")]),
+            ]),
+            backend,
+        )
+        .unwrap();
+
+        let observed = observer.materialized_dataframes();
+        assert_eq!(observed.len(), 1);
+        assert_eq!(
+            observed[0]
+                .get_column_names()
+                .into_iter()
+                .map(|name| name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["z", "a"]
+        );
+        assert_eq!(observed[0]["z"].dtype(), &polars::prelude::DataType::String);
+        assert_eq!(observed[0]["a"].dtype(), &polars::prelude::DataType::Int64);
+        assert_eq!(observed[0]["a"].null_count(), 1);
+        let RuntimeValue::Scalar(Value::Object(columns)) = output else {
+            panic!("external result shape changed")
+        };
+        assert_eq!(
+            columns.keys().map(AsRef::as_ref).collect::<Vec<_>>(),
+            vec!["a", "z"]
+        );
+    }
+
+    fn execute_bridge_plan(
+        plan: &CompiledRelationalPlan,
+        input: crate::node_system::runtime::RelationalInput,
+        backend: ProductionRelationalBackend,
+    ) -> Result<RuntimeValue, RelationalError> {
+        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
+            ProjectSessionId::new("dataframe-bridge-test"),
+            Default::default(),
+        ));
+        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
+        let cancellation = CancellationToken::new();
+        let context = RelationalContext {
+            run_id: RunId::new(1),
+            resources: &resources,
+            cancellation: &cancellation,
+        };
+        backend
+            .execute(&context, plan, &[], &[input])
+            .map(|mut execution| execution.outputs.remove(0))
+    }
+
+    fn execute_input_plan(
+        plan: &CompiledRelationalPlan,
+        input: RuntimeValue,
+        backend: ProductionRelationalBackend,
+    ) -> Result<RuntimeValue, RelationalError> {
+        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
+            ProjectSessionId::new("dataframe-input-test"),
+            Default::default(),
+        ));
+        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
+        let cancellation = CancellationToken::new();
+        let context = RelationalContext {
+            run_id: RunId::new(1),
+            resources: &resources,
+            cancellation: &cancellation,
+        };
+        backend
+            .execute(&context, plan, &[input], &[])
+            .map(|mut execution| execution.outputs.remove(0))
     }
 
     #[test]
@@ -1175,9 +1451,17 @@ mod tests {
             },
         ));
 
-        let result = backend.execute(&context, &plan, &[Value::Integer(1).into()], &[]);
+        let result = backend.execute(
+            &context,
+            &plan,
+            &[RuntimeValue::Scalar(Value::Object(BTreeMap::new()))],
+            &[],
+        );
 
-        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().code(),
+            crate::node_system::runtime::RelationalErrorCode::Cancelled
+        );
         assert_eq!(
             observed.lock().unwrap().as_slice(),
             &[

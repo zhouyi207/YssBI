@@ -9,6 +9,11 @@ export type NodeCreationDescriptorDto =
       nodeTypeId: string;
     }
   | {
+      kind: 'parameterizedStatic';
+      nodeTypeId: string;
+      requiredParameters: string[];
+    }
+  | {
       kind: 'resourceBound';
       nodeTypeId: string;
       resourcePath: string;
@@ -30,6 +35,12 @@ function isResourceBoundCreateArgs(value: unknown): value is ResourceBoundCreate
 export function isNodeCreationDescriptorDto(value: unknown): value is NodeCreationDescriptorDto {
   if (isExactRecord(value, ['kind', 'nodeTypeId'])) {
     return value.kind === 'static' && typeof value.nodeTypeId === 'string';
+  }
+  if (isExactRecord(value, ['kind', 'nodeTypeId', 'requiredParameters'])) {
+    return value.kind === 'parameterizedStatic'
+      && typeof value.nodeTypeId === 'string'
+      && Array.isArray(value.requiredParameters)
+      && value.requiredParameters.every((key) => typeof key === 'string');
   }
   if (!isExactRecord(value, [
     'kind', 'nodeTypeId', 'resourcePath', 'resourceRevision', 'createArgs',

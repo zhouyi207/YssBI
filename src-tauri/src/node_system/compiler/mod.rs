@@ -48,6 +48,8 @@ pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutio
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
 #[cfg(test)]
+mod task1_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_dynamic;

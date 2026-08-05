@@ -115,6 +115,7 @@ function projection(
             editor: 'number',
             multiline: false,
             value: 2,
+            configuration: null,
           },
         ],
         capabilities: {

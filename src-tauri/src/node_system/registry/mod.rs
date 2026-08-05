@@ -12,13 +12,62 @@ pub use model::{
 };
 pub use validation::RegistryValidationError;
 
-use crate::node_system::protocol::{NodeProtocol, NodeTypeId, ProtocolError, StaticNodeProtocol};
+use crate::node_system::protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct NominalParameterValidator {
+    identity: TypeId,
+    version: u32,
+    validate: Arc<dyn Fn(&serde_json::Value) -> Result<(), String> + Send + Sync>,
+}
+
+impl NominalParameterValidator {
+    fn new(
+        identity: TypeId,
+        version: u32,
+        validate: impl Fn(&serde_json::Value) -> Result<(), String> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            identity,
+            version,
+            validate: Arc::new(validate),
+        }
+    }
+
+    fn validate(&self, value: &serde_json::Value) -> Result<(), String> {
+        (self.validate)(value)
+    }
+}
+
+impl std::fmt::Debug for NominalParameterValidator {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NominalParameterValidator")
+            .field("identity", &self.identity)
+            .field("version", &self.version)
+            .finish_non_exhaustive()
+    }
+}
 
 impl NodeRegistry {
     pub fn protocol(&self, id: &NodeTypeId) -> Option<&NodeProtocol> {
         self.get(id).map(|node| node.protocol.as_ref())
+    }
+
+    pub fn has_nominal_parameter_validator(&self, id: &TypeId) -> bool {
+        self.nominal_validators.contains_key(id)
+    }
+
+    pub fn validate_nominal_parameter(
+        &self,
+        id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        self.nominal_validators
+            .get(id)
+            .map(|validator| validator.validate(value))
     }
 }
 
@@ -26,6 +75,7 @@ impl NodeRegistry {
 pub struct NodeRegistryBuilder {
     providers: Vec<ProviderRegistration>,
     provider_ids: BTreeSet<crate::node_system::protocol::ProviderId>,
+    nominal_validators: BTreeMap<TypeId, NominalParameterValidator>,
 }
 
 impl NodeRegistryBuilder {
@@ -44,8 +94,25 @@ impl NodeRegistryBuilder {
         Ok(())
     }
 
+    pub fn register_nominal_validator(
+        &mut self,
+        id: TypeId,
+        identity: TypeId,
+        version: u32,
+        validator: impl Fn(&serde_json::Value) -> Result<(), String> + Send + Sync + 'static,
+    ) -> Result<(), NodeRegistrationError> {
+        if self.nominal_validators.contains_key(&id) {
+            return Err(RegistryValidationError::DuplicateNominalValidator(id).into());
+        }
+        self.nominal_validators.insert(
+            id,
+            NominalParameterValidator::new(identity, version, validator),
+        );
+        Ok(())
+    }
+
     pub fn freeze(self) -> Result<NodeRegistry, NodeRegistrationError> {
-        let parts = validation::validate(&self.providers)?;
+        let parts = validation::validate(&self.providers, &self.nominal_validators)?;
         let protocol_fingerprints: BTreeMap<_, _> = parts
             .nodes
             .iter()
@@ -56,44 +123,29 @@ impl NodeRegistryBuilder {
                 )
             })
             .collect();
-        let canonical = canonical_registry(&self.providers, &protocol_fingerprints);
+        let canonical = canonical_registry(
+            &self.providers,
+            &protocol_fingerprints,
+            &self.nominal_validators,
+        );
         let fingerprint = fingerprint::registry_fingerprint(&canonical);
         Ok(NodeRegistry {
             by_id: parts.nodes,
+            node_providers: parts.node_providers,
             type_index: parts.types,
+            type_providers: parts.type_providers,
             category_index: parts.categories,
             catalog_manifest: CatalogManifest {
                 node_protocols: protocol_fingerprints,
                 i18n: parts.i18n,
             },
+            nominal_validators: self.nominal_validators,
             fingerprint,
         })
     }
 }
 
-impl RegisteredNode {
-    pub fn leaf_static(
-        protocol: &'static StaticNodeProtocol,
-        implementation: impl Into<LeafImplementation>,
-    ) -> Result<Self, ProtocolError> {
-        Ok(Self::leaf(
-            Arc::new(NodeProtocol::from_static(protocol)?),
-            implementation,
-        ))
-    }
-
-    pub fn structural_static(
-        protocol: &'static StaticNodeProtocol,
-        role: StructuralNodeRole,
-    ) -> Result<Self, ProtocolError> {
-        Ok(Self::structural(
-            Arc::new(NodeProtocol::from_static(protocol)?),
-            role,
-        ))
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeRegistrationError {
     InvalidProtocol(ProtocolError),
     InvalidRegistry(RegistryValidationError),
@@ -144,6 +196,7 @@ pub fn i18n_inventory(registry: &NodeRegistry) -> String {
 fn canonical_registry(
     providers: &[ProviderRegistration],
     protocols: &BTreeMap<crate::node_system::protocol::NodeTypeId, ProtocolFingerprint>,
+    nominal_validators: &BTreeMap<TypeId, NominalParameterValidator>,
 ) -> serde_json::Value {
     use serde_json::{Value, json};
     let mut sorted = providers.iter().collect::<Vec<_>>();
@@ -172,11 +225,12 @@ fn canonical_registry(
                             "implementationIdentity": implementation.implementation_identity(),
                             "kind": implementation.capability(),
                         }),
+                        (None, None) => json!({ "kind": "ProtocolOnly" }),
                         (None, Some(role)) => json!({
                             "kind": "Structural",
                             "role": format!("{role:?}"),
                         }),
-                        _ => json!({ "kind": "Invalid" }),
+                        (Some(_), Some(_)) => json!({ "kind": "Invalid" }),
                     };
                     json!([
                         x.protocol.type_id,
@@ -197,7 +251,17 @@ fn canonical_registry(
             })
         })
         .collect::<Vec<Value>>();
-    json!({ "providers": entries })
+    json!({
+        "providers": entries,
+        "nominalValidators": nominal_validators
+            .iter()
+            .map(|(type_id, validator)| json!([
+                type_id,
+                validator.identity,
+                validator.version,
+            ]))
+            .collect::<Vec<_>>(),
+    })
 }
 
 #[cfg(test)]

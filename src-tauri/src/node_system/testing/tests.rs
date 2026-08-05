@@ -1,9 +1,9 @@
 use super::*;
-use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalog, build_builtin_provider};
+use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalog, build_builtin_node_system};
 use crate::node_system::document::{DocumentConnection, DocumentNode, GraphDocument};
 use crate::node_system::protocol::{NodeTypeId, PortKey, Value};
 use crate::node_system::registry::{
-    NodeRegistry, NodeRegistryBuilder, canonical_semantic_protocol_snapshot, i18n_inventory,
+    NodeRegistry, canonical_semantic_protocol_snapshot, i18n_inventory,
 };
 use crate::node_system::runtime::{CancellationToken, RunError, RunExecutor, RuntimeValue};
 
@@ -90,7 +90,7 @@ struct LocaleState {
 
 #[test]
 fn semantic_protocol_and_i18n_exporters_are_canonical() {
-    let registry = crate::node_system::catalog::build_builtin_registry();
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let semantic = canonical_semantic_protocol_snapshot(&registry);
     let semantic: serde_json::Value = serde_json::from_str(&semantic).unwrap();
     let node_ids = semantic["nodes"]
@@ -114,10 +114,9 @@ fn semantic_protocol_and_i18n_exporters_are_canonical() {
 
 #[test]
 fn localized_text_does_not_change_semantic_snapshot_or_fingerprint() {
-    let (provider, catalog) = build_builtin_provider();
-    let mut builder = NodeRegistryBuilder::new();
-    builder.register_provider(provider).unwrap();
-    let registry = builder.freeze().unwrap();
+    let builtin = build_builtin_node_system().unwrap();
+    let registry = builtin.registry;
+    let catalog = builtin.catalog;
     let fingerprint = registry.fingerprint().clone();
     let semantic = canonical_semantic_protocol_snapshot(&registry);
     let inventory = i18n_inventory(&registry);
@@ -132,13 +131,11 @@ fn localized_text_does_not_change_semantic_snapshot_or_fingerprint() {
 
 #[test]
 fn changing_language_does_not_change_the_document() {
-    let (provider, catalog) = build_builtin_provider();
-    let mut registry = NodeRegistryBuilder::new();
-    registry.register_provider(provider).unwrap();
+    let builtin = build_builtin_node_system().unwrap();
     let mut state = LocaleState {
         document: arithmetic_graph().0,
-        registry: registry.freeze().unwrap(),
-        catalog,
+        registry: std::sync::Arc::unwrap_or_clone(builtin.registry),
+        catalog: std::sync::Arc::unwrap_or_clone(builtin.catalog),
         localized: None,
     };
 
