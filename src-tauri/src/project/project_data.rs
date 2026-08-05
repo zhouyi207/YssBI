@@ -2,7 +2,9 @@ use super::{
     GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata, WorksheetDocument,
 };
 use crate::database::DatabaseDecl;
-use crate::node_system::document::{FunctionDocument, FunctionSignature, GraphDocument};
+use crate::node_system::document::{
+    DocumentError, FunctionDocument, FunctionSignature, GraphDocument,
+};
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,6 +28,10 @@ impl GraphResourceDocument {
             function: matches!(kind, GraphDocumentKind::Function)
                 .then(|| FunctionDocument::new(FunctionSignature::default())),
         }
+    }
+
+    pub fn validate(&self) -> Result<(), DocumentError> {
+        self.document.validate()
     }
 }
 

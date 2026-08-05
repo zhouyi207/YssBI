@@ -641,12 +641,34 @@ impl BuiltinCatalog {
 
 impl LocalizationBundle for BuiltinLocalizationBundle<'_> {
     fn text(&self, key: &I18nKey, arguments: &DiagnosticArguments) -> Box<str> {
-        let mut message = self.catalog.text(&self.locale, key).into_string();
-        for (name, value) in arguments {
-            message = message.replace(&format!("{{{name}}}"), value);
-        }
-        message.into()
+        render_template(&self.catalog.text(&self.locale, key), arguments).into()
     }
+}
+
+fn render_template(template: &str, arguments: &DiagnosticArguments) -> String {
+    let mut rendered = String::with_capacity(template.len());
+    let mut cursor = 0;
+
+    while let Some(relative_open) = template[cursor..].find('{') {
+        let open = cursor + relative_open;
+        rendered.push_str(&template[cursor..open]);
+        let name_start = open + 1;
+        let Some(relative_close) = template[name_start..].find('}') else {
+            rendered.push_str(&template[open..]);
+            return rendered;
+        };
+        let close = name_start + relative_close;
+        let name = &template[name_start..close];
+        if let Some(value) = arguments.get(name) {
+            rendered.push_str(value);
+        } else {
+            rendered.push_str(&template[open..=close]);
+        }
+        cursor = close + 1;
+    }
+
+    rendered.push_str(&template[cursor..]);
+    rendered
 }
 
 fn normalize_locale(locale: &str) -> String {

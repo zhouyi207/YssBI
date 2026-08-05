@@ -392,6 +392,40 @@ fn user_created_dynamic_interface_binding_mismatch_is_diagnosed() {
 }
 
 #[test]
+fn duplicate_interface_locator_emits_separate_port_and_locator_facts() {
+    let current = basis(1);
+    let duplicate = member(
+        current.clone(),
+        "customer_id",
+        "Customer",
+        SchemaFieldIdentityGuarantee::Stable,
+    );
+    let result = materialize_dynamic_interface(
+        &current,
+        node_id(),
+        &protocol(),
+        &document(None),
+        &resolver_set(vec![duplicate.clone(), duplicate]),
+    );
+
+    let diagnostic = result
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.interface.duplicate_locator")
+        .expect("duplicate locator diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([
+            (
+                Box::from("locator"),
+                Box::from(r#"{"kind":"schema_field","source":"source","field":"customer_id"}"#),
+            ),
+            (Box::from("port_key"), Box::from("fields")),
+        ])
+    );
+}
+
+#[test]
 fn missing_and_duplicate_resolvers_are_reported() {
     let current = basis(1);
     let graph = document(None);

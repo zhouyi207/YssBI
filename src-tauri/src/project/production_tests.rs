@@ -143,6 +143,12 @@ fn structurally_invalid_insert_graph_has_zero_authoritative_effects() {
         )
         .unwrap_err();
 
+    assert!(matches!(
+        &error,
+        ProjectFilesystemError::InvalidGraphDocument { path, source }
+            if path == &graph_path()
+                && source == &DocumentError::EndpointNodeNotFound(missing_node_id)
+    ));
     assert_eq!(
         document_error_source(&error),
         Some(&DocumentError::EndpointNodeNotFound(missing_node_id))
@@ -171,14 +177,14 @@ fn structurally_invalid_resource_patch_insert_has_zero_authoritative_effects() {
     state.graph_projection(&graph_path(), "en-US").unwrap();
     let coordinator = state.compile_coordinator.read().unwrap().clone();
     assert!(coordinator.contains_slot_for_test(&document_path()));
-    let invalid_path = GraphResourcePath::new("functions/Invalid.yssbi-function").unwrap();
+    let invalid_path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
     let invalid_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
         invalid_path.as_str().into(),
     ));
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x203)),
-        affected_resources: vec![invalid_key.clone()],
+        affected_resources: Vec::new(),
         expected_revisions: Default::default(),
         expected_absent_resources: [invalid_key].into_iter().collect(),
         recovery_marker: Some(state.project_recovery_marker()),
@@ -203,13 +209,19 @@ fn structurally_invalid_resource_patch_insert_has_zero_authoritative_effects() {
                 path: invalid_path.clone(),
                 resource: graph_with_dangling_endpoint(
                     "Invalid",
-                    GraphDocumentKind::Function,
+                    GraphDocumentKind::Event,
                     missing_node_id,
                 ),
             },
         )
         .unwrap_err();
 
+    assert!(matches!(
+        &error,
+        ProjectFilesystemError::InvalidGraphDocument { path, source }
+            if path == &invalid_path
+                && source == &DocumentError::EndpointNodeNotFound(missing_node_id)
+    ));
     assert_eq!(
         document_error_source(&error),
         Some(&DocumentError::EndpointNodeNotFound(missing_node_id))
@@ -226,6 +238,189 @@ fn structurally_invalid_resource_patch_insert_has_zero_authoritative_effects() {
     assert_eq!(state.history_lengths_for_test(), before_history_lengths);
     assert!(!completion_observed.load(std::sync::atomic::Ordering::Acquire));
     assert!(coordinator.contains_slot_for_test(&document_path()));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn structurally_invalid_move_graph_moved_has_zero_authoritative_effects() {
+    let (state, root) = state_with_project_path("invalid-move-moved");
+    let from = graph_path();
+    let to = GraphResourcePath::new("events/Moved.yssbi-event").unwrap();
+    let source = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    state.insert_graph(from.clone(), source.clone()).unwrap();
+    state.graph_projection(&from, "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        from.as_str().into(),
+    ));
+    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        to.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x205)),
+        affected_resources: vec![source_key.clone()],
+        expected_revisions: [(source_key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_absent_resources: [destination_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let before_history = state.history_status();
+    let before_history_head = state.history_head_id_for_test(true);
+    let before_history_lengths = state.history_lengths_for_test();
+    let completion_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let completion_for_hook = std::sync::Arc::clone(&completion_observed);
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        completion_for_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+    let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x206));
+
+    let error = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::MoveGraph {
+                from: from.clone(),
+                to: to.clone(),
+                moved_before: source,
+                moved: graph_with_dangling_endpoint(
+                    "Moved",
+                    GraphDocumentKind::Event,
+                    missing_node_id,
+                ),
+                referenced_graphs_before: Default::default(),
+                referenced_graphs: Default::default(),
+                loaded_referenced_graphs: Default::default(),
+                referenced_variables_before: Default::default(),
+                referenced_variables: Default::default(),
+            },
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        &error,
+        ProjectFilesystemError::InvalidGraphDocument { path, source }
+            if path == &to
+                && source == &DocumentError::EndpointNodeNotFound(missing_node_id)
+    ));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    assert!(state.get_data().unwrap().graphs.contains_key(&from));
+    assert!(!state.get_data().unwrap().graphs.contains_key(&to));
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_head_id_for_test(true), before_history_head);
+    assert_eq!(state.history_lengths_for_test(), before_history_lengths);
+    assert!(!completion_observed.load(std::sync::atomic::Ordering::Acquire));
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn structurally_invalid_move_graph_referenced_graphs_have_zero_authoritative_effects() {
+    let (state, root) = state_with_project_path("invalid-move-references");
+    let from = graph_path();
+    let to = GraphResourcePath::new("events/Moved.yssbi-event").unwrap();
+    let referenced_path = GraphResourcePath::new("events/Referenced.yssbi-event").unwrap();
+    let source = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let referenced_before = GraphResourceDocument::new("Referenced", GraphDocumentKind::Event);
+    state.insert_graph(from.clone(), source.clone()).unwrap();
+    state
+        .insert_graph(referenced_path.clone(), referenced_before.clone())
+        .unwrap();
+    state.graph_projection(&from, "en-US").unwrap();
+    state.graph_projection(&referenced_path, "en-US").unwrap();
+    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    let referenced_document_path =
+        crate::node_system::document::GraphResourcePath(referenced_path.as_str().into());
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    assert!(coordinator.contains_slot_for_test(&referenced_document_path));
+    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        from.as_str().into(),
+    ));
+    let referenced_key = ResourceKey::Graph(referenced_document_path.clone());
+    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        to.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x207)),
+        affected_resources: vec![source_key.clone(), referenced_key.clone()],
+        expected_revisions: [
+            (source_key, GraphRevision::INITIAL),
+            (referenced_key, GraphRevision::INITIAL),
+        ]
+        .into_iter()
+        .collect(),
+        expected_absent_resources: [destination_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_publication = state.publication_state_for_test();
+    let before_history = state.history_status();
+    let before_history_head = state.history_head_id_for_test(true);
+    let before_history_lengths = state.history_lengths_for_test();
+    let completion_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let completion_for_hook = std::sync::Arc::clone(&completion_observed);
+    state.set_committed_resource_completion_test_hook(std::sync::Arc::new(move || {
+        completion_for_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+    let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x208));
+
+    let error = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::MoveGraph {
+                from: from.clone(),
+                to: to.clone(),
+                moved_before: source,
+                moved: GraphResourceDocument::new("Moved", GraphDocumentKind::Event),
+                referenced_graphs_before: [(referenced_path.clone(), referenced_before)]
+                    .into_iter()
+                    .collect(),
+                referenced_graphs: [(
+                    referenced_path.clone(),
+                    graph_with_dangling_endpoint(
+                        "Referenced",
+                        GraphDocumentKind::Event,
+                        missing_node_id,
+                    ),
+                )]
+                .into_iter()
+                .collect(),
+                loaded_referenced_graphs: [referenced_path.clone()].into_iter().collect(),
+                referenced_variables_before: Default::default(),
+                referenced_variables: Default::default(),
+            },
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        &error,
+        ProjectFilesystemError::InvalidGraphDocument { path, source }
+            if path == &referenced_path
+                && source == &DocumentError::EndpointNodeNotFound(missing_node_id)
+    ));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        before_data
+    );
+    assert!(state.get_data().unwrap().graphs.contains_key(&from));
+    assert!(!state.get_data().unwrap().graphs.contains_key(&to));
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.history_head_id_for_test(true), before_history_head);
+    assert_eq!(state.history_lengths_for_test(), before_history_lengths);
+    assert!(!completion_observed.load(std::sync::atomic::Ordering::Acquire));
+    assert!(coordinator.contains_slot_for_test(&document_path()));
+    assert!(coordinator.contains_slot_for_test(&referenced_document_path));
     std::fs::remove_dir_all(root).unwrap();
 }
 

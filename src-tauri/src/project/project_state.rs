@@ -5,11 +5,12 @@ use crate::event::GraphMutationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
-    EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch, GraphMutation, HistoryEntryId,
-    HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, OperationId,
-    ProjectDocumentState, ProjectHistory, ProjectHistoryTransaction, ResourceKey, ResourceRevision,
-    RevisionedGraphStore,
+    EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch, HistoryEntryId, HistoryMutation,
+    HistoryStatusDto, MutationConflict, MutationRequest, OperationId, ProjectDocumentState,
+    ProjectHistory, ProjectHistoryTransaction, ResourceKey, ResourceRevision,
 };
+#[cfg(test)]
+use crate::node_system::document::{GraphMutation, RevisionedGraphStore};
 use crate::project::{
     GraphLifecycleIntent, GraphLifecycleOperation, GraphLifecycleRegistry,
     GraphRenameOwnershipLease, GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot,
@@ -707,6 +708,45 @@ fn compile_product_invalidation_for_resource_patch(
         ResourceDocumentPatch::UpsertWorksheet { .. }
         | ResourceDocumentPatch::RemoveWorksheet { .. } => CompileProductInvalidation::None,
     }
+}
+
+fn validate_graph_resource(
+    path: &GraphResourcePath,
+    resource: &GraphResourceDocument,
+) -> Result<(), ProjectFilesystemError> {
+    resource
+        .validate()
+        .map_err(|source| ProjectFilesystemError::InvalidGraphDocument {
+            path: path.clone(),
+            source,
+        })
+}
+
+fn preflight_resource_patch_graphs(
+    patch: &ResourceDocumentPatch,
+) -> Result<(), ProjectFilesystemError> {
+    match patch {
+        ResourceDocumentPatch::InsertGraph { path, resource } => {
+            validate_graph_resource(path, resource)?;
+        }
+        ResourceDocumentPatch::MoveGraph {
+            to,
+            moved,
+            referenced_graphs,
+            ..
+        } => {
+            validate_graph_resource(to, moved)?;
+            for (path, resource) in referenced_graphs {
+                validate_graph_resource(path, resource)?;
+            }
+        }
+        ResourceDocumentPatch::RemoveGraph { .. }
+        | ResourceDocumentPatch::UnloadGraph { .. }
+        | ResourceDocumentPatch::PatchVariables { .. }
+        | ResourceDocumentPatch::UpsertWorksheet { .. }
+        | ResourceDocumentPatch::RemoveWorksheet { .. } => {}
+    }
+    Ok(())
 }
 
 fn affected_projection_paths(
@@ -2555,6 +2595,7 @@ impl ProjectState {
         resource: GraphResourceDocument,
     ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
         self.ensure_project_operational()?;
+        validate_graph_resource(&path, &resource)?;
         let revision = resource.document.revision;
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
@@ -2565,7 +2606,7 @@ impl ProjectState {
         } else {
             CompileProductInvalidation::Graphs(vec![path.clone()])
         };
-        let inserted = Self::insert_graph_locked(&mut data, path.clone(), resource);
+        let inserted = Self::insert_graph_locked(&mut data, path.clone(), resource)?;
         graph_revisions.insert(path, revision);
         publication.advance_authority_generation();
         self.apply_compile_product_invalidation(invalidation);
@@ -2576,9 +2617,10 @@ impl ProjectState {
         data: &mut ProjectData,
         path: GraphResourcePath,
         resource: GraphResourceDocument,
-    ) -> GraphResourceDocument {
+    ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
+        validate_graph_resource(&path, &resource)?;
         data.graphs.insert(path, resource.clone());
-        resource
+        Ok(resource)
     }
 
     pub fn apply_resource_document_patch(
@@ -2617,6 +2659,7 @@ impl ProjectState {
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
+        preflight_resource_patch_graphs(&patch)?;
         let projection_environment = projection_environment
             .map(Ok)
             .unwrap_or_else(|| self.capture_projection_environment_for_session(&context.session))
@@ -2720,8 +2763,9 @@ impl ProjectState {
 
             match patch {
                 ResourceDocumentPatch::InsertGraph { path, resource } => {
-                    graph_revisions.insert(path.clone(), resource.document.revision);
-                    Self::insert_graph_locked(&mut data, path, resource);
+                    let revision = resource.document.revision;
+                    Self::insert_graph_locked(&mut data, path.clone(), resource)?;
+                    graph_revisions.insert(path, revision);
                 }
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
                     data.graphs.remove(&path);
@@ -2763,12 +2807,12 @@ impl ProjectState {
                     graph_revisions.remove(&from);
                     graph_revisions.insert(to.clone(), moved.document.revision);
                     if was_loaded {
-                        Self::insert_graph_locked(&mut data, to, moved);
+                        Self::insert_graph_locked(&mut data, to, moved)?;
                     }
                     for (path, resource) in referenced_graphs {
                         graph_revisions.insert(path.clone(), resource.document.revision);
                         if loaded_referenced_graphs.contains(&path) {
-                            Self::insert_graph_locked(&mut data, path, resource);
+                            Self::insert_graph_locked(&mut data, path, resource)?;
                         }
                     }
                     for (id, variable) in referenced_variables {
@@ -3773,7 +3817,7 @@ impl ProjectState {
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
         let inserted =
-            Self::insert_graph_locked(&mut data, operation.owner.graph_path.clone(), resource);
+            Self::insert_graph_locked(&mut data, operation.owner.graph_path.clone(), resource)?;
         graph_revisions.insert(operation.owner.graph_path.clone(), revision);
         if let Some(local_variables) = local_variables {
             for (id, variable) in local_variables {
@@ -3870,13 +3914,20 @@ impl ProjectState {
             operation.session.root.as_path().to_string_lossy().as_ref(),
             &operation.owner.graph_path,
         );
-        if let Err(error) = &loaded {
+        if loaded.is_err() {
             self.validate_graph_lifecycle_operation(&operation)?;
-            return Err(ProjectFilesystemError::TransactionPrepareFailed {
-                message: error.to_string(),
-            });
         }
-        let loaded = loaded.expect("checked graph read result");
+        let loaded = loaded.map_err(|error| match error {
+            crate::project::ProjectError::InvalidGraphDocument { source, .. } => {
+                ProjectFilesystemError::InvalidGraphDocument {
+                    path: operation.owner.graph_path.clone(),
+                    source,
+                }
+            }
+            error => ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            },
+        })?;
         let mut graph = loaded.document;
         graph.revision = loaded.revision;
         let resource = GraphResourceDocument {
@@ -4065,7 +4116,8 @@ impl ProjectState {
         })
     }
 
-    pub fn apply_graph_mutation(
+    #[cfg(test)]
+    pub(crate) fn apply_graph_mutation(
         &self,
         graph_path: &GraphResourcePath,
         request: MutationRequest<GraphMutation>,
@@ -4121,7 +4173,8 @@ impl ProjectState {
         Ok(event)
     }
 
-    pub fn apply_graph_patch(
+    #[cfg(test)]
+    pub(crate) fn apply_graph_patch(
         &self,
         graph_path: &GraphResourcePath,
         request: MutationRequest<GraphDocumentPatch>,

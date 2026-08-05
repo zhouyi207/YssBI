@@ -1,14 +1,15 @@
+use super::CompilerDiagnostic;
 use super::pipeline::ResourceSnapshot;
 use crate::node_system::analysis::{
-    CompilationBasis, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
-    ResolvedInterface, ResolvedPort, ResolvedPortStatus, ResourceVersionSet,
+    CompilationBasis, DiagnosticLocation, NodeDiagnostic, ResolvedInterface, ResolvedPort,
+    ResolvedPortStatus, ResourceVersionSet,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphRevision,
     LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use crate::node_system::protocol::{
-    I18nKey, InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec,
+    InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -241,10 +242,9 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
             PortInstances::UserCreated { .. } => state.add_existing_instances(spec, None),
             PortInstances::Derived { resolver } => {
                 let Some(implementation) = resolvers.get(resolver) else {
-                    state.push_node_diagnostic(
-                        "compiler.interface.resolver_missing",
-                        format!("{}:{}", spec.key, resolver),
-                    );
+                    state.push_node_diagnostic(CompilerDiagnostic::InterfaceResolverMissing {
+                        resolver_id: resolver.to_string().into(),
+                    });
                     state.add_existing_instances(spec, None);
                     continue;
                 };
@@ -257,11 +257,10 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
                     resources,
                 }) {
                     Ok(members) => state.add_resolved_instances(basis, spec, members),
-                    Err(error) => {
-                        state.push_node_diagnostic(
-                            "compiler.interface.resolver_failed",
-                            format!("{}:{}", spec.key, error),
-                        );
+                    Err(_) => {
+                        state.push_node_diagnostic(CompilerDiagnostic::InterfaceResolverFailed {
+                            resolver_id: resolver.to_string().into(),
+                        });
                         state.add_existing_instances(spec, None);
                     }
                 }
@@ -319,10 +318,14 @@ impl<'a> MaterializationState<'a> {
         let mut duplicated = BTreeSet::new();
         for member in members.into_vec() {
             if !validate_projected_member_basis(basis, &member) {
-                self.push_node_diagnostic(
-                    "compiler.interface.basis_mismatch",
-                    format!("{}:{}", spec.key, locator_detail(&member.locator)),
-                );
+                self.push_node_diagnostic(CompilerDiagnostic::InterfaceBasisMismatch {
+                    expected_basis: serde_json::to_string(basis)
+                        .expect("compilation basis is serializable")
+                        .into(),
+                    actual_basis: serde_json::to_string(&member.basis)
+                        .expect("compilation basis is serializable")
+                        .into(),
+                });
                 continue;
             }
             let locator = member.locator.clone();
@@ -333,10 +336,12 @@ impl<'a> MaterializationState<'a> {
         // A duplicated locator is ambiguous even if labels differ; reject it rather than name-match.
         for locator in duplicated {
             by_locator.remove(&locator);
-            self.push_node_diagnostic(
-                "compiler.interface.duplicate_locator",
-                format!("{}:{}", spec.key, locator_detail(&locator)),
-            );
+            self.push_node_diagnostic(CompilerDiagnostic::InterfaceDuplicateLocator {
+                port_key: spec.key.to_string().into(),
+                locator: serde_json::to_string(&locator)
+                    .expect("dynamic member locators are serializable")
+                    .into(),
+            });
         }
 
         self.add_existing_instances(spec, Some(&by_locator));
@@ -388,9 +393,11 @@ impl<'a> MaterializationState<'a> {
                     ResolvedPortStatus::Resolved
                 } else {
                     self.push_port_diagnostic(
-                        "compiler.port.binding_kind_mismatch",
+                        CompilerDiagnostic::PortBindingKindMismatch {
+                            expected_kind: "derived".into(),
+                            actual_kind: "user_created".into(),
+                        },
                         &address,
-                        address.to_string(),
                     );
                     ResolvedPortStatus::Orphan
                 };
@@ -400,9 +407,11 @@ impl<'a> MaterializationState<'a> {
             }
             if matches!(spec.instances, PortInstances::UserCreated { .. }) {
                 self.push_port_diagnostic(
-                    "compiler.port.binding_kind_mismatch",
+                    CompilerDiagnostic::PortBindingKindMismatch {
+                        expected_kind: "user_created".into(),
+                        actual_kind: "derived".into(),
+                    },
                     &address,
-                    address.to_string(),
                 );
                 self.ports.insert(
                     address.clone(),
@@ -450,9 +459,10 @@ impl<'a> MaterializationState<'a> {
                 },
                 (ResolvedPortStatus::Orphan, _) => {
                     self.push_port_diagnostic(
-                        "compiler.port.orphan",
+                        CompilerDiagnostic::PortOrphan {
+                            port: address.to_string().into(),
+                        },
                         &address,
-                        locator_detail(origin),
                     );
                     ProjectedDynamicPortBinding::Orphan {
                         origin: origin.clone(),
@@ -500,36 +510,32 @@ impl<'a> MaterializationState<'a> {
     fn diagnose_forbidden_state(&mut self, address: &PortAddress) {
         for (&connection_id, connection) in &self.document.connections {
             if connection.input == *address || connection.output == *address {
-                self.diagnostics.push(diagnostic(
-                    "compiler.interface.identity_none_connection",
-                    DiagnosticLocation::Connection(connection_id),
-                    address.to_string(),
-                ));
+                self.diagnostics.push(
+                    CompilerDiagnostic::InterfaceIdentityNoneConnection {
+                        port: address.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Connection(connection_id)),
+                );
             }
         }
         if self.document.input_states.contains_key(address) {
             self.push_port_diagnostic(
-                "compiler.interface.identity_none_override",
+                CompilerDiagnostic::InterfaceIdentityNoneOverride {
+                    port: address.to_string().into(),
+                },
                 address,
-                address.to_string(),
             );
         }
     }
 
-    fn push_node_diagnostic(&mut self, code: &'static str, detail: String) {
-        self.diagnostics.push(diagnostic(
-            code,
-            DiagnosticLocation::Node(self.node_id),
-            detail,
-        ));
+    fn push_node_diagnostic(&mut self, diagnostic: CompilerDiagnostic) {
+        self.diagnostics
+            .push(diagnostic.into_node(DiagnosticLocation::Node(self.node_id)));
     }
 
-    fn push_port_diagnostic(&mut self, code: &'static str, address: &PortAddress, detail: String) {
-        self.diagnostics.push(diagnostic(
-            code,
-            DiagnosticLocation::Port(address.clone()),
-            detail,
-        ));
+    fn push_port_diagnostic(&mut self, diagnostic: CompilerDiagnostic, address: &PortAddress) {
+        self.diagnostics
+            .push(diagnostic.into_node(DiagnosticLocation::Port(address.clone())));
     }
 
     fn finish(self) -> DynamicInterfaceResolution {
@@ -630,19 +636,4 @@ fn projected_address(
         template.clone(),
         PortInstanceId::from_uuid(uuid::Uuid::from_bytes(bytes)),
     )
-}
-
-fn diagnostic(
-    code: &'static str,
-    primary: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-    detail: String,
-) -> DynamicInterfaceDiagnostic {
-    NodeDiagnostic {
-        code: DiagnosticCode::new(code),
-        message_key: I18nKey::new(format!("diagnostics.{code}")).expect("static diagnostic key"),
-        arguments: BTreeMap::from([(Box::<str>::from("detail"), detail.into_boxed_str())]),
-        severity: DiagnosticSeverity::Error,
-        primary,
-        related: Box::new([]),
-    }
 }

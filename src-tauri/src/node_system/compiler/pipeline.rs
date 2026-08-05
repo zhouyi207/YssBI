@@ -15,13 +15,17 @@ use super::specialization::{
     DemandPortFact, ExecutionPlanBasis, IntermediateKernel, IntermediateOperation,
 };
 use super::type_analysis::{TypeConstraintGraph, TypeEnvironment};
-use super::{LoweredKernel, LoweringContext, NodeImplementation};
+use super::{
+    CompilerDiagnostic, CompilerDiagnosticLocation, CompilerNodeDiagnostic, LoweredKernel,
+    LoweringContext, NodeImplementation, compare_diagnostics, managed_node_role_name,
+    node_scope_name, port_kind_name,
+};
 use crate::node_system::analysis::{
     AnalysisSnapshot, AnalyzedNode, CompilationBasis, CompileId, CompileProvenance, ControlEdge,
-    CorrelationContext, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK,
-    NodeDiagnostic, ProjectSessionId, ResolvedInterface, ResolvedPort, ResourceVersionSet,
-    SemanticDependency, SpanEvent, SpanKind, SpanStatus, TraceSink, ValidatedSemanticGraph,
-    ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,
+    CorrelationContext, DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId,
+    ResolvedInterface, ResolvedPort, ResourceVersionSet, SemanticDependency, SpanEvent, SpanKind,
+    SpanStatus, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode, ValidatedSemanticPort,
+    ValueEdge,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
@@ -35,10 +39,10 @@ use crate::node_system::plan::{
     ValueDependency, ValueRef,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, EffectSemantics, EvaluationPolicy, I18nKey, InputConsumption,
-    LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction, ParameterConstraint,
-    ParameterEditorSpec, PortDirection, PortInstances, PortKind, PortSpec, Purity, TypeClassId,
-    TypeConstructorId, TypeExpr, TypeId,
+    ConnectionsPerPort, EffectSemantics, EvaluationPolicy, InputConsumption, LiteralPolicy,
+    NodeProtocol, NodeTypeId, OutputProduction, ParameterConstraint, ParameterEditorSpec,
+    PortDirection, PortInstances, PortKind, PortSpec, Purity, TypeClassId, TypeConstructorId,
+    TypeExpr, TypeId,
 };
 use crate::node_system::registry::{
     NodeRegistry, ProtocolFingerprint, RegistryFingerprint, StructuralNodeRole,
@@ -399,14 +403,10 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let semantic = state.semantic_graph();
         let semantic = match analysis.validated(semantic) {
             Ok(graph) => graph,
-            Err(error) => {
+            Err(_) => {
                 analysis.diagnostics = append_diagnostic(
                     analysis.diagnostics,
-                    diagnostic(
-                        "compiler.semantic.invalid",
-                        DiagnosticLocation::Graph,
-                        error.to_string(),
-                    ),
+                    CompilerDiagnostic::SemanticInvalid {}.into_node(DiagnosticLocation::Graph),
                 );
                 self.trace.record(SpanEvent::new(
                     SpanKind::Analysis,
@@ -536,14 +536,10 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 .resources
                 .function_graph_document(&target)
                 .ok_or_else(|| {
-                    diagnostic(
-                        "compiler.control.call.abi_missing",
-                        DiagnosticLocation::Graph,
-                        format!(
-                            "target function '{}' has no graph in the compilation snapshot",
-                            target.0
-                        ),
-                    )
+                    CompilerDiagnostic::ControlCallAbiMissing {
+                        function_path: target.0.clone(),
+                    }
+                    .into_node(DiagnosticLocation::Graph)
                 })?;
             let provenance = CompileProvenance {
                 project_session_id: self.project_session_id.clone(),
@@ -565,34 +561,26 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             )?;
             let analysis = state.snapshot();
             if analysis.has_blocking_errors() {
-                return Err(diagnostic(
-                    "compiler.control.call.abi_invalid",
-                    DiagnosticLocation::Graph,
-                    format!(
-                        "target function '{}' has blocking interface diagnostics",
-                        target.0
-                    ),
-                )
+                return Err(CompilerDiagnostic::ControlCallAbiInvalid {
+                    function_path: target.0.clone(),
+                }
+                .into_node(DiagnosticLocation::Graph)
                 .into());
             }
             let interface_projection = state.interface_projection();
-            let semantic = analysis
-                .validated(state.semantic_graph())
-                .map_err(|error| {
-                    diagnostic(
-                        "compiler.control.call.abi_invalid",
-                        DiagnosticLocation::Graph,
-                        format!("target function '{}': {error}", target.0),
-                    )
-                })?;
+            let semantic = analysis.validated(state.semantic_graph()).map_err(|_| {
+                CompilerDiagnostic::ControlCallAbiInvalid {
+                    function_path: target.0.clone(),
+                }
+                .into_node(DiagnosticLocation::Graph)
+            })?;
             let abi =
                 derive_function_abi(self.registry, &semantic, &interface_projection, &provenance)?
                     .ok_or_else(|| {
-                        diagnostic(
-                            "compiler.control.call.abi_invalid",
-                            DiagnosticLocation::Graph,
-                            format!("target function '{}' has no Entry/Return ABI", target.0),
-                        )
+                        CompilerDiagnostic::ControlCallAbiInvalid {
+                            function_path: target.0.clone(),
+                        }
+                        .into_node(DiagnosticLocation::Graph)
                     })?;
             abis.insert(target, abi);
         }
@@ -657,16 +645,19 @@ impl<'a> AnalysisState<'a> {
             cancellation.checkpoint()?;
             if node.id != node_id {
                 self.push(
-                    "compiler.document.node_id_mismatch",
+                    CompilerDiagnostic::DocumentNodeIdMismatch {
+                        expected_id: node_id.to_string().into(),
+                        actual_id: node.id.to_string().into(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    node.id.to_string(),
                 );
             }
             let Some(resolved) = registry.resolve(&node.node_type) else {
                 self.push(
-                    "compiler.node.unknown",
+                    CompilerDiagnostic::NodeUnknown {
+                        node_type: node.node_type.to_string().into(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    node.node_type.to_string(),
                 );
                 continue;
             };
@@ -682,19 +673,20 @@ impl<'a> AnalysisState<'a> {
                 && resolved.protocol.scope != path_scope
             {
                 self.push(
-                    "compiler.node.scope_mismatch",
+                    CompilerDiagnostic::NodeScopeMismatch {
+                        expected_scope: node_scope_name(path_scope).into(),
+                        actual_scope: node_scope_name(resolved.protocol.scope).into(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    format!(
-                        "node scope {:?} is invalid for graph '{}'",
-                        resolved.protocol.scope, self.graph_path.0
-                    ),
                 );
             }
             if resolved.protocol.type_id != node.node_type {
                 self.push(
-                    "compiler.registry.type_mismatch",
+                    CompilerDiagnostic::RegistryTypeMismatch {
+                        expected_type: node.node_type.to_string().into(),
+                        actual_type: resolved.protocol.type_id.to_string().into(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    node.node_type.to_string(),
                 );
                 continue;
             }
@@ -725,7 +717,7 @@ impl<'a> AnalysisState<'a> {
         cancellation.checkpoint()?;
         self.analyze_schemas(schema_resolvers);
         cancellation.checkpoint()?;
-        self.diagnostics.sort_by_key(diagnostic_sort_key);
+        self.diagnostics.sort_by(compare_diagnostics);
         Ok(())
     }
 
@@ -735,12 +727,10 @@ impl<'a> AnalysisState<'a> {
         }
         let Some(function) = resources.function_document(&self.graph_path) else {
             self.push(
-                "compiler.function.abi.signature_missing",
+                CompilerDiagnostic::FunctionAbiSignatureMissing {
+                    function_path: self.graph_path.0.clone(),
+                },
                 DiagnosticLocation::Graph,
-                format!(
-                    "function '{}' has no authoritative signature",
-                    self.graph_path.0
-                ),
             );
             return;
         };
@@ -787,9 +777,11 @@ impl<'a> AnalysisState<'a> {
             .collect::<Vec<_>>();
         if nodes.len() != 1 {
             self.push(
-                "compiler.function.abi.managed_role_invalid",
+                CompilerDiagnostic::FunctionAbiManagedRoleInvalid {
+                    expected_role: structural_role_name(role).into(),
+                    actual_count: nodes.len().to_string().into(),
+                },
                 DiagnosticLocation::Graph,
-                format!("function ABI requires exactly one {role:?} node"),
             );
             return;
         }
@@ -815,9 +807,10 @@ impl<'a> AnalysisState<'a> {
             } = origin
             else {
                 self.push(
-                    "compiler.function.abi.locator_invalid",
+                    CompilerDiagnostic::FunctionAbiLocatorInvalid {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address),
-                    "function ABI endpoint requires a FunctionParameter locator".into(),
                 );
                 continue;
             };
@@ -833,27 +826,28 @@ impl<'a> AnalysisState<'a> {
                 })
             {
                 self.push(
-                    "compiler.function.abi.endpoint_invalid",
+                    CompilerDiagnostic::FunctionAbiEndpointInvalid {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!(
-                        "{role:?} ABI endpoint must be {expected_template} Data {expected_direction:?}"
-                    ),
                 );
                 continue;
             }
             if function != self.graph_path {
                 self.push(
-                    "compiler.function.abi.locator_target_mismatch",
+                    CompilerDiagnostic::FunctionAbiLocatorTargetMismatch {
+                        function_path: function.0.clone(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!("ABI locator targets '{}'", function.0),
                 );
                 continue;
             }
             if !expected_ids.contains(&parameter) {
                 self.push(
-                    "compiler.function.abi.member_unexpected",
+                    CompilerDiagnostic::FunctionAbiMemberUnexpected {
+                        field_name: parameter.0.clone(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!("unexpected ABI member '{}'", parameter.0),
                 );
                 continue;
             }
@@ -862,15 +856,17 @@ impl<'a> AnalysisState<'a> {
         for expected in expected_ids {
             match counts.get(expected).copied().unwrap_or(0) {
                 0 => self.push(
-                    "compiler.function.abi.member_missing",
+                    CompilerDiagnostic::FunctionAbiMemberMissing {
+                        field_name: expected.0.clone(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    format!("missing ABI member '{}'", expected.0),
                 ),
                 1 => {}
                 _ => self.push(
-                    "compiler.function.abi.member_duplicate",
+                    CompilerDiagnostic::FunctionAbiMemberDuplicate {
+                        field_name: expected.0.clone(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    format!("duplicate ABI member '{}'", expected.0),
                 ),
             }
         }
@@ -941,16 +937,17 @@ impl<'a> AnalysisState<'a> {
             })
             .map(|(address, binding)| (address.clone(), binding.clone()))
             .collect::<Vec<_>>();
-        let mut counts = BTreeMap::<FunctionParameterId, usize>::new();
+        let mut member_ports = BTreeMap::<FunctionParameterId, Vec<PortAddress>>::new();
         for (address, binding) in bindings {
             let origin = match binding {
                 DynamicPortBinding::Resolved { origin, .. }
                 | DynamicPortBinding::Orphan { origin, .. } => origin,
                 DynamicPortBinding::UserCreated { .. } => {
                     self.push(
-                        "compiler.control.call.locator_invalid",
+                        CompilerDiagnostic::ControlCallLocatorInvalid {
+                            port: address.to_string().into(),
+                        },
                         DiagnosticLocation::Port(address),
-                        "Call ABI endpoint requires a FunctionParameter locator".into(),
                     );
                     continue;
                 }
@@ -964,11 +961,10 @@ impl<'a> AnalysisState<'a> {
                 spec.kind != PortKind::Data || spec.direction != expected_direction
             }) {
                 self.push(
-                    "compiler.control.call.endpoint_invalid",
+                    CompilerDiagnostic::ControlCallEndpointInvalid {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!(
-                        "Call {expected_template} endpoint must be Data {expected_direction:?}"
-                    ),
                 );
                 continue;
             }
@@ -978,42 +974,55 @@ impl<'a> AnalysisState<'a> {
             } = origin
             else {
                 self.push(
-                    "compiler.control.call.locator_invalid",
+                    CompilerDiagnostic::ControlCallLocatorInvalid {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address),
-                    "Call ABI endpoint requires a FunctionParameter locator".into(),
                 );
                 continue;
             };
             if &function != target {
                 self.push(
-                    "compiler.control.call.locator_target_mismatch",
+                    CompilerDiagnostic::ControlCallLocatorTargetMismatch {
+                        function_path: function.0.clone(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!("Call member locator targets '{}'", function.0),
                 );
                 continue;
             }
             if !expected_ids.contains(&parameter) {
                 self.push(
-                    "compiler.control.call.member_unexpected",
+                    CompilerDiagnostic::ControlCallMemberUnexpected {
+                        member_role: call_member_role(expected_template).into(),
+                        member_id: parameter.0.clone(),
+                    },
                     DiagnosticLocation::Port(address),
-                    format!("unexpected Call member '{}'", parameter.0),
                 );
                 continue;
             }
-            *counts.entry(parameter).or_default() += 1;
+            member_ports.entry(parameter).or_default().push(address);
         }
         for expected in expected_ids {
-            match counts.get(expected).copied().unwrap_or(0) {
-                0 => self.push(
-                    "compiler.control.call.member_missing",
+            match member_ports
+                .get(expected)
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+            {
+                [] => self.push(
+                    CompilerDiagnostic::ControlCallMemberMissing {
+                        member_role: call_member_role(expected_template).into(),
+                        member_id: expected.0.clone(),
+                    },
                     DiagnosticLocation::Node(node_id),
-                    format!("missing Call member '{}'", expected.0),
                 ),
-                1 => {}
-                _ => self.push(
-                    "compiler.control.call.locator_duplicate",
-                    DiagnosticLocation::Node(node_id),
-                    format!("duplicate Call member '{}'", expected.0),
+                [_] => {}
+                [_, duplicate, ..] => self.push(
+                    CompilerDiagnostic::ControlCallLocatorDuplicate {
+                        function_path: target.0.clone(),
+                        parameter_id: expected.0.clone(),
+                        port: duplicate.to_string().into(),
+                    },
+                    DiagnosticLocation::Port((*duplicate).clone()),
                 ),
             }
         }
@@ -1036,9 +1045,10 @@ impl<'a> AnalysisState<'a> {
             if nodes.len() > 1 {
                 for node_id in nodes {
                     self.push(
-                        "compiler.node.managed_singleton",
+                        CompilerDiagnostic::NodeManagedSingleton {
+                            managed_role: managed_node_role_name(Some(role)).into(),
+                        },
                         DiagnosticLocation::Node(node_id),
-                        format!("managed role {role:?} may occur only once per graph"),
                     );
                 }
             }
@@ -1062,12 +1072,11 @@ impl<'a> AnalysisState<'a> {
             .collect::<Vec<_>>();
         for issue in issues {
             self.push(
-                issue.code,
+                issue.diagnostic,
                 issue
                     .node_id
                     .map(DiagnosticLocation::Node)
                     .unwrap_or(DiagnosticLocation::Graph),
-                issue.detail,
             );
         }
     }
@@ -1091,12 +1100,13 @@ impl<'a> AnalysisState<'a> {
                 normalized.insert(key.clone(), value.clone());
             } else {
                 self.push(
-                    "compiler.parameter.unknown",
+                    CompilerDiagnostic::ParameterUnknown {
+                        parameter_key: key.to_string().into(),
+                    },
                     DiagnosticLocation::Parameter {
                         node_id,
                         key: key.clone(),
                     },
-                    key.to_string(),
                 );
             }
         }
@@ -1104,14 +1114,15 @@ impl<'a> AnalysisState<'a> {
             if let (Some(value), TypeExpr::Concrete(type_id)) =
                 (normalized.get(&spec.key), &spec.value_type)
             {
-                if let Some(Err(detail)) = registry.validate_nominal_parameter(type_id, value) {
+                if let Some(Err(_)) = registry.validate_nominal_parameter(type_id, value) {
                     self.push(
-                        "compiler.parameter.invalid",
+                        CompilerDiagnostic::ParameterInvalid {
+                            parameter_key: spec.key.to_string().into(),
+                        },
                         DiagnosticLocation::Parameter {
                             node_id,
                             key: spec.key.clone(),
                         },
-                        detail,
                     );
                 }
             }
@@ -1122,12 +1133,13 @@ impl<'a> AnalysisState<'a> {
                     }
                 } else if spec.constraints.contains(&ParameterConstraint::Required) {
                     self.push(
-                        "compiler.parameter.required",
+                        CompilerDiagnostic::ParameterRequired {
+                            parameter_key: spec.key.to_string().into(),
+                        },
                         DiagnosticLocation::Parameter {
                             node_id,
                             key: spec.key.clone(),
                         },
-                        spec.key.to_string(),
                     );
                 }
             }
@@ -1188,9 +1200,10 @@ impl<'a> AnalysisState<'a> {
         {
             let PortRef::Instance { template, .. } = &address.port else {
                 self.push(
-                    "compiler.port.binding_not_instance",
+                    CompilerDiagnostic::PortBindingNotInstance {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
                 continue;
             };
@@ -1201,17 +1214,19 @@ impl<'a> AnalysisState<'a> {
                 .find(|port| &port.key == template)
             else {
                 self.push(
-                    "compiler.port.unknown",
+                    CompilerDiagnostic::PortUnknown {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
                 continue;
             };
             if spec.instances == PortInstances::Declared {
                 self.push(
-                    "compiler.port.instance_not_allowed",
+                    CompilerDiagnostic::PortInstanceNotAllowed {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
             }
         }
@@ -1222,25 +1237,29 @@ impl<'a> AnalysisState<'a> {
         for (&connection_id, connection) in &self.document.connections {
             if connection.id != connection_id {
                 self.push(
-                    "compiler.document.connection_id_mismatch",
+                    CompilerDiagnostic::DocumentConnectionIdMismatch {
+                        expected_id: connection_id.to_string().into(),
+                        actual_id: connection.id.to_string().into(),
+                    },
                     DiagnosticLocation::Connection(connection_id),
-                    connection.id.to_string(),
                 );
             }
             let output = self.lookup_document_port(&connection.output).cloned();
             let input = self.lookup_document_port(&connection.input).cloned();
             if output.is_none() {
                 self.push(
-                    "compiler.port.unknown",
+                    CompilerDiagnostic::PortUnknown {
+                        port: connection.output.to_string().into(),
+                    },
                     DiagnosticLocation::Port(connection.output.clone()),
-                    connection.output.to_string(),
                 );
             }
             if input.is_none() {
                 self.push(
-                    "compiler.port.unknown",
+                    CompilerDiagnostic::PortUnknown {
+                        port: connection.input.to_string().into(),
+                    },
                     DiagnosticLocation::Port(connection.input.clone()),
-                    connection.input.to_string(),
                 );
             }
             let (Some(output), Some(input)) = (output, input) else {
@@ -1248,23 +1267,27 @@ impl<'a> AnalysisState<'a> {
             };
             if output.direction != PortDirection::Output {
                 self.push(
-                    "compiler.connection.output_direction",
+                    CompilerDiagnostic::ConnectionOutputDirection {
+                        port: connection.output.to_string().into(),
+                    },
                     DiagnosticLocation::Connection(connection_id),
-                    connection.output.to_string(),
                 );
             }
             if input.direction != PortDirection::Input {
                 self.push(
-                    "compiler.connection.input_direction",
+                    CompilerDiagnostic::ConnectionInputDirection {
+                        port: connection.input.to_string().into(),
+                    },
                     DiagnosticLocation::Connection(connection_id),
-                    connection.input.to_string(),
                 );
             }
             if output.kind != input.kind {
                 self.push(
-                    "compiler.connection.kind_mismatch",
+                    CompilerDiagnostic::ConnectionKindMismatch {
+                        source_kind: port_kind_name(output.kind).into(),
+                        target_kind: port_kind_name(input.kind).into(),
+                    },
                     DiagnosticLocation::Connection(connection_id),
-                    connection_id.to_string(),
                 );
             }
             if let Some(spec) = self.port_spec(&connection.input, &input.template) {
@@ -1273,9 +1296,10 @@ impl<'a> AnalysisState<'a> {
                         if connection.order.is_none() =>
                     {
                         self.push(
-                            "compiler.connection.order_required",
+                            CompilerDiagnostic::ConnectionOrderRequired {
+                                port: connection.input.to_string().into(),
+                            },
                             DiagnosticLocation::Connection(connection_id),
-                            connection.input.to_string(),
                         );
                     }
                     ConnectionsPerPort::Single
@@ -1283,9 +1307,10 @@ impl<'a> AnalysisState<'a> {
                         if connection.order.is_some() =>
                     {
                         self.push(
-                            "compiler.connection.order_forbidden",
+                            CompilerDiagnostic::ConnectionOrderForbidden {
+                                port: connection.input.to_string().into(),
+                            },
                             DiagnosticLocation::Connection(connection_id),
-                            connection.input.to_string(),
                         );
                     }
                     _ => {}
@@ -1308,9 +1333,10 @@ impl<'a> AnalysisState<'a> {
                 };
                 if exceeded {
                     self.push(
-                        "compiler.connection.limit",
+                        CompilerDiagnostic::ConnectionLimit {
+                            port: address.to_string().into(),
+                        },
                         DiagnosticLocation::Port(address.clone()),
-                        count.to_string(),
                     );
                 }
             }
@@ -1333,9 +1359,10 @@ impl<'a> AnalysisState<'a> {
             if port.direction != PortDirection::Input {
                 if self.document.input_states.contains_key(&address) {
                     self.push(
-                        "compiler.input.not_input",
+                        CompilerDiagnostic::InputNotInput {
+                            port: address.to_string().into(),
+                        },
                         DiagnosticLocation::Port(address.clone()),
-                        address.to_string(),
                     );
                 }
                 continue;
@@ -1357,9 +1384,10 @@ impl<'a> AnalysisState<'a> {
                 .expect("resolved port has protocol spec");
             if literal.is_some() && connections != 0 {
                 self.push(
-                    "compiler.input.conflicting_bindings",
+                    CompilerDiagnostic::InputConflictingBindings {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
             }
             if literal.is_some()
@@ -1369,9 +1397,10 @@ impl<'a> AnalysisState<'a> {
                     .is_none_or(|binding| binding.literal_policy == LiteralPolicy::Forbidden)
             {
                 self.push(
-                    "compiler.input.literal_forbidden",
+                    CompilerDiagnostic::InputLiteralForbidden {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
             }
             let has_default = spec
@@ -1381,9 +1410,10 @@ impl<'a> AnalysisState<'a> {
             if port.kind == PortKind::Data && connections == 0 && literal.is_none() && !has_default
             {
                 self.push(
-                    "compiler.input.unbound",
+                    CompilerDiagnostic::InputUnbound {
+                        port: address.to_string().into(),
+                    },
                     DiagnosticLocation::Port(address.clone()),
-                    address.to_string(),
                 );
             }
         }
@@ -1396,9 +1426,10 @@ impl<'a> AnalysisState<'a> {
             .collect();
         for address in stale {
             self.push(
-                "compiler.input.unknown_port",
+                CompilerDiagnostic::InputUnknownPort {
+                    port: address.to_string().into(),
+                },
                 DiagnosticLocation::Port(address.clone()),
-                address.to_string(),
             );
         }
     }
@@ -1439,9 +1470,8 @@ impl<'a> AnalysisState<'a> {
             .collect::<Vec<_>>();
         for connection_id in cyclic_value_dependencies(&edges) {
             self.push(
-                "compiler.dependency.value_cycle",
+                CompilerDiagnostic::DependencyValueCycle {},
                 DiagnosticLocation::Connection(connection_id),
-                connection_id.to_string(),
             );
         }
     }
@@ -1475,7 +1505,7 @@ impl<'a> AnalysisState<'a> {
         let (facts, issues) = graph.solve(registry);
         self.type_facts = facts;
         for issue in issues {
-            self.push(issue.code, issue.location, issue.detail);
+            self.push(issue.diagnostic, issue.location);
         }
     }
 
@@ -1504,7 +1534,7 @@ impl<'a> AnalysisState<'a> {
         self.schema_facts = expressions;
         self.resolved_schema_facts = facts;
         for issue in issues {
-            self.push(issue.code, issue.location, issue.detail);
+            self.push(issue.diagnostic, issue.location);
         }
     }
 
@@ -1528,13 +1558,8 @@ impl<'a> AnalysisState<'a> {
             .iter()
             .find(|port| &port.key == key)
     }
-    fn push(
-        &mut self,
-        code: &'static str,
-        location: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-        detail: String,
-    ) {
-        self.diagnostics.push(diagnostic(code, location, detail));
+    fn push(&mut self, diagnostic: CompilerDiagnostic, location: CompilerDiagnosticLocation) {
+        self.diagnostics.push(diagnostic.into_node(location));
     }
 
     fn interface_projection(&self) -> ValidatedInterfaceProjection {
@@ -1646,11 +1671,9 @@ impl<'a> AnalysisState<'a> {
     }
 }
 
-type CompilerDiagnostic = NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>;
-
 enum LowerGraphFailure {
     Cancelled(CompileCancelled),
-    Diagnostic(CompilerDiagnostic),
+    Diagnostic(CompilerNodeDiagnostic),
 }
 
 impl From<CompileCancelled> for LowerGraphFailure {
@@ -1659,8 +1682,8 @@ impl From<CompileCancelled> for LowerGraphFailure {
     }
 }
 
-impl From<CompilerDiagnostic> for LowerGraphFailure {
-    fn from(diagnostic: CompilerDiagnostic) -> Self {
+impl From<CompilerNodeDiagnostic> for LowerGraphFailure {
+    fn from(diagnostic: CompilerNodeDiagnostic) -> Self {
         Self::Diagnostic(diagnostic)
     }
 }
@@ -1695,6 +1718,26 @@ struct PendingRelationalFragment {
     inputs: BTreeMap<PortAddress, crate::node_system::plan::RelationalOperatorIndex>,
 }
 
+fn structural_role_name(role: StructuralNodeRole) -> &'static str {
+    match role {
+        StructuralNodeRole::EventBegin => "event_begin",
+        StructuralNodeRole::FunctionEntry => "function_entry",
+        StructuralNodeRole::FunctionReturn => "function_return",
+        StructuralNodeRole::Branch => "branch",
+        StructuralNodeRole::Loop => "loop",
+        StructuralNodeRole::Sequence => "sequence",
+        StructuralNodeRole::Call => "call",
+    }
+}
+
+fn call_member_role(template: &str) -> &'static str {
+    match template {
+        "arguments" => "argument",
+        "results" => "result",
+        _ => "member",
+    }
+}
+
 fn function_target(
     parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
 ) -> Option<&str> {
@@ -1712,7 +1755,7 @@ fn function_target(
 fn allocate_port_values<R: CompilerRegistry>(
     registry: &R,
     graph: &CompilerSemanticGraph,
-) -> Result<(u32, BTreeMap<PortAddress, ValueRef>), CompilerDiagnostic> {
+) -> Result<(u32, BTreeMap<PortAddress, ValueRef>), CompilerNodeDiagnostic> {
     let mut next_value = 0u32;
     let mut values = BTreeMap::new();
     for node in graph.nodes.iter() {
@@ -1732,7 +1775,7 @@ fn derive_function_abi<R: CompilerRegistry>(
     graph: &CompilerSemanticGraph,
     projection: &ValidatedInterfaceProjection,
     provenance: &CompileProvenance,
-) -> Result<Option<FunctionPlanAbi>, CompilerDiagnostic> {
+) -> Result<Option<FunctionPlanAbi>, CompilerNodeDiagnostic> {
     if !provenance.graph_path.0.starts_with("functions/") {
         return Ok(None);
     }
@@ -1763,22 +1806,17 @@ fn derive_function_abi<R: CompilerRegistry>(
                 continue;
             };
             if function != &provenance.graph_path {
-                return Err(diagnostic(
-                    "compiler.function.abi_target_mismatch",
-                    DiagnosticLocation::Port(port.address.clone()),
-                    format!(
-                        "function ABI member targets '{}' instead of '{}'",
-                        function.0, provenance.graph_path.0
-                    ),
-                ));
+                return Err(CompilerDiagnostic::FunctionAbiTargetMismatch {
+                    function_path: function.0.clone(),
+                }
+                .into_node(DiagnosticLocation::Port(port.address.clone())));
             }
             let value = values[&port.address];
             if destination.insert(parameter.clone(), value).is_some() {
-                return Err(diagnostic(
-                    "compiler.function.abi_member_duplicate",
-                    DiagnosticLocation::Port(port.address.clone()),
-                    format!("duplicate function ABI member '{}'", parameter.0),
-                ));
+                return Err(CompilerDiagnostic::FunctionAbiMemberDuplicate {
+                    field_name: parameter.0.clone(),
+                }
+                .into_node(DiagnosticLocation::Port(port.address.clone())));
             }
         }
     }
@@ -1863,11 +1901,10 @@ fn lower_graph<R: CompilerRegistry>(
             continue;
         }
         let implementation = resolved.implementation().ok_or_else(|| {
-            diagnostic(
-                "compiler.lowering.implementation_missing",
-                DiagnosticLocation::Node(node.node_id),
-                node.node_type_id.to_string(),
-            )
+            CompilerDiagnostic::LoweringImplementationMissing {
+                node_type: node.node_type_id.to_string().into(),
+            }
+            .into_node(DiagnosticLocation::Node(node.node_id))
         })?;
         let mut inputs = Vec::new();
         let mut planned_inputs = Vec::new();
@@ -1906,12 +1943,11 @@ fn lower_graph<R: CompilerRegistry>(
                             serde_json::from_value::<crate::node_system::protocol::TypedValue>(
                                 literal.clone(),
                             )
-                            .map_err(|error| {
-                                diagnostic(
-                                    "compiler.lowering.failed",
-                                    DiagnosticLocation::Port(port.address.clone()),
-                                    format!("invalid literal binding: {error}"),
-                                )
+                            .map_err(|_| {
+                                CompilerDiagnostic::LoweringFailed {
+                                    node_type: node.node_type_id.to_string().into(),
+                                }
+                                .into_node(DiagnosticLocation::Port(port.address.clone()))
                             })?
                             .value,
                         )
@@ -1939,22 +1975,18 @@ fn lower_graph<R: CompilerRegistry>(
             inputs: &inputs,
             outputs: &outputs,
         };
-        let lowered = implementation.lowerer.lower(&context).map_err(|error| {
-            diagnostic(
-                "compiler.lowering.failed",
-                DiagnosticLocation::Node(node.node_id),
-                error.to_string(),
-            )
+        let lowered = implementation.lowerer.lower(&context).map_err(|_| {
+            CompilerDiagnostic::LoweringFailed {
+                node_type: node.node_type_id.to_string().into(),
+            }
+            .into_node(DiagnosticLocation::Node(node.node_id))
         })?;
         let mut owned_resources = BTreeMap::<ResourceId, CompiledResourceRequirement>::new();
         if let Some(metadata) = lowered.kernel.metadata() {
             if metadata.effect != resolved.protocol.execution.effects {
-                return Err(diagnostic(
-                    "compiler.lowering.effect_contract",
-                    DiagnosticLocation::Node(node.node_id),
-                    "lowered fragment effect metadata differs from the node protocol".to_string(),
-                )
-                .into());
+                return Err(CompilerDiagnostic::LoweringEffectContract {}
+                    .into_node(DiagnosticLocation::Node(node.node_id))
+                    .into());
             }
             for requirement in &metadata.resources {
                 owned_resources.insert(requirement.resource.clone(), requirement.clone());
@@ -1962,30 +1994,27 @@ fn lower_graph<R: CompilerRegistry>(
                     resources.insert(requirement.resource.clone(), requirement.clone())
                 {
                     if previous != *requirement {
-                        return Err(diagnostic(
-                            "compiler.lowering.resource_conflict",
-                            DiagnosticLocation::Node(node.node_id),
-                            requirement.resource.as_str().to_string(),
-                        )
+                        return Err(CompilerDiagnostic::LoweringResourceConflict {
+                            resource_id: requirement.resource.as_str().into(),
+                        }
+                        .into_node(DiagnosticLocation::Node(node.node_id))
                         .into());
                     }
                 }
             }
             for result in &metadata.results {
                 let Some(&value) = port_values.get(&result.output) else {
-                    return Err(diagnostic(
-                        "compiler.lowering.result_port",
-                        DiagnosticLocation::Node(node.node_id),
-                        "fragment result references an unknown data output".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::LoweringResultPort {
+                        port: result.output.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id))
                     .into());
                 };
                 if !outputs.iter().any(|(address, _)| address == &result.output) {
-                    return Err(diagnostic(
-                        "compiler.lowering.result_port",
-                        DiagnosticLocation::Node(node.node_id),
-                        "fragment result must reference an output of the lowered node".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::LoweringResultPort {
+                        port: result.output.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id))
                     .into());
                 }
                 if results
@@ -2002,11 +2031,10 @@ fn lower_graph<R: CompilerRegistry>(
                     )
                     .is_some()
                 {
-                    return Err(diagnostic(
-                        "compiler.lowering.result_duplicate",
-                        DiagnosticLocation::Node(node.node_id),
-                        result.name.to_string(),
-                    )
+                    return Err(CompilerDiagnostic::LoweringResultDuplicate {
+                        result_name: result.name.clone(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id))
                     .into());
                 }
             }
@@ -2034,12 +2062,11 @@ fn lower_graph<R: CompilerRegistry>(
             } else {
                 ResourceAccess::Shared
             };
-            let resource = ResourceId::new(resource).map_err(|error| {
-                diagnostic(
-                    "compiler.lowering.resource_id",
-                    DiagnosticLocation::Node(node.node_id),
-                    error.to_string(),
-                )
+            let resource = ResourceId::new(resource).map_err(|_| {
+                CompilerDiagnostic::LoweringResourceId {
+                    resource_id: resource.into(),
+                }
+                .into_node(DiagnosticLocation::Node(node.node_id))
             })?;
             let requirement = CompiledResourceRequirement {
                 resource: resource.clone(),
@@ -2050,11 +2077,10 @@ fn lower_graph<R: CompilerRegistry>(
             owned_resources.insert(resource.clone(), requirement.clone());
             if let Some(previous) = resources.insert(resource, requirement.clone()) {
                 if previous != requirement {
-                    return Err(diagnostic(
-                        "compiler.lowering.resource_conflict",
-                        DiagnosticLocation::Node(node.node_id),
-                        requirement.resource.as_str().to_string(),
-                    )
+                    return Err(CompilerDiagnostic::LoweringResourceConflict {
+                        resource_id: requirement.resource.as_str().into(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id))
                     .into());
                 }
             }
@@ -2135,39 +2161,35 @@ fn lower_graph<R: CompilerRegistry>(
         match dependency {
             SemanticDependency::Value(edge) => {
                 let Some(&source) = port_values.get(&edge.source) else {
-                    return Err(diagnostic(
-                        "compiler.plan.value_producer_missing",
-                        DiagnosticLocation::Connection(edge.connection_id),
-                        "semantic value producer has no plan value".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanValueProducerMissing {
+                        port: edge.source.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Connection(edge.connection_id))
                     .into());
                 };
                 let Some(&destination) = port_values.get(&edge.target) else {
-                    return Err(diagnostic(
-                        "compiler.plan.value_consumer_missing",
-                        DiagnosticLocation::Connection(edge.connection_id),
-                        "semantic value consumer has no plan value".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanValueConsumerMissing {
+                        port: edge.target.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Connection(edge.connection_id))
                     .into());
                 };
                 if !operation_outputs.contains_key(&edge.source)
                     && !structural_outputs.contains(&edge.source)
                 {
-                    return Err(diagnostic(
-                        "compiler.plan.value_producer_missing",
-                        DiagnosticLocation::Connection(edge.connection_id),
-                        "semantic value producer does not lower to an operation output".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanValueProducerMissing {
+                        port: edge.source.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Connection(edge.connection_id))
                     .into());
                 }
                 if !operation_inputs.contains_key(&edge.target)
                     && !structural_inputs.contains(&edge.target)
                 {
-                    return Err(diagnostic(
-                        "compiler.plan.value_consumer_missing",
-                        DiagnosticLocation::Connection(edge.connection_id),
-                        "semantic value consumer does not lower to an operation input".to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanValueConsumerMissing {
+                        port: edge.target.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Connection(edge.connection_id))
                     .into());
                 }
                 value_dependencies.push(ValueDependency {
@@ -2180,11 +2202,10 @@ fn lower_graph<R: CompilerRegistry>(
                     relational_by_node.get(&edge.target.node_id),
                 ) {
                     let Some(&consumer_input) = consumer.inputs.get(&edge.target) else {
-                        return Err(diagnostic(
-                            "compiler.relational.input_binding_missing",
-                            DiagnosticLocation::Connection(edge.connection_id),
-                            "relational consumer did not bind its semantic input port".to_string(),
-                        )
+                        return Err(CompilerDiagnostic::RelationalInputBindingMissing {
+                            port: edge.target.to_string().into(),
+                        }
+                        .into_node(DiagnosticLocation::Connection(edge.connection_id))
                         .into());
                     };
                     relational_connections.push(RelationalConnection {
@@ -2198,19 +2219,17 @@ fn lower_graph<R: CompilerRegistry>(
             }
             SemanticDependency::Effect(edge) => {
                 let Some(&before) = operation_by_node.get(&edge.predecessor) else {
-                    return Err(diagnostic(
-                        "compiler.plan.effect_producer_missing",
-                        DiagnosticLocation::Node(edge.predecessor),
-                        edge.effect_key.to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanEffectProducerMissing {
+                        port: edge.effect_key.clone(),
+                    }
+                    .into_node(DiagnosticLocation::Node(edge.predecessor))
                     .into());
                 };
                 let Some(&after) = operation_by_node.get(&edge.successor) else {
-                    return Err(diagnostic(
-                        "compiler.plan.effect_consumer_missing",
-                        DiagnosticLocation::Node(edge.successor),
-                        edge.effect_key.to_string(),
-                    )
+                    return Err(CompilerDiagnostic::PlanEffectConsumerMissing {
+                        port: edge.effect_key.clone(),
+                    }
+                    .into_node(DiagnosticLocation::Node(edge.successor))
                     .into());
                 };
                 effect_dependencies.push(PlannedEffectDependency { before, after });
@@ -2321,13 +2340,11 @@ fn lower_graph<R: CompilerRegistry>(
     cancellation.checkpoint()?;
     let mut root_region = build_control_region(control_nodes, control_edges, function_abis)
         .map_err(|issue| {
-            diagnostic(
-                issue.code,
+            issue.diagnostic.into_node(
                 issue
                     .node_id
                     .map(DiagnosticLocation::Node)
                     .unwrap_or(DiagnosticLocation::Graph),
-                issue.detail,
             )
         })?;
     deduplicate_region_operations(&mut root_region);
@@ -2389,13 +2406,9 @@ fn lower_graph<R: CompilerRegistry>(
         default_outputs,
     };
     cancellation.checkpoint()?;
-    let plan = basis.derive_full_plan().map_err(|error| {
-        diagnostic(
-            "compiler.plan.invalid",
-            DiagnosticLocation::Graph,
-            error.to_string(),
-        )
-    })?;
+    let plan = basis
+        .derive_full_plan()
+        .map_err(|_| CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph))?;
     Ok((basis, plan))
 }
 
@@ -2481,11 +2494,10 @@ fn resolve_for_lowering<'a, R: CompilerRegistry>(
     >,
 ) -> Result<RegistryNode<'a>, NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>> {
     registry.resolve(&node.node_type_id).ok_or_else(|| {
-        diagnostic(
-            "compiler.node.disappeared",
-            DiagnosticLocation::Node(node.node_id),
-            node.node_type_id.to_string(),
-        )
+        CompilerDiagnostic::NodeDisappeared {
+            node_type: node.node_type_id.to_string().into(),
+        }
+        .into_node(DiagnosticLocation::Node(node.node_id))
     })
 }
 
@@ -2511,36 +2523,67 @@ fn append_diagnostic(
 ) -> Box<[NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>]> {
     let mut values = diagnostics.into_vec();
     values.push(value);
-    values.sort_by_key(diagnostic_sort_key);
+    values.sort_by(compare_diagnostics);
     values.into_boxed_slice()
 }
-fn diagnostic(
-    code: &'static str,
-    primary: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-    detail: String,
-) -> NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>> {
-    NodeDiagnostic {
-        code: DiagnosticCode::new(code),
-        message_key: I18nKey::new(format!("diagnostics.{code}"))
-            .expect("compiler diagnostic keys are valid"),
-        arguments: BTreeMap::from([(Box::from("detail"), detail.into_boxed_str())]),
-        severity: DiagnosticSeverity::Error,
-        primary,
-        related: Box::new([]),
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    struct DisappearingRegistry {
+        fingerprint: RegistryFingerprint,
     }
-}
-fn diagnostic_sort_key(
-    value: &NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>,
-) -> (String, String) {
-    (
-        match &value.primary {
-            DiagnosticLocation::Graph => "0".into(),
-            DiagnosticLocation::Node(id) => format!("1:{id}"),
-            DiagnosticLocation::Port(address) => format!("2:{address}"),
-            DiagnosticLocation::Connection(id) => format!("3:{id}"),
-            DiagnosticLocation::Parameter { node_id, key } => format!("4:{node_id}:{key}"),
-            DiagnosticLocation::Resource(id) => format!("5:{id}"),
-        },
-        value.code.as_str().into(),
-    )
+
+    impl TypeEnvironment for DisappearingRegistry {
+        fn concrete_implements(&self, _: &TypeId, _: &TypeClassId) -> Option<bool> {
+            None
+        }
+
+        fn constructor_arity(&self, _: &TypeConstructorId) -> Option<usize> {
+            None
+        }
+    }
+
+    impl CompilerRegistry for DisappearingRegistry {
+        fn fingerprint(&self) -> &RegistryFingerprint {
+            &self.fingerprint
+        }
+
+        fn resolve(&self, _: &NodeTypeId) -> Option<RegistryNode<'_>> {
+            None
+        }
+    }
+
+    #[test]
+    fn disappeared_node_emits_the_node_type_from_the_lowering_resolver() {
+        let registry = DisappearingRegistry {
+            fingerprint: RegistryFingerprint::from_bytes([9; 32]),
+        };
+        let node_id = NodeId::from_uuid(Uuid::from_u128(1));
+        let node_type = NodeTypeId::new("yssbi.test.disappeared").unwrap();
+        let node = ValidatedSemanticNode {
+            node_id,
+            node_type_id: node_type.clone(),
+            protocol_fingerprint: ProtocolFingerprint::from_bytes([7; 32]),
+            normalized_parameters: BTreeMap::new(),
+            ports: Box::new([]),
+        };
+
+        let diagnostic = match resolve_for_lowering(&registry, &node) {
+            Ok(_) => panic!("missing registry node must emit a diagnostic"),
+            Err(diagnostic) => diagnostic,
+        };
+
+        assert_eq!(diagnostic.code.as_str(), "compiler.node.disappeared");
+        assert_eq!(
+            diagnostic.arguments,
+            BTreeMap::from([(
+                Box::from("node_type"),
+                node_type.to_string().into_boxed_str(),
+            )])
+        );
+        assert_eq!(diagnostic.primary, DiagnosticLocation::Node(node_id));
+    }
 }

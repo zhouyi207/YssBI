@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use proc_macro2::{TokenStream, TokenTree};
 use syn::parse::Parser;
@@ -96,7 +97,11 @@ fn expand_use_tree(tree: &UseTree, prefix: &mut Vec<String>, paths: &mut Vec<Vec
             path.push(rename.ident.to_string());
             paths.push(path);
         }
-        UseTree::Glob(_) => paths.push(prefix.clone()),
+        UseTree::Glob(_) => {
+            let mut path = prefix.clone();
+            path.push("*".to_owned());
+            paths.push(path);
+        }
         UseTree::Group(group) => {
             for tree in &group.items {
                 expand_use_tree(tree, prefix, paths);
@@ -897,14 +902,45 @@ fn audit_source_tree(root: &Path, excluded_relative: Option<&str>) -> Vec<String
     offenders
 }
 
+fn cfg_predicate_is_exclusively_test(meta: &Meta) -> bool {
+    match meta {
+        Meta::Path(path) => path.is_ident("test"),
+        Meta::List(list) if list.path.is_ident("all") || list.path.is_ident("any") => {
+            let Ok(predicates) =
+                Punctuated::<Meta, Token![,]>::parse_terminated.parse2(list.tokens.clone())
+            else {
+                return false;
+            };
+            if list.path.is_ident("all") {
+                predicates.iter().any(cfg_predicate_is_exclusively_test)
+            } else {
+                !predicates.is_empty() && predicates.iter().all(cfg_predicate_is_exclusively_test)
+            }
+        }
+        Meta::List(_) | Meta::NameValue(_) => false,
+    }
+}
+
 fn is_test_only(attributes: &[syn::Attribute]) -> bool {
     attributes.iter().any(|attribute| {
-        attribute.path().is_ident("test")
-            || (attribute.path().is_ident("cfg")
-                && attribute
-                    .meta
-                    .require_list()
-                    .is_ok_and(|list| list.tokens.to_string().contains("test")))
+        if attribute.path().is_ident("test") {
+            return true;
+        }
+        let Ok(cfg) = attribute.meta.require_list() else {
+            return false;
+        };
+        if !attribute.path().is_ident("cfg") {
+            return false;
+        }
+        let Ok(predicates) =
+            Punctuated::<Meta, Token![,]>::parse_terminated.parse2(cfg.tokens.clone())
+        else {
+            return false;
+        };
+        predicates.len() == 1
+            && predicates
+                .first()
+                .is_some_and(cfg_predicate_is_exclusively_test)
     })
 }
 
@@ -1863,6 +1899,2234 @@ fn assemble(builder: &mut NodeRegistryBuilder) -> Result<(), Error> {
         offenders.join("\n")
     );
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[derive(Default)]
+struct CompilerDiagnosticAudit {
+    message_keys: HashSet<String>,
+    violations: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum CallableContext {
+    Module(String),
+    Impl(String),
+    Trait(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CallableKey {
+    file: String,
+    module: String,
+    context: CallableContext,
+    name: String,
+}
+
+#[derive(Clone)]
+struct DiagnosticConstructorCandidate {
+    key: CallableKey,
+    static_parameters: HashMap<String, usize>,
+    output: ReturnType,
+    body: Option<syn::Block>,
+}
+
+#[derive(Default)]
+struct CompilerDiagnosticSyntaxIndex {
+    diagnostic_types: HashSet<String>,
+    definitions: HashSet<CallableKey>,
+    return_types: HashMap<CallableKey, String>,
+    constructors: HashMap<CallableKey, usize>,
+    code_producers: HashMap<CallableKey, HashSet<String>>,
+}
+
+struct DiagnosticDefinitionCollector {
+    file: String,
+    modules: Vec<String>,
+    owner: Option<CallableContext>,
+    diagnostic_types: HashSet<String>,
+    aliases: Vec<(String, Type)>,
+    import_aliases: Vec<(String, String)>,
+    constructors: Vec<DiagnosticConstructorCandidate>,
+}
+
+fn static_string_parameters(signature: &syn::Signature) -> HashMap<String, usize> {
+    signature
+        .inputs
+        .iter()
+        .filter_map(|argument| match argument {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(argument) => Some(argument),
+        })
+        .enumerate()
+        .filter_map(|(position, argument)| {
+            type_is_static_str_reference(&argument.ty)
+                .then(|| pattern_ident(&argument.pat).map(|name| (name, position)))
+                .flatten()
+        })
+        .collect()
+}
+
+fn module_context(modules: &[String]) -> CallableContext {
+    CallableContext::Module(modules.join("::"))
+}
+
+fn callable_key(
+    file: &str,
+    modules: &[String],
+    owner: Option<&CallableContext>,
+    name: &syn::Ident,
+) -> CallableKey {
+    CallableKey {
+        file: file.to_owned(),
+        module: modules.join("::"),
+        context: owner.cloned().unwrap_or_else(|| module_context(modules)),
+        name: name.to_string(),
+    }
+}
+
+fn impl_context(self_type: &Type) -> Option<CallableContext> {
+    named_type(self_type).map(CallableContext::Impl)
+}
+
+fn named_type(value_type: &Type) -> Option<String> {
+    match value_type {
+        Type::Path(path) => path
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string()),
+        Type::Reference(reference) => named_type(&reference.elem),
+        Type::Paren(parenthesized) => named_type(&parenthesized.elem),
+        Type::Group(group) => named_type(&group.elem),
+        _ => None,
+    }
+}
+
+impl<'ast> Visit<'ast> for DiagnosticDefinitionCollector {
+    fn visit_item(&mut self, node: &'ast Item) {
+        if is_test_only(item_attributes(node)) {
+            return;
+        }
+        visit::visit_item(self, node);
+    }
+
+    fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
+        let code = node.fields.iter().any(|field| {
+            field.ident.as_ref().is_some_and(|name| name == "code")
+                && type_is_static_str_reference(&field.ty)
+        });
+        let detail = node
+            .fields
+            .iter()
+            .any(|field| field.ident.as_ref().is_some_and(|name| name == "detail"));
+        if code && detail {
+            self.diagnostic_types.insert(node.ident.to_string());
+        }
+        visit::visit_item_struct(self, node);
+    }
+
+    fn visit_item_type(&mut self, node: &'ast syn::ItemType) {
+        self.aliases
+            .push((node.ident.to_string(), (*node.ty).clone()));
+        visit::visit_item_type(self, node);
+    }
+
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        let mut bindings = Vec::new();
+        collect_use_bindings(&node.tree, &mut Vec::new(), &mut bindings);
+        self.import_aliases.extend(
+            bindings
+                .into_iter()
+                .filter_map(|(alias, target)| target.last().cloned().map(|target| (alias, target))),
+        );
+        visit::visit_item_use(self, node);
+    }
+
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        self.modules.push(node.ident.to_string());
+        visit::visit_item_mod(self, node);
+        self.modules.pop();
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        let previous = self.owner.clone();
+        self.owner = impl_context(&node.self_ty);
+        visit::visit_item_impl(self, node);
+        self.owner = previous;
+    }
+
+    fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
+        let previous = self.owner.clone();
+        self.owner = Some(CallableContext::Trait(node.ident.to_string()));
+        visit::visit_item_trait(self, node);
+        self.owner = previous;
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        self.constructors.push(DiagnosticConstructorCandidate {
+            key: callable_key(
+                &self.file,
+                &self.modules,
+                self.owner.as_ref(),
+                &node.sig.ident,
+            ),
+            static_parameters: static_string_parameters(&node.sig),
+            output: node.sig.output.clone(),
+            body: Some((*node.block).clone()),
+        });
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        if is_test_only(&node.attrs) {
+            return;
+        }
+        self.constructors.push(DiagnosticConstructorCandidate {
+            key: callable_key(
+                &self.file,
+                &self.modules,
+                self.owner.as_ref(),
+                &node.sig.ident,
+            ),
+            static_parameters: static_string_parameters(&node.sig),
+            output: node.sig.output.clone(),
+            body: Some(node.block.clone()),
+        });
+        visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if is_test_only(&node.attrs) {
+            return;
+        }
+        self.constructors.push(DiagnosticConstructorCandidate {
+            key: callable_key(
+                &self.file,
+                &self.modules,
+                self.owner.as_ref(),
+                &node.sig.ident,
+            ),
+            static_parameters: static_string_parameters(&node.sig),
+            output: node.sig.output.clone(),
+            body: node.default.clone(),
+        });
+        visit::visit_trait_item_fn(self, node);
+    }
+}
+
+fn resolve_path_callable(
+    current: &CallableKey,
+    path: &syn::Path,
+    definitions: &HashSet<CallableKey>,
+) -> Option<CallableKey> {
+    let segments = path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    let name = segments.last()?.clone();
+    let mut candidates = Vec::new();
+    if segments.len() == 1 {
+        candidates.push(CallableKey {
+            file: current.file.clone(),
+            module: current.module.clone(),
+            context: CallableContext::Module(current.module.clone()),
+            name,
+        });
+    } else {
+        let qualifier = &segments[segments.len() - 2];
+        candidates.push(CallableKey {
+            file: current.file.clone(),
+            module: current.module.clone(),
+            context: CallableContext::Impl(qualifier.clone()),
+            name: name.clone(),
+        });
+        candidates.push(CallableKey {
+            file: current.file.clone(),
+            module: current.module.clone(),
+            context: CallableContext::Trait(qualifier.clone()),
+            name: name.clone(),
+        });
+        let mut modules = current
+            .module
+            .split("::")
+            .filter(|segment| !segment.is_empty())
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        modules.extend(segments[..segments.len() - 1].iter().cloned());
+        let module = modules.join("::");
+        candidates.push(CallableKey {
+            file: current.file.clone(),
+            module: module.clone(),
+            context: CallableContext::Module(module),
+            name,
+        });
+    }
+    let mut matches = candidates
+        .into_iter()
+        .filter(|candidate| definitions.contains(candidate));
+    let resolved = matches.next()?;
+    matches.next().is_none().then_some(resolved)
+}
+
+fn resolve_method_callable(
+    current: &CallableKey,
+    receiver: &Expr,
+    receiver_type: Option<&str>,
+    method: &syn::Ident,
+    definitions: &HashSet<CallableKey>,
+) -> Option<CallableKey> {
+    if matches!(receiver, Expr::Path(path) if path.path.is_ident("self")) {
+        let candidate = CallableKey {
+            file: current.file.clone(),
+            module: current.module.clone(),
+            context: current.context.clone(),
+            name: method.to_string(),
+        };
+        return definitions.contains(&candidate).then_some(candidate);
+    }
+    let receiver_type = receiver_type?;
+    let candidate = CallableKey {
+        file: current.file.clone(),
+        module: current.module.clone(),
+        context: CallableContext::Impl(receiver_type.to_owned()),
+        name: method.to_string(),
+    };
+    definitions.contains(&candidate).then_some(candidate)
+}
+
+fn declared_return_type(candidate: &DiagnosticConstructorCandidate) -> Option<String> {
+    let ReturnType::Type(_, value_type) = &candidate.output else {
+        return None;
+    };
+    let name = named_type(value_type)?;
+    if name != "Self" {
+        return Some(name);
+    }
+    match &candidate.key.context {
+        CallableContext::Impl(owner) => Some(owner.clone()),
+        CallableContext::Module(_) | CallableContext::Trait(_) => None,
+    }
+}
+
+fn inferred_expression_type(
+    expression: &Expr,
+    current: Option<&CallableKey>,
+    definitions: &HashSet<CallableKey>,
+    return_types: &HashMap<CallableKey, String>,
+) -> Option<String> {
+    match expression {
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string())
+            .filter(|name| name.chars().next().is_some_and(char::is_uppercase)),
+        Expr::Call(call) => {
+            let current = current?;
+            let Expr::Path(path) = call.func.as_ref() else {
+                return None;
+            };
+            let callee = resolve_path_callable(current, &path.path, definitions)?;
+            return_types.get(&callee).cloned()
+        }
+        Expr::Struct(value) => value
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string()),
+        Expr::Paren(value) => {
+            inferred_expression_type(&value.expr, current, definitions, return_types)
+        }
+        Expr::Group(value) => {
+            inferred_expression_type(&value.expr, current, definitions, return_types)
+        }
+        _ => None,
+    }
+}
+
+fn local_receiver_type(
+    pattern: &Pat,
+    expression: &Expr,
+    current: Option<&CallableKey>,
+    definitions: &HashSet<CallableKey>,
+    return_types: &HashMap<CallableKey, String>,
+) -> Option<String> {
+    match pattern {
+        Pat::Type(typed) => named_type(&typed.ty),
+        _ => inferred_expression_type(expression, current, definitions, return_types),
+    }
+}
+
+fn unwrap_diagnostic_code_expression(expression: &Expr) -> &Expr {
+    match expression {
+        Expr::Call(call)
+            if matches!(
+                call.func.as_ref(),
+                Expr::Path(path)
+                    if path.path.segments.last().is_some_and(|segment| segment.ident == "new")
+                        && path.path.segments.iter().any(|segment| segment.ident == "DiagnosticCode")
+            ) =>
+        {
+            call.args
+                .first()
+                .map_or(expression, unwrap_diagnostic_code_expression)
+        }
+        Expr::Paren(parenthesized) => unwrap_diagnostic_code_expression(&parenthesized.expr),
+        Expr::Group(group) => unwrap_diagnostic_code_expression(&group.expr),
+        _ => expression,
+    }
+}
+
+fn parameter_position_in_expression(
+    expression: &Expr,
+    parameters: &HashMap<String, usize>,
+    bindings: &HashMap<String, Expr>,
+    visiting: &mut HashSet<String>,
+) -> Option<usize> {
+    let expression = unwrap_diagnostic_code_expression(expression);
+    match expression {
+        Expr::Path(path) if path.path.segments.len() == 1 => {
+            let name = path.path.segments[0].ident.to_string();
+            if let Some(position) = parameters.get(&name) {
+                return Some(*position);
+            }
+            if !visiting.insert(name.clone()) {
+                return None;
+            }
+            let resolved = bindings.get(&name).and_then(|bound| {
+                parameter_position_in_expression(bound, parameters, bindings, visiting)
+            });
+            visiting.remove(&name);
+            resolved
+        }
+        Expr::Reference(reference) => {
+            parameter_position_in_expression(&reference.expr, parameters, bindings, visiting)
+        }
+        Expr::Paren(parenthesized) => {
+            parameter_position_in_expression(&parenthesized.expr, parameters, bindings, visiting)
+        }
+        Expr::Group(group) => {
+            parameter_position_in_expression(&group.expr, parameters, bindings, visiting)
+        }
+        _ => None,
+    }
+}
+
+struct ConstructorFlowAnalyzer<'a> {
+    current: &'a CallableKey,
+    parameters: &'a HashMap<String, usize>,
+    diagnostic_types: &'a HashSet<String>,
+    definitions: &'a HashSet<CallableKey>,
+    constructors: &'a HashMap<CallableKey, usize>,
+    return_types: &'a HashMap<CallableKey, String>,
+    bindings: HashMap<String, Expr>,
+    receiver_types: HashMap<String, String>,
+    positions: HashSet<usize>,
+}
+
+impl ConstructorFlowAnalyzer<'_> {
+    fn record_source(&mut self, expression: &Expr) {
+        if let Some(position) = parameter_position_in_expression(
+            expression,
+            self.parameters,
+            &self.bindings,
+            &mut HashSet::new(),
+        ) {
+            self.positions.insert(position);
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for ConstructorFlowAnalyzer<'_> {
+    fn visit_local(&mut self, node: &'ast syn::Local) {
+        visit::visit_local(self, node);
+        if let (Some(name), Some(init)) = (pattern_ident(&node.pat), node.init.as_ref()) {
+            if let Some(receiver_type) = local_receiver_type(
+                &node.pat,
+                &init.expr,
+                Some(self.current),
+                self.definitions,
+                self.return_types,
+            ) {
+                self.receiver_types.insert(name.clone(), receiver_type);
+            }
+            self.bindings.insert(name, (*init.expr).clone());
+        }
+    }
+
+    fn visit_expr_struct(&mut self, node: &'ast syn::ExprStruct) {
+        let diagnostic = node
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| self.diagnostic_types.contains(&segment.ident.to_string()));
+        if diagnostic {
+            for field in &node.fields {
+                if matches!(&field.member, Member::Named(name) if name == "code") {
+                    self.record_source(&field.expr);
+                }
+            }
+        }
+        visit::visit_expr_struct(self, node);
+    }
+
+    fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
+        if let Expr::Path(path) = node.func.as_ref() {
+            if let Some(callee) = resolve_path_callable(self.current, &path.path, self.definitions)
+            {
+                if let Some(position) = self.constructors.get(&callee) {
+                    if let Some(argument) = node.args.iter().nth(*position) {
+                        self.record_source(argument);
+                    }
+                }
+            }
+        }
+        visit::visit_expr_call(self, node);
+    }
+
+    fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+        let receiver_type = match node.receiver.as_ref() {
+            Expr::Path(path) if path.path.segments.len() == 1 => self
+                .receiver_types
+                .get(&path.path.segments[0].ident.to_string())
+                .map(String::as_str),
+            _ => None,
+        };
+        if let Some(callee) = resolve_method_callable(
+            self.current,
+            &node.receiver,
+            receiver_type,
+            &node.method,
+            self.definitions,
+        ) {
+            if let Some(position) = self.constructors.get(&callee) {
+                if let Some(argument) = node.args.iter().nth(*position) {
+                    self.record_source(argument);
+                }
+            }
+        }
+        visit::visit_expr_method_call(self, node);
+    }
+}
+
+fn output_is_static_str(output: &ReturnType) -> bool {
+    matches!(output, ReturnType::Type(_, value_type) if type_is_static_str_reference(value_type))
+}
+
+type LocalBindingEnvironment = HashMap<String, Rc<LocalBoundExpression>>;
+
+struct LocalBoundExpression {
+    expression: Expr,
+    bindings: LocalBindingEnvironment,
+}
+
+struct ScopedReturnExpression {
+    expression: Expr,
+    bindings: LocalBindingEnvironment,
+}
+
+#[derive(Default)]
+struct LocalExpressionCollector {
+    scopes: Vec<LocalBindingEnvironment>,
+    returns: Vec<ScopedReturnExpression>,
+}
+
+impl LocalExpressionCollector {
+    fn visible_bindings(&self) -> LocalBindingEnvironment {
+        let mut bindings = HashMap::new();
+        for scope in &self.scopes {
+            bindings.extend(scope.clone());
+        }
+        bindings
+    }
+
+    fn record_return(&mut self, expression: &Expr) {
+        self.returns.push(ScopedReturnExpression {
+            expression: expression.clone(),
+            bindings: self.visible_bindings(),
+        });
+    }
+
+    fn collect_body(&mut self, body: &syn::Block) {
+        self.scopes.push(HashMap::new());
+        for statement in &body.stmts {
+            self.visit_stmt(statement);
+        }
+        if let Some(tail) = block_tail_expression(body) {
+            self.record_return(tail);
+        }
+        self.scopes.pop();
+    }
+}
+
+impl<'ast> Visit<'ast> for LocalExpressionCollector {
+    fn visit_item(&mut self, _node: &'ast Item) {}
+
+    fn visit_expr_async(&mut self, _node: &'ast syn::ExprAsync) {}
+
+    fn visit_expr_closure(&mut self, _node: &'ast syn::ExprClosure) {}
+
+    fn visit_block(&mut self, node: &'ast syn::Block) {
+        self.scopes.push(HashMap::new());
+        visit::visit_block(self, node);
+        self.scopes.pop();
+    }
+
+    fn visit_local(&mut self, node: &'ast syn::Local) {
+        visit::visit_local(self, node);
+        let (Some(name), Some(init)) = (pattern_ident(&node.pat), node.init.as_ref()) else {
+            return;
+        };
+        let binding = Rc::new(LocalBoundExpression {
+            expression: (*init.expr).clone(),
+            bindings: self.visible_bindings(),
+        });
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, binding);
+        }
+    }
+
+    fn visit_expr_return(&mut self, node: &'ast syn::ExprReturn) {
+        visit::visit_expr_return(self, node);
+        if let Some(expression) = &node.expr {
+            self.record_return(expression);
+        }
+    }
+
+    fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
+        if matches!(node.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(value), .. }) if !value.value)
+        {
+            if let Some((_, alternative)) = &node.else_branch {
+                self.visit_expr(alternative);
+            }
+            return;
+        }
+        if matches!(node.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(value), .. }) if value.value)
+        {
+            self.visit_block(&node.then_branch);
+            return;
+        }
+        visit::visit_expr_if(self, node);
+    }
+}
+
+fn block_tail_expression(block: &syn::Block) -> Option<&Expr> {
+    match block.stmts.last() {
+        Some(syn::Stmt::Expr(expression, None)) => Some(expression),
+        _ => None,
+    }
+}
+
+fn returned_block_code_values(
+    block: &syn::Block,
+    bindings: &LocalBindingEnvironment,
+) -> Option<HashSet<String>> {
+    let mut scoped = bindings.clone();
+    for statement in &block.stmts {
+        if let syn::Stmt::Local(local) = statement {
+            let (Some(name), Some(init)) = (pattern_ident(&local.pat), local.init.as_ref()) else {
+                continue;
+            };
+            let binding = Rc::new(LocalBoundExpression {
+                expression: (*init.expr).clone(),
+                bindings: scoped.clone(),
+            });
+            scoped.insert(name, binding);
+        }
+    }
+    block_tail_expression(block).and_then(|tail| returned_code_values(tail, &scoped))
+}
+
+fn returned_code_values(
+    expression: &Expr,
+    bindings: &LocalBindingEnvironment,
+) -> Option<HashSet<String>> {
+    if let Some(value) = static_string_expression(expression) {
+        return value
+            .starts_with("compiler.")
+            .then(|| HashSet::from([value]));
+    }
+    match expression {
+        Expr::Path(path) if path.path.segments.len() == 1 => {
+            let name = path.path.segments[0].ident.to_string();
+            let bound = bindings.get(&name)?;
+            returned_code_values(&bound.expression, &bound.bindings)
+        }
+        Expr::If(value) => {
+            if matches!(value.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(flag), .. }) if flag.value)
+            {
+                return returned_block_code_values(&value.then_branch, bindings);
+            }
+            if matches!(value.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(flag), .. }) if !flag.value)
+            {
+                return value
+                    .else_branch
+                    .as_ref()
+                    .and_then(|(_, alternative)| returned_code_values(alternative, bindings));
+            }
+            let mut values = returned_block_code_values(&value.then_branch, bindings)?;
+            let alternative = value.else_branch.as_ref()?.1.as_ref();
+            values.extend(returned_code_values(alternative, bindings)?);
+            Some(values)
+        }
+        Expr::Match(value) => {
+            let mut values = HashSet::new();
+            for arm in &value.arms {
+                values.extend(returned_code_values(&arm.body, bindings)?);
+            }
+            Some(values)
+        }
+        Expr::Block(value) => returned_block_code_values(&value.block, bindings),
+        Expr::Reference(value) => returned_code_values(&value.expr, bindings),
+        Expr::Paren(value) => returned_code_values(&value.expr, bindings),
+        Expr::Group(value) => returned_code_values(&value.expr, bindings),
+        _ => None,
+    }
+}
+
+fn producer_return_codes(body: &syn::Block) -> Option<HashSet<String>> {
+    let mut collector = LocalExpressionCollector::default();
+    collector.collect_body(body);
+    if collector.returns.is_empty() {
+        return None;
+    }
+    let mut values = HashSet::new();
+    for returned in collector.returns {
+        values.extend(returned_code_values(
+            &returned.expression,
+            &returned.bindings,
+        )?);
+    }
+    (!values.is_empty()).then_some(values)
+}
+
+fn build_compiler_diagnostic_index(files: &[(String, syn::File)]) -> CompilerDiagnosticSyntaxIndex {
+    let mut collector = DiagnosticDefinitionCollector {
+        file: String::new(),
+        modules: Vec::new(),
+        owner: None,
+        diagnostic_types: HashSet::from(["NodeDiagnostic".to_owned()]),
+        aliases: Vec::new(),
+        import_aliases: Vec::new(),
+        constructors: Vec::new(),
+    };
+    for (relative, file) in files {
+        collector.file.clone_from(relative);
+        collector.modules.clear();
+        collector.owner = None;
+        collector.visit_file(file);
+    }
+
+    loop {
+        let mut changed = false;
+        for (alias, target) in &collector.aliases {
+            if named_type(target).is_some_and(|name| collector.diagnostic_types.contains(&name)) {
+                changed |= collector.diagnostic_types.insert(alias.clone());
+            }
+        }
+        for (alias, target) in &collector.import_aliases {
+            if collector.diagnostic_types.contains(target) {
+                changed |= collector.diagnostic_types.insert(alias.clone());
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let definitions = collector
+        .constructors
+        .iter()
+        .map(|candidate| candidate.key.clone())
+        .collect::<HashSet<_>>();
+    let return_types = collector
+        .constructors
+        .iter()
+        .filter_map(|candidate| {
+            declared_return_type(candidate).map(|output| (candidate.key.clone(), output))
+        })
+        .collect::<HashMap<_, _>>();
+    let mut constructors = HashMap::<CallableKey, usize>::new();
+    loop {
+        let mut changed = false;
+        for candidate in &collector.constructors {
+            let Some(body) = &candidate.body else {
+                continue;
+            };
+            if candidate.static_parameters.is_empty() {
+                continue;
+            }
+            let mut analyzer = ConstructorFlowAnalyzer {
+                current: &candidate.key,
+                parameters: &candidate.static_parameters,
+                diagnostic_types: &collector.diagnostic_types,
+                definitions: &definitions,
+                constructors: &constructors,
+                return_types: &return_types,
+                bindings: HashMap::new(),
+                receiver_types: HashMap::new(),
+                positions: HashSet::new(),
+            };
+            analyzer.visit_block(body);
+            if analyzer.positions.len() == 1 {
+                let position = *analyzer.positions.iter().next().unwrap();
+                changed |= constructors
+                    .insert(candidate.key.clone(), position)
+                    .is_none();
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let code_producers = collector
+        .constructors
+        .iter()
+        .filter(|candidate| output_is_static_str(&candidate.output))
+        .filter_map(|candidate| {
+            let body = candidate.body.as_ref()?;
+            producer_return_codes(body).map(|codes| (candidate.key.clone(), codes))
+        })
+        .collect();
+
+    CompilerDiagnosticSyntaxIndex {
+        diagnostic_types: collector.diagnostic_types,
+        definitions,
+        return_types,
+        constructors,
+        code_producers,
+    }
+}
+
+struct CompilerDiagnosticVisitor<'a> {
+    relative: &'a str,
+    source: &'a str,
+    audit: &'a mut CompilerDiagnosticAudit,
+    index: &'a CompilerDiagnosticSyntaxIndex,
+    argument_maps: Vec<HashSet<String>>,
+    code_bindings: Vec<HashMap<String, HashSet<String>>>,
+    receiver_types: Vec<HashMap<String, String>>,
+    modules: Vec<String>,
+    owner: Option<CallableContext>,
+    current_callable: Option<CallableKey>,
+}
+
+impl CompilerDiagnosticVisitor<'_> {
+    fn report(&mut self, label: &str, token: &str) {
+        record(
+            &mut self.audit.violations,
+            self.relative,
+            line_for(self.source, token),
+            label,
+            token,
+        );
+    }
+
+    fn inspect_string(&mut self, value: &str) {
+        if value.starts_with("compiler.") {
+            self.report("untyped compiler diagnostic code", value);
+        }
+    }
+
+    fn code_binding(&self, name: &str) -> Option<HashSet<String>> {
+        self.code_bindings
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).cloned())
+    }
+
+    fn emitted_codes(&self, expression: &Expr, visiting: &mut HashSet<String>) -> HashSet<String> {
+        if let Some(value) = static_string_expression(expression) {
+            return value
+                .starts_with("compiler.")
+                .then(|| HashSet::from([value]))
+                .unwrap_or_default();
+        }
+        match expression {
+            Expr::Path(path) if path.path.segments.len() == 1 => {
+                let name = path.path.segments[0].ident.to_string();
+                if !visiting.insert(name.clone()) {
+                    return HashSet::new();
+                }
+                let codes = self.code_binding(&name).unwrap_or_default();
+                visiting.remove(&name);
+                codes
+            }
+            Expr::Call(call) => {
+                let Some(current) = &self.current_callable else {
+                    return HashSet::new();
+                };
+                let Expr::Path(path) = call.func.as_ref() else {
+                    return HashSet::new();
+                };
+                resolve_path_callable(current, &path.path, &self.index.definitions)
+                    .and_then(|callee| self.index.code_producers.get(&callee).cloned())
+                    .unwrap_or_default()
+            }
+            Expr::If(value) => {
+                if matches!(value.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(flag), .. }) if flag.value)
+                {
+                    return block_tail_expression(&value.then_branch)
+                        .map(|tail| self.emitted_codes(tail, visiting))
+                        .unwrap_or_default();
+                }
+                if matches!(value.cond.as_ref(), Expr::Lit(ExprLit { lit: Lit::Bool(flag), .. }) if !flag.value)
+                {
+                    return value
+                        .else_branch
+                        .as_ref()
+                        .map(|(_, alternative)| self.emitted_codes(alternative, visiting))
+                        .unwrap_or_default();
+                }
+                let mut codes = block_tail_expression(&value.then_branch)
+                    .map(|tail| self.emitted_codes(tail, visiting))
+                    .unwrap_or_default();
+                if let Some((_, alternative)) = &value.else_branch {
+                    codes.extend(self.emitted_codes(alternative, visiting));
+                }
+                codes
+            }
+            Expr::Match(value) => value.arms.iter().fold(HashSet::new(), |mut codes, arm| {
+                codes.extend(self.emitted_codes(&arm.body, visiting));
+                codes
+            }),
+            Expr::Block(value) => block_tail_expression(&value.block)
+                .map(|tail| self.emitted_codes(tail, visiting))
+                .unwrap_or_default(),
+            Expr::Reference(value) => self.emitted_codes(&value.expr, visiting),
+            Expr::Paren(value) => self.emitted_codes(&value.expr, visiting),
+            Expr::Group(value) => self.emitted_codes(&value.expr, visiting),
+            _ => HashSet::new(),
+        }
+    }
+
+    fn projected_codes(&self, expression: &Expr, position: usize) -> HashSet<String> {
+        match expression {
+            Expr::Tuple(tuple) => tuple
+                .elems
+                .iter()
+                .nth(position)
+                .map(|value| self.emitted_codes(value, &mut HashSet::new()))
+                .unwrap_or_default(),
+            Expr::If(value) => {
+                let mut codes = block_tail_expression(&value.then_branch)
+                    .map(|tail| self.projected_codes(tail, position))
+                    .unwrap_or_default();
+                if let Some((_, alternative)) = &value.else_branch {
+                    codes.extend(self.projected_codes(alternative, position));
+                }
+                codes
+            }
+            Expr::Block(value) => block_tail_expression(&value.block)
+                .map(|tail| self.projected_codes(tail, position))
+                .unwrap_or_default(),
+            Expr::Paren(value) => self.projected_codes(&value.expr, position),
+            Expr::Group(value) => self.projected_codes(&value.expr, position),
+            _ => HashSet::new(),
+        }
+    }
+
+    fn record_emitted_code(&mut self, expression: &Expr) {
+        for code in self.emitted_codes(expression, &mut HashSet::new()) {
+            let Some(suffix) = code.strip_prefix("compiler.") else {
+                continue;
+            };
+            self.audit
+                .message_keys
+                .insert(format!("diagnostics.compiler.{suffix}"));
+        }
+    }
+
+    fn receiver_type(&self, expression: &Expr) -> Option<String> {
+        let Expr::Path(path) = expression else {
+            return inferred_expression_type(
+                expression,
+                self.current_callable.as_ref(),
+                &self.index.definitions,
+                &self.index.return_types,
+            );
+        };
+        if path.path.segments.len() != 1 {
+            return inferred_expression_type(
+                expression,
+                self.current_callable.as_ref(),
+                &self.index.definitions,
+                &self.index.return_types,
+            );
+        }
+        let name = path.path.segments[0].ident.to_string();
+        self.receiver_types
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(&name).cloned())
+    }
+
+    fn receiver_is_argument_map(&self, expression: &Expr) -> bool {
+        match expression {
+            Expr::Path(path) if path.path.segments.len() == 1 => {
+                let name = path.path.segments[0].ident.to_string();
+                self.argument_maps
+                    .iter()
+                    .rev()
+                    .any(|scope| scope.contains(&name))
+            }
+            Expr::Field(field) => matches!(
+                &field.member,
+                Member::Named(name)
+                    if matches!(name.to_string().as_str(), "arguments" | "diagnostic_arguments")
+            ),
+            Expr::Paren(parenthesized) => self.receiver_is_argument_map(&parenthesized.expr),
+            Expr::Reference(reference) => self.receiver_is_argument_map(&reference.expr),
+            _ => false,
+        }
+    }
+
+    fn inspect_macro_tokens(&mut self, tokens: TokenStream) {
+        for token in tokens {
+            match token {
+                TokenTree::Group(group) => self.inspect_macro_tokens(group.stream()),
+                TokenTree::Literal(literal) => {
+                    if let Ok(value) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
+                        self.inspect_string(&value.value());
+                    }
+                }
+                TokenTree::Ident(_) | TokenTree::Punct(_) => {}
+            }
+        }
+    }
+}
+
+fn item_attributes(item: &Item) -> &[syn::Attribute] {
+    match item {
+        Item::Const(item) => &item.attrs,
+        Item::Enum(item) => &item.attrs,
+        Item::ExternCrate(item) => &item.attrs,
+        Item::Fn(item) => &item.attrs,
+        Item::ForeignMod(item) => &item.attrs,
+        Item::Impl(item) => &item.attrs,
+        Item::Macro(item) => &item.attrs,
+        Item::Mod(item) => &item.attrs,
+        Item::Static(item) => &item.attrs,
+        Item::Struct(item) => &item.attrs,
+        Item::Trait(item) => &item.attrs,
+        Item::TraitAlias(item) => &item.attrs,
+        Item::Type(item) => &item.attrs,
+        Item::Union(item) => &item.attrs,
+        Item::Use(item) => &item.attrs,
+        Item::Verbatim(_) => &[],
+        _ => &[],
+    }
+}
+
+fn type_is_static_str_reference(value_type: &Type) -> bool {
+    let Type::Reference(reference) = value_type else {
+        return false;
+    };
+    reference
+        .lifetime
+        .as_ref()
+        .is_some_and(|lifetime| lifetime.ident == "static")
+        && matches!(
+            reference.elem.as_ref(),
+            Type::Path(path)
+                if path.path.segments.last().is_some_and(|segment| segment.ident == "str")
+        )
+}
+
+fn path_is_argument_map_constructor(path: &syn::Path) -> bool {
+    path.segments.iter().any(|segment| {
+        matches!(
+            segment.ident.to_string().as_str(),
+            "DiagnosticArguments" | "BTreeMap"
+        )
+    })
+}
+
+fn type_is_argument_map(value_type: &Type) -> bool {
+    matches!(
+        value_type,
+        Type::Path(path) if path_is_argument_map_constructor(&path.path)
+    )
+}
+
+fn expression_constructs_argument_map(expression: &Expr) -> bool {
+    match expression {
+        Expr::Call(call) => matches!(
+            call.func.as_ref(),
+            Expr::Path(path)
+                if path_is_argument_map_constructor(&path.path)
+                    && path.path.segments.last().is_some_and(|segment| {
+                        matches!(segment.ident.to_string().as_str(), "new" | "default" | "from")
+                    })
+        ),
+        Expr::Macro(expression) => expression.mac.path.segments.last().is_some_and(|segment| {
+            matches!(
+                segment.ident.to_string().as_str(),
+                "btreemap" | "diagnostic_arguments"
+            )
+        }),
+        Expr::Paren(parenthesized) => expression_constructs_argument_map(&parenthesized.expr),
+        Expr::Group(group) => expression_constructs_argument_map(&group.expr),
+        _ => false,
+    }
+}
+
+fn expression_is_detail_literal(expression: &Expr) -> bool {
+    if static_string_expression(expression).as_deref() == Some("detail") {
+        return true;
+    }
+    match expression {
+        Expr::Call(call)
+            if matches!(
+                call.func.as_ref(),
+                Expr::Path(path)
+                    if path.path.segments.last().is_some_and(|segment| {
+                        matches!(segment.ident.to_string().as_str(), "from" | "new")
+                    })
+            ) =>
+        {
+            call.args.first().is_some_and(expression_is_detail_literal)
+        }
+        Expr::MethodCall(call)
+            if matches!(
+                call.method.to_string().as_str(),
+                "into" | "to_owned" | "to_string"
+            ) =>
+        {
+            expression_is_detail_literal(&call.receiver)
+        }
+        Expr::Reference(reference) => expression_is_detail_literal(&reference.expr),
+        Expr::Paren(parenthesized) => expression_is_detail_literal(&parenthesized.expr),
+        Expr::Group(group) => expression_is_detail_literal(&group.expr),
+        _ => false,
+    }
+}
+
+fn expression_contains_detail_entry(expression: &Expr) -> bool {
+    match expression {
+        Expr::Tuple(tuple) => tuple
+            .elems
+            .first()
+            .is_some_and(expression_is_detail_literal),
+        Expr::Array(array) => array.elems.iter().any(expression_contains_detail_entry),
+        Expr::Reference(reference) => expression_contains_detail_entry(&reference.expr),
+        Expr::Paren(parenthesized) => expression_contains_detail_entry(&parenthesized.expr),
+        Expr::Group(group) => expression_contains_detail_entry(&group.expr),
+        _ => false,
+    }
+}
+
+fn pattern_argument_map_name(pattern: &Pat) -> Option<String> {
+    match pattern {
+        Pat::Type(typed) if type_is_argument_map(&typed.ty) => pattern_ident(&typed.pat),
+        _ => None,
+    }
+}
+
+impl<'ast> Visit<'ast> for CompilerDiagnosticVisitor<'_> {
+    fn visit_item(&mut self, node: &'ast Item) {
+        if is_test_only(item_attributes(node)) {
+            return;
+        }
+        visit::visit_item(self, node);
+    }
+
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        self.modules.push(node.ident.to_string());
+        visit::visit_item_mod(self, node);
+        self.modules.pop();
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        let previous = self.owner.clone();
+        self.owner = impl_context(&node.self_ty);
+        visit::visit_item_impl(self, node);
+        self.owner = previous;
+    }
+
+    fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
+        let previous = self.owner.clone();
+        self.owner = Some(CallableContext::Trait(node.ident.to_string()));
+        visit::visit_item_trait(self, node);
+        self.owner = previous;
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        let key = callable_key(
+            self.relative,
+            &self.modules,
+            self.owner.as_ref(),
+            &node.sig.ident,
+        );
+        if self.index.constructors.contains_key(&key) {
+            self.report(
+                "generic compiler diagnostic constructor",
+                &format!("fn {}", node.sig.ident),
+            );
+        }
+        let previous = self.current_callable.replace(key);
+        visit::visit_item_fn(self, node);
+        self.current_callable = previous;
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        if is_test_only(&node.attrs) {
+            return;
+        }
+        let key = callable_key(
+            self.relative,
+            &self.modules,
+            self.owner.as_ref(),
+            &node.sig.ident,
+        );
+        if self.index.constructors.contains_key(&key) {
+            self.report(
+                "generic compiler diagnostic constructor",
+                &format!("fn {}", node.sig.ident),
+            );
+        }
+        let previous = self.current_callable.replace(key);
+        visit::visit_impl_item_fn(self, node);
+        self.current_callable = previous;
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if is_test_only(&node.attrs) {
+            return;
+        }
+        let key = callable_key(
+            self.relative,
+            &self.modules,
+            self.owner.as_ref(),
+            &node.sig.ident,
+        );
+        if self.index.constructors.contains_key(&key) {
+            self.report(
+                "generic compiler diagnostic constructor",
+                &format!("fn {}", node.sig.ident),
+            );
+        }
+        let previous = self.current_callable.replace(key);
+        visit::visit_trait_item_fn(self, node);
+        self.current_callable = previous;
+    }
+
+    fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
+        if self
+            .index
+            .diagnostic_types
+            .contains(&node.ident.to_string())
+        {
+            for field in &node.fields {
+                let Some(name) = &field.ident else {
+                    continue;
+                };
+                if matches!(name.to_string().as_str(), "code" | "detail") {
+                    self.report("untyped compiler issue field", &name.to_string());
+                }
+            }
+        }
+        visit::visit_item_struct(self, node);
+    }
+
+    fn visit_expr_struct(&mut self, node: &'ast syn::ExprStruct) {
+        let type_name = node
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string());
+        if type_name
+            .as_ref()
+            .is_some_and(|name| self.index.diagnostic_types.contains(name))
+        {
+            let name = type_name.as_deref().unwrap_or("NodeDiagnostic");
+            self.report(
+                "direct compiler NodeDiagnostic construction",
+                &format!("{name} {{"),
+            );
+        }
+        if type_name.is_some_and(|name| self.index.diagnostic_types.contains(&name)) {
+            for field in &node.fields {
+                if matches!(&field.member, Member::Named(name) if name == "code") {
+                    self.record_emitted_code(&field.expr);
+                }
+            }
+        }
+        visit::visit_expr_struct(self, node);
+    }
+
+    fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
+        if let Expr::Path(path) = node.func.as_ref() {
+            if let Some(current) = &self.current_callable {
+                if let Some(callee) =
+                    resolve_path_callable(current, &path.path, &self.index.definitions)
+                {
+                    if let Some(position) = self.index.constructors.get(&callee) {
+                        if let Some(argument) = node.args.iter().nth(*position) {
+                            self.record_emitted_code(argument);
+                        }
+                    }
+                }
+            }
+            if path_is_argument_map_constructor(&path.path)
+                && path
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|segment| segment.ident == "from")
+                && node.args.iter().any(expression_contains_detail_entry)
+            {
+                self.report("generic compiler diagnostic argument", "\"detail\"");
+            }
+        }
+        visit::visit_expr_call(self, node);
+    }
+
+    fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+        if let Some(current) = &self.current_callable {
+            let receiver_type = self.receiver_type(&node.receiver);
+            if let Some(callee) = resolve_method_callable(
+                current,
+                &node.receiver,
+                receiver_type.as_deref(),
+                &node.method,
+                &self.index.definitions,
+            ) {
+                if let Some(position) = self.index.constructors.get(&callee) {
+                    if let Some(argument) = node.args.iter().nth(*position) {
+                        self.record_emitted_code(argument);
+                    }
+                }
+            }
+        }
+        if node.method == "insert"
+            && self.receiver_is_argument_map(&node.receiver)
+            && node.args.first().is_some_and(expression_is_detail_literal)
+        {
+            self.report("generic compiler diagnostic argument", "\"detail\"");
+        }
+        visit::visit_expr_method_call(self, node);
+    }
+
+    fn visit_local(&mut self, node: &'ast syn::Local) {
+        visit::visit_local(self, node);
+        let name = pattern_argument_map_name(&node.pat).or_else(|| {
+            let init = node.init.as_ref()?;
+            expression_constructs_argument_map(&init.expr)
+                .then(|| pattern_ident(&node.pat))
+                .flatten()
+        });
+        if let (Some(name), Some(scope)) = (name, self.argument_maps.last_mut()) {
+            scope.insert(name);
+        }
+        if let Some(init) = node.init.as_ref() {
+            if let (Some(name), Some(receiver_type), Some(scope)) = (
+                pattern_ident(&node.pat),
+                local_receiver_type(
+                    &node.pat,
+                    &init.expr,
+                    self.current_callable.as_ref(),
+                    &self.index.definitions,
+                    &self.index.return_types,
+                ),
+                self.receiver_types.last_mut(),
+            ) {
+                scope.insert(name, receiver_type);
+            }
+            let bindings = match &node.pat {
+                Pat::Tuple(tuple) => tuple
+                    .elems
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(position, pattern)| {
+                        pattern_ident(pattern)
+                            .map(|name| (name, self.projected_codes(&init.expr, position)))
+                    })
+                    .collect::<Vec<_>>(),
+                _ => pattern_ident(&node.pat)
+                    .map(|name| vec![(name, self.emitted_codes(&init.expr, &mut HashSet::new()))])
+                    .unwrap_or_default(),
+            };
+            if let Some(scope) = self.code_bindings.last_mut() {
+                for (name, codes) in bindings {
+                    if !codes.is_empty() {
+                        scope.insert(name, codes);
+                    }
+                }
+            }
+        }
+    }
+
+    fn visit_block(&mut self, node: &'ast syn::Block) {
+        self.argument_maps.push(HashSet::new());
+        self.code_bindings.push(HashMap::new());
+        self.receiver_types.push(HashMap::new());
+        visit::visit_block(self, node);
+        self.receiver_types.pop();
+        self.code_bindings.pop();
+        self.argument_maps.pop();
+    }
+
+    fn visit_lit_str(&mut self, node: &'ast syn::LitStr) {
+        self.inspect_string(&node.value());
+    }
+
+    fn visit_macro(&mut self, node: &'ast Macro) {
+        let name = node
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string());
+        if matches!(
+            name.as_deref(),
+            Some(
+                "assert"
+                    | "assert_eq"
+                    | "assert_ne"
+                    | "debug_assert"
+                    | "debug_assert_eq"
+                    | "debug_assert_ne"
+            )
+        ) {
+            return;
+        }
+        self.inspect_macro_tokens(node.tokens.clone());
+    }
+}
+
+fn is_compiler_test_source(relative: &str) -> bool {
+    let file_name = relative.rsplit('/').next().unwrap_or(relative);
+    file_name == "tests.rs" || file_name.starts_with("tests_") || file_name.ends_with("_tests.rs")
+}
+
+fn inspect_compiler_diagnostic_source(
+    relative: &str,
+    source: &str,
+    audit: &mut CompilerDiagnosticAudit,
+) {
+    match syn::parse_file(source) {
+        Ok(module) => {
+            let index = build_compiler_diagnostic_index(&[(relative.to_owned(), module.clone())]);
+            CompilerDiagnosticVisitor {
+                relative,
+                source,
+                audit,
+                index: &index,
+                argument_maps: Vec::new(),
+                code_bindings: Vec::new(),
+                receiver_types: Vec::new(),
+                modules: Vec::new(),
+                owner: None,
+                current_callable: None,
+            }
+            .visit_file(&module);
+        }
+        Err(error) => record(
+            &mut audit.violations,
+            relative,
+            1,
+            "Rust source parse failure",
+            &error.to_string(),
+        ),
+    }
+}
+
+fn audit_compiler_diagnostic_tree(
+    compiler_root: &Path,
+    exclude_definition_authority: bool,
+) -> CompilerDiagnosticAudit {
+    let mut paths = Vec::new();
+    rust_sources(compiler_root, &mut paths);
+    paths.sort();
+
+    let mut audit = CompilerDiagnosticAudit::default();
+    let mut sources = Vec::new();
+    for path in paths {
+        let relative = path
+            .strip_prefix(compiler_root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if is_compiler_test_source(&relative)
+            || exclude_definition_authority && relative == "diagnostics.rs"
+        {
+            continue;
+        }
+        let source = std::fs::read_to_string(path).unwrap();
+        match syn::parse_file(&source) {
+            Ok(module) => sources.push((relative, source, module)),
+            Err(error) => record(
+                &mut audit.violations,
+                &relative,
+                1,
+                "Rust source parse failure",
+                &error.to_string(),
+            ),
+        }
+    }
+
+    let indexed_sources = sources
+        .iter()
+        .map(|(relative, _, module)| (relative.clone(), module.clone()))
+        .collect::<Vec<_>>();
+    let index = build_compiler_diagnostic_index(&indexed_sources);
+    for (relative, source, module) in &sources {
+        CompilerDiagnosticVisitor {
+            relative,
+            source,
+            audit: &mut audit,
+            index: &index,
+            argument_maps: Vec::new(),
+            code_bindings: Vec::new(),
+            receiver_types: Vec::new(),
+            modules: Vec::new(),
+            owner: None,
+            current_callable: None,
+        }
+        .visit_file(module);
+    }
+    audit.violations.sort();
+    audit.violations.dedup();
+    audit
+}
+
+fn audit_compiler_diagnostic_sources(
+    exclude_definition_authority: bool,
+) -> CompilerDiagnosticAudit {
+    let compiler_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/node_system/compiler");
+    audit_compiler_diagnostic_tree(&compiler_root, exclude_definition_authority)
+}
+
+#[test]
+fn production_compiler_diagnostics_use_only_typed_definition_authority() {
+    let audit = audit_compiler_diagnostic_sources(true);
+    assert!(
+        audit.violations.is_empty(),
+        "production compiler diagnostics bypass typed definition authority:\n{}",
+        audit.violations.join("\n")
+    );
+}
+
+#[test]
+fn compiler_diagnostic_audit_detects_detail_only_as_an_argument_map_key() {
+    let source = r#"
+fn build(value: Box<str>) {
+    let _unrelated = "detail";
+    let _from_alias = DiagnosticArguments::from([(Box::<str>::from("detail"), value.clone())]);
+    let _from_map = BTreeMap::from([("detail".into(), value.clone())]);
+    let mut typed: DiagnosticArguments = DiagnosticArguments::new();
+    typed.insert(Box::from("detail"), value.clone());
+    let mut plain: BTreeMap<Box<str>, Box<str>> = BTreeMap::new();
+    plain.insert("detail".to_owned(), value);
+    unrelated.insert("detail", 1);
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("detail.rs", source, &mut audit);
+
+    let detail_violations = audit
+        .violations
+        .iter()
+        .filter(|violation| violation.contains("generic compiler diagnostic argument"))
+        .count();
+    assert_eq!(detail_violations, 4, "{:#?}", audit.violations);
+}
+
+#[test]
+fn compiler_diagnostic_inventory_uses_only_emission_and_issue_constructor_calls() {
+    let source = r#"
+fn diagnostic(detail: String, stable_id: &'static str) -> NodeDiagnostic {
+    NodeDiagnostic {
+        code: DiagnosticCode::new(stable_id),
+        detail,
+    }
+}
+
+fn select_code(flag: bool) -> &'static str {
+    trace("compiler.producer.logged");
+    let _unused = "compiler.producer.unreturned";
+    if false {
+        trace("compiler.producer.dead");
+    }
+    let selected = if flag {
+        "compiler.produced.left"
+    } else {
+        "compiler.produced.right"
+    };
+    selected
+}
+
+fn unused_code() -> &'static str {
+    "compiler.unused.producer"
+}
+
+fn unresolved_code(flag: bool) -> &'static str {
+    if flag {
+        "compiler.unresolved.must_not_guess"
+    } else {
+        external_code()
+    }
+}
+
+mod unrelated {
+    fn diagnostic(detail: String, stable_id: &'static str) -> usize {
+        trace(stable_id);
+        detail.len()
+    }
+
+    fn emit() {
+        let _ = diagnostic(String::new(), "compiler.same_name.free_noise");
+    }
+}
+
+struct DiagnosticFactory;
+impl DiagnosticFactory {
+    fn make(detail: String, stable_id: &'static str) -> NodeDiagnostic {
+        NodeDiagnostic {
+            code: DiagnosticCode::new(stable_id),
+            detail,
+        }
+    }
+}
+
+struct UnrelatedFactory;
+impl UnrelatedFactory {
+    fn make(detail: String, stable_id: &'static str) -> usize {
+        trace(stable_id);
+        detail.len()
+    }
+}
+
+fn emit(flag: bool) {
+    let _ = diagnostic(String::new(), "compiler.emitted");
+    let (stable_id, detail) = if flag {
+        ("compiler.selected.left", String::new())
+    } else {
+        ("compiler.selected.right", String::new())
+    };
+    let _ = diagnostic(detail, stable_id);
+    let _ = diagnostic(String::new(), select_code(flag));
+    let _ = diagnostic(String::new(), unresolved_code(flag));
+    let diagnostic_factory = DiagnosticFactory;
+    let unrelated_factory = UnrelatedFactory;
+    let _ = diagnostic_factory.make(String::new(), "compiler.method.emitted");
+    let _ = unrelated_factory.make(String::new(), "compiler.same_name.method_noise");
+    let _unrelated = "compiler.constant";
+    trace("compiler.logged");
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("inventory.rs", source, &mut audit);
+
+    assert_eq!(
+        audit.message_keys,
+        HashSet::from([
+            "diagnostics.compiler.emitted".to_owned(),
+            "diagnostics.compiler.method.emitted".to_owned(),
+            "diagnostics.compiler.produced.left".to_owned(),
+            "diagnostics.compiler.produced.right".to_owned(),
+            "diagnostics.compiler.selected.left".to_owned(),
+            "diagnostics.compiler.selected.right".to_owned(),
+        ])
+    );
+}
+
+#[test]
+fn compiler_diagnostic_inventory_resolves_lexical_producer_scopes() {
+    let source = r#"
+fn diagnostic(stable_id: &'static str) -> NodeDiagnostic {
+    NodeDiagnostic { code: DiagnosticCode::new(stable_id) }
+}
+
+fn select_outer_code(flag: bool) -> &'static str {
+    let code = "compiler.outer.returned";
+    fn nested() -> &'static str {
+        let code = "compiler.nested.function_noise";
+        code
+    }
+    let _future = async {
+        let code = "compiler.nested.async_noise";
+        code
+    };
+    let _closure = || {
+        let code = "compiler.nested.closure_noise";
+        code
+    };
+    {
+        let code = "compiler.nested.block_noise";
+        trace(code);
+    }
+    if flag {
+        let code = "compiler.nested.if_noise";
+        trace(code);
+    }
+    loop {
+        let code = "compiler.nested.loop_noise";
+        trace(code);
+        break;
+    }
+    match flag {
+        true => {
+            let code = "compiler.nested.match_noise";
+            trace(code);
+        }
+        false => {}
+    }
+    code
+}
+
+fn select_inner_code(flag: bool) -> &'static str {
+    let code = "compiler.inner.outer_noise";
+    if flag {
+        let code = "compiler.inner.returned";
+        return code;
+    }
+    let code = "compiler.inner.after_return_noise";
+    "compiler.inner.fallback"
+}
+
+fn emit(flag: bool) {
+    let _ = diagnostic(select_outer_code(flag));
+    let _ = diagnostic(select_inner_code(flag));
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("nested_returns.rs", source, &mut audit);
+
+    assert_eq!(
+        audit.message_keys,
+        HashSet::from([
+            "diagnostics.compiler.inner.fallback".to_owned(),
+            "diagnostics.compiler.inner.returned".to_owned(),
+            "diagnostics.compiler.outer.returned".to_owned(),
+        ])
+    );
+}
+
+#[test]
+fn compiler_diagnostic_constructor_flow_resolves_typed_local_receivers() {
+    let source = r#"
+struct Problem {
+    code: &'static str,
+    detail: String,
+}
+
+struct Factory;
+impl Factory {
+    fn new() -> Self {
+        Self
+    }
+
+    fn unrelated() -> OtherFactory {
+        OtherFactory
+    }
+
+    fn make(stable_id: &'static str) -> Problem {
+        Problem { code: stable_id, detail: String::new() }
+    }
+}
+
+struct OtherFactory;
+impl OtherFactory {
+    fn make(stable_id: &'static str) -> usize {
+        stable_id.len()
+    }
+}
+
+fn forwarded_from_path(stable_id: &'static str) -> Problem {
+    let factory = Factory;
+    factory.make(stable_id)
+}
+
+fn forwarded_from_proven_return(stable_id: &'static str) -> Problem {
+    let factory = Factory::new();
+    factory.make(stable_id)
+}
+
+fn forwarded_from_annotation(stable_id: &'static str) -> Problem {
+    let factory: Factory = opaque_factory();
+    factory.make(stable_id)
+}
+
+fn unrelated_associated_result(stable_id: &'static str) -> usize {
+    let factory = Factory::unrelated();
+    factory.make(stable_id)
+}
+
+fn emit() {
+    let _ = forwarded_from_path("compiler.local_receiver.path");
+    let _ = forwarded_from_proven_return("compiler.local_receiver.proven_return");
+    let _ = forwarded_from_annotation("compiler.local_receiver.annotation");
+    let _ = unrelated_associated_result("compiler.local_receiver.ambiguous_noise");
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("local_receiver.rs", source, &mut audit);
+
+    assert_eq!(
+        audit.message_keys,
+        HashSet::from([
+            "diagnostics.compiler.local_receiver.annotation".to_owned(),
+            "diagnostics.compiler.local_receiver.path".to_owned(),
+            "diagnostics.compiler.local_receiver.proven_return".to_owned(),
+        ])
+    );
+    assert!(
+        audit.violations.iter().any(|violation| violation
+            .contains("generic compiler diagnostic constructor:fn forwarded_from_annotation")),
+        "forwarding constructor was not identified: {:#?}",
+        audit.violations
+    );
+}
+
+#[test]
+fn compiler_diagnostic_audit_detects_structural_issue_and_constructor_forms() {
+    let source = r#"
+struct Problem {
+    code: &'static str,
+    detail: String,
+}
+
+struct UnrelatedResponse {
+    code: u16,
+    detail: String,
+}
+
+fn free(stable_id: &'static str, detail: String) -> Problem {
+    Problem {
+        code: stable_id,
+        detail,
+    }
+}
+
+struct Factory;
+impl Factory {
+    fn inherent(stable_id: &'static str, detail: String) -> NodeDiagnostic {
+        NodeDiagnostic {
+            code: DiagnosticCode::new(stable_id),
+            detail,
+        }
+    }
+}
+
+trait BuildsProblem {
+    fn trait_method(stable_id: &'static str, detail: String) -> Problem {
+        Problem {
+            code: stable_id,
+            detail,
+        }
+    }
+}
+
+fn unrelated(code: &'static str) -> usize {
+    code.len()
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("structural.rs", source, &mut audit);
+
+    for expected in [
+        "untyped compiler issue field:code",
+        "untyped compiler issue field:detail",
+        "generic compiler diagnostic constructor:fn free",
+        "generic compiler diagnostic constructor:fn inherent",
+        "generic compiler diagnostic constructor:fn trait_method",
+        "direct compiler NodeDiagnostic construction:NodeDiagnostic {",
+    ] {
+        assert!(
+            audit
+                .violations
+                .iter()
+                .any(|violation| violation.contains(expected)),
+            "missing {expected} in {:#?}",
+            audit.violations
+        );
+    }
+    assert!(
+        audit
+            .violations
+            .iter()
+            .all(|violation| !violation.contains("fn unrelated")),
+        "unrelated code parameter was classified as diagnostic: {:#?}",
+        audit.violations
+    );
+    assert_eq!(
+        audit
+            .violations
+            .iter()
+            .filter(|violation| violation.contains("untyped compiler issue field"))
+            .count(),
+        2,
+        "non-diagnostic code/detail fields were classified as an issue: {:#?}",
+        audit.violations
+    );
+}
+
+#[test]
+fn compiler_diagnostic_audit_resolves_import_and_reexport_aliases() {
+    let source = r#"
+use crate::node_system::analysis::NodeDiagnostic as ImportedDiagnostic;
+pub use crate::node_system::analysis::NodeDiagnostic as ReexportedDiagnostic;
+
+struct UnrelatedDiagnostic {
+    code: &'static str,
+}
+
+fn emit_import_alias() {
+    let _ = ImportedDiagnostic {
+        code: DiagnosticCode::new("compiler.alias.import"),
+    };
+}
+
+fn emit_reexport_alias() {
+    let _ = ReexportedDiagnostic {
+        code: DiagnosticCode::new("compiler.alias.reexport"),
+    };
+}
+
+fn unrelated() {
+    let _ = UnrelatedDiagnostic { code: "not-a-diagnostic" };
+}
+"#;
+    let mut audit = CompilerDiagnosticAudit::default();
+    inspect_compiler_diagnostic_source("aliases.rs", source, &mut audit);
+
+    assert!(
+        audit
+            .violations
+            .iter()
+            .any(|violation| violation.contains("ImportedDiagnostic {")),
+        "import alias bypassed direct-construction audit: {:#?}",
+        audit.violations
+    );
+    assert!(
+        audit
+            .violations
+            .iter()
+            .any(|violation| violation.contains("ReexportedDiagnostic {")),
+        "re-export alias bypassed direct-construction audit: {:#?}",
+        audit.violations
+    );
+    assert!(
+        audit
+            .violations
+            .iter()
+            .all(|violation| !violation.contains("UnrelatedDiagnostic")),
+        "unrelated struct was classified as NodeDiagnostic: {:#?}",
+        audit.violations
+    );
+}
+
+#[test]
+fn compiler_diagnostic_audit_recurses_and_excludes_only_authority_and_tests() {
+    let root = audit_fixture("compiler-diagnostic-tree");
+    write_fixture(
+        &root,
+        "nested/emitter.rs",
+        r#"
+fn diagnostic(code: &'static str) -> NodeDiagnostic {
+    NodeDiagnostic { code }
+}
+fn emit() { let _ = diagnostic("compiler.nested.emitted"); }
+#[cfg(test)]
+fn fixture() {
+    let _ = diagnostic("compiler.inline.test");
+    let _ = NodeDiagnostic { code: "compiler.inline.direct" };
+}
+"#,
+    );
+    write_fixture(
+        &root,
+        "diagnostics.rs",
+        r#"
+const KEY: &str = "diagnostics.compiler.authority";
+fn authority() { let _ = "compiler.authority.internal"; }
+"#,
+    );
+    write_fixture(
+        &root,
+        "tests.rs",
+        r#"
+fn diagnostic(code: &'static str) -> NodeDiagnostic { NodeDiagnostic { code } }
+fn fixture() { let _ = diagnostic("compiler.file.test"); }
+"#,
+    );
+
+    let enforcement = audit_compiler_diagnostic_tree(&root, true);
+    assert!(
+        enforcement
+            .violations
+            .iter()
+            .any(|violation| violation.contains("compiler.nested.emitted")),
+        "nested production file was skipped: {:#?}",
+        enforcement.violations
+    );
+    assert!(
+        enforcement
+            .violations
+            .iter()
+            .all(|violation| !violation.contains("authority") && !violation.contains("test")),
+        "authority or tests leaked into enforcement: {:#?}",
+        enforcement.violations
+    );
+
+    let inventory = audit_compiler_diagnostic_tree(&root, false);
+    assert_eq!(
+        inventory.message_keys,
+        HashSet::from(["diagnostics.compiler.nested.emitted".to_owned()])
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+fn audit_production_graph_write_surface(
+    document_source: &str,
+    mutation_source: &str,
+    project_state_source: &str,
+) -> Vec<String> {
+    let document_module = syn::parse_file(document_source).unwrap();
+    let mutation_module = syn::parse_file(mutation_source).unwrap();
+    let project_state = syn::parse_file(project_state_source).unwrap();
+    let mut violations = Vec::new();
+
+    let mut public_document_exports = HashSet::new();
+    let mut has_public_glob = false;
+    for item in &document_module.items {
+        let Item::Use(item_use) = item else {
+            continue;
+        };
+        if !matches!(item_use.vis, syn::Visibility::Public(_)) || is_test_only(&item_use.attrs) {
+            continue;
+        }
+        let mut paths = Vec::new();
+        expand_use_tree(&item_use.tree, &mut Vec::new(), &mut paths);
+        for path in paths {
+            has_public_glob |= path.last().is_some_and(|segment| segment == "*");
+            if let Some(export) = path.last() {
+                public_document_exports.insert(export.clone());
+            }
+        }
+    }
+
+    if has_public_glob {
+        violations.push(
+            "production public glob re-export from mutation or another module is forbidden"
+                .to_owned(),
+        );
+    }
+    for raw_export in ["GraphMutation", "RevisionedGraphStore", "apply_mutation"] {
+        if public_document_exports.contains(raw_export) {
+            violations.push(format!(
+                "raw graph write symbol {raw_export} must not be publicly re-exported in production"
+            ));
+        }
+    }
+    if !public_document_exports.contains("GraphDocumentPatch") {
+        violations.push(
+            "GraphDocumentPatch must remain publicly available as committed delta/History data"
+                .to_owned(),
+        );
+    }
+
+    if mutation_module.items.iter().any(|item| {
+        matches!(
+            item,
+            Item::Fn(function)
+                if function.sig.ident == "apply_mutation"
+                    && matches!(function.vis, syn::Visibility::Public(_))
+                    && !is_test_only(&function.attrs)
+        )
+    }) {
+        violations
+            .push("no public production free function named apply_mutation may remain".to_owned());
+    }
+
+    let mut public_project_state_methods = HashSet::new();
+    for item in &project_state.items {
+        let Item::Impl(item_impl) = item else {
+            continue;
+        };
+        let Type::Path(self_type) = item_impl.self_ty.as_ref() else {
+            continue;
+        };
+        if !self_type
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "ProjectState")
+        {
+            continue;
+        }
+        for impl_item in &item_impl.items {
+            let syn::ImplItem::Fn(method) = impl_item else {
+                continue;
+            };
+            if matches!(method.vis, syn::Visibility::Public(_)) && !is_test_only(&method.attrs) {
+                public_project_state_methods.insert(method.sig.ident.to_string());
+            }
+        }
+    }
+
+    for raw_method in ["apply_graph_mutation", "apply_graph_patch"] {
+        if public_project_state_methods.contains(raw_method) {
+            violations.push(format!(
+                "ProjectState::{raw_method} must not be public in production"
+            ));
+        }
+    }
+    if !public_project_state_methods.contains("apply_editor_graph_mutation") {
+        violations.push("ProjectState::apply_editor_graph_mutation must remain public".to_owned());
+    }
+
+    violations
+}
+
+#[test]
+fn production_graph_write_surface_exposes_only_editor_mutations() {
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let violations = audit_production_graph_write_surface(
+        &std::fs::read_to_string(source_root.join("node_system/document/mod.rs")).unwrap(),
+        &std::fs::read_to_string(source_root.join("node_system/document/mutation.rs")).unwrap(),
+        &std::fs::read_to_string(source_root.join("project/project_state.rs")).unwrap(),
+    );
+
+    assert!(
+        violations.is_empty(),
+        "production graph write-surface violations:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn production_graph_write_surface_audit_rejects_cfg_bypasses() {
+    let violations = audit_production_graph_write_surface(
+        r#"
+pub use patch::GraphDocumentPatch;
+#[cfg(not(test))]
+pub use mutation::GraphMutation;
+#[cfg(any(test, feature = "fixture"))]
+pub use mutation::RevisionedGraphStore;
+"#,
+        r#"
+#[cfg(not(test))]
+pub fn apply_mutation() {}
+"#,
+        r#"
+pub struct ProjectState;
+impl ProjectState {
+    pub fn apply_editor_graph_mutation(&self) {}
+    #[cfg(not(test))]
+    pub fn apply_graph_mutation(&self) {}
+    #[cfg(any(test, feature = "fixture"))]
+    pub fn apply_graph_patch(&self) {}
+}
+"#,
+    );
+
+    for expected in [
+        "raw graph write symbol GraphMutation",
+        "raw graph write symbol RevisionedGraphStore",
+        "public production free function named apply_mutation",
+        "ProjectState::apply_graph_mutation",
+        "ProjectState::apply_graph_patch",
+    ] {
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.contains(expected)),
+            "missing {expected} violation in:\n{}",
+            violations.join("\n")
+        );
+    }
+}
+
+#[test]
+fn production_graph_write_surface_audit_allows_exclusive_test_gates() {
+    let violations = audit_production_graph_write_surface(
+        r#"
+pub use patch::GraphDocumentPatch;
+#[cfg(test)]
+pub use mutation::GraphMutation;
+#[cfg(all(feature = "fixture", test))]
+pub use mutation::RevisionedGraphStore;
+#[cfg(test)]
+pub use fixture_exports::*;
+"#,
+        r#"
+#[cfg(any(test, all(test, feature = "fixture")))]
+pub fn apply_mutation() {}
+"#,
+        r#"
+pub struct ProjectState;
+impl ProjectState {
+    pub fn apply_editor_graph_mutation(&self) {}
+    #[cfg(test)]
+    pub fn apply_graph_mutation(&self) {}
+    #[cfg(all(test, feature = "fixture"))]
+    pub fn apply_graph_patch(&self) {}
+}
+"#,
+    );
+
+    assert!(
+        violations.is_empty(),
+        "exclusive test gates must remain fixture-only:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn production_graph_write_surface_audit_rejects_mutation_glob_reexports() {
+    let violations = audit_production_graph_write_surface(
+        r#"
+pub use patch::GraphDocumentPatch;
+pub use mutation::*;
+"#,
+        "",
+        r#"
+pub struct ProjectState;
+impl ProjectState {
+    pub fn apply_editor_graph_mutation(&self) {}
+}
+"#,
+    );
+
+    assert!(
+        violations
+            .iter()
+            .any(|violation| violation.contains("public glob re-export from mutation")),
+        "missing mutation glob violation in:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn production_graph_write_surface_audit_rejects_indirect_glob_reexports() {
+    let violations = audit_production_graph_write_surface(
+        r#"
+pub use patch::GraphDocumentPatch;
+mod exports {
+    pub use super::mutation::GraphMutation;
+}
+pub use exports::*;
+"#,
+        "",
+        r#"
+pub struct ProjectState;
+impl ProjectState {
+    pub fn apply_editor_graph_mutation(&self) {}
+}
+"#,
+    );
+
+    assert!(
+        violations
+            .iter()
+            .any(|violation| violation.contains("production public glob re-export")),
+        "missing indirect glob violation in:\n{}",
+        violations.join("\n")
+    );
 }
 
 #[test]

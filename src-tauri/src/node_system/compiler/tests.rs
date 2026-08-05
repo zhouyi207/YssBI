@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompileId, NOOP_TRACE_SINK, ProjectSessionId, ResourceKey, ResourceVersion, SpanEvent,
-    SpanKind, TraceSink,
+    CompileId, DiagnosticLocation, NOOP_TRACE_SINK, ProjectSessionId, ResourceKey, ResourceVersion,
+    SpanEvent, SpanKind, TraceSink,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -22,6 +22,9 @@ use crate::node_system::registry::{
     ProviderRegistration, RegisteredNode, RegistryFingerprint, StructuralNodeRole,
 };
 use crate::node_system::testing::TestProtocolBuilder;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -715,12 +718,49 @@ fn lowering_diagnostic_clears_semantic_and_plan() {
 
     assert!(result.semantic.is_none());
     assert!(result.plan.is_none());
-    assert!(
-        result
-            .analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| { diagnostic.code.as_str() == "compiler.lowering.failed" })
+    let diagnostic = result
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.failed")
+        .expect("lowering diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([(
+            Box::from("node_type"),
+            Box::from("yssbi.test.lowering_failure"),
+        )])
+    );
+}
+
+#[test]
+fn unbound_input_diagnostic_carries_the_exact_port() {
+    let protocol = test_protocol(
+        "unbound_input",
+        vec![data_port(
+            "value",
+            PortDirection::Input,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let registry = TestRegistry::new(vec![protocol]);
+    let address = PortAddress::declared(node_id(1), key("value"));
+
+    let result = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph_with_nodes(&[(1, "unbound_input")]));
+
+    let diagnostic = result
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.input.unbound")
+        .expect("unbound input diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([(Box::from("port"), address.to_string().into())])
     );
 }
 
@@ -1052,6 +1092,83 @@ fn compiler_aggregates_fragment_resources_and_results() {
             },
             value: plan.operations[0].outputs[0].value,
         }]
+    );
+}
+
+#[test]
+fn duplicate_lowering_result_emits_the_result_name() {
+    let first = test_protocol(
+        "duplicate_result_first",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let second = test_protocol(
+        "duplicate_result_second",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let first_type = first.type_id.clone();
+    let second_type = second.type_id.clone();
+    let registry = TestRegistry::new(vec![first, second])
+        .with_lowerer(
+            &first_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        effect: EffectSemantics::None,
+                        resources: Box::new([]),
+                        results: Box::new([FragmentResult {
+                            name: "answer".into(),
+                            output: PortAddress::declared(node_id(1), key("out")),
+                        }]),
+                    },
+                ),
+            },
+        )
+        .with_lowerer(
+            &second_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        effect: EffectSemantics::None,
+                        resources: Box::new([]),
+                        results: Box::new([FragmentResult {
+                            name: "answer".into(),
+                            output: PortAddress::declared(node_id(2), key("out")),
+                        }]),
+                    },
+                ),
+            },
+        );
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph_with_nodes(&[
+        (1, "duplicate_result_first"),
+        (2, "duplicate_result_second"),
+    ]));
+
+    let diagnostic = result
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.result_duplicate")
+        .expect("duplicate result diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([(Box::from("result_name"), Box::from("answer"))])
     );
 }
 
@@ -1980,11 +2097,16 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
 enum FixtureInsertionOrder {
     Forward,
     Reverse,
+    Seeded(u64),
 }
 
 fn in_fixture_order<T>(mut values: Vec<T>, order: FixtureInsertionOrder) -> Vec<T> {
-    if matches!(order, FixtureInsertionOrder::Reverse) {
-        values.reverse();
+    match order {
+        FixtureInsertionOrder::Forward => {}
+        FixtureInsertionOrder::Reverse => values.reverse(),
+        FixtureInsertionOrder::Seeded(seed) => {
+            values.shuffle(&mut StdRng::seed_from_u64(seed));
+        }
     }
     values
 }
@@ -2304,6 +2426,325 @@ fn assert_reversed_insertions<T: std::fmt::Debug + PartialEq>(forward: &[T], rev
         forward.iter().rev().collect::<Vec<_>>(),
         reverse.iter().collect::<Vec<_>>()
     );
+}
+
+struct InvalidDeterminismFixture {
+    document: GraphDocument,
+    node_insertions: Vec<NodeId>,
+    connection_insertions: Vec<ConnectionId>,
+    port_binding_insertions: Vec<PortAddress>,
+    input_state_insertions: Vec<PortAddress>,
+}
+
+fn invalid_determinism_protocols() -> Vec<NodeProtocol> {
+    let source = test_protocol(
+        "invalid_determinism_int_source",
+        vec![data_port(
+            "out",
+            PortDirection::Output,
+            TypeExpr::Concrete(type_id("core.int")),
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let sink = test_protocol(
+        "invalid_determinism_string_sink",
+        vec![data_port(
+            "in",
+            PortDirection::Input,
+            TypeExpr::Concrete(type_id("core.string")),
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let mut required = data_port("required", PortDirection::Input, TypeExpr::Unknown, None);
+    required.instances = PortInstances::UserCreated {
+        min: 0,
+        max: Some(2),
+    };
+    let required = test_protocol(
+        "invalid_determinism_required",
+        vec![required],
+        vec![],
+        vec![],
+    );
+
+    vec![source, sink, required]
+}
+
+fn invalid_determinism_fixture(order: FixtureInsertionOrder) -> InvalidDeterminismFixture {
+    let node_entries = vec![
+        (101, "yssbi.test.invalid_determinism_int_source"),
+        (102, "yssbi.test.invalid_determinism_int_source"),
+        (103, "yssbi.test.invalid_determinism_string_sink"),
+        (104, "yssbi.test.invalid_determinism_string_sink"),
+        (105, "yssbi.test.invalid_determinism_required"),
+        (106, "yssbi.test.invalid_determinism_unknown"),
+    ];
+    let mut nodes = BTreeMap::new();
+    let mut node_insertions = Vec::new();
+    for (id, node_type) in in_fixture_order(node_entries, order) {
+        let id = node_id(id);
+        insert_tracked(
+            &mut nodes,
+            &mut node_insertions,
+            id,
+            DocumentNode {
+                id,
+                node_type: NodeTypeId::new(node_type).unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        );
+    }
+
+    let connection_entries = vec![
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(201)),
+            output: PortAddress::declared(node_id(101), key("out")),
+            input: PortAddress::declared(node_id(103), key("in")),
+            order: None,
+        },
+        DocumentConnection {
+            id: ConnectionId::from_uuid(Uuid::from_u128(202)),
+            output: PortAddress::declared(node_id(102), key("out")),
+            input: PortAddress::declared(node_id(104), key("in")),
+            order: None,
+        },
+    ];
+    let mut connections = BTreeMap::new();
+    let mut connection_insertions = Vec::new();
+    for connection in in_fixture_order(connection_entries, order) {
+        insert_tracked(
+            &mut connections,
+            &mut connection_insertions,
+            connection.id,
+            connection,
+        );
+    }
+
+    let dynamic_ports = [
+        PortAddress::instance(
+            node_id(105),
+            key("required"),
+            PortInstanceId::from_uuid(Uuid::from_u128(301)),
+        ),
+        PortAddress::instance(
+            node_id(105),
+            key("required"),
+            PortInstanceId::from_uuid(Uuid::from_u128(302)),
+        ),
+    ];
+    let binding_entries = vec![
+        (
+            dynamic_ports[0].clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey("invalid-required-a".into()),
+            },
+        ),
+        (
+            dynamic_ports[1].clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey("invalid-required-b".into()),
+            },
+        ),
+    ];
+    let mut port_bindings = BTreeMap::new();
+    let mut port_binding_insertions = Vec::new();
+    for (address, binding) in in_fixture_order(binding_entries, order) {
+        insert_tracked(
+            &mut port_bindings,
+            &mut port_binding_insertions,
+            address,
+            binding,
+        );
+    }
+
+    let state_entries = dynamic_ports
+        .iter()
+        .cloned()
+        .map(|address| {
+            (
+                address,
+                InputState {
+                    literal_override: None,
+                },
+            )
+        })
+        .collect();
+    let mut input_states = BTreeMap::new();
+    let mut input_state_insertions = Vec::new();
+    for (address, state) in in_fixture_order(state_entries, order) {
+        insert_tracked(
+            &mut input_states,
+            &mut input_state_insertions,
+            address,
+            state,
+        );
+    }
+
+    InvalidDeterminismFixture {
+        document: GraphDocument {
+            revision: crate::node_system::document::GraphRevision::new(29),
+            nodes,
+            port_bindings,
+            connections,
+            input_states,
+        },
+        node_insertions,
+        connection_insertions,
+        port_binding_insertions,
+        input_state_insertions,
+    }
+}
+
+#[test]
+fn invalid_analysis_snapshot_is_deterministic_across_insertion_orders() {
+    let orders = [
+        FixtureInsertionOrder::Forward,
+        FixtureInsertionOrder::Reverse,
+        FixtureInsertionOrder::Seeded(0),
+        FixtureInsertionOrder::Seeded(1),
+        FixtureInsertionOrder::Seeded(0x5eed_5eed_5eed_5eed),
+    ];
+    let fixtures = orders
+        .into_iter()
+        .map(invalid_determinism_fixture)
+        .collect::<Vec<_>>();
+    let baseline_fixture = &fixtures[0];
+
+    for fixture in &fixtures[1..] {
+        assert_eq!(fixture.document, baseline_fixture.document);
+    }
+    assert_reversed_insertions(
+        &baseline_fixture.node_insertions,
+        &fixtures[1].node_insertions,
+    );
+    assert_reversed_insertions(
+        &baseline_fixture.connection_insertions,
+        &fixtures[1].connection_insertions,
+    );
+    assert_reversed_insertions(
+        &baseline_fixture.port_binding_insertions,
+        &fixtures[1].port_binding_insertions,
+    );
+    assert_reversed_insertions(
+        &baseline_fixture.input_state_insertions,
+        &fixtures[1].input_state_insertions,
+    );
+    for (seed, fixture) in [0_u64, 1, 0x5eed_5eed_5eed_5eed]
+        .into_iter()
+        .zip(&fixtures[2..])
+    {
+        let changed_histories = [
+            fixture.node_insertions != baseline_fixture.node_insertions,
+            fixture.connection_insertions != baseline_fixture.connection_insertions,
+            fixture.port_binding_insertions != baseline_fixture.port_binding_insertions,
+            fixture.input_state_insertions != baseline_fixture.input_state_insertions,
+        ];
+        assert!(
+            changed_histories.into_iter().any(|changed| changed),
+            "seed {seed:#x} did not change any tracked insertion history"
+        );
+    }
+
+    let registry = TestRegistry::new(invalid_determinism_protocols());
+    let compiler = GraphCompiler::new(&registry, &Resources).with_observability(
+        ProjectSessionId::new("invalid-determinism-session"),
+        &NOOP_TRACE_SINK,
+    );
+    let graph_path = GraphResourcePath("events/invalid-determinism".into());
+    let compile_id = CompileId::new(79);
+    let snapshots = fixtures
+        .iter()
+        .map(|fixture| {
+            compiler.snapshot_with_compile_id(compile_id, graph_path.clone(), &fixture.document)
+        })
+        .collect::<Vec<_>>();
+
+    for snapshot in &snapshots {
+        assert_eq!(
+            snapshot.provenance.project_session_id.as_str(),
+            "invalid-determinism-session"
+        );
+        assert_eq!(snapshot.provenance.graph_path, graph_path);
+        assert_eq!(snapshot.provenance.compile_id, compile_id);
+        assert_eq!(
+            snapshot.provenance.basis.graph_revision,
+            baseline_fixture.document.revision
+        );
+        assert_eq!(
+            snapshot.provenance.basis.registry_fingerprint,
+            RegistryFingerprint::from_bytes([9; 32])
+        );
+        assert_eq!(
+            snapshot.provenance.basis.resource_versions,
+            BTreeMap::from([(ResourceKey::new("resource.test"), ResourceVersion::new("1"))])
+        );
+    }
+
+    let results = snapshots
+        .iter()
+        .map(|snapshot| {
+            compiler
+                .compile_snapshot(snapshot, &CompileCancellationToken::new())
+                .expect("invalid fixture analysis should complete")
+        })
+        .collect::<Vec<_>>();
+    for (result, snapshot) in results.iter().zip(&snapshots) {
+        assert_eq!(result.analysis.basis, snapshot.provenance.basis);
+    }
+    let baseline = &results[0];
+    let baseline_diagnostics = baseline.analysis.diagnostics.as_ref();
+
+    assert!(baseline.semantic.is_none());
+    assert!(baseline.plan.is_none());
+    assert!(baseline_diagnostics.len() >= 3);
+    for code in [
+        "compiler.node.unknown",
+        "compiler.input.unbound",
+        "compiler.type.incompatible",
+    ] {
+        assert!(
+            baseline_diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code.as_str() == code),
+            "missing {code}: {baseline_diagnostics:#?}"
+        );
+    }
+    assert!(
+        baseline_diagnostics
+            .iter()
+            .all(|diagnostic| !diagnostic.arguments.contains_key("detail"))
+    );
+
+    let baseline_bytes = serde_json::to_vec(&baseline.analysis).unwrap();
+    let baseline_json = serde_json::to_value(&baseline.analysis).unwrap();
+    for diagnostic in baseline_json["diagnostics"].as_array().unwrap() {
+        assert!(diagnostic.get("message").is_none());
+        assert!(diagnostic["arguments"].get("detail").is_none());
+    }
+
+    for result in &results[1..] {
+        assert!(result.semantic.is_none());
+        assert!(result.plan.is_none());
+        assert_eq!(result.analysis.diagnostics.as_ref(), baseline_diagnostics);
+        assert_eq!(
+            serde_json::to_vec(&result.analysis).unwrap(),
+            baseline_bytes
+        );
+
+        for (actual, expected) in result.analysis.diagnostics.iter().zip(baseline_diagnostics) {
+            assert_eq!(actual.code, expected.code);
+            assert_eq!(actual.arguments, expected.arguments);
+            assert_eq!(actual.severity, expected.severity);
+            assert_eq!(actual.primary, expected.primary);
+            assert_eq!(actual.related, expected.related);
+        }
+    }
 }
 
 #[test]
@@ -5172,16 +5613,19 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             &CompileCancellationToken::new(),
         )
         .unwrap();
-    let codes = products
+    let diagnostic = products
         .analysis
         .diagnostics
         .iter()
-        .map(|diagnostic| diagnostic.code.as_str())
-        .collect::<Vec<_>>();
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.control.call.member_missing")
+        .expect("missing Call member diagnostic");
     assert!(products.plan.is_none());
-    assert!(
-        codes.contains(&"compiler.control.call.member_missing"),
-        "missing Call member diagnostics: {codes:?}"
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([
+            (Box::from("member_id"), parameter_id.0.clone()),
+            (Box::from("member_role"), Box::from("argument")),
+        ])
     );
 
     let mut extra_call_argument = caller.clone();
@@ -5203,16 +5647,226 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             &CompileCancellationToken::new(),
         )
         .unwrap();
-    let codes = products
+    let diagnostic = products
         .analysis
         .diagnostics
         .iter()
-        .map(|diagnostic| diagnostic.code.as_str())
-        .collect::<Vec<_>>();
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.control.call.member_unexpected")
+        .expect("unexpected Call member diagnostic");
     assert!(products.plan.is_none());
-    assert!(
-        codes.contains(&"compiler.control.call.member_unexpected"),
-        "extra Call member diagnostics: {codes:?}"
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([
+            (Box::from("member_id"), Box::from("unexpected")),
+            (Box::from("member_role"), Box::from("argument")),
+        ])
+    );
+
+    let mut duplicate_call_argument = caller.clone();
+    let duplicate_address = bind_resolved_function_port(
+        &mut duplicate_call_argument,
+        10,
+        "arguments",
+        103,
+        "duplicate",
+        &function_path,
+        &parameter_id,
+    );
+    let products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(
+                GraphResourcePath("events/duplicate-call-locator".into()),
+                &duplicate_call_argument,
+            ),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let diagnostic = products
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.control.call.locator_duplicate")
+        .expect("duplicate Call locator diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([
+            (Box::from("function_path"), function_path.0.clone()),
+            (Box::from("parameter_id"), parameter_id.0.clone()),
+            (Box::from("port"), duplicate_address.to_string().into()),
+        ])
+    );
+}
+
+#[test]
+fn production_diagnostics_emit_canonical_protocol_enum_facts() {
+    let protocol = structural_protocol("managed_role_mismatch", vec![], vec![]);
+    let issues = super::control::validate_structural_contract(
+        node_id(1),
+        StructuralNodeRole::FunctionEntry,
+        &protocol,
+        &BTreeMap::new(),
+    );
+    let managed_role = issues
+        .iter()
+        .find(|issue| {
+            issue.diagnostic.definition().code == "compiler.control.managed_role_mismatch"
+        })
+        .expect("managed-role mismatch");
+    let managed_role = managed_role
+        .diagnostic
+        .clone()
+        .into_node(DiagnosticLocation::Node(node_id(1)));
+    assert_eq!(
+        managed_role.arguments,
+        BTreeMap::from([
+            (Box::from("actual_role"), Box::from("none")),
+            (Box::from("expected_role"), Box::from("function_entry")),
+        ])
+    );
+
+    let mut scoped = test_protocol("function_scoped", vec![], vec![], vec![]);
+    scoped.scope = NodeScope::Function;
+    let registry = TestRegistry::new(vec![scoped]);
+    let scope_graph = graph_with_nodes(&[(2, "function_scoped")]);
+    let scope_compiler = GraphCompiler::new(&registry, &Resources);
+    let scope_result = scope_compiler
+        .compile_snapshot(
+            &scope_compiler.snapshot(
+                GraphResourcePath("events/canonical-facts".into()),
+                &scope_graph,
+            ),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let scope = scope_result
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.node.scope_mismatch")
+        .expect("scope mismatch");
+    assert_eq!(
+        scope.arguments,
+        BTreeMap::from([
+            (Box::from("actual_scope"), Box::from("function")),
+            (Box::from("expected_scope"), Box::from("event")),
+        ])
+    );
+
+    let source = test_protocol(
+        "kind_source",
+        vec![data_port(
+            "value",
+            PortDirection::Output,
+            TypeExpr::Concrete(type_id("core.int64")),
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let sink = test_protocol(
+        "kind_sink",
+        vec![effect_port("effect", PortDirection::Input)],
+        vec![],
+        vec![],
+    );
+    let registry = TestRegistry::new(vec![source, sink]);
+    let mut graph = graph_with_nodes(&[(3, "kind_source"), (4, "kind_sink")]);
+    connect(&mut graph, 301, 3, "value", 4, "effect");
+    let kind_result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let kind = kind_result
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.connection.kind_mismatch")
+        .expect("connection-kind mismatch");
+    assert_eq!(
+        kind.arguments,
+        BTreeMap::from([
+            (Box::from("source_kind"), Box::from("data")),
+            (Box::from("target_kind"), Box::from("effect")),
+        ])
+    );
+}
+
+#[test]
+fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
+    struct FunctionResources {
+        path: GraphResourcePath,
+        function: FunctionDocument,
+    }
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::new()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            (path == &self.path).then_some(&self.function)
+        }
+    }
+
+    let mut entry = structural_protocol(
+        "duplicate_function_entry",
+        vec![control_port("then", PortDirection::Output)],
+        vec![],
+    );
+    entry.managed_role = Some(ManagedNodeRole::FunctionEntry);
+    entry.scope = NodeScope::Function;
+    let entry_type = entry.type_id.clone();
+    let mut return_node = structural_protocol(
+        "single_function_return",
+        vec![control_port("enter", PortDirection::Input)],
+        vec![],
+    );
+    return_node.managed_role = Some(ManagedNodeRole::FunctionReturn);
+    return_node.scope = NodeScope::Function;
+    let return_type = return_node.type_id.clone();
+    let registry = TestRegistry::new(vec![entry, return_node])
+        .structural(&entry_type, StructuralNodeRole::FunctionEntry)
+        .structural(&return_type, StructuralNodeRole::FunctionReturn);
+    let path = GraphResourcePath("functions/duplicate-entry".into());
+    let resources = FunctionResources {
+        path: path.clone(),
+        function: FunctionDocument::new(FunctionSignature {
+            parameters: vec![],
+            return_type: None,
+        }),
+    };
+    let graph = graph_with_nodes(&[
+        (1, "duplicate_function_entry"),
+        (2, "duplicate_function_entry"),
+        (3, "single_function_return"),
+    ]);
+    let compiler = GraphCompiler::new(&registry, &resources);
+
+    let products = compiler
+        .compile_snapshot(
+            &compiler.snapshot(path, &graph),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap();
+
+    let diagnostic = products
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.function.abi.managed_role_invalid")
+        .expect("managed role count diagnostic");
+    assert_eq!(
+        diagnostic.arguments,
+        BTreeMap::from([
+            (Box::from("actual_count"), Box::from("2")),
+            (Box::from("expected_role"), Box::from("function_entry")),
+        ])
+    );
+    let singleton = products
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.node.managed_singleton")
+        .expect("managed singleton diagnostic");
+    assert_eq!(
+        singleton.arguments,
+        BTreeMap::from([(Box::from("managed_role"), Box::from("function_entry"))])
     );
 }
 

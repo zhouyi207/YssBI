@@ -1,5 +1,6 @@
+use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
 use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress, PortRef};
+use crate::node_system::document::{NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RelationalScalarType,
     RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField,
@@ -63,9 +64,8 @@ impl SchemaResolverSet {
 }
 
 pub(crate) struct SchemaAnalysisIssue {
-    pub code: &'static str,
-    pub location: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-    pub detail: String,
+    pub location: CompilerDiagnosticLocation,
+    pub diagnostic: CompilerDiagnostic,
 }
 
 struct SchemaNode<'a> {
@@ -235,9 +235,10 @@ impl<'a> SchemaAnalyzer<'a> {
     ) -> Option<SchemaFact> {
         let Some(resolver) = self.resolvers.get(resolver_id) else {
             self.issues.push(SchemaAnalysisIssue {
-                code: "compiler.schema.resolver_missing",
                 location: DiagnosticLocation::Port(address.clone()),
-                detail: resolver_id.to_string(),
+                diagnostic: CompilerDiagnostic::SchemaResolverMissing {
+                    resolver_id: resolver_id.to_string().into(),
+                },
             });
             return None;
         };
@@ -265,11 +266,12 @@ impl<'a> SchemaAnalyzer<'a> {
         };
         match resolver.resolve(&context) {
             Ok(schema) => Some(schema),
-            Err(error) => {
+            Err(_) => {
                 self.issues.push(SchemaAnalysisIssue {
-                    code: "compiler.schema.resolver_failed",
                     location: DiagnosticLocation::Port(address.clone()),
-                    detail: error.message.into_string(),
+                    diagnostic: CompilerDiagnostic::SchemaResolverFailed {
+                        resolver_id: resolver_id.to_string().into(),
+                    },
                 });
                 None
             }
@@ -373,14 +375,9 @@ impl<'a> SchemaAnalyzer<'a> {
         >(value.clone())
         {
             Ok(predicate) => predicate,
-            Err(error) => {
-                let code = filter_shape_error_code(value);
-                self.schema_issue_at_parameter(
-                    node_id,
-                    Some(predicate_key),
-                    code,
-                    error.to_string(),
-                );
+            Err(_) => {
+                let diagnostic = filter_shape_diagnostic(value, predicate_key);
+                self.schema_issue_at_parameter(node_id, Some(predicate_key), diagnostic);
                 return None;
             }
         };
@@ -392,8 +389,9 @@ impl<'a> SchemaAnalyzer<'a> {
             self.schema_issue_at_parameter(
                 node_id,
                 Some(predicate_key),
-                "compiler.relational.filter_column_missing",
-                predicate.column.into_string(),
+                CompilerDiagnostic::RelationalFilterColumnMissing {
+                    field_name: predicate.column.into(),
+                },
             );
             return None;
         };
@@ -401,8 +399,9 @@ impl<'a> SchemaAnalyzer<'a> {
             self.schema_issue_at_parameter(
                 node_id,
                 Some(predicate_key),
-                "compiler.relational.filter_operator_invalid",
-                field.name.0.to_string(),
+                CompilerDiagnostic::RelationalFilterOperatorInvalid {
+                    field_name: field.name.0.clone(),
+                },
             );
             return None;
         }
@@ -414,8 +413,9 @@ impl<'a> SchemaAnalyzer<'a> {
             self.schema_issue_at_parameter(
                 node_id,
                 Some(predicate_key),
-                "compiler.relational.filter_literal_type",
-                field.name.0.to_string(),
+                CompilerDiagnostic::RelationalFilterLiteralType {
+                    field_name: field.name.0.clone(),
+                },
             );
             return None;
         }
@@ -442,8 +442,7 @@ impl<'a> SchemaAnalyzer<'a> {
             self.schema_issue_at_parameter(
                 node_id,
                 parameter,
-                "compiler.schema.project_empty",
-                "project columns must not be empty".into(),
+                CompilerDiagnostic::SchemaProjectEmpty {},
             );
             return None;
         }
@@ -459,8 +458,9 @@ impl<'a> SchemaAnalyzer<'a> {
                 self.schema_issue_at_parameter(
                     node_id,
                     parameter,
-                    "compiler.schema.project_field_missing",
-                    column.0.to_string(),
+                    CompilerDiagnostic::SchemaProjectFieldMissing {
+                        field_name: column.0.clone(),
+                    },
                 );
                 valid = false;
             }
@@ -468,8 +468,9 @@ impl<'a> SchemaAnalyzer<'a> {
                 self.schema_issue_at_parameter(
                     node_id,
                     parameter,
-                    "compiler.schema.project_field_duplicate",
-                    column.0.to_string(),
+                    CompilerDiagnostic::SchemaProjectFieldDuplicate {
+                        field_name: column.0.clone(),
+                    },
                 );
                 valid = false;
             }
@@ -516,16 +517,18 @@ impl<'a> SchemaAnalyzer<'a> {
             if !available.contains(from) {
                 self.schema_issue(
                     node_id,
-                    "compiler.schema.rename_field_missing",
-                    from.to_owned(),
+                    CompilerDiagnostic::SchemaRenameFieldMissing {
+                        source_name: from.into(),
+                    },
                 );
                 valid = false;
             }
             if !seen_sources.insert(from) {
                 self.schema_issue(
                     node_id,
-                    "compiler.schema.rename_source_duplicate",
-                    from.to_owned(),
+                    CompilerDiagnostic::SchemaRenameSourceDuplicate {
+                        source_name: from.into(),
+                    },
                 );
                 valid = false;
             }
@@ -533,8 +536,10 @@ impl<'a> SchemaAnalyzer<'a> {
             {
                 self.schema_issue(
                     node_id,
-                    "compiler.schema.rename_target_conflict",
-                    to.to_owned(),
+                    CompilerDiagnostic::SchemaRenameTargetConflict {
+                        source_name: from.into(),
+                        target_name: to.into(),
+                    },
                 );
                 valid = false;
             }
@@ -565,37 +570,36 @@ impl<'a> SchemaAnalyzer<'a> {
         ))
     }
 
-    fn schema_issue(&mut self, node_id: NodeId, code: &'static str, detail: String) {
-        self.schema_issue_at_parameter(node_id, None, code, detail);
+    fn schema_issue(&mut self, node_id: NodeId, diagnostic: CompilerDiagnostic) {
+        self.schema_issue_at_parameter(node_id, None, diagnostic);
     }
 
     fn schema_issue_at_parameter(
         &mut self,
         node_id: NodeId,
         parameter: Option<&ParameterKey>,
-        code: &'static str,
-        detail: String,
+        diagnostic: CompilerDiagnostic,
     ) {
         self.issues.push(SchemaAnalysisIssue {
-            code,
             location: parameter.map_or(DiagnosticLocation::Node(node_id), |key| {
                 DiagnosticLocation::Parameter {
                     node_id,
                     key: key.clone(),
                 }
             }),
-            detail,
+            diagnostic,
         });
     }
 
-    fn invalid_parameter(&mut self, node_id: NodeId, key: &ParameterKey, detail: &str) {
+    fn invalid_parameter(&mut self, node_id: NodeId, key: &ParameterKey, _reason: &str) {
         self.issues.push(SchemaAnalysisIssue {
-            code: "compiler.schema.parameter_invalid",
             location: DiagnosticLocation::Parameter {
                 node_id,
                 key: key.clone(),
             },
-            detail: detail.into(),
+            diagnostic: CompilerDiagnostic::SchemaParameterInvalid {
+                parameter_key: key.to_string().into(),
+            },
         });
     }
 
@@ -644,31 +648,51 @@ fn filter_operator_supported(
     }
 }
 
-fn filter_shape_error_code(value: &serde_json::Value) -> &'static str {
+fn filter_shape_diagnostic(
+    value: &serde_json::Value,
+    parameter_key: &ParameterKey,
+) -> CompilerDiagnostic {
     let Some(object) = value.as_object() else {
-        return "compiler.relational.filter_literal_type";
+        return CompilerDiagnostic::RelationalFilterLiteralType {
+            field_name: parameter_key.to_string().into(),
+        };
     };
+    let field_name = object
+        .get("column")
+        .and_then(serde_json::Value::as_str)
+        .filter(|column| !column.is_empty() && column.trim() == *column)
+        .unwrap_or(parameter_key.as_str());
     if object
         .get("column")
         .and_then(serde_json::Value::as_str)
         .is_none_or(|column| column.is_empty() || column.trim() != column)
     {
-        return "compiler.relational.filter_column_missing";
+        return CompilerDiagnostic::RelationalFilterColumnMissing {
+            field_name: field_name.into(),
+        };
     }
     let operator = object.get("operator").and_then(serde_json::Value::as_str);
     match operator {
         Some("isNull" | "isNotNull") if object.contains_key("value") => {
-            "compiler.relational.filter_literal_forbidden"
+            CompilerDiagnostic::RelationalFilterLiteralForbidden {
+                field_name: field_name.into(),
+            }
         }
         Some(
             "equal" | "notEqual" | "lessThan" | "lessThanOrEqual" | "greaterThan"
             | "greaterThanOrEqual",
-        ) if !object.contains_key("value") => "compiler.relational.filter_literal_missing",
+        ) if !object.contains_key("value") => CompilerDiagnostic::RelationalFilterLiteralMissing {
+            field_name: field_name.into(),
+        },
         Some(
             "equal" | "notEqual" | "lessThan" | "lessThanOrEqual" | "greaterThan"
             | "greaterThanOrEqual" | "isNull" | "isNotNull",
-        ) => "compiler.relational.filter_literal_type",
-        _ => "compiler.relational.filter_operator_invalid",
+        ) => CompilerDiagnostic::RelationalFilterLiteralType {
+            field_name: field_name.into(),
+        },
+        _ => CompilerDiagnostic::RelationalFilterOperatorInvalid {
+            field_name: field_name.into(),
+        },
     }
 }
 
@@ -778,7 +802,10 @@ mod tests {
             let (mapping, issues) = resolve_builtin_rename(from, to);
             assert!(mapping.is_none());
             assert_eq!(issues.len(), 1);
-            assert_eq!(issues[0].code, "compiler.schema.parameter_invalid");
+            assert_eq!(
+                issues[0].diagnostic.definition().code,
+                "compiler.schema.parameter_invalid"
+            );
             assert!(matches!(
                 &issues[0].location,
                 DiagnosticLocation::Parameter { key: actual, .. } if actual.as_str() == key
@@ -927,7 +954,7 @@ mod tests {
             let (fact, issues) = filter_with(typed_input(), predicate);
             assert!(fact.is_none());
             assert_eq!(issues.len(), 1);
-            assert_eq!(issues[0].code, code);
+            assert_eq!(issues[0].diagnostic.definition().code, code);
             assert!(matches!(
                 &issues[0].location,
                 DiagnosticLocation::Parameter { key, .. } if key.as_str() == "predicate"
@@ -1012,13 +1039,18 @@ mod tests {
         let (_, _, issues) = analyzer.analyze();
 
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].code, "compiler.schema.resolver_missing");
-        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| issue.code.starts_with("compiler.relational.filter_"))
+        assert_eq!(
+            issues[0].diagnostic.definition().code,
+            "compiler.schema.resolver_missing"
         );
+        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
+        assert!(!issues.iter().any(|issue| {
+            issue
+                .diagnostic
+                .definition()
+                .code
+                .starts_with("compiler.relational.filter_")
+        }));
     }
 
     struct FailingConnectedSourceResolver;
@@ -1085,13 +1117,18 @@ mod tests {
         let (_, _, issues) = analyzer.analyze();
 
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].code, "compiler.schema.resolver_failed");
-        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
-        assert!(
-            !issues
-                .iter()
-                .any(|issue| issue.code.starts_with("compiler.relational.filter_"))
+        assert_eq!(
+            issues[0].diagnostic.definition().code,
+            "compiler.schema.resolver_failed"
         );
+        assert_eq!(issues[0].location, DiagnosticLocation::Port(source_output));
+        assert!(!issues.iter().any(|issue| {
+            issue
+                .diagnostic
+                .definition()
+                .code
+                .starts_with("compiler.relational.filter_")
+        }));
     }
 
     #[test]

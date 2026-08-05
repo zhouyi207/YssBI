@@ -520,6 +520,13 @@ pub(crate) fn parse_graph_resource_document(
         )));
     }
     validate_function_shape(path, document.kind, document.function.as_ref())?;
+    document
+        .document
+        .validate()
+        .map_err(|source| ProjectError::InvalidGraphDocument {
+            path: path.to_path_buf(),
+            source,
+        })?;
     Ok(document)
 }
 
@@ -1060,8 +1067,9 @@ pub fn discover_databases_from_root(
 mod tests {
     use super::*;
     use crate::node_system::document::{
-        DocumentConnection, DocumentNode, GraphDocument as NodeGraphDocument, NodeId, NodePosition,
-        ParameterValues, PortAddress,
+        ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+        EffectiveInputBinding, FunctionParameterId, GraphDocument as NodeGraphDocument, InputState,
+        NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
     use crate::node_system::protocol::{NodeTypeId, PortKey};
     use crate::project::GraphResourceDocument;
@@ -1151,9 +1159,9 @@ mod tests {
         let root = temp_project_dir();
         let graph_path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
         let mut project = ProjectData::new();
-        project
-            .graphs
-            .insert(graph_path.clone(), normalized_graph());
+        let mut graph = normalized_graph();
+        graph.name = "Invalid".into();
+        project.graphs.insert(graph_path.clone(), graph);
         initialize_project_directory(&project, root.as_path()).unwrap();
 
         let graph_file = root.join(graph_path.as_str());
@@ -1175,6 +1183,15 @@ mod tests {
 
         let error =
             load_project_graph_from_file(root.to_string_lossy().as_ref(), &graph_path).unwrap_err();
+        assert!(matches!(
+            &error,
+            ProjectError::InvalidGraphDocument { path, source }
+                if path == &graph_file
+                    && source
+                        == &crate::node_system::document::DocumentError::EndpointNodeNotFound(
+                            missing_node_id,
+                        )
+        ));
         let source = std::error::Error::source(&error).and_then(|source| {
             source.downcast_ref::<crate::node_system::document::DocumentError>()
         });
@@ -1241,6 +1258,301 @@ mod tests {
         let error =
             load_project_graph_from_file(root.to_string_lossy().as_ref(), &graph_path).unwrap_err();
         assert!(error.to_string().contains("unsupported schema version 1"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn production_graph_io_preserves_input_precedence_and_connection_order() {
+        let root = temp_project_dir();
+        let graph_path = GraphResourcePath::new("events/Precedence.yssbi-event").unwrap();
+        let first_source = NodeId::from_uuid(uuid::Uuid::from_u128(0x301));
+        let second_source = NodeId::from_uuid(uuid::Uuid::from_u128(0x302));
+        let target = NodeId::from_uuid(uuid::Uuid::from_u128(0x303));
+        let later_connection = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x304));
+        let earlier_connection = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x305));
+        let input = PortAddress::declared(target, PortKey::new("value").unwrap());
+        let node = |id| DocumentNode {
+            id,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut document = NodeGraphDocument::default();
+        for id in [first_source, second_source, target] {
+            document.nodes.insert(id, node(id));
+        }
+        document.input_states.insert(
+            input.clone(),
+            InputState {
+                literal_override: Some(serde_json::json!(41)),
+            },
+        );
+        document.connections.insert(
+            later_connection,
+            DocumentConnection {
+                id: later_connection,
+                output: PortAddress::declared(first_source, PortKey::new("value").unwrap()),
+                input: input.clone(),
+                order: Some(OrderKey("rank-b".into())),
+            },
+        );
+        document.connections.insert(
+            earlier_connection,
+            DocumentConnection {
+                id: earlier_connection,
+                output: PortAddress::declared(second_source, PortKey::new("value").unwrap()),
+                input: input.clone(),
+                order: Some(OrderKey("rank-a".into())),
+            },
+        );
+        let graph = GraphResourceDocument {
+            name: "Precedence".into(),
+            kind: GraphDocumentKind::Event,
+            document,
+            function: None,
+        };
+
+        assert_eq!(
+            graph.document.effective_input_binding(&input, None),
+            EffectiveInputBinding::Connections(vec![earlier_connection, later_connection])
+        );
+        assert_eq!(
+            graph.document.input_states.get(&input),
+            Some(&InputState {
+                literal_override: Some(serde_json::json!(41)),
+            })
+        );
+
+        let mut project = ProjectData::new();
+        project.graphs.insert(graph_path.clone(), graph);
+        initialize_project_directory(&project, root.as_path()).unwrap();
+        let mut loaded =
+            load_project_graph_from_file(root.to_string_lossy().as_ref(), &graph_path).unwrap();
+
+        assert_eq!(
+            loaded.document.effective_input_binding(&input, None),
+            EffectiveInputBinding::Connections(vec![earlier_connection, later_connection])
+        );
+        assert_eq!(
+            loaded.document.connections[&earlier_connection].order,
+            Some(OrderKey("rank-a".into()))
+        );
+        assert_eq!(
+            loaded.document.connections[&later_connection].order,
+            Some(OrderKey("rank-b".into()))
+        );
+        assert_eq!(
+            loaded.document.input_states.get(&input),
+            Some(&InputState {
+                literal_override: Some(serde_json::json!(41)),
+            })
+        );
+
+        loaded.document.disconnect(earlier_connection).unwrap();
+        loaded.document.disconnect(later_connection).unwrap();
+        assert_eq!(
+            loaded.document.effective_input_binding(&input, None),
+            EffectiveInputBinding::Literal(serde_json::json!(41))
+        );
+
+        loaded.document.set_literal(input.clone(), None).unwrap();
+        assert_eq!(
+            loaded
+                .document
+                .effective_input_binding(&input, Some(serde_json::json!(7))),
+            EffectiveInputBinding::ProtocolDefault(serde_json::json!(7))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn reject_unstable_metadata_keys(value: &serde_json::Value) {
+        const FORBIDDEN_KEYS: &[&str] = &[
+            "displayName",
+            "displayLabel",
+            "categoryTitle",
+            "localizedLabel",
+            "projection",
+            "projectionBasis",
+            "sourceRevision",
+            "registryFingerprint",
+            "registrySnapshot",
+            "snapshotHandle",
+            "resourceVersions",
+            "compilerValueRef",
+            "planValueSource",
+        ];
+
+        match value {
+            serde_json::Value::Object(entries) => {
+                for (key, child) in entries {
+                    assert!(
+                        !FORBIDDEN_KEYS.contains(&key.as_str()),
+                        "persisted graph contains unstable metadata key '{key}'"
+                    );
+                    reject_unstable_metadata_keys(child);
+                }
+            }
+            serde_json::Value::Array(entries) => {
+                for child in entries {
+                    reject_unstable_metadata_keys(child);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn persisted_graph_json_contains_only_stable_document_metadata() {
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x401));
+        let port_instance_id = PortInstanceId::from_uuid(uuid::Uuid::from_u128(0x402));
+        let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x403));
+        let node_type = NodeTypeId::new("yssbi.constant.int64").unwrap();
+        let dynamic_address = PortAddress::instance(
+            node_id,
+            PortKey::new("dynamic_value").unwrap(),
+            port_instance_id,
+        );
+        let locator = DynamicMemberLocator::FunctionParameter {
+            function: crate::node_system::document::GraphResourcePath(
+                "functions/stable.yssbi-function".into(),
+            ),
+            parameter: FunctionParameterId("stable-parameter".into()),
+        };
+        let mut document = NodeGraphDocument::default();
+        document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: node_type.clone(),
+                position: NodePosition { x: 1.0, y: 2.0 },
+                parameters: ParameterValues::new(),
+                user_label: Some("User-authored label".into()),
+            },
+        );
+        document.port_bindings.insert(
+            dynamic_address.clone(),
+            DynamicPortBinding::Resolved {
+                origin: locator.clone(),
+                order: OrderKey("stable-order".into()),
+            },
+        );
+        document.connections.insert(
+            connection_id,
+            DocumentConnection {
+                id: connection_id,
+                output: PortAddress::declared(node_id, PortKey::new("value").unwrap()),
+                input: dynamic_address,
+                order: Some(OrderKey("connection-order".into())),
+            },
+        );
+        let graph = GraphResourceDocument {
+            name: "Stable".into(),
+            kind: GraphDocumentKind::Event,
+            document,
+            function: None,
+        };
+        let variable_id = VariableId::nil();
+        let local_variables = HashMap::from([(
+            variable_id,
+            VariableInstance {
+                id: variable_id,
+                name: "Stable local".into(),
+                data_type: crate::graph::value::DataType::Int64,
+                data_value: crate::graph::value::DataValue::Int64(7),
+                tabular: None,
+                description: String::new(),
+                scope: VariableScope::Event {
+                    event_path: "events/Stable.yssbi-event".into(),
+                },
+                tags: Vec::new(),
+            },
+        )]);
+
+        let first = serialize_graph_resource_document(&graph, local_variables.clone()).unwrap();
+        let second = serialize_graph_resource_document(&graph, local_variables).unwrap();
+        assert_eq!(first, second);
+
+        let value: serde_json::Value = serde_json::from_slice(&first).unwrap();
+        let persisted_node = &value["document"]["nodes"][node_id.to_string()];
+        assert_eq!(persisted_node["id"], serde_json::json!(node_id.to_string()));
+        assert_eq!(
+            persisted_node["node_type"],
+            serde_json::json!(node_type.as_str())
+        );
+        assert_eq!(
+            persisted_node["user_label"],
+            serde_json::json!("User-authored label")
+        );
+
+        let persisted_binding = &value["document"]["port_bindings"][0];
+        assert_eq!(
+            persisted_binding[0],
+            serde_json::json!({
+                "node_id": node_id.to_string(),
+                "port": {
+                    "kind": "instance",
+                    "template": "dynamic_value",
+                    "instance_id": port_instance_id.to_string(),
+                },
+            })
+        );
+        assert_eq!(
+            persisted_binding[1],
+            serde_json::json!({
+                "kind": "resolved",
+                "origin": {
+                    "kind": "function_parameter",
+                    "function": "functions/stable.yssbi-function",
+                    "parameter": "stable-parameter",
+                },
+                "order": "stable-order",
+            })
+        );
+
+        let persisted_connection = &value["document"]["connections"][connection_id.to_string()];
+        assert_eq!(
+            persisted_connection["id"],
+            serde_json::json!(connection_id.to_string())
+        );
+        assert_eq!(
+            persisted_connection["input"],
+            serde_json::json!({
+                "node_id": node_id.to_string(),
+                "port": {
+                    "kind": "instance",
+                    "template": "dynamic_value",
+                    "instance_id": port_instance_id.to_string(),
+                },
+            })
+        );
+        reject_unstable_metadata_keys(&value);
+    }
+
+    #[test]
+    fn production_graph_io_loads_unknown_node_types_for_compiler_diagnostics() {
+        let root = temp_project_dir();
+        let graph_path = GraphResourcePath::new("events/Unknown.yssbi-event").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x501));
+        let mut graph = GraphResourceDocument::new("Unknown", GraphDocumentKind::Event);
+        graph.document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: NodeTypeId::new("yssbi.test.missing").unwrap(),
+                position: NodePosition { x: 3.0, y: 4.0 },
+                parameters: ParameterValues::new(),
+                user_label: Some("Preserved unknown node".into()),
+            },
+        );
+        let mut project = ProjectData::new();
+        project.graphs.insert(graph_path.clone(), graph.clone());
+        initialize_project_directory(&project, root.as_path()).unwrap();
+
+        let loaded =
+            load_project_graph_from_file(root.to_string_lossy().as_ref(), &graph_path).unwrap();
+
+        assert_eq!(loaded, graph);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

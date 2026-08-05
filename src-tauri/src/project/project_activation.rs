@@ -86,7 +86,15 @@ impl PreparedProjectActivation {
         mut data: ProjectData,
         authority_basis: Option<PreparedAuthorityBasis>,
         requires_final_rebuild: bool,
-    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
+    ) -> Result<Self, ProjectFilesystemError> {
+        for (path, resource) in &data.graphs {
+            resource
+                .validate()
+                .map_err(|source| ProjectFilesystemError::InvalidGraphDocument {
+                    path: path.clone(),
+                    source,
+                })?;
+        }
         let mut store = ProjectStore::try_new()?;
         for (id, declaration) in &data.databases {
             let instance = if matches!(declaration.engine, DatabaseEngine::DuckDb { .. }) {
@@ -151,8 +159,7 @@ impl ProjectState {
         path: Option<&Path>,
     ) -> Result<PreparedProjectActivation, ProjectFilesystemError> {
         let Some(path) = path else {
-            return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false)
-                .map_err(Into::into);
+            return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false);
         };
         let root = NormalizedProjectRoot::from_project_path(path)?;
         let lease = self.filesystem().acquire(root.clone())?;
@@ -293,6 +300,12 @@ mod tests {
             Ok(_) => panic!("structurally invalid graph data was prepared"),
             Err(error) => error,
         };
+        assert!(matches!(
+            &error,
+            crate::project::ProjectFilesystemError::InvalidGraphDocument { path, source }
+                if path.as_str() == "events/Invalid.yssbi-event"
+                    && source == &DocumentError::EndpointNodeNotFound(missing_node_id)
+        ));
         let source = std::error::Error::source(&error)
             .and_then(|source| source.downcast_ref::<DocumentError>());
         assert_eq!(

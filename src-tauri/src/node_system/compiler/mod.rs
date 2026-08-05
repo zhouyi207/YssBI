@@ -3,6 +3,7 @@
 mod control;
 mod coordinator;
 mod dependency;
+mod diagnostics;
 pub mod dynamic_interface;
 mod lowering;
 mod pipeline;
@@ -16,6 +17,12 @@ pub use coordinator::{
     CompilationSlot, CompilationTask, CompileCancellationToken, CompileCancelled,
     CompileCoordinator, CompileProducts, PublishOutcome, PublishReport, PublishedExecutionPlan,
     ScheduleOutcome, SelectedExecutionPlan, compilation_basis,
+};
+pub use diagnostics::CompilerDiagnosticDefinitionError;
+pub(crate) use diagnostics::{
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnostic, CompilerDiagnosticLocation,
+    CompilerNodeDiagnostic, compare_diagnostics, managed_node_role_name, node_scope_name,
+    port_kind_name, validate_compiler_diagnostic_definitions,
 };
 pub use dynamic_interface::{
     InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,

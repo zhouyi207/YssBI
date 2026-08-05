@@ -1549,10 +1549,3 @@ impl RevisionedGraphStore {
         })
     }
 }
-
-pub fn apply_mutation(
-    store: &mut RevisionedGraphStore,
-    request: MutationRequest<GraphMutation>,
-) -> Result<GraphDeltaEvent<GraphDocumentPatch>, MutationConflict> {
-    store.apply_mutation(request)
-}

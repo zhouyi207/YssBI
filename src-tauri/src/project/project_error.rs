@@ -1,3 +1,4 @@
+use crate::node_system::document::DocumentError;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -7,6 +8,12 @@ pub enum ProjectFilesystemError {
     BuiltinInitialization(#[from] crate::node_system::catalog::BuiltinInitializationError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
+    #[error("graph resource '{path}' is structurally invalid")]
+    InvalidGraphDocument {
+        path: super::GraphResourcePath,
+        #[source]
+        source: DocumentError,
+    },
     #[error("stale project lifecycle: {message}")]
     StaleProjectLifecycle { message: String },
     #[error("resource revision conflict: {message}")]
@@ -35,6 +42,7 @@ impl ProjectFilesystemError {
         match self {
             Self::BuiltinInitialization(_) => "builtin_initialization_failed",
             Self::InvalidRoot { .. } => "invalid_project_root",
+            Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
@@ -75,4 +83,11 @@ pub enum ProjectError {
 
     #[error("invalid project format: {0}")]
     InvalidProjectFormat(String),
+
+    #[error("graph file '{}' is structurally invalid", path.display())]
+    InvalidGraphDocument {
+        path: PathBuf,
+        #[source]
+        source: DocumentError,
+    },
 }

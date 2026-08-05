@@ -51,6 +51,7 @@ impl From<ProjectError> for AppError {
         let code = match error {
             ProjectError::FileNotFound(_) => "project_not_found",
             ProjectError::InvalidProjectFormat(_) => "invalid_project_format",
+            ProjectError::InvalidGraphDocument { .. } => "invalid_graph_document",
             ProjectError::Serialize(_) => "project_serialize_failed",
             ProjectError::Deserialize(_) => "project_deserialize_failed",
             ProjectError::Io(_) => "project_io_failed",

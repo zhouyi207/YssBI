@@ -1,3 +1,4 @@
+use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
 use crate::node_system::analysis::DiagnosticLocation;
 use crate::node_system::document::{ConnectionId, NodeId, PortAddress};
 use crate::node_system::protocol::{
@@ -7,9 +8,20 @@ use crate::node_system::protocol::{
 use std::collections::{BTreeMap, VecDeque};
 
 pub(crate) struct TypeAnalysisIssue {
-    pub code: &'static str,
-    pub location: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-    pub detail: String,
+    pub location: CompilerDiagnosticLocation,
+    pub diagnostic: CompilerDiagnostic,
+}
+
+struct TypeMismatch {
+    expected_type: String,
+    actual_type: String,
+}
+
+fn type_mismatch(expected_type: impl Into<String>, actual_type: impl Into<String>) -> TypeMismatch {
+    TypeMismatch {
+        expected_type: expected_type.into(),
+        actual_type: actual_type.into(),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -186,7 +198,7 @@ impl TypeConstraintGraph {
                     solver.one_of(subject, alternatives)
                 }
                 ConstraintKind::Implements(_, _) | ConstraintKind::ElementOf(_, _) => {
-                    Err("internal type predicate scheduling error".into())
+                    unreachable!("type predicates are deferred")
                 }
             };
             push_issue(&mut issues, constraint.location, result);
@@ -419,7 +431,7 @@ impl Solver {
         }
     }
 
-    fn equal(&mut self, left: TypeValue, right: TypeValue) -> Result<(), String> {
+    fn equal(&mut self, left: TypeValue, right: TypeValue) -> Result<(), TypeMismatch> {
         let left = self.resolve(left);
         let right = self.resolve(right);
         match (left, right) {
@@ -452,15 +464,11 @@ impl Solver {
                 }
                 Ok(())
             }
-            (left, right) => Err(format!(
-                "{} is not equal to {}",
-                display_type(&left),
-                display_type(&right)
-            )),
+            (left, right) => Err(type_mismatch(display_type(&right), display_type(&left))),
         }
     }
 
-    fn assignable(&mut self, source: TypeValue, target: TypeValue) -> Result<(), String> {
+    fn assignable(&mut self, source: TypeValue, target: TypeValue) -> Result<(), TypeMismatch> {
         let source = self.resolve(source);
         let target = self.resolve(target);
         match (source, target) {
@@ -496,6 +504,11 @@ impl Solver {
                 Ok(())
             }
             (source, TypeValue::Union(targets)) => {
+                let expected_type = targets
+                    .iter()
+                    .map(display_type)
+                    .collect::<Vec<_>>()
+                    .join(" | ");
                 for target in targets {
                     let mut trial = self.clone();
                     if trial.assignable(source.clone(), target).is_ok() {
@@ -503,23 +516,20 @@ impl Solver {
                         return Ok(());
                     }
                 }
-                Err(format!(
-                    "{} matches no union alternative",
-                    display_type(&source)
-                ))
+                Err(type_mismatch(expected_type, display_type(&source)))
             }
-            (source, target) => Err(format!(
-                "{} is not assignable to {}",
-                display_type(&source),
-                display_type(&target)
-            )),
+            (source, target) => Err(type_mismatch(display_type(&target), display_type(&source))),
         }
     }
 
-    fn one_of(&mut self, subject: TypeValue, alternatives: Vec<TypeValue>) -> Result<(), String> {
+    fn one_of(
+        &mut self,
+        subject: TypeValue,
+        alternatives: Vec<TypeValue>,
+    ) -> Result<(), TypeMismatch> {
         let subject = self.resolve(subject);
         if alternatives.is_empty() {
-            return Err("one-of constraint has no alternatives".into());
+            return Err(type_mismatch("one_of_alternative", "none"));
         }
         if alternatives.len() == 1 {
             return self.equal(subject, alternatives.into_iter().next().unwrap());
@@ -534,10 +544,7 @@ impl Solver {
                 return Ok(());
             }
         }
-        Err(format!(
-            "{} matches no one-of alternative",
-            display_type(&subject)
-        ))
+        Err(type_mismatch("one_of_alternative", display_type(&subject)))
     }
 
     fn implements(
@@ -545,15 +552,17 @@ impl Solver {
         value: TypeValue,
         class: &TypeClassId,
         environment: &dyn TypeEnvironment,
-    ) -> Result<(), String> {
+    ) -> Result<(), TypeMismatch> {
         let value = self.resolve(value);
         match value {
             TypeValue::Unknown | TypeValue::Variable(_) => Ok(()),
             TypeValue::Concrete(value_type) => {
                 match environment.concrete_implements(&value_type, class) {
                     Some(true) => Ok(()),
-                    Some(false) => Err(format!("{value_type} does not implement {class}")),
-                    None => Err(format!("unknown concrete type '{value_type}'")),
+                    Some(false) | None => Err(type_mismatch(
+                        format!("class:{class}"),
+                        value_type.to_string(),
+                    )),
                 }
             }
             TypeValue::Applied {
@@ -563,12 +572,12 @@ impl Solver {
                 validate_constructor(environment, &constructor, arguments.len())?;
                 match environment.applied_implements(&constructor, class) {
                     Some(true) => Ok(()),
-                    Some(false) => Err(format!(
-                        "{} does not implement {class}",
+                    Some(false) => Err(type_mismatch(
+                        format!("class:{class}"),
                         display_type(&TypeValue::Applied {
                             constructor,
                             arguments,
-                        })
+                        }),
                     )),
                     None => Ok(()),
                 }
@@ -587,7 +596,7 @@ impl Solver {
         element: TypeValue,
         collection: TypeValue,
         environment: &dyn TypeEnvironment,
-    ) -> Result<(), String> {
+    ) -> Result<(), TypeMismatch> {
         let element = self.resolve(element);
         let collection = self.resolve(collection);
         if let TypeValue::Union(elements) = element {
@@ -616,18 +625,16 @@ impl Solver {
                         return Ok(());
                     }
                 }
-                Err(format!(
-                    "{} is not an element of any union alternative",
-                    display_type(&element)
-                ))
+                Err(type_mismatch("collection_element", display_type(&element)))
             }
-            TypeValue::Concrete(value_type) => Err(format!(
-                "concrete type '{value_type}' has no registered element types"
+            TypeValue::Concrete(value_type) => Err(type_mismatch(
+                format!("elements_of:{value_type}"),
+                display_type(&element),
             )),
         }
     }
 
-    fn union(&mut self, left: usize, right: usize) -> Result<(), String> {
+    fn union(&mut self, left: usize, right: usize) -> Result<(), TypeMismatch> {
         let mut left = self.root(left);
         let mut right = self.root(right);
         if left == right {
@@ -656,14 +663,14 @@ impl Solver {
         }
     }
 
-    fn bind(&mut self, variable: usize, value: TypeValue) -> Result<(), String> {
+    fn bind(&mut self, variable: usize, value: TypeValue) -> Result<(), TypeMismatch> {
         let root = self.root(variable);
         let value = self.resolve(value);
         if value == TypeValue::Variable(root) {
             return Ok(());
         }
         if occurs(root, &value) {
-            return Err("recursive type binding".into());
+            return Err(type_mismatch("non_recursive_type", display_type(&value)));
         }
         if let Some(existing) = self.bindings[root].clone() {
             self.equal(existing, value)
@@ -714,14 +721,16 @@ impl Solver {
 
 fn push_issue(
     issues: &mut Vec<TypeAnalysisIssue>,
-    location: DiagnosticLocation<NodeId, PortAddress, ConnectionId, Box<str>>,
-    result: Result<(), String>,
+    location: CompilerDiagnosticLocation,
+    result: Result<(), TypeMismatch>,
 ) {
-    if let Err(detail) = result {
+    if let Err(mismatch) = result {
         issues.push(TypeAnalysisIssue {
-            code: "compiler.type.incompatible",
             location,
-            detail,
+            diagnostic: CompilerDiagnostic::TypeIncompatible {
+                expected_type: mismatch.expected_type.into(),
+                actual_type: mismatch.actual_type.into(),
+            },
         });
     }
 }
@@ -730,13 +739,17 @@ fn validate_constructor(
     environment: &dyn TypeEnvironment,
     constructor: &TypeConstructorId,
     actual_arity: usize,
-) -> Result<(), String> {
+) -> Result<(), TypeMismatch> {
     match environment.constructor_arity(constructor) {
         Some(expected_arity) if expected_arity == actual_arity => Ok(()),
-        Some(expected_arity) => Err(format!(
-            "type constructor '{constructor}' expects {expected_arity} arguments, found {actual_arity}"
+        Some(expected_arity) => Err(type_mismatch(
+            format!("{constructor}/{expected_arity}"),
+            format!("{constructor}/{actual_arity}"),
         )),
-        None => Err(format!("unknown type constructor '{constructor}'")),
+        None => Err(type_mismatch(
+            "registered_type_constructor",
+            constructor.to_string(),
+        )),
     }
 }
 

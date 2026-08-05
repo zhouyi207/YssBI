@@ -5,7 +5,8 @@ use crate::node_system::analysis::{
     EditorGraphProjectionDto, LocalizationBundle, NodeDiagnostic,
 };
 use crate::node_system::compiler::{
-    CompileCancellationToken, GraphCompiler, LoweredKernel, LoweringContext, ResourceSnapshot,
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompileCancellationToken, CompilerDiagnosticDefinitionError,
+    GraphCompiler, LoweredKernel, LoweringContext, ResourceSnapshot,
     build_builtin_interface_resolvers,
 };
 use crate::node_system::document::{
@@ -916,6 +917,60 @@ fn builtin_assembly_preserves_parameter_decimal_and_default_sources() {
 }
 
 #[test]
+fn every_production_compiler_definition_is_required_by_builtin_i18n() {
+    let (provider, _, _) = builtin_bundle_parts_for_test().unwrap();
+    let missing = COMPILER_DIAGNOSTIC_DEFINITIONS
+        .iter()
+        .filter(|definition| {
+            let message_key = I18nKey::new(definition.message_key).unwrap();
+            !provider.i18n.keys.contains(&message_key)
+        })
+        .map(|definition| definition.message_key)
+        .collect::<Vec<_>>();
+
+    assert!(
+        missing.is_empty(),
+        "compiler diagnostic definitions missing from built-in i18n requirements:\n{}",
+        missing.join("\n")
+    );
+}
+
+#[test]
+fn builtin_assembly_preserves_diagnostic_definition_error_source() {
+    let source = CompilerDiagnosticDefinitionError::DuplicateCode {
+        code: "compiler.test.duplicate".into(),
+    };
+    let error = BuiltinAssemblyError::DiagnosticDefinitions {
+        source: source.clone(),
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "built-in compiler diagnostic definitions are invalid: duplicate diagnostic code: compiler.test.duplicate"
+    );
+    assert_eq!(
+        error
+            .source()
+            .and_then(|source| source.downcast_ref::<CompilerDiagnosticDefinitionError>()),
+        Some(&source)
+    );
+}
+
+#[test]
+fn builtin_startup_rejects_missing_compiler_default_template() {
+    let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
+    let missing = I18nKey::new("diagnostics.compiler.node.scope_mismatch").unwrap();
+    catalog.remove_message_for_test("en-US", &missing);
+
+    assert!(matches!(
+        validate_builtin_bundle_for_test(provider, catalog, alias_keys),
+        Err(BuiltinInitializationError::Localization(
+            I18nBundleValidationError::MissingDefaultLocale { keys }
+        )) if keys.iter().any(|key| key.as_ref() == missing.as_str())
+    ));
+}
+
+#[test]
 fn builtin_startup_rejects_missing_default_locale_key() {
     let (provider, mut catalog, alias_keys) = builtin_bundle_parts_for_test().unwrap();
     let missing = provider.i18n.keys.iter().next().unwrap().clone();
@@ -981,24 +1036,54 @@ fn builtin_startup_returns_one_validated_registry_and_catalog_bundle() {
 fn compiler_diagnostics_render_in_english_and_chinese() {
     let catalog = build_builtin_node_system().unwrap().catalog;
     let key = I18nKey::new("diagnostics.compiler.type.incompatible").unwrap();
-    let arguments = DiagnosticArguments::from([(
-        Box::<str>::from("detail"),
-        Box::<str>::from("left and right differ"),
-    )]);
+    let arguments = DiagnosticArguments::from([
+        (
+            Box::<str>::from("actual_type"),
+            Box::<str>::from("core.string"),
+        ),
+        (
+            Box::<str>::from("expected_type"),
+            Box::<str>::from("core.integer"),
+        ),
+    ]);
 
     assert_eq!(
         catalog
             .localization("en-US")
             .text(&key, &arguments)
             .as_ref(),
-        "Compiler diagnostic: left and right differ"
+        "Type core.string is incompatible with core.integer."
     );
     assert_eq!(
         catalog
             .localization("zh-CN")
             .text(&key, &arguments)
             .as_ref(),
-        "编译诊断：left and right differ"
+        "类型 core.string 与 core.integer 不兼容。"
+    );
+}
+
+#[test]
+fn diagnostic_rendering_does_not_rewrite_inserted_argument_placeholders() {
+    let catalog = build_builtin_node_system().unwrap().catalog;
+    let key = I18nKey::new("diagnostics.compiler.type.incompatible").unwrap();
+    let arguments = DiagnosticArguments::from([
+        (
+            Box::<str>::from("actual_type"),
+            Box::<str>::from("literal {expected_type}"),
+        ),
+        (
+            Box::<str>::from("expected_type"),
+            Box::<str>::from("core.integer"),
+        ),
+    ]);
+
+    assert_eq!(
+        catalog
+            .localization("en-US")
+            .text(&key, &arguments)
+            .as_ref(),
+        "Type literal {expected_type} is incompatible with core.integer."
     );
 }
 
@@ -1426,6 +1511,67 @@ fn editor_locale_changes_only_display_not_identity_or_address() {
             .iter()
             .map(|port| (&port.address, &port.template_key))
             .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn diagnostic_projection_changes_only_localized_message() {
+    let (mut document, registry, catalog) = editor_fixture();
+    document.nodes.values_mut().next().unwrap().node_type =
+        NodeTypeId::new("yssbi.test.unknown").unwrap();
+    let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
+        .compile(&document)
+        .analysis;
+    let snapshot_before = serde_json::to_vec(&analysis).unwrap();
+
+    let en = EditorGraphProjectionDto::from_sources(
+        "functions/main",
+        &analysis,
+        &document,
+        &registry,
+        &catalog.localization("en-US"),
+    )
+    .unwrap();
+    let zh = EditorGraphProjectionDto::from_sources(
+        "functions/main",
+        &analysis,
+        &document,
+        &registry,
+        &catalog.localization("zh-CN"),
+    )
+    .unwrap();
+
+    assert_eq!(snapshot_before, serde_json::to_vec(&analysis).unwrap());
+    assert_eq!(analysis.diagnostics.len(), 1);
+    assert_eq!(en.diagnostics.len(), 1);
+    assert_eq!(zh.diagnostics.len(), 1);
+
+    let en_diagnostic = &en.diagnostics[0];
+    let zh_diagnostic = &zh.diagnostics[0];
+    assert_eq!(en_diagnostic.code.as_ref(), "compiler.node.unknown");
+    assert_eq!(en_diagnostic.code, zh_diagnostic.code);
+    assert_eq!(en_diagnostic.severity, zh_diagnostic.severity);
+    assert_eq!(en_diagnostic.blocking, zh_diagnostic.blocking);
+    assert_eq!(en_diagnostic.location, zh_diagnostic.location);
+    assert_eq!(en_diagnostic.related, zh_diagnostic.related);
+    assert_ne!(en_diagnostic.message, zh_diagnostic.message);
+    assert_eq!(
+        en_diagnostic.message.as_ref(),
+        "Node type yssbi.test.unknown is unknown."
+    );
+    assert_eq!(
+        zh_diagnostic.message.as_ref(),
+        "节点类型 yssbi.test.unknown 未知。"
+    );
+
+    let snapshot_json = std::str::from_utf8(&snapshot_before).unwrap();
+    assert!(!snapshot_json.contains(en_diagnostic.message.as_ref()));
+    assert!(!snapshot_json.contains(zh_diagnostic.message.as_ref()));
+    assert!(
+        analysis
+            .diagnostics
+            .iter()
+            .all(|diagnostic| !diagnostic.arguments.contains_key("detail"))
     );
 }
 

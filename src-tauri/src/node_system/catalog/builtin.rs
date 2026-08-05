@@ -1,8 +1,9 @@
 use super::localization::{Aliases, BuiltinCatalog, Message, Text};
 use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::node_system::compiler::{
-    LoweredKernel, LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
-    builtin_function_interface_resolver_ids,
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError, LoweredKernel, LoweredNode,
+    LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    builtin_function_interface_resolver_ids, validate_compiler_diagnostic_definitions,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
@@ -26,6 +27,9 @@ pub enum BuiltinInitializationError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinAssemblyError {
+    DiagnosticDefinitions {
+        source: CompilerDiagnosticDefinitionError,
+    },
     InvalidSemanticId {
         value: Box<str>,
         source: InvalidSemanticId,
@@ -74,6 +78,10 @@ impl std::error::Error for BuiltinInitializationError {
 impl std::fmt::Display for BuiltinAssemblyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::DiagnosticDefinitions { source } => write!(
+                formatter,
+                "built-in compiler diagnostic definitions are invalid: {source}",
+            ),
             Self::InvalidSemanticId { value, source } => {
                 write!(
                     formatter,
@@ -110,6 +118,7 @@ impl std::fmt::Display for BuiltinAssemblyError {
 impl std::error::Error for BuiltinAssemblyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::DiagnosticDefinitions { source } => Some(source),
             Self::InvalidSemanticId { source, .. } => Some(source),
             Self::InvalidProtocol { source, .. } => Some(source),
             Self::InvalidParameterSchema { source, .. } => Some(source),
@@ -244,91 +253,6 @@ impl ProviderFragment {
         Ok(self)
     }
 }
-
-const COMPILER_DIAGNOSTIC_CODES: &[&str] = &[
-    "compiler.connection.input_direction",
-    "compiler.connection.kind_mismatch",
-    "compiler.connection.limit",
-    "compiler.connection.order_forbidden",
-    "compiler.connection.order_required",
-    "compiler.connection.output_direction",
-    "compiler.control.ambiguous_output",
-    "compiler.control.binding_invalid",
-    "compiler.control.binding_port_missing",
-    "compiler.control.binding_required",
-    "compiler.control.call.resource_parameter_missing",
-    "compiler.control.call.target_invalid",
-    "compiler.control.control_port_required",
-    "compiler.control.cycle",
-    "compiler.control.data_port_required",
-    "compiler.control.entry.output_required",
-    "compiler.control.leaf_without_operation",
-    "compiler.control.loop.carried_required",
-    "compiler.control.loop.max_iterations_required",
-    "compiler.control.managed_role_mismatch",
-    "compiler.control.no_entry",
-    "compiler.control.return.input_required",
-    "compiler.control.return_has_successor",
-    "compiler.control.shared_region",
-    "compiler.control.unreachable",
-    "compiler.control.value_missing",
-    "compiler.dependency.value_cycle",
-    "compiler.document.connection_id_mismatch",
-    "compiler.document.node_id_mismatch",
-    "compiler.input.conflicting_bindings",
-    "compiler.input.literal_forbidden",
-    "compiler.input.not_input",
-    "compiler.input.unbound",
-    "compiler.input.unknown_port",
-    "compiler.interface.basis_mismatch",
-    "compiler.interface.duplicate_locator",
-    "compiler.interface.identity_none_connection",
-    "compiler.interface.identity_none_override",
-    "compiler.interface.resolver_failed",
-    "compiler.interface.resolver_missing",
-    "compiler.lowering.effect_contract",
-    "compiler.lowering.failed",
-    "compiler.lowering.implementation_missing",
-    "compiler.lowering.resource_conflict",
-    "compiler.lowering.result_duplicate",
-    "compiler.lowering.result_port",
-    "compiler.node.disappeared",
-    "compiler.node.unknown",
-    "compiler.parameter.invalid",
-    "compiler.parameter.required",
-    "compiler.parameter.unknown",
-    "compiler.plan.effect_consumer_missing",
-    "compiler.plan.effect_producer_missing",
-    "compiler.plan.invalid",
-    "compiler.plan.invalid_node_id",
-    "compiler.plan.value_consumer_missing",
-    "compiler.plan.value_producer_missing",
-    "compiler.port.binding_not_instance",
-    "compiler.port.instance_not_allowed",
-    "compiler.port.orphan",
-    "compiler.port.unknown",
-    "compiler.registry.type_mismatch",
-    "compiler.relational.backend_mismatch",
-    "compiler.relational.filter_column_missing",
-    "compiler.relational.filter_literal_forbidden",
-    "compiler.relational.filter_literal_missing",
-    "compiler.relational.filter_literal_type",
-    "compiler.relational.filter_operator_invalid",
-    "compiler.relational.fragment_unplanned",
-    "compiler.relational.input_binding_missing",
-    "compiler.relational.planning_failed",
-    "compiler.schema.parameter_invalid",
-    "compiler.schema.project_empty",
-    "compiler.schema.project_field_duplicate",
-    "compiler.schema.project_field_missing",
-    "compiler.schema.rename_field_missing",
-    "compiler.schema.rename_source_duplicate",
-    "compiler.schema.rename_target_conflict",
-    "compiler.schema.resolver_failed",
-    "compiler.schema.resolver_missing",
-    "compiler.semantic.invalid",
-    "compiler.type.incompatible",
-];
 
 #[derive(Clone, Copy)]
 struct FamilySpec {
@@ -625,6 +549,9 @@ fn assemble_builtin_parts()
 fn assemble_builtin_parts_with(
     inject: impl FnOnce(&mut ProviderFragment) -> Result<(), BuiltinAssemblyError>,
 ) -> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
+    validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS)
+        .map_err(|source| BuiltinAssemblyError::DiagnosticDefinitions { source })?;
+
     let mut fragment = ProviderFragment::default();
     let messages = &mut fragment.messages;
     let nodes = &mut fragment.nodes;
@@ -1014,25 +941,25 @@ fn i18n_requirements(
             keys.extend(parameter.description_key.iter().cloned());
         }
     }
-    for code in COMPILER_DIAGNOSTIC_CODES {
-        keys.insert(
-            I18nKey::new(format!("diagnostics.{code}")).map_err(|source| {
-                let value = format!("diagnostics.{code}");
-                BuiltinAssemblyError::InvalidSemanticId {
-                    value: value.into(),
-                    source,
-                }
-            })?,
-        );
+    for definition in COMPILER_DIAGNOSTIC_DEFINITIONS {
+        keys.insert(I18nKey::new(definition.message_key).map_err(|source| {
+            BuiltinAssemblyError::InvalidSemanticId {
+                value: definition.message_key.into(),
+                source,
+            }
+        })?);
     }
     Ok((I18nManifest { keys }, alias_keys))
 }
 
 fn add_diagnostic_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
-    for code in COMPILER_DIAGNOSTIC_CODES {
-        let key = leak(format!("diagnostics.{code}"));
-        out.push(("en-US", key, Text("Compiler diagnostic: {detail}")));
-        out.push(("zh-CN", key, Text("编译诊断：{detail}")));
+    for definition in COMPILER_DIAGNOSTIC_DEFINITIONS {
+        out.extend(
+            definition
+                .templates
+                .iter()
+                .map(|template| (template.locale, definition.message_key, Text(template.text))),
+        );
     }
 }
 

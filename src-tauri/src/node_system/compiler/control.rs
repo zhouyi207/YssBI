@@ -1,3 +1,4 @@
+use super::{CompilerDiagnostic, managed_node_role_name};
 use crate::node_system::document::{
     DynamicMemberLocator, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
 };
@@ -32,8 +33,7 @@ pub(crate) struct ControlEdge {
 #[derive(Debug)]
 pub(crate) struct ControlIssue {
     pub node_id: Option<NodeId>,
-    pub code: &'static str,
-    pub detail: String,
+    pub diagnostic: CompilerDiagnostic,
 }
 
 pub(crate) fn validate_structural_contract(
@@ -52,8 +52,10 @@ pub(crate) fn validate_structural_contract(
     if protocol.managed_role != expected_managed_role {
         issues.push(issue(
             node_id,
-            "compiler.control.managed_role_mismatch",
-            "structural role and protocol managed role do not match",
+            CompilerDiagnostic::ControlManagedRoleMismatch {
+                expected_role: managed_node_role_name(expected_managed_role).into(),
+                actual_role: managed_node_role_name(protocol.managed_role).into(),
+            },
         ));
     }
     match role {
@@ -99,8 +101,9 @@ pub(crate) fn validate_structural_contract(
                 Some(value) if value > 0 => {}
                 _ => issues.push(issue(
                     node_id,
-                    "compiler.control.loop.max_iterations_required",
-                    "loop requires a positive integer max_iterations parameter",
+                    CompilerDiagnostic::ControlLoopMaxIterationsRequired {
+                        parameter_key: "max_iterations".into(),
+                    },
                 )),
             }
         }
@@ -108,8 +111,9 @@ pub(crate) fn validate_structural_contract(
             if call_target(parameters).is_none() {
                 issues.push(issue(
                     node_id,
-                    "compiler.control.call.resource_parameter_missing",
-                    "call requires a non-empty target/function_plan resource parameter",
+                    CompilerDiagnostic::ControlCallResourceParameterMissing {
+                        parameter_key: "target".into(),
+                    },
                 ));
             }
         }
@@ -126,8 +130,7 @@ pub(crate) fn validate_structural_contract(
             if !has_port(protocol, PortKind::Control, PortDirection::Output, None) {
                 issues.push(issue(
                     node_id,
-                    "compiler.control.entry.output_required",
-                    "entry structural node requires a control output",
+                    CompilerDiagnostic::ControlEntryOutputRequired {},
                 ));
             }
         }
@@ -135,8 +138,7 @@ pub(crate) fn validate_structural_contract(
             if !has_port(protocol, PortKind::Control, PortDirection::Input, None) {
                 issues.push(issue(
                     node_id,
-                    "compiler.control.return.input_required",
-                    "function return requires a control input",
+                    CompilerDiagnostic::ControlReturnInputRequired {},
                 ));
             }
         }
@@ -195,14 +197,15 @@ impl<'a> RegionBuilder<'a> {
                 .push(edge.target.node_id);
             *incoming.entry(edge.target.node_id).or_insert(0) += 1;
         }
-        for targets in outgoing.values_mut() {
+        for (port, targets) in &mut outgoing {
             targets.sort_unstable();
             targets.dedup();
             if targets.len() > 1 {
                 return Err(ControlIssue {
                     node_id: None,
-                    code: "compiler.control.ambiguous_output",
-                    detail: "a control output may enter only one structured region".into(),
+                    diagnostic: CompilerDiagnostic::ControlAmbiguousOutput {
+                        port: port.to_string().into(),
+                    },
                 });
             }
         }
@@ -251,8 +254,7 @@ impl<'a> RegionBuilder<'a> {
         if !self.nodes.is_empty() && roots.is_empty() {
             return Err(ControlIssue {
                 node_id: None,
-                code: "compiler.control.no_entry",
-                detail: "control graph has no structural entry".into(),
+                diagnostic: CompilerDiagnostic::ControlNoEntry {},
             });
         }
         let mut steps = Vec::new();
@@ -267,8 +269,7 @@ impl<'a> RegionBuilder<'a> {
                 .copied();
             return Err(ControlIssue {
                 node_id,
-                code: "compiler.control.unreachable",
-                detail: "node is not part of a recognized structured control region".into(),
+                diagnostic: CompilerDiagnostic::ControlUnreachable {},
             });
         }
         Ok(StructuredControlRegion::Sequence(steps.into_boxed_slice()))
@@ -287,18 +288,10 @@ impl<'a> RegionBuilder<'a> {
             return Ok(empty_region());
         }
         if self.active.contains(&node_id) {
-            return Err(issue(
-                node_id,
-                "compiler.control.cycle",
-                "control cycles must be represented by an explicit Loop node",
-            ));
+            return Err(issue(node_id, CompilerDiagnostic::ControlCycle {}));
         }
         if self.visited.contains(&node_id) {
-            return Err(issue(
-                node_id,
-                "compiler.control.shared_region",
-                "a node cannot belong to more than one structured region",
-            ));
+            return Err(issue(node_id, CompilerDiagnostic::ControlSharedRegion {}));
         }
         self.active.insert(node_id);
         self.visited.insert(node_id);
@@ -309,11 +302,7 @@ impl<'a> RegionBuilder<'a> {
         let result = match role {
             None => {
                 let operation = operation.ok_or_else(|| {
-                    issue(
-                        node_id,
-                        "compiler.control.leaf_without_operation",
-                        "leaf node has no operation",
-                    )
+                    issue(node_id, CompilerDiagnostic::ControlLeafWithoutOperation {})
                 })?;
                 let mut steps = vec![ControlStep::Operation(operation)];
                 for successor in self.successors(node_id, None) {
@@ -361,8 +350,9 @@ impl<'a> RegionBuilder<'a> {
                     .ok_or_else(|| {
                         issue(
                             node_id,
-                            "compiler.control.loop.max_iterations_required",
-                            "loop max_iterations is invalid",
+                            CompilerDiagnostic::ControlLoopMaxIterationsRequired {
+                                parameter_key: "max_iterations".into(),
+                            },
                         )
                     })?;
                 let loop_region = StructuredControlRegion::Loop {
@@ -379,17 +369,19 @@ impl<'a> RegionBuilder<'a> {
                         .ok_or_else(|| {
                             issue(
                                 node_id,
-                                "compiler.control.call.resource_parameter_missing",
-                                "call target is missing",
+                                CompilerDiagnostic::ControlCallResourceParameterMissing {
+                                    parameter_key: "target".into(),
+                                },
                             )
                         })?
                         .into(),
                 );
-                let target = FunctionPlanHandle::new(target_path.0.clone()).map_err(|error| {
+                let target = FunctionPlanHandle::new(target_path.0.clone()).map_err(|_| {
                     issue(
                         node_id,
-                        "compiler.control.call.target_invalid",
-                        &error.to_string(),
+                        CompilerDiagnostic::ControlCallTargetInvalid {
+                            function_path: target_path.0.clone(),
+                        },
                     )
                 })?;
                 let arguments = self.call_argument_bindings(node_id, &target_path)?;
@@ -420,8 +412,7 @@ impl<'a> RegionBuilder<'a> {
                 if !self.successors(node_id, None).is_empty() {
                     Err(issue(
                         node_id,
-                        "compiler.control.return_has_successor",
-                        "function return must terminate its region",
+                        CompilerDiagnostic::ControlReturnHasSuccessor {},
                     ))
                 } else {
                     Ok(empty_region())
@@ -468,8 +459,7 @@ impl<'a> RegionBuilder<'a> {
             [successor] => self.walk_stopping_before(*successor, stop),
             _ => Err(issue(
                 node_id,
-                "compiler.control.ambiguous_output",
-                "structural output has multiple successors",
+                CompilerDiagnostic::ControlAmbiguousOutput { port: key.into() },
             )),
         }
     }
@@ -482,13 +472,8 @@ impl<'a> RegionBuilder<'a> {
         let then_start = flow_node_before_stop(self.branch_arm_start(node_id, "true")?, stop);
         let else_start = flow_node_before_stop(self.branch_arm_start(node_id, "false")?, stop);
         let graph = self.normal_flow_graph(&[then_start, else_start], stop)?;
-        let post_dominators = post_dominators(&graph).ok_or_else(|| {
-            issue(
-                node_id,
-                "compiler.control.cycle",
-                "normal control flow must reach a structural exit",
-            )
-        })?;
+        let post_dominators = post_dominators(&graph)
+            .ok_or_else(|| issue(node_id, CompilerDiagnostic::ControlCycle {}))?;
         if let Some(continuation) =
             resolve_common_post_dominator(node_id, &post_dominators, then_start, else_start)?
         {
@@ -502,8 +487,7 @@ impl<'a> RegionBuilder<'a> {
         {
             Err(issue(
                 node_id,
-                "compiler.control.unstructured_continuation",
-                "branch arms share reachable nodes that do not post-dominate every arm path",
+                CompilerDiagnostic::ControlUnstructuredContinuation {},
             ))
         } else {
             Ok(None)
@@ -516,8 +500,7 @@ impl<'a> RegionBuilder<'a> {
             [successor] => Ok(FlowNode::Node(*successor)),
             _ => Err(issue(
                 node_id,
-                "compiler.control.ambiguous_output",
-                "branch arm has multiple successors",
+                CompilerDiagnostic::ControlAmbiguousOutput { port: key.into() },
             )),
         }
     }
@@ -614,8 +597,7 @@ impl<'a> RegionBuilder<'a> {
         values_for_key(node, key).into_iter().next().ok_or_else(|| {
             issue(
                 node_id,
-                "compiler.control.value_missing",
-                &format!("missing value for port {key}"),
+                CompilerDiagnostic::ControlValueMissing { port: key.into() },
             )
         })
     }
@@ -690,15 +672,27 @@ impl<'a> RegionBuilder<'a> {
             [] => {
                 return Err(issue(
                     node_id,
-                    "compiler.control.member_group_missing",
-                    "structural node is missing its required port member group contract",
+                    CompilerDiagnostic::ControlMemberGroupMissing {
+                        field_name: expected_keys
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(",")
+                            .into(),
+                    },
                 ));
             }
             _ => {
                 return Err(issue(
                     node_id,
-                    "compiler.control.member_group_ambiguous",
-                    "structural node has multiple matching port member group contracts",
+                    CompilerDiagnostic::ControlMemberGroupAmbiguous {
+                        field_name: expected_keys
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(",")
+                            .into(),
+                    },
                 ));
             }
         };
@@ -729,18 +723,13 @@ impl<'a> RegionBuilder<'a> {
                 .iter()
                 .flat_map(|(_, templates)| templates.iter().copied())
                 .collect::<BTreeSet<_>>();
-            let (code, detail) = if partial.len() > 1 && union == expected_keys {
-                (
-                    "compiler.control.member_group_identity_ambiguous",
-                    "grouped endpoints are split across incompatible shared instance IDs",
-                )
+            let field_name = union.iter().copied().collect::<Vec<_>>().join(",").into();
+            let diagnostic = if partial.len() > 1 && union == expected_keys {
+                CompilerDiagnostic::ControlMemberGroupIdentityAmbiguous { field_name }
             } else {
-                (
-                    "compiler.control.member_group_incomplete",
-                    "a shared instance ID is missing one or more grouped endpoints",
-                )
+                CompilerDiagnostic::ControlMemberGroupIncomplete { field_name }
             };
-            return Err(issue(node_id, code, detail));
+            return Err(issue(node_id, diagnostic));
         }
         let complete_instances = present.keys().copied().collect::<BTreeSet<_>>();
         if complete_instances.len() < group.min as usize
@@ -750,8 +739,14 @@ impl<'a> RegionBuilder<'a> {
         {
             return Err(issue(
                 node_id,
-                "compiler.control.member_group_count_invalid",
-                "complete structural member count is outside the protocol bounds",
+                CompilerDiagnostic::ControlMemberGroupCountInvalid {
+                    field_name: expected_keys
+                        .iter()
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(",")
+                        .into(),
+                },
             ));
         }
 
@@ -794,8 +789,9 @@ impl<'a> RegionBuilder<'a> {
             if !valid {
                 return Err(issue(
                     node_id,
-                    "compiler.control.member_group_direction_invalid",
-                    &format!("grouped endpoint {key} has the wrong data direction"),
+                    CompilerDiagnostic::ControlMemberGroupDirectionInvalid {
+                        field_name: (*key).into(),
+                    },
                 ));
             }
         }
@@ -817,8 +813,9 @@ impl<'a> RegionBuilder<'a> {
                     abi.parameters.get(&parameter).copied().ok_or_else(|| {
                         issue(
                             node_id,
-                            "compiler.control.call.abi_member_missing",
-                            &format!("target ABI has no parameter '{}'", parameter.0),
+                            CompilerDiagnostic::ControlCallAbiMemberMissing {
+                                field_name: parameter.0.clone(),
+                            },
                         )
                     })?;
                 Ok(CallArgumentBinding {
@@ -843,8 +840,9 @@ impl<'a> RegionBuilder<'a> {
                 let callee_source = abi.results.get(&parameter).copied().ok_or_else(|| {
                     issue(
                         node_id,
-                        "compiler.control.call.abi_member_missing",
-                        &format!("target ABI has no result '{}'", parameter.0),
+                        CompilerDiagnostic::ControlCallAbiMemberMissing {
+                            field_name: parameter.0.clone(),
+                        },
                     )
                 })?;
                 Ok(CallResultBinding {
@@ -870,15 +868,19 @@ impl<'a> RegionBuilder<'a> {
         if let Some(missing) = expected.difference(&actual).next() {
             return Err(issue(
                 node_id,
-                "compiler.control.call.member_missing",
-                &format!("Call is missing {role} member '{}'", missing.0),
+                CompilerDiagnostic::ControlCallMemberMissing {
+                    member_role: role.into(),
+                    member_id: missing.0.clone(),
+                },
             ));
         }
         if let Some(unexpected) = actual.difference(&expected).next() {
             return Err(issue(
                 node_id,
-                "compiler.control.call.member_unexpected",
-                &format!("Call has unexpected {role} member '{}'", unexpected.0),
+                CompilerDiagnostic::ControlCallMemberUnexpected {
+                    member_role: role.into(),
+                    member_id: unexpected.0.clone(),
+                },
             ));
         }
         Ok(())
@@ -892,8 +894,9 @@ impl<'a> RegionBuilder<'a> {
         self.function_abis.get(target).ok_or_else(|| {
             issue(
                 node_id,
-                "compiler.control.call.abi_missing",
-                &format!("target function '{}' has no compiled ABI", target.0),
+                CompilerDiagnostic::ControlCallAbiMissing {
+                    function_path: target.0.clone(),
+                },
             )
         })
     }
@@ -921,29 +924,35 @@ impl<'a> RegionBuilder<'a> {
             else {
                 return Err(issue(
                     node_id,
-                    "compiler.control.call.locator_invalid",
-                    "Call data members require FunctionParameter locators",
+                    CompilerDiagnostic::ControlCallLocatorInvalid {
+                        port: address.to_string().into(),
+                    },
                 ));
             };
             if function != target {
                 return Err(issue(
                     node_id,
-                    "compiler.control.call.locator_target_mismatch",
-                    "Call member locator does not target the selected function",
+                    CompilerDiagnostic::ControlCallLocatorTargetMismatch {
+                        function_path: function.0.clone(),
+                    },
                 ));
             }
             let value = node.values.get(address).copied().ok_or_else(|| {
                 issue(
                     node_id,
-                    "compiler.control.call.value_missing",
-                    "Call dynamic member has no compiler-local value",
+                    CompilerDiagnostic::ControlCallValueMissing {
+                        port: address.to_string().into(),
+                    },
                 )
             })?;
             if members.insert(parameter.clone(), value).is_some() {
                 return Err(issue(
                     node_id,
-                    "compiler.control.call.locator_duplicate",
-                    "Call has duplicate dynamic members for one function parameter",
+                    CompilerDiagnostic::ControlCallLocatorDuplicate {
+                        function_path: function.0.clone(),
+                        parameter_id: parameter.0.clone(),
+                        port: address.to_string().into(),
+                    },
                 ));
             }
         }
@@ -969,8 +978,7 @@ fn resolve_common_post_dominator(
         CommonPostDominator::Node(node_id) => Ok(Some(node_id)),
         CommonPostDominator::Ambiguous => Err(issue(
             branch_id,
-            "compiler.control.branch.continuation_ambiguous",
-            "branch arms have multiple incomparable immediate post-dominators",
+            CompilerDiagnostic::ControlBranchContinuationAmbiguous {},
         )),
     }
 }
@@ -1081,8 +1089,10 @@ fn require_data_port(
     if !has_port(protocol, PortKind::Data, direction, Some(key)) {
         issues.push(issue(
             node_id,
-            "compiler.control.data_port_required",
-            &format!("missing {direction:?} data port {key}"),
+            CompilerDiagnostic::ControlDataPortRequired {
+                port_key: key.into(),
+                expected_direction: direction_name(direction).into(),
+            },
         ));
     }
 }
@@ -1097,9 +1107,18 @@ fn require_control_port(
     if !has_port(protocol, PortKind::Control, direction, Some(key)) {
         issues.push(issue(
             node_id,
-            "compiler.control.control_port_required",
-            &format!("missing {direction:?} control port {key}"),
+            CompilerDiagnostic::ControlControlPortRequired {
+                port_key: key.into(),
+                expected_direction: direction_name(direction).into(),
+            },
         ));
+    }
+}
+
+fn direction_name(direction: PortDirection) -> &'static str {
+    match direction {
+        PortDirection::Input => "input",
+        PortDirection::Output => "output",
     }
 }
 
@@ -1167,11 +1186,10 @@ fn empty_region() -> StructuredControlRegion {
     StructuredControlRegion::Sequence(Box::new([]))
 }
 
-fn issue(node_id: NodeId, code: &'static str, detail: &str) -> ControlIssue {
+fn issue(node_id: NodeId, diagnostic: CompilerDiagnostic) -> ControlIssue {
     ControlIssue {
         node_id: Some(node_id),
-        code,
-        detail: detail.into(),
+        diagnostic,
     }
 }
 
@@ -1188,6 +1206,109 @@ mod tests {
 
     fn node(value: u128) -> FlowNode {
         FlowNode::Node(node_id(value))
+    }
+
+    #[test]
+    fn structural_port_requirements_emit_port_key_and_direction_facts() {
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let mut protocol = registry
+            .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
+            .unwrap()
+            .protocol()
+            .clone();
+        let ports = protocol
+            .interface
+            .ports
+            .iter()
+            .filter(|port| !matches!(port.key.as_str(), "condition" | "true"))
+            .cloned()
+            .collect();
+        protocol.interface = NodeInterfaceProtocol::new(ports, vec![], vec![]).unwrap();
+
+        let issues = validate_structural_contract(
+            node_id(1),
+            StructuralNodeRole::Branch,
+            &protocol,
+            &BTreeMap::new(),
+        );
+
+        assert!(issues.iter().any(|issue| {
+            issue.diagnostic
+                == CompilerDiagnostic::ControlDataPortRequired {
+                    port_key: "condition".into(),
+                    expected_direction: "input".into(),
+                }
+        }));
+        assert!(issues.iter().any(|issue| {
+            issue.diagnostic
+                == CompilerDiagnostic::ControlControlPortRequired {
+                    port_key: "true".into(),
+                    expected_direction: "output".into(),
+                }
+        }));
+    }
+
+    #[test]
+    fn duplicate_call_locator_emits_complete_function_parameter_and_port_facts() {
+        let registry =
+            std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+        let protocol = registry
+            .get(&NodeTypeId::new("yssbi.project.function.call").unwrap())
+            .unwrap()
+            .protocol();
+        let call_id = node_id(10);
+        let function_path = GraphResourcePath("functions/customer".into());
+        let parameter_id = crate::node_system::document::FunctionParameterId("customer_id".into());
+        let first = PortAddress::instance(
+            call_id,
+            PortKey::new("arguments").unwrap(),
+            PortInstanceId::from_uuid(Uuid::from_u128(100)),
+        );
+        let duplicate = PortAddress::instance(
+            call_id,
+            PortKey::new("arguments").unwrap(),
+            PortInstanceId::from_uuid(Uuid::from_u128(101)),
+        );
+        let locator = DynamicMemberLocator::FunctionParameter {
+            function: function_path.clone(),
+            parameter: parameter_id.clone(),
+        };
+        let parameters = BTreeMap::new();
+        let nodes = BTreeMap::from([(
+            call_id,
+            ControlNode {
+                node_id: call_id,
+                role: Some(StructuralNodeRole::Call),
+                protocol,
+                parameters: &parameters,
+                ports: Box::from([first.clone(), duplicate.clone()]),
+                values: BTreeMap::from([
+                    (first.clone(), ValueRef::new(1)),
+                    (duplicate.clone(), ValueRef::new(2)),
+                ]),
+                dynamic_members: BTreeMap::from([
+                    (first, locator.clone()),
+                    (duplicate.clone(), locator),
+                ]),
+                operation: None,
+            },
+        )]);
+        let function_abis = BTreeMap::new();
+        let builder = RegionBuilder::new(nodes, Vec::new(), &function_abis).unwrap();
+
+        let issue = builder
+            .call_members(call_id, &function_path, PortDirection::Input)
+            .expect_err("duplicate function locator must fail");
+
+        assert_eq!(
+            issue.diagnostic,
+            CompilerDiagnostic::ControlCallLocatorDuplicate {
+                function_path: function_path.0,
+                parameter_id: parameter_id.0,
+                port: duplicate.to_string().into(),
+            }
+        );
     }
 
     #[test]
@@ -1317,7 +1438,10 @@ mod tests {
         let branch_id = NodeId::from_uuid(Uuid::from_u128(9));
         let error = resolve_common_post_dominator(branch_id, &post_dominators, left, right)
             .expect_err("incomparable candidates must block");
-        assert_eq!(error.code, "compiler.control.branch.continuation_ambiguous");
+        assert_eq!(
+            error.diagnostic,
+            CompilerDiagnostic::ControlBranchContinuationAmbiguous {}
+        );
         assert_eq!(error.node_id, Some(branch_id));
     }
 }
