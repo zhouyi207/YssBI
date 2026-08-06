@@ -212,6 +212,11 @@ export type RevealProjectResourceRequest = {
 export class ProjectService {
     // ==================== 项目级操作 ====================
 
+    /** 获取当前后端项目 activation，供后创建的独立 WebView 建立 lifecycle identity。 */
+    static async getProjectActivation(): Promise<ProjectActivationResult> {
+        return await invoke("get_current_project_activation");
+    }
+
     /**
      * 分阶段加载第一步：获取 databases + variables（含 schema）
      */

@@ -1,5 +1,6 @@
 use crate::application::database_schema::enriched_database_dtos;
 use crate::error::AppError;
+use crate::event::ProjectActivationResultDto;
 use crate::log::LogLevel;
 use crate::log_app;
 use crate::node_system::analysis::EditorGraphProjectionDto;
@@ -34,6 +35,38 @@ pub fn get_project_databases_variables(
         databases,
         variables,
     })
+}
+
+fn current_project_activation(
+    state: &ProjectState,
+) -> Result<ProjectActivationResultDto, AppError> {
+    let activation_revision = state.activation_revision();
+    let session = state.capture_project_session().map_err(AppError::from)?;
+    let path = state
+        .get_path()
+        .ok_or_else(|| AppError::new("stale_project_lifecycle", "No project is active"))?;
+    state
+        .validate_project_session(&session)
+        .map_err(AppError::from)?;
+    if state.activation_revision() != activation_revision {
+        return Err(AppError::new(
+            "stale_project_lifecycle",
+            "Project changed during activation capture",
+        ));
+    }
+    Ok(ProjectActivationResultDto {
+        path: normalize_existing_path(&path).unwrap_or(path),
+        project_instance_id: session.instance_id.to_string(),
+        activation_revision,
+    })
+}
+
+/// 获取当前项目 activation，供项目加载后创建的独立 WebView 建立 lifecycle identity。
+#[tauri::command]
+pub fn get_current_project_activation(
+    state: State<ProjectState>,
+) -> Result<ProjectActivationResultDto, AppError> {
+    current_project_activation(state.inner())
 }
 
 /// 获取当前项目路径
@@ -115,6 +148,22 @@ mod tests {
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
         let expected = state.capture_project_session().unwrap().instance_id;
         state.read_project_index(&expected).unwrap()
+    }
+
+    #[test]
+    fn current_project_activation_bootstraps_late_created_webviews() {
+        let project = crate::project::fixtures::TempProject::activate(
+            "current-activation",
+            ProjectData::new(),
+        );
+        let state = project.state();
+        let session = state.capture_project_session().unwrap();
+
+        let activation = current_project_activation(state).unwrap();
+
+        assert_eq!(activation.project_instance_id, session.instance_id.as_str());
+        assert_eq!(activation.activation_revision, state.activation_revision());
+        assert!(!activation.path.is_empty());
     }
 
     fn editor_create_node_request(

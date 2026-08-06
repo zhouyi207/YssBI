@@ -5,8 +5,10 @@
 
 import { LoadStatus } from '@/shared/types/ui/common';
 import { ProjectData } from '@/shared/types';
-import { useProjectIOStore } from './projectIOStore';
+import { loadActivatedProject, useProjectIOStore } from './projectIOStore';
 import { reconcileProjectPath } from './projectSession';
+import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import { ProjectService } from '@/services/project/projectService';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import type { GraphData } from '@/shared/types/store/graph';
 
@@ -25,6 +27,10 @@ export function getGraphByPath(graphPath: string): GraphData | null {
  * - 其它：全量 `loadProject`
  */
 export async function initProjectSync(): Promise<ProjectData | null> {
+  if (!captureProjectLifecycleState().projectInstanceId) {
+    return loadActivatedProject(await ProjectService.getProjectActivation());
+  }
+
   const { status, currentPath, loadProject, exportSnapshot } = useProjectIOStore.getState();
 
   if (status === LoadStatus.Ready) {

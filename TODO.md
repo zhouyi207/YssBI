@@ -279,6 +279,58 @@ src/app/appConfig/appLinks.ts
 - [x] 本地验证通过：`pnpm run typecheck`、`pnpm test`、`cargo check --manifest-path src-tauri/Cargo.toml`、`cargo test --manifest-path src-tauri/Cargo.toml`、`git --no-pager diff --check`。
 - [ ] 删除掉 `atomic_enum`、`crossbeam`、`dashmap` 这些 crates，因为目前没有什么作用
 
+## 2026.08.06
+
+- [x] 完成 `node-architecture.md` 迁徙遗漏审计；当前仍存在以下协议、权威边界和运行平台收口项，全部完成前不应继续把对应 Phase 标记为 100%。
+- [x] 修复数据库导入 publication delta 的资源 revision 错误：database mutation 不再误用项目级 `authority_generation` 作为 `toRevision`，改为按资源自身的 `fromRevision.next()` 连续推进，避免 CSV 导入已在后端提交却被前端以 `resource deltas are malformed` 拒绝。
+- [x] 补充数据库 revision 回归覆盖：验证项目已有多次 publication 后，新数据库仍从资源 revision `0 → 1`，同时保持项目级 publication revision 独立递增。
+- [x] 修复后创建独立 WebView 的项目 lifecycle 初始化：新增只读 `get_current_project_activation` bootstrap command，返回当前 `projectInstanceId`、`activationRevision` 与项目路径；`initProjectSync` 在本地 identity 为空时先接受真实 activation receipt，再加载权威项目快照。
+- [x] 统一子窗口项目同步入口：`useProjectSync` 不再于 lifecycle 建立前直接执行 `reconcileProjectPath`，数据库编辑器与 Bayes 等晚创建窗口可正常建立 publication baseline，避免 `ProjectLifecycleError: project lifecycle changed before publication settlement`。
+- [x] 补充 late-created WebView 与 Rust activation receipt 回归测试；`typecheck`、IPC/初始化审计、focused database/activation tests、`rust:check`、`rust:fmt:check` 与 `git diff --check` 通过。完整前端套件唯一超时项单独重跑通过；Rust 串行 lib 测试 1080/1083，通过项外的 3 项因 Windows 当前用户缺少 reparse point 权限（错误 1314）失败。
+
+### node_architecture 遗漏审计
+
+- [ ] **Phase 1–3：修复 `GraphDelta` project-event wire 身份断裂。** Rust `EventProject::GraphDelta` 只发送 `{ delta }`，前端 `GraphDeltaHandler` 却强制读取 `payload.projectInstanceId`，导致真实跨窗口图 delta 被静默忽略；统一 envelope，并增加 Rust→TS project-event golden contract，禁止测试继续构造后端不会发送的字段。
+- [ ] **Phase 2–3：为全部 active-project 节点命令补齐后端可验证的 lifecycle identity。** `mutate_graph_document`、`update_function_signature`、`hydrate_editor_graph`、History 和 `execute_graph_document` 等命令必须显式接收并校验调用方 `projectInstanceId`；当前部分 TS 已发送但 Rust 未消费，另一些调用两侧都缺失，旧 WebView 请求可能落到替换后的新项目。
+- [ ] **Phase 3：删除前端函数签名到 Pin 的业务投影。** `functionSignaturePins` 仍在 React 侧执行 `type_name → DataType`、参数/返回值到 Pin、未知类型回退 `Any` 和固定 `Result` 命名；改为直接消费 Rust 权威 function/editor projection，项目加载、publication 与 recovery 不再重建 resolved interface。
+- [ ] **Phase 1–2：删除仍进入生产类型图的 legacy node creation/identity DTO。** 移除已无 Rust IPC 对应物的 `batchCreateNode.ts`、`nodeInstanceParams.ts`、禁用但仍公开旧类型的 `useNodeManagement.createNodes`，并清理 clipboard、旧 graph DTO 和 store 中的 `NodeInstanceParamsDTO`/显示名身份残留。
+- [ ] **Phase 2：收紧 raw `GraphDocument` mutation API。** `create_node`、`delete_node`、`bind_port`、`connect`、`disconnect`、`set_literal` 当前仍是生产可见 public 方法；改为 descriptor/validated patch 唯一生产入口，raw helper 仅限 document 内部或 `cfg(test)`。
+- [ ] **Phase 3：删除前端直接改写 graph projection 的 legacy reference cascade。** `projectPublicationMovePlan.prepareReferences` 和 `cascadeSubGraphPathInLoadedGraphs` 仍直接修改 `NodeData.subGraphPath`；资源移动只能安装 Rust 返回的 revisioned projection replacement，前端仅迁移 tab、viewport 等临时 UI state。
+- [ ] **Phase 5：让 `CompilationBasis.resource_versions` 只记录本次分析实际读取的资源。** 当前 compile snapshot 预先纳入全部函数、变量和数据库版本，无关资源 mutation 也会使 analysis/plan 过期，不符合计划的精确读取集与“无关 mutation 不失效”要求。
+- [ ] **Phase 5：将所有可由用户修复的 lowerability 错误前移到 Analysis。** 当前先生成 `ValidatedSemanticGraph`，再由 function ABI/lowering 发现 blocking diagnostic 并清空 semantic/plan；应在 semantic validation 前完成可执行性检查，使 lowerer 仅因取消、资源耗尽或内部错误失败。
+- [ ] **Phase 6：真正落实 demand-driven result publication。** Scheduler 当前为保留 operation 的全部 outputs 创建 result source 并发送 `ValueReady`，普通运行仍保留中间 Pin；仅显式 requested output/default result 可发布，Pin 预览继续走独立 demand。
+- [ ] **Phase 6/运行平台：实现协议声明的 `CachePolicy` 和默认 per-run memoization，或删除无效声明。** 当前 Catalog 声明 `PerRun`，但 plan/runtime 不携带或消费 cache policy，现有 activation 重复执行保护不是结果 memoization。
+- [ ] **Phase 7：补齐 relational island 与 native kernel 边界的 materialization adapter。** 按 `InputConsumption`/`OutputProduction` 插入 collect、buffer、spill、replay/stream bridge；当前 relational 输出统一转换为 fully-materialized scalar，consumer contract 尚未进入 scheduler/runtime。
+- [ ] **Phase 8：对齐计划中的 bounded stream/backpressure 与调度契约。** 当前 TODO 将 stream transport、deadline 和并行调度列为后续能力，但 `node-architecture.md` Phase 8/运行平台完成标准包含 bounded stream、backpressure、workload-aware parallel scheduler、timeout/retry policy；需要实现，或明确修订计划和 Phase 完成度，不能同时标记 100%。
+- [ ] **Phase 9：恢复完整 Catalog 搜索字段。** 前端搜索目前只索引 title/aliases，且测试明确排除 `technicalTerms`、稳定 `nodeTypeId`、后端 `searchText` 和可选 pinyin；应与计划一致支持当前 locale 标题、别名、技术词、资源名及可选拼音命中同一稳定 ID。
+- [ ] **Phase 9：补齐可配对、可计时的性能 trace span。** `SpanEvent` 目前没有 span identity、parent/span pairing 或 timestamp/duration，operation span 也缺少稳定 operation/activation 字段，无法计算 snapshot、analysis、lowering、run、resource acquire、cleanup 各阶段耗时。
+- [ ] **横切边界：移除第十个 `node_system/parameter_types/` 顶层目录。** 计划固定九个顶层所有权边界；将其中协议类型、codec 和 validation 归并到 `protocol/` 或明确领域模块，避免 analysis/catalog/compiler 共同拥有该边界。
+- [ ] **横切清理：删除 localization compatibility 双接口。** 合并 `LocalizationLookup`/`LocalizationBundle`，移除标注为 `Compatibility boundary` 的 blanket bridge，保持 0.x 项目单一路径。
+- [ ] **Phase 4/横切清理：删除 History legacy 默认解码。** `ProjectHistoryTransaction.persistence` 等字段仍通过 `#[serde(default)]` 接受旧 wire，且存在专门的 `legacy_history_transaction_defaults_to_in_memory_until_save` 测试；项目未发布，不保留迁移 shim。
+- [ ] **协议契约：补齐 execution 与 project-event 的 Rust↔TS golden coverage。** 冻结全部 `ExecutionDemandDto`、`RunEventKindDto`、`ExecuteGraphResultDto`、`GraphDelta`/resource mutation event envelope，并在前端增加严格 wire parser，避免手写 TS union 与 Rust enum 漂移。
+
+- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；
+
+```
+"/*#__PURE__*/"
+
+in "node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-editor-container/data-grid-container.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-grid-overlay-editor/private/markdown-overlay-editor-style.js (2:13): A comment
+```
+
+- [ ] 工作表中的 worksheet 的存储形式是使用目前这种形式好还是使用 event, function 形式要好，请分析：在这里我可以要求 name 禁止使用特殊符号
+- [ ] 测试中我认为不应该有软件的版本号信息，因为软件版本号会更新，请分析
+- [ ] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
+- [ ] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点
+- [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理
+- [ ] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
+- [ ] 在 sidebar 中创建 item 的时候首先会出现在最下方然后根据 name 移动位置，能不能直接根据 name 出现在某个位置，忽略出现在下方的过程，这样不美观
+- [ ] 目前后端节点的定义好像也不太清晰明了，需要讨论怎么处理
+- [ ] 在 graph 中的右键菜单我希望根据 section subsection 等等分类，包括 activitybar 为节点的 sidebar 中的节点也是一样，这样如果不记得名称找起来非常方便，需要讨论
+- [ ] 后续我会加入 mcp 功能方便 llm 直接调用统计方法获得数值结果，同时我会加入智能分析功能利用 llm 分析数值报告获得分析结果，在这里我初步的构想是在 activitybar 中添加一个报告的 icon，其对应的 sidebar 中显示各种数值报告的 item，然后 llm 可以对这些报告进行执行分析输出得到结果编写论文；你怎么看，目前怎么预留接口，前端应该如何设计等等需要仔细讨论和实现（在这里 data 中每一列我希望可以添加一个描述统计，意味着我们可以在导入数据的时候对 data column 添加一个文本标注，方便模型知道 data column 并进行描述统计分析一些有意义的结果并输出一些合理的假设）
+- [ ] 关于可视化层面，目前可视化的图表还不够，我希望更加的丰富；并将这些图表组件化放置在一起，哪里需要就调用避免重复实现，差异较大可以分为两个组件
+- [ ] 将过去的操作尽可能实现后归纳到 v0_0.md 文档
+
 
 
 

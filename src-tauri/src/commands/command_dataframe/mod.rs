@@ -846,6 +846,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(retried_import.mutation.publication_revision, 6);
+        assert_eq!(
+            retried_import.mutation.deltas[0].from_revision,
+            ResourceRevision::INITIAL,
+        );
+        assert_eq!(
+            retried_import.mutation.deltas[0].to_revision,
+            ResourceRevision::INITIAL.next(),
+        );
         assert_exact_event(&events, &retried_import, 6);
 
         let _ = std::fs::remove_dir_all(root);

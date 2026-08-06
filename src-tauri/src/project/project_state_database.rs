@@ -217,11 +217,11 @@ impl ProjectState {
     ) -> crate::event::ResourceMutationResultDto {
         use crate::node_system::document::{
             DatabaseDocumentPatch, DatabaseResourceKey, ResourceDeltaEvent, ResourceDocumentPatch,
-            ResourceKey, ResourceRevision,
+            ResourceKey,
         };
 
         let publication_revision = publication.allocate_resource_revision();
-        let to_revision = ResourceRevision::new(publication.authority_generation());
+        let to_revision = from_revision.next();
         if after.is_some() {
             revisions.insert(id.to_string(), to_revision.get());
         } else {

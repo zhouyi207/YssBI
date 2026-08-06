@@ -4,6 +4,7 @@ import type { GraphData } from '@/shared/types/store/graph';
 import { graphDataToDomainGraph } from '@/shared/types/dto/graphModel';
 import { LoadStatus } from '@/shared/types/ui/common';
 import { useDatabaseStore } from './databaseStore';
+import { initProjectSync } from './projectHelpers';
 import { useGraphDataStore } from './graphDataStore';
 import {
   loadActivatedProject,
@@ -30,6 +31,7 @@ import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFix
 
 vi.mock('@/services/project/projectService', () => ({
   ProjectService: {
+    getProjectActivation: vi.fn(),
     getProjectPath: vi.fn(),
     getDatabasesVariables: vi.fn(),
     getProjectIndex: vi.fn(),
@@ -364,6 +366,45 @@ describe('useProjectIOStore snapshot paths', () => {
     await expect(preparation).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
     expect(ProjectService.getDatabasesVariables).not.toHaveBeenCalled();
     expect(ProjectService.getProjectIndex).not.toHaveBeenCalled();
+  });
+
+  it('bootstraps a late-created webview from the current backend activation', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000704';
+    projectPublicationCoordinator.cancelProject();
+    useProjectIOStore.setState({
+      status: LoadStatus.Idle,
+      error: null,
+      currentPath: null,
+      projectInstanceId: null,
+    });
+    vi.mocked(ProjectService.getProjectActivation).mockResolvedValue({
+      path: '/tmp/late-webview.yssbi',
+      projectInstanceId,
+      activationRevision: 1,
+    });
+    vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/late-webview.yssbi');
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 3,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Late webview',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    await expect(initProjectSync()).resolves.toEqual(expect.any(Object));
+
+    expect(ProjectService.getProjectActivation).toHaveBeenCalledOnce();
+    expect(ProjectService.getProjectIndex).toHaveBeenCalledWith(projectInstanceId);
+    expect(useProjectIOStore.getState()).toMatchObject({
+      status: LoadStatus.Ready,
+      projectInstanceId,
+    });
   });
 
   it('establishes a new identity owner before first activation hydration', async () => {

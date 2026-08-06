@@ -2,7 +2,7 @@
 // Application 层：协调 useEditor 与 Core 的 ProjectListener
 
 import { useEffect, useRef } from 'react';
-import { reconcileProjectPath } from '@/features/core/dataStore';
+import { initProjectSync } from '@/features/core/dataStore';
 import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
 import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
 import { logger } from '@/utils/appLogger';
@@ -62,7 +62,9 @@ function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').Eve
  */
 export function useProjectSync() {
   useEffect(() => {
-    void reconcileProjectPath();
+    void initProjectSync().catch((error) => {
+      logger.sys.error(`Failed to initialize project sync: ${String(error)}`, 'useProjectSync');
+    });
   }, []);
   useProjectSyncCore(undefined);
 }

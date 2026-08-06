@@ -161,6 +161,7 @@ pub fn run() {
             release_run_result_sources,
             // ==================== 项目管理 ====================
             get_project_databases_variables,
+            get_current_project_activation,
             get_project_path,
             get_project_resource_path,
             get_project_index,
