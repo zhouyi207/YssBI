@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every Batch A active-project node command lifecycle-safe and freeze graph/project-event plus execution wire contracts across Rust and TypeScript.
+**Goal:** Make every Batch A active-project node/database command lifecycle-safe, prevent result-source capability aliasing, and freeze graph/project-event plus execution wire contracts across Rust and TypeScript.
 
-**Architecture:** Frontend application workflows capture one `ProjectIdentitySnapshot`, pass its required `projectInstanceId` through service DTOs, and reject stale completions. Rust validates the caller identity at the final `ProjectState` authority gate, returns project-scoped DTOs, and emits events carrying the same identity. Strict TypeScript parsers consume Rust golden fixtures before any store effect.
+**Architecture:** Frontend application workflows capture one `ProjectIdentitySnapshot`, pass its required `projectInstanceId` through service DTOs, and reject stale completions. Rust validates the caller identity at the final `ProjectState` authority gate, returns project-scoped DTOs, and emits events carrying the same identity. Result-source handles use one process-global monotonic allocator, database IDs remain project-scoped resources, and strict TypeScript parsers consume Rust golden fixtures before any store effect.
 
 **Tech Stack:** Rust 2024, Tauri 2 commands/events/channels, Serde, React 19, TypeScript 5.8, Zustand, Vitest 4, pnpm 11.
 
@@ -680,3 +680,528 @@ git --no-pager diff --stat
 ```
 
 Expected: no whitespace errors, no staged changes, no unintended generated/build files, and only planned/user-existing modifications.
+
+---
+
+## Final-review expansion
+
+The independent whole-plan review found four architecture gaps. The approved design makes the review govern over the original Task 5 follow-up-capability exclusion and expands Batch A with Tasks 8–12. Tasks 1–7 remain complete and are not reimplemented.
+
+### Expansion file map
+
+#### Result-source capability
+
+- `src-tauri/src/node_system/runtime/result_store.rs`: process-global source ID allocation and unit tests.
+- `src-tauri/src/project/project_state.rs`: replacement-project source alias regression through descriptor/value/page/release APIs.
+- `src-tauri/src/commands/command_node_system.rs`: follow-up command regression; command signatures remain unchanged.
+
+#### Database lifecycle
+
+- `src/services/database/databaseService.ts`: required identity for all project-owned reads, edits, and export.
+- `src/services/database/databaseService.test.ts`: exact invoke payload contract for all 20 project-owned commands.
+- `src/features/application/databaseEditor/useDataLoader.ts`: lifecycle snapshot for page/meta reads.
+- `src/features/application/databaseEditor/useEditActions.ts`: lifecycle snapshot for post-edit metadata and export.
+- `src/services/worksheet/worksheetDataService.ts`: caller-supplied lifecycle identity for database-backed worksheet previews.
+- `src/views/BayesView/BayesView.tsx`, `src/views/DatabaseEditor/DatabaseEditorWindow.tsx`, `src/views/EditorView/Layout/Detail/panels/WorksheetDetailPanel.tsx`: capture one identity and suppress stale metadata completions.
+- `src-tauri/src/commands/command_dataframe/mod.rs`: required Rust identity parameters and thin read/export helpers.
+- `src-tauri/src/project/project_state_database.rs`: identity-aware detached database snapshots and export publication.
+- `src-tauri/tests/database_test.rs`: focused integration coverage for database I/O.
+
+#### Execution parser and preview
+
+- `src/shared/types/dto/runEventParser.ts`: canonical graph-path and UUID-backed port validation.
+- `src/shared/types/dto/runEventParser.test.ts`: malformed identity regression matrix.
+- `src/shared/types/dto/editorProjectionGuards.ts`: shared strict port-address guard.
+- `src/features/application/editor/requestPinPreview.ts`: stale settlement is a no-op.
+- `src/features/application/editor/requestPinPreview.test.ts`: replacement generation/key collision regression.
+- `src/features/application/projectLifecycleReceiptDependencies.ts`: synchronous execution-store cleanup on lifecycle reset.
+- `src/features/application/projectLifecycleReceiptDependencies.test.ts`: reset clears old previews before replacement hydration.
+
+#### Policy and evidence
+
+- `src/services/project/projectFilesystemContract.test.ts`: database identity policy and capability exemptions.
+- `TODO.md`: fresh final-review expansion evidence.
+
+---
+
+### Task 8: Make result-source handles process-global capabilities
+
+**Files:**
+- Modify: `src-tauri/src/node_system/runtime/result_store.rs`
+- Modify: `src-tauri/src/project/project_state.rs`
+- Modify: `src-tauri/src/commands/command_node_system.rs`
+
+**Interfaces:**
+- Keeps `ResultSourceId(u64)` and every decimal-string IPC shape unchanged.
+- Produces one module-level process-global monotonic allocator shared by every `ResultStore`.
+- `ResultStore::new()` and `ResultStore::with_capacity()` no longer reset source allocation.
+- Later policy work continues classifying source follow-ups as capability-authorized because IDs are globally non-reusable within the process.
+
+- [ ] **Step 1: Add failing cross-store and concurrent allocator tests**
+
+In `result_store.rs`, add tests that publish snapshots through separate stores:
+
+```rust
+let first_store = ResultStore::new();
+let replacement_store = ResultStore::new();
+let first = publish_test_snapshot(&first_store, RunId::new(1));
+let replacement = publish_test_snapshot(&replacement_store, RunId::new(2));
+assert_ne!(first.source_id, replacement.source_id);
+assert!(replacement.source_id.get() > first.source_id.get());
+```
+
+Spawn multiple threads, each with its own `ResultStore`, publish one source per thread, collect IDs into a `BTreeSet`, and assert the set length equals the number of publications.
+
+- [ ] **Step 2: Add a failing replacement-project alias regression**
+
+In the `ProjectState` tests, retain the old `ResultStore`, activate a replacement project, publish a new source, and prove the old handle cannot resolve or release the replacement source:
+
+```rust
+assert_ne!(old_source.source_id, replacement_source.source_id);
+assert_eq!(state.result_source_descriptor(old_source.source_id), None);
+assert_eq!(state.result_source_value(old_source.source_id), None);
+assert_eq!(state.result_source_page(old_source.source_id, 0, 10), None);
+assert!(!state.release_result_source(old_source.source_id));
+assert!(state.result_source_descriptor(replacement_source.source_id).is_some());
+```
+
+Also exercise the four thin Tauri helpers with the old decimal ID and assert descriptor/value/page return `None` and release returns `false`.
+
+- [ ] **Step 3: Run RED tests**
+
+```sh
+pnpm rust:test --lib result_source_ids_are_process_global -- --test-threads=1 --nocapture
+pnpm rust:test --lib stale_source_handle_cannot_alias_replacement_project -- --test-threads=1 --nocapture
+```
+
+Expected: FAIL because each `ResultStoreInner` currently initializes `next_id` to zero and both stores issue source ID `1`.
+
+- [ ] **Step 4: Implement the global monotonic allocator**
+
+Replace per-store allocation with a module-level allocator:
+
+```rust
+static NEXT_RESULT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_result_source_range(count: usize) -> u64 {
+    let count = u64::try_from(count).expect("result source batch length fits u64");
+    NEXT_RESULT_SOURCE_ID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| next.checked_add(count))
+        .expect("result source id space exhausted")
+}
+```
+
+Remove `next_id` from `ResultStoreInner`. `commit_batch` obtains the first ID from `allocate_result_source_range(prepared.len())`. Do not add a test reset function: resetting a process-global capability allocator could itself create aliases between parallel tests or live stores.
+
+- [ ] **Step 5: Run GREEN and compatibility tests**
+
+```sh
+pnpm rust:test --lib result_source_ids_are_process_global -- --test-threads=1 --nocapture
+pnpm rust:test --lib stale_source_handle_cannot_alias_replacement_project -- --test-threads=1 --nocapture
+pnpm rust:test --lib descriptor_page_and_release_replace_result_source_store_reads -- --test-threads=1 --nocapture
+pnpm rust:test --lib prepared_runtime_values_commit_as_an_ordered_atomic_batch -- --test-threads=1 --nocapture
+pnpm rust:test --lib execution_ipc_dto_serializes_opaque_ids_as_decimal_strings -- --test-threads=1 --nocapture
+```
+
+Expected: PASS; wire IDs remain canonical decimal strings and store-local descriptor/value/page/release behavior is unchanged.
+
+- [ ] **Step 6: Review checkpoint**
+
+Run `git diff --check`. Confirm no allocator reset/test escape hatch exists, `runId`/`sourceId` follow-up signatures are unchanged, and old-handle release cannot remove a replacement source.
+
+---
+
+### Task 9: Make every project database operation lifecycle-owned
+
+**Files:**
+- Modify: `src/services/database/databaseService.ts`
+- Modify: `src/services/database/databaseService.test.ts`
+- Modify: `src/features/application/databaseEditor/useDataLoader.ts`
+- Create: `src/features/application/databaseEditor/useDataLoader.test.ts`
+- Modify: `src/features/application/databaseEditor/useEditActions.ts`
+- Create: `src/features/application/databaseEditor/useEditActions.lifecycle.test.ts`
+- Modify: `src/services/worksheet/worksheetDataService.ts`
+- Create: `src/services/worksheet/worksheetDataService.lifecycle.test.ts`
+- Modify: `src/views/BayesView/BayesView.tsx`
+- Create: `src/views/BayesView/BayesView.databaseIdentity.test.tsx`
+- Modify: `src/views/DatabaseEditor/DatabaseEditorWindow.tsx`
+- Create: `src/views/DatabaseEditor/DatabaseEditorWindow.databaseIdentity.test.tsx`
+- Modify: `src/views/EditorView/Layout/Detail/panels/WorksheetDetailPanel.tsx`
+- Create: `src/views/EditorView/Layout/Detail/panels/WorksheetDetailPanel.databaseIdentity.test.tsx`
+- Modify: `src-tauri/src/commands/command_dataframe/mod.rs`
+- Modify: `src-tauri/src/project/project_state_database.rs`
+- Modify: `src-tauri/tests/database_test.rs`
+
+**Interfaces:**
+- Read signatures become `getDatabaseMeta(projectInstanceId, id)`, `getDatabaseRows(projectInstanceId, id, offset, limit)`, `getColumnStats(projectInstanceId, id)`, `getColumnDistribution(projectInstanceId, id)`, `getDatasetOverview(projectInstanceId, id)`, and `getEditState(projectInstanceId, id)`.
+- Export becomes `exportDatabase(projectInstanceId, id, path, format)`.
+- Existing mutation signatures remain required and unchanged.
+- Rust produces `ProjectState::with_database_snapshot_for_project(&ProjectInstanceId, id, f)` and an identity-aware export snapshot/publication path.
+- `list_sqlite_tables`, `list_sql_tables`, and `list_excel_sheets` remain project-independent.
+
+- [ ] **Step 1: Add failing exact service tests for all project-owned commands**
+
+Extend `databaseService.test.ts` with a table for the seven currently identity-free methods:
+
+```ts
+await DatabaseService.getDatabaseMeta(projectInstanceId, 'sales');
+expect(invoke).toHaveBeenCalledWith('get_database_meta', { projectInstanceId, id: 'sales' });
+
+await DatabaseService.getDatabaseRows(projectInstanceId, 'sales', 0, 50);
+expect(invoke).toHaveBeenCalledWith('get_database_rows', {
+  projectInstanceId, id: 'sales', offset: 0, limit: 50,
+});
+```
+
+Repeat exact payload assertions for column stats, column distribution, dataset overview, edit state, and export. Retain the existing table covering the 13 identity-bearing lifecycle/edit mutations, yielding an exact 20-command inventory.
+
+- [ ] **Step 2: Add failing frontend replacement-race tests**
+
+In `useDataLoader.test.ts`, `useEditActions.lifecycle.test.ts`, `worksheetDataService.lifecycle.test.ts`, `BayesView.databaseIdentity.test.tsx`, `DatabaseEditorWindow.databaseIdentity.test.tsx`, and `WorksheetDetailPanel.databaseIdentity.test.tsx`, delay metadata/page/export promises, call `projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0)`, resolve the old promise, and assert:
+
+```ts
+expect(useDatabaseStore.getState()).toEqual(replacementStoreSnapshot);
+expect(setLoadedRows).not.toHaveBeenCalled();
+expect(updateDatabase).not.toHaveBeenCalled();
+```
+
+For export, assert the old completion does not show success for the replacement project. For worksheet preview and Bayes/database/detail metadata hydration, pass one captured identity into the service and recheck it before each store callback.
+
+- [ ] **Step 3: Run frontend RED tests**
+
+```sh
+pnpm test src/services/database/databaseService.test.ts src/features/application/dataManagement/databaseMutation.test.ts src/features/application/databaseEditor/useDataLoader.test.ts src/features/application/databaseEditor/useEditActions.lifecycle.test.ts src/services/worksheet/worksheetDataService.lifecycle.test.ts src/views/BayesView/BayesView.databaseIdentity.test.tsx src/views/DatabaseEditor/DatabaseEditorWindow.databaseIdentity.test.tsx src/views/EditorView/Layout/Detail/panels/WorksheetDetailPanel.databaseIdentity.test.tsx src/features/application/projectLifecycleReceiptDependencies.test.ts
+```
+
+Expected: FAIL because seven service methods omit identity and stale read completions can still update replacement UI state.
+
+- [ ] **Step 4: Add failing Rust stale read/export tests**
+
+In `project_state_database.rs` and `command_dataframe/mod.rs`, cover same database ID in two activated projects:
+
+```rust
+let stale = old_session.instance_id;
+state.activate_project_fixture(replacement_root, replacement_data_with_sales);
+let result = state.with_database_snapshot_for_project(&stale, "sales", |_| Ok(()));
+assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
+```
+
+For meta, rows, stats, distribution, overview, edit state, and export command helpers, assert stale identity returns `stale_project_lifecycle` without invoking the snapshot closure. For export, pre-create the destination with sentinel bytes and assert stale-before-entry and replacement-before-final-publication leave those bytes unchanged and remove the temporary output.
+
+- [ ] **Step 5: Run Rust RED tests**
+
+```sh
+pnpm rust:test --lib database_reads_reject_stale_project_identity -- --test-threads=1 --nocapture
+pnpm rust:test --lib database_export_rejects_replacement_before_publication -- --test-threads=1 --nocapture
+```
+
+Expected: compile/test failure because identity-aware snapshot/export APIs and read command parameters do not exist.
+
+- [ ] **Step 6: Implement identity-aware frontend services and workflows**
+
+Change every project-owned service method to include `projectInstanceId`. At each application/view workflow:
+
+```ts
+const identity = captureProjectIdentity();
+const result = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, id);
+if (!isCurrentProjectIdentity(identity)) return;
+```
+
+Capture once before the first read in a logical refresh and reuse that identity through rows followed by metadata. Recheck after every await and before Zustand/local component state. Do not move lifecycle-global reads into `DatabaseService`.
+
+Ensure project lifecycle reset clears old database UI state before replacement hydration; stale read completion performs no store effect or success notification.
+
+- [ ] **Step 7: Implement Rust snapshot and export authority**
+
+Add `project_instance_id: ProjectInstanceId` to all 20 project-owned Tauri commands. Keep the commands thin and delegate reads to:
+
+```rust
+pub(crate) fn with_database_snapshot_for_project<F, R>(
+    &self,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    f: F,
+) -> Result<R, ProjectFilesystemError>
+```
+
+Capture and validate the active session/publication identity before cloning `DatabaseInstance`; execute expensive Polars work outside global locks. Mutations continue through existing revisioned writer/final commit validation.
+
+For export, snapshot under expected identity, write to a sibling temporary file outside locks, revalidate the same project identity immediately before atomic replacement, and remove the temporary file on stale/error. Do not hold project locks during CSV/Parquet serialization.
+
+- [ ] **Step 8: Run Task 9 GREEN tests**
+
+Run Steps 3 and 5, then:
+
+```sh
+pnpm typecheck
+pnpm rust:check
+```
+
+Expected: all focused tests and checks PASS. Existing mutations still return authority-sourced `ResourceMutationResultDto.projectInstanceId`.
+
+- [ ] **Step 9: Review checkpoint**
+
+Confirm all 20 project-owned database service/command signatures require identity, the three external-source listing commands remain exempt, stale reads cannot expose a replacement database with the same ID, and no lock is held during database computation or export I/O.
+
+---
+
+### Task 10: Reject malformed execution graph and port identities
+
+**Files:**
+- Modify: `src/shared/types/dto/editorProjectionGuards.ts`
+- Modify: `src/shared/types/dto/editorMutationWireParser.ts`
+- Modify: `src/shared/types/dto/editorMutationWireParser.test.ts`
+- Modify: `src/shared/types/dto/runEventParser.ts`
+- Modify: `src/shared/types/dto/runEventParser.test.ts`
+- Modify: `src/services/nodeSystem/nodeSystemGoldenContracts.test.ts`
+
+**Interfaces:**
+- Produces shared `isGraphResourcePath(value): value is string` and strict UUID-backed `isPortAddressDto` behavior.
+- `parseExecutionDemandDto` and `parseRunEvent` keep their public signatures.
+- Accepts only `events/...` or `functions/...` graph paths and UUID `nodeId`/instance `instanceId` values.
+
+- [ ] **Step 1: Add failing malformed-identity tests**
+
+For both declared and instance port fixtures, mutate one field at a time:
+
+```ts
+expect(() => parseExecutionDemandDto({
+  type: 'outputs',
+  outputs: [{ graphPath: '', port: validPort }],
+  includeDefaultResults: false,
+})).toThrow('graph output reference');
+expect(() => parseExecutionDemandDto(outputsWith({ nodeId: 'not-a-uuid' }))).toThrow();
+expect(() => parseExecutionDemandDto(outputsWith({ instanceId: 'not-a-uuid' }))).toThrow();
+expect(() => parseRunEvent(eventWithCorrelation({ graphPath: 'not-a-resource' }))).toThrow();
+```
+
+Also reject `.yssbi-event` under `functions/`, `.yssbi-function` under `events/`, empty path segments, and malformed OutputReady graph/port identities.
+
+- [ ] **Step 2: Run RED**
+
+```sh
+pnpm test src/shared/types/dto/runEventParser.test.ts src/services/nodeSystem/nodeSystemGoldenContracts.test.ts
+```
+
+Expected: FAIL because current execution parsing checks graph paths and port IDs only as strings.
+
+- [ ] **Step 3: Implement shared strict guards**
+
+Export canonical helpers from `editorProjectionGuards.ts`:
+
+```ts
+export function isGraphResourcePath(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const segments = value.split('/');
+  if (segments.length < 2 || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    return false;
+  }
+  const [root, ...resourceSegments] = segments;
+  if (!resourceSegments.every((segment) => /^[A-Za-z0-9._-]+$/.test(segment))) return false;
+  return (root === 'events' && value.endsWith('.yssbi-event'))
+    || (root === 'functions' && value.endsWith('.yssbi-function'));
+}
+```
+
+Use the repository UUID guard for declared `nodeId` and instance `instanceId`. Require every non-root segment to match `/^[A-Za-z0-9._-]+$/` after rejecting empty, `.` and `..` segments. Reuse the same helpers in `editorMutationWireParser.ts` and `runEventParser.ts`; delete the parser-local graph-path implementation so no divergent validator remains.
+
+- [ ] **Step 4: Wire strict validation into every execution identity**
+
+`parseGraphOutputRefDto` validates graph path and port. `parseRunCorrelationDto` validates correlation graph path and UUID-backed nullable `nodeId`. Preserve `nodeTypeId` as an opaque Registry identifier. Golden fixture variants must continue parsing unchanged.
+
+- [ ] **Step 5: Run GREEN**
+
+Run Step 2 and:
+
+```sh
+pnpm typecheck
+pnpm test src/shared/types/dto/editorMutationWireParser.test.ts
+```
+
+Expected: all tests PASS; malformed demand fails before invoke construction and malformed channel events fail before callback/terminal observation.
+
+- [ ] **Step 6: Review checkpoint**
+
+Search `runEventParser.ts` for raw string-only graph/port validation. Confirm declared/instance UUIDs and event/function path suffixes are enforced by one shared helper.
+
+---
+
+### Task 11: Make stale pin-preview settlement a complete no-op
+
+**Files:**
+- Modify: `src/features/application/editor/requestPinPreview.ts`
+- Modify: `src/features/application/editor/requestPinPreview.test.ts`
+- Modify: `src/features/application/projectLifecycleReceiptDependencies.ts`
+- Modify: `src/features/application/projectLifecycleReceiptDependencies.test.ts`
+
+**Interfaces:**
+- Project lifecycle reset synchronously clears execution graphs/previews.
+- Stale preview event, rejection, and completion return `{ status: 'rejected', reason: 'stale-project-lifecycle' }` without any Zustand getter or setter.
+- Same-project non-stale failure cleanup remains generation-owned.
+
+- [ ] **Step 1: Add a failing replacement generation-collision test**
+
+Start an old preview, replace the project, reset execution state, and create a replacement preview for the same graph/port with the same generation value. Resolve/reject the old request and assert:
+
+```ts
+expect(useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(cacheKey))
+  .toMatchObject({ generation: replacementGeneration, status: 'pending' });
+expect(removePinPreview).not.toHaveBeenCalled();
+```
+
+Spy on `useExecutionStore.getState` after replacement and prove the stale settlement itself performs no store read.
+
+- [ ] **Step 2: Add a failing lifecycle-reset test**
+
+Seed execution state with a pending preview, invoke `createProjectLifecycleReceiptDependencies().clearProject()`, and assert `graphs` is empty before replacement hydration callbacks run.
+
+- [ ] **Step 3: Run RED**
+
+```sh
+pnpm test src/features/application/editor/requestPinPreview.test.ts src/features/application/projectLifecycleReceiptDependencies.test.ts
+```
+
+Expected: FAIL because stale settlement calls `store.removePinPreview` and lifecycle clear does not explicitly clear execution state.
+
+- [ ] **Step 4: Implement synchronous reset and stale no-op**
+
+In lifecycle dependencies, clear execution state during `clearProject`:
+
+```ts
+useExecutionStore.setState({
+  graphs: {},
+  previewGeneration: 0,
+  playbackGraphPath: null,
+  isPlaying: false,
+});
+```
+
+In `requestPinPreview`, replace `rejectStaleSettlement` with a pure result constructor that does not close over `store`:
+
+```ts
+const staleSettlement = (): PinPreviewRequestResult => ({
+  status: 'rejected',
+  reason: 'stale-project-lifecycle',
+});
+```
+
+Channel callbacks retain their pre-store identity check. Non-stale error paths may still fail/remove the generation they own.
+
+- [ ] **Step 5: Run GREEN**
+
+Run Step 3 and:
+
+```sh
+pnpm test src/features/core/execution/useExecutionStore.lifecycle.test.ts src/features/application/editor/observeGraphRunEvent.test.ts
+pnpm typecheck
+```
+
+Expected: all tests PASS and replacement previews survive every old-request settlement path.
+
+- [ ] **Step 6: Review checkpoint**
+
+Confirm every stale branch returns before `useExecutionStore.getState`, `removePinPreview`, `failPinPreview`, toast, or other store/UI effects.
+
+---
+
+### Task 12: Expand architecture policy and deliver final evidence
+
+**Files:**
+- Modify: `src/services/project/projectFilesystemContract.test.ts`
+- Modify: `TODO.md`
+- Review: all files changed in Tasks 8–11
+
+**Interfaces:**
+- Adds the exact 20 project-owned database commands to identity-required policy.
+- Keeps exactly three external-source listing commands project-independent.
+- Retains source follow-ups as capability exemptions only because Task 8 proves process-global non-reuse.
+- Produces final evidence for the approved whole-plan review expansion.
+
+- [ ] **Step 1: Add failing policy mutations**
+
+Extend the audit inventory with this exact identity-required set:
+
+```ts
+const projectDatabaseIdentityFields = {
+  load_database: 'projectInstanceId',
+  delete_database: 'projectInstanceId',
+  rename_database: 'projectInstanceId',
+  get_database_meta: 'projectInstanceId',
+  get_database_rows: 'projectInstanceId',
+  get_column_stats: 'projectInstanceId',
+  get_column_distribution: 'projectInstanceId',
+  get_dataset_overview: 'projectInstanceId',
+  edit_cell: 'projectInstanceId',
+  add_row: 'projectInstanceId',
+  delete_rows: 'projectInstanceId',
+  add_column: 'projectInstanceId',
+  delete_column: 'projectInstanceId',
+  cast_column: 'projectInstanceId',
+  rename_column: 'projectInstanceId',
+  undo_edit: 'projectInstanceId',
+  redo_edit: 'projectInstanceId',
+  save_database_changes: 'projectInstanceId',
+  export_database: 'projectInstanceId',
+  get_edit_state: 'projectInstanceId',
+} as const;
+```
+
+Add fixtures that remove/rename `projectInstanceId` from `get_database_rows` and `edit_cell` invokes, remove `ProjectInstanceId` from those Rust signatures, and incorrectly classify `get_database_meta` as capability-authorized. Each mutation must make the audit fail with the command name.
+
+- [ ] **Step 2: Run policy RED**
+
+```sh
+pnpm test src/services/project/projectFilesystemContract.test.ts
+```
+
+Expected before inventory/exemption correction: FAIL listing database commands that are still capability-exempt or missing required identity.
+
+- [ ] **Step 3: Implement exact policy classification**
+
+Merge `projectDatabaseIdentityFields` into the identity-required map exactly once. Keep only `list_sqlite_tables`, `list_sql_tables`, and `list_excel_sheets` in the database external-source/global exemption. Keep `get_result_source_descriptor`, `get_result_source_value`, `get_result_source_page`, and `release_result_source` in capability exemptions and document that their decimal handles are process-global and non-reusable.
+
+Do not add wildcard exemptions or weaken AST payload/signature checks.
+
+- [ ] **Step 4: Run focused expansion matrix**
+
+```sh
+pnpm typecheck
+pnpm test src/services/database/databaseService.test.ts src/features/application/dataManagement/databaseMutation.test.ts src/shared/types/dto/runEventParser.test.ts src/services/nodeSystem/nodeSystemGoldenContracts.test.ts src/features/application/editor/requestPinPreview.test.ts src/features/application/projectLifecycleReceiptDependencies.test.ts src/services/project/projectFilesystemContract.test.ts
+pnpm rust:test --lib result_source_ids_are_process_global -- --test-threads=1 --nocapture
+pnpm rust:test --lib stale_source_handle_cannot_alias_replacement_project -- --test-threads=1 --nocapture
+pnpm rust:test --lib database_reads_reject_stale_project_identity -- --test-threads=1 --nocapture
+pnpm rust:test --lib database_export_rejects_replacement_before_publication -- --test-threads=1 --nocapture
+pnpm rust:fmt:check
+pnpm rust:check
+```
+
+Expected: every command exits 0; existing warnings may remain but no new warning is introduced.
+
+- [ ] **Step 5: Run broad verification**
+
+```sh
+pnpm test
+pnpm rust:test --lib -- --test-threads=1
+pnpm verify
+```
+
+Expected: frontend and serial Rust lib suites pass. If `pnpm verify` again fails only with the same Windows `LNK1102` while linking integration binaries, record the exact binaries/error and do not claim the command passed.
+
+- [ ] **Step 6: Request final whole-plan review**
+
+Provide the reviewer the complete Tasks 1–12 diff and verification report. Require explicit checks for source aliasing, all database read/mutation gates, strict graph/UUID parsing, stale preview zero effects, capability exemptions, and absence of optional compatibility paths. Fix every Critical/Important finding before delivery.
+
+- [ ] **Step 7: Update TODO and design evidence**
+
+Under `2026.08.06`, retain only the already completed Batch A checkmarks and update their evidence with Task 8–12 commands/results. Do not mark unrelated Batch B–D omissions complete. Ensure the design and plan describe process-global source capabilities and exact database command identity.
+
+- [ ] **Step 8: Final hygiene**
+
+```sh
+git diff --check
+git --no-pager diff --cached --name-only
+git --no-optional-locks status --short
+git --no-pager diff --stat
+```
+
+Expected: no whitespace errors, no staged files, no unintended build/generated files, and only Tasks 1–12 plus the approved design/plan/TODO changes.

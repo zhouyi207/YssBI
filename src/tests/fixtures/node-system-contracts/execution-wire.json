@@ -1,0 +1,347 @@
+{
+  "demands": [
+    {
+      "type": "default"
+    },
+    {
+      "includeDefaultResults": false,
+      "outputs": [
+        {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "instanceId": "00000000-0000-0000-0000-000000000003",
+            "kind": "instance",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "templateKey": "results"
+          }
+        }
+      ],
+      "type": "outputs"
+    }
+  ],
+  "executeGraphResult": {
+    "runId": "9007199254740993"
+  },
+  "format": "yssbi.execution-wire.v1",
+  "runEvents": [
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "type": "runStarted"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "type": "runCompleted"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "code": "kernelFailed",
+        "type": "runErrored"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "type": "runCancelled"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "activationId": "9007199254740993",
+        "operationIndex": 3,
+        "type": "operationStarted"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "activationId": "9007199254740993",
+        "operationIndex": 3,
+        "type": "operationCompleted"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "activationId": "9007199254740993",
+        "code": "kernelFailed",
+        "operationIndex": 3,
+        "type": "operationErrored"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "sourceId": "9007199254740993",
+        "type": "valueReady",
+        "valueIndex": 4
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "name": "contract-result",
+        "sourceId": "9007199254740993",
+        "type": "resultReady"
+      }
+    },
+    {
+      "basis": {
+        "graphRevision": "7",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      },
+      "correlation": {
+        "compileId": "9007199254740993",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740993",
+        "selectionDigest": "contract-selection"
+      },
+      "kind": {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        "sourceId": "9007199254740993",
+        "type": "outputReady"
+      }
+    }
+  ]
+}

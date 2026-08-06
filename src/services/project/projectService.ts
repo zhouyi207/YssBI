@@ -3,6 +3,10 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecuteGraphResultDto, RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
+import {
+    parseExecuteGraphResultDto,
+    parseExecutionDemandDto,
+} from "@/shared/types/dto/runEventParser";
 import type { Graph } from "@/shared/types/domain";
 import type { GraphInstanceDTO } from "@/shared/types/dto";
 import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
@@ -422,18 +426,21 @@ export class ProjectService {
     }
     /** Execute one graph document and drain its streamed run events. */
     static async executeGraphDocument(
+        projectInstanceId: string,
         graphPath: string,
         demand: ExecutionDemandDto,
         onEvent?: (event: RunEvent) => void,
     ): Promise<ExecuteGraphResultDto> {
+        const parsedDemand = parseExecutionDemandDto(demand);
         const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
         try {
             let result: ExecuteGraphResultDto;
             try {
-                result = await invoke<ExecuteGraphResultDto>(
+                const rawResult = await invoke<unknown>(
                     "execute_graph_document",
-                    { graphPath, demand, onEvent: channel },
+                    { projectInstanceId, graphPath, demand: parsedDemand, onEvent: channel },
                 );
+                result = parseExecuteGraphResultDto(rawResult);
             } catch (error) {
                 if (commandSentTerminalRunEvent(error)) {
                     try {

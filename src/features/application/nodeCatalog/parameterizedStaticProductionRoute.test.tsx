@@ -17,6 +17,7 @@ import {
   executeEditorMutation,
   resetEditorMutationCoordinator,
 } from '@/features/application/editorMutation/editorMutationCoordinator';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { CatalogService } from '@/services/nodeSystem/catalogService';
 import type {
   EditorGraphMutationDto,
@@ -66,6 +67,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage('en-US');
   resetEditorMutationCoordinator();
+  projectPublicationCoordinator.cancelProject();
   useGraphDataStore.setState({ graphEntities: {} });
   container = document.createElement('div');
   document.body.append(container);
@@ -82,6 +84,8 @@ describe('ParameterizedStatic production route', () => {
   it('uses one Rust-authoritative fixture from Catalog descriptor through ordered editor submit', async () => {
     expect(isLocalizedCatalogDto(fixture.catalog)).toBe(true);
     if (!isLocalizedCatalogDto(fixture.catalog)) throw new Error('invalid Rust Catalog fixture');
+    const projectInstanceId = fixture.catalog.projectInstanceId;
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
     const initialProjection = validateEditorGraphProjection(fixture.initialProjection);
     const prepared = prepareGraphProjectionReplacements([{
       graphPath: fixture.graphPath,
@@ -139,6 +143,7 @@ describe('ParameterizedStatic production route', () => {
     expect(mutationCalls[0]).toEqual([
       'mutate_graph_document',
       {
+        projectInstanceId,
         graphPath: fixture.graphPath,
         locale: fixture.create.locale,
         request: {
@@ -161,6 +166,7 @@ describe('ParameterizedStatic production route', () => {
     expect(mutationCalls[1]).toEqual([
       'mutate_graph_document',
       {
+        projectInstanceId,
         graphPath: fixture.graphPath,
         locale: fixture.connect.locale,
         request: {
@@ -208,6 +214,7 @@ describe('ParameterizedStatic production route', () => {
     expect(mutationCalls[2]).toEqual([
       'mutate_graph_document',
       {
+        projectInstanceId,
         graphPath: fixture.graphPath,
         locale: fixture.submit.locale,
         request: {

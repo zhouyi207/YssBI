@@ -205,6 +205,7 @@ export interface ResourceDeltaDto<TPayload = ResourceDocumentPatchDto> {
 }
 
 export interface GraphMutationResultDto {
+  projectInstanceId: string;
   delta: GraphDeltaDto;
   projectionReplacement: GraphProjectionReplacementDto;
   history: HistoryStatusDto;

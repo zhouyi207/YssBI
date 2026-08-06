@@ -7,7 +7,9 @@ Close the highest-risk remaining node-architecture gaps before continuing broade
 1. every active-project node command is owned by the caller's exact project lifecycle;
 2. graph mutation direct results and project events carry one coherent project identity;
 3. stale WebView commands have zero effects on a replacement project;
-4. execution and project-event Rust/TypeScript wire contracts are strict and drift-resistant.
+4. execution and project-event Rust/TypeScript wire contracts are strict and drift-resistant;
+5. result-source capabilities cannot alias across project replacement;
+6. every project database read and mutation is lifecycle-owned.
 
 This is Batch A of the omissions recorded under `TODO.md` → `## 2026.08.06` → `node_architecture 遗漏审计`.
 
@@ -39,14 +41,31 @@ The following commands accept a required `projectInstanceId` and validate it in 
 
 The implementation includes a source/contract audit that forces every active-project command to declare its identity policy. This prevents future commands from silently bypassing lifecycle ownership.
 
+### Project database commands requiring explicit identity
+
+Every command that reads or mutates a database owned by the active project accepts a required `projectInstanceId`:
+
+- lifecycle/resource mutation: `load_database`, `delete_database`, `rename_database`;
+- reads: `get_database_meta`, `get_database_rows`, `get_column_stats`, `get_column_distribution`, `get_dataset_overview`, `get_edit_state`;
+- edit mutations: `edit_cell`, `add_row`, `delete_rows`, `add_column`, `delete_column`, `cast_column`, `rename_column`, `undo_edit`, `redo_edit`, `save_database_changes`;
+- snapshot export: `export_database`.
+
+`list_sqlite_tables`, `list_sql_tables`, and `list_excel_sheets` inspect caller-selected external sources before project import and remain project-independent.
+
+Rust validates reads against an identity-aware database snapshot and validates mutations again at their final filesystem/authority commit gate. Export snapshots data without holding project locks during external I/O, writes to a temporary output, revalidates lifecycle before publication, and atomically replaces the selected output only for the still-current project.
+
+Database IDs remain project resource identifiers serialized under `databases/{database-id}`. They are not treated as globally non-aliasing capabilities.
+
 ### Explicit exclusions
 
 The following remain unchanged:
 
 - project activation and bootstrap commands, because they establish identity;
 - global Registry construction and project-independent catalog assembly;
-- follow-up operations authorized by opaque `runId` or `sourceId` capability handles;
+- follow-up operations authorized by process-global opaque `runId` or `sourceId` capability handles;
 - project lifecycle workflows already governed by lifecycle mutation receipts.
+
+`sourceId` remains a decimal-string opaque handle, but allocation is process-global and monotonic across every `ResultStore`. Creating or replacing a project never resets the allocator, so an old source handle cannot alias a replacement project's source. Follow-up source APIs remain unchanged.
 
 ## Authority model
 
@@ -83,8 +102,9 @@ A stale command returns `stale_project_lifecycle` and must not:
 - allocate graph/resource/publication revisions;
 - invalidate or publish compile products;
 - insert a run into `ProjectRunRegistry`;
+- expose or mutate a replacement project's result source or database through an aliased identifier;
 - emit `GraphDelta`, `ResourceMutationCommitted`, or run events;
-- modify frontend stores through a direct-result continuation.
+- modify frontend stores through a direct-result continuation, including stale pin-preview cleanup.
 
 ## Graph mutation result and event wire
 
@@ -134,6 +154,8 @@ Application coordinators use the captured identity snapshot around all command c
 - no publication submission occurs;
 - no store is updated;
 - no ordinary failure notification is shown.
+
+Pin-preview state is synchronously cleared by the project lifecycle reset. A stale preview event, rejection, or successful completion performs no Zustand read or write and cannot remove a same-path/same-port preview created by the replacement project.
 
 ### Project events
 
@@ -195,7 +217,7 @@ TypeScript consumes the Rust-generated/checked-in fixtures through production pa
 - extra fields on strict envelopes;
 - unknown enum variants;
 - unsafe numeric IDs where decimal strings are required;
-- malformed graph/port identities;
+- malformed graph resource paths and UUID-backed node/instance port identities;
 - missing project identity;
 - mismatched direct/event project or operation correlation.
 
@@ -229,6 +251,21 @@ The existing catalog/editor-projection golden contract remains intact.
 - Add command identity-policy source audits.
 - Run focused and broad verification.
 
+### Slice 5: Final-review capability and database closure
+
+- Move `sourceId` allocation to one process-global monotonic allocator while preserving the decimal-string wire and follow-up APIs.
+- Add replacement and concurrency regressions proving old source handles cannot read, page, or release replacement-project sources.
+- Thread required identity through every active-project database service and command.
+- Validate database reads at snapshot and mutations at the final commit authority gate, with stale zero-effect tests.
+- Move database commands out of capability exemptions in the architecture audit.
+
+### Slice 6: Final-review parser and preview closure
+
+- Reuse canonical graph-resource-path validation in execution demand, correlation, and event parsing.
+- Validate UUID-backed `nodeId` and instance port `instanceId` fields.
+- Make stale pin-preview settlement a complete no-op after lifecycle reset.
+- Add malformed execution identity and same-key replacement-preview regressions.
+
 ## Test strategy
 
 ### Rust focused tests
@@ -248,7 +285,10 @@ The existing catalog/editor-projection golden contract remains intact.
 - `GraphDeltaHandler` accepts current events and rejects stale events before store reads;
 - raw event parsers reject malformed and extra fields;
 - direct/event duplicates settle once;
-- execution demand and run-event fixtures pass production parsers.
+- execution demand and run-event fixtures pass production parsers;
+- malformed graph paths and UUID-backed port identities are rejected before invoke/callback effects;
+- stale preview settlement cannot remove a replacement project's same-key preview;
+- database services send exact required identity and stale reads/mutations have zero effects.
 
 ### Broader checks
 
@@ -272,8 +312,12 @@ Batch A is complete only when:
 4. direct graph mutation results and events carry coherent identity and delta correlation;
 5. every listed execution/event DTO variant is covered by Rust↔TypeScript golden tests and strict production parsing;
 6. no optional identity compatibility path remains;
-7. focused verification and architecture audits pass;
-8. `TODO.md` marks only the completed Batch A omissions as done, with fresh evidence.
+7. process-global source IDs cannot alias across project replacement, and old handles cannot affect replacement sources;
+8. every project database read and mutation requires and validates lifecycle identity;
+9. malformed execution graph/port identities are rejected before effects;
+10. stale pin-preview settlement performs no replacement-store effect;
+11. focused verification and architecture audits pass;
+12. `TODO.md` marks only the completed Batch A omissions as done, with fresh evidence.
 
 ## Out of scope
 

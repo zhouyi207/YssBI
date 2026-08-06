@@ -5,7 +5,39 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
+import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import type { RunEvent } from '@/shared/types/dto/runEvent';
 import { useProjectOperations } from './useProjectOperations';
+
+const projectInstanceId = 'project-instance-1';
+const graphPath = 'events/Main.yssbi-event';
+
+function runStartedEvent(): RunEvent {
+  return {
+    correlation: {
+      projectSessionId: 'backend-session-1',
+      graphPath,
+      graphRevision: '1',
+      registryFingerprint: 'registry-1',
+      resourceVersions: {},
+      compileId: '1',
+      selectionDigest: 'selection-1',
+      runId: 'run-stale',
+      nodeId: null,
+      nodeTypeId: null,
+      parentCall: null,
+    },
+    basis: {
+      graphRevision: '1',
+      registryFingerprint: 'registry-1',
+      resourceVersions: {},
+    },
+    kind: { type: 'runStarted' },
+  };
+}
 
 const executionState = {
   graphs: {},
@@ -46,6 +78,8 @@ describe('useProjectOperations execution demand', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearProjectLifecycle();
+    startProjectLifecycle(projectInstanceId);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -63,6 +97,7 @@ describe('useProjectOperations execution demand', () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
+    clearProjectLifecycle();
   });
 
   it('passes explicit Default demand for an ordinary event run', async () => {
@@ -71,9 +106,34 @@ describe('useProjectOperations execution demand', () => {
     });
 
     expect(ProjectService.executeGraphDocument).toHaveBeenCalledWith(
-      'events/Main.yssbi-event',
+      projectInstanceId,
+      graphPath,
       { type: 'default' },
       expect.any(Function),
     );
+  });
+
+  it('ignores delayed events and completion after project lifecycle replacement', async () => {
+    let emit!: (event: RunEvent) => void;
+    let resolveExecution!: (value: { runId: string }) => void;
+    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
+      (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
+        emit = onEvent ?? (() => undefined);
+        resolveExecution = resolve;
+      }),
+    );
+
+    const execution = operations.executeGraph();
+    startProjectLifecycle('project-instance-2');
+    emit(runStartedEvent());
+    resolveExecution({ runId: 'run-stale' });
+    await act(async () => execution);
+
+    expect(executionState.setActiveRunId).not.toHaveBeenCalled();
+    expect(executionState.commitExecutionVisual).not.toHaveBeenCalled();
+    expect(executionState.completeExecution).not.toHaveBeenCalled();
+    expect(executionState.failExecution).not.toHaveBeenCalled();
+    expect(executionState.interruptExecution).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 });

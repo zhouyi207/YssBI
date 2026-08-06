@@ -1,5 +1,9 @@
+use crate::commands::command_node_system::ExecuteGraphResultDto;
 use crate::commands::command_trace::TraceRecordDto;
-use crate::commands::node_system_execution_dto::RunEventDto;
+use crate::commands::node_system_execution_dto::{
+    EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionDemandDto, RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
+};
+use crate::event::{Event, EventProject, ProjectionStatusDto, ResourceMutationResultDto};
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, ProjectSessionId,
     ResourceVersionSet, SpanEvent, SpanKind, SpanStatus, TraceRecord,
@@ -10,12 +14,16 @@ use crate::node_system::catalog::{
 };
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
-    DocumentNode, GraphDocument, GraphResourcePath, GraphRevision, NodeId, NodePosition,
-    ResourceRevision,
+    DocumentNode, GraphDeltaEvent, GraphDocument, GraphDocumentPatch, GraphResourcePath,
+    GraphRevision, HistoryStatusDto, NodeId, NodePosition, OperationId, PortAddress,
+    PortInstanceId, ResourceRevision,
 };
-use crate::node_system::protocol::{NodeTypeId, ParameterKey};
+use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
+use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
-use crate::node_system::runtime::{RunEvent, RunEventKind};
+use crate::node_system::runtime::{
+    RUN_EVENT_KIND_VARIANT_COUNT, ResultSourceId, RunErrorCode, RunEvent, RunEventKind,
+};
 
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -185,6 +193,144 @@ fn contract_correlation(registry: &NodeRegistry) -> CorrelationContext {
     }
 }
 
+fn contract_output(port: PortAddress) -> GraphOutputRef {
+    GraphOutputRef {
+        graph_path: GraphResourcePath(GRAPH_PATH.into()),
+        port,
+    }
+}
+
+fn execution_wire_contract(registry: &NodeRegistry) -> Value {
+    const UNSAFE_ID: u64 = 9_007_199_254_740_993;
+    let node_id = NodeId::from_uuid(Uuid::from_u128(2));
+    let declared = contract_output(PortAddress::declared(
+        node_id,
+        PortKey::new("result").unwrap(),
+    ));
+    let instance = contract_output(PortAddress::instance(
+        node_id,
+        PortKey::new("results").unwrap(),
+        PortInstanceId::from_uuid(Uuid::from_u128(3)),
+    ));
+    let mut correlation = contract_correlation(registry);
+    correlation.compile_id = CompileId::new(UNSAFE_ID);
+    correlation.run_id = Some(crate::node_system::analysis::RunId::new(UNSAFE_ID));
+    let basis = CompilationBasis {
+        graph_revision: correlation.graph_revision,
+        registry_fingerprint: correlation.registry_fingerprint.clone(),
+        resource_versions: correlation.resource_versions.clone(),
+    };
+    let kinds = [
+        RunEventKind::RunStarted,
+        RunEventKind::RunCompleted,
+        RunEventKind::RunErrored {
+            code: RunErrorCode::KernelFailed,
+        },
+        RunEventKind::RunCancelled,
+        RunEventKind::OperationStarted {
+            operation_index: 3,
+            activation_id: UNSAFE_ID,
+        },
+        RunEventKind::OperationCompleted {
+            operation_index: 3,
+            activation_id: UNSAFE_ID,
+        },
+        RunEventKind::OperationErrored {
+            operation_index: 3,
+            activation_id: UNSAFE_ID,
+            code: RunErrorCode::KernelFailed,
+        },
+        RunEventKind::ValueReady {
+            value_index: 4,
+            source_id: ResultSourceId::new(UNSAFE_ID),
+        },
+        RunEventKind::ResultReady {
+            name: "contract-result".into(),
+            source_id: ResultSourceId::new(UNSAFE_ID),
+        },
+        RunEventKind::OutputReady {
+            output: declared.clone(),
+            source_id: ResultSourceId::new(UNSAFE_ID),
+        },
+    ];
+    let run_events = kinds
+        .into_iter()
+        .map(|kind| {
+            serde_json::to_value(RunEventDto::from(RunEvent {
+                correlation: correlation.clone(),
+                basis: basis.clone(),
+                kind,
+            }))
+            .expect("production RunEvent DTO must serialize")
+        })
+        .collect::<Vec<_>>();
+    let demands = [
+        ExecutionDemand::Default,
+        ExecutionDemand::Outputs {
+            outputs: vec![declared, instance].into_boxed_slice(),
+            include_default_results: false,
+        },
+    ]
+    .into_iter()
+    .map(|demand| {
+        serde_json::to_value(ExecutionDemandDto::from(demand))
+            .expect("production execution demand DTO must serialize")
+    })
+    .collect::<Vec<_>>();
+    let execute_graph_result = serde_json::to_value(ExecuteGraphResultDto {
+        run_id: UNSAFE_ID.to_string(),
+    })
+    .expect("production execute graph result DTO must serialize");
+
+    json!({
+        "format": "yssbi.execution-wire.v1",
+        "demands": demands,
+        "runEvents": run_events,
+        "executeGraphResult": execute_graph_result,
+    })
+}
+
+fn project_events_contract() -> Value {
+    let operation_id = OperationId::from_uuid(Uuid::from_u128(4));
+    let graph_delta = Event::Project(EventProject::GraphDelta {
+        project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
+        delta: GraphDeltaEvent {
+            graph_path: GraphResourcePath(GRAPH_PATH.into()),
+            from_revision: ResourceRevision::new(7),
+            to_revision: ResourceRevision::new(8),
+            caused_by: Some(operation_id),
+            payload: GraphDocumentPatch::new([]),
+        },
+    });
+    let resource_mutation = Event::Project(EventProject::ResourceMutationCommitted {
+        result: ResourceMutationResultDto {
+            operation_id,
+            project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
+            publication_revision: 11,
+            moves: Vec::new(),
+            deltas: Vec::new(),
+            worksheet_deltas: Vec::new(),
+            projection_replacements: Vec::new(),
+            projection_status: ProjectionStatusDto::Complete {
+                expected_graph_paths: Vec::new(),
+            },
+            history: HistoryStatusDto {
+                can_undo: true,
+                can_redo: false,
+            },
+        },
+    });
+
+    json!({
+        "format": "yssbi.project-events.v1",
+        "events": [
+            serde_json::to_value(graph_delta).expect("production GraphDelta event must serialize"),
+            serde_json::to_value(resource_mutation)
+                .expect("production ResourceMutationCommitted event must serialize"),
+        ],
+    })
+}
+
 fn required_fingerprint(value: &Value, pointer: &str, purpose: &str) -> String {
     let fingerprint = value
         .pointer(pointer)
@@ -281,6 +427,8 @@ fn contracts() -> BTreeMap<&'static str, Value> {
         ("localized-catalog.json", localized_catalog),
         ("editor-projection.json", editor_projection),
         ("fingerprint-wire.json", fingerprint_wire),
+        ("project-events.json", project_events_contract()),
+        ("execution-wire.json", execution_wire_contract(&registry)),
     ])
 }
 
@@ -326,9 +474,57 @@ fn fingerprint_wire_is_extracted_from_production_dto_encoders() {
 }
 
 #[test]
+fn execution_and_project_event_contract_inventories_are_complete() {
+    let builtin = build_builtin_node_system().expect("built-in node system must validate");
+    let execution = execution_wire_contract(&builtin.registry);
+    let run_events = execution["runEvents"].as_array().unwrap();
+    // Source declarations emit these counts; adding a source variant also breaks the
+    // exhaustive DTO conversion until both conversion and fixture coverage are updated.
+    let event_types = run_events
+        .iter()
+        .map(|event| event["kind"]["type"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(run_events.len(), RUN_EVENT_KIND_VARIANT_COUNT);
+    assert_eq!(event_types, RUN_EVENT_KIND_DTO_WIRE_TYPES);
+    let demand_types = execution["demands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|demand| demand["type"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(demand_types.len(), EXECUTION_DEMAND_VARIANT_COUNT);
+    assert_eq!(demand_types, EXECUTION_DEMAND_DTO_WIRE_TYPES);
+    assert_eq!(execution["executeGraphResult"]["runId"], "9007199254740993");
+    for event in run_events {
+        assert_eq!(
+            event
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["basis".into(), "correlation".into(), "kind".into()]),
+        );
+    }
+
+    let project_events = project_events_contract();
+    let events = project_events["events"].as_array().unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["payload"]["type"], "GraphDelta");
+    assert_eq!(events[1]["payload"]["type"], "ResourceMutationCommitted");
+}
+
+#[test]
 fn checked_in_node_system_contracts_match_rust() {
     let update = std::env::var(UPDATE_ENV).as_deref() == Ok("1");
-    for (name, generated) in contracts() {
+    let contracts = contracts();
+    for required in ["project-events.json", "execution-wire.json"] {
+        assert!(
+            contracts.contains_key(required),
+            "missing required node-system contract {required}"
+        );
+    }
+    for (name, generated) in contracts {
         let path = fixture_path(name);
         if update {
             write_fixture(&path, &generated);

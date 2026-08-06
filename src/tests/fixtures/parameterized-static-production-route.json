@@ -82,6 +82,7 @@
     },
     "operationId": "00000000-0000-0000-0000-0000000000c9",
     "result": {
+      "projectInstanceId": "fixture-project",
       "delta": {
         "causedBy": "00000000-0000-0000-0000-0000000000c9",
         "fromRevision": 2,
@@ -974,6 +975,7 @@
       "y": 180.0
     },
     "result": {
+      "projectInstanceId": "fixture-project",
       "delta": {
         "causedBy": "00000000-0000-0000-0000-0000000000c8",
         "fromRevision": 1,
@@ -2499,6 +2501,7 @@
     },
     "operationId": "00000000-0000-0000-0000-0000000000ca",
     "result": {
+      "projectInstanceId": "fixture-project",
       "delta": {
         "causedBy": "00000000-0000-0000-0000-0000000000ca",
         "fromRevision": 3,

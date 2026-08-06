@@ -9,6 +9,11 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
@@ -230,6 +235,12 @@ export function useProjectOperations() {
     }
 
     const { graph: currentGraph } = target;
+    let project: ProjectIdentitySnapshot;
+    try {
+      project = captureProjectIdentity();
+    } catch {
+      return;
+    }
 
     try {
       logger.exec.info(`执行当前 Event: ${currentGraph.name} (${graphPath})`);
@@ -239,13 +250,16 @@ export function useProjectOperations() {
       useExecutionStore.getState().startExecution(graphPath);
 
       const result = await ProjectService.executeGraphDocument(
+        project.projectInstanceId,
         graphPath,
         { type: 'default' },
         (event) => {
+          if (!isCurrentProjectIdentity(project)) return;
           observeGraphRunEvent(graphPath, event, runState);
         },
       );
 
+      if (!isCurrentProjectIdentity(project)) return;
       finalizeExecutionRun(graphPath, recording, runState.outcome);
       logger.exec.debug(`执行 runId: ${result.runId}`);
 
@@ -257,6 +271,7 @@ export function useProjectOperations() {
         uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
       }
     } catch (e) {
+      if (!isCurrentProjectIdentity(project)) return;
       if (isExecutionCancelledError(e)) {
         logger.exec.info(`执行已中断: ${currentGraph.name} (${graphPath})`);
         finalizeExecutionRun(graphPath, [], 'cancelled');

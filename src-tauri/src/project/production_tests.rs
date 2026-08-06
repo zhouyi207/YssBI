@@ -16,6 +16,10 @@ fn document_path() -> crate::node_system::document::GraphResourcePath {
     crate::node_system::document::GraphResourcePath(graph_path().as_str().into())
 }
 
+fn current_project_instance_id(state: &ProjectState) -> ProjectInstanceId {
+    ProjectInstanceId::from_existing(state.project_instance_id())
+}
+
 fn load_graph(
     state: &ProjectState,
     graph_path: &GraphResourcePath,
@@ -43,12 +47,27 @@ impl crate::node_system::runtime::RunEventSink for DemandRunEvents {
     }
 }
 
-fn state_with_empty_graph() -> ProjectState {
-    let state = ProjectState::new();
-    state.insert_graph(
-        graph_path(),
-        GraphResourceDocument::new("Production", GraphDocumentKind::Event),
-    );
+struct ActivatedProjectState(crate::project::fixtures::TempProject);
+
+impl std::ops::Deref for ActivatedProjectState {
+    type Target = ProjectState;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.state()
+    }
+}
+
+fn state_with_empty_graph() -> ActivatedProjectState {
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "production-empty-graph",
+        ProjectData::new(),
+    ));
+    state
+        .insert_graph(
+            graph_path(),
+            GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+        )
+        .unwrap();
     state
 }
 
@@ -703,6 +722,7 @@ fn resource_descriptor_publication_accepts_function_variable_and_database_paths(
         fixture
             .state
             .apply_editor_graph_mutation_observed(
+                &project_instance_id,
                 &graph_path(),
                 "en-US",
                 resource_descriptor_matrix_request(
@@ -795,9 +815,13 @@ fn resource_descriptor_rejections_have_zero_publication_effects() {
 
         let error = fixture
             .state
-            .apply_editor_graph_mutation_observed(&graph_path(), "en-US", request, |_| {
-                event_count.set(event_count.get() + 1);
-            })
+            .apply_editor_graph_mutation_observed(
+                &fixture.state.capture_project_session().unwrap().instance_id,
+                &graph_path(),
+                "en-US",
+                request,
+                |_| event_count.set(event_count.get() + 1),
+            )
             .unwrap_err();
 
         assert_eq!(error.code(), expected_code, "case: {case}");
@@ -812,11 +836,125 @@ fn resource_descriptor_rejections_have_zero_publication_effects() {
 }
 
 #[test]
+fn resource_bound_editor_mutation_preserves_stale_lifecycle_before_catalog_observer() {
+    let (state, root, variable_id) =
+        resource_descriptor_fixture("resource-descriptor-stale-caller");
+    let stale_id = state.capture_project_session().unwrap().instance_id;
+    let replacement_root = std::env::temp_dir().join(format!(
+        "yssbi-resource-descriptor-stale-replacement-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&replacement_root).unwrap();
+    let mut replacement = ProjectData::new();
+    replacement.graphs.insert(
+        graph_path(),
+        GraphResourceDocument::new("Production", GraphDocumentKind::Event),
+    );
+    state.activate_project_fixture(replacement_root.to_string_lossy().into_owned(), replacement);
+    let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let history_before = state.history_status();
+    let revisions_before = state.revision_state_for_test();
+    let publication_before = state.publication_state_for_test();
+    let catalog_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let catalog_observed_by_hook = std::sync::Arc::clone(&catalog_observed);
+    state.set_catalog_mutation_before_publication_test_hook(std::sync::Arc::new(move || {
+        catalog_observed_by_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+    let mutation_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mutation_observed_by_callback = std::sync::Arc::clone(&mutation_observed);
+
+    let error = state
+        .apply_editor_graph_mutation_observed(
+            &stale_id,
+            &graph_path(),
+            "en-US",
+            resource_descriptor_request(variable_id),
+            move |_| {
+                mutation_observed_by_callback.store(true, std::sync::atomic::Ordering::Release);
+            },
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), "stale_project_lifecycle");
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        data_before
+    );
+    assert_eq!(state.history_status(), history_before);
+    assert_eq!(state.revision_state_for_test(), revisions_before);
+    assert_eq!(state.publication_state_for_test(), publication_before);
+    assert!(!catalog_observed.load(std::sync::atomic::Ordering::Acquire));
+    assert!(!mutation_observed.load(std::sync::atomic::Ordering::Acquire));
+    std::fs::remove_dir_all(root).unwrap();
+    std::fs::remove_dir_all(replacement_root).unwrap();
+}
+
+#[test]
+fn resource_bound_editor_mutation_classifies_in_snapshot_authority_drift_as_catalog_stale() {
+    let (state, root, variable_id) =
+        resource_descriptor_fixture("resource-descriptor-in-snapshot-drift");
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    let normalized_root = NormalizedProjectRoot::from_project_path(&root).unwrap();
+    let held_lease = state.filesystem().acquire(normalized_root).unwrap();
+    let catalog_waiting = state.filesystem().observe_next_wait();
+    let catalog_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let catalog_observed_by_hook = std::sync::Arc::clone(&catalog_observed);
+    state.set_catalog_mutation_before_publication_test_hook(std::sync::Arc::new(move || {
+        catalog_observed_by_hook.store(true, std::sync::atomic::Ordering::Release);
+    }));
+    let mutation_observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mutation_observed_by_callback = std::sync::Arc::clone(&mutation_observed);
+    let mutation_state = state.clone();
+    let mutation = std::thread::spawn(move || {
+        mutation_state.apply_editor_graph_mutation_observed(
+            &project_instance_id,
+            &graph_path(),
+            "en-US",
+            resource_descriptor_request(variable_id),
+            move |_| {
+                mutation_observed_by_callback.store(true, std::sync::atomic::Ordering::Release);
+            },
+        )
+    });
+    catalog_waiting
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("resource-bound mutation must wait for the held catalog root lease");
+    state
+        .mutation_publication
+        .lock()
+        .unwrap()
+        .advance_authority_generation();
+    let data_before_release = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let history_before_release = state.history_status();
+    let revisions_before_release = state.revision_state_for_test();
+    let publication_before_release = state.publication_state_for_test();
+    drop(held_lease);
+
+    let error = mutation.join().unwrap().unwrap_err();
+
+    assert_eq!(error.code(), "catalog_resource_stale");
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        data_before_release
+    );
+    assert_eq!(state.history_status(), history_before_release);
+    assert_eq!(state.revision_state_for_test(), revisions_before_release);
+    assert_eq!(
+        state.publication_state_for_test(),
+        publication_before_release
+    );
+    assert!(!catalog_observed.load(std::sync::atomic::Ordering::Acquire));
+    assert!(!mutation_observed.load(std::sync::atomic::Ordering::Acquire));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn resource_descriptor_publication_materializes_exact_variable_binding() {
     let (state, root, variable_id) = resource_descriptor_fixture("resource-descriptor-valid");
 
     let result = state
         .apply_editor_graph_mutation(
+            &state.capture_project_session().unwrap().instance_id,
             &graph_path(),
             "en-US",
             resource_descriptor_request(variable_id),
@@ -843,6 +981,7 @@ fn resource_descriptor_publication_materializes_exact_variable_binding() {
 #[test]
 fn resource_descriptor_authority_change_after_snapshot_has_zero_mutation_effects() {
     let (state, root, variable_id) = resource_descriptor_fixture("resource-descriptor-authority");
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
     let graph_before = state.get_data().unwrap().graphs[&graph_path()]
         .document
         .clone();
@@ -861,6 +1000,7 @@ fn resource_descriptor_authority_change_after_snapshot_has_zero_mutation_effects
 
     let error = state
         .apply_editor_graph_mutation_observed(
+            &project_instance_id,
             &graph_path(),
             "en-US",
             resource_descriptor_request(variable_id),
@@ -904,6 +1044,7 @@ fn resource_descriptor_project_replacement_after_snapshot_has_zero_mutation_effe
 
     let error = state
         .apply_editor_graph_mutation_observed(
+            &original_instance,
             &graph_path(),
             "en-US",
             resource_descriptor_request(variable_id),
@@ -913,7 +1054,7 @@ fn resource_descriptor_project_replacement_after_snapshot_has_zero_mutation_effe
         )
         .unwrap_err();
 
-    assert_eq!(error.code(), "catalog_resource_stale");
+    assert_eq!(error.code(), "stale_project_lifecycle");
     assert_ne!(
         state.capture_project_session().unwrap().instance_id,
         original_instance
@@ -1143,6 +1284,7 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
 
     assert!(matches!(
         state.apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph,
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -1151,6 +1293,7 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
     ));
     assert!(matches!(
         state.update_function_signature_observed(
+            &current_project_instance_id(&state),
             &graph,
             "en-US",
             MutationRequest::new(
@@ -1167,6 +1310,7 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
     ));
     assert!(matches!(
         state.undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -1430,6 +1574,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
 
     let editor_error = state
         .apply_editor_graph_mutation_observed(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &event,
             "en-US",
             MutationRequest::new(
@@ -1447,6 +1592,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
 
     let function_error = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function,
             "en-US",
             MutationRequest::new(
@@ -1467,6 +1613,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
 
     for error in [
         state.undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -1479,6 +1626,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             |_| {},
         ),
         state.redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -1519,7 +1667,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
     assert_eq!(observed, 0);
     assert!(
         state
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &event,
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &NOOP_RUN_EVENT_SINK
@@ -1760,7 +1908,12 @@ fn editor_mutation_returns_correlated_delta_projection_and_history_status() {
     let request = editor_mutation_request(GraphRevision::INITIAL, operation_id);
 
     let result = state
-        .apply_editor_graph_mutation(&graph_path(), "en-US", request)
+        .apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
+            &graph_path(),
+            "en-US",
+            request,
+        )
         .unwrap();
 
     assert_eq!(result.delta.caused_by, Some(operation_id));
@@ -1778,6 +1931,7 @@ fn stale_editor_mutation_rejects_without_consuming_history() {
     let state = state_with_empty_graph();
     state
         .apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -1785,6 +1939,7 @@ fn stale_editor_mutation_rejects_without_consuming_history() {
         .unwrap();
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -1805,6 +1960,7 @@ fn stale_editor_mutation_rejects_without_consuming_history() {
 
     let error = state
         .apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -1826,6 +1982,7 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
     let state = state_with_empty_graph();
     state
         .apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -1834,6 +1991,7 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -1866,6 +2024,7 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
 
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -2217,6 +2376,124 @@ fn durable_unloaded_history_fixture(
     )
 }
 
+#[derive(Clone, Copy)]
+enum HistoryLifecycleReplacementCheckpoint {
+    Preparation,
+    Finalize,
+}
+
+fn assert_history_lifecycle_replacement_has_zero_effects(
+    label: &str,
+    checkpoint: HistoryLifecycleReplacementCheckpoint,
+) {
+    let (state, root, root_text, graph_path, resource, _) = durable_unloaded_history_fixture(label);
+    let expected_project = state.capture_project_session().unwrap().instance_id;
+    let graph_file = root.join(graph_path.as_str());
+    let file_before = std::fs::read(&graph_file).unwrap();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    let hook = std::sync::Arc::new(move || {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("bounded History lifecycle checkpoint release");
+    });
+    match checkpoint {
+        HistoryLifecycleReplacementCheckpoint::Preparation => {
+            state.set_history_after_preparation_test_hook(hook);
+        }
+        HistoryLifecycleReplacementCheckpoint::Finalize => {
+            state.set_history_after_disk_commit_test_hook(hook);
+        }
+    }
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let worker_observed = std::sync::Arc::clone(&observed);
+    let worker_state = state.clone();
+    let worker = std::thread::spawn(move || {
+        worker_state.undo_last_transaction_observed(
+            &expected_project,
+            "en-US",
+            MutationRequest::new(
+                resource,
+                GraphRevision::new(1),
+                OperationId::new(),
+                HistoryMutation {},
+            ),
+            |_| worker_observed.store(true, std::sync::atomic::Ordering::SeqCst),
+        )
+    });
+
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("History reached lifecycle checkpoint");
+    let mut replacement = ProjectData::new();
+    replacement.graphs.insert(
+        graph_path.clone(),
+        GraphResourceDocument::new("Replacement", GraphDocumentKind::Event),
+    );
+    let replacement_root = NormalizedProjectRoot::from_project_path(root_text).unwrap();
+    state
+        .publish_project_activation_without_test_hooks(
+            PreparedProjectActivation::from_data(Some(replacement_root), replacement, None, false)
+                .unwrap(),
+        )
+        .unwrap()
+        .dispose();
+    let data_after_replacement = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let status_after_replacement = state.history_status();
+    let lengths_after_replacement = state.history_lengths_for_test();
+    let undo_head_after_replacement = state.history_head_id_for_test(true);
+    let redo_head_after_replacement = state.history_head_id_for_test(false);
+    let revisions_after_replacement = state.revision_state_for_test();
+    let publication_after_replacement = state.publication_state_for_test();
+    release_tx.send(()).unwrap();
+
+    let error = worker.join().unwrap().unwrap_err();
+
+    assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+    assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(std::fs::read(&graph_file).unwrap(), file_before);
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        data_after_replacement
+    );
+    assert_eq!(state.history_status(), status_after_replacement);
+    assert_eq!(state.history_lengths_for_test(), lengths_after_replacement);
+    assert_eq!(
+        state.history_head_id_for_test(true),
+        undo_head_after_replacement
+    );
+    assert_eq!(
+        state.history_head_id_for_test(false),
+        redo_head_after_replacement
+    );
+    assert_eq!(state.revision_state_for_test(), revisions_after_replacement);
+    assert_eq!(
+        state.publication_state_for_test(),
+        publication_after_replacement
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn history_commands_reject_stale_project_identity_with_zero_effects_during_preparation() {
+    assert_history_lifecycle_replacement_has_zero_effects(
+        "HistoryLifecyclePreparation",
+        HistoryLifecycleReplacementCheckpoint::Preparation,
+    );
+}
+
+#[test]
+fn history_commands_reject_stale_project_identity_with_zero_effects_before_final_commit() {
+    assert_history_lifecycle_replacement_has_zero_effects(
+        "HistoryLifecycleFinalize",
+        HistoryLifecycleReplacementCheckpoint::Finalize,
+    );
+}
+
 fn durable_graph_global_history_fixture(
     label: &str,
 ) -> (
@@ -2305,8 +2582,501 @@ fn durable_graph_global_history_fixture(
     )
 }
 
+fn publish_empty_replacement_hook(
+    state: &ProjectState,
+    root: &std::path::Path,
+) -> std::sync::Arc<dyn Fn() + Send + Sync> {
+    let replacement_state = state.clone();
+    let replacement_root =
+        NormalizedProjectRoot::from_project_path(root.to_string_lossy().into_owned()).unwrap();
+    let first = std::sync::atomic::AtomicBool::new(true);
+    std::sync::Arc::new(move || {
+        if !first.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            return;
+        }
+        replacement_state
+            .publish_project_activation_without_test_hooks(
+                PreparedProjectActivation::from_data(
+                    Some(replacement_root.clone()),
+                    ProjectData::new(),
+                    None,
+                    false,
+                )
+                .unwrap(),
+            )
+            .unwrap()
+            .dispose();
+    })
+}
+
+fn assert_empty_replacement_authority(state: &ProjectState, stale_project: &ProjectInstanceId) {
+    let data = state.project_data.read().unwrap();
+    assert!(data.graphs.is_empty());
+    assert!(data.variables.is_empty());
+    assert!(data.databases.is_empty());
+    assert!(data.worksheets.is_empty());
+    drop(data);
+    assert_eq!(
+        state.history_status(),
+        crate::node_system::document::HistoryStatusDto {
+            can_undo: false,
+            can_redo: false,
+        }
+    );
+    assert_eq!(state.history_lengths_for_test(), (0, 0));
+    assert_eq!(state.history_head_id_for_test(true), None);
+    assert_eq!(state.history_head_id_for_test(false), None);
+    let revisions = state.revision_state_for_test();
+    assert!(revisions.0.is_empty());
+    assert!(revisions.1.is_empty());
+    assert!(revisions.2.is_empty());
+    let publication = state.publication_state_for_test();
+    assert_ne!(publication.0, stale_project.as_str());
+    assert_eq!((publication.1, publication.2), (0, 0));
+    assert!(
+        state
+            .project_store
+            .read()
+            .unwrap()
+            .variable_tabular
+            .is_empty()
+    );
+}
+
+fn file_snapshots(
+    paths: impl IntoIterator<Item = std::path::PathBuf>,
+) -> Vec<(std::path::PathBuf, Option<Vec<u8>>)> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let contents = std::fs::read(&path).ok();
+            (path, contents)
+        })
+        .collect()
+}
+
+fn assert_file_snapshots_unchanged(snapshots: &[(std::path::PathBuf, Option<Vec<u8>>)]) {
+    for (path, expected) in snapshots {
+        assert_eq!(
+            std::fs::read(path).ok().as_ref(),
+            expected.as_ref(),
+            "{path:?}"
+        );
+    }
+}
+
+fn durable_variable_history_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    ResourceKey,
+    crate::variable::VariableId,
+) {
+    let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let variable = test_variable(label);
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    state
+        .commit_variable_effects(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+        )
+        .unwrap();
+    (
+        state,
+        root,
+        ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+            format!("variables/{}", variable.id).into(),
+        )),
+        variable.id,
+    )
+}
+
+fn graph_move_history_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    GraphResourcePath,
+    GraphResourcePath,
+    GraphRevision,
+) {
+    let (state, root) = state_with_project_path(label);
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let source = state
+        .create_graph_resource_fixture("Move Source", GraphDocumentKind::Event)
+        .unwrap();
+    let renamed = state
+        .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Move Target")
+        .unwrap();
+    let target = renamed.path;
+    let revision = renamed
+        .publication
+        .deltas
+        .iter()
+        .find_map(|delta| match &delta.resource {
+            ResourceKey::Graph(path) if path.0.as_ref() == target.as_str() => {
+                Some(delta.to_revision)
+            }
+            _ => None,
+        })
+        .unwrap();
+    (state, root, source, target, revision)
+}
+
+fn history_request(
+    resource: ResourceKey,
+    revision: GraphRevision,
+) -> MutationRequest<HistoryMutation> {
+    MutationRequest::new(resource, revision, OperationId::new(), HistoryMutation {})
+}
+
+fn run_history_direction(
+    state: &ProjectState,
+    project: &ProjectInstanceId,
+    undo: bool,
+    request: MutationRequest<HistoryMutation>,
+    observed: &std::sync::atomic::AtomicBool,
+) -> Result<crate::event::ResourceMutationResultDto, MutationConflict> {
+    if undo {
+        state.undo_last_transaction_observed(project, "en-US", request, |_| {
+            observed.store(true, std::sync::atomic::Ordering::SeqCst)
+        })
+    } else {
+        state.redo_last_transaction_observed(project, "en-US", request, |_| {
+            observed.store(true, std::sync::atomic::Ordering::SeqCst)
+        })
+    }
+}
+
+#[test]
+fn history_lifecycle_typing_rejects_projection_replacement_for_every_durable_policy_and_direction()
+{
+    for undo in [true, false] {
+        let (state, root, root_text, graph_path, resource, _) =
+            durable_unloaded_history_fixture(if undo {
+                "ProjectionUnloadedUndo"
+            } else {
+                "ProjectionUnloadedRedo"
+            });
+        let project = state.capture_project_session().unwrap().instance_id;
+        let mut revision = GraphRevision::new(1);
+        if !undo {
+            let result = state
+                .undo_last_transaction_observed(
+                    &project,
+                    "en-US",
+                    history_request(resource.clone(), revision),
+                    |_| {},
+                )
+                .unwrap();
+            revision = result.deltas[0].to_revision;
+        }
+        let files = file_snapshots([root.join(graph_path.as_str())]);
+        state.set_projection_environment_after_path_data_test_hook(publish_empty_replacement_hook(
+            &state, &root,
+        ));
+        let observed = std::sync::atomic::AtomicBool::new(false);
+        let error = run_history_direction(
+            &state,
+            &project,
+            undo,
+            history_request(resource, revision),
+            &observed,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_empty_replacement_authority(&state, &project);
+        assert_file_snapshots_unchanged(&files);
+        let _ = std::fs::remove_dir_all(root_text);
+
+        let (state, root, resource, _) = durable_variable_history_fixture(if undo {
+            "ProjectionVariableUndo"
+        } else {
+            "ProjectionVariableRedo"
+        });
+        let project = state.capture_project_session().unwrap().instance_id;
+        let mut revision = GraphRevision::new(1);
+        if !undo {
+            let result = state
+                .undo_last_transaction_observed(
+                    &project,
+                    "en-US",
+                    history_request(resource.clone(), revision),
+                    |_| {},
+                )
+                .unwrap();
+            revision = result.deltas[0].to_revision;
+        }
+        let files = file_snapshots([root.join(crate::project::GLOBAL_VARIABLES_FILE)]);
+        state.set_projection_environment_after_path_data_test_hook(publish_empty_replacement_hook(
+            &state, &root,
+        ));
+        let observed = std::sync::atomic::AtomicBool::new(false);
+        let error = run_history_direction(
+            &state,
+            &project,
+            undo,
+            history_request(resource, revision),
+            &observed,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_empty_replacement_authority(&state, &project);
+        assert_file_snapshots_unchanged(&files);
+        let _ = std::fs::remove_dir_all(root);
+
+        let (state, root, source, target, mut revision) = graph_move_history_fixture(if undo {
+            "ProjectionMoveUndo"
+        } else {
+            "ProjectionMoveRedo"
+        });
+        let project = state.capture_project_session().unwrap().instance_id;
+        let mut path = target.clone();
+        if !undo {
+            let result = state
+                .undo_last_transaction_observed(
+                    &project,
+                    "en-US",
+                    history_request(
+                        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                            path.as_str().into(),
+                        )),
+                        revision,
+                    ),
+                    |_| {},
+                )
+                .unwrap();
+            path = source.clone();
+            revision = result.deltas[0].to_revision;
+        }
+        let files = file_snapshots([root.join(path.as_str())]);
+        state.set_projection_environment_after_path_data_test_hook(publish_empty_replacement_hook(
+            &state, &root,
+        ));
+        let observed = std::sync::atomic::AtomicBool::new(false);
+        let error = run_history_direction(
+            &state,
+            &project,
+            undo,
+            history_request(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    path.as_str().into(),
+                )),
+                revision,
+            ),
+            &observed,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_empty_replacement_authority(&state, &project);
+        assert_file_snapshots_unchanged(&files);
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+#[test]
+fn history_lifecycle_typing_rolls_back_variable_and_graph_move_finalization_for_undo_and_redo() {
+    for undo in [true, false] {
+        let (state, root, resource, _) = durable_variable_history_fixture(if undo {
+            "FinalizeVariableUndo"
+        } else {
+            "FinalizeVariableRedo"
+        });
+        let project = state.capture_project_session().unwrap().instance_id;
+        let mut revision = GraphRevision::new(1);
+        if !undo {
+            let result = state
+                .undo_last_transaction_observed(
+                    &project,
+                    "en-US",
+                    history_request(resource.clone(), revision),
+                    |_| {},
+                )
+                .unwrap();
+            revision = result.deltas[0].to_revision;
+        }
+        let files = file_snapshots([root.join(crate::project::GLOBAL_VARIABLES_FILE)]);
+        state
+            .set_history_after_disk_commit_test_hook(publish_empty_replacement_hook(&state, &root));
+        let observed = std::sync::atomic::AtomicBool::new(false);
+        let error = run_history_direction(
+            &state,
+            &project,
+            undo,
+            history_request(resource, revision),
+            &observed,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_empty_replacement_authority(&state, &project);
+        assert_file_snapshots_unchanged(&files);
+        let _ = std::fs::remove_dir_all(root);
+
+        let (state, root, source, target, mut revision) = graph_move_history_fixture(if undo {
+            "FinalizeMoveUndo"
+        } else {
+            "FinalizeMoveRedo"
+        });
+        let project = state.capture_project_session().unwrap().instance_id;
+        let mut path = target.clone();
+        if !undo {
+            let result = state
+                .undo_last_transaction_observed(
+                    &project,
+                    "en-US",
+                    history_request(
+                        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                            path.as_str().into(),
+                        )),
+                        revision,
+                    ),
+                    |_| {},
+                )
+                .unwrap();
+            path = source.clone();
+            revision = result.deltas[0].to_revision;
+        }
+        let source_file = root.join(source.as_str());
+        let target_file = root.join(target.as_str());
+        assert_ne!(source_file, target_file);
+        if undo {
+            assert!(!source_file.exists());
+            assert!(target_file.is_file());
+        } else {
+            assert!(source_file.is_file());
+            assert!(!target_file.exists());
+        }
+        let files = file_snapshots([source_file, target_file]);
+        assert_ne!(files[0].0, files[1].0);
+        state.set_graph_move_history_io_checkpoint(publish_empty_replacement_hook(&state, &root));
+        let observed = std::sync::atomic::AtomicBool::new(false);
+        let error = run_history_direction(
+            &state,
+            &project,
+            undo,
+            history_request(
+                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                    path.as_str().into(),
+                )),
+                revision,
+            ),
+            &observed,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+        assert_empty_replacement_authority(&state, &project);
+        assert_file_snapshots_unchanged(&files);
+        let _ = std::fs::remove_dir_all(root);
+    }
+}
+
+#[test]
+fn history_lifecycle_typing_preserves_recovery_required_when_durable_rollback_fails() {
+    for variable_policy in [true, false] {
+        for undo in [true, false] {
+            let label = match (variable_policy, undo) {
+                (true, true) => "RecoveryVariableUndo",
+                (true, false) => "RecoveryVariableRedo",
+                (false, true) => "RecoveryMoveUndo",
+                (false, false) => "RecoveryMoveRedo",
+            };
+            let (state, root, mut resource, mut revision, redo_path) = if variable_policy {
+                let (state, root, resource, _) = durable_variable_history_fixture(label);
+                (state, root, resource, GraphRevision::new(1), None)
+            } else {
+                let (state, root, source, target, revision) = graph_move_history_fixture(label);
+                (
+                    state,
+                    root,
+                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        target.as_str().into(),
+                    )),
+                    revision,
+                    Some(source),
+                )
+            };
+            let project = state.capture_project_session().unwrap().instance_id;
+            if !undo {
+                let result = state
+                    .undo_last_transaction_observed(
+                        &project,
+                        "en-US",
+                        history_request(resource.clone(), revision),
+                        |_| {},
+                    )
+                    .unwrap();
+                revision = result.deltas[0].to_revision;
+                if let Some(path) = redo_path {
+                    resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                        path.as_str().into(),
+                    ));
+                }
+            }
+            if variable_policy {
+                state.set_history_after_disk_commit_test_hook(publish_empty_replacement_hook(
+                    &state, &root,
+                ));
+            } else {
+                state.set_graph_move_history_io_checkpoint(publish_empty_replacement_hook(
+                    &state, &root,
+                ));
+            }
+            crate::project::set_project_filesystem_rollback_fault(true);
+            let observed = std::sync::atomic::AtomicBool::new(false);
+            let result = run_history_direction(
+                &state,
+                &project,
+                undo,
+                history_request(resource, revision),
+                &observed,
+            );
+            crate::project::set_project_filesystem_rollback_fault(false);
+            let error = result.unwrap_err();
+            assert!(matches!(error, MutationConflict::RecoveryRequired(_)));
+            assert_eq!(error.code(), "project_recovery_required");
+            assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
+            assert_empty_replacement_authority(&state, &project);
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ExpectedHistoryConflict {
+    History,
+    StaleProjectLifecycle,
+}
+
 fn assert_unloaded_post_disk_race_rejected(
     label: &str,
+    expected_conflict: ExpectedHistoryConflict,
     mutate: impl FnOnce(&ProjectState, &GraphResourcePath, &str),
 ) {
     let (state, root, root_text, graph_path, resource, _) = durable_unloaded_history_fixture(label);
@@ -2328,6 +3098,7 @@ fn assert_unloaded_post_disk_race_rejected(
     let history_state = state.clone();
     let history_thread = std::thread::spawn(move || {
         history_state.undo_last_transaction_observed(
+            &current_project_instance_id(&history_state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -2354,7 +3125,14 @@ fn assert_unloaded_post_disk_race_rejected(
 
     let error = history_thread.join().unwrap().unwrap_err();
 
-    assert!(matches!(error, MutationConflict::History(_)));
+    match expected_conflict {
+        ExpectedHistoryConflict::History => {
+            assert!(matches!(error, MutationConflict::History(_)));
+        }
+        ExpectedHistoryConflict::StaleProjectLifecycle => {
+            assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+        }
+    }
     assert!(!observed.load(std::sync::atomic::Ordering::SeqCst));
     assert_eq!(
         serde_json::to_value(state.get_data().unwrap()).unwrap(),
@@ -2372,54 +3150,80 @@ fn assert_unloaded_post_disk_race_rejected(
 
 #[test]
 fn unloaded_graph_history_post_disk_authority_race_matrix_rejects_without_publication() {
-    assert_unloaded_post_disk_race_rejected("HistoryHeadRace", |state, _, _| {
-        state.append_history_head_for_test();
-    });
-    assert_unloaded_post_disk_race_rejected("HistoryDirectionRace", |state, _, _| {
-        state
-            .history
-            .write()
-            .unwrap()
-            .move_undo_head_to_redo_for_test();
-    });
-    assert_unloaded_post_disk_race_rejected("GraphRevisionRace", |state, path, _| {
-        state
-            .graph_revisions
-            .write()
-            .unwrap()
-            .insert(path.clone(), GraphRevision::new(7));
-    });
-    assert_unloaded_post_disk_race_rejected("AuthorityGenerationRace", |state, _, _| {
-        state
-            .mutation_publication
-            .lock()
-            .unwrap()
-            .advance_authority_generation();
-    });
-    assert_unloaded_post_disk_race_rejected("ProjectInstanceRace", |state, _, _| {
-        state
-            .mutation_publication
-            .lock()
-            .unwrap()
-            .project_instance_id = uuid::Uuid::new_v4().to_string();
-    });
-    assert_unloaded_post_disk_race_rejected("ProjectSessionRace", |state, _, root_text| {
-        let replacement = std::path::PathBuf::from(root_text).join("replacement-session");
-        std::fs::create_dir_all(&replacement).unwrap();
-        state.replace_active_root_for_test(
-            crate::project::NormalizedProjectRoot::from_project_path(replacement).unwrap(),
-        );
-    });
-    assert_unloaded_post_disk_race_rejected("ResidencyRace", |state, path, root_text| {
-        let graph =
-            crate::project::project_io::load_project_graph_from_file(root_text, path).unwrap();
-        state
-            .project_data
-            .write()
-            .unwrap()
-            .graphs
-            .insert(path.clone(), graph);
-    });
+    assert_unloaded_post_disk_race_rejected(
+        "HistoryHeadRace",
+        ExpectedHistoryConflict::History,
+        |state, _, _| state.append_history_head_for_test(),
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "HistoryDirectionRace",
+        ExpectedHistoryConflict::History,
+        |state, _, _| {
+            state
+                .history
+                .write()
+                .unwrap()
+                .move_undo_head_to_redo_for_test();
+        },
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "GraphRevisionRace",
+        ExpectedHistoryConflict::History,
+        |state, path, _| {
+            state
+                .graph_revisions
+                .write()
+                .unwrap()
+                .insert(path.clone(), GraphRevision::new(7));
+        },
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "AuthorityGenerationRace",
+        ExpectedHistoryConflict::StaleProjectLifecycle,
+        |state, _, _| {
+            state
+                .mutation_publication
+                .lock()
+                .unwrap()
+                .advance_authority_generation();
+        },
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "ProjectInstanceRace",
+        ExpectedHistoryConflict::StaleProjectLifecycle,
+        |state, _, _| {
+            state
+                .mutation_publication
+                .lock()
+                .unwrap()
+                .project_instance_id = uuid::Uuid::new_v4().to_string();
+        },
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "ProjectSessionRace",
+        ExpectedHistoryConflict::StaleProjectLifecycle,
+        |state, _, root_text| {
+            let replacement = std::path::PathBuf::from(root_text).join("replacement-session");
+            std::fs::create_dir_all(&replacement).unwrap();
+            state.replace_active_root_for_test(
+                crate::project::NormalizedProjectRoot::from_project_path(replacement).unwrap(),
+            );
+        },
+    );
+    assert_unloaded_post_disk_race_rejected(
+        "ResidencyRace",
+        ExpectedHistoryConflict::History,
+        |state, path, root_text| {
+            let graph =
+                crate::project::project_io::load_project_graph_from_file(root_text, path).unwrap();
+            state
+                .project_data
+                .write()
+                .unwrap()
+                .graphs
+                .insert(path.clone(), graph);
+        },
+    );
 }
 
 #[test]
@@ -2446,6 +3250,7 @@ fn mixed_residency_history_rejects_variable_revision_and_tombstone_race() {
     let history_state = state.clone();
     let history_thread = std::thread::spawn(move || {
         history_state.undo_last_transaction_observed(
+            &current_project_instance_id(&history_state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -2542,6 +3347,7 @@ fn loaded_only_history_routing_rejects_specialized_policy_races() {
         let request_resource = resource.clone();
         let history_thread = std::thread::spawn(move || {
             history_state.undo_last_transaction_observed(
+                &current_project_instance_id(&history_state),
                 "en-US",
                 MutationRequest::new(
                     request_resource,
@@ -2645,6 +3451,7 @@ fn unloaded_graph_history_routing_rejects_specialized_head_race() {
     let history_state = state.clone();
     let history_thread = std::thread::spawn(move || {
         history_state.undo_last_transaction_observed(
+            &current_project_instance_id(&history_state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -2714,6 +3521,7 @@ fn unloaded_graph_history_rejects_stale_function_owner_graph_revision() {
     state.activate_project_fixture(root_text, project);
     state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -2758,6 +3566,7 @@ fn unloaded_graph_history_rejects_stale_function_owner_graph_revision() {
 
     let error = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -2886,6 +3695,7 @@ fn mixed_residency_history_rejects_loaded_function_revision_race() {
     let history_state = state.clone();
     let history_thread = std::thread::spawn(move || {
         history_state.undo_last_transaction_observed(
+            &current_project_instance_id(&history_state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(event_key),
@@ -2971,6 +3781,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     state.activate_project_fixture(root_text.clone(), project);
     state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -3004,6 +3815,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     let undo_resource = resource.clone();
     let undo_thread = std::thread::spawn(move || {
         undo_state.undo_last_transaction_observed(
+            &current_project_instance_id(&undo_state),
             "en-US",
             MutationRequest::new(
                 undo_resource,
@@ -3122,6 +3934,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     let mut redo_observed = Vec::new();
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -3356,6 +4169,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
     let mut undo_observed = Vec::new();
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
@@ -3508,6 +4322,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
     let mut redo_observed = Vec::new();
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
@@ -3706,6 +4521,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -3733,6 +4549,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
 
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -3804,6 +4621,7 @@ fn unloaded_graph_history_staging_and_live_replace_faults_preserve_state() {
 
         let error = state
             .undo_last_transaction_observed(
+                &current_project_instance_id(&state),
                 "en-US",
                 MutationRequest::new(
                     resource,
@@ -3877,6 +4695,7 @@ fn unloaded_graph_post_disk_commit_revision_mismatch_rolls_back() {
 
     let error = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -3919,6 +4738,7 @@ fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
 
     let error = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -3935,6 +4755,7 @@ fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
     assert!(!observed);
     assert!(matches!(
         state.undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -3969,6 +4790,7 @@ fn unloaded_graph_history_lease_excludes_coordinator_operation_until_finalize() 
     let history_state = state.clone();
     let history_thread = std::thread::spawn(move || {
         history_state.undo_last_transaction_observed(
+            &current_project_instance_id(&history_state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -4084,6 +4906,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
@@ -4130,6 +4953,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
 
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key),
@@ -4247,6 +5071,7 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(graph_key),
@@ -4288,6 +5113,7 @@ fn project_reload_clears_history_status() {
     let state = state_with_empty_graph();
     state
         .apply_editor_graph_mutation(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -4316,6 +5142,7 @@ fn committed_editor_mutation_remains_observable_when_projection_fails() {
 
     let error = state
         .apply_editor_graph_mutation_observed(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -4339,19 +5166,24 @@ fn committed_editor_mutation_remains_observable_when_projection_fails() {
 fn function_state_with_caller(
     label: &str,
 ) -> (
-    ProjectState,
+    ActivatedProjectState,
     GraphResourcePath,
     GraphResourcePath,
     ResourceKey,
 ) {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        label,
+        ProjectData::new(),
+    ));
     let function_path =
         GraphResourcePath::new(format!("functions/{label}.yssbi-function")).unwrap();
     let caller_path = GraphResourcePath::new(format!("events/{label}Caller.yssbi-event")).unwrap();
-    state.insert_graph(
-        function_path.clone(),
-        GraphResourceDocument::new(label, GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            function_path.clone(),
+            GraphResourceDocument::new(label, GraphDocumentKind::Function),
+        )
+        .unwrap();
     let mut caller =
         GraphResourceDocument::new(format!("{label} Caller"), GraphDocumentKind::Event);
     let mut call = node("yssbi.project.function.call");
@@ -4360,7 +5192,7 @@ fn function_state_with_caller(
         serde_json::json!(function_path.as_str()),
     );
     caller.document.nodes.insert(call.id, call);
-    state.insert_graph(caller_path.clone(), caller);
+    state.insert_graph(caller_path.clone(), caller).unwrap();
     let resource = ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
         function_path.as_str().into(),
     ));
@@ -4394,6 +5226,7 @@ fn assert_recovery_blocks_signature(
     resource: ResourceKey,
 ) {
     let blocked = state.update_function_signature_observed(
+        &current_project_instance_id(state),
         function_path,
         "en-US",
         function_signature_request(
@@ -4422,6 +5255,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
     let signature_events = std::sync::Arc::clone(&signature_observed);
     let signature_result = signature_state
         .update_function_signature_observed(
+            &current_project_instance_id(&signature_state),
             &signature_path,
             "en-US",
             function_signature_request(
@@ -4453,6 +5287,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
         function_state_with_caller("UndoRecovery");
     undo_state
         .update_function_signature_observed(
+            &current_project_instance_id(&undo_state),
             &undo_path,
             "en-US",
             function_signature_request(
@@ -4472,6 +5307,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
     let undo_events = std::sync::Arc::clone(&undo_observed);
     let undo_result = undo_state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&undo_state),
             "en-US",
             MutationRequest::new(
                 undo_resource.clone(),
@@ -4502,6 +5338,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
         function_state_with_caller("RedoRecovery");
     redo_state
         .update_function_signature_observed(
+            &current_project_instance_id(&redo_state),
             &redo_path,
             "en-US",
             function_signature_request(
@@ -4515,6 +5352,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
         .unwrap();
     redo_state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&redo_state),
             "en-US",
             MutationRequest::new(
                 redo_resource.clone(),
@@ -4533,6 +5371,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
     let redo_events = std::sync::Arc::clone(&redo_observed);
     let redo_result = redo_state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&redo_state),
             "en-US",
             MutationRequest::new(
                 redo_resource.clone(),
@@ -4576,6 +5415,7 @@ fn committed_projection_failure_after_recovery_marker_returns_incomplete() {
 
     let result = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -4925,6 +5765,7 @@ fn committed_projection_uses_precommit_database_metadata_after_removal() {
 
     let result = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -4961,6 +5802,7 @@ fn committed_resource_observer_and_response_serialize_identically() {
     let signature_events = std::sync::Arc::clone(&observed);
     let signature = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -4982,6 +5824,7 @@ fn committed_resource_observer_and_response_serialize_identically() {
     let undo_events = std::sync::Arc::clone(&observed);
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -5002,6 +5845,7 @@ fn committed_resource_observer_and_response_serialize_identically() {
     let redo_events = std::sync::Arc::clone(&observed);
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -5034,9 +5878,12 @@ fn committed_graph_source_is_rejected_after_interleaved_undo() {
         }
         Ok(())
     }));
+    let mutation_project_instance_id =
+        ProjectInstanceId::from_existing(state.project_instance_id());
     let mutation_state = state.clone();
     let mutation = std::thread::spawn(move || {
         mutation_state.apply_editor_graph_mutation(
+            &mutation_project_instance_id,
             &graph_path(),
             "en-US",
             editor_mutation_request(GraphRevision::INITIAL, OperationId::new()),
@@ -5046,6 +5893,7 @@ fn committed_graph_source_is_rejected_after_interleaved_undo() {
 
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -5075,13 +5923,18 @@ fn history_status_waits_for_authoritative_publication() {
     let (history_changed_tx, history_changed_rx) = std::sync::mpsc::channel();
     let (release_publication_tx, release_publication_rx) = std::sync::mpsc::channel();
     let release_publication_rx = std::sync::Mutex::new(release_publication_rx);
-    state.set_mutation_publication_test_hook(std::sync::Arc::new(move || {
+    state.set_authoritative_publication_test_hook(std::sync::Arc::new(move || {
         history_changed_tx.send(()).unwrap();
-        release_publication_rx.lock().unwrap().recv().unwrap();
+        release_publication_rx
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("bounded authoritative publication release");
     }));
     let mutation_state = state.clone();
+    let (mutation_done_tx, mutation_done_rx) = std::sync::mpsc::channel();
     let mutation = std::thread::spawn(move || {
-        mutation_state.apply_graph_patch(
+        let result = mutation_state.apply_graph_patch(
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -5091,9 +5944,13 @@ fn history_status_waits_for_authoritative_publication() {
                     node: node("yssbi.constant.int64"),
                 }]),
             ),
-        )
+        );
+        mutation_done_tx.send(()).unwrap();
+        result
     });
-    history_changed_rx.recv().unwrap();
+    history_changed_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("mutation reached authoritative publication checkpoint");
 
     let (status_tx, status_rx) = std::sync::mpsc::channel();
     let status_state = state.clone();
@@ -5107,15 +5964,20 @@ fn history_status_waits_for_authoritative_publication() {
     );
 
     release_publication_tx.send(()).unwrap();
+    mutation_done_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("mutation completed after publication release");
     mutation.join().unwrap().unwrap();
-    status.join().unwrap();
     assert_eq!(
-        status_rx.recv().unwrap(),
+        status_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("status completed after authoritative publication"),
         crate::node_system::document::HistoryStatusDto {
             can_undo: true,
             can_redo: false,
         }
     );
+    status.join().unwrap();
     assert_eq!(
         state.get_data().unwrap().graphs[&graph_path()]
             .document
@@ -5392,6 +6254,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
         .to_revision;
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5435,6 +6298,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
         .to_revision;
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5475,6 +6339,7 @@ fn concurrent_history_append_during_rename_undo_rolls_back_disk_without_moving_h
 
     let error = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5559,6 +6424,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5588,6 +6454,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
 
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5638,6 +6505,7 @@ fn unloaded_rename_undo_redo_restores_disk_identity() {
 
     let undo = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5656,6 +6524,7 @@ fn unloaded_rename_undo_redo_restores_disk_identity() {
 
     let redo = state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -5757,7 +6626,7 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
 
     let executing_state = state.clone();
     let execution = std::thread::spawn(move || {
-        executing_state.execute_graph(
+        executing_state.execute_graph_for_current_project_for_test(
             &event,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -5791,12 +6660,18 @@ fn project_replacement_during_function_loading_cancels_before_old_resource_inser
 
 #[test]
 fn normalized_function_signature_update_is_undoable() {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "normalized-function-signature-undo",
+        ProjectData::new(),
+    ));
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
     let path = GraphResourcePath::new("functions/Tax.yssbi-function").unwrap();
-    state.insert_graph(
-        path.clone(),
-        GraphResourceDocument::new("Tax", GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            path.clone(),
+            GraphResourceDocument::new("Tax", GraphDocumentKind::Function),
+        )
+        .unwrap();
     let signature = crate::node_system::document::FunctionSignature {
         parameters: vec![crate::node_system::document::FunctionParameter {
             id: crate::node_system::document::FunctionParameterId("amount".into()),
@@ -5809,6 +6684,7 @@ fn normalized_function_signature_update_is_undoable() {
     let operation_id = OperationId::new();
     let result = state
         .update_function_signature_observed(
+            &project_instance_id,
             &path,
             "en-US",
             MutationRequest::new(
@@ -5839,6 +6715,7 @@ fn normalized_function_signature_update_is_undoable() {
     );
     state
         .undo_last_transaction_observed(
+            &project_instance_id,
             "en-US",
             MutationRequest::new(
                 ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
@@ -5863,12 +6740,18 @@ fn normalized_function_signature_update_is_undoable() {
 
 #[test]
 fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "revisioned-signature-history",
+        ProjectData::new(),
+    ));
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
     let path = GraphResourcePath::new("functions/Revisioned.yssbi-function").unwrap();
-    state.insert_graph(
-        path.clone(),
-        GraphResourceDocument::new("Revisioned", GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            path.clone(),
+            GraphResourceDocument::new("Revisioned", GraphDocumentKind::Function),
+        )
+        .unwrap();
     let resource = ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
         path.as_str().into(),
     ));
@@ -5887,6 +6770,7 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
     let signature_operation = OperationId::new();
     let signature_result = state
         .update_function_signature_observed(
+            &project_instance_id,
             &path,
             "en-US",
             MutationRequest::new(
@@ -5904,6 +6788,7 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
     assert_eq!(signature_delta.to_revision, GraphRevision::new(1));
     assert!(matches!(
         state.update_function_signature_observed(
+            &project_instance_id,
             &path,
             "en-US",
             MutationRequest::new(
@@ -5924,12 +6809,13 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
         HistoryMutation {},
     );
     assert!(matches!(
-        state.undo_last_transaction_observed("en-US", stale_undo, |_| {}),
+        state.undo_last_transaction_observed(&project_instance_id, "en-US", stale_undo, |_| {}),
         Err(MutationConflict::StaleRevision { .. })
     ));
     let undo_operation = OperationId::new();
     let undo_result = state
         .undo_last_transaction_observed(
+            &project_instance_id,
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -5962,12 +6848,13 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
         HistoryMutation {},
     );
     assert!(matches!(
-        state.redo_last_transaction_observed("en-US", stale_redo, |_| {}),
+        state.redo_last_transaction_observed(&project_instance_id, "en-US", stale_redo, |_| {}),
         Err(MutationConflict::StaleRevision { .. })
     ));
     let redo_operation = OperationId::new();
     let redo_result = state
         .redo_last_transaction_observed(
+            &project_instance_id,
             "en-US",
             MutationRequest::new(
                 undo_deltas[0].resource.clone(),
@@ -6003,13 +6890,19 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
 
 #[test]
 fn signature_result_declares_function_and_caller_projection_paths_without_caller_delta() {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "signature-result-projection-paths",
+        ProjectData::new(),
+    ));
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
     let function_path = GraphResourcePath::new("functions/Declared.yssbi-function").unwrap();
     let caller_path = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
-    state.insert_graph(
-        function_path.clone(),
-        GraphResourceDocument::new("Declared", GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            function_path.clone(),
+            GraphResourceDocument::new("Declared", GraphDocumentKind::Function),
+        )
+        .unwrap();
     let mut caller = GraphResourceDocument::new("Caller", GraphDocumentKind::Event);
     let mut call = node("yssbi.project.function.call");
     call.parameters.insert(
@@ -6017,11 +6910,12 @@ fn signature_result_declares_function_and_caller_projection_paths_without_caller
         serde_json::json!(function_path.as_str()),
     );
     caller.document.nodes.insert(call.id, call);
-    state.insert_graph(caller_path.clone(), caller);
+    state.insert_graph(caller_path.clone(), caller).unwrap();
 
     let operation_id = OperationId::new();
     let result = state
         .update_function_signature_observed(
+            &project_instance_id,
             &function_path,
             "en-US",
             MutationRequest::new(
@@ -6065,15 +6959,21 @@ fn signature_result_declares_function_and_caller_projection_paths_without_caller
 
 #[test]
 fn concurrent_function_results_keep_commit_publication_order_without_locking_projection() {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "concurrent-function-publication-order",
+        ProjectData::new(),
+    ));
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
     let first_path = GraphResourcePath::new("functions/First.yssbi-function").unwrap();
     let second_path = GraphResourcePath::new("functions/Second.yssbi-function").unwrap();
     let caller_path = GraphResourcePath::new("events/SharedCaller.yssbi-event").unwrap();
     for (path, name) in [(&first_path, "First"), (&second_path, "Second")] {
-        state.insert_graph(
-            path.clone(),
-            GraphResourceDocument::new(name, GraphDocumentKind::Function),
-        );
+        state
+            .insert_graph(
+                path.clone(),
+                GraphResourceDocument::new(name, GraphDocumentKind::Function),
+            )
+            .unwrap();
     }
     let mut caller = GraphResourceDocument::new("SharedCaller", GraphDocumentKind::Event);
     for function_path in [&first_path, &second_path] {
@@ -6084,8 +6984,9 @@ fn concurrent_function_results_keep_commit_publication_order_without_locking_pro
         );
         caller.document.nodes.insert(call.id, call);
     }
-    state.insert_graph(caller_path, caller);
+    state.insert_graph(caller_path, caller).unwrap();
 
+    let rendezvous_timeout = std::time::Duration::from_secs(2);
     let (first_projection_tx, first_projection_rx) = std::sync::mpsc::channel();
     let (release_first_tx, release_first_rx) = std::sync::mpsc::channel();
     let release_first_rx = std::sync::Mutex::new(release_first_rx);
@@ -6093,8 +6994,16 @@ fn concurrent_function_results_keep_commit_publication_order_without_locking_pro
     let hook_calls = std::sync::Arc::clone(&projection_calls);
     state.set_projection_test_hook(std::sync::Arc::new(move || {
         if hook_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
-            first_projection_tx.send(()).unwrap();
-            release_first_rx.lock().unwrap().recv().unwrap();
+            first_projection_tx
+                .send(())
+                .map_err(|error| format!("failed to announce the first projection: {error}"))?;
+            release_first_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(rendezvous_timeout)
+                .map_err(|error| {
+                    format!("timed out waiting to release the first projection: {error}")
+                })?;
         }
         Ok(())
     }));
@@ -6102,67 +7011,11 @@ fn concurrent_function_results_keep_commit_publication_order_without_locking_pro
     let (published_tx, published_rx) = std::sync::mpsc::channel();
     let spawn_signature = |path: GraphResourcePath, return_type: &'static str| {
         let mutation_state = state.clone();
+        let project_instance_id = project_instance_id.clone();
         let published_tx = published_tx.clone();
         std::thread::spawn(move || {
-            mutation_state
-                .update_function_signature_observed(
-                    &path,
-                    "en-US",
-                    MutationRequest::new(
-                        ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
-                            path.as_str().into(),
-                        )),
-                        GraphRevision::INITIAL,
-                        OperationId::new(),
-                        crate::node_system::document::FunctionDocumentPatch::new(
-                            Default::default(),
-                            crate::node_system::document::FunctionSignature {
-                                parameters: Vec::new(),
-                                return_type: Some(return_type.into()),
-                            },
-                        ),
-                    ),
-                    move |result| {
-                        published_tx
-                            .send(
-                                serde_json::to_value(result).unwrap()["publicationRevision"]
-                                    .as_u64()
-                                    .unwrap(),
-                            )
-                            .unwrap();
-                    },
-                )
-                .unwrap()
-        })
-    };
-
-    let first = spawn_signature(first_path, "Int64");
-    first_projection_rx.recv().unwrap();
-    let second = spawn_signature(second_path, "Float64");
-    assert_eq!(
-        published_rx
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .unwrap(),
-        2,
-        "the second commit must publish while the first projection is blocked",
-    );
-    release_first_tx.send(()).unwrap();
-    assert_eq!(published_rx.recv().unwrap(), 1);
-    assert_eq!(second.join().unwrap().publication_revision, 2);
-    assert_eq!(first.join().unwrap().publication_revision, 1);
-}
-
-#[test]
-fn resource_publication_revision_restarts_for_a_replacement_project() {
-    let state = ProjectState::new();
-    let path = GraphResourcePath::new("functions/Revisioned.yssbi-function").unwrap();
-    let mutate = |state: &ProjectState, return_type: &str| {
-        state.insert_graph(
-            path.clone(),
-            GraphResourceDocument::new("Revisioned", GraphDocumentKind::Function),
-        );
-        state
-            .update_function_signature_observed(
+            mutation_state.update_function_signature_observed(
+                &project_instance_id,
                 &path,
                 "en-US",
                 MutationRequest::new(
@@ -6179,30 +7032,140 @@ fn resource_publication_revision_restarts_for_a_replacement_project() {
                         },
                     ),
                 ),
-                |_| {},
+                move |result| {
+                    published_tx
+                        .send(
+                            serde_json::to_value(result).unwrap()["publicationRevision"]
+                                .as_u64()
+                                .unwrap(),
+                        )
+                        .expect("publication observer receiver must remain available");
+                },
             )
-            .unwrap()
+        })
     };
 
-    let previous = mutate(&state, "Int64");
+    let first = spawn_signature(first_path, "Int64");
+    first_projection_rx
+        .recv_timeout(rendezvous_timeout)
+        .expect("the first signature worker must reach projection");
+    let second = spawn_signature(second_path, "Float64");
+    assert_eq!(
+        published_rx
+            .recv_timeout(rendezvous_timeout)
+            .expect("the second signature must publish while the first projection is blocked"),
+        2,
+        "the second commit must publish while the first projection is blocked",
+    );
+    release_first_tx
+        .send(())
+        .expect("the first projection hook must remain available");
+    assert_eq!(
+        published_rx
+            .recv_timeout(rendezvous_timeout)
+            .expect("the released first signature must publish"),
+        1,
+    );
+    let second_result = second
+        .join()
+        .expect("the second signature worker must not panic")
+        .expect("the second signature mutation must succeed");
+    let first_result = first
+        .join()
+        .expect("the first signature worker must not panic")
+        .expect("the first signature mutation must succeed");
+    assert_eq!(second_result.publication_revision, 2);
+    assert_eq!(first_result.publication_revision, 1);
+}
+
+#[test]
+fn resource_publication_revision_restarts_for_a_replacement_project() {
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "resource-publication-revision-old",
+        ProjectData::new(),
+    ));
+    let old_project_instance_id = state.capture_project_session().unwrap().instance_id;
+    let path = GraphResourcePath::new("functions/Revisioned.yssbi-function").unwrap();
+    let mutate =
+        |state: &ProjectState, project_instance_id: &ProjectInstanceId, return_type: &str| {
+            state
+                .insert_graph(
+                    path.clone(),
+                    GraphResourceDocument::new("Revisioned", GraphDocumentKind::Function),
+                )
+                .unwrap();
+            state
+                .update_function_signature_observed(
+                    project_instance_id,
+                    &path,
+                    "en-US",
+                    MutationRequest::new(
+                        ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                            path.as_str().into(),
+                        )),
+                        GraphRevision::INITIAL,
+                        OperationId::new(),
+                        crate::node_system::document::FunctionDocumentPatch::new(
+                            Default::default(),
+                            crate::node_system::document::FunctionSignature {
+                                parameters: Vec::new(),
+                                return_type: Some(return_type.into()),
+                            },
+                        ),
+                    ),
+                    |_| {},
+                )
+                .unwrap()
+        };
+
+    let previous = mutate(&state, &old_project_instance_id, "Int64");
     assert_eq!(previous.publication_revision, 1);
-    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
-    let replacement = mutate(&state, "Float64");
+    let replacement_project = crate::project::fixtures::TempProject::activate(
+        "resource-publication-revision-replacement",
+        ProjectData::new(),
+    );
+    let replacement_root = replacement_project
+        .state()
+        .capture_project_session()
+        .unwrap()
+        .root;
+    state.activate_project_fixture(
+        replacement_root.as_path().to_string_lossy().into_owned(),
+        ProjectData::new(),
+    );
+    let replacement_project_instance_id = state.capture_project_session().unwrap().instance_id;
+    let replacement = mutate(&state, &replacement_project_instance_id, "Float64");
     assert_eq!(replacement.publication_revision, 1);
+    assert_eq!(
+        previous.project_instance_id,
+        old_project_instance_id.as_str()
+    );
+    assert_eq!(
+        replacement.project_instance_id,
+        replacement_project_instance_id.as_str()
+    );
     assert_ne!(
         previous.project_instance_id,
         replacement.project_instance_id
     );
+    drop(replacement_project);
 }
 
 #[test]
 fn delayed_old_project_result_keeps_its_original_instance_identity() {
-    let state = ProjectState::new();
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "delayed-old-project-result",
+        ProjectData::new(),
+    ));
+    let old_project_instance_id = state.capture_project_session().unwrap().instance_id;
     let path = GraphResourcePath::new("functions/Delayed.yssbi-function").unwrap();
-    state.insert_graph(
-        path.clone(),
-        GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            path.clone(),
+            GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
+        )
+        .unwrap();
+    let rendezvous_timeout = std::time::Duration::from_secs(2);
     let (projection_started_tx, projection_started_rx) = std::sync::mpsc::channel();
     let (release_projection_tx, release_projection_rx) = std::sync::mpsc::channel();
     let release_projection_rx = std::sync::Mutex::new(release_projection_rx);
@@ -6210,46 +7173,77 @@ fn delayed_old_project_result_keeps_its_original_instance_identity() {
     let hook_calls = std::sync::Arc::clone(&calls);
     state.set_projection_test_hook(std::sync::Arc::new(move || {
         if hook_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
-            projection_started_tx.send(()).unwrap();
-            release_projection_rx.lock().unwrap().recv().unwrap();
+            projection_started_tx
+                .send(())
+                .map_err(|error| format!("failed to announce the delayed projection: {error}"))?;
+            release_projection_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(rendezvous_timeout)
+                .map_err(|error| {
+                    format!("timed out waiting to release the delayed projection: {error}")
+                })?;
         }
         Ok(())
     }));
 
+    let (old_result_completed_tx, old_result_completed_rx) = std::sync::mpsc::channel();
     let old_state = state.clone();
     let old_path = path.clone();
+    let old_worker_project_instance_id = old_project_instance_id.clone();
     let old = std::thread::spawn(move || {
-        old_state
-            .update_function_signature_observed(
-                &old_path,
-                "en-US",
-                MutationRequest::new(
-                    ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
-                        old_path.as_str().into(),
-                    )),
-                    GraphRevision::INITIAL,
-                    OperationId::new(),
-                    crate::node_system::document::FunctionDocumentPatch::new(
-                        Default::default(),
-                        crate::node_system::document::FunctionSignature {
-                            parameters: Vec::new(),
-                            return_type: Some("Int64".into()),
-                        },
-                    ),
+        let result = old_state.update_function_signature_observed(
+            &old_worker_project_instance_id,
+            &old_path,
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
+                    old_path.as_str().into(),
+                )),
+                GraphRevision::INITIAL,
+                OperationId::new(),
+                crate::node_system::document::FunctionDocumentPatch::new(
+                    Default::default(),
+                    crate::node_system::document::FunctionSignature {
+                        parameters: Vec::new(),
+                        return_type: Some("Int64".into()),
+                    },
                 ),
-                |_| {},
-            )
-            .unwrap()
+            ),
+            |_| {},
+        );
+        old_result_completed_tx
+            .send(())
+            .expect("the delayed-result completion receiver must remain available");
+        result
     });
-    projection_started_rx.recv().unwrap();
+    projection_started_rx
+        .recv_timeout(rendezvous_timeout)
+        .expect("the old-project worker must reach the delayed projection hook");
 
-    state.activate_project_fixture("replacement-project".into(), ProjectData::new());
-    state.insert_graph(
-        path.clone(),
-        GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
+    let replacement_project = crate::project::fixtures::TempProject::activate(
+        "delayed-result-replacement",
+        ProjectData::new(),
     );
+    let replacement_root = replacement_project
+        .state()
+        .capture_project_session()
+        .unwrap()
+        .root;
+    state.activate_project_fixture(
+        replacement_root.as_path().to_string_lossy().into_owned(),
+        ProjectData::new(),
+    );
+    let replacement_project_instance_id = state.capture_project_session().unwrap().instance_id;
+    state
+        .insert_graph(
+            path.clone(),
+            GraphResourceDocument::new("Delayed", GraphDocumentKind::Function),
+        )
+        .unwrap();
     let replacement = state
         .update_function_signature_observed(
+            &replacement_project_instance_id,
             &path,
             "en-US",
             MutationRequest::new(
@@ -6269,12 +7263,29 @@ fn delayed_old_project_result_keeps_its_original_instance_identity() {
             |_| {},
         )
         .unwrap();
-    release_projection_tx.send(()).unwrap();
-    let delayed = old.join().unwrap();
+    release_projection_tx
+        .send(())
+        .expect("the delayed projection hook must remain available");
+    old_result_completed_rx
+        .recv_timeout(rendezvous_timeout)
+        .expect("the old-project mutation must complete after its projection is released");
+    let delayed = old
+        .join()
+        .expect("the old-project signature worker must not panic")
+        .expect("the old-project signature mutation must succeed");
 
     assert_eq!(delayed.publication_revision, 1);
     assert_eq!(replacement.publication_revision, 1);
+    assert_eq!(
+        delayed.project_instance_id,
+        old_project_instance_id.as_str()
+    );
+    assert_eq!(
+        replacement.project_instance_id,
+        replacement_project_instance_id.as_str()
+    );
     assert_ne!(delayed.project_instance_id, replacement.project_instance_id);
+    drop(replacement_project);
 }
 
 #[test]
@@ -6303,6 +7314,7 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
 
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
@@ -6414,7 +7426,7 @@ fn project_execution_publishes_persisted_function_plans() {
         .unwrap();
 
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -6654,7 +7666,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     drop(data);
 
     let first = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -6691,7 +7703,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
         )
         .unwrap();
     let second = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -6949,7 +7961,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             .collect::<Vec<_>>();
 
         state
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &event_path,
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &NOOP_RUN_EVENT_SINK,
@@ -6994,7 +8006,7 @@ fn production_compiler_rejects_wrong_scope_and_duplicate_shell_nodes() {
         .unwrap();
 
     let error = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -7200,7 +8212,7 @@ fn project_execution_refuses_blocking_analysis() {
         .unwrap();
 
     let error = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -7245,7 +8257,7 @@ fn project_variable_get_executes_against_authoritative_resource() {
         .unwrap();
 
     let result = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -7328,7 +8340,11 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
         include_default_results: false,
     };
     let invalid = state
-        .execute_graph(&graph_path(), &invalid_demand, &NOOP_RUN_EVENT_SINK)
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &invalid_demand,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap_err();
     assert!(invalid.starts_with("invalid_execution_demand:"));
     assert_eq!(observer.acquired(), 0);
@@ -7344,7 +8360,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
         include_default_results: false,
     };
     let run = state
-        .execute_graph(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
+        .execute_graph_for_current_project_for_test(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
         .unwrap();
 
     assert_eq!(run.values.len(), 1);
@@ -7373,7 +8389,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let events = DemandRunEvents::default();
 
     let unavailable = state
-        .execute_graph(&graph_path(), &unavailable_demand, &events)
+        .execute_graph_for_current_project_for_test(&graph_path(), &unavailable_demand, &events)
         .unwrap_err();
 
     assert!(unavailable.contains("unavailable"), "{unavailable}");
@@ -7493,6 +8509,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
 
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -7517,6 +8534,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
 
     state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -7588,6 +8606,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
         .unwrap();
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource.clone(),
@@ -7600,6 +8619,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
         .unwrap();
     state
         .redo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 resource,
@@ -7668,6 +8688,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
 
     let error = state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
@@ -7754,6 +8775,7 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
         ));
         state
             .undo_last_transaction_observed(
+                &current_project_instance_id(&state),
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -7767,6 +8789,7 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
         assert_eq!(cached_i64_column(&state, variable.id), vec![1, 2]);
         state
             .redo_last_transaction_observed(
+                &current_project_instance_id(&state),
                 "en-US",
                 MutationRequest::new(
                     resource,
@@ -7911,6 +8934,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
 
     state
         .undo_last_transaction_observed(
+            &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
                 ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
@@ -7965,7 +8989,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         after: crate::graph::value::DataValue::Int64(2),
     };
     let history_before = state.history_status();
-    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    let active_project_instance_id = state.capture_project_session().unwrap().instance_id;
 
     crate::project::set_project_filesystem_fault(Some(
         crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
@@ -7987,7 +9011,9 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         crate::graph::value::DataValue::Int64(1)
     );
     assert_eq!(state.history_status(), history_before);
-    let failed_index = state.read_project_index(&project_instance_id).unwrap();
+    let failed_index = state
+        .read_project_index(&active_project_instance_id)
+        .unwrap();
     assert_eq!(failed_index.publication_revision, 0);
     assert_eq!(
         std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
@@ -8007,7 +9033,9 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         resource_mutation.deltas[0].to_revision,
         GraphRevision::new(1)
     );
-    let success_index = state.read_project_index(&project_instance_id).unwrap();
+    let success_index = state
+        .read_project_index(&active_project_instance_id)
+        .unwrap();
     assert_eq!(success_index.publication_revision, 1);
     assert_eq!(
         crate::project::load_project_from_file(&root_text)
@@ -8026,6 +9054,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         .unwrap();
     let next = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             MutationRequest::new(
@@ -8184,7 +9213,7 @@ fn projection_and_execution_reuse_one_compile_product() {
 
     state.graph_projection(&graph_path(), "en-US").unwrap();
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8241,7 +9270,7 @@ fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_diges
     let before = crate::node_system::compiler::compile_snapshot_invocations();
 
     let default_run = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8250,10 +9279,14 @@ fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_diges
     let first_output = output(first_node);
     let first_events = DemandRunEvents::default();
     let first_run = state
-        .execute_graph(&graph_path(), &demand(first_output.clone()), &first_events)
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &demand(first_output.clone()),
+            &first_events,
+        )
         .unwrap();
     let second_run = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &demand(output(second_node)),
             &NOOP_RUN_EVENT_SINK,
@@ -8323,7 +9356,7 @@ fn graph_basis_replacement_discards_old_demand_variants() {
         include_default_results: false,
     };
     state
-        .execute_graph(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
+        .execute_graph_for_current_project_for_test(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
         .unwrap();
     let (old_compile_id, old_variants) = state
         .published_variant_cache_state_for_test(&graph_path())
@@ -8344,7 +9377,7 @@ fn graph_basis_replacement_discards_old_demand_variants() {
         )
         .unwrap();
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8377,7 +9410,7 @@ fn authority_mismatch_rejects_populated_variant_without_overwriting_current_prod
     let events = DemandRunEvents::default();
 
     let error = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -8404,7 +9437,7 @@ fn execution_and_projection_reuse_one_compile_product() {
     let before = crate::node_system::compiler::compile_snapshot_invocations();
 
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8587,7 +9620,7 @@ fn function_body_mutations_invalidate_other_graph_compile_slots() {
 fn project_replacement_detaches_old_compile_generation_and_populated_variants() {
     let (state, root) = active_state_with_valid_constant_graph("replace-compile-generation");
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8733,6 +9766,7 @@ fn committed_source_cannot_rebind_after_authority_generation_aba() {
 
     let result = state
         .update_function_signature_observed(
+            &current_project_instance_id(&state),
             &function_path,
             "en-US",
             function_signature_request(
@@ -8774,7 +9808,7 @@ fn compile_capture_retries_when_authority_changes_during_metadata_capture() {
 
     let execution_state = state.clone();
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(
+        execution_state.execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -8991,7 +10025,7 @@ fn execution_rejects_function_body_change_after_main_plan_before_run() {
         let executing_state = state.clone();
         let (execution_done_tx, execution_done_rx) = std::sync::mpsc::channel();
         let execution = scope.spawn(move || {
-            let result = executing_state.execute_graph(
+            let result = executing_state.execute_graph_for_current_project_for_test(
                 &graph_path(),
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &NOOP_RUN_EVENT_SINK,
@@ -9103,7 +10137,7 @@ fn database_resource_version_changes_with_resolved_column_type() {
 fn project_execution_runs_valid_plan_through_run_executor() {
     let (state, root) = active_state_with_valid_constant_graph("valid-plan-execution");
     let result = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9127,7 +10161,7 @@ fn production_observability_execute_graph_records_compile_and_run_for_current_se
     };
 
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9163,7 +10197,7 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
         std::sync::Arc::clone(&store.trace_sink)
     };
     state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9318,7 +10352,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
 
     let result = fixture
         .state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &fixture.path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9456,7 +10490,7 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
         .set_production_relational_observer(std::sync::Arc::clone(&forward_observer));
     let forward = fixture
         .state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &fixture.path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9473,7 +10507,7 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
         .set_production_relational_observer(std::sync::Arc::clone(&reversed_observer));
     let mut reversed = fixture
         .state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &fixture.path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -9589,7 +10623,7 @@ fn predicate_cancellation_publishes_no_result_and_releases_project_resources() {
 
     let error = fixture
         .state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &fixture.path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -9675,7 +10709,7 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
 
         let error = fixture
             .state
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &fixture.path,
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &events,
@@ -9769,7 +10803,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     state.set_production_relational_observer(std::sync::Arc::clone(&observer));
 
     let result = state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &NOOP_RUN_EVENT_SINK,
@@ -10415,7 +11449,11 @@ impl ProductionRelationalChainFixture {
         let (result_tx, result_rx) = std::sync::mpsc::sync_channel(1);
         let execution = std::thread::spawn(move || {
             result_tx
-                .send(state.execute_graph(&path, &demand, thread_events.as_ref()))
+                .send(state.execute_graph_for_current_project_for_test(
+                    &path,
+                    &demand,
+                    thread_events.as_ref(),
+                ))
                 .unwrap();
         });
 
@@ -10486,7 +11524,7 @@ impl ProductionRelationalChainFixture {
         let events = DemandRunEvents::default();
         let error = self
             .state
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &self.path,
                 &self.demand(ProductionChainOutput::Limit),
                 &events,
@@ -10577,6 +11615,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
     let prepare_result = fixture
         .state
         .apply_editor_graph_mutation(
+            &session.instance_id,
             &fixture.path,
             "en-US",
             MutationRequest::new(
@@ -10607,6 +11646,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
     let create_result = fixture
         .state
         .apply_editor_graph_mutation(
+            &session.instance_id,
             &fixture.path,
             "en-US",
             MutationRequest::new(
@@ -10659,6 +11699,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
     let connect_result = fixture
         .state
         .apply_editor_graph_mutation(
+            &session.instance_id,
             &fixture.path,
             "en-US",
             MutationRequest::new(
@@ -10713,6 +11754,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
     let submit_result = fixture
         .state
         .apply_editor_graph_mutation(
+            &session.instance_id,
             &fixture.path,
             "en-US",
             MutationRequest::new(
@@ -10752,6 +11794,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
     let normalized_created_node_id = "00000000-0000-0000-0000-000000000009";
     let normalized_connection_id = "00000000-0000-0000-0000-000000000068";
     for result in [&mut create_result, &mut connect_result, &mut submit_result] {
+        normalize_string(result, session.instance_id.as_str(), "fixture-project");
         normalize_string(result, &created_node_id, normalized_created_node_id);
         normalize_string(result, &connection_id, normalized_connection_id);
     }
@@ -10853,7 +11896,7 @@ fn production_relational_chain_final_only_demand_publishes_only_exact_final_valu
 
     let result = fixture
         .state
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &fixture.path,
             &fixture.demand(ProductionChainOutput::Limit),
             &events,
@@ -10880,7 +11923,11 @@ fn production_relational_chain_filter_and_project_previews_prune_suffixes() {
 
         let result = fixture
             .state
-            .execute_graph(&fixture.path, &fixture.demand(output), &events)
+            .execute_graph_for_current_project_for_test(
+                &fixture.path,
+                &fixture.demand(output),
+                &events,
+            )
             .expect("stable preview demand executes");
 
         fixture.assert_preview(
@@ -10910,7 +11957,11 @@ fn production_relational_chain_previews_freeze_exact_operator_prefixes() {
         fixture.install(&observer, &leases);
         fixture
             .state
-            .execute_graph(&fixture.path, &fixture.demand(output), &events)
+            .execute_graph_for_current_project_for_test(
+                &fixture.path,
+                &fixture.demand(output),
+                &events,
+            )
             .unwrap();
 
         fixture.assert_exact_preview_plan(output, &observer);
@@ -10930,7 +11981,7 @@ fn production_relational_chain_is_uuid_sort_order_independent() {
         fixture.install(&observer, &leases);
         let result = fixture
             .state
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &fixture.path,
                 &fixture.demand(ProductionChainOutput::Limit),
                 &events,

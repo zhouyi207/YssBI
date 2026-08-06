@@ -128,7 +128,7 @@ describe('requestPinPreview', () => {
   ])('settles the exact projected $name preview when frontend and backend project identities differ', async ({ address }) => {
     const { outputKey } = installGraph(eventGraphPath, address);
     const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
-      async (_graphPath, demand, onEvent) => {
+      async (_projectInstanceId, _graphPath, demand, onEvent) => {
         emitSuccessfulPreview(demand, onEvent);
         return { runId: 'run-1' };
       },
@@ -139,6 +139,7 @@ describe('requestPinPreview', () => {
     });
 
     expect(execute).toHaveBeenCalledWith(
+      frontendProjectInstanceId,
       eventGraphPath,
       {
         type: 'outputs',
@@ -288,7 +289,7 @@ describe('requestPinPreview', () => {
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
-      async (_graphPath, demand, onEvent) => {
+      async (_projectInstanceId, _graphPath, demand, onEvent) => {
         if (demand.type !== 'outputs') throw new Error('expected output demand');
         onEvent?.(runEvent({ type: 'runStarted' }));
         replace();
@@ -314,27 +315,40 @@ describe('requestPinPreview', () => {
     });
   });
 
-  it('suppresses an OutputReady after project lifecycle replacement', async () => {
+  it('ignores delayed events and completion after project lifecycle replacement', async () => {
     const { outputKey, outputAddress } = installGraph();
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
-    vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
-      async (_graphPath, demand, onEvent) => {
-        if (demand.type !== 'outputs') throw new Error('expected output demand');
-        onEvent?.(runEvent({ type: 'runStarted' }));
-        startProjectLifecycle('project-session-2');
-        onEvent?.(runEvent({
-          type: 'outputReady',
-          output: demand.outputs[0],
-          sourceId: 'source-stale-project',
-        }));
-        onEvent?.(runEvent({ type: 'runCompleted' }));
-        return { runId: 'run-1' };
-      },
+    let emit!: (event: RunEvent) => void;
+    let resolveExecution!: (value: { runId: string }) => void;
+    const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
+      (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
+        emit = onEvent ?? (() => undefined);
+        resolveExecution = resolve;
+      }),
     );
 
-    await requestPinPreview(eventGraphPath, outputKey);
+    const preview = requestPinPreview(eventGraphPath, outputKey);
+    expect(execute).toHaveBeenCalledWith(
+      frontendProjectInstanceId,
+      eventGraphPath,
+      expect.objectContaining({ type: 'outputs' }),
+      expect.any(Function),
+    );
+    startProjectLifecycle('project-session-2');
+    emit(runEvent({ type: 'runStarted' }));
+    emit(runEvent({
+      type: 'outputReady',
+      output: { graphPath: eventGraphPath, port: outputAddress },
+      sourceId: 'source-stale-project',
+    }));
+    emit(runEvent({ type: 'runCompleted' }));
+    resolveExecution({ runId: 'run-1' });
 
+    await expect(preview).resolves.toEqual({
+      status: 'rejected',
+      reason: 'stale-project-lifecycle',
+    });
     expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
       pinPreviewCacheKey(eventGraphPath, outputAddress),
     )).toBeUndefined();
@@ -425,7 +439,7 @@ describe('requestPinPreview', () => {
     const callbacks: Array<(event: RunEvent) => void> = [];
     const resolvers: Array<(value: { runId: string }) => void> = [];
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
-      (_graphPath, _demand, onEvent) => new Promise((resolve) => {
+      (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
         callbacks.push(onEvent ?? (() => undefined));
         resolvers.push(resolve);
       }),

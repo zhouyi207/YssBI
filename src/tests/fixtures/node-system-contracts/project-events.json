@@ -1,0 +1,47 @@
+{
+  "events": [
+    {
+      "payload": {
+        "payload": {
+          "delta": {
+            "causedBy": "00000000-0000-0000-0000-000000000004",
+            "fromRevision": 7,
+            "graphPath": "events/contract.yssbi-event",
+            "payload": {
+              "operations": []
+            },
+            "toRevision": 8
+          },
+          "projectInstanceId": "00000000-0000-0000-0000-000000000601"
+        },
+        "type": "GraphDelta"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [],
+            "history": {
+              "canRedo": false,
+              "canUndo": true
+            },
+            "moves": [],
+            "operationId": "00000000-0000-0000-0000-000000000004",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 11
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    }
+  ],
+  "format": "yssbi.project-events.v1"
+}

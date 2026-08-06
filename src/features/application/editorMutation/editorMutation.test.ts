@@ -17,6 +17,7 @@ import {
   executeEditorMutation,
   resetEditorMutationCoordinator,
 } from './editorMutationCoordinator';
+import { projectPublicationCoordinator } from './projectPublicationCoordinator';
 import {
   getPendingMutation,
   resetPendingMutations,
@@ -36,6 +37,7 @@ function graphResult(
   toRevision = 2,
 ): GraphMutationResultDto {
   return {
+    projectInstanceId: '00000000-0000-0000-0000-000000000601',
     delta: {
       graphPath,
       fromRevision,
@@ -79,9 +81,15 @@ describe('mutation and history services', () => {
     };
     vi.mocked(invoke).mockResolvedValue(graphResult(request.operationId, 4, 5));
 
-    await GraphMutationService.mutateGraph(graphPath, 'en-US', request);
+    await GraphMutationService.mutateGraph(
+      '00000000-0000-0000-0000-000000000601',
+      graphPath,
+      'en-US',
+      request,
+    );
 
     expect(invoke).toHaveBeenCalledWith('mutate_graph_document', {
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
       graphPath: 'functions/Main.yssbi-function',
       locale: 'en-US',
       request: {
@@ -124,10 +132,16 @@ describe('mutation and history services', () => {
     };
     vi.mocked(invoke).mockResolvedValue(graphResult(request.operationId, 4, 5));
 
-    await GraphMutationService.mutateGraph(graphPath, 'en-US', request);
+    await GraphMutationService.mutateGraph(
+      '00000000-0000-0000-0000-000000000601',
+      graphPath,
+      'en-US',
+      request,
+    );
 
     expect(invoke).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith('mutate_graph_document', {
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
       graphPath,
       locale: 'en-US',
       request,
@@ -153,9 +167,15 @@ describe('mutation and history services', () => {
     };
     vi.mocked(invoke).mockResolvedValue(graphResult(request.operationId, 5, 6));
 
-    await GraphMutationService.mutateGraph(graphPath, 'zh-CN', request);
+    await GraphMutationService.mutateGraph(
+      '00000000-0000-0000-0000-000000000601',
+      graphPath,
+      'zh-CN',
+      request,
+    );
 
     expect(invoke).toHaveBeenCalledWith('mutate_graph_document', {
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
       graphPath: 'functions/Main.yssbi-function',
       locale: 'zh-CN',
       request: {
@@ -268,7 +288,8 @@ describe('mutation and history services', () => {
     });
   });
 
-  it('keeps history services invoke-only and sends locale plus request', async () => {
+  it('keeps history services invoke-only and sends project identity, locale, and request', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000601';
     const request = {
       resource: { kind: 'graph' as const, key: graphPath },
       baseRevision: 5,
@@ -288,20 +309,22 @@ describe('mutation and history services', () => {
     };
     vi.mocked(invoke).mockResolvedValue(response);
 
-    await expect(HistoryService.undo('zh-CN', request)).resolves.toBe(response);
+    await expect(HistoryService.undo(projectInstanceId, 'zh-CN', request)).resolves.toBe(response);
     expect(invoke).toHaveBeenLastCalledWith('undo_graph_document', {
+      projectInstanceId,
       locale: 'zh-CN',
       request,
     });
 
-    await HistoryService.redo('zh-CN', request);
+    await HistoryService.redo(projectInstanceId, 'zh-CN', request);
     expect(invoke).toHaveBeenLastCalledWith('redo_graph_document', {
+      projectInstanceId,
       locale: 'zh-CN',
       request,
     });
 
-    await HistoryService.getStatus();
-    expect(invoke).toHaveBeenLastCalledWith('get_project_history_status');
+    await HistoryService.getStatus(projectInstanceId);
+    expect(invoke).toHaveBeenLastCalledWith('get_project_history_status', { projectInstanceId });
   });
 });
 
@@ -310,6 +333,10 @@ describe('executeEditorMutation', () => {
     vi.clearAllMocks();
     resetPendingMutations();
     resetEditorMutationCoordinator();
+    projectPublicationCoordinator.startProject(
+      '00000000-0000-0000-0000-000000000601',
+      0,
+    );
     useGraphDataStore.setState({ graphEntities: {} });
     useGraphDataStore.getState().replaceProjection(
       graphPath,
@@ -326,7 +353,7 @@ describe('executeEditorMutation', () => {
       { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
       {
         createOperationId: () => 'operation-1',
-        mutateGraph: async (_path, _locale, request) => {
+        mutateGraph: async (_projectInstanceId, _path, _locale, request) => {
           pendingObservedDuringInvoke = getPendingMutation(request.operationId) != null;
           return graphResult(request.operationId);
         },

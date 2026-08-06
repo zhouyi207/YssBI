@@ -3,7 +3,7 @@ import { getPendingMutation } from '@/features/application/editorMutation/pendin
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
-import type { GraphDeltaDto, ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { GraphDeltaDto } from '@/shared/types/dto/editorMutation';
 import { BaseEventHandler } from './BaseEventHandler';
 import type {
   GraphDeltaEventPayload,
@@ -12,31 +12,69 @@ import type {
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
+  parseGraphDeltaEventPayload,
+  parseResourceMutationCommittedPayload,
+} from '../utils/projectEventWireParser';
+import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
+import { markResourceStale } from '@/features/core/resource';
 
-function isCurrentProjectEvent(projectInstanceId: string): boolean {
+function captureCurrentProjectEventIdentity(
+  projectInstanceId: string,
+): ProjectIdentitySnapshot | null {
   try {
     const identity = captureProjectIdentity();
     return identity.projectInstanceId === projectInstanceId
-      && isCurrentProjectIdentity(identity);
+      && isCurrentProjectIdentity(identity)
+      ? identity
+      : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isCurrentProjectEvent(projectInstanceId: string): boolean {
+  return captureCurrentProjectEventIdentity(projectInstanceId) !== null;
+}
+
+function markMalformedCurrentGraphEventStale(payload: unknown): void {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return;
+  const projectInstanceId = (payload as Record<string, unknown>).projectInstanceId;
+  const delta = (payload as Record<string, unknown>).delta;
+  if (typeof projectInstanceId !== 'string'
+    || !isCurrentProjectEvent(projectInstanceId)
+    || typeof delta !== 'object'
+    || delta === null
+    || Array.isArray(delta)) return;
+  const graphPath = (delta as Record<string, unknown>).graphPath;
+  if (typeof graphPath !== 'string') return;
+  const kind = inferGraphResourceKind(graphPath);
+  if (kind) markResourceStale({ id: graphPath, kind }, true);
 }
 
 export class GraphDeltaHandler extends BaseEventHandler<GraphDeltaEventPayload> {
   eventType = 'GraphDelta';
 
   handle(payload: GraphDeltaEventPayload): void {
-    const delta: GraphDeltaDto | undefined = payload?.delta;
-    if (!delta || typeof delta.graphPath !== 'string') return;
-    if (!isCurrentProjectEvent(payload.projectInstanceId)) return;
+    let parsed: GraphDeltaEventPayload;
+    try {
+      parsed = parseGraphDeltaEventPayload(payload);
+    } catch {
+      markMalformedCurrentGraphEventStale(payload);
+      return;
+    }
+    const delta: GraphDeltaDto = parsed.delta;
+    const identity = captureCurrentProjectEventIdentity(parsed.projectInstanceId);
+    if (!identity) return;
 
     const pending = delta.causedBy ? getPendingMutation(delta.causedBy) : undefined;
     if (pending?.graphPath === delta.graphPath) return;
 
     const current = useGraphDataStore.getState().graphEntities[delta.graphPath];
     if (current && delta.toRevision <= current.sourceRevision) return;
+    if (!isCurrentProjectIdentity(identity)) return;
 
     void invalidateGraphProjection(delta.graphPath);
   }
@@ -46,14 +84,19 @@ export class ResourceMutationCommittedHandler extends BaseEventHandler<ResourceM
   eventType = 'ResourceMutationCommitted';
 
   handle(payload: ResourceMutationCommittedPayload): void {
-    const result: unknown = payload?.result;
-    if (!result || typeof result !== 'object') return;
-    const projectInstanceId = (result as { projectInstanceId?: unknown }).projectInstanceId;
-    if (typeof projectInstanceId !== 'string' || !isCurrentProjectEvent(projectInstanceId)) return;
-    const committed = result as ResourceMutationResultDto;
+    let parsed: ResourceMutationCommittedPayload;
+    try {
+      parsed = parseResourceMutationCommittedPayload(payload);
+    } catch {
+      return;
+    }
+    const committed = parsed.result;
+    const identity = captureCurrentProjectEventIdentity(committed.projectInstanceId);
+    if (!identity) return;
     void projectPublicationCoordinator.submit({
       result: committed,
     }).then(() => {
+      if (!isCurrentProjectIdentity(identity)) return;
       useNodeCatalogStore.getState().observeResourcePublication(
         committed.projectInstanceId,
         committed.publicationRevision,

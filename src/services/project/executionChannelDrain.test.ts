@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RunEvent, RunEventKind } from '@/shared/types/dto/runEvent';
 import { createExecutionStreamDrain } from './executionChannelDrain';
 
@@ -8,7 +8,7 @@ function runEvent(kind: RunEventKind): RunEvent {
       projectSessionId: 'project-session-1',
       graphPath: 'events/Main.yssbi-event',
       graphRevision: '7',
-      registryFingerprint: 'registry-1',
+      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
       resourceVersions: {},
       compileId: '9',
       selectionDigest: 'demand-selection-a',
@@ -19,7 +19,7 @@ function runEvent(kind: RunEventKind): RunEvent {
     },
     basis: {
       graphRevision: '7',
-      registryFingerprint: 'registry-1',
+      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
       resourceVersions: {},
     },
     kind,
@@ -78,6 +78,18 @@ describe('createExecutionStreamDrain', () => {
     expect(() => drain.onmessage(runEvent(terminal))).not.toThrow();
 
     await expect(wait).rejects.toBe(consumerError);
+  });
+
+  it('rejects malformed channel values before callbacks or terminal observation', async () => {
+    const callback = vi.fn();
+    const drain = createExecutionStreamDrain(callback);
+    const wait = drain.waitForStreamEnd();
+    const malformed = { ...runEvent({ type: 'runCompleted' }), extra: true };
+
+    expect(() => (drain.onmessage as (value: unknown) => void)(malformed)).not.toThrow();
+
+    expect(callback).not.toHaveBeenCalled();
+    await expect(wait).rejects.toThrow('Invalid run event');
   });
 
   it('rejects a pending waiter when its channel is disposed', async () => {

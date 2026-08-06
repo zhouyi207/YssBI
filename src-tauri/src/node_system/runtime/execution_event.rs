@@ -12,40 +12,35 @@ pub struct RunEvent {
     pub kind: RunEventKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum RunEventKind {
+macro_rules! define_run_event_kind {
+    ($($variant:ident $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(tag = "type", rename_all = "camelCase")]
+        pub enum RunEventKind {
+            $($variant $({ $($field: $field_type),* })?),*
+        }
+
+        #[cfg(test)]
+        pub(crate) const RUN_EVENT_KIND_VARIANT_COUNT: usize =
+            [$(stringify!($variant)),*].len();
+    };
+}
+
+define_run_event_kind! {
     RunStarted,
     RunCompleted,
-    RunErrored {
-        code: RunErrorCode,
-    },
+    RunErrored { code: RunErrorCode },
     RunCancelled,
-    OperationStarted {
-        operation_index: u32,
-        activation_id: u64,
-    },
-    OperationCompleted {
-        operation_index: u32,
-        activation_id: u64,
-    },
+    OperationStarted { operation_index: u32, activation_id: u64 },
+    OperationCompleted { operation_index: u32, activation_id: u64 },
     OperationErrored {
         operation_index: u32,
         activation_id: u64,
         code: RunErrorCode,
     },
-    ValueReady {
-        value_index: u32,
-        source_id: ResultSourceId,
-    },
-    ResultReady {
-        name: Box<str>,
-        source_id: ResultSourceId,
-    },
-    OutputReady {
-        output: GraphOutputRef,
-        source_id: ResultSourceId,
-    },
+    ValueReady { value_index: u32, source_id: ResultSourceId },
+    ResultReady { name: Box<str>, source_id: ResultSourceId },
+    OutputReady { output: GraphOutputRef, source_id: ResultSourceId },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -445,7 +445,7 @@ fn run_branch(document: GraphResourceDocument) -> BranchOutcome {
     let events = RecordingRunEvents::default();
     let run = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -801,7 +801,7 @@ fn run_loop(
     let events = RecordingRunEvents::default();
     let run = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1102,7 +1102,7 @@ fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
 
     let run = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1145,7 +1145,7 @@ fn builtin_call_two_calls_in_one_run_keep_arguments_results_and_frames_independe
 
     let run = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1222,7 +1222,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 
     let first = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &RecordingRunEvents::default(),
@@ -1256,7 +1256,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 
     let second = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &RecordingRunEvents::default(),
@@ -1293,7 +1293,7 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
 
     let error = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1416,7 +1416,7 @@ fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
 
     let error = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1473,7 +1473,7 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(
+        execution_state.execute_graph_for_current_project_for_test(
             &execution_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             execution_events.as_ref(),
@@ -1557,7 +1557,7 @@ fn builtin_loop_carries_initial_and_subsequent_values_across_observable_iteratio
 
     let run = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -1684,7 +1684,7 @@ fn builtin_loop_project_drain_cancels_between_iterations_without_publishing_resu
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(
+        execution_state.execute_graph_for_current_project_for_test(
             &execution_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             execution_events.as_ref(),
@@ -1881,7 +1881,7 @@ fn builtin_effect_edge_orders_real_builtins_independent_of_document_insertion() 
 
         fixture
             .state()
-            .execute_graph(
+            .execute_graph_for_current_project_for_test(
                 &graph_path,
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &events,
@@ -1916,7 +1916,7 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
 
     let error = fixture
         .state()
-        .execute_graph(
+        .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
@@ -2039,7 +2039,7 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
     let execution = std::thread::spawn(move || {
-        execution_state.execute_graph(
+        execution_state.execute_graph_for_current_project_for_test(
             &execution_path,
             &crate::node_system::plan::ExecutionDemand::Default,
             execution_events.as_ref(),

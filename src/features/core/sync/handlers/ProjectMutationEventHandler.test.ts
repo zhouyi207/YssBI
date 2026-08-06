@@ -3,12 +3,18 @@ import {
   registerPendingMutation,
   resetPendingMutations,
 } from '@/features/application/editorMutation/pendingMutationRegistry';
+import * as pendingMutationRegistry from '@/features/application/editorMutation/pendingMutationRegistry';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useHistoryStore } from '@/features/core/history';
 import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
+import {
+  markResourceLoaded,
+  useDocumentStateStore,
+  useResourceStore,
+} from '@/features/core/resource';
 import { ProjectService } from '@/services/project/projectService';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
@@ -40,6 +46,14 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
 const graphPath = 'events/Main.yssbi-event';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const operationId = '00000000-0000-0000-0000-000000000401';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function resourceResult(publicationRevision = 1): ResourceMutationResultDto {
   return {
@@ -176,6 +190,70 @@ describe('Project mutation event synchronization', () => {
     expect(invalidateGraphProjection).toHaveBeenCalledWith(graphPath);
   });
 
+  it('lets downstream invalidation reject a pending response after project replacement', async () => {
+    const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' });
+    const replacement = makeEditorProjectionFixture({
+      graphPath,
+      sourceRevision: 2,
+      title: 'Old project response',
+    });
+    const pending = deferred<typeof replacement.projection>();
+    const actualCoordinator = await vi.importActual<
+      typeof import('@/features/application/editorProjection/graphProjectionCoordinator')
+    >('@/features/application/editorProjection/graphProjectionCoordinator');
+    let invalidation!: Promise<boolean>;
+    vi.mocked(invalidateGraphProjection).mockImplementationOnce((path) => {
+      invalidation = actualCoordinator.invalidateGraphProjection(path);
+      return invalidation;
+    });
+    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    markResourceLoaded({ id: graphPath, kind: 'event' });
+    vi.mocked(GraphProjectionService.hydrateGraph).mockReturnValueOnce(pending.promise);
+
+    new GraphDeltaHandler().handle({
+      projectInstanceId,
+      delta: {
+        graphPath,
+        fromRevision: 1,
+        toRevision: 2,
+        causedBy: null,
+        payload: { operations: [] },
+      },
+    });
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    pending.resolve(replacement.projection);
+
+    await expect(invalidation).resolves.toBe(false);
+    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+      sourceRevision: 1,
+      nodes: { 'local-node': { title: 'Current' } },
+    });
+  });
+
+  it('gives a malformed GraphDelta path zero pending, graph, or resource store effects', () => {
+    const pendingLookup = vi.spyOn(pendingMutationRegistry, 'getPendingMutation');
+    const graphStateRead = vi.spyOn(useGraphDataStore, 'getState');
+    const resourceWrite = vi.spyOn(useResourceStore, 'setState');
+    const documentWrite = vi.spyOn(useDocumentStateStore, 'setState');
+
+    new GraphDeltaHandler().handle({
+      projectInstanceId,
+      delta: {
+        graphPath: 'malformed path',
+        fromRevision: 1,
+        toRevision: 2,
+        causedBy: null,
+        payload: { operations: [] },
+      },
+    } as never);
+
+    expect(pendingLookup).not.toHaveBeenCalled();
+    expect(graphStateRead).not.toHaveBeenCalled();
+    expect(resourceWrite).not.toHaveBeenCalled();
+    expect(documentWrite).not.toHaveBeenCalled();
+    expect(invalidateGraphProjection).not.toHaveBeenCalled();
+  });
+
   it('ignores GraphDelta revisions already represented by the projection', () => {
     useGraphDataStore.getState().replaceProjection(
       graphPath,
@@ -197,7 +275,49 @@ describe('Project mutation event synchronization', () => {
     expect(invalidateGraphProjection).not.toHaveBeenCalled();
   });
 
-  it('ignores stale project events before pending-operation correlation', () => {
+  it('rejects project replacement between graph state read and invalidation', () => {
+    const originalGetState = useGraphDataStore.getState;
+    vi.spyOn(useGraphDataStore, 'getState').mockImplementationOnce(() => {
+      projectPublicationCoordinator.startProject(projectInstanceId, 0);
+      return originalGetState();
+    });
+
+    new GraphDeltaHandler().handle({
+      projectInstanceId,
+      delta: {
+        graphPath,
+        fromRevision: 1,
+        toRevision: 2,
+        causedBy: null,
+        payload: { operations: [] },
+      },
+    });
+
+    expect(invalidateGraphProjection).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale GraphDelta identity before pending lookup or graph store reads', () => {
+    projectPublicationCoordinator.startProject('00000000-0000-0000-0000-000000000602', 0);
+    const pendingLookup = vi.spyOn(pendingMutationRegistry, 'getPendingMutation');
+    const graphStateRead = vi.spyOn(useGraphDataStore, 'getState');
+
+    new GraphDeltaHandler().handle({
+      projectInstanceId,
+      delta: {
+        graphPath,
+        fromRevision: 1,
+        toRevision: 2,
+        causedBy: operationId,
+        payload: { operations: [] },
+      },
+    });
+
+    expect(pendingLookup).not.toHaveBeenCalled();
+    expect(graphStateRead).not.toHaveBeenCalled();
+    expect(invalidateGraphProjection).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale project events before coordinator submission', () => {
     projectPublicationCoordinator.startProject('00000000-0000-0000-0000-000000000602', 0);
     const submit = vi.spyOn(projectPublicationCoordinator, 'submit').mockResolvedValue({
       status: 'applied',
@@ -265,6 +385,23 @@ describe('Project mutation event synchronization', () => {
     expect(observe).toHaveBeenCalledWith(projectInstanceId, 3);
   });
 
+  it('does not advance the Catalog after project replacement while submission settles', async () => {
+    const settlement = deferred<{
+      status: 'applied';
+      affectedGraphPaths: ReadonlySet<string>;
+    }>();
+    vi.spyOn(projectPublicationCoordinator, 'submit').mockReturnValue(settlement.promise);
+    const observe = vi.spyOn(useNodeCatalogStore.getState(), 'observeResourcePublication');
+
+    new ResourceMutationCommittedHandler().handle({ result: resourceResult(3) });
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    settlement.resolve({ status: 'applied', affectedGraphPaths: new Set() });
+    await settlement.promise;
+    await Promise.resolve();
+
+    expect(observe).not.toHaveBeenCalled();
+  });
+
   it('delivers matching direct and event receipts to coordinator-owned deduplication', () => {
     const submit = vi.spyOn(projectPublicationCoordinator, 'submit').mockResolvedValue({
       status: 'applied',
@@ -277,6 +414,27 @@ describe('Project mutation event synchronization', () => {
     handler.handle({ result: structuredClone(result) });
 
     expect(submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives malformed ResourceMutationCommitted payloads zero store effects', () => {
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit').mockResolvedValue({
+      status: 'applied',
+      affectedGraphPaths: new Set(),
+    });
+    const graphWrite = vi.spyOn(useGraphDataStore, 'setState');
+    const databaseWrite = vi.spyOn(useDatabaseStore, 'setState');
+    const historyWrite = vi.spyOn(useHistoryStore, 'setState');
+    const catalogRead = vi.spyOn(useNodeCatalogStore, 'getState');
+
+    new ResourceMutationCommittedHandler().handle({
+      result: { ...resourceResult(), publicationRevision: 0 },
+    } as never);
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(graphWrite).not.toHaveBeenCalled();
+    expect(databaseWrite).not.toHaveBeenCalled();
+    expect(historyWrite).not.toHaveBeenCalled();
+    expect(catalogRead).not.toHaveBeenCalled();
   });
 
   it('ignores malformed event envelopes without coordinator submission', () => {

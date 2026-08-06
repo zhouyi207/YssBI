@@ -356,6 +356,47 @@ mod tests {
         (correlation, basis)
     }
 
+    fn publish_test_snapshot(store: &ResultStore, run_id: RunId) -> ResultSourceDescriptor {
+        let (correlation, basis) = context(run_id);
+        store.publish_snapshot(
+            run_id,
+            correlation,
+            basis,
+            "result",
+            ArtifactSnapshot::Value(Value::Integer(run_id.get() as i64)),
+        )
+    }
+
+    #[test]
+    fn result_source_ids_are_process_global_across_stores() {
+        let first_store = ResultStore::new();
+        let replacement_store = ResultStore::new();
+        let first = publish_test_snapshot(&first_store, RunId::new(1));
+        let replacement = publish_test_snapshot(&replacement_store, RunId::new(2));
+
+        assert_ne!(first.source_id, replacement.source_id);
+        assert!(replacement.source_id.get() > first.source_id.get());
+    }
+
+    #[test]
+    fn result_source_ids_are_process_global_when_allocated_concurrently() {
+        const PUBLICATION_COUNT: usize = 16;
+
+        let source_ids = (0..PUBLICATION_COUNT)
+            .map(|index| {
+                std::thread::spawn(move || {
+                    let store = ResultStore::new();
+                    publish_test_snapshot(&store, RunId::new(index as u64 + 1))
+                        .source_id
+                        .get()
+                })
+            })
+            .map(|publication| publication.join().unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(source_ids.len(), PUBLICATION_COUNT);
+    }
+
     #[test]
     fn descriptor_page_and_release_replace_result_source_store_reads() {
         let store = ResultStore::new();

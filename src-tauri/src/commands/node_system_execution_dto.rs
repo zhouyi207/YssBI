@@ -36,16 +36,28 @@ impl TryFrom<GraphOutputRefDto> for GraphOutputRef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "type",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum ExecutionDemandDto {
-    Default {},
-    Outputs {
+macro_rules! define_execution_demand_dto {
+    ($($variant:ident => $wire_type:literal $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?) => {
+        #[cfg(test)]
+        pub(crate) const EXECUTION_DEMAND_DTO_WIRE_TYPES: [&str;
+            [$(stringify!($variant)),*].len()] = [$($wire_type),*];
+
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(
+            tag = "type",
+            rename_all = "camelCase",
+            rename_all_fields = "camelCase",
+            deny_unknown_fields
+        )]
+        pub enum ExecutionDemandDto {
+            $($variant $({ $($field: $field_type),* })?),*
+        }
+    };
+}
+
+define_execution_demand_dto! {
+    Default => "default" {},
+    Outputs => "outputs" {
         outputs: Box<[GraphOutputRefDto]>,
         include_default_results: bool,
     },
@@ -145,50 +157,41 @@ impl From<CorrelationContext> for RunCorrelationDto {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub(crate) enum RunEventKindDto {
-    RunStarted,
-    RunCompleted,
-    RunErrored {
+macro_rules! define_run_event_kind_dto {
+    ($($variant:ident => $wire_type:literal $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?) => {
+        #[cfg(test)]
+        pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str;
+            [$(stringify!($variant)),*].len()] = [$($wire_type),*];
+
+        #[derive(Debug, Serialize)]
+        #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+        pub(crate) enum RunEventKindDto {
+            $($variant $({ $($field: $field_type),* })?),*
+        }
+    };
+}
+
+define_run_event_kind_dto! {
+    RunStarted => "runStarted",
+    RunCompleted => "runCompleted",
+    RunErrored => "runErrored" { code: RunErrorCode },
+    RunCancelled => "runCancelled",
+    OperationStarted => "operationStarted" {
+        operation_index: u32,
+        activation_id: String,
+    },
+    OperationCompleted => "operationCompleted" {
+        operation_index: u32,
+        activation_id: String,
+    },
+    OperationErrored => "operationErrored" {
+        operation_index: u32,
+        activation_id: String,
         code: RunErrorCode,
     },
-    RunCancelled,
-    OperationStarted {
-        #[serde(rename = "operationIndex")]
-        operation_index: u32,
-        #[serde(rename = "activationId")]
-        activation_id: String,
-    },
-    OperationCompleted {
-        #[serde(rename = "operationIndex")]
-        operation_index: u32,
-        #[serde(rename = "activationId")]
-        activation_id: String,
-    },
-    OperationErrored {
-        #[serde(rename = "operationIndex")]
-        operation_index: u32,
-        #[serde(rename = "activationId")]
-        activation_id: String,
-        code: RunErrorCode,
-    },
-    ValueReady {
-        #[serde(rename = "valueIndex")]
-        value_index: u32,
-        #[serde(rename = "sourceId")]
-        source_id: String,
-    },
-    ResultReady {
-        name: Box<str>,
-        #[serde(rename = "sourceId")]
-        source_id: String,
-    },
-    OutputReady {
-        output: GraphOutputRefDto,
-        #[serde(rename = "sourceId")]
-        source_id: String,
-    },
+    ValueReady => "valueReady" { value_index: u32, source_id: String },
+    ResultReady => "resultReady" { name: Box<str>, source_id: String },
+    OutputReady => "outputReady" { output: GraphOutputRefDto, source_id: String },
 }
 
 impl From<RunEventKind> for RunEventKindDto {

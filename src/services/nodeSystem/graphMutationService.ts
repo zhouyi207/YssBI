@@ -4,17 +4,21 @@ import type {
   GraphMutationResultDto,
   MutationRequestDto,
 } from '@/shared/types/dto/editorMutation';
+import { parseGraphMutationResultDto } from '@/shared/types/dto/editorMutationWireParser';
 
 export class GraphMutationService {
-  static mutateGraph(
+  static async mutateGraph(
+    projectInstanceId: string,
     graphPath: string,
     locale: string,
     request: MutationRequestDto<EditorGraphMutationDto>,
   ): Promise<GraphMutationResultDto> {
-    return invoke<GraphMutationResultDto>('mutate_graph_document', {
+    const response: unknown = await invoke('mutate_graph_document', {
+      projectInstanceId,
       graphPath,
       locale,
       request,
     });
+    return parseGraphMutationResultDto(response);
   }
 }

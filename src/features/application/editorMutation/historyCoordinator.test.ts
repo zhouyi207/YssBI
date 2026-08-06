@@ -11,6 +11,7 @@ import { prepareGraphProjectionForPublication } from '@/features/application/edi
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
   executeHistoryMutation,
+  refreshHistoryStatus,
   resetHistoryCoordinator,
   type HistoryCoordinatorDependencies,
 } from './historyCoordinator';
@@ -27,6 +28,7 @@ const functionPath = 'functions/Main.yssbi-function';
 const eventPath = 'events/Secondary.yssbi-event';
 const operationId = '00000000-0000-0000-0000-000000000401';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000602';
 const thresholdVariableId = '00000000-0000-0000-0000-000000000703';
 
 
@@ -227,7 +229,7 @@ describe('executeHistoryMutation', () => {
     'calls Rust %s with the current resource revision and a registered operation ID',
     async (direction) => {
       let pendingDuringInvoke = false;
-      const invoke = vi.fn(async (_locale, request) => {
+      const invoke = vi.fn(async (_projectInstanceId, _locale, request) => {
         pendingDuringInvoke = useHistoryStore.getState().pending
           && getPendingMutation(request.operationId) != null;
         return completeResult();
@@ -237,7 +239,7 @@ describe('executeHistoryMutation', () => {
         dependencies(invoke),
       );
 
-      expect(invoke).toHaveBeenCalledWith('zh-CN', {
+      expect(invoke).toHaveBeenCalledWith(projectInstanceId, 'zh-CN', {
         resource: { kind: 'graph', key: functionPath },
         baseRevision: 5,
         operationId,
@@ -302,7 +304,7 @@ describe('executeHistoryMutation', () => {
       dependencies(invoke, hydrateGraph),
     );
 
-    expect(invoke).toHaveBeenCalledWith('en-US', {
+    expect(invoke).toHaveBeenCalledWith(projectInstanceId, 'en-US', {
       resource: { kind: 'graph', key: functionPath },
       baseRevision: 5,
       operationId,
@@ -455,36 +457,105 @@ describe('executeHistoryMutation', () => {
     expect(getPendingMutation(operationId)).toBeUndefined();
   });
 
-  it('ignores a delayed old-project direct result when identities and publication numbers collide', async () => {
-    let resolve!: (result: ResourceMutationResultDto) => void;
-    const pendingResult = new Promise<ResourceMutationResultDto>((done) => {
+  it.each(['undo', 'redo'] as const)(
+    'rejects a stale %s response before publication, hydration, or History effects',
+    async (direction) => {
+      let resolve!: (result: ResourceMutationResultDto) => void;
+      const pendingResult = new Promise<ResourceMutationResultDto>((done) => {
+        resolve = done;
+      });
+      const invoke = vi.fn(() => pendingResult);
+      const hydrateGraph = vi.fn(async () => true);
+      const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+      const request = executeHistoryMutation(
+        { direction, graphPath: functionPath, locale: 'en-US' },
+        dependencies(invoke, hydrateGraph),
+      );
+
+      expect(invoke).toHaveBeenCalledWith(projectInstanceId, 'en-US', expect.objectContaining({
+        baseRevision: 5,
+        operationId,
+      }));
+      projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
+      const replacementHistory = { canUndo: false, canRedo: false, pending: true };
+      useHistoryStore.setState(replacementHistory, true);
+
+      resolve(completeResult());
+
+      await expect(request).resolves.toEqual({ status: 'stale' });
+      expect(submit).not.toHaveBeenCalled();
+      expect(hydrateGraph).not.toHaveBeenCalled();
+      expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(5);
+      expect(useHistoryStore.getState()).toEqual(replacementHistory);
+    },
+  );
+
+  it.each(['undo', 'redo'] as const)(
+    'treats a backend-stale %s rejection as stale while frontend identity remains current',
+    async (direction) => {
+      const hydrateGraph = vi.fn(async () => true);
+      const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+      const historyBefore = { canUndo: true, canRedo: false, pending: false };
+      useHistoryStore.setState(historyBefore, true);
+
+      await expect(executeHistoryMutation(
+        { direction, graphPath: functionPath, locale: 'en-US' },
+        dependencies(vi.fn(async () => {
+          throw { code: 'stale_project_lifecycle', message: 'backend project changed' };
+        }), hydrateGraph),
+      )).resolves.toEqual({ status: 'stale' });
+
+      expect(submit).not.toHaveBeenCalled();
+      expect(hydrateGraph).not.toHaveBeenCalled();
+      expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(5);
+      expect(useHistoryStore.getState()).toEqual(historyBefore);
+      expect(getPendingMutation(operationId)).toBeUndefined();
+    },
+  );
+
+  it('rejects replacement during the anchor revision read before invoking History', async () => {
+    const capturedStore = useGraphDataStore.getState();
+    vi.spyOn(useGraphDataStore, 'getState').mockImplementationOnce(() => {
+      projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
+      return capturedStore;
+    });
+    const invoke = vi.fn(async () => completeResult());
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+
+    await expect(executeHistoryMutation(
+      { direction: 'undo', graphPath: functionPath, locale: 'en-US' },
+      dependencies(invoke),
+    )).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+});
+
+describe('refreshHistoryStatus lifecycle identity', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    resetHistoryCoordinator();
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useHistoryStore.setState({ canUndo: true, canRedo: false, pending: false }, true);
+  });
+
+  it('ignores a stale status response without changing replacement History state', async () => {
+    let resolve!: (status: { canUndo: boolean; canRedo: boolean }) => void;
+    const pendingStatus = new Promise<{ canUndo: boolean; canRedo: boolean }>((done) => {
       resolve = done;
     });
-    const request = executeHistoryMutation(
-      { direction: 'undo', graphPath: functionPath, locale: 'en-US' },
-      dependencies(vi.fn(() => pendingResult)),
-    );
+    const getStatus = vi.fn(() => pendingStatus);
+    const request = refreshHistoryStatus({ getStatus });
 
-    expect(useHistoryStore.getState().pending).toBe(true);
-    projectPublicationCoordinator.startProject(
-      '00000000-0000-0000-0000-000000000602',
-      0,
-    );
-    useHistoryStore.setState({ canUndo: false, canRedo: false, pending: true }, true);
-    expect(useHistoryStore.getState()).toEqual({
-      canUndo: false,
-      canRedo: false,
-      pending: true,
-    });
-    expect(getPendingMutation(operationId)).toBeDefined();
+    expect(getStatus).toHaveBeenCalledWith(projectInstanceId);
+    projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
+    const replacementHistory = { canUndo: false, canRedo: false, pending: true };
+    useHistoryStore.setState(replacementHistory, true);
 
-    resolve(completeResult());
-    await expect(request).resolves.toEqual({ status: 'stale' });
-    expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(5);
-    expect(useHistoryStore.getState()).toEqual({
-      canUndo: false,
-      canRedo: false,
-      pending: false,
-    });
+    resolve({ canUndo: true, canRedo: true });
+    await request;
+
+    expect(useHistoryStore.getState()).toEqual(replacementHistory);
   });
 });

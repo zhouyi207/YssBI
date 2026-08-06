@@ -84,8 +84,20 @@ pub struct GraphOutputRef {
     pub port: PortAddress,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExecutionDemand {
+macro_rules! define_execution_demand {
+    ($($variant:ident $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        pub enum ExecutionDemand {
+            $($variant $({ $($field: $field_type),* })?),*
+        }
+
+        #[cfg(test)]
+        pub(crate) const EXECUTION_DEMAND_VARIANT_COUNT: usize =
+            [$(stringify!($variant)),*].len();
+    };
+}
+
+define_execution_demand! {
     Default,
     Outputs {
         outputs: Box<[GraphOutputRef]>,

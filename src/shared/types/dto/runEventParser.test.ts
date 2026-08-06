@@ -1,0 +1,127 @@
+import { describe, expect, it } from 'vitest';
+import executionWire from '@/tests/fixtures/node-system-contracts/execution-wire.json';
+import { EXECUTION_DEMAND_TYPES } from './executionDemand';
+import { RUN_EVENT_KIND_TYPES } from './runEvent';
+import {
+  parseExecuteGraphResultDto,
+  parseExecutionDemandDto,
+  parseRunEvent,
+} from './runEventParser';
+
+function clone(value: unknown): unknown {
+  return structuredClone(value);
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value as Record<string, unknown>;
+}
+
+describe('execution wire parsers', () => {
+  it('parses every Rust-generated execution demand variant', () => {
+    expect(executionWire.demands.map(parseExecutionDemandDto)).toEqual(executionWire.demands);
+    expect(executionWire.demands.map((demand) => demand.type))
+      .toEqual(Object.keys(EXECUTION_DEMAND_TYPES));
+    expect(() => parseExecutionDemandDto({
+      type: 'outputs',
+      outputs: [],
+      includeDefaultResults: false,
+    })).not.toThrow();
+  });
+
+  it.each(executionWire.demands)('rejects extra keys on demand $type', (valid) => {
+    expect(() => parseExecutionDemandDto({ ...valid, extra: true })).toThrow();
+  });
+
+  it('strictly validates output references and both port-address variants', () => {
+    const outputs = executionWire.demands.find((demand) => demand.type === 'outputs');
+    if (!outputs?.outputs) throw new Error('missing outputs fixture');
+    expect(outputs.outputs.map((output) => output.port.kind)).toEqual(['declared', 'instance']);
+
+    const extraOutput = clone(outputs);
+    Object.assign(
+      (record(extraOutput).outputs as Array<Record<string, unknown>>)[0],
+      { extra: true },
+    );
+    expect(() => parseExecutionDemandDto(extraOutput)).toThrow();
+
+    const extraPort = clone(outputs);
+    const firstOutput = (record(extraPort).outputs as Array<Record<string, unknown>>)[0];
+    Object.assign(firstOutput.port as object, { extra: true });
+    expect(() => parseExecutionDemandDto(extraPort)).toThrow();
+  });
+
+  it('parses every Rust-generated RunEventKindDto variant', () => {
+    expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
+    expect(executionWire.runEvents.map((event) => event.kind.type))
+      .toEqual(Object.keys(RUN_EVENT_KIND_TYPES));
+  });
+
+  it.each(executionWire.runEvents)('rejects extra keys on RunEvent $kind.type', (valid) => {
+    expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
+    expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
+  });
+
+  it('rejects unknown and malformed run event variants', () => {
+    const valid = executionWire.runEvents[0];
+    expect(() => parseRunEvent({ ...valid, kind: { type: 'unknown' } })).toThrow();
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: { ...valid.correlation, compileId: 9_007_199_254_740_993 },
+    })).toThrow();
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: { ...valid.correlation, runId: '01' },
+    })).toThrow();
+  });
+
+  it('bounds u32 event indexes while accepting the exact maximum', () => {
+    const operation = executionWire.runEvents.find(
+      (event) => event.kind.type === 'operationStarted',
+    );
+    const value = executionWire.runEvents.find((event) => event.kind.type === 'valueReady');
+    if (!operation || !value) throw new Error('missing indexed event fixtures');
+
+    expect(() => parseRunEvent({
+      ...operation,
+      kind: { ...operation.kind, operationIndex: 4_294_967_295 },
+    })).not.toThrow();
+    expect(() => parseRunEvent({
+      ...operation,
+      kind: { ...operation.kind, operationIndex: 4_294_967_296 },
+    })).toThrow();
+    expect(() => parseRunEvent({
+      ...value,
+      kind: { ...value.kind, valueIndex: 4_294_967_295 },
+    })).not.toThrow();
+    expect(() => parseRunEvent({
+      ...value,
+      kind: { ...value.kind, valueIndex: 4_294_967_296 },
+    })).toThrow();
+  });
+
+  it('requires lowercase 64-hex Registry fingerprints in correlation and basis', () => {
+    const valid = executionWire.runEvents[0];
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: {
+        ...valid.correlation,
+        registryFingerprint: valid.correlation.registryFingerprint.toUpperCase(),
+      },
+    })).toThrow();
+    expect(() => parseRunEvent({
+      ...valid,
+      basis: {
+        ...valid.basis,
+        registryFingerprint: valid.basis.registryFingerprint.slice(1),
+      },
+    })).toThrow();
+  });
+
+  it('parses only an exact execute graph result with an opaque decimal string ID', () => {
+    expect(parseExecuteGraphResultDto(executionWire.executeGraphResult))
+      .toEqual(executionWire.executeGraphResult);
+    expect(() => parseExecuteGraphResultDto({ runId: 41 })).toThrow();
+    expect(() => parseExecuteGraphResultDto({ runId: '41', extra: true })).toThrow();
+    expect(() => parseExecuteGraphResultDto({ runId: '01' })).toThrow();
+  });
+});

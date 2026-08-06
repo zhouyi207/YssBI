@@ -4,6 +4,11 @@ import { getGraphSourceRevision } from '@/features/core/dataStore/graphEntityAcc
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { EMPTY_HISTORY_STATE, useHistoryStore } from '@/features/core/history/historyStore';
 import { HistoryService } from '@/services/nodeSystem/historyService';
+import {
+  assertCurrentProjectIdentity,
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 import type {
   HistoryMutationDto,
@@ -34,15 +39,17 @@ export interface ExecuteHistoryMutationInput {
 export interface HistoryCoordinatorDependencies {
   createOperationId(): string;
   undo(
+    projectInstanceId: string,
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto>;
   redo(
+    projectInstanceId: string,
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto>;
   hydrateGraph(graphPath: string, locale: string): Promise<unknown>;
-  getStatus(): Promise<HistoryStatusDto>;
+  getStatus(projectInstanceId: string): Promise<HistoryStatusDto>;
 }
 
 export type ExecuteHistoryMutationOutcome =
@@ -57,10 +64,12 @@ const pendingHistoryOperations = new Set<string>();
 
 const defaultDependencies: HistoryCoordinatorDependencies = {
   createOperationId: () => crypto.randomUUID(),
-  undo: (locale, request) => HistoryService.undo(locale, request),
-  redo: (locale, request) => HistoryService.redo(locale, request),
+  undo: (projectInstanceId, locale, request) =>
+    HistoryService.undo(projectInstanceId, locale, request),
+  redo: (projectInstanceId, locale, request) =>
+    HistoryService.redo(projectInstanceId, locale, request),
   hydrateGraph: hydrateGraphProjection,
-  getStatus: () => HistoryService.getStatus(),
+  getStatus: (projectInstanceId) => HistoryService.getStatus(projectInstanceId),
 };
 
 function invalidHistoryResult(message: string): never {
@@ -114,13 +123,16 @@ export async function refreshHistoryStatus(
   overrides: Partial<HistoryCoordinatorDependencies> = {},
 ): Promise<void> {
   const dependencies = { ...defaultDependencies, ...overrides };
+  const identity = captureProjectIdentity();
   const epoch = coordinatorEpoch;
   useHistoryStore.setState({ pending: true });
   try {
-    const status = await dependencies.getStatus();
-    if (epoch === coordinatorEpoch) setHistoryStatus(status);
+    const status = await dependencies.getStatus(identity.projectInstanceId);
+    if (isCurrentProjectIdentity(identity)) setHistoryStatus(status);
   } finally {
-    if (epoch === coordinatorEpoch) useHistoryStore.setState({ pending: false });
+    if (epoch === coordinatorEpoch && isCurrentProjectIdentity(identity)) {
+      useHistoryStore.setState({ pending: false });
+    }
   }
 }
 
@@ -148,7 +160,9 @@ export async function executeHistoryMutation(
     throw new Error('a history request is already pending');
   }
   const dependencies = { ...defaultDependencies, ...overrides };
+  const identity = captureProjectIdentity();
   const sourceRevision = getGraphSourceRevision(useGraphDataStore.getState(), input.graphPath);
+  assertCurrentProjectIdentity(identity);
   if (sourceRevision == null) {
     throw new Error(`history anchor '${input.graphPath}' is not loaded`);
   }
@@ -174,16 +188,26 @@ export async function executeHistoryMutation(
   try {
     let result: ResourceMutationResultDto;
     try {
-      result = await dependencies[input.direction](input.locale, request);
+      result = await dependencies[input.direction](
+        identity.projectInstanceId,
+        input.locale,
+        request,
+      );
     } catch (error) {
+      if (!isCurrentProjectIdentity(identity)
+        || (typeof error === 'object'
+          && error !== null
+          && 'code' in error
+          && (error as { code?: unknown }).code === 'stale_project_lifecycle')) {
+        return { status: 'stale' };
+      }
       if (!isHistoryConflict(error)) throw error;
-      if (epoch !== coordinatorEpoch) return { status: 'stale' };
       await hydrateAffectedGraphs([input.graphPath], input.locale, dependencies);
-      if (epoch !== coordinatorEpoch) return { status: 'stale' };
+      if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
       return { status: 'conflict' };
     }
 
-    if (epoch !== coordinatorEpoch) return { status: 'stale' };
+    if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
     try {
       await projectPublicationCoordinator.submit({
         result,
@@ -196,12 +220,14 @@ export async function executeHistoryMutation(
       }
       invalidHistoryResult(error instanceof Error ? error.message : String(error));
     }
-    if (epoch !== coordinatorEpoch) return { status: 'stale' };
+    if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
     return { status: 'applied', result };
   } finally {
     completePendingMutation(operationId);
     pendingHistoryOperations.delete(operationId);
-    if (epoch === coordinatorEpoch) useHistoryStore.setState({ pending: false });
+    if (epoch === coordinatorEpoch && isCurrentProjectIdentity(identity)) {
+      useHistoryStore.setState({ pending: false });
+    }
   }
 }
 

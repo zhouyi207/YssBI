@@ -111,6 +111,7 @@ describe('Pin preview production path', () => {
     });
 
     expect(execute).toHaveBeenCalledWith(
+      'project-session-1',
       graphPath,
       {
         type: 'outputs',

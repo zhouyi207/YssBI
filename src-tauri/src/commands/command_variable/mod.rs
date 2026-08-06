@@ -919,9 +919,9 @@ mod tests {
                 HistoryMutation {},
             );
             let result = if undo {
-                state.undo_last_transaction_observed("en-US", request, |_| {})
+                state.undo_last_transaction_observed(&project_instance_id, "en-US", request, |_| {})
             } else {
-                state.redo_last_transaction_observed("en-US", request, |_| {})
+                state.redo_last_transaction_observed(&project_instance_id, "en-US", request, |_| {})
             }
             .unwrap();
             assert_eq!(result.publication_revision, publication_revision);
@@ -990,9 +990,9 @@ mod tests {
                 HistoryMutation {},
             );
             let result = if undo {
-                state.undo_last_transaction_observed("en-US", request, |_| {})
+                state.undo_last_transaction_observed(&project_instance_id, "en-US", request, |_| {})
             } else {
-                state.redo_last_transaction_observed("en-US", request, |_| {})
+                state.redo_last_transaction_observed(&project_instance_id, "en-US", request, |_| {})
             }
             .unwrap();
             assert_eq!(result.publication_revision, publication_revision);
@@ -1020,6 +1020,7 @@ mod tests {
 
         let restored = state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -1040,6 +1041,7 @@ mod tests {
 
         let removed = state
             .redo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource,
@@ -1103,7 +1105,7 @@ mod tests {
         delete_variable_with_emitter(
             &state,
             variable_id,
-            project_instance_id,
+            project_instance_id.clone(),
             ResourceRevision::new(2),
             OperationId::new(),
             |_| {},
@@ -1121,6 +1123,7 @@ mod tests {
 
         let stale = state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -1143,6 +1146,7 @@ mod tests {
 
         let undo_delete = state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -1161,6 +1165,7 @@ mod tests {
 
         let undo_update = state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -1179,6 +1184,7 @@ mod tests {
 
         state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
@@ -1198,6 +1204,7 @@ mod tests {
         for revision in 6..=8 {
             state
                 .redo_last_transaction_observed(
+                    &project_instance_id,
                     "en-US",
                     MutationRequest::new(
                         resource.clone(),

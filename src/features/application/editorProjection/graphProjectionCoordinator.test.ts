@@ -217,6 +217,36 @@ describe('graphProjectionCoordinator invalidation', () => {
     expect(getDocumentState({ id: graphPath, kind: 'event' })?.stale).toBe(true);
   });
 
+  it('does not install a delayed hydrate after project lifecycle replacement', async () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' });
+    const stale = makeEditorProjectionFixture({ graphPath, sourceRevision: 2, title: 'Old project' });
+    const replacement = makeEditorProjectionFixture({
+      graphPath,
+      sourceRevision: 1,
+      title: 'Replacement project',
+    });
+    const pending = deferred<typeof stale.projection>();
+    useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    markResourceLoaded({ id: graphPath, kind: 'event' });
+    vi.mocked(GraphProjectionService.hydrateGraph).mockReturnValue(pending.promise);
+
+    const request = invalidationApi()(graphPath);
+    startProjectLifecycle('project-instance-2');
+    useProjectIOStore.setState({ projectInstanceId: 'project-instance-2' });
+    useGraphDataStore.setState({ graphEntities: {} });
+    useGraphDataStore.getState().replaceProjection(graphPath, replacement.projection, 1);
+    const replacementGraph = useGraphDataStore.getState().graphEntities[graphPath];
+    pending.resolve(stale.projection);
+
+    await expect(request).resolves.toBe(false);
+    expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(replacementGraph);
+    expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
+      sourceRevision: 1,
+      nodes: { 'local-node': { title: 'Replacement project' } },
+    });
+  });
+
   it('ignores a pending response after the coordinator is reset for another project', async () => {
     const graphPath = 'events/Main.yssbi-event';
     const fixture = makeEditorProjectionFixture({ graphPath });

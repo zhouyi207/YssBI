@@ -18,6 +18,7 @@ pub struct GraphProjectionReplacementDto {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphMutationResultDto {
+    pub project_instance_id: String,
     pub delta: crate::node_system::document::GraphDeltaEvent<
         crate::node_system::document::GraphDocumentPatch,
     >,
@@ -154,6 +155,7 @@ pub enum EventProject {
     },
     #[serde(rename_all = "camelCase")]
     GraphDelta {
+        project_instance_id: String,
         delta: crate::node_system::document::GraphDeltaEvent<
             crate::node_system::document::GraphDocumentPatch,
         >,
@@ -373,6 +375,71 @@ mod tests {
                 },
             })
         );
+    }
+
+    #[test]
+    fn graph_delta_event_carries_project_identity() {
+        let delta = crate::node_system::document::GraphDeltaEvent {
+            graph_path: crate::node_system::document::GraphResourcePath(
+                "events/Main.yssbi-event".into(),
+            ),
+            from_revision: crate::node_system::document::ResourceRevision::INITIAL,
+            to_revision: crate::node_system::document::ResourceRevision::new(1),
+            caused_by: Some(crate::node_system::document::OperationId::from_uuid(
+                uuid::Uuid::from_u128(0x401),
+            )),
+            payload: crate::node_system::document::GraphDocumentPatch {
+                operations: Vec::new(),
+            },
+        };
+        let projection = serde_json::from_value(serde_json::json!({
+            "basis": {
+                "graphPath": "events/Main.yssbi-event",
+                "graphRevision": 1,
+                "registryFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+                "resourceVersions": {},
+            },
+            "graphPath": "events/Main.yssbi-event",
+            "sourceRevision": 1,
+            "nodes": [],
+            "connections": [],
+            "diagnostics": [],
+            "hasBlockingDiagnostics": false,
+        }))
+        .unwrap();
+        let result = GraphMutationResultDto {
+            project_instance_id: "project-a".into(),
+            delta: delta.clone(),
+            projection_replacement: GraphProjectionReplacementDto {
+                graph_path: "events/Main.yssbi-event".into(),
+                projection,
+            },
+            history: Default::default(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(EventProject::GraphDelta {
+                project_instance_id: "project-a".into(),
+                delta: delta.clone(),
+            })
+            .unwrap(),
+            serde_json::json!({
+                "type": "GraphDelta",
+                "payload": {
+                    "projectInstanceId": "project-a",
+                    "delta": serde_json::to_value(delta).unwrap(),
+                }
+            }),
+        );
+
+        let result_wire = serde_json::to_value(result).unwrap();
+        assert_eq!(result_wire["projectInstanceId"], "project-a");
+        let mut missing_identity = result_wire;
+        missing_identity
+            .as_object_mut()
+            .unwrap()
+            .remove("projectInstanceId");
+        assert!(serde_json::from_value::<GraphMutationResultDto>(missing_identity).is_err());
     }
 
     #[test]

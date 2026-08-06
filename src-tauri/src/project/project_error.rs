@@ -16,6 +16,8 @@ pub enum ProjectFilesystemError {
     },
     #[error("stale project lifecycle: {message}")]
     StaleProjectLifecycle { message: String },
+    #[error("catalog resource stale: {message}")]
+    CatalogResourceStale { message: String },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -44,6 +46,7 @@ impl ProjectFilesystemError {
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
+            Self::CatalogResourceStale { .. } => "catalog_resource_stale",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",

@@ -4,6 +4,7 @@ import i18nInventory from '@/tests/fixtures/node-system-contracts/i18n-inventory
 import localizedCatalog from '@/tests/fixtures/node-system-contracts/localized-catalog.json';
 import editorProjection from '@/tests/fixtures/node-system-contracts/editor-projection.json';
 import fingerprintWire from '@/tests/fixtures/node-system-contracts/fingerprint-wire.json';
+import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
 import {
   isLocalizedCatalogDto,
   type LocalizedCatalogDto,
@@ -12,6 +13,9 @@ import { isNodeCreationDescriptorDto } from '@/shared/types/dto/nodeCreationDesc
 import { isEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionGuards';
 import { parseEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionParser';
 import { isSchemaAwareParameterEditorDto } from '@/shared/types/dto/parameterEditorValidators';
+import {
+  parseProjectMutationEvent,
+} from '@/features/core/sync/utils/projectEventWireParser';
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -24,6 +28,15 @@ function deleteKey(value: object, key: string): void {
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 
 describe('Rust-generated node-system golden contracts', () => {
+  it('consumes the exact production GraphDelta and ResourceMutationCommitted event shapes', () => {
+    expect(projectEvents.format).toBe('yssbi.project-events.v1');
+    expect(projectEvents.events.map((event) => [event.type, event.payload.type])).toEqual([
+      ['Project', 'GraphDelta'],
+      ['Project', 'ResourceMutationCommitted'],
+    ]);
+    expect(projectEvents.events.map(parseProjectMutationEvent)).toEqual(projectEvents.events);
+  });
+
   it('shares one canonical Registry fingerprint across every wire purpose', () => {
     expect(semanticProtocol.format).toBe('yssbi.semantic-node-protocol.v1');
     expect(i18nInventory.format).toBe('yssbi.i18n-inventory.v1');

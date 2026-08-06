@@ -106,6 +106,7 @@ pub enum MutationConflict {
         current_revision: ResourceRevision,
     },
     MaterializationUnauthorized,
+    StaleProjectLifecycle(Box<str>),
     CatalogResourceStale(Box<str>),
     CatalogDescriptorInvalid(Box<str>),
     InvalidEditorMutation(Box<str>),
@@ -118,6 +119,7 @@ impl MutationConflict {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::RecoveryRequired(_) => "project_recovery_required",
+            Self::StaleProjectLifecycle(_) => "stale_project_lifecycle",
             Self::CatalogResourceStale(_) => "catalog_resource_stale",
             Self::CatalogDescriptorInvalid(_) => "catalog_descriptor_invalid",
             _ => "mutation_conflict",
@@ -161,7 +163,8 @@ impl fmt::Display for MutationConflict {
             Self::MaterializationUnauthorized => {
                 formatter.write_str("materialization authorization does not match projected member")
             }
-            Self::CatalogResourceStale(message)
+            Self::StaleProjectLifecycle(message)
+            | Self::CatalogResourceStale(message)
             | Self::CatalogDescriptorInvalid(message)
             | Self::InvalidEditorMutation(message) => formatter.write_str(message),
             Self::Projection(message) => {

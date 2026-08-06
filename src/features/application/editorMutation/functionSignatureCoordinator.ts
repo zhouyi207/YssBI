@@ -74,11 +74,15 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
 
 
 
-function isFunctionRevisionConflict(error: unknown): boolean {
+function hasErrorCode(error: unknown, code: string): boolean {
   return typeof error === 'object'
     && error !== null
     && 'code' in error
-    && (error as { code?: unknown }).code === 'function_revision_conflict';
+    && (error as { code?: unknown }).code === code;
+}
+
+function isFunctionRevisionConflict(error: unknown): boolean {
+  return hasErrorCode(error, 'function_revision_conflict');
 }
 
 function buildSignature(
@@ -193,7 +197,8 @@ export async function executeFunctionSignatureMutation(
       );
       if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
     } catch (error) {
-      if (!isCurrentProjectIdentity(identity)) return { status: 'stale' };
+      if (!isCurrentProjectIdentity(identity)
+        || hasErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
       if (epoch !== coordinatorEpoch) return { status: 'stale' };
       if (!isFunctionRevisionConflict(error)) throw error;
       await hydrateAuthoritativeState(

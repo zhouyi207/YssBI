@@ -10,6 +10,11 @@ import { GraphMutationService } from '@/services/nodeSystem/graphMutationService
 import { hydrateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import {
+  assertCurrentProjectIdentity,
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { applyMutationResult } from './applyMutationResult';
 import { setHistoryStatus } from './historyCoordinator';
 import {
@@ -28,6 +33,7 @@ export interface ExecuteEditorMutationInput {
 export interface EditorMutationCoordinatorDependencies {
   createOperationId(): string;
   mutateGraph(
+    projectInstanceId: string,
     graphPath: string,
     locale: string,
     request: MutationRequestDto<EditorGraphMutationDto>,
@@ -38,7 +44,7 @@ export interface EditorMutationCoordinatorDependencies {
 
 export type ExecuteEditorMutationOutcome =
   | { status: 'applied'; result: GraphMutationResultDto }
-  | { status: 'stale'; result: GraphMutationResultDto }
+  | { status: 'stale'; result?: GraphMutationResultDto }
   | { status: 'conflict' };
 
 
@@ -51,17 +57,21 @@ function defaultOperationId(): string {
 
 const defaultDependencies: EditorMutationCoordinatorDependencies = {
   createOperationId: defaultOperationId,
-  mutateGraph: (graphPath, locale, request) =>
-    GraphMutationService.mutateGraph(graphPath, locale, request),
+  mutateGraph: (projectInstanceId, graphPath, locale, request) =>
+    GraphMutationService.mutateGraph(projectInstanceId, graphPath, locale, request),
   hydrateGraph: hydrateGraphProjection,
   updateHistoryStatus: setHistoryStatus,
 };
 
-function isRevisionConflict(error: unknown): boolean {
+function hasErrorCode(error: unknown, code: string): boolean {
   return typeof error === 'object'
     && error !== null
     && 'code' in error
-    && (error as { code?: unknown }).code === 'graph_revision_conflict';
+    && (error as { code?: unknown }).code === code;
+}
+
+function isRevisionConflict(error: unknown): boolean {
+  return hasErrorCode(error, 'graph_revision_conflict');
 }
 
 async function requestAuthoritativeHydrate(
@@ -79,7 +89,9 @@ export async function executeEditorMutation(
   overrides: Partial<EditorMutationCoordinatorDependencies> = {},
 ): Promise<ExecuteEditorMutationOutcome> {
   const dependencies = { ...defaultDependencies, ...overrides };
+  const identity = captureProjectIdentity();
   const basis = getGraphProjectionBasis(useGraphDataStore.getState(), input.graphPath);
+  assertCurrentProjectIdentity(identity);
   if (!basis) throw new Error(`graph projection '${input.graphPath}' is not loaded`);
 
   const operationId = dependencies.createOperationId();
@@ -99,12 +111,21 @@ export async function executeEditorMutation(
   try {
     let result: GraphMutationResultDto;
     try {
-      result = await dependencies.mutateGraph(input.graphPath, input.locale, request);
+      result = await dependencies.mutateGraph(
+        identity.projectInstanceId,
+        input.graphPath,
+        input.locale,
+        request,
+      );
     } catch (error) {
+      if (!isCurrentProjectIdentity(identity)
+        || hasErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
       if (!isRevisionConflict(error)) throw error;
       await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
       return { status: 'conflict' };
     }
+
+    if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
 
     try {
       const applied = applyMutationResult(pending, result);

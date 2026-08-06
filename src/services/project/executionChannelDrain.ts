@@ -1,5 +1,6 @@
 import { Channel } from '@tauri-apps/api/core';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
+import { parseRunEvent } from '@/shared/types/dto/runEventParser';
 import { trackChannel } from '@/services/devHmrIpc';
 
 export class ExecutionChannelDisposedError extends Error {
@@ -12,7 +13,7 @@ export class ExecutionChannelDisposedError extends Error {
 }
 
 export type ExecutionStreamDrain = {
-  onmessage: (msg: RunEvent) => void;
+  onmessage: (msg: unknown) => void;
   waitForStreamEnd: () => Promise<void>;
   dispose: () => void;
 };
@@ -20,6 +21,7 @@ export type ExecutionStreamDrain = {
 type CallbackError = { caught: unknown };
 type StreamSettlement =
   | { reason: 'terminal'; callbackError?: CallbackError }
+  | { reason: 'invalid'; caught: unknown }
   | { reason: 'disposed' };
 
 function deliverRunEvent(
@@ -61,12 +63,19 @@ export function createExecutionStreamDrain(
   };
 
   return {
-    onmessage: (event) => deliverRunEvent(event, onEvent, settle),
+    onmessage: (raw) => {
+      try {
+        deliverRunEvent(parseRunEvent(raw), onEvent, settle);
+      } catch (caught) {
+        settle({ reason: 'invalid', caught });
+      }
+    },
     waitForStreamEnd: async () => {
       const settlement = await streamEnded;
       if (settlement.reason === 'disposed') {
         throw new ExecutionChannelDisposedError();
       }
+      if (settlement.reason === 'invalid') throw settlement.caught;
       if (settlement.callbackError) {
         throw settlement.callbackError.caught;
       }
@@ -76,7 +85,7 @@ export function createExecutionStreamDrain(
 }
 
 export type ExecutionChannelBinding = {
-  channel: Channel<RunEvent>;
+  channel: Channel<unknown>;
   waitForStreamEnd: () => Promise<void>;
 };
 
@@ -88,7 +97,7 @@ export function bindExecutionEventChannel(
   onEvent?: (event: RunEvent) => void,
 ): ExecutionChannelBinding {
   const drain = createExecutionStreamDrain(onEvent);
-  const channel = trackChannel(new Channel<RunEvent>(), drain.dispose);
+  const channel = trackChannel(new Channel<unknown>(), drain.dispose);
   channel.onmessage = drain.onmessage;
   return { channel, waitForStreamEnd: drain.waitForStreamEnd };
 }

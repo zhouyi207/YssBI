@@ -164,6 +164,7 @@ export async function requestPinPreview(
 
   try {
     await ProjectService.executeGraphDocument(
+      captured.authority.project.projectInstanceId,
       graphPath,
       {
         type: 'outputs',

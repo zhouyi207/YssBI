@@ -133,7 +133,9 @@ fn capture_catalog_with_reader(
     let (resource_publication_revision, authority_generation) = {
         let publication = state.mutation_publication.lock().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
-            return Err(stale_catalog("project changed before Catalog capture"));
+            return Err(stale_project_lifecycle(
+                "project changed before Catalog capture",
+            ));
         }
         (
             publication.resource_revision,
@@ -148,12 +150,16 @@ fn capture_catalog_with_reader(
         state.validate_project_session(&session)?;
 
         let publication = state.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != session.instance_id.as_str()
-            || publication.resource_revision != resource_publication_revision
+        if publication.project_instance_id != session.instance_id.as_str() {
+            return Err(stale_project_lifecycle(
+                "project changed while reading Catalog resources",
+            ));
+        }
+        if publication.resource_revision != resource_publication_revision
             || publication.authority_generation() != authority_generation
         {
             return Err(stale_catalog(
-                "project authority changed while reading Catalog resources",
+                "Catalog authority changed while reading resources",
             ));
         }
         let data = state.project_data.read().unwrap().clone();
@@ -196,12 +202,16 @@ fn capture_catalog_with_reader(
 
     state.validate_project_session(&session)?;
     let publication = state.mutation_publication.lock().unwrap();
-    if publication.project_instance_id != session.instance_id.as_str()
-        || publication.resource_revision != resource_publication_revision
+    if publication.project_instance_id != session.instance_id.as_str() {
+        return Err(stale_project_lifecycle(
+            "project changed before Catalog snapshot publication",
+        ));
+    }
+    if publication.resource_revision != resource_publication_revision
         || publication.authority_generation() != authority_generation
     {
         return Err(stale_catalog(
-            "project authority changed before Catalog snapshot publication",
+            "Catalog authority changed before snapshot publication",
         ));
     }
     drop(publication);
@@ -386,8 +396,14 @@ fn node_type(value: &'static str) -> NodeTypeId {
     NodeTypeId::new(value).expect("built-in resource node type ID")
 }
 
-fn stale_catalog(message: impl Into<String>) -> ProjectFilesystemError {
+fn stale_project_lifecycle(message: impl Into<String>) -> ProjectFilesystemError {
     ProjectFilesystemError::StaleProjectLifecycle {
+        message: message.into(),
+    }
+}
+
+fn stale_catalog(message: impl Into<String>) -> ProjectFilesystemError {
+    ProjectFilesystemError::CatalogResourceStale {
         message: message.into(),
     }
 }
@@ -468,7 +484,7 @@ fn capture_project_index_authority_with(
 ) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
     let publication = state.mutation_publication.lock().unwrap();
     if publication.project_instance_id != session.instance_id.as_str() {
-        return Err(stale_catalog(
+        return Err(stale_project_lifecycle(
             "project changed before project index authority capture",
         ));
     }
@@ -512,12 +528,16 @@ fn validate_project_index_authority(
 ) -> Result<(), ProjectFilesystemError> {
     state.validate_project_session(session)?;
     let publication = state.mutation_publication.lock().unwrap();
-    if publication.project_instance_id != capture.project_instance_id
-        || publication.resource_revision != capture.publication_revision
+    if publication.project_instance_id != capture.project_instance_id {
+        return Err(stale_project_lifecycle(
+            "project changed before project index publication",
+        ));
+    }
+    if publication.resource_revision != capture.publication_revision
         || publication.authority_generation() != capture.authority_generation
     {
         return Err(stale_catalog(
-            "project authority changed before project index publication",
+            "project index authority changed before publication",
         ));
     }
     Ok(())
@@ -1406,7 +1426,7 @@ mod tests {
             Ok(index)
         })
         .unwrap_err();
-        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert_eq!(error.code(), "catalog_resource_stale");
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1447,7 +1467,7 @@ mod tests {
             .remove(&loaded_variable_id);
         assert_eq!(
             state.catalog_snapshot(&expected).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "catalog_resource_stale"
         );
 
         state.variable_revisions.write().unwrap().insert(
@@ -1463,7 +1483,7 @@ mod tests {
             .remove("sales");
         assert_eq!(
             state.catalog_snapshot(&expected).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "catalog_resource_stale"
         );
         std::fs::remove_dir_all(root).unwrap();
     }

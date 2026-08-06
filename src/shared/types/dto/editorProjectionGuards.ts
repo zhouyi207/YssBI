@@ -83,7 +83,7 @@ function isCapabilities(value: unknown): boolean {
   return Object.values(value).every((entry) => typeof entry === 'boolean');
 }
 
-function isPortAddress(value: unknown): value is PortAddressDto {
+export function isPortAddressDto(value: unknown): value is PortAddressDto {
   if (!isRecord(value)) return false;
   if (value.kind === 'declared') {
     return hasExactKeys(value, ['kind', 'nodeId', 'portKey'])
@@ -140,7 +140,7 @@ function isPort(value: unknown): boolean {
     'address', 'templateKey', 'display', 'direction', 'kind', 'instanceKind', 'orphan',
     'canRemove', 'connections', 'input', 'resolvedType', 'resolvedSchema', 'status',
   ])
-    && isPortAddress(value.address)
+    && isPortAddressDto(value.address)
     && typeof value.templateKey === 'string'
     && isPortDisplay(value.display)
     && portDirections.has(value.direction as string)
@@ -177,7 +177,7 @@ function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {
     case 'node':
       return hasExactKeys(value, ['kind', 'nodeId']) && typeof value.nodeId === 'string';
     case 'port':
-      return hasExactKeys(value, ['kind', 'address']) && isPortAddress(value.address);
+      return hasExactKeys(value, ['kind', 'address']) && isPortAddressDto(value.address);
     case 'connection':
       return hasExactKeys(value, ['kind', 'connectionId'])
         && typeof value.connectionId === 'string';
@@ -221,8 +221,8 @@ function isNode(value: unknown): boolean {
 function isConnection(value: unknown): boolean {
   return hasExactKeys(value, ['connectionId', 'output', 'input', 'order'])
     && typeof value.connectionId === 'string'
-    && isPortAddress(value.output)
-    && isPortAddress(value.input)
+    && isPortAddressDto(value.output)
+    && isPortAddressDto(value.input)
     && isStringOrNull(value.order);
 }
 

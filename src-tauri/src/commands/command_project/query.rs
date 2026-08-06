@@ -142,7 +142,7 @@ mod tests {
         GraphRevision, MutationRequest, OperationId, ResourceKey,
     };
     use crate::node_system::protocol::NodeTypeId;
-    use crate::project::{GraphResourcePath, ProjectData};
+    use crate::project::{GraphResourcePath, ProjectData, ProjectInstanceId};
     use crate::variable::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
@@ -289,6 +289,7 @@ mod tests {
         let observer_revision = std::sync::Arc::clone(&observed_revision);
         let publication = state
             .update_function_signature_observed(
+                &ProjectInstanceId::from_existing(state.project_instance_id()),
                 &function_path,
                 "en-US",
                 function_signature_request(&function_path),
@@ -362,6 +363,7 @@ mod tests {
 
         let signature = state
             .update_function_signature_observed(
+                &ProjectInstanceId::from_existing(state.project_instance_id()),
                 &function_path,
                 "en-US",
                 function_signature_request(&function_path),
@@ -372,8 +374,10 @@ mod tests {
             )
             .unwrap();
         let after_signature = read_project_index_for_test(&state);
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
         let undo = state
             .undo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     signature.deltas[0].resource.clone(),
@@ -390,6 +394,7 @@ mod tests {
         let after_undo = read_project_index_for_test(&state);
         let redo = state
             .redo_last_transaction_observed(
+                &project_instance_id,
                 "en-US",
                 MutationRequest::new(
                     undo.deltas[0].resource.clone(),
@@ -457,8 +462,10 @@ mod tests {
             )
             .unwrap();
 
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
         let graph_mutation = state
             .apply_editor_graph_mutation(
+                &project_instance_id,
                 &graph_path,
                 "en-US",
                 editor_create_node_request(&graph_path),
@@ -467,6 +474,7 @@ mod tests {
         let after_graph = read_project_index_for_test(&state);
         let resource_publication = state
             .update_function_signature_observed(
+                &ProjectInstanceId::from_existing(state.project_instance_id()),
                 &function_path,
                 "en-US",
                 function_signature_request(&function_path),

@@ -243,6 +243,7 @@ struct CommittedGraphLoad {
 }
 
 struct CommittedGraphMutation {
+    project_instance_id: String,
     delta: GraphDeltaEvent<GraphDocumentPatch>,
     projection_source: ProjectionSourceSnapshot,
     history: HistoryStatusDto,
@@ -405,6 +406,30 @@ fn variable_scope_references_path(scope: &crate::variable::VariableScope, target
         crate::variable::VariableScope::Function { function_path } => {
             crate::project::graph_resource_index::normalize_resource_path(function_path) == target
         }
+    }
+}
+
+fn history_project_error(error: ProjectFilesystemError) -> MutationConflict {
+    match error {
+        ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+            MutationConflict::StaleProjectLifecycle(error.to_string().into())
+        }
+        ProjectFilesystemError::ProjectRecoveryRequired { .. }
+        | ProjectFilesystemError::TransactionRollbackFailed {
+            recovery_required: true,
+            ..
+        } => MutationConflict::RecoveryRequired(error.to_string().into()),
+        _ => MutationConflict::History(error.to_string().into()),
+    }
+}
+
+fn resolve_history_rollback(
+    original: MutationConflict,
+    rollback: Result<(), ProjectFilesystemError>,
+) -> MutationConflict {
+    match rollback {
+        Ok(()) => original,
+        Err(error) => history_project_error(error),
     }
 }
 
@@ -899,6 +924,8 @@ pub struct ProjectState {
     #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
     #[cfg(test)]
+    authoritative_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
+    #[cfg(test)]
     history_after_routing_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
     #[cfg(test)]
     history_after_preparation_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
@@ -1157,6 +1184,8 @@ impl ProjectState {
             #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
+            authoritative_publication_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
             history_after_routing_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             history_after_preparation_test_hook: Arc::new(RwLock::new(None)),
@@ -1244,9 +1273,24 @@ impl ProjectState {
             .clone()
     }
 
-    pub fn history_status(&self) -> HistoryStatusDto {
+    #[cfg(test)]
+    pub(crate) fn history_status(&self) -> HistoryStatusDto {
         let _publication = self.mutation_publication.lock().unwrap();
         self.history.read().unwrap().status()
+    }
+
+    pub fn history_status_for_project(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+    ) -> Result<HistoryStatusDto, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != project_instance_id.as_str() {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "caller project changed before History status read".into(),
+            });
+        }
+        Ok(self.history.read().unwrap().status())
     }
 
     #[cfg(test)]
@@ -1552,6 +1596,21 @@ impl ProjectState {
     fn run_mutation_publication_test_hook(&self) {}
 
     #[cfg(test)]
+    fn run_authoritative_publication_test_hook(&self) {
+        if let Some(hook) = self
+            .authoritative_publication_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    fn run_authoritative_publication_test_hook(&self) {}
+
+    #[cfg(test)]
     fn run_history_after_routing_test_hook(&self) {
         if let Some(hook) = self.history_after_routing_test_hook.read().unwrap().clone() {
             hook();
@@ -1768,8 +1827,16 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(super) fn set_mutation_publication_test_hook(&self, hook: MutationPublicationTestHook) {
+    pub(crate) fn set_mutation_publication_test_hook(&self, hook: MutationPublicationTestHook) {
         *self.mutation_publication_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_authoritative_publication_test_hook(
+        &self,
+        hook: MutationPublicationTestHook,
+    ) {
+        *self.authoritative_publication_test_hook.write().unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -4052,15 +4119,23 @@ impl ProjectState {
 
     pub fn apply_editor_graph_mutation(
         &self,
+        project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         locale: &str,
         request: MutationRequest<EditorGraphMutationDto>,
     ) -> Result<GraphMutationResultDto, MutationConflict> {
-        self.apply_editor_graph_mutation_observed(graph_path, locale, request, |_| {})
+        self.apply_editor_graph_mutation_observed(
+            project_instance_id,
+            graph_path,
+            locale,
+            request,
+            |_| {},
+        )
     }
 
     pub fn apply_editor_graph_mutation_observed(
         &self,
+        project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         locale: &str,
         request: MutationRequest<EditorGraphMutationDto>,
@@ -4080,27 +4155,29 @@ impl ProjectState {
                 descriptor:
                     crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. },
                 ..
-            } => {
-                let project_instance_id = self
-                    .capture_project_session()
-                    .map_err(|error| {
-                        MutationConflict::CatalogResourceStale(error.to_string().into())
-                    })?
-                    .instance_id;
-                Some(
-                    self.catalog_mutation_validation_snapshot(&project_instance_id)
-                        .map_err(|error| {
-                            MutationConflict::CatalogResourceStale(error.to_string().into())
-                        })?,
-                )
-            }
+            } => Some(
+                self.catalog_mutation_validation_snapshot(project_instance_id)
+                    .map_err(|error| match error {
+                        ProjectFilesystemError::StaleProjectLifecycle { message } => {
+                            MutationConflict::StaleProjectLifecycle(message.into())
+                        }
+                        ProjectFilesystemError::CatalogResourceStale { message } => {
+                            MutationConflict::CatalogResourceStale(message.into())
+                        }
+                        error => MutationConflict::CatalogResourceStale(error.to_string().into()),
+                    })?,
+            ),
             _ => None,
         };
         if catalog_snapshot.is_some() {
             self.run_catalog_mutation_before_publication_test_hook();
         }
-        let committed =
-            self.commit_editor_graph_mutation(graph_path, request, catalog_snapshot.as_ref())?;
+        let committed = self.commit_editor_graph_mutation(
+            project_instance_id,
+            graph_path,
+            request,
+            catalog_snapshot.as_ref(),
+        )?;
         observe(&committed.delta);
         let projection_replacement = crate::event::GraphProjectionReplacementDto {
             graph_path: graph_path.as_str().to_string(),
@@ -4110,6 +4187,7 @@ impl ProjectState {
                 .map_err(|error| MutationConflict::Projection(error.into()))?,
         };
         Ok(GraphMutationResultDto {
+            project_instance_id: committed.project_instance_id,
             delta: committed.delta,
             projection_replacement,
             history: committed.history,
@@ -4200,12 +4278,14 @@ impl ProjectState {
             base_revision,
             operation_id,
             None,
+            None,
             move |_, _| Ok(payload),
         )
     }
 
     fn commit_editor_graph_mutation(
         &self,
+        project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         request: MutationRequest<EditorGraphMutationDto>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
@@ -4222,6 +4302,7 @@ impl ProjectState {
             resource,
             base_revision,
             operation_id,
+            Some(project_instance_id),
             catalog_snapshot,
             move |document, registry| {
                 payload.into_patch_with_catalog_snapshot(
@@ -4240,6 +4321,7 @@ impl ProjectState {
         resource: ResourceKey,
         base_revision: ResourceRevision,
         operation_id: OperationId,
+        project_instance_id: Option<&ProjectInstanceId>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
         plan: impl FnOnce(
             &crate::node_system::document::GraphDocument,
@@ -4259,7 +4341,17 @@ impl ProjectState {
         let projection_environment = self
             .capture_projection_environment(&expected_session)
             .map_err(|error| MutationConflict::Projection(error.into()))?;
+        self.run_mutation_publication_test_hook();
         let mut publication = self.mutation_publication.lock().unwrap();
+        let mut data = self.project_data.write().unwrap();
+        let mut graph_revisions = self.graph_revisions.write().unwrap();
+        if project_instance_id
+            .is_some_and(|expected| publication.project_instance_id != expected.as_str())
+        {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before graph authority commit".into(),
+            ));
+        }
         if let Some(snapshot) = catalog_snapshot {
             if publication.project_instance_id != snapshot.project_instance_id.as_str()
                 || publication.authority_generation() != snapshot.authority_generation
@@ -4270,18 +4362,15 @@ impl ProjectState {
             }
         }
         if publication.project_instance_id != expected_session.project_instance_id.as_str() {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: project changed before graph authority commit".into(),
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "project changed before graph authority commit".into(),
             ));
         }
         if !projection_environment.matches_publication(&publication) {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: projection environment changed before graph authority commit"
-                    .into(),
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "projection environment changed before graph authority commit".into(),
             ));
         }
-        let mut data = self.project_data.write().unwrap();
-        let mut graph_revisions = self.graph_revisions.write().unwrap();
         self.ensure_mutation_operational()?;
         let graph =
             data.graphs
@@ -4317,7 +4406,7 @@ impl ProjectState {
         history
             .apply_transaction(&mut documents, transaction)
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        self.run_mutation_publication_test_hook();
+        self.run_authoritative_publication_test_hook();
         let updated = documents
             .graphs
             .remove(&crate::node_system::document::GraphResourcePath(
@@ -4340,6 +4429,7 @@ impl ProjectState {
             publication.authority_generation(),
         );
         Ok(CommittedGraphMutation {
+            project_instance_id: publication.project_instance_id.clone(),
             delta: GraphDeltaEvent {
                 graph_path: crate::node_system::document::GraphResourcePath(
                     graph_path.as_str().into(),
@@ -4356,12 +4446,27 @@ impl ProjectState {
 
     pub fn update_function_signature_observed(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         locale: &str,
         request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
         observe: impl FnOnce(&crate::event::ResourceMutationResultDto),
     ) -> Result<crate::event::ResourceMutationResultDto, MutationConflict> {
-        let receipt = self.commit_function_signature(graph_path, request)?;
+        let session = self
+            .capture_project_session()
+            .map_err(|error| match error {
+                ProjectFilesystemError::StaleProjectLifecycle { message } => {
+                    MutationConflict::StaleProjectLifecycle(message.into())
+                }
+                error => MutationConflict::RecoveryRequired(error.to_string().into()),
+            })?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "function signature command project instance is stale".into(),
+            ));
+        }
+        let receipt =
+            self.commit_function_signature(expected_project_instance_id, graph_path, request)?;
         let result = receipt.complete(locale);
         observe(&result);
         Ok(result)
@@ -4369,6 +4474,7 @@ impl ProjectState {
 
     fn commit_function_signature(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
     ) -> Result<CommittedResourceMutation, MutationConflict> {
@@ -4386,16 +4492,21 @@ impl ProjectState {
         let projection_environment = self
             .capture_projection_environment(&expected_session)
             .map_err(|error| MutationConflict::Projection(error.into()))?;
+        self.run_mutation_publication_test_hook();
         let mut publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != expected_project_instance_id.as_str() {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before signature authority commit".into(),
+            ));
+        }
         if publication.project_instance_id != expected_session.project_instance_id.as_str() {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: project changed before signature authority commit".into(),
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "project changed before signature authority commit".into(),
             ));
         }
         if !projection_environment.matches_publication(&publication) {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: projection environment changed before signature authority commit"
-                    .into(),
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "projection environment changed before signature authority commit".into(),
             ));
         }
         let mut data = self.project_data.write().unwrap();
@@ -4435,7 +4546,6 @@ impl ProjectState {
         history
             .apply_transaction(&mut documents, transaction)
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        self.run_mutation_publication_test_hook();
         let to_revision = documents.functions[match &expected_resource {
             ResourceKey::Function(key) => key,
             _ => unreachable!(),
@@ -4486,11 +4596,12 @@ impl ProjectState {
 
     pub fn undo_last_transaction_observed(
         &self,
+        project_instance_id: &ProjectInstanceId,
         locale: &str,
         request: MutationRequest<HistoryMutation>,
         observe: impl FnOnce(&crate::event::ResourceMutationResultDto),
     ) -> Result<crate::event::ResourceMutationResultDto, MutationConflict> {
-        let receipt = self.commit_history_direction(true, request)?;
+        let receipt = self.commit_history_direction(project_instance_id, true, request)?;
         let result = receipt.complete(locale);
         observe(&result);
         Ok(result)
@@ -4498,18 +4609,33 @@ impl ProjectState {
 
     pub fn redo_last_transaction_observed(
         &self,
+        project_instance_id: &ProjectInstanceId,
         locale: &str,
         request: MutationRequest<HistoryMutation>,
         observe: impl FnOnce(&crate::event::ResourceMutationResultDto),
     ) -> Result<crate::event::ResourceMutationResultDto, MutationConflict> {
-        let receipt = self.commit_history_direction(false, request)?;
+        let receipt = self.commit_history_direction(project_instance_id, false, request)?;
         let result = receipt.complete(locale);
         observe(&result);
         Ok(result)
     }
 
+    fn capture_history_projection_environment(
+        &self,
+        session: &ProjectSession,
+    ) -> Result<ProjectionEnvironmentSnapshot, MutationConflict> {
+        match self.capture_projection_environment_for_session(session) {
+            Ok(environment) => Ok(environment),
+            Err(error) => match self.validate_project_session(session) {
+                Ok(()) => Err(MutationConflict::History(error.into())),
+                Err(session_error) => Err(history_project_error(session_error)),
+            },
+        }
+    }
+
     fn prepare_history_documents(
         &self,
+        project_instance_id: &ProjectInstanceId,
         undo: bool,
         request: &MutationRequest<HistoryMutation>,
         expected_history_id: &HistoryEntryId,
@@ -4520,11 +4646,13 @@ impl ProjectState {
             let publication = self.mutation_publication.lock().unwrap();
             let staging_basis = self
                 .capture_variable_staging_basis(&publication)
-                .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+                .map_err(history_project_error)?;
             let session = staging_basis.session;
-            if publication.project_instance_id != session.instance_id.as_str() {
-                return Err(MutationConflict::History(
-                    "project changed before History preparation snapshot".into(),
+            if publication.project_instance_id != project_instance_id.as_str()
+                || session.instance_id != *project_instance_id
+            {
+                return Err(MutationConflict::StaleProjectLifecycle(
+                    "caller project changed before History preparation snapshot".into(),
                 ));
             }
             let data = self.project_data.read().unwrap().clone();
@@ -4593,7 +4721,15 @@ impl ProjectState {
             .cloned()
             .ok_or_else(|| MutationConflict::History("History is empty".into()))?
         };
+        let project_instance_id = ProjectInstanceId::from_existing(
+            self.mutation_publication
+                .lock()
+                .unwrap()
+                .project_instance_id
+                .clone(),
+        );
         self.prepare_history_documents(
+            &project_instance_id,
             undo,
             &request,
             &transaction.history_id,
@@ -4623,10 +4759,19 @@ impl ProjectState {
 
     fn commit_history_direction(
         &self,
+        project_instance_id: &ProjectInstanceId,
         undo: bool,
         request: MutationRequest<HistoryMutation>,
     ) -> Result<CommittedResourceMutation, MutationConflict> {
         self.ensure_mutation_operational()?;
+        let expected_session = self
+            .capture_project_session()
+            .map_err(history_project_error)?;
+        if expected_session.instance_id != *project_instance_id {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before History routing".into(),
+            ));
+        }
         let next_transaction = {
             let history = self.history.read().unwrap();
             if undo {
@@ -4648,15 +4793,26 @@ impl ProjectState {
         })?;
         match transaction.persistence {
             crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
-                return self.commit_graph_move_history_direction(undo, request, transaction);
+                return self.commit_graph_move_history_direction(
+                    project_instance_id,
+                    undo,
+                    request,
+                    transaction,
+                );
             }
             crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
-                return self.commit_variable_effect_history_direction(undo, request, transaction);
+                return self.commit_variable_effect_history_direction(
+                    project_instance_id,
+                    undo,
+                    request,
+                    transaction,
+                );
             }
             crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {
                 self.run_history_after_routing_test_hook();
                 if self.history_transaction_contains_unloaded_graph(&transaction, undo)? {
                     let prepared = self.prepare_history_documents(
+                        project_instance_id,
                         undo,
                         &request,
                         &transaction.history_id,
@@ -4669,20 +4825,19 @@ impl ProjectState {
         }
         let routed_history_id = transaction.history_id.clone();
         let routed_persistence = transaction.persistence;
-        let expected_session = self.current_projection_environment_expectation();
-        let projection_environment = self
-            .capture_projection_environment(&expected_session)
-            .map_err(|error| MutationConflict::Projection(error.into()))?;
+        let projection_environment =
+            self.capture_history_projection_environment(&expected_session)?;
         let mut publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != expected_session.project_instance_id.as_str() {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: project changed before history authority commit".into(),
+        if publication.project_instance_id != project_instance_id.as_str()
+            || publication.project_instance_id != expected_session.instance_id.as_str()
+        {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before History authority commit".into(),
             ));
         }
         if !projection_environment.matches_publication(&publication) {
-            return Err(MutationConflict::Projection(
-                "stale_project_lifecycle: projection environment changed before history authority commit"
-                    .into(),
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "projection environment changed before History authority commit".into(),
             ));
         }
         let mut data = self.project_data.write().unwrap();
@@ -4838,9 +4993,8 @@ impl ProjectState {
                 .ok()
                 .is_some_and(|path| prepared.loaded_after_data.graphs.contains_key(&path))
         });
-        let projection_environment = self
-            .capture_projection_environment_for_session(&prepared.basis.session)
-            .map_err(|error| MutationConflict::Projection(error.into()))?;
+        let projection_environment =
+            self.capture_history_projection_environment(&prepared.basis.session)?;
         let projected_generation = prepared
             .basis
             .authority_generation
@@ -4860,6 +5014,8 @@ impl ProjectState {
             .unwrap()
             .clone();
         self.run_history_after_preparation_test_hook();
+        self.validate_project_session(&prepared.basis.session)
+            .map_err(history_project_error)?;
         let context = ProjectTransactionContext {
             session: prepared.basis.session.clone(),
             operation_id: request.operation_id,
@@ -4874,10 +5030,8 @@ impl ProjectState {
             mutations,
             crate::project::history_hydration::validate_durable_history_document,
         )
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        let committed_filesystem = filesystem
-            .commit()
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(history_project_error)?;
+        let committed_filesystem = filesystem.commit().map_err(history_project_error)?;
 
         self.run_history_after_disk_commit_test_hook();
         let authority_result = (|| {
@@ -4889,7 +5043,7 @@ impl ProjectState {
                 || identity.project_root.as_ref() != Some(&prepared.basis.session.root)
                 || !projection_environment.matches_publication(&publication)
             {
-                return Err(MutationConflict::History(
+                return Err(MutationConflict::StaleProjectLifecycle(
                     "project session or authority changed before durable History commit".into(),
                 ));
             }
@@ -5007,18 +5161,16 @@ impl ProjectState {
                     completion_test_hook,
                 })
             }
-            Err(error) => match committed_filesystem.rollback() {
-                Ok(()) => Err(error),
-                Err(rollback) if rollback.recovery_required() => Err(
-                    MutationConflict::RecoveryRequired(rollback.to_string().into()),
-                ),
-                Err(rollback) => Err(MutationConflict::History(rollback.to_string().into())),
-            },
+            Err(error) => Err(resolve_history_rollback(
+                error,
+                committed_filesystem.rollback(),
+            )),
         }
     }
 
     fn commit_variable_effect_history_direction(
         &self,
+        project_instance_id: &ProjectInstanceId,
         undo: bool,
         request: MutationRequest<HistoryMutation>,
         transaction: ProjectHistoryTransaction,
@@ -5026,19 +5178,22 @@ impl ProjectState {
         let history_id = transaction.history_id.clone();
         let session = self
             .capture_project_session()
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(history_project_error)?;
+        if session.instance_id != *project_instance_id {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before durable variable History preparation".into(),
+            ));
+        }
         let expected_project_path = self.get_path().ok_or_else(|| {
             MutationConflict::History("no project is active for variable persistence".into())
         })?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&session)
-            .map_err(|error| MutationConflict::History(error.into()))?;
+        let projection_environment = self.capture_history_projection_environment(&session)?;
         let filesystem_lease = self
             .filesystem()
             .acquire(session.root.clone())
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(history_project_error)?;
         self.validate_project_session(&session)
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(history_project_error)?;
 
         let (data_snapshot, graph_revisions, variable_revisions, history_snapshot) = {
             let publication = self.mutation_publication.lock().unwrap();
@@ -5046,8 +5201,8 @@ impl ProjectState {
             if publication.project_instance_id != session.instance_id.as_str()
                 || path.as_deref() != Some(expected_project_path.as_str())
             {
-                return Err(MutationConflict::History(
-                    "project changed before durable history snapshot".into(),
+                return Err(MutationConflict::StaleProjectLifecycle(
+                    "project changed before durable History snapshot".into(),
                 ));
             }
             (
@@ -5144,10 +5299,9 @@ impl ProjectState {
             mutations,
             validate_variable_effect_document,
         )
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        let committed_filesystem = prepared
-            .commit()
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(history_project_error)?;
+        let committed_filesystem = prepared.commit().map_err(history_project_error)?;
+        self.run_history_after_disk_commit_test_hook();
 
         let authority_result = (|| {
             let mut publication = self.mutation_publication.lock().unwrap();
@@ -5155,13 +5309,13 @@ impl ProjectState {
             if publication.project_instance_id != context.session.instance_id.as_str()
                 || path.as_deref() != Some(expected_project_path.as_str())
             {
-                return Err(MutationConflict::History(
-                    "project changed before durable history authority commit".into(),
+                return Err(MutationConflict::StaleProjectLifecycle(
+                    "project changed before durable History authority commit".into(),
                 ));
             }
             if !projection_environment.matches_publication(&publication) {
-                return Err(MutationConflict::History(
-                    "projection environment changed before durable history authority commit".into(),
+                return Err(MutationConflict::StaleProjectLifecycle(
+                    "projection environment changed before durable History authority commit".into(),
                 ));
             }
             let mut data = self.project_data.write().unwrap();
@@ -5274,18 +5428,16 @@ impl ProjectState {
                 committed_filesystem.finalize();
                 Ok(result)
             }
-            Err(error) => {
-                let rollback = committed_filesystem.rollback();
-                Err(rollback
-                    .err()
-                    .map(|rollback| MutationConflict::History(rollback.to_string().into()))
-                    .unwrap_or(error))
-            }
+            Err(error) => Err(resolve_history_rollback(
+                error,
+                committed_filesystem.rollback(),
+            )),
         }
     }
 
     fn commit_graph_move_history_direction(
         &self,
+        project_instance_id: &ProjectInstanceId,
         undo: bool,
         request: MutationRequest<HistoryMutation>,
         transaction: ProjectHistoryTransaction,
@@ -5326,16 +5478,19 @@ impl ProjectState {
 
         let session = self
             .capture_project_session()
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&session)
-            .map_err(|error| MutationConflict::History(error.into()))?;
+            .map_err(history_project_error)?;
+        if session.instance_id != *project_instance_id {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before graph move History preparation".into(),
+            ));
+        }
+        let projection_environment = self.capture_history_projection_environment(&session)?;
         let filesystem_lease = self
             .filesystem()
             .acquire(session.root.clone())
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(history_project_error)?;
         self.validate_project_session(&session)
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+            .map_err(history_project_error)?;
         let loaded_source = self
             .project_data
             .read()
@@ -5485,10 +5640,8 @@ impl ProjectState {
                 }
             },
         )
-        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        let committed_filesystem = prepared
-            .commit()
-            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        .map_err(history_project_error)?;
+        let committed_filesystem = prepared.commit().map_err(history_project_error)?;
         self.run_graph_move_history_io_checkpoint();
         let publication = self.apply_resource_document_patch_internal(
             &context,
@@ -5512,11 +5665,36 @@ impl ProjectState {
                 committed_filesystem.finalize();
                 Ok(receipt)
             }
-            Err(error) => {
-                let rollback = committed_filesystem.rollback();
-                Err(MutationConflict::History(
-                    rollback.err().unwrap_or(error).to_string().into(),
-                ))
+            Err(error) => Err(resolve_history_rollback(
+                history_project_error(error),
+                committed_filesystem.rollback(),
+            )),
+        }
+    }
+
+    pub fn graph_projection_for_project(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        locale: &str,
+    ) -> Result<EditorGraphProjectionDto, ProjectFilesystemError> {
+        let session = self.capture_project_session()?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "graph hydrate project instance is stale".into(),
+            });
+        }
+        let projection = self
+            .capture_projection_source(graph_path)
+            .and_then(|source| source.graph_projection(graph_path, locale));
+        match projection {
+            Ok(projection) => {
+                self.validate_project_session(&session)?;
+                Ok(projection)
+            }
+            Err(message) => {
+                self.validate_project_session(&session)?;
+                Err(ProjectFilesystemError::TransactionPrepareFailed { message })
             }
         }
     }
@@ -5669,11 +5847,13 @@ impl ProjectState {
 
     fn capture_execution_snapshot(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         compilation: &super::compile_publication::CurrentCompilation,
     ) -> Result<ExecutionSnapshot, String> {
         let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != compilation.authority.project_instance_id
+        if publication.project_instance_id != expected_project_instance_id.as_str()
+            || publication.project_instance_id != compilation.authority.project_instance_id
             || publication.authority_generation() != compilation.authority.authority_generation
         {
             return Err(
@@ -5722,31 +5902,61 @@ impl ProjectState {
 
     fn validate_execution_authority(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         authority: &super::compile_publication::ExecutionAuthorityToken,
     ) -> Result<(), String> {
         let publication = self.mutation_publication.lock().unwrap();
-        self.execution_authority_matches(&publication, authority)
-            .then_some(())
-            .ok_or_else(|| "stale_project_lifecycle: execution authority changed before run".into())
+        (publication.project_instance_id == expected_project_instance_id.as_str()
+            && self.execution_authority_matches(&publication, authority))
+        .then_some(())
+        .ok_or_else(|| "stale_project_lifecycle: execution authority changed before run".into())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn execute_graph_for_current_project_for_test(
+        &self,
+        graph_path: &GraphResourcePath,
+        demand: &crate::node_system::plan::ExecutionDemand,
+        events: &dyn crate::node_system::runtime::RunEventSink,
+    ) -> Result<crate::node_system::runtime::RunResult, ProjectExecutionError> {
+        let project_instance_id = self
+            .capture_project_session()
+            .map_err(|error| format!("{}: {error}", error.code()))?
+            .instance_id;
+        self.execute_graph(&project_instance_id, graph_path, demand, events)
     }
 
     pub fn execute_graph(
         &self,
+        expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         demand: &crate::node_system::plan::ExecutionDemand,
         events: &dyn crate::node_system::runtime::RunEventSink,
     ) -> Result<crate::node_system::runtime::RunResult, ProjectExecutionError> {
         self.ensure_project_operational()
             .map_err(|error| format!("{}: {error}", error.code()))?;
+        let session = self
+            .capture_project_session()
+            .map_err(|error| format!("{}: {error}", error.code()))?;
+        if &session.instance_id != expected_project_instance_id {
+            return Err("stale_project_lifecycle: execution caller project is stale".into());
+        }
         let cancellation = crate::node_system::runtime::CancellationToken::new();
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != expected_project_instance_id.as_str() {
+            return Err(
+                "stale_project_lifecycle: execution authority changed before preparation".into(),
+            );
+        }
         let store = self.project_store.read().unwrap();
-        let runs = Arc::clone(&store.runs);
         let session_id = store.project_session_id.clone();
         let trace_sink = Arc::clone(&store.trace_sink);
-        let pre_run = runs
+        let runs = Arc::clone(&store.runs);
+        let preparation = runs
             .track_pre_run(session_id.clone(), cancellation.clone())
             .map_err(|error| error.to_string())?;
         drop(store);
+        drop(publication);
 
         self.load_function_resources(&cancellation)?;
         let compilation =
@@ -5772,7 +5982,11 @@ impl ProjectState {
             .map_err(|error| format!("invalid_execution_demand: {error}"))?;
         let plan = selected.plan;
         cancellation.check().map_err(|error| error.to_string())?;
-        let execution = self.capture_execution_snapshot(graph_path, &compilation)?;
+        let execution = self.capture_execution_snapshot(
+            expected_project_instance_id,
+            graph_path,
+            &compilation,
+        )?;
         let compile_resources =
             compile_resources_from_data(&execution.data, execution.database_schemas.clone())?;
         if compile_resources.versions != compilation.authority.basis.resource_versions {
@@ -5845,8 +6059,33 @@ impl ProjectState {
             )
             .map_err(|error| error.to_string())?;
         self.run_execution_before_final_gate_test_hook();
-        self.validate_execution_authority(&compilation.authority)?;
+        self.validate_execution_authority(expected_project_instance_id, &compilation.authority)?;
+        drop(preparation);
         self.run_execution_before_run_test_hook();
+        let pre_run = {
+            let publication = self.mutation_publication.lock().unwrap();
+            if publication.project_instance_id != expected_project_instance_id.as_str()
+                || !self.execution_authority_matches(&publication, &compilation.authority)
+            {
+                return Err(
+                    "stale_project_lifecycle: execution authority changed before run registration"
+                        .into(),
+                );
+            }
+            let store = self.project_store.read().unwrap();
+            if store.project_session_id != execution.session_id
+                || !Arc::ptr_eq(&runs, &execution.runs)
+            {
+                return Err(
+                    "stale_project_lifecycle: execution session changed before run registration"
+                        .into(),
+                );
+            }
+            execution
+                .runs
+                .track_pre_run(execution.session_id.clone(), cancellation.clone())
+                .map_err(|error| error.to_string())?
+        };
         let finalize =
             |result: &mut crate::node_system::runtime::RunResult,
              cancellation: &crate::node_system::runtime::CancellationToken| {
@@ -7347,6 +7586,367 @@ fn json_to_protocol_value(
                 .collect::<Result<_, String>>()?,
         ),
     })
+}
+
+#[cfg(test)]
+mod execution_identity_tests {
+    use super::*;
+    use crate::node_system::runtime::{
+        ArtifactSnapshot, ResultSourceDescriptor, ResultStore, RunEvent, RunEventKind, RunEventSink,
+    };
+    use crate::project::GraphDocumentKind;
+    use std::sync::{Arc, Condvar, Mutex};
+    use std::time::Duration;
+
+    #[derive(Default)]
+    struct RecordingRunEvents(Mutex<Vec<RunEvent>>);
+
+    impl RunEventSink for RecordingRunEvents {
+        fn record(&self, event: RunEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    fn publish_identity_test_snapshot(
+        store: &ResultStore,
+        run_id: crate::node_system::analysis::RunId,
+    ) -> ResultSourceDescriptor {
+        let basis = crate::node_system::analysis::CompilationBasis {
+            graph_revision: crate::node_system::document::GraphRevision::new(1),
+            registry_fingerprint: crate::node_system::registry::RegistryFingerprint::from_bytes(
+                [8; 32],
+            ),
+            resource_versions: std::collections::BTreeMap::new(),
+        };
+        let correlation = crate::node_system::analysis::CorrelationContext {
+            project_session_id: crate::node_system::analysis::ProjectSessionId::new("session"),
+            graph_path: crate::node_system::document::GraphResourcePath(
+                "events/Main.yssbi-event".into(),
+            ),
+            graph_revision: basis.graph_revision,
+            registry_fingerprint: basis.registry_fingerprint.clone(),
+            resource_versions: basis.resource_versions.clone(),
+            compile_id: crate::node_system::analysis::CompileId::new(1),
+            selection_digest: None,
+            run_id: Some(run_id),
+            node_id: None,
+            node_type_id: None,
+            parent_call: None,
+        };
+        store.publish_snapshot(
+            run_id,
+            correlation,
+            basis,
+            "result",
+            ArtifactSnapshot::Value(crate::node_system::protocol::Value::Integer(1)),
+        )
+    }
+
+    #[derive(Default)]
+    struct TestGate {
+        state: Mutex<(bool, bool)>,
+        changed: Condvar,
+    }
+
+    impl TestGate {
+        fn arrive_and_wait(&self) {
+            let mut state = self.state.lock().unwrap();
+            state.0 = true;
+            self.changed.notify_all();
+            while !state.1 {
+                state = self.changed.wait(state).unwrap();
+            }
+        }
+
+        fn wait_until_arrived(&self) {
+            let state = self.state.lock().unwrap();
+            let (state, _) = self
+                .changed
+                .wait_timeout_while(state, Duration::from_secs(2), |state| !state.0)
+                .unwrap();
+            assert!(state.0, "test gate was not reached before timeout");
+        }
+
+        fn release(&self) {
+            let mut state = self.state.lock().unwrap();
+            state.1 = true;
+            self.changed.notify_all();
+        }
+    }
+
+    struct BlockingRunEvents {
+        events: Mutex<Vec<RunEvent>>,
+        started: Arc<TestGate>,
+    }
+
+    impl RunEventSink for BlockingRunEvents {
+        fn record(&self, event: RunEvent) {
+            let is_started = event.kind == RunEventKind::RunStarted;
+            self.events.lock().unwrap().push(event);
+            if is_started {
+                self.started.arrive_and_wait();
+            }
+        }
+    }
+
+    #[test]
+    fn stale_source_handle_cannot_alias_replacement_project() {
+        let old_root = std::env::temp_dir().join(format!(
+            "yssbi-stale-result-source-old-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let replacement_root = std::env::temp_dir().join(format!(
+            "yssbi-stale-result-source-replacement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&old_root).unwrap();
+        std::fs::create_dir_all(&replacement_root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
+        let old_results = state.project_store.read().unwrap().results.clone();
+        let old_source = publish_identity_test_snapshot(
+            &old_results,
+            crate::node_system::analysis::RunId::new(1),
+        );
+
+        state.activate_project_fixture(
+            replacement_root.to_string_lossy().into_owned(),
+            ProjectData::new(),
+        );
+        let replacement_results = state.project_store.read().unwrap().results.clone();
+        let replacement_source = publish_identity_test_snapshot(
+            &replacement_results,
+            crate::node_system::analysis::RunId::new(2),
+        );
+
+        assert_ne!(old_source.source_id, replacement_source.source_id);
+        assert_eq!(
+            state
+                .result_source_descriptor(old_source.source_id)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            state.result_source_value(old_source.source_id).unwrap(),
+            None
+        );
+        assert_eq!(
+            state
+                .result_source_page(old_source.source_id, 0, 10)
+                .unwrap(),
+            None
+        );
+        assert!(!state.release_result_source(old_source.source_id).unwrap());
+        assert!(
+            state
+                .result_source_descriptor(replacement_source.source_id)
+                .unwrap()
+                .is_some()
+        );
+
+        let _ = std::fs::remove_dir_all(old_root);
+        let _ = std::fs::remove_dir_all(replacement_root);
+    }
+
+    #[test]
+    fn execute_graph_rejects_stale_caller_before_run_registration() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-execution-entry-stale-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
+        );
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project.clone());
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+        let events = RecordingRunEvents::default();
+
+        let error = state
+            .execute_graph(
+                &stale_id,
+                &graph_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &events,
+            )
+            .unwrap_err();
+
+        assert!(error.to_string().contains("stale_project_lifecycle"));
+        assert!(events.0.lock().unwrap().is_empty());
+        let store = state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 0);
+        drop(store);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn replacement_wins_before_final_registration_gate_with_zero_effects() {
+        let old_root = std::env::temp_dir().join(format!(
+            "yssbi-execution-registration-stale-old-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let new_root = std::env::temp_dir().join(format!(
+            "yssbi-execution-registration-stale-new-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&old_root).unwrap();
+        std::fs::create_dir_all(&new_root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
+        );
+        let state = ProjectState::new();
+        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let (old_runs, old_results) = {
+            let store = state.project_store.read().unwrap();
+            (Arc::clone(&store.runs), store.results.clone())
+        };
+        let before_registration = Arc::new(TestGate::default());
+        let execution_gate = Arc::clone(&before_registration);
+        state.set_execution_before_run_test_hook(Arc::new(move || {
+            execution_gate.arrive_and_wait();
+        }));
+        let events = Arc::new(RecordingRunEvents::default());
+        let execution_state = state.clone();
+        let execution_path = graph_path.clone();
+        let execution_events = Arc::clone(&events);
+        let execution = std::thread::spawn(move || {
+            execution_state.execute_graph(
+                &project_instance_id,
+                &execution_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                execution_events.as_ref(),
+            )
+        });
+        before_registration.wait_until_arrived();
+
+        let replacement_state = state.clone();
+        let replacement_root = new_root.to_string_lossy().into_owned();
+        let replacement = std::thread::spawn(move || {
+            replacement_state.activate_project_fixture(replacement_root, project);
+        });
+        replacement.join().unwrap();
+        before_registration.release();
+
+        let error = execution.join().unwrap().unwrap_err();
+        assert!(error.to_string().starts_with("stale_project_lifecycle:"));
+        assert!(error.run_error().is_none());
+        assert!(events.0.lock().unwrap().is_empty());
+        assert_eq!(old_runs.active_run_count(), 0);
+        assert_eq!(old_results.source_count(), 0);
+        let store = state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 0);
+        drop(store);
+        let _ = std::fs::remove_dir_all(old_root);
+        let _ = std::fs::remove_dir_all(new_root);
+    }
+
+    #[test]
+    fn registration_wins_and_replacement_drains_the_admitted_run() {
+        let old_root = std::env::temp_dir().join(format!(
+            "yssbi-execution-registration-admitted-old-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let new_root = std::env::temp_dir().join(format!(
+            "yssbi-execution-registration-admitted-new-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&old_root).unwrap();
+        std::fs::create_dir_all(&new_root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
+        );
+        let state = ProjectState::new();
+        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let (old_runs, old_results, old_session_id) = {
+            let store = state.project_store.read().unwrap();
+            (
+                Arc::clone(&store.runs),
+                store.results.clone(),
+                store.project_session_id.clone(),
+            )
+        };
+        let activation_token = state.project_activation.acquire();
+        let before_registration = Arc::new(TestGate::default());
+        let execution_gate = Arc::clone(&before_registration);
+        state.set_execution_before_run_test_hook(Arc::new(move || {
+            execution_gate.arrive_and_wait();
+        }));
+        let run_started = Arc::new(TestGate::default());
+        let events = Arc::new(BlockingRunEvents {
+            events: Mutex::new(Vec::new()),
+            started: Arc::clone(&run_started),
+        });
+        let execution_state = state.clone();
+        let execution_path = graph_path.clone();
+        let execution_events = Arc::clone(&events);
+        let execution = std::thread::spawn(move || {
+            execution_state.execute_graph(
+                &project_instance_id,
+                &execution_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                execution_events.as_ref(),
+            )
+        });
+        before_registration.wait_until_arrived();
+
+        let replacement_state = state.clone();
+        let replacement_root = new_root.to_string_lossy().into_owned();
+        let replacement = std::thread::spawn(move || {
+            replacement_state.activate_project_fixture(replacement_root, project);
+        });
+        before_registration.release();
+        run_started.wait_until_arrived();
+        drop(activation_token);
+        assert!(old_runs.wait_until_draining_for_test(&old_session_id, Duration::from_secs(2)));
+        run_started.release();
+
+        let error = execution.join().unwrap().unwrap_err();
+        replacement.join().unwrap();
+        assert_eq!(
+            error.run_error(),
+            Some(&crate::node_system::runtime::RunError::Cancelled)
+        );
+        let recorded = events.events.lock().unwrap();
+        assert!(
+            recorded
+                .iter()
+                .any(|event| event.kind == RunEventKind::RunStarted)
+        );
+        assert!(
+            recorded
+                .iter()
+                .any(|event| event.kind == RunEventKind::RunCancelled)
+        );
+        assert!(
+            recorded
+                .iter()
+                .all(|event| event.kind != RunEventKind::RunCompleted)
+        );
+        drop(recorded);
+        assert_eq!(old_runs.active_run_count(), 0);
+        assert_eq!(old_results.source_count(), 0);
+        let store = state.project_store.read().unwrap();
+        assert_eq!(store.runs.active_run_count(), 0);
+        assert_eq!(store.results.source_count(), 0);
+        drop(store);
+        let _ = std::fs::remove_dir_all(old_root);
+        let _ = std::fs::remove_dir_all(new_root);
+    }
 }
 
 #[cfg(test)]

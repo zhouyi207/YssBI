@@ -175,6 +175,7 @@ describe('unavailable creation routing', () => {
     vi.mocked(createNodeFromDescriptor).mockResolvedValueOnce({
       status: 'stale',
       result: {
+        projectInstanceId: 'project-1',
         delta: {
           graphPath,
           fromRevision: 1,

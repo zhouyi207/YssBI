@@ -49,6 +49,9 @@ fn mutation_conflict_to_app_error(
         crate::node_system::document::MutationConflict::StaleRevision { .. } => {
             AppError::new(revision_conflict_code, error.to_string())
         }
+        crate::node_system::document::MutationConflict::StaleProjectLifecycle(message) => {
+            AppError::new("stale_project_lifecycle", message)
+        }
         _ => AppError::internal(error),
     }
 }
@@ -329,31 +332,64 @@ pub fn rename_graph_resource(
     )
 }
 
+fn update_function_signature_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    function_path: String,
+    locale: &str,
+    request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
+    let path = parse_graph_path(function_path)?;
+    state
+        .update_function_signature_observed(
+            &project_instance_id,
+            &path,
+            locale,
+            request,
+            |result| emit_resource_result(&mut emit, result),
+        )
+        .map_err(|error| mutation_conflict_to_app_error(error, "function_revision_conflict"))
+}
+
 #[tauri::command]
 pub fn update_function_signature(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: String,
     request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
 ) -> Result<ResourceMutationResultDto, AppError> {
-    let path = parse_graph_path(function_path)?;
+    update_function_signature_with_emitter(
+        state.inner(),
+        project_instance_id,
+        function_path,
+        &locale,
+        request,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn hydrate_editor_graph_from_state(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    locale: &str,
+) -> Result<EditorGraphProjectionDto, AppError> {
     state
-        .update_function_signature_observed(&path, &locale, request, |result| {
-            emit_resource_mutation_result(&app, result)
-        })
-        .map_err(|error| mutation_conflict_to_app_error(error, "function_revision_conflict"))
+        .graph_projection_for_project(&project_instance_id, &parse_graph_path(graph_path)?, locale)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn hydrate_editor_graph(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
 ) -> Result<EditorGraphProjectionDto, AppError> {
-    state
-        .graph_projection(&parse_graph_path(graph_path)?, &locale)
-        .map_err(AppError::internal)
+    hydrate_editor_graph_from_state(state.inner(), project_instance_id, graph_path, &locale)
 }
 
 fn parse_editor_mutation_request(
@@ -398,54 +434,62 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
 
 fn mutate_graph_document_with_emitter(
     state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: &str,
     request: serde_json::Value,
     mut emit: impl FnMut(Event),
 ) -> Result<GraphMutationResultDto, AppError> {
     let request = parse_editor_mutation_request(request)?;
-    state
-        .apply_editor_graph_mutation_observed(
+    let result = state
+        .apply_editor_graph_mutation(
+            &project_instance_id,
             &parse_graph_path(graph_path)?,
             locale,
             request,
-            |delta| {
-                emit(Event::Project(EventProject::GraphDelta {
-                    delta: delta.clone(),
-                }))
-            },
         )
-        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))
+        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))?;
+    emit(Event::Project(EventProject::GraphDelta {
+        project_instance_id: result.project_instance_id.clone(),
+        delta: result.delta.clone(),
+    }));
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn mutate_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
     request: serde_json::Value,
 ) -> Result<GraphMutationResultDto, AppError> {
-    mutate_graph_document_with_emitter(state.inner(), graph_path, &locale, request, |event| {
-        emit_project_event(&app, event)
-    })
+    mutate_graph_document_with_emitter(
+        state.inner(),
+        project_instance_id,
+        graph_path,
+        &locale,
+        request,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn get_project_history_status_from_state(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+) -> Result<HistoryStatusDto, AppError> {
+    state
+        .history_status_for_project(&project_instance_id)
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
 pub fn get_project_history_status(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
 ) -> Result<HistoryStatusDto, AppError> {
-    state.ensure_project_operational().map_err(AppError::from)?;
-    Ok(state.history_status())
-}
-
-fn emit_resource_mutation_result(app: &AppHandle, result: &ResourceMutationResultDto) {
-    emit_project_event(
-        app,
-        Event::Project(EventProject::ResourceMutationCommitted {
-            result: result.clone(),
-        }),
-    );
+    get_project_history_status_from_state(state.inner(), project_instance_id)
 }
 
 fn publish_run_resource_mutation(
@@ -459,16 +503,47 @@ fn publish_run_resource_mutation(
     }
 }
 
+fn undo_graph_document_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    locale: &str,
+    request: MutationRequest<HistoryMutation>,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
+    state
+        .undo_last_transaction_observed(&project_instance_id, locale, request, |result| {
+            emit_resource_result(&mut emit, result)
+        })
+        .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
+}
+
 #[tauri::command]
 pub fn undo_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
 ) -> Result<ResourceMutationResultDto, AppError> {
+    undo_graph_document_with_emitter(
+        state.inner(),
+        project_instance_id,
+        &locale,
+        request,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn redo_graph_document_with_emitter<R: EmitOutcome>(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    locale: &str,
+    request: MutationRequest<HistoryMutation>,
+    mut emit: impl FnMut(Event) -> R,
+) -> Result<ResourceMutationResultDto, AppError> {
     state
-        .undo_last_transaction_observed(&locale, request, |result| {
-            emit_resource_mutation_result(&app, result)
+        .redo_last_transaction_observed(&project_instance_id, locale, request, |result| {
+            emit_resource_result(&mut emit, result)
         })
         .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
 }
@@ -477,14 +552,17 @@ pub fn undo_graph_document(
 pub fn redo_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
 ) -> Result<ResourceMutationResultDto, AppError> {
-    state
-        .redo_last_transaction_observed(&locale, request, |result| {
-            emit_resource_mutation_result(&app, result)
-        })
-        .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
+    redo_graph_document_with_emitter(
+        state.inner(),
+        project_instance_id,
+        &locale,
+        request,
+        |event| emit_project_event(&app, event),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -532,6 +610,9 @@ fn execution_app_error(
     terminal: Option<TerminalRunEvent>,
 ) -> AppError {
     let message = error.to_string();
+    if message.starts_with("stale_project_lifecycle:") {
+        return AppError::new("stale_project_lifecycle", message);
+    }
     let Some(terminal) = terminal else {
         if message.starts_with("invalid_execution_demand:") {
             return AppError {
@@ -580,16 +661,23 @@ pub struct ExecuteGraphResultDto {
     pub run_id: String,
 }
 
+fn get_result_source_descriptor_from_state(
+    state: &ProjectState,
+    source_id: &str,
+) -> Result<Option<ResultSourceDescriptorDto>, AppError> {
+    let source_id = parse_opaque_u64("sourceId", source_id)?;
+    state
+        .result_source_descriptor(ResultSourceId::new(source_id))
+        .map_err(AppError::from)
+        .map(|descriptor| descriptor.map(Into::into))
+}
+
 #[tauri::command]
 pub fn get_result_source_descriptor(
     state: State<'_, ProjectState>,
     source_id: String,
 ) -> Result<Option<ResultSourceDescriptorDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", &source_id)?;
-    state
-        .result_source_descriptor(ResultSourceId::new(source_id))
-        .map_err(AppError::from)
-        .map(|descriptor| descriptor.map(Into::into))
+    get_result_source_descriptor_from_state(&state, &source_id)
 }
 
 #[derive(Debug, Serialize)]
@@ -599,12 +687,11 @@ pub enum ResultSourceValueDto {
     Sequence(Box<[crate::node_system::protocol::Value]>),
 }
 
-#[tauri::command]
-pub fn get_result_source_value(
-    state: State<'_, ProjectState>,
-    source_id: String,
+fn get_result_source_value_from_state(
+    state: &ProjectState,
+    source_id: &str,
 ) -> Result<Option<ResultSourceValueDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", &source_id)?;
+    let source_id = parse_opaque_u64("sourceId", source_id)?;
     state
         .result_source_value(ResultSourceId::new(source_id))
         .map_err(AppError::from)
@@ -619,13 +706,20 @@ pub fn get_result_source_value(
 }
 
 #[tauri::command]
-pub fn get_result_source_page(
+pub fn get_result_source_value(
     state: State<'_, ProjectState>,
     source_id: String,
+) -> Result<Option<ResultSourceValueDto>, AppError> {
+    get_result_source_value_from_state(&state, &source_id)
+}
+
+fn get_result_source_page_from_state(
+    state: &ProjectState,
+    source_id: &str,
     offset: usize,
     limit: usize,
 ) -> Result<Option<ResultSourcePageDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", &source_id)?;
+    let source_id = parse_opaque_u64("sourceId", source_id)?;
     state
         .result_source_page(ResultSourceId::new(source_id), offset, limit)
         .map_err(AppError::from)
@@ -633,14 +727,31 @@ pub fn get_result_source_page(
 }
 
 #[tauri::command]
+pub fn get_result_source_page(
+    state: State<'_, ProjectState>,
+    source_id: String,
+    offset: usize,
+    limit: usize,
+) -> Result<Option<ResultSourcePageDto>, AppError> {
+    get_result_source_page_from_state(&state, &source_id, offset, limit)
+}
+
+fn release_result_source_from_state(
+    state: &ProjectState,
+    source_id: &str,
+) -> Result<bool, AppError> {
+    let source_id = parse_opaque_u64("sourceId", source_id)?;
+    state
+        .release_result_source(ResultSourceId::new(source_id))
+        .map_err(AppError::from)
+}
+
+#[tauri::command]
 pub fn release_result_source(
     state: State<'_, ProjectState>,
     source_id: String,
 ) -> Result<bool, AppError> {
-    let source_id = parse_opaque_u64("sourceId", &source_id)?;
-    state
-        .release_result_source(ResultSourceId::new(source_id))
-        .map_err(AppError::from)
+    release_result_source_from_state(&state, &source_id)
 }
 
 #[tauri::command]
@@ -664,6 +775,7 @@ pub fn cancel_graph_run(state: State<'_, ProjectState>, run_id: String) -> Resul
 pub async fn execute_graph_document(
     app: AppHandle,
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     graph_path: String,
     demand: ExecutionDemandDto,
     on_event: Channel<RunEventDto>,
@@ -685,7 +797,7 @@ pub async fn execute_graph_document(
             terminal: Arc::clone(&terminal),
         };
         state
-            .execute_graph(&graph_path, &demand, &events)
+            .execute_graph(&project_instance_id, &graph_path, &demand, &events)
             .map(|result| {
                 publish_run_resource_mutation(result.resource_mutation.as_ref(), |event| {
                     emit_project_event(&app, event)
@@ -713,14 +825,546 @@ mod tests {
     };
     use crate::node_system::catalog::NodeCreationDescriptor;
     use crate::node_system::document::{
-        ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey, ResourceRevision,
-        VariableDocumentPatch, VariableResourceKey,
+        FunctionDocumentPatch, FunctionResourceKey, ResourceDeltaEvent, ResourceDocumentPatch,
+        ResourceKey, ResourceRevision, VariableDocumentPatch, VariableResourceKey,
     };
     use crate::node_system::registry::RegistryFingerprint;
-    use crate::node_system::runtime::{ResultSourceId, RunEventKind};
+    use crate::node_system::runtime::{
+        ArtifactSnapshot, ResultSourceDescriptor, ResultSourceId, ResultStore, RunEventKind,
+    };
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
     };
+
+    fn graph_mutation_request(graph_path: &GraphResourcePath) -> serde_json::Value {
+        serde_json::json!({
+            "resource": { "kind": "graph", "key": graph_path.as_str() },
+            "baseRevision": 0,
+            "operationId": "00000000-0000-0000-0000-000000000806",
+            "payload": {
+                "type": "createNode",
+                "payload": {
+                    "descriptor": {
+                        "kind": "static",
+                        "nodeTypeId": "yssbi.constant.int64"
+                    },
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "userLabel": null
+                }
+            }
+        })
+    }
+
+    fn resource_bound_graph_mutation_request(graph_path: &GraphResourcePath) -> serde_json::Value {
+        serde_json::json!({
+            "resource": { "kind": "graph", "key": graph_path.as_str() },
+            "baseRevision": 0,
+            "operationId": "00000000-0000-0000-0000-000000000807",
+            "payload": {
+                "type": "createNode",
+                "payload": {
+                    "descriptor": {
+                        "kind": "resourceBound",
+                        "nodeTypeId": "yssbi.project.function.call",
+                        "resourcePath": "functions/Helper.yssbi-function",
+                        "resourceRevision": 0,
+                        "createArgs": { "kind": "function" }
+                    },
+                    "position": { "x": 1.0, "y": 2.0 },
+                    "userLabel": null
+                }
+            }
+        })
+    }
+
+    fn graph_project(graph_path: &GraphResourcePath) -> ProjectData {
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
+        );
+        project
+    }
+
+    fn function_project(graph_path: &GraphResourcePath) -> ProjectData {
+        let mut project = ProjectData::new();
+        project.graphs.insert(
+            graph_path.clone(),
+            GraphResourceDocument::new("Compute", GraphDocumentKind::Function),
+        );
+        project
+    }
+
+    fn publish_identity_test_snapshot(
+        store: &ResultStore,
+        run_id: RunId,
+    ) -> ResultSourceDescriptor {
+        let basis = CompilationBasis {
+            graph_revision: crate::node_system::document::GraphRevision::new(1),
+            registry_fingerprint: RegistryFingerprint::from_bytes([8; 32]),
+            resource_versions: std::collections::BTreeMap::new(),
+        };
+        let correlation = CorrelationContext {
+            project_session_id: ProjectSessionId::new("session"),
+            graph_path: crate::node_system::document::GraphResourcePath(
+                "events/Main.yssbi-event".into(),
+            ),
+            graph_revision: basis.graph_revision,
+            registry_fingerprint: basis.registry_fingerprint.clone(),
+            resource_versions: basis.resource_versions.clone(),
+            compile_id: CompileId::new(1),
+            selection_digest: None,
+            run_id: Some(run_id),
+            node_id: None,
+            node_type_id: None,
+            parent_call: None,
+        };
+        store.publish_snapshot(
+            run_id,
+            correlation,
+            basis,
+            "result",
+            ArtifactSnapshot::Value(crate::node_system::protocol::Value::Integer(1)),
+        )
+    }
+
+    fn history_request(graph_path: &GraphResourcePath) -> MutationRequest<HistoryMutation> {
+        MutationRequest::new(
+            ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+                graph_path.as_str().into(),
+            )),
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            HistoryMutation {},
+        )
+    }
+
+    fn function_signature_request(
+        graph_path: &GraphResourcePath,
+    ) -> MutationRequest<FunctionDocumentPatch> {
+        MutationRequest::new(
+            ResourceKey::Function(FunctionResourceKey(graph_path.as_str().into())),
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            FunctionDocumentPatch::new(Default::default(), Default::default()),
+        )
+    }
+
+    #[derive(Default)]
+    struct RecordingRunEvents(std::sync::Mutex<Vec<crate::node_system::runtime::RunEvent>>);
+
+    impl crate::node_system::runtime::RunEventSink for RecordingRunEvents {
+        fn record(&self, event: crate::node_system::runtime::RunEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    #[test]
+    fn stale_source_handle_cannot_alias_replacement_project_through_tauri_helpers() {
+        let old_root = std::env::temp_dir().join(format!(
+            "yssbi-stale-result-source-command-old-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let replacement_root = std::env::temp_dir().join(format!(
+            "yssbi-stale-result-source-command-replacement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&old_root).unwrap();
+        std::fs::create_dir_all(&replacement_root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
+        let old_results = state.project_store.read().unwrap().results.clone();
+        let old_source = publish_identity_test_snapshot(&old_results, RunId::new(1));
+
+        state.activate_project_fixture(
+            replacement_root.to_string_lossy().into_owned(),
+            ProjectData::new(),
+        );
+        let replacement_results = state.project_store.read().unwrap().results.clone();
+        let replacement_source =
+            publish_identity_test_snapshot(&replacement_results, RunId::new(2));
+        let old_source_id = old_source.source_id.get().to_string();
+
+        assert_ne!(old_source.source_id, replacement_source.source_id);
+        assert!(
+            get_result_source_descriptor_from_state(&state, &old_source_id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            get_result_source_value_from_state(&state, &old_source_id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            get_result_source_page_from_state(&state, &old_source_id, 0, 10)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!release_result_source_from_state(&state, &old_source_id).unwrap());
+        assert!(
+            get_result_source_descriptor_from_state(
+                &state,
+                &replacement_source.source_id.get().to_string(),
+            )
+            .unwrap()
+            .is_some()
+        );
+
+        let _ = std::fs::remove_dir_all(old_root);
+        let _ = std::fs::remove_dir_all(replacement_root);
+    }
+
+    #[test]
+    fn execute_graph_rejects_stale_project_before_run_registration() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-stale-execution-command-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let events = RecordingRunEvents::default();
+
+        let error = state
+            .execute_graph(
+                &stale_id,
+                &graph_path,
+                &crate::node_system::plan::ExecutionDemand::Default,
+                &events,
+            )
+            .map_err(|error| execution_app_error(error, None))
+            .unwrap_err();
+
+        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.details, None);
+        assert!(events.0.lock().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_commands_reject_stale_project_identity_with_zero_effects() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-history-command-stale-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let status_before = state.history_status();
+        let lengths_before = state.history_lengths_for_test();
+        let undo_head_before = state.history_head_id_for_test(true);
+        let redo_head_before = state.history_head_id_for_test(false);
+        let revisions_before = state.revision_state_for_test();
+        let publication_before = state.publication_state_for_test();
+        let mut events = Vec::new();
+
+        let status_error =
+            get_project_history_status_from_state(&state, stale_id.clone()).unwrap_err();
+        let undo_error = undo_graph_document_with_emitter(
+            &state,
+            stale_id.clone(),
+            "en-US",
+            history_request(&graph_path),
+            |event| events.push(event),
+        )
+        .unwrap_err();
+        let redo_error = redo_graph_document_with_emitter(
+            &state,
+            stale_id,
+            "en-US",
+            history_request(&graph_path),
+            |event| events.push(event),
+        )
+        .unwrap_err();
+
+        for error in [status_error, undo_error, redo_error] {
+            assert_eq!(error.code, "stale_project_lifecycle");
+        }
+        assert!(events.is_empty());
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            data_before
+        );
+        assert_eq!(state.history_status(), status_before);
+        assert_eq!(state.history_lengths_for_test(), lengths_before);
+        assert_eq!(state.history_head_id_for_test(true), undo_head_before);
+        assert_eq!(state.history_head_id_for_test(false), redo_head_before);
+        assert_eq!(state.revision_state_for_test(), revisions_before);
+        assert_eq!(state.publication_state_for_test(), publication_before);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn function_signature_command_rejects_stale_project_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-function-signature-command-stale-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            function_project(&graph_path),
+        );
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            function_project(&graph_path),
+        );
+        let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let mut events = Vec::new();
+
+        let error = update_function_signature_with_emitter(
+            &state,
+            stale_id,
+            graph_path.as_str().to_string(),
+            "en-US",
+            function_signature_request(&graph_path),
+            |event| events.push(event),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "stale_project_lifecycle");
+        assert!(events.is_empty());
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            before_data
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn function_signature_command_rejects_project_replacement_before_publication() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-function-signature-command-race-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            function_project(&graph_path),
+        );
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let rendezvous = Arc::new(std::sync::Barrier::new(2));
+        let hook_rendezvous = Arc::clone(&rendezvous);
+        state.set_mutation_publication_test_hook(Arc::new(move || {
+            hook_rendezvous.wait();
+            hook_rendezvous.wait();
+        }));
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let worker_events = Arc::clone(&events);
+        let worker_state = state.clone();
+        let worker_path = graph_path.clone();
+        let worker = std::thread::spawn(move || {
+            update_function_signature_with_emitter(
+                &worker_state,
+                project_instance_id,
+                worker_path.as_str().to_string(),
+                "en-US",
+                function_signature_request(&worker_path),
+                |event| worker_events.lock().unwrap().push(event),
+            )
+        });
+
+        rendezvous.wait();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            function_project(&graph_path),
+        );
+        let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        rendezvous.wait();
+        let error = worker.join().unwrap().unwrap_err();
+
+        assert_eq!(error.code, "stale_project_lifecycle");
+        assert!(events.lock().unwrap().is_empty());
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            before_data
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn hydrate_editor_graph_rejects_stale_project_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-hydrate-editor-graph-stale-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        let mut replacement = graph_project(&graph_path);
+        replacement.graphs.get_mut(&graph_path).unwrap().name = "Replacement".into();
+        let replacement_state = state.clone();
+        let replacement_root = root.to_string_lossy().into_owned();
+        state.set_projection_test_hook(Arc::new(move || {
+            replacement_state
+                .activate_project_fixture(replacement_root.clone(), replacement.clone());
+            Ok(())
+        }));
+
+        let error = hydrate_editor_graph_from_state(
+            &state,
+            stale_id,
+            graph_path.as_str().to_string(),
+            "en-US",
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(
+            state.get_data().unwrap().graphs[&graph_path].name,
+            "Replacement"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn graph_mutation_rejects_stale_caller_project() {
+        let first_root = std::env::temp_dir().join(format!(
+            "yssbi-graph-mutation-stale-first-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let other_root = std::env::temp_dir().join(format!(
+            "yssbi-graph-mutation-stale-other-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&first_root).unwrap();
+        std::fs::create_dir_all(&other_root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            first_root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let stale_id = state.capture_project_session().unwrap().instance_id;
+        state.activate_project_fixture(
+            other_root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let history_before = state.history_status();
+        let revisions_before = state.revision_state_for_test();
+        let publication_before = state.publication_state_for_test();
+        let mut events = Vec::new();
+
+        let result = mutate_graph_document_with_emitter(
+            &state,
+            stale_id,
+            graph_path.as_str().to_string(),
+            "en-US",
+            resource_bound_graph_mutation_request(&graph_path),
+            |event| events.push(event),
+        );
+
+        assert_eq!(result.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            data_before
+        );
+        assert_eq!(state.history_status(), history_before);
+        assert_eq!(state.revision_state_for_test(), revisions_before);
+        assert_eq!(state.publication_state_for_test(), publication_before);
+        assert!(events.is_empty());
+        let _ = std::fs::remove_dir_all(first_root);
+        let _ = std::fs::remove_dir_all(other_root);
+    }
+
+    #[test]
+    fn graph_mutation_rejects_project_replacement_before_finalize() {
+        let first_root = std::env::temp_dir().join(format!(
+            "yssbi-graph-mutation-race-first-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let other_root = std::env::temp_dir().join(format!(
+            "yssbi-graph-mutation-race-other-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&first_root).unwrap();
+        std::fs::create_dir_all(&other_root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(
+            first_root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let rendezvous = Arc::new(std::sync::Barrier::new(2));
+        let hook_rendezvous = Arc::clone(&rendezvous);
+        state.set_mutation_publication_test_hook(Arc::new(move || {
+            hook_rendezvous.wait();
+            hook_rendezvous.wait();
+        }));
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let worker_events = Arc::clone(&events);
+        let worker_state = state.clone();
+        let worker_graph_path = graph_path.clone();
+        let worker = std::thread::spawn(move || {
+            mutate_graph_document_with_emitter(
+                &worker_state,
+                project_instance_id,
+                worker_graph_path.as_str().to_string(),
+                "en-US",
+                graph_mutation_request(&worker_graph_path),
+                |event| worker_events.lock().unwrap().push(event),
+            )
+        });
+
+        rendezvous.wait();
+        state.activate_project_fixture(
+            other_root.to_string_lossy().into_owned(),
+            graph_project(&graph_path),
+        );
+        let data_before_release = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let history_before_release = state.history_status();
+        let revisions_before_release = state.revision_state_for_test();
+        let publication_before_release = state.publication_state_for_test();
+        rendezvous.wait();
+        let result = worker.join().unwrap();
+
+        assert_eq!(result.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            data_before_release
+        );
+        assert_eq!(state.history_status(), history_before_release);
+        assert_eq!(state.revision_state_for_test(), revisions_before_release);
+        assert_eq!(
+            state.publication_state_for_test(),
+            publication_before_release
+        );
+        assert!(events.lock().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(first_root);
+        let _ = std::fs::remove_dir_all(other_root);
+    }
 
     #[test]
     fn execution_errors_report_terminal_delivery_and_stable_codes() {
@@ -1325,6 +1969,7 @@ mod tests {
 
         let error = mutate_graph_document_with_emitter(
             &state,
+            ProjectInstanceId::from_existing(state.project_instance_id()),
             graph_path.as_str().to_string(),
             "en-US",
             raw,

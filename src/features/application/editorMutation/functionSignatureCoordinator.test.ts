@@ -158,6 +158,28 @@ describe('executeFunctionSignatureMutation', () => {
     expect(getPendingMutation(operationId)).toBeUndefined();
   });
 
+  it('treats a backend stale lifecycle rejection as stale without publication effects', async () => {
+    const beforeGraph = useGraphDataStore.getState().graphEntities[functionPath];
+    const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+
+    await expect(executeFunctionSignatureMutation(
+      {
+        functionPath,
+        locale: 'en-US',
+        patch: { inputs: [] },
+      },
+      dependencies(vi.fn(async () => {
+        throw { code: 'stale_project_lifecycle', message: 'project was replaced' };
+      })),
+    )).resolves.toEqual({ status: 'stale' });
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(useGraphDataStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
+    expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
+    expect(getPendingMutation(operationId)).toBeUndefined();
+  });
+
   it('rejects missing signature authority before invoke or publication effects', async () => {
     useGraphMetaStore.getState().clear();
     const mutateSignature = vi.fn();

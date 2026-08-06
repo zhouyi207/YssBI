@@ -30,6 +30,8 @@ pub use artifact::{
 pub use builtin::{
     BuiltinConstantParameters, BuiltinVariableParameters, build_builtin_kernel_registry,
 };
+#[cfg(test)]
+pub(crate) use execution_event::RUN_EVENT_KIND_VARIANT_COUNT;
 pub use execution_event::{
     NOOP_RUN_EVENT_SINK, NoopRunEventSink, RunErrorCode, RunEvent, RunEventKind, RunEventSink,
 };
