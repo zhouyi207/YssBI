@@ -1,10 +1,13 @@
+#[cfg(test)]
+use super::{ConnectionId, DocumentNode, DynamicPortBinding, InputState, NodeId, OrderKey};
 use super::{
-    ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicPortBinding,
-    EffectiveInputBinding, GraphDocument, InputState, NodeId, OrderKey, PortAddress, TypedValue,
+    DocumentConnection, DocumentError, EffectiveInputBinding, GraphDocument, PortAddress,
+    TypedValue,
 };
 
+#[cfg(test)]
 impl GraphDocument {
-    pub fn create_node(&mut self, node: DocumentNode) -> Result<(), DocumentError> {
+    pub(crate) fn create_node(&mut self, node: DocumentNode) -> Result<(), DocumentError> {
         if self.nodes.contains_key(&node.id) {
             return Err(DocumentError::DuplicateNode(node.id));
         }
@@ -13,7 +16,7 @@ impl GraphDocument {
         Ok(())
     }
 
-    pub fn delete_node(&mut self, node_id: NodeId) -> Result<DocumentNode, DocumentError> {
+    pub(crate) fn delete_node(&mut self, node_id: NodeId) -> Result<DocumentNode, DocumentError> {
         if !self.nodes.contains_key(&node_id) {
             return Err(DocumentError::NodeNotFound(node_id));
         }
@@ -30,7 +33,7 @@ impl GraphDocument {
         Ok(node)
     }
 
-    pub fn bind_port(
+    pub(crate) fn bind_port(
         &mut self,
         address: PortAddress,
         binding: DynamicPortBinding,
@@ -47,7 +50,7 @@ impl GraphDocument {
         Ok(())
     }
 
-    pub fn connect(
+    pub(crate) fn connect(
         &mut self,
         output: PortAddress,
         input: PortAddress,
@@ -70,7 +73,7 @@ impl GraphDocument {
         Ok(id)
     }
 
-    pub fn disconnect(
+    pub(crate) fn disconnect(
         &mut self,
         connection_id: ConnectionId,
     ) -> Result<DocumentConnection, DocumentError> {
@@ -82,7 +85,7 @@ impl GraphDocument {
         Ok(connection)
     }
 
-    pub fn set_literal(
+    pub(crate) fn set_literal(
         &mut self,
         address: PortAddress,
         literal: Option<TypedValue>,
@@ -104,7 +107,9 @@ impl GraphDocument {
         self.revision.advance();
         Ok(())
     }
+}
 
+impl GraphDocument {
     pub fn effective_input_binding(
         &self,
         address: &PortAddress,

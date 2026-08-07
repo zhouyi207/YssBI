@@ -10,9 +10,8 @@ use crate::node_system::catalog::{
     CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, ParameterConstraint,
-    PortDirection, PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec, TypeExpr,
-    Value,
+    ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
+    PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
 };
 use crate::node_system::registry::NodeRegistry;
 
@@ -459,7 +458,7 @@ impl EditorGraphMutationDto {
             }
             Self::SetLiteral { address, literal } => {
                 let address = address.try_into().map_err(invalid_editor_mutation)?;
-                validate_literal_target(document, registry, &address)?;
+                validate_literal_target(document, registry, &address, literal.as_ref())?;
                 let before = document.input_states.get(&address).cloned();
                 vec![GraphDocumentOperation::SetInputState {
                     address,
@@ -767,154 +766,58 @@ pub(super) fn validate_parameters_with_registry(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {
-    validate_parameters(protocol, parameters)?;
-    for spec in protocol.parameters.parameters.iter() {
-        let (Some(value), TypeExpr::Concrete(type_id)) =
-            (parameters.get(&spec.key), &spec.value_type)
-        else {
-            continue;
-        };
-        if let Some(Err(detail)) = registry.validate_nominal_parameter(type_id, value) {
-            return Err(invalid_editor_mutation(format!(
-                "parameter '{}' is invalid: {detail}",
-                spec.key
-            )));
-        }
-    }
-    Ok(())
+    let nominal = |type_id: &crate::node_system::protocol::TypeId, value: &serde_json::Value| {
+        registry.validate_nominal_parameter(type_id, value)
+    };
+    validate_shared_parameters(protocol, parameters, &nominal)
 }
 
 pub(super) fn validate_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {
-    for key in parameters.keys() {
-        if !protocol
-            .parameters
-            .parameters
-            .iter()
-            .any(|spec| &spec.key == key)
-        {
-            return Err(invalid_editor_mutation(format!(
-                "unknown parameter '{key}' for node type '{}'",
-                protocol.type_id
-            )));
-        }
-    }
-    for spec in protocol.parameters.parameters.iter() {
-        let Some(value) = parameters.get(&spec.key) else {
-            if spec.default_value.is_none()
-                && spec.constraints.contains(&ParameterConstraint::Required)
-            {
-                return Err(invalid_editor_mutation(format!(
-                    "required parameter '{}' is missing",
-                    spec.key
-                )));
-            }
-            continue;
-        };
-        if spec.constraints.contains(&ParameterConstraint::Required) && value.is_null() {
-            return Err(invalid_editor_mutation(format!(
-                "required parameter '{}' cannot be null",
-                spec.key
-            )));
-        }
-        if !parameter_value_matches_type(value, &spec.value_type) {
-            return Err(invalid_editor_mutation(format!(
-                "parameter '{}' does not match its declared type",
-                spec.key
-            )));
-        }
-        for constraint in &spec.constraints {
-            validate_parameter_constraint(&spec.key, value, constraint)?;
-        }
-    }
-    Ok(())
+    let nominal = |_: &crate::node_system::protocol::TypeId, _: &serde_json::Value| None;
+    validate_shared_parameters(protocol, parameters, &nominal)
 }
 
-fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) -> bool {
-    match expected {
-        TypeExpr::Concrete(id) => match id.as_str() {
-            "core.bool" => value.is_boolean(),
-            "core.int64" => value.as_i64().is_some(),
-            "core.float64" => value.is_number(),
-            "core.string" => value.is_string(),
-            _ => true,
-        },
-        TypeExpr::Union(options) => options
-            .iter()
-            .any(|option| parameter_value_matches_type(value, option)),
-        TypeExpr::Generic(_) | TypeExpr::Applied { .. } | TypeExpr::Unknown => true,
-    }
-}
-
-fn validate_parameter_constraint(
-    key: &crate::node_system::protocol::ParameterKey,
-    value: &serde_json::Value,
-    constraint: &ParameterConstraint,
+fn validate_shared_parameters(
+    protocol: &NodeProtocol,
+    parameters: &ParameterValues,
+    nominal: &impl crate::node_system::protocol::validation::NominalParameterValidator,
 ) -> Result<(), MutationConflict> {
-    let valid = match constraint {
-        ParameterConstraint::Required => !value.is_null(),
-        ParameterConstraint::OneOf(options) => options
-            .iter()
-            .any(|option| protocol_value_matches_json(option, value)),
-        ParameterConstraint::IntegerRange { min, max } => value.as_i64().is_some_and(|value| {
-            min.is_none_or(|minimum| value >= minimum) && max.is_none_or(|maximum| value <= maximum)
-        }),
-        ParameterConstraint::Length { min, max } => parameter_length(value).is_some_and(|length| {
-            min.is_none_or(|minimum| length >= minimum as usize)
-                && max.is_none_or(|maximum| length <= maximum as usize)
-        }),
+    let Some(issue) =
+        crate::node_system::protocol::validate_parameter_values(protocol, parameters, nominal)
+            .into_iter()
+            .next()
+    else {
+        return Ok(());
     };
-    if valid {
-        Ok(())
-    } else {
-        Err(invalid_editor_mutation(format!(
-            "parameter '{key}' violates its protocol constraints"
-        )))
-    }
-}
-
-fn parameter_length(value: &serde_json::Value) -> Option<usize> {
-    match value {
-        serde_json::Value::String(value) => Some(value.chars().count()),
-        serde_json::Value::Array(value) => Some(value.len()),
-        serde_json::Value::Object(value) => Some(value.len()),
-        _ => None,
-    }
-}
-
-fn protocol_value_matches_json(expected: &Value, actual: &serde_json::Value) -> bool {
-    match (expected, actual) {
-        (Value::Null, serde_json::Value::Null) => true,
-        (Value::Bool(expected), serde_json::Value::Bool(actual)) => expected == actual,
-        (Value::Integer(expected), actual) => actual.as_i64() == Some(*expected),
-        (Value::Unsigned(expected), actual) => actual.as_u64() == Some(*expected),
-        (Value::Decimal(expected), serde_json::Value::String(actual)) => {
-            expected.as_str() == actual
+    use crate::node_system::protocol::ParameterIssueKind;
+    let detail = match issue.kind {
+        ParameterIssueKind::Unknown => format!(
+            "unknown parameter '{}' for node type '{}'",
+            issue.key, protocol.type_id
+        ),
+        ParameterIssueKind::Required => {
+            format!("required parameter '{}' is missing or null", issue.key)
         }
-        (Value::String(expected), serde_json::Value::String(actual)) => expected.as_ref() == actual,
-        (Value::Bytes(expected), serde_json::Value::Array(actual)) => actual
-            .iter()
-            .map(serde_json::Value::as_u64)
-            .eq(expected.iter().map(|byte| Some(u64::from(*byte)))),
-        (Value::List(expected), serde_json::Value::Array(actual)) => {
-            expected.len() == actual.len()
-                && expected
-                    .iter()
-                    .zip(actual)
-                    .all(|(expected, actual)| protocol_value_matches_json(expected, actual))
+        ParameterIssueKind::InvalidType => {
+            format!("parameter '{}' does not match its declared type", issue.key)
         }
-        (Value::Object(expected), serde_json::Value::Object(actual)) => {
-            expected.len() == actual.len()
-                && expected.iter().all(|(key, expected)| {
-                    actual
-                        .get(key.as_ref())
-                        .is_some_and(|actual| protocol_value_matches_json(expected, actual))
-                })
+        ParameterIssueKind::Constraint => {
+            format!(
+                "parameter '{}' violates its protocol constraints",
+                issue.key
+            )
         }
-        _ => false,
-    }
+        ParameterIssueKind::InvalidNominal(detail) => {
+            format!("parameter '{}' is invalid: {detail}", issue.key)
+        }
+        ParameterIssueKind::InvalidResourceId => {
+            format!("parameter '{}' is not a valid resource id", issue.key)
+        }
+    };
+    Err(invalid_editor_mutation(detail))
 }
 
 fn move_node_operations(
@@ -1087,6 +990,7 @@ fn validate_literal_target(
     document: &GraphDocument,
     registry: &NodeRegistry,
     address: &PortAddress,
+    literal: Option<&TypedValue>,
 ) -> Result<(), MutationConflict> {
     let port = resolve_mutation_port(document, registry, address)?;
     if matches!(port.binding, Some(DynamicPortBinding::Orphan { .. })) {
@@ -1109,6 +1013,10 @@ fn validate_literal_target(
         return Err(invalid_editor_mutation(
             "the input protocol forbids literal overrides",
         ));
+    }
+    if let Some(literal) = literal {
+        crate::node_system::protocol::validate_typed_literal(literal, &port.spec.value_type)
+            .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
 }

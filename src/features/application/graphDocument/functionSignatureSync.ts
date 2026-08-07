@@ -1,11 +1,9 @@
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import type { FunctionSignaturePin, GraphType } from '@/shared/types';
-import { dataTypeFromDisplayString } from '@/shared/types/domain/dataType';
-import {
-  createDataSignaturePin,
-} from '@/shared/types/domain/functionSignaturePin';
 import type { FunctionSignatureDto } from '@/shared/types/dto/editorMutation';
+import type { FunctionEditorProjectionDto } from '@/shared/types/dto/editorProjection';
 import type { ProjectGraphIndexRow } from '@/services/project/projectService';
+import type { PreparedFunctionDeltaInstall } from '@/features/application/editorMutation/projectPublicationCoordinator';
 
 /** 从后端图 DTO / 领域图读取签名并写入 graphMetaStore（UI 签名唯一来源，见 functionResourceView）。 */
 export type FunctionSignatureSource = {
@@ -39,29 +37,35 @@ export function syncFunctionSignatureFromGraph(graph: FunctionSignatureSource): 
   });
 }
 
-export function functionSignaturePins(signature: FunctionSignatureDto): {
-  functionInputs: FunctionSignaturePin[];
-  functionOutputs: FunctionSignaturePin[];
-} {
-  const functionInputs = signature.parameters.map((parameter) =>
-    createDataSignaturePin(
-      parameter.id,
-      parameter.name,
-      dataTypeFromDisplayString(parameter.type_name) ?? { kind: 'Any' },
-    ),
-  );
-  const returnType = signature.return_type
-    ? dataTypeFromDisplayString(signature.return_type) ?? { kind: 'Any' as const }
-    : null;
+export function installFunctionEditorProjection(
+  graphPath: string,
+  signature: FunctionSignatureDto,
+  projection: FunctionEditorProjectionDto,
+): PreparedFunctionDeltaInstall {
   return {
-    functionInputs,
-    functionOutputs: returnType
-      ? [createDataSignaturePin('return', 'Result', returnType)]
-      : [],
+    graphPath,
+    revision: projection.functionRevision,
+    signature: structuredClone(signature),
+    functionInputs: structuredClone(projection.inputs),
+    functionOutputs: structuredClone(projection.outputs),
   };
 }
 
-
+function hasExactFunctionProjection(
+  existing: ReturnType<typeof useGraphMetaStore.getState>['graphs'][string],
+  signature: FunctionSignatureDto,
+  projection: FunctionEditorProjectionDto,
+): boolean {
+  return JSON.stringify({
+    signature: existing.functionSignature,
+    inputs: existing.functionInputs,
+    outputs: existing.functionOutputs,
+  }) === JSON.stringify({
+    signature,
+    inputs: projection.inputs,
+    outputs: projection.outputs,
+  });
+}
 
 /** 项目打开 / 索引刷新：从 `getProjectIndex` 的函数行 hydrate 签名表（与后端索引层对齐）。 */
 export function hydrateFunctionSignaturesFromProjectIndex(
@@ -70,14 +74,26 @@ export function hydrateFunctionSignaturesFromProjectIndex(
   const graphMetaStore = useGraphMetaStore.getState();
   for (const row of graphs) {
     if (row.type !== 'function') continue;
-    if (row.functionRevision == null || !row.functionSignature) continue;
     const existing = graphMetaStore.graphs[row.path];
-    if (existing?.functionRevision != null
-      && existing.functionRevision >= row.functionRevision) continue;
+    if (existing?.functionRevision != null) {
+      if (existing.functionRevision > row.functionRevision) continue;
+      if (existing.functionRevision === row.functionRevision
+        && hasExactFunctionProjection(
+          existing,
+          row.functionSignature,
+          row.functionEditorProjection,
+        )) continue;
+    }
+    const install = installFunctionEditorProjection(
+      row.path,
+      row.functionSignature,
+      row.functionEditorProjection,
+    );
     const patch = {
-      functionRevision: row.functionRevision,
-      functionSignature: row.functionSignature,
-      ...functionSignaturePins(row.functionSignature),
+      functionRevision: install.revision,
+      functionSignature: install.signature,
+      functionInputs: [...install.functionInputs],
+      functionOutputs: [...install.functionOutputs],
     };
     if (existing) {
       graphMetaStore.updateGraph(row.path, patch);

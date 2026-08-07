@@ -6,6 +6,11 @@ import Scatter from '@/views/PlotView/Scatter';
 import Line from '@/views/PlotView/Line';
 import Histogram from '@/views/PlotView/Histogram';
 import { WorksheetEmptyState } from './WorksheetEmptyState';
+import {
+  assertCurrentProjectIdentity,
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 interface WorksheetChartPreviewProps {
   document: WorksheetDocument | null;
@@ -31,21 +36,36 @@ export function WorksheetChartPreview({ document }: WorksheetChartPreviewProps) 
       return;
     }
 
-    const cached = getCachedWorksheetPreview(document);
+    const identity = captureProjectIdentity();
+    const cached = getCachedWorksheetPreview(identity.projectInstanceId, document);
     if (cached) {
+      if (!isCurrentProjectIdentity(identity)) return;
       setPreview(cached);
       setLoading(false);
       return;
     }
 
+    const previewIdentity = {
+      projectInstanceId: identity.projectInstanceId,
+      isCurrent: () => isCurrentProjectIdentity(identity),
+      assertCurrent: () => assertCurrentProjectIdentity(identity),
+    };
     const timer = window.setTimeout(() => {
       void (async () => {
+        if (!isCurrentProjectIdentity(identity)) return;
         setLoading(true);
         try {
-          const result = await getWorksheetPreview(document, () => fetchWorksheetPreview(document));
+          const result = await getWorksheetPreview(
+            identity.projectInstanceId,
+            document,
+            () => fetchWorksheetPreview(document, previewIdentity),
+          );
+          if (!isCurrentProjectIdentity(identity)) return;
           setPreview(result);
+        } catch {
+          if (!isCurrentProjectIdentity(identity)) return;
         } finally {
-          setLoading(false);
+          if (isCurrentProjectIdentity(identity)) setLoading(false);
         }
       })();
     }, 300);

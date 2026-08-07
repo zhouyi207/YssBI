@@ -12,8 +12,33 @@ import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailColumnList } from '../shared/DetailColumnList';
 import { DetailForm, DetailNameField } from '../shared/DetailForm';
 import { DetailSectionHeader } from '../shared/DetailText';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 const CHART_TYPES: WorksheetChartType[] = ['histogram', 'scatter', 'line'];
+
+type DatabaseMetadataUpdater = (
+  id: string,
+  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
+) => void;
+
+export async function hydrateWorksheetDatabaseMetadata(
+  databaseId: string,
+  updateDatabase: DatabaseMetadataUpdater,
+  isCancelled: () => boolean = () => false,
+): Promise<void> {
+  const identity = captureProjectIdentity();
+  const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, databaseId);
+  if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
+  updateDatabase(databaseId, {
+    name: meta.name,
+    columns: meta.columns,
+    rowCount: meta.rowCount,
+    columnCount: meta.columnCount,
+  });
+}
 
 function isNumericType(type: string): boolean {
   const t = type.toLowerCase();
@@ -59,14 +84,9 @@ export function WorksheetDetailPanel({ document }: WorksheetDetailPanelProps) {
     if (!databaseId) return;
     const existing = databases[databaseId] as { columns?: unknown[] } | undefined;
     if (existing?.columns && existing.columns.length > 0) return;
-    void DatabaseService.getDatabaseMeta(databaseId).then((meta) => {
-      updateDatabase(databaseId, {
-        name: meta.name,
-        columns: meta.columns,
-        rowCount: meta.rowCount,
-        columnCount: meta.columnCount,
-      });
-    });
+    let cancelled = false;
+    void hydrateWorksheetDatabaseMetadata(databaseId, updateDatabase, () => cancelled);
+    return () => { cancelled = true; };
   }, [document.databaseId, databases, updateDatabase]);
 
   const numericColumns = columns.filter((c) => isNumericType(c.type));

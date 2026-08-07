@@ -50,6 +50,7 @@ mod tests {
                     graph_revision: GraphRevision::new(7),
                     registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
                     resource_versions: ResourceVersionSet::new(),
+                    resource_observations: Default::default(),
                 },
                 compile_id: CompileId::new(1),
             },

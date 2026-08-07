@@ -29,6 +29,7 @@ fn basis(revision: u64) -> CompilationBasis<GraphRevision> {
         graph_revision: GraphRevision::new(revision),
         registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),
         resource_versions: BTreeMap::new(),
+        resource_observations: BTreeMap::new(),
     }
 }
 

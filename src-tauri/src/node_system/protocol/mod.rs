@@ -4,6 +4,7 @@ mod identity;
 mod model;
 mod parameter;
 mod types;
+pub mod validation;
 mod value;
 
 pub use identity::{
@@ -27,5 +28,9 @@ pub use parameter::{
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
     SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, TypeConstraint, TypeExpr, TypeTerm,
+};
+pub use validation::{
+    LiteralValidationIssue, LocatedParameterIssue, ParameterIssueKind, validate_parameter_values,
+    validate_typed_literal,
 };
 pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};

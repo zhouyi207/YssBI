@@ -7,6 +7,7 @@ import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
 
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
@@ -37,7 +38,10 @@ vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', as
   ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
   prepareGraphProjectionForPublication: vi.fn(async (graphPath: string) =>
     (await import('@/tests/helpers/editorProjectionFixtures'))
-      .makeEditorProjectionFixture({ graphPath }).projection),
+      .makeEditorProjectionFixture({
+        graphPath,
+        sourceRevision: graphPath === functionPath ? 12 : graphPath === eventPath ? 3 : 1,
+      }).projection),
 }));
 
 function installIntVariable(id: string, value: number): void {
@@ -73,6 +77,13 @@ function replacement(graphPath: string, revision: number, title: string) {
       sourceRevision: revision,
       title,
     }).projection,
+    ...(graphPath.startsWith('functions/') ? {
+      functionEditorProjection: {
+        functionRevision: revision,
+        inputs: [],
+        outputs: [{ id: 'return', name: 'Result', dataType: { kind: 'Float64' as const } }],
+      },
+    } : {}),
   };
 }
 
@@ -113,6 +124,40 @@ function completeResult(causedBy = operationId): ResourceMutationResultDto {
       expectedGraphPaths: [functionPath, eventPath],
     },
     history: { canUndo: false, canRedo: true },
+  };
+}
+
+function recoveryIndex(graphPaths: string[]): ProjectIndexRow {
+  return {
+    projectInstanceId,
+    projectName: 'History recovery',
+    appVersion: '0.2.7',
+    exportTime: '',
+    publicationRevision: 1,
+    history: { canUndo: false, canRedo: true },
+    graphs: graphPaths.map((path) => path === functionPath
+      ? {
+          path,
+          name: 'Main',
+          type: 'function' as const,
+          revision: 12,
+          functionRevision: 12,
+          functionSignature: { parameters: [], return_type: 'float64' },
+          functionEditorProjection: {
+            functionRevision: 12,
+            inputs: [],
+            outputs: [{ id: 'return', name: 'Result', dataType: { kind: 'Float64' as const } }],
+          },
+        }
+      : {
+          path,
+          name: path === eventPath ? 'Secondary' : 'Invalidated',
+          type: 'event' as const,
+          revision: path === eventPath ? 3 : 1,
+        }),
+    variables: [],
+    worksheets: [],
+    databases: [],
   };
 }
 
@@ -184,8 +229,8 @@ describe('executeHistoryMutation', () => {
           patch: { from: functionPath, to: restoredPath },
         },
       }],
-      projectionReplacements: [],
-      projectionStatus: { status: 'incomplete', invalidatedGraphPaths: [restoredPath] },
+      projectionReplacements: [replacement(restoredPath, 1, 'Restored Function')],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [restoredPath] },
       history: { canUndo: false, canRedo: true },
     };
 
@@ -291,6 +336,7 @@ describe('executeHistoryMutation', () => {
       history: { canUndo: false, canRedo: true },
     };
     const hydrateGraph = vi.fn(async () => true);
+    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue(recoveryIndex([functionPath]));
     const eventHandler = new ResourceMutationCommittedHandler();
     let statusAfterEvent: ReturnType<typeof useHistoryStore.getState> | undefined;
     const invoke = vi.fn(async () => {
@@ -312,7 +358,7 @@ describe('executeHistoryMutation', () => {
     });
     expect(statusAfterEvent).toMatchObject({ canUndo: true, canRedo: false, pending: true });
     expect(outcome).toEqual({ status: 'applied', result });
-    expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(5);
+    expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(12);
     expect(useHistoryStore.getState()).toEqual({
       canUndo: false,
       canRedo: true,
@@ -409,6 +455,9 @@ describe('executeHistoryMutation', () => {
       invalidatedGraphPaths: [eventPath, invalidatedPath],
     };
     const hydrateGraph = vi.fn(async () => true);
+    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue(
+      recoveryIndex([functionPath, eventPath, invalidatedPath]),
+    );
 
     await executeHistoryMutation(
       { direction: 'undo', graphPath: functionPath, locale: 'en-US' },
@@ -416,7 +465,7 @@ describe('executeHistoryMutation', () => {
     );
 
     expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(12);
-    expect(useGraphDataStore.getState().graphEntities[eventPath].sourceRevision).toBe(2);
+    expect(useGraphDataStore.getState().graphEntities[eventPath].sourceRevision).toBe(3);
     expect(hydrateGraph).not.toHaveBeenCalled();
     expect(prepareGraphProjectionForPublication).toHaveBeenCalledTimes(3);
     expect(prepareGraphProjectionForPublication).toHaveBeenCalledWith(

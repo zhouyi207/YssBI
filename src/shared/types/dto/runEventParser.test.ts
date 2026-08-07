@@ -50,6 +50,57 @@ describe('execution wire parsers', () => {
     expect(() => parseExecutionDemandDto(extraPort)).toThrow();
   });
 
+  it.each([
+    '',
+    'not-a-resource',
+    'events/contract.yssbi-function',
+    'functions/contract.yssbi-event',
+    'events//contract.yssbi-event',
+    'events/../contract.yssbi-event',
+  ])('rejects malformed graph output path %j', (graphPath) => {
+    const outputs = clone(executionWire.demands.find((demand) => demand.type === 'outputs'));
+    const firstOutput = (record(outputs).outputs as Array<Record<string, unknown>>)[0];
+    firstOutput.graphPath = graphPath;
+
+    expect(() => parseExecutionDemandDto(outputs)).toThrow('graph output reference');
+  });
+
+  it.each([
+    'events/folder/sub-folder/Main.v2.yssbi-event',
+    'functions/library/math/Calculate.yssbi-function',
+    'events/Sales Report 中文.yssbi-event',
+    'functions/销售 预测.yssbi-function',
+  ])('accepts opaque execution graph path %j', (graphPath) => {
+    const outputs = clone(executionWire.demands.find((demand) => demand.type === 'outputs'));
+    const firstOutput = (record(outputs).outputs as Array<Record<string, unknown>>)[0];
+    firstOutput.graphPath = graphPath;
+    expect(() => parseExecutionDemandDto(outputs)).not.toThrow();
+
+    const event = executionWire.runEvents[0];
+    expect(() => parseRunEvent({
+      ...event,
+      correlation: { ...event.correlation, graphPath },
+    })).not.toThrow();
+  });
+
+  it('requires UUID-backed declared and instance port identities', () => {
+    const outputs = clone(executionWire.demands.find((demand) => demand.type === 'outputs'));
+    const references = record(outputs).outputs as Array<Record<string, unknown>>;
+
+    (references[0].port as Record<string, unknown>).nodeId = 'not-a-uuid';
+    expect(() => parseExecutionDemandDto(outputs)).toThrow('graph output reference');
+
+    (references[0].port as Record<string, unknown>).nodeId =
+      '00000000-0000-0000-0000-000000000002';
+    (references[1].port as Record<string, unknown>).nodeId = 'not-a-uuid';
+    expect(() => parseExecutionDemandDto(outputs)).toThrow('graph output reference');
+
+    (references[1].port as Record<string, unknown>).nodeId =
+      '00000000-0000-0000-0000-000000000002';
+    (references[1].port as Record<string, unknown>).instanceId = 'not-a-uuid';
+    expect(() => parseExecutionDemandDto(outputs)).toThrow('graph output reference');
+  });
+
   it('parses every Rust-generated RunEventKindDto variant', () => {
     expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
     expect(executionWire.runEvents.map((event) => event.kind.type))
@@ -72,6 +123,51 @@ describe('execution wire parsers', () => {
       ...valid,
       correlation: { ...valid.correlation, runId: '01' },
     })).toThrow();
+  });
+
+  it.each([
+    'not-a-resource',
+    'events/contract.yssbi-function',
+    'functions/contract.yssbi-event',
+    'events//contract.yssbi-event',
+    'events/../contract.yssbi-event',
+  ])('rejects malformed run correlation graph path %j', (graphPath) => {
+    const valid = executionWire.runEvents[0];
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: { ...valid.correlation, graphPath },
+    })).toThrow('run correlation');
+  });
+
+  it('requires a UUID correlation nodeId while keeping nodeTypeId opaque', () => {
+    const valid = executionWire.runEvents[0];
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: { ...valid.correlation, nodeId: 'not-a-uuid' },
+    })).toThrow('run correlation');
+    expect(() => parseRunEvent({
+      ...valid,
+      correlation: {
+        ...valid.correlation,
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        nodeTypeId: 'opaque registry identifier/with spaces',
+      },
+    })).not.toThrow();
+  });
+
+  it('rejects malformed OutputReady graph and port identities', () => {
+    const outputReady = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
+    if (!outputReady) throw new Error('missing outputReady fixture');
+
+    const malformedPath = clone(outputReady);
+    (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath =
+      'functions/contract.yssbi-event';
+    expect(() => parseRunEvent(malformedPath)).toThrow('graph output reference');
+
+    const malformedPort = clone(outputReady);
+    const output = record(record(malformedPort).kind).output as Record<string, unknown>;
+    (output.port as Record<string, unknown>).nodeId = 'not-a-uuid';
+    expect(() => parseRunEvent(malformedPort)).toThrow('graph output reference');
   });
 
   it('bounds u32 event indexes while accepting the exact maximum', () => {

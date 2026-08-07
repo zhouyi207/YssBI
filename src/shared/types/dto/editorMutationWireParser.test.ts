@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   parseGraphDeltaDto,
   parseGraphMutationResultDto,
+  parseGraphProjectionReplacementDto,
 } from './editorMutationWireParser';
 
 const graphPath = 'events/Main.yssbi-event';
+const functionPath = 'functions/Forecast.yssbi-function';
 const operationId = '00000000-0000-0000-0000-000000000401';
 const nodeId = '00000000-0000-0000-0000-000000000101';
 const instanceId = '00000000-0000-0000-0000-000000000102';
@@ -66,38 +68,119 @@ function delta() {
   };
 }
 
+function projection(path: string, revision: number) {
+  return {
+    basis: {
+      graphPath: path,
+      graphRevision: revision,
+      registryFingerprint: '0'.repeat(64),
+      resourceVersions: {},
+    },
+    graphPath: path,
+    sourceRevision: revision,
+    nodes: [],
+    connections: [],
+    diagnostics: [],
+    hasBlockingDiagnostics: false,
+  };
+}
+
+function functionEditorProjection(revision = 5) {
+  return {
+    functionRevision: revision,
+    inputs: [{ id: 'sales', name: 'Observed sales', dataType: { kind: 'Float64' } }],
+    outputs: [{ id: 'return', name: 'Array<String>', dataType: { kind: 'Array', inner: { kind: 'String' } } }],
+  };
+}
+
 function graphResult() {
   return {
     projectInstanceId: 'project-a',
     delta: delta(),
     projectionReplacement: {
       graphPath,
-      projection: {
-        basis: {
-          graphPath,
-          graphRevision: 5,
-          registryFingerprint: '0'.repeat(64),
-          resourceVersions: {},
-        },
-        graphPath,
-        sourceRevision: 5,
-        nodes: [],
-        connections: [],
-        diagnostics: [],
-        hasBlockingDiagnostics: false,
-      },
+      projection: projection(graphPath, 5),
     },
     history: { canUndo: true, canRedo: false },
   };
 }
 
 describe('editor mutation wire parser', () => {
+  it('strictly branches event and function projection replacement wire shapes', () => {
+    const eventReplacement = { graphPath, projection: projection(graphPath, 5) };
+    const functionReplacement = {
+      graphPath: functionPath,
+      projection: projection(functionPath, 5),
+      functionEditorProjection: functionEditorProjection(),
+    };
+
+    expect(parseGraphProjectionReplacementDto(eventReplacement)).toEqual(eventReplacement);
+    expect(parseGraphProjectionReplacementDto(functionReplacement)).toEqual(functionReplacement);
+    expect(() => parseGraphProjectionReplacementDto({
+      ...eventReplacement,
+      functionEditorProjection: functionEditorProjection(),
+    })).toThrow('projection replacement');
+    expect(() => parseGraphProjectionReplacementDto({
+      graphPath: functionPath,
+      projection: projection(functionPath, 5),
+    })).toThrow('projection replacement');
+  });
+
+  it.each([
+    'events/Sales Report 中文.yssbi-event',
+    'functions/销售 预测.yssbi-function',
+  ])('parses opaque replacement path %j', (path) => {
+    const replacement = path.startsWith('functions/')
+      ? {
+          graphPath: path,
+          projection: projection(path, 5),
+          functionEditorProjection: functionEditorProjection(),
+        }
+      : { graphPath: path, projection: projection(path, 5) };
+    expect(parseGraphProjectionReplacementDto(replacement)).toEqual(replacement);
+  });
+
+  it('rejects empty and whitespace-only Struct keys in function replacement pins', () => {
+    for (const inner of ['', '   ']) {
+      const malformed = {
+        graphPath: functionPath,
+        projection: projection(functionPath, 5),
+        functionEditorProjection: {
+          ...functionEditorProjection(),
+          outputs: [{ id: 'return', name: 'Model', dataType: { kind: 'Struct', inner } }],
+        },
+      };
+      expect(() => parseGraphProjectionReplacementDto(malformed)).toThrow('projection replacement');
+    }
+  });
+
   it('parses every Rust graph patch operation from an exact delta', () => {
     expect(parseGraphDeltaDto(delta())).toEqual(delta());
   });
 
+  it.each([
+    'events/folder/sub-folder/Main.v2.yssbi-event',
+    'functions/library/math/Calculate.yssbi-function',
+    'events/Sales Report 中文.yssbi-event',
+    'functions/销售 预测.yssbi-function',
+  ])('accepts opaque graph mutation path %j', (nestedGraphPath) => {
+    const nested = { ...delta(), graphPath: nestedGraphPath };
+    expect(parseGraphDeltaDto(nested)).toEqual(nested);
+  });
+
   it('rejects malformed graph delta identity, revisions, operations, and extra fields', () => {
-    expect(() => parseGraphDeltaDto({ ...delta(), graphPath: '' })).toThrow('graphPath');
+    for (const malformedPath of [
+      '',
+      'not-a-resource',
+      'events/Main.yssbi-function',
+      'functions/Main.yssbi-event',
+      'events//Main.yssbi-event',
+      'events/../Main.yssbi-event',
+    ]) {
+      expect(() => parseGraphDeltaDto({ ...delta(), graphPath: malformedPath })).toThrow(
+        'graphPath',
+      );
+    }
     expect(() => parseGraphDeltaDto({ ...delta(), toRevision: 5.5 })).toThrow('revision');
     expect(() => parseGraphDeltaDto({ ...delta(), causedBy: 'not-a-uuid' })).toThrow('causedBy');
     expect(() => parseGraphDeltaDto({ ...delta(), extra: true })).toThrow('exact');

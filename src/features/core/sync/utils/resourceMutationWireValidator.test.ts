@@ -37,6 +37,22 @@ function graphDelta(): ResourceDeltaDto {
   };
 }
 
+function functionDelta(): ResourceDeltaDto {
+  return {
+    resource: { kind: 'function', key: 'functions/library/math/Calculate.yssbi-function' },
+    fromRevision: 4,
+    toRevision: 5,
+    causedBy: operationId,
+    payload: {
+      kind: 'function',
+      patch: {
+        before: { parameters: [], return_type: null },
+        after: { parameters: [], return_type: null },
+      },
+    },
+  };
+}
+
 describe('resource mutation wire envelope', () => {
   it.each([
     ['database', databaseDelta],
@@ -74,6 +90,27 @@ describe('resource mutation wire envelope', () => {
     delta.payload.patch.extension = true;
 
     expect(areResourceDeltasValid([delta])).toBe(true);
+  });
+
+  it.each([
+    'events/Main.yssbi-function',
+    'events/../Main.yssbi-event',
+    'events//Main.yssbi-event',
+  ])('rejects malformed graph resource identity %j', (key) => {
+    const delta = graphDelta();
+    delta.resource.key = key;
+
+    expect(areResourceDeltasValid([delta])).toBe(false);
+  });
+
+  it('accepts nested and opaque event and function resource identities', () => {
+    const event = graphDelta();
+    event.resource.key = 'events/Sales Report 中文.yssbi-event';
+    const functionResource = functionDelta();
+    functionResource.resource.key = 'functions/销售 预测.yssbi-function';
+
+    expect(areResourceDeltasValid([event])).toBe(true);
+    expect(areResourceDeltasValid([functionResource])).toBe(true);
   });
 });
 

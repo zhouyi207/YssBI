@@ -27,6 +27,7 @@ fn event(graph_path: &str, run_id: Option<u64>) -> SpanEvent {
             graph_revision: GraphRevision::new(3),
             registry_fingerprint: RegistryFingerprint::from_bytes([5; 32]),
             resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
         },
         compile_id: CompileId::new(11),
     };

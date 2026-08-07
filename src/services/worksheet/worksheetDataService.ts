@@ -6,8 +6,15 @@ import type {
   WorksheetPreviewPayload,
 } from '@/shared/types/domain';
 
+export interface WorksheetPreviewProjectIdentity {
+  readonly projectInstanceId: string;
+  isCurrent(): boolean;
+  assertCurrent(): void;
+}
+
 export async function fetchWorksheetPreview(
   document: WorksheetDocument,
+  identity: WorksheetPreviewProjectIdentity,
 ): Promise<WorksheetPreviewPayload> {
   const { databaseId, chartType, encodings } = document;
 
@@ -21,8 +28,10 @@ export async function fetchWorksheetPreview(
       if (!column) return { kind: 'empty' };
 
       const distributions = (await DatabaseService.getColumnDistribution(
+        identity.projectInstanceId,
         databaseId,
       )) as ColumnDistribution[];
+      identity.assertCurrent();
       const match = distributions.find((d) => d.columnName === column);
       if (!match) {
         return { kind: 'error', message: `Column "${column}" not found` };
@@ -48,12 +57,21 @@ export async function fetchWorksheetPreview(
       const yCol = encodings.y;
       if (!xCol || !yCol) return { kind: 'empty' };
 
-      const pair = await WorksheetService.getPlotColumnPair(databaseId, xCol, yCol);
+      const pair = await WorksheetService.getPlotColumnPair(
+        identity.projectInstanceId,
+        databaseId,
+        xCol,
+        yCol,
+      );
+      identity.assertCurrent();
       return { kind: chartType, pair };
     }
 
     return { kind: 'empty' };
   } catch (error) {
+    if (!identity.isCurrent()) {
+      identity.assertCurrent();
+    }
     return {
       kind: 'error',
       message: error instanceof Error ? error.message : String(error),

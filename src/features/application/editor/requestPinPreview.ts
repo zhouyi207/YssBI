@@ -76,6 +76,10 @@ function reject(reason: PinPreviewRejectionReason): PinPreviewRequestResult {
   return { status: 'rejected', reason };
 }
 
+function staleSettlement(): PinPreviewRequestResult {
+  return { status: 'rejected', reason: 'stale-project-lifecycle' };
+}
+
 function validatePin(pin: PinData | undefined): PinPreviewRejectionReason | null {
   if (!pin) return 'missing-pin';
   if (!pin.address) return 'missing-address';
@@ -136,12 +140,13 @@ export async function requestPinPreview(
   pinId: string,
 ): Promise<PinPreviewRequestResult> {
   const captured = capturePreviewRequest(graphPath, pinId);
+  if (captured === 'stale-project-lifecycle') return staleSettlement();
   if (typeof captured === 'string') return reject(captured);
 
   try {
     assertCurrentProjectIdentity(captured.authority.project);
   } catch {
-    return reject('stale-project-lifecycle');
+    return staleSettlement();
   }
   if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
     return reject('missing-resource');
@@ -156,10 +161,6 @@ export async function requestPinPreview(
     generation,
     runId: null,
     terminal: 'pending',
-  };
-  const rejectStaleSettlement = (): PinPreviewRequestResult => {
-    store.removePinPreview(graphPath, captured.output.port, generation);
-    return { status: 'rejected', reason: 'stale-project-lifecycle' };
   };
 
   try {
@@ -177,8 +178,12 @@ export async function requestPinPreview(
       },
     );
   } catch (error) {
+    if (!isCurrentProjectIdentity(captured.authority.project)) {
+      return staleSettlement();
+    }
     if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
-      return rejectStaleSettlement();
+      store.removePinPreview(graphPath, captured.output.port, generation);
+      return staleSettlement();
     }
     const message = formatErrorMessage(error);
     store.failPinPreview(graphPath, captured.output.port, generation, message);
@@ -186,8 +191,12 @@ export async function requestPinPreview(
     return { status: 'failed', generation, error: message };
   }
 
+  if (!isCurrentProjectIdentity(captured.authority.project)) {
+    return staleSettlement();
+  }
   if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
-    return rejectStaleSettlement();
+    store.removePinPreview(graphPath, captured.output.port, generation);
+    return staleSettlement();
   }
   const preview = lookupPinPreview(
     useExecutionStore.getState().getGraph(graphPath).pinPreviews,

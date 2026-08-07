@@ -30,17 +30,9 @@ export function buildClipboardSnapshot(nodeIds: string[] , graphPath: string): C
       });
     }
 
-    const params: ClipboardEntry['params'] = {};
-    if (node.variableId) params.variableId = node.variableId;
-    if (node.variableName) params.variableName = node.variableName;
-    if (node.variableType) params.variableType = node.variableType;
-    if (node.subGraphPath) params.subGraphPath = node.subGraphPath;
-    if (node.dataframeId) params.dataframeId = node.dataframeId;
-
     entries.push({
       nodeType: node.nodeType,
       position: { x: node.position.x, y: node.position.y },
-      params: Object.keys(params).length > 0 ? params : undefined,
       pins,
     });
   }

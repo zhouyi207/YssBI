@@ -2,7 +2,7 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
-import { loadActivatedProject, useProjectIOStore } from '@/features/core/dataStore';
+import { loadActivatedProject } from '@/features/core/dataStore';
 import {
     applyProjectLifecycleReceipt,
     type ProjectLifecycleReceiptDependencies,
@@ -29,17 +29,9 @@ export class ProjectClearedHandler extends BaseEventHandler<void> {
     handle(_payload: void, callbacks?: EventCallbacks): void {
         this.log('Project cleared');
         
-        useProjectIOStore.getState().loadProjectFromData(
-            {
-                variables: {},
-                graphs: {},
-                databases: {},
-                metadata: { exportTime: '', appVersion: '' },
-            },
-            null
-        );
-        
-        callbacks?.onProjectCleared?.();
+        createProjectLifecycleReceiptDependencies(
+            (callbacks ?? this.callbacks)?.onProjectCleared,
+        ).clearProject();
     }
 }
 

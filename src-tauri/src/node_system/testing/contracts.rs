@@ -14,15 +14,20 @@ use crate::node_system::catalog::{
 };
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
-    DocumentNode, GraphDeltaEvent, GraphDocument, GraphDocumentPatch, GraphResourcePath,
-    GraphRevision, HistoryStatusDto, NodeId, NodePosition, OperationId, PortAddress,
-    PortInstanceId, ResourceRevision,
+    DocumentNode, FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionParameterId,
+    FunctionResourceKey, FunctionSignature, GraphDeltaEvent, GraphDocument, GraphDocumentPatch,
+    GraphResourcePath, GraphRevision, HistoryStatusDto, MutationRequest, NodeId, NodePosition,
+    OperationId, PortAddress, PortInstanceId, ResourceKey, ResourceRevision,
 };
 use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::{
     RUN_EVENT_KIND_VARIANT_COUNT, ResultSourceId, RunErrorCode, RunEvent, RunEventKind,
+};
+use crate::project::{
+    GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectGraphIndexEntry,
+    ProjectInstanceId, ProjectState,
 };
 
 use serde_json::{Value, json};
@@ -219,6 +224,7 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
         graph_revision: correlation.graph_revision,
         registry_fingerprint: correlation.registry_fingerprint.clone(),
         resource_versions: correlation.resource_versions.clone(),
+        resource_observations: Default::default(),
     };
     let kinds = [
         RunEventKind::RunStarted,
@@ -360,6 +366,7 @@ fn fingerprint_wire_from_production_encoders(
         graph_revision: correlation.graph_revision,
         registry_fingerprint: correlation.registry_fingerprint.clone(),
         resource_versions: correlation.resource_versions.clone(),
+        resource_observations: Default::default(),
     };
     let run_event = serde_json::to_value(RunEventDto::from(RunEvent {
         correlation: correlation.clone(),
@@ -426,6 +433,10 @@ fn contracts() -> BTreeMap<&'static str, Value> {
         ("i18n-inventory.json", i18n_contract(&registry)),
         ("localized-catalog.json", localized_catalog),
         ("editor-projection.json", editor_projection),
+        (
+            "function-editor-projection.json",
+            function_editor_projection_contract(),
+        ),
         ("fingerprint-wire.json", fingerprint_wire),
         ("project-events.json", project_events_contract()),
         ("execution-wire.json", execution_wire_contract(&registry)),
@@ -442,6 +453,122 @@ fn write_fixture(path: &Path, value: &Value) {
     encoded.push('\n');
     fs::write(path, encoded)
         .unwrap_or_else(|error| panic!("failed to update fixture {}: {error}", path.display()));
+}
+
+#[test]
+fn function_editor_projection_rejects_empty_struct_keys() {
+    for type_name in ["Struct<>", "Struct<   >"] {
+        let input = FunctionDocument::new(FunctionSignature {
+            parameters: vec![FunctionParameter {
+                id: FunctionParameterId("model".into()),
+                name: "Model".into(),
+                type_name: type_name.into(),
+            }],
+            return_type: None,
+        });
+        let output = FunctionDocument::new(FunctionSignature {
+            parameters: Vec::new(),
+            return_type: Some(type_name.into()),
+        });
+
+        assert!(
+            crate::node_system::analysis::build_function_editor_projection(&input).is_err(),
+            "function editor input accepted invalid type {type_name:?}"
+        );
+        assert!(
+            crate::node_system::analysis::build_function_editor_projection(&output).is_err(),
+            "function editor output accepted invalid type {type_name:?}"
+        );
+    }
+}
+
+fn function_editor_projection_contract() -> Value {
+    let function = FunctionDocument {
+        revision: ResourceRevision::new(1),
+        signature: FunctionSignature {
+            parameters: vec![FunctionParameter {
+                id: FunctionParameterId("sales".into()),
+                name: "Observed sales".into(),
+                type_name: "DataSeries<Float64>".into(),
+            }],
+            return_type: Some("Array<String>".into()),
+        },
+    };
+    let function_editor_projection =
+        crate::node_system::analysis::build_function_editor_projection(&function)
+            .expect("function fixture types must resolve");
+    let index = serde_json::to_value(ProjectGraphIndexEntry {
+        path: "functions/forecast.yssbi-function".into(),
+        name: "Forecast".into(),
+        graph_type: GraphDocumentKind::Function,
+        revision: ResourceRevision::new(1),
+        function_revision: Some(function.revision),
+        function_signature: Some(function.signature.clone()),
+        function_editor_projection: Some(function_editor_projection.clone()),
+    })
+    .expect("project index row must serialize");
+    let state = ProjectState::new();
+    state.activate_project_fixture(
+        "function-editor-projection-contract".into(),
+        ProjectData::new(),
+    );
+    let graph_path =
+        crate::project::GraphResourcePath::new("functions/forecast.yssbi-function").unwrap();
+    state
+        .insert_graph(
+            graph_path.clone(),
+            GraphResourceDocument::new("Forecast", GraphDocumentKind::Function),
+        )
+        .unwrap();
+    let result = state
+        .update_function_signature_observed(
+            &ProjectInstanceId::from_existing(state.project_instance_id()),
+            &graph_path,
+            "en-US",
+            MutationRequest {
+                resource: ResourceKey::Function(FunctionResourceKey(graph_path.as_str().into())),
+                base_revision: ResourceRevision::INITIAL,
+                operation_id: OperationId::from_uuid(Uuid::from_u128(701)),
+                payload: FunctionDocumentPatch::new(
+                    FunctionSignature::default(),
+                    function.signature.clone(),
+                ),
+            },
+            |_| {},
+        )
+        .expect("function mutation must publish");
+    let replacement = serde_json::to_value(&result.projection_replacements[0])
+        .expect("project-event replacement must serialize");
+    let expected = json!({
+        "functionRevision": 1,
+        "inputs": [{
+            "id": "sales",
+            "name": "Observed sales",
+            "dataType": { "kind": "DataSeries", "inner": { "kind": "Float64" } }
+        }],
+        "outputs": [{
+            "id": "return",
+            "name": "Array<String>",
+            "dataType": { "kind": "Array", "inner": { "kind": "String" } }
+        }]
+    });
+
+    assert_eq!(index["functionEditorProjection"], expected);
+    assert_eq!(replacement["functionEditorProjection"], expected);
+    json!({
+        "format": "yssbi.function-editor-projection.v1",
+        "indexRow": index,
+        "replacement": replacement,
+    })
+}
+
+#[test]
+fn function_editor_projection_wire() {
+    let contract = function_editor_projection_contract();
+    assert_eq!(
+        contract["indexRow"]["functionEditorProjection"],
+        contract["replacement"]["functionEditorProjection"]
+    );
 }
 
 #[test]

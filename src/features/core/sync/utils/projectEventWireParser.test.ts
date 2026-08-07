@@ -15,8 +15,14 @@ const delta = {
   causedBy: null,
   payload: { operations: [] },
 };
+const operationId = '00000000-0000-0000-0000-000000000401';
+const functionPath = 'functions/Sales Report 销售预测.yssbi-function';
+const functionSignature = {
+  parameters: [{ id: 'sales', name: 'Observed sales', type_name: 'Float64' }],
+  return_type: 'Array<String>',
+};
 const resourceResult = {
-  operationId: '00000000-0000-0000-0000-000000000401',
+  operationId,
   projectInstanceId,
   publicationRevision: 1,
   moves: [],
@@ -25,6 +31,44 @@ const resourceResult = {
   projectionStatus: { status: 'complete', expectedGraphPaths: [] },
   history: { canUndo: false, canRedo: false },
 };
+
+function functionResourceResult(functionRevision = 1) {
+  const projection = structuredClone(editorProjection) as Record<string, unknown>;
+  projection.graphPath = functionPath;
+  projection.sourceRevision = 1;
+  (projection.basis as Record<string, unknown>).graphPath = functionPath;
+  (projection.basis as Record<string, unknown>).graphRevision = 1;
+  return {
+    ...resourceResult,
+    deltas: [{
+      resource: { kind: 'function', key: functionPath },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: operationId,
+      payload: {
+        kind: 'function',
+        patch: {
+          before: { parameters: [], return_type: null },
+          after: functionSignature,
+        },
+      },
+    }],
+    projectionReplacements: [{
+      graphPath: functionPath,
+      projection,
+      functionEditorProjection: {
+        functionRevision,
+        inputs: [{ id: 'sales', name: 'Observed sales', dataType: { kind: 'Float64' } }],
+        outputs: [{
+          id: 'return',
+          name: 'Array<String>',
+          dataType: { kind: 'Array', inner: { kind: 'String' } },
+        }],
+      },
+    }],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [functionPath] },
+  };
+}
 
 describe('project event wire parser', () => {
   it('parses each complete Rust-generated project mutation event envelope', () => {
@@ -57,6 +101,31 @@ describe('project event wire parser', () => {
     expect(() => parseGraphDeltaEventPayload({ projectInstanceId, delta, extra: true })).toThrow(
       'exact',
     );
+  });
+
+  it('parses an exact function replacement with Rust-resolved editor pins', () => {
+    const result = functionResourceResult();
+    expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+  });
+
+  it('rejects a function replacement revision that disagrees with its function delta', () => {
+    expect(() => parseResourceMutationCommittedPayload({
+      result: functionResourceResult(2),
+    })).toThrow('function delta');
+  });
+
+  it('matches function revision to the function delta even when a graph delta comes first', () => {
+    const result = functionResourceResult(2);
+    const deltas = result.deltas as unknown[];
+    deltas.unshift({
+      resource: { kind: 'graph', key: functionPath },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: operationId,
+      payload: { kind: 'graph', patch: { operations: [] } },
+    });
+
+    expect(() => parseResourceMutationCommittedPayload({ result })).toThrow('function delta');
   });
 
   it('parses only an exact valid ResourceMutationCommitted payload', () => {

@@ -218,6 +218,114 @@ describe('project publication production stores', () => {
     expect(useResourceStore.getState().resources['yssbi://database/sales']?.name).toBe('After');
   });
 
+  it('moves unloaded ownership without installing or loading a graph when complete replacements are empty', () => {
+    const source = buildGraphResourceMeta('event', firstPath, 'First');
+    useResourceStore.getState().setSnapshot({ resources: [source], graphOrder: [firstPath] });
+    useDocumentStateStore.getState().upsertDocument({
+      resourceKey: resourceKey(source),
+      loaded: false,
+      dirty: true,
+      stale: false,
+      missing: false,
+      conflict: false,
+      version: 3,
+    });
+    useGraphMetaStore.getState().addGraph({ path: firstPath, name: 'First', type: 'event' });
+    useEditorTabStore.getState().initGroupPlacement('editor', [
+      { id: firstPath, component: 'GraphEditor', type: 'event' },
+    ], firstPath);
+    useViewportStore.getState().setViewport({ groupId: 'editor', graphPath: firstPath }, {
+      x: 7,
+      y: 9,
+      scale: 1.25,
+    });
+    const resourceMove: ResourceMoveDto = {
+      from: firstPath,
+      to: destinationPath,
+      kind: 'event',
+      name: 'Merged',
+    };
+    const preparedMove = prepareGraphResourceMove(resourceMove, false);
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000906',
+      projectInstanceId,
+      publicationRevision: 1,
+      moves: [resourceMove],
+      deltas: [moveDelta(resourceMove)],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+      history: { canUndo: true, canRedo: false },
+    };
+
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId,
+      epoch: 1,
+      fingerprint: 'unloaded-complete-move',
+      affectedGraphPaths: new Set([firstPath, destinationPath]),
+      moves: [preparedMove],
+    });
+    commitPreparedPublication(plan);
+
+    expect(useGraphDataStore.getState().graphEntities).toEqual({});
+    expect(useResourceStore.getState().resources).toMatchObject({
+      [resourceKey({ id: destinationPath, kind: 'event' })]: {
+        id: destinationPath,
+        loaded: false,
+      },
+    });
+    expect(useDocumentStateStore.getState().documents).toMatchObject({
+      [resourceKey({ id: destinationPath, kind: 'event' })]: {
+        loaded: false,
+        dirty: true,
+        version: 3,
+      },
+    });
+    expect(useEditorTabStore.getState().getPlacement('editor')).toMatchObject({
+      tabIds: [destinationPath],
+      activeTabId: destinationPath,
+    });
+    expect(useViewportStore.getState().viewports).toEqual({
+      [viewportScopeKey({ groupId: 'editor', graphPath: destinationPath })]: {
+        x: 7,
+        y: 9,
+        scale: 1.25,
+      },
+    });
+  });
+
+  it('rejects incomplete publication before committing move ownership or graph authority', () => {
+    const source = buildGraphResourceMeta('event', firstPath, 'First');
+    useResourceStore.getState().setSnapshot({ resources: [source], graphOrder: [firstPath] });
+    useGraphMetaStore.getState().addGraph({ path: firstPath, name: 'First', type: 'event' });
+    const resourceMove: ResourceMoveDto = {
+      from: firstPath,
+      to: destinationPath,
+      kind: 'event',
+      name: 'Merged',
+    };
+    const preparedMove = prepareGraphResourceMove(resourceMove, false);
+    const before = snapshotProductionStores();
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000907',
+      projectInstanceId,
+      publicationRevision: 1,
+      moves: [resourceMove],
+      deltas: [moveDelta(resourceMove)],
+      projectionReplacements: [],
+      projectionStatus: { status: 'incomplete', invalidatedGraphPaths: [destinationPath] },
+      history: { canUndo: true, canRedo: false },
+    };
+
+    expect(() => prepareSynchronousPublicationCommit(result, {
+      projectInstanceId,
+      epoch: 1,
+      fingerprint: 'incomplete-move-recovery',
+      affectedGraphPaths: new Set([firstPath, destinationPath]),
+      moves: [preparedMove],
+    })).toThrow('incomplete projection status requires recovery');
+    expect(snapshotProductionStores()).toEqual(before);
+  });
+
   it('rejects collective move destination conflicts with zero production-store effects', () => {
     useResourceStore.getState().setSnapshot({
       resources: [
@@ -241,15 +349,15 @@ describe('project publication production stores', () => {
       title: 'Merged',
     }).projection;
     const moves = [move(firstPath), move(secondPath)];
-    const preparedMoves = moves.map((entry) => prepareGraphResourceMove(entry, destination));
+    const preparedMoves = moves.map((entry) => prepareGraphResourceMove(entry, true));
     const result: ResourceMutationResultDto = {
       operationId: '00000000-0000-0000-0000-000000000902',
       projectInstanceId,
       publicationRevision: 1,
       moves,
       deltas: [moveDelta(moves[0])],
-      projectionReplacements: [],
-      projectionStatus: { status: 'incomplete', invalidatedGraphPaths: [destinationPath] },
+      projectionReplacements: [{ graphPath: destinationPath, projection: destination }],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [destinationPath] },
       history: { canUndo: true, canRedo: false },
     };
 
@@ -300,18 +408,20 @@ describe('project publication production stores', () => {
       [firstDestination, makeEditorProjectionFixture({ graphPath: firstDestination, title: 'X' }).projection],
       [secondDestination, makeEditorProjectionFixture({ graphPath: secondDestination, title: 'Y' }).projection],
     ]);
-    const preparedMoves = moves.map((entry) =>
-      prepareGraphResourceMove(entry, destinations.get(entry.to)!));
+    const preparedMoves = moves.map((entry) => prepareGraphResourceMove(entry, true));
     const result: ResourceMutationResultDto = {
       operationId: '00000000-0000-0000-0000-000000000903',
       projectInstanceId,
       publicationRevision: 1,
       moves,
       deltas: moves.map(moveDelta),
-      projectionReplacements: [],
+      projectionReplacements: moves.map((entry) => ({
+        graphPath: entry.to,
+        projection: destinations.get(entry.to)!,
+      })),
       projectionStatus: {
-        status: 'incomplete',
-        invalidatedGraphPaths: [firstDestination, secondDestination],
+        status: 'complete',
+        expectedGraphPaths: [firstDestination, secondDestination],
       },
       history: { canUndo: true, canRedo: false },
     };

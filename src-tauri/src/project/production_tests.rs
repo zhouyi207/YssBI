@@ -1131,10 +1131,10 @@ fn rename_environment_failure_never_changes_filesystem_targets() {
     let target_file = root.join("events/After.yssbi-event");
     insert_uncached_duckdb_declaration(&state, "database/missing.duckdb");
 
-    crate::project::set_project_filesystem_rollback_fault(true);
+    state.set_project_filesystem_rollback_fault(true);
     let result =
         state.rename_graph_resource_fixture(&state.project_instance_id(), &source, "After");
-    crate::project::set_project_filesystem_rollback_fault(false);
+    state.set_project_filesystem_rollback_fault(false);
 
     assert!(result.is_err());
     assert_eq!(std::fs::read(&source_file).unwrap(), source_before);
@@ -1153,9 +1153,9 @@ fn worksheet_upsert_environment_failure_never_changes_filesystem_target() {
     let worksheet = WorksheetDocument::new("Uncommitted", "database");
     let worksheet_file = upsert_root.join(crate::project::worksheet_relative_path(&worksheet));
 
-    crate::project::set_project_filesystem_rollback_fault(true);
+    upsert_state.set_project_filesystem_rollback_fault(true);
     let upsert_result = upsert_state.upsert_worksheet_document(worksheet.clone());
-    crate::project::set_project_filesystem_rollback_fault(false);
+    upsert_state.set_project_filesystem_rollback_fault(false);
 
     assert!(upsert_result.is_err());
     assert!(!worksheet_file.exists());
@@ -1190,9 +1190,9 @@ fn worksheet_removal_environment_failure_never_changes_filesystem_target() {
     let worksheet_file = remove_root.join(crate::project::worksheet_relative_path(&worksheet));
     let worksheet_before = std::fs::read(&worksheet_file).unwrap();
 
-    crate::project::set_project_filesystem_rollback_fault(true);
+    remove_state.set_project_filesystem_rollback_fault(true);
     let remove_result = remove_state.remove_worksheet_document(&worksheet.id);
-    crate::project::set_project_filesystem_rollback_fault(false);
+    remove_state.set_project_filesystem_rollback_fault(false);
 
     assert!(remove_result.is_err());
     assert_eq!(std::fs::read(&worksheet_file).unwrap(), worksheet_before);
@@ -1516,7 +1516,7 @@ fn unwind_rollback_failure_blocks_mutations_until_activation() {
     )
     .unwrap();
     let committed = prepared.commit().unwrap();
-    crate::project::set_project_filesystem_rollback_fault(true);
+    state.set_project_filesystem_rollback_fault(true);
     drop(committed);
 
     let blocked = state
@@ -2132,7 +2132,7 @@ fn graph_cache_unload_preserves_complete_project_history() {
     assert_eq!(state.revision_state_for_test(), before_revisions);
     assert_eq!(state.authority_generation_for_test(), before_generation + 1);
     assert!(!coordinator.contains_slot_for_test(&document_path()));
-    assert!(!coordinator.contains_slot_for_test(&retained_document_path));
+    assert!(coordinator.contains_slot_for_test(&retained_document_path));
 
     state.graph_projection(&retained, "en-US").unwrap();
     let before_noop_retained_slot = coordinator.contains_slot_for_test(&retained_document_path);
@@ -3048,7 +3048,7 @@ fn history_lifecycle_typing_preserves_recovery_required_when_durable_rollback_fa
                     &state, &root,
                 ));
             }
-            crate::project::set_project_filesystem_rollback_fault(true);
+            state.set_project_filesystem_rollback_fault(true);
             let observed = std::sync::atomic::AtomicBool::new(false);
             let result = run_history_direction(
                 &state,
@@ -3057,7 +3057,7 @@ fn history_lifecycle_typing_preserves_recovery_required_when_durable_rollback_fa
                 history_request(resource, revision),
                 &observed,
             );
-            crate::project::set_project_filesystem_rollback_fault(false);
+            state.set_project_filesystem_rollback_fault(false);
             let error = result.unwrap_err();
             assert!(matches!(error, MutationConflict::RecoveryRequired(_)));
             assert_eq!(error.code(), "project_recovery_required");
@@ -4616,7 +4616,7 @@ fn unloaded_graph_history_staging_and_live_replace_faults_preserve_state() {
         let before_revisions = state.revision_state_for_test();
         let before_variable_entry = state.variable_revision_entry_for_test(&variable_id);
         let before_publication = state.publication_state_for_test();
-        crate::project::set_project_filesystem_fault(Some(fault));
+        state.set_project_filesystem_fault(Some(fault));
         let mut observed = false;
 
         let error = state
@@ -4733,7 +4733,7 @@ fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
             .unwrap()
             .insert(hook_path.clone(), GraphRevision::new(7));
     }));
-    crate::project::set_project_filesystem_rollback_fault(true);
+    state.set_project_filesystem_rollback_fault(true);
     let mut observed = false;
 
     let error = state
@@ -8848,7 +8848,7 @@ fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
     let authority_before = state.get_variable(&variable.id).unwrap().unwrap();
     let cache_before = cached_i64_column(&state, variable.id);
 
-    crate::project::set_project_filesystem_fault(Some(
+    state.set_project_filesystem_fault(Some(
         crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
     ));
     assert!(commit_tabular_effect(&state, &variable, r#"{"value":[7,8,9]}"#).is_err());
@@ -8991,7 +8991,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
     let history_before = state.history_status();
     let active_project_instance_id = state.capture_project_session().unwrap().instance_id;
 
-    crate::project::set_project_filesystem_fault(Some(
+    state.set_project_filesystem_fault(Some(
         crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
     ));
     let error = state
@@ -9159,30 +9159,6 @@ fn temp_project_with_empty_graph(label: &str) -> crate::project::fixtures::TempP
     project
 }
 
-fn temp_project_with_valid_constant_graph(label: &str) -> crate::project::fixtures::TempProject {
-    let project = temp_project_with_empty_graph(label);
-    let mut constant = node("yssbi.constant.int64");
-    constant.parameters.insert(
-        crate::node_system::protocol::ParameterKey::new("value").unwrap(),
-        serde_json::json!(7),
-    );
-    project
-        .state()
-        .apply_graph_patch(
-            &graph_path(),
-            MutationRequest::new(
-                ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
-                OperationId::new(),
-                GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
-                    node: constant,
-                }]),
-            ),
-        )
-        .unwrap();
-    project
-}
-
 fn active_state_with_valid_constant_graph(label: &str) -> (ProjectState, std::path::PathBuf) {
     let (state, root) = active_state_with_empty_graph(label);
     let mut constant = node("yssbi.constant.int64");
@@ -9204,6 +9180,172 @@ fn active_state_with_valid_constant_graph(label: &str) -> (ProjectState, std::pa
         )
         .unwrap();
     (state, root)
+}
+
+#[test]
+fn unrelated_resource_mutation_preserves_published_compilation() {
+    let used = test_variable("Used");
+    let unrelated = test_variable("Unrelated");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", used.id)),
+    );
+    graph.document.nodes.insert(variable_node.id, variable_node);
+    let mut data = ProjectData::new();
+    data.variables.insert(used.id, used.clone());
+    data.variables.insert(unrelated.id, unrelated.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project = crate::project::fixtures::TempProject::activate(
+        "exact-resource-publication-freshness",
+        data,
+    );
+    let state = project.state();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let original = state
+        .published_compile_ids_for_test(&graph_path())
+        .unwrap()
+        .0;
+
+    state
+        .update_variable(
+            &unrelated.id,
+            Some("Unrelated changed".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let after_unrelated = state
+        .published_compile_ids_for_test(&graph_path())
+        .unwrap()
+        .0;
+    assert_eq!(after_unrelated, original);
+
+    state
+        .update_variable(
+            &used.id,
+            Some("Used changed".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let after_dependency = state
+        .published_compile_ids_for_test(&graph_path())
+        .unwrap()
+        .0;
+    assert_ne!(after_dependency, original);
+
+    for dependency in [
+        "functions/Used.yssbi-function",
+        "variables/00000000-0000-0000-0000-000000000701",
+        "databases/used",
+    ] {
+        let coordinator = crate::node_system::compiler::CompileCoordinator::<&str, &str>::new();
+        let request_basis = crate::node_system::compiler::compilation_basis(
+            GraphRevision::INITIAL,
+            crate::node_system::registry::RegistryFingerprint::from_bytes([7; 32]),
+            Default::default(),
+        );
+        let task = match coordinator.request(document_path(), request_basis.clone()) {
+            crate::node_system::compiler::ScheduleOutcome::Start(task) => task,
+            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. } => unreachable!(),
+        };
+        let dependency_key = crate::node_system::analysis::ResourceKey::new(dependency);
+        let unrelated_key = crate::node_system::analysis::ResourceKey::new("variables/unrelated");
+        let version_one = crate::node_system::analysis::ResourceVersion::new("1");
+        let mut current_versions = std::collections::BTreeMap::from([
+            (dependency_key.clone(), version_one.clone()),
+            (
+                unrelated_key.clone(),
+                crate::node_system::analysis::ResourceVersion::new("1"),
+            ),
+        ]);
+        let final_basis = crate::node_system::compiler::compilation_basis(
+            GraphRevision::INITIAL,
+            request_basis.registry_fingerprint.clone(),
+            std::collections::BTreeMap::from([(dependency_key.clone(), version_one)]),
+        );
+        coordinator.publish_tracked(
+            &task,
+            &request_basis,
+            &current_versions,
+            &final_basis,
+            crate::node_system::compiler::CompileProducts {
+                analysis: "analysis",
+                has_blocking_diagnostics: false,
+                plan: Some("plan"),
+            },
+        );
+        coordinator.finish(&document_path(), task.compile_id);
+
+        current_versions.insert(
+            unrelated_key,
+            crate::node_system::analysis::ResourceVersion::new("2"),
+        );
+        let reused = coordinator
+            .get_current_tracked(&document_path(), &request_basis, &current_versions)
+            .unwrap();
+        assert_eq!(reused.0.compile_id, task.compile_id);
+
+        current_versions.insert(
+            dependency_key,
+            crate::node_system::analysis::ResourceVersion::new("2"),
+        );
+        assert!(
+            coordinator
+                .get_current_tracked(&document_path(), &request_basis, &current_versions)
+                .is_none()
+        );
+        let replacement = match coordinator.request(document_path(), request_basis.clone()) {
+            crate::node_system::compiler::ScheduleOutcome::Start(task) => task,
+            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. } => unreachable!(),
+        };
+        assert_ne!(replacement.compile_id, task.compile_id);
+    }
+}
+
+#[test]
+fn fast_compile_candidate_reuse_skips_full_resource_snapshot_construction() {
+    let (state, root) = active_state_with_valid_constant_graph("fast-reuse-resource-snapshot");
+    for index in 0..32 {
+        let path =
+            GraphResourcePath::new(format!("functions/Unrelated{index}.yssbi-function")).unwrap();
+        state
+            .insert_graph(
+                path,
+                GraphResourceDocument::new(
+                    format!("Unrelated {index}"),
+                    GraphDocumentKind::Function,
+                ),
+            )
+            .unwrap();
+    }
+    let before = super::project_state::compile_resource_snapshot_constructions();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let after_compile = super::project_state::compile_resource_snapshot_constructions();
+    assert_eq!(
+        after_compile - before,
+        1,
+        "a real compile builds one snapshot"
+    );
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    assert_eq!(
+        super::project_state::compile_resource_snapshot_constructions(),
+        after_compile,
+        "fast candidate reuse must not construct the full project snapshot"
+    );
+
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -9393,7 +9535,7 @@ fn graph_basis_replacement_discards_old_demand_variants() {
 }
 
 #[test]
-fn authority_mismatch_rejects_populated_variant_without_overwriting_current_product() {
+fn unrelated_authority_generation_change_preserves_execution_authority() {
     let (state, root) = active_state_with_valid_constant_graph("variant-authority-mismatch");
     let observed = std::sync::Arc::new(std::sync::Mutex::new(None));
     let observed_for_hook = std::sync::Arc::clone(&observed);
@@ -9409,21 +9551,15 @@ fn authority_mismatch_rejects_populated_variant_without_overwriting_current_prod
     }));
     let events = DemandRunEvents::default();
 
-    let error = state
+    state
         .execute_graph_for_current_project_for_test(
             &graph_path(),
             &crate::node_system::plan::ExecutionDemand::Default,
             &events,
         )
-        .unwrap_err();
-
-    assert!(error.contains("stale_project_lifecycle"), "{error}");
+        .unwrap();
     let (compile_id, variants) = observed.lock().unwrap().unwrap();
     assert_eq!(variants, 1);
-    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
-        event.kind,
-        crate::node_system::runtime::RunEventKind::OperationStarted { .. }
-    )));
     assert_eq!(
         state.published_compile_ids_for_test(&graph_path()),
         Some((compile_id, Some(compile_id))),
@@ -9487,7 +9623,7 @@ fn blocking_recompile_clears_published_execution_plan() {
 }
 
 #[test]
-fn stale_compile_cannot_restore_an_older_plan() {
+fn newer_graph_basis_replaces_older_published_plan() {
     let (state, root) = active_state_with_valid_constant_graph("stale-compile-plan");
     state.graph_projection(&graph_path(), "en-US").unwrap();
     let (first_compile_id, first_plan_id) =
@@ -9523,7 +9659,8 @@ fn stale_compile_cannot_restore_an_older_plan() {
     gate_paused_rx
         .recv_timeout(std::time::Duration::from_secs(5))
         .unwrap();
-    let coordinator = state.compile_coordinator.read().unwrap().clone();
+    release_gate_tx.send(()).unwrap();
+    stale.join().unwrap().unwrap();
 
     state
         .apply_graph_patch(
@@ -9538,11 +9675,6 @@ fn stale_compile_cannot_restore_an_older_plan() {
             ),
         )
         .unwrap();
-
-    assert!(!coordinator.contains_slot_for_test(&document_path()));
-    release_gate_tx.send(()).unwrap();
-    let stale_error = stale.join().unwrap().unwrap_err();
-    assert!(stale_error.contains("stale_project_lifecycle"));
 
     state.graph_projection(&graph_path(), "en-US").unwrap();
     let (current_compile_id, current_plan_id) =
@@ -9566,11 +9698,15 @@ fn graph_unload_invalidates_compile_slot() {
 }
 
 #[test]
-fn function_body_mutations_invalidate_other_graph_compile_slots() {
+fn function_body_mutations_stale_dependent_callers_without_eager_slot_eviction() {
     for entry in ["mutation", "patch"] {
         let (state, function_path, caller_path, _) =
             function_state_with_caller(&format!("FunctionBody{entry}"));
         state.graph_projection(&caller_path, "en-US").unwrap();
+        let original_compile_id = state
+            .published_compile_ids_for_test(&caller_path)
+            .unwrap()
+            .0;
         let coordinator = state.compile_coordinator.read().unwrap().clone();
         let caller_document_path =
             crate::node_system::document::GraphResourcePath(caller_path.as_str().into());
@@ -9610,8 +9746,17 @@ fn function_body_mutations_invalidate_other_graph_compile_slots() {
         }
 
         assert!(
-            !coordinator.contains_slot_for_test(&caller_document_path),
-            "{entry} left a dependent caller compile slot published"
+            coordinator.contains_slot_for_test(&caller_document_path),
+            "{entry} eagerly evicted a dependent caller slot"
+        );
+        state.graph_projection(&caller_path, "en-US").unwrap();
+        assert_ne!(
+            state
+                .published_compile_ids_for_test(&caller_path)
+                .unwrap()
+                .0,
+            original_compile_id,
+            "{entry} reused a caller whose exact function dependency changed",
         );
     }
 }
@@ -9754,7 +9899,7 @@ fn graph_projection_retries_when_authority_changes_during_metadata_capture() {
 }
 
 #[test]
-fn committed_source_cannot_rebind_after_authority_generation_aba() {
+fn committed_source_keeps_captured_authority_across_unrelated_generation_aba() {
     let (state, function_path, caller_path, resource) =
         function_state_with_caller("CompileSourceAba");
     let authority_state = state.clone();
@@ -9781,14 +9926,528 @@ fn committed_source_cannot_rebind_after_authority_generation_aba() {
 
     assert_eq!(
         result.projection_status,
-        crate::event::ProjectionStatusDto::Incomplete {
-            invalidated_graph_paths: vec![
+        crate::event::ProjectionStatusDto::Complete {
+            expected_graph_paths: vec![
                 caller_path.as_str().to_string(),
                 function_path.as_str().to_string(),
             ],
         }
     );
-    assert!(result.projection_replacements.is_empty());
+    assert_eq!(result.projection_replacements.len(), 2);
+}
+
+#[test]
+fn function_insert_uses_max_incoming_or_retained_successor_and_reports_overflow() {
+    let state = ProjectState::new();
+    state.activate_project_fixture("function-insert-revision".into(), ProjectData::new());
+    let path = GraphResourcePath::new("functions/Insert.yssbi-function").unwrap();
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(path.clone(), GraphRevision::new(7));
+
+    let mut low = GraphResourceDocument::new("Insert", GraphDocumentKind::Function);
+    low.document.revision = GraphRevision::new(3);
+    let inserted = state.insert_graph(path.clone(), low).unwrap();
+    assert_eq!(inserted.document.revision, GraphRevision::new(8));
+    assert_eq!(
+        inserted.function.as_ref().unwrap().revision,
+        inserted.document.revision
+    );
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&path],
+        GraphRevision::new(8)
+    );
+
+    let mut high = GraphResourceDocument::new("Insert", GraphDocumentKind::Function);
+    high.document.revision = GraphRevision::new(12);
+    let inserted = state.insert_graph(path.clone(), high).unwrap();
+    assert_eq!(inserted.document.revision, GraphRevision::new(12));
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&path],
+        GraphRevision::new(12)
+    );
+
+    let overflow = GraphResourcePath::new("functions/Overflow.yssbi-function").unwrap();
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(overflow.clone(), GraphRevision::new(u64::MAX));
+    let before_generation = state.authority_generation_for_test();
+    let error = state
+        .insert_graph(
+            overflow.clone(),
+            GraphResourceDocument::new("Overflow", GraphDocumentKind::Function),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), "resource_revision_overflow");
+    assert!(!state.get_data().unwrap().graphs.contains_key(&overflow));
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&overflow],
+        GraphRevision::new(u64::MAX)
+    );
+    assert_eq!(state.authority_generation_for_test(), before_generation);
+}
+
+#[test]
+fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
+    let (state, root) = state_with_project_path("function-patch-reinsert");
+    let path = GraphResourcePath::new("functions/Reinsert.yssbi-function").unwrap();
+    let mut original = GraphResourceDocument::new("Reinsert", GraphDocumentKind::Function);
+    original.document.revision = GraphRevision::new(4);
+    state.insert_graph(path.clone(), original).unwrap();
+    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        path.as_str().into(),
+    ));
+    let remove_context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![key.clone()],
+        expected_revisions: [(key.clone(), GraphRevision::new(4))].into_iter().collect(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+
+    let removed = state
+        .apply_resource_document_patch(
+            &remove_context,
+            ResourceDocumentPatch::RemoveGraph {
+                path: path.clone(),
+                revision: GraphRevision::new(4),
+            },
+        )
+        .unwrap();
+    assert_eq!(removed.deltas[0].to_revision, GraphRevision::new(5));
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&path],
+        GraphRevision::new(5)
+    );
+    assert!(!state.get_data().unwrap().graphs.contains_key(&path));
+
+    let insert_context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: [key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let mut incoming = GraphResourceDocument::new("Reinsert", GraphDocumentKind::Function);
+    incoming.document.revision = GraphRevision::new(1);
+    let inserted = state
+        .apply_resource_document_patch(
+            &insert_context,
+            ResourceDocumentPatch::InsertGraph {
+                path: path.clone(),
+                resource: incoming,
+            },
+        )
+        .unwrap();
+
+    let revision = GraphRevision::new(6);
+    let data = state.get_data().unwrap();
+    assert_eq!(data.graphs[&path].document.revision, revision);
+    assert_eq!(
+        data.graphs[&path].function.as_ref().unwrap().revision,
+        revision
+    );
+    assert_eq!(state.graph_revisions.read().unwrap()[&path], revision);
+    assert_eq!(inserted.deltas[0].to_revision, revision);
+    assert_eq!(
+        inserted.projection_replacements[0]
+            .projection
+            .source_revision,
+        revision.get()
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn function_move_into_tombstone_keeps_document_ledger_delta_and_projection_revision_equal() {
+    let (state, root) = state_with_project_path("function-move-target-tombstone");
+    let from = GraphResourcePath::new("functions/Before.yssbi-function").unwrap();
+    let to = GraphResourcePath::new("functions/After.yssbi-function").unwrap();
+    let mut source = GraphResourceDocument::new("Before", GraphDocumentKind::Function);
+    source.document.revision = GraphRevision::new(2);
+    state.insert_graph(from.clone(), source.clone()).unwrap();
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(to.clone(), GraphRevision::new(9));
+    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        from.as_str().into(),
+    ));
+    let target_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        to.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![source_key.clone()],
+        expected_revisions: [(source_key, GraphRevision::new(2))].into_iter().collect(),
+        expected_absent_resources: [target_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let mut moved = source.clone();
+    moved.name = "After".into();
+    moved.document.revision = GraphRevision::new(3);
+
+    let result = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::MoveGraph {
+                from: from.clone(),
+                to: to.clone(),
+                moved_before: source,
+                moved,
+                referenced_graphs_before: Default::default(),
+                referenced_graphs: Default::default(),
+                loaded_referenced_graphs: Default::default(),
+                referenced_variables_before: Default::default(),
+                referenced_variables: Default::default(),
+            },
+        )
+        .unwrap();
+
+    let revision = GraphRevision::new(10);
+    let data = state.get_data().unwrap();
+    let moved = &data.graphs[&to];
+    assert_eq!(moved.document.revision, revision);
+    assert_eq!(moved.function.as_ref().unwrap().revision, revision);
+    assert_eq!(state.graph_revisions.read().unwrap()[&to], revision);
+    assert_eq!(result.deltas[0].to_revision, revision);
+    assert_eq!(
+        result.projection_replacements[0].projection.source_revision,
+        revision.get()
+    );
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&from],
+        GraphRevision::new(3)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn function_load_over_retained_revision_keeps_document_ledger_and_projection_equal() {
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "function-load-retained-revision",
+        ProjectData::new(),
+    ));
+    let path = GraphResourcePath::new("functions/Loaded.yssbi-function").unwrap();
+    let mut persisted = GraphResourceDocument::new("Loaded", GraphDocumentKind::Function);
+    persisted.document.revision = GraphRevision::new(2);
+    state.insert_graph(path.clone(), persisted).unwrap();
+    crate::project::fixtures::write_state_graph(&state, &path).unwrap();
+    state.unload_graph_resource(&path).unwrap();
+    state
+        .graph_revisions
+        .write()
+        .unwrap()
+        .insert(path.clone(), GraphRevision::new(8));
+    let instance = state.capture_project_session().unwrap().instance_id;
+
+    let projection = state
+        .load_graph_projection(&instance, &path, 1, "en-US")
+        .unwrap();
+
+    let revision = GraphRevision::new(9);
+    let data = state.get_data().unwrap();
+    assert_eq!(data.graphs[&path].document.revision, revision);
+    assert_eq!(
+        data.graphs[&path].function.as_ref().unwrap().revision,
+        revision
+    );
+    assert_eq!(state.graph_revisions.read().unwrap()[&path], revision);
+    assert_eq!(projection.source_revision, revision.get());
+
+    let reloaded = state
+        .load_graph_projection(&instance, &path, 2, "en-US")
+        .unwrap();
+    let reload_revision = GraphRevision::new(10);
+    let data = state.get_data().unwrap();
+    assert_eq!(data.graphs[&path].document.revision, reload_revision);
+    assert_eq!(
+        data.graphs[&path].function.as_ref().unwrap().revision,
+        reload_revision
+    );
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&path],
+        reload_revision
+    );
+    assert_eq!(reloaded.source_revision, reload_revision.get());
+}
+
+#[test]
+fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
+    let state = ProjectState::new();
+    state.activate_project_fixture("resource-authority-state".into(), ProjectData::new());
+    let function_path = GraphResourcePath::new("functions/Authority.yssbi-function").unwrap();
+    let function_key = crate::node_system::analysis::ResourceKey::new(function_path.as_str());
+    let variable = test_variable("Authority Variable");
+    let variable_id = variable.id;
+    let variable_key =
+        crate::node_system::analysis::ResourceKey::new(format!("variables/{variable_id}"));
+    let database_key = crate::node_system::analysis::ResourceKey::new("databases/authority");
+    let keys = || {
+        vec![
+            function_key.clone(),
+            variable_key.clone(),
+            database_key.clone(),
+        ]
+    };
+
+    let missing = state.authoritative_resource_states_for_test(keys());
+    assert!(
+        missing.values().all(
+            |state| state == &crate::node_system::analysis::ResourceObservedState::Absent(None)
+        )
+    );
+
+    let function = GraphResourceDocument::new("Authority", GraphDocumentKind::Function);
+    state
+        .insert_graph(function_path.clone(), function.clone())
+        .unwrap();
+    {
+        let mut publication = state.mutation_publication.lock().unwrap();
+        let mut data = state.project_data.write().unwrap();
+        data.variables.insert(variable_id, variable.clone());
+        data.databases.insert(
+            "authority".into(),
+            crate::database::DatabaseDecl {
+                id: "authority".into(),
+                engine: crate::database::DatabaseEngine::InMemory {
+                    name: "authority".into(),
+                },
+                schema_version: 1,
+                required: false,
+                name: Some("Authority".into()),
+            },
+        );
+        state.variable_revisions.write().unwrap().insert(
+            variable_id,
+            super::project_state::VariableRevisionEntry::present(GraphRevision::new(1)),
+        );
+        state
+            .database_authority_revisions
+            .write()
+            .unwrap()
+            .insert("authority".into(), 1);
+        publication.advance_authority_generation();
+    }
+    let present = state.authoritative_resource_states_for_test(keys());
+    assert!(present.values().all(|state| matches!(
+        state,
+        crate::node_system::analysis::ResourceObservedState::Present(_)
+    )));
+
+    {
+        let mut publication = state.mutation_publication.lock().unwrap();
+        let mut data = state.project_data.write().unwrap();
+        data.graphs.remove(&function_path);
+        data.variables.remove(&variable_id);
+        data.databases.remove("authority");
+        let mut graph_revisions = state.graph_revisions.write().unwrap();
+        let function_tombstone = graph_revisions[&function_path].next();
+        graph_revisions.insert(function_path.clone(), function_tombstone);
+        let mut variable_revisions = state.variable_revisions.write().unwrap();
+        let variable_tombstone = variable_revisions[&variable_id].revision.next();
+        variable_revisions.insert(
+            variable_id,
+            super::project_state::VariableRevisionEntry::deleted(variable_tombstone),
+        );
+        let mut database_revisions = state.database_authority_revisions.write().unwrap();
+        *database_revisions.get_mut("authority").unwrap() += 1;
+        publication.advance_authority_generation();
+    }
+    let tombstones = state.authoritative_resource_states_for_test(keys());
+    assert!(tombstones.values().all(|state| matches!(
+        state,
+        crate::node_system::analysis::ResourceObservedState::Absent(Some(_))
+    )));
+
+    state.insert_graph(function_path.clone(), function).unwrap();
+    {
+        let mut publication = state.mutation_publication.lock().unwrap();
+        let mut data = state.project_data.write().unwrap();
+        data.variables.insert(variable_id, variable);
+        data.databases.insert(
+            "authority".into(),
+            crate::database::DatabaseDecl {
+                id: "authority".into(),
+                engine: crate::database::DatabaseEngine::InMemory {
+                    name: "authority".into(),
+                },
+                schema_version: 1,
+                required: false,
+                name: Some("Authority".into()),
+            },
+        );
+        let mut variable_revisions = state.variable_revisions.write().unwrap();
+        let next_variable = variable_revisions[&variable_id].revision.next();
+        variable_revisions.insert(
+            variable_id,
+            super::project_state::VariableRevisionEntry::present(next_variable),
+        );
+        *state
+            .database_authority_revisions
+            .write()
+            .unwrap()
+            .get_mut("authority")
+            .unwrap() += 1;
+        publication.advance_authority_generation();
+    }
+    let recreated = state.authoritative_resource_states_for_test(keys());
+    assert!(recreated.values().all(|state| matches!(
+        state,
+        crate::node_system::analysis::ResourceObservedState::Present(_)
+    )));
+    assert_ne!(
+        present, recreated,
+        "same-content recreation must not reuse versions"
+    );
+}
+
+#[test]
+fn captured_source_compiles_once_across_unrelated_mutation() {
+    let unrelated = test_variable("Unrelated capture mutation");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut constant = node("yssbi.constant.int64");
+    constant.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("value").unwrap(),
+        serde_json::json!(7),
+    );
+    graph.document.nodes.insert(constant.id, constant);
+    let mut data = ProjectData::new();
+    data.variables.insert(unrelated.id, unrelated.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project = crate::project::fixtures::TempProject::activate(
+        "compile-captured-source-unrelated-mutation",
+        data,
+    );
+    let state = project.state();
+    let hook_state = state.clone();
+    let hook_variable = unrelated.id;
+    let hook_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_calls_for_hook = std::sync::Arc::clone(&hook_calls);
+    state.set_compile_after_source_capture_test_hook(std::sync::Arc::new(move || {
+        let attempt = hook_calls_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        assert_eq!(
+            attempt, 0,
+            "stale captured source entered a Start/cancel loop"
+        );
+        hook_state
+            .update_variable(
+                &hook_variable,
+                Some("Unrelated changed after capture".into()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+    }));
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        1,
+        "the first captured source must compile and publish exactly once"
+    );
+    assert_eq!(hook_calls.load(std::sync::atomic::Ordering::Acquire), 1);
+}
+
+#[test]
+fn captured_dependency_mutation_rejects_publish_and_recompiles_current() {
+    let used = test_variable("Captured dependency");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", used.id)),
+    );
+    graph.document.nodes.insert(variable_node.id, variable_node);
+    let mut data = ProjectData::new();
+    data.variables.insert(used.id, used.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project = crate::project::fixtures::TempProject::activate(
+        "compile-captured-source-dependency-mutation",
+        data,
+    );
+    let state = project.state();
+    let hook_state = state.clone();
+    let hook_variable = used.id;
+    let hook_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_calls_for_hook = std::sync::Arc::clone(&hook_calls);
+    state.set_compile_after_source_capture_test_hook(std::sync::Arc::new(move || {
+        let attempt = hook_calls_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        if attempt == 0 {
+            hook_state
+                .update_variable(
+                    &hook_variable,
+                    Some("Dependency changed after capture".into()),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap();
+        } else if attempt > 1 {
+            panic!("stale dependency source was compiled more than once");
+        }
+    }));
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        2,
+        "the captured compile must finish, fail publication, and recompile current authority"
+    );
+    assert_eq!(hook_calls.load(std::sync::atomic::Ordering::Acquire), 2);
+}
+
+#[test]
+fn stale_lifecycle_after_source_capture_returns_without_compiling() {
+    let (state, root) = active_state_with_valid_constant_graph("compile-source-stale-lifecycle");
+    let mut replacement_data = ProjectData::new();
+    replacement_data.graphs.insert(
+        graph_path(),
+        GraphResourceDocument::new("Replacement", GraphDocumentKind::Event),
+    );
+    let replacement = crate::project::fixtures::TempProject::activate(
+        "compile-source-stale-lifecycle-replacement",
+        replacement_data.clone(),
+    );
+    let replacement_root = replacement.state().capture_project_session().unwrap().root;
+    let hook_state = state.clone();
+    let hook_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook_calls_for_hook = std::sync::Arc::clone(&hook_calls);
+    state.set_compile_after_source_capture_test_hook(std::sync::Arc::new(move || {
+        let attempt = hook_calls_for_hook.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        assert_eq!(attempt, 0, "stale lifecycle entered a compile retry loop");
+        hook_state.activate_project_fixture(
+            replacement_root.as_path().to_string_lossy().into_owned(),
+            replacement_data.clone(),
+        );
+    }));
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+
+    let error = state.graph_projection(&graph_path(), "en-US").unwrap_err();
+
+    assert!(error.contains("stale_project_lifecycle"), "{error}");
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        0,
+        "stale lifecycle must return before real compilation"
+    );
+    assert_eq!(hook_calls.load(std::sync::atomic::Ordering::Acquire), 1);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -9836,7 +10495,7 @@ fn compile_capture_retries_when_authority_changes_during_metadata_capture() {
 }
 
 #[test]
-fn publish_gate_rejects_authority_generation_change() {
+fn publish_gate_ignores_unrelated_authority_generation_change() {
     let (state, root) = active_state_with_valid_constant_graph("compile-publish-gate");
     let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
     let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
@@ -9862,13 +10521,148 @@ fn publish_gate_rejects_authority_generation_change() {
         .advance_authority_generation();
     release_gate_tx.send(()).unwrap();
 
-    let error = projection.join().unwrap().unwrap_err();
-    assert!(error.contains("stale_project_lifecycle"));
+    projection.join().unwrap().unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn fast_path_gate_rejects_authority_generation_change() {
+fn fast_path_gate_revalidates_dependency_mutation_after_candidate_capture() {
+    let used = test_variable("Used");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", used.id)),
+    );
+    graph.document.nodes.insert(variable_node.id, variable_node);
+    let mut data = ProjectData::new();
+    data.variables.insert(used.id, used.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project = crate::project::fixtures::TempProject::activate(
+        "compile-fast-path-exact-dependency-gate",
+        data,
+    );
+    let state = project.state();
+    let before = crate::node_system::compiler::compile_snapshot_invocations();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+
+    let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
+    let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
+    let release_gate_rx = std::sync::Mutex::new(release_gate_rx);
+    let first_gate = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_before_authority_gate_test_hook(std::sync::Arc::new(move || {
+        if first_gate.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            gate_paused_tx.send(()).unwrap();
+            release_gate_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let projection_state = state.clone();
+    let projection =
+        std::thread::spawn(move || projection_state.graph_projection(&graph_path(), "en-US"));
+    gate_paused_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    state
+        .update_variable(
+            &used.id,
+            Some("Used changed after candidate capture".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    release_gate_tx.send(()).unwrap();
+    projection.join().unwrap().unwrap();
+
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before,
+        2,
+        "the stale fast-path candidate must be rejected and recompiled"
+    );
+}
+
+#[test]
+fn exact_authority_capture_and_candidate_lookup_are_one_atomic_gate() {
+    let used = test_variable("Atomic Used");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", used.id)),
+    );
+    graph.document.nodes.insert(variable_node.id, variable_node);
+    let mut data = ProjectData::new();
+    data.variables.insert(used.id, used.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project =
+        crate::project::fixtures::TempProject::activate("compile-exact-capture-lookup-gate", data);
+    let state = project.state();
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    let original = state
+        .published_compile_ids_for_test(&graph_path())
+        .unwrap()
+        .0;
+
+    let (captured_tx, captured_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    let first = std::sync::atomic::AtomicBool::new(true);
+    state.set_compile_after_exact_authority_capture_test_hook(std::sync::Arc::new(move || {
+        if first.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            captured_tx.send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+        }
+    }));
+
+    let projection_state = state.clone();
+    let projection =
+        std::thread::spawn(move || projection_state.graph_projection(&graph_path(), "en-US"));
+    captured_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    let mutation_state = state.clone();
+    let (mutation_done_tx, mutation_done_rx) = std::sync::mpsc::channel();
+    let mutation = std::thread::spawn(move || {
+        mutation_state
+            .update_variable(
+                &used.id,
+                Some("Changed after exact capture".into()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        mutation_done_tx.send(()).unwrap();
+    });
+    assert!(
+        mutation_done_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err()
+    );
+
+    release_tx.send(()).unwrap();
+    projection.join().unwrap().unwrap();
+    mutation.join().unwrap();
+    mutation_done_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+
+    state.graph_projection(&graph_path(), "en-US").unwrap();
+    assert_ne!(
+        state
+            .published_compile_ids_for_test(&graph_path())
+            .unwrap()
+            .0,
+        original,
+    );
+}
+
+#[test]
+fn fast_path_gate_ignores_unrelated_authority_generation_change() {
     let (state, root) = active_state_with_valid_constant_graph("compile-fast-path-gate");
     state.graph_projection(&graph_path(), "en-US").unwrap();
     let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
@@ -9895,13 +10689,12 @@ fn fast_path_gate_rejects_authority_generation_change() {
         .advance_authority_generation();
     release_gate_tx.send(()).unwrap();
 
-    let error = projection.join().unwrap().unwrap_err();
-    assert!(error.contains("stale_project_lifecycle"));
+    projection.join().unwrap().unwrap();
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn coalesced_waiter_terminates_when_authority_generation_changes() {
+fn coalesced_waiters_ignore_unrelated_authority_generation_change() {
     let (state, root) = active_state_with_valid_constant_graph("coalesced-stale-termination");
     let (gate_paused_tx, gate_paused_rx) = std::sync::mpsc::channel();
     let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
@@ -9942,8 +10735,7 @@ fn coalesced_waiter_terminates_when_authority_generation_changes() {
     release_gate_tx.send(()).unwrap();
 
     for result in [first.join().unwrap(), second.join().unwrap()] {
-        let error = result.unwrap_err();
-        assert!(error.contains("stale_project_lifecycle"));
+        result.unwrap();
     }
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -9968,6 +10760,8 @@ fn different_basis_request_compiles_after_authoritative_invalidation() {
     gate_paused_rx
         .recv_timeout(std::time::Duration::from_secs(5))
         .unwrap();
+    release_gate_tx.send(()).unwrap();
+    active.join().unwrap().unwrap();
 
     state
         .apply_graph_patch(
@@ -9985,9 +10779,6 @@ fn different_basis_request_compiles_after_authoritative_invalidation() {
     let latest = state.graph_projection(&graph_path(), "en-US").unwrap();
     assert_eq!(latest.source_revision, 2);
 
-    release_gate_tx.send(()).unwrap();
-    let active_error = active.join().unwrap().unwrap_err();
-    assert!(active_error.contains("stale_project_lifecycle"));
     assert_eq!(
         crate::node_system::compiler::compile_snapshot_invocations() - before,
         2
@@ -9998,22 +10789,35 @@ fn different_basis_request_compiles_after_authoritative_invalidation() {
 }
 
 #[test]
-fn execution_rejects_function_body_change_after_main_plan_before_run() {
-    let project = temp_project_with_valid_constant_graph("execution-authority-gate");
+fn execution_rejects_exact_dependency_change_after_plan_before_run() {
+    let used = test_variable("Execution Authority");
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    let mut variable_node = node("yssbi.project.variable.get");
+    variable_node.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{}", used.id)),
+    );
+    graph.document.nodes.insert(variable_node.id, variable_node);
+    let mut data = ProjectData::new();
+    data.variables.insert(used.id, used.clone());
+    data.graphs.insert(graph_path(), graph);
+    let project = crate::project::fixtures::TempProject::activate(
+        "execution-exact-dependency-authority",
+        data,
+    );
     let state = project.state();
-    let function_path = state
-        .create_graph_resource_fixture("Authority", GraphDocumentKind::Function)
-        .unwrap();
-
-    let (plan_ready_tx, plan_ready_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let release_rx = std::sync::Mutex::new(release_rx);
+    let mutation_state = state.clone();
     state.set_execution_before_final_gate_test_hook(std::sync::Arc::new(move || {
-        let _ = plan_ready_tx.send(());
-        let _ = release_rx
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .recv_timeout(std::time::Duration::from_secs(5));
+        mutation_state
+            .update_variable(
+                &used.id,
+                Some("Changed before run".into()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
     }));
     let run_entered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let run_entered_for_hook = std::sync::Arc::clone(&run_entered);
@@ -10021,53 +10825,18 @@ fn execution_rejects_function_body_change_after_main_plan_before_run() {
         run_entered_for_hook.store(true, std::sync::atomic::Ordering::Release);
     }));
 
-    let error = std::thread::scope(|scope| {
-        let executing_state = state.clone();
-        let (execution_done_tx, execution_done_rx) = std::sync::mpsc::channel();
-        let execution = scope.spawn(move || {
-            let result = executing_state.execute_graph_for_current_project_for_test(
-                &graph_path(),
-                &crate::node_system::plan::ExecutionDemand::Default,
-                &NOOP_RUN_EVENT_SINK,
-            );
-            let _ = execution_done_tx.send(());
-            result
-        });
-        plan_ready_rx
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap();
-        let (selected_compile_id, variants) = state
-            .published_variant_cache_state_for_test(&graph_path())
-            .unwrap();
-        assert_eq!(variants, 1);
-        state
-            .apply_graph_patch(
-                &function_path,
-                MutationRequest::new(
-                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                        function_path.as_str().into(),
-                    )),
-                    GraphRevision::INITIAL,
-                    OperationId::new(),
-                    GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
-                        node: node("yssbi.constant.int64"),
-                    }]),
-                ),
-            )
-            .unwrap();
-        assert!(
-            state
-                .published_variant_cache_state_for_test(&graph_path())
-                .is_none()
-        );
-        assert!(selected_compile_id.get() > 0);
-        release_tx.send(()).unwrap();
-        execution_done_rx
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap();
-        execution.join().unwrap().unwrap_err()
-    });
-    assert!(error.contains("stale"), "unexpected error: {error}");
+    let error = state
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("stale"),
+        "unexpected error: {error}"
+    );
     assert!(!run_entered.load(std::sync::atomic::Ordering::Acquire));
 }
 

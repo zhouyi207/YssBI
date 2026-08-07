@@ -56,12 +56,14 @@ export class WorksheetService {
   }
 
   static async getPlotColumnPair(
+    projectInstanceId: string,
     databaseId: string,
     xCol: string,
     yCol: string,
     maxPoints?: number,
   ): Promise<PlotColumnPairPayload> {
     return await invoke('get_plot_column_pair', {
+      projectInstanceId,
       databaseId,
       xCol,
       yCol,

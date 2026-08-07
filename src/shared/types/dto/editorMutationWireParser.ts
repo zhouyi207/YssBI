@@ -1,4 +1,3 @@
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type {
   GraphDeltaDto,
   GraphDocumentPatchDto,
@@ -9,12 +8,16 @@ import type {
   DiagnosticLocationDto,
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
-  PortAddressDto,
 } from './editorProjection';
+import {
+  isFunctionEditorProjectionDto,
+  isGraphResourcePath,
+  isPortAddressDto,
+  isUuid,
+} from './editorProjectionGuards';
 
 type UnknownRecord = Record<string, unknown>;
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -26,16 +29,8 @@ function hasExactKeys(value: UnknownRecord, keys: readonly string[]): boolean {
     && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
 
-function isGraphPath(value: unknown): value is string {
-  return typeof value === 'string' && inferGraphResourceKind(value) != null;
-}
-
 function isSafeRevision(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
-}
-
-function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value);
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -157,23 +152,12 @@ function parseGraphPatch(value: unknown): GraphDocumentPatchDto {
   return { operations: value.operations } as GraphDocumentPatchDto;
 }
 
-function isPortAddress(value: unknown): value is PortAddressDto {
-  if (!isRecord(value) || typeof value.nodeId !== 'string') return false;
-  if (value.kind === 'declared') {
-    return hasExactKeys(value, ['kind', 'nodeId', 'portKey']) && typeof value.portKey === 'string';
-  }
-  return value.kind === 'instance'
-    && hasExactKeys(value, ['kind', 'nodeId', 'templateKey', 'instanceId'])
-    && typeof value.templateKey === 'string'
-    && typeof value.instanceId === 'string';
-}
-
 function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {
   if (!isRecord(value)) return false;
   switch (value.kind) {
     case 'graph': return hasExactKeys(value, ['kind']);
     case 'node': return hasExactKeys(value, ['kind', 'nodeId']) && typeof value.nodeId === 'string';
-    case 'port': return hasExactKeys(value, ['kind', 'address']) && isPortAddress(value.address);
+    case 'port': return hasExactKeys(value, ['kind', 'address']) && isPortAddressDto(value.address);
     case 'connection':
       return hasExactKeys(value, ['kind', 'connectionId']) && typeof value.connectionId === 'string';
     case 'parameter':
@@ -201,7 +185,7 @@ function isDiagnostic(value: unknown): boolean {
 function isProjectionBasis(value: unknown): boolean {
   return isRecord(value)
     && hasExactKeys(value, ['graphPath', 'graphRevision', 'registryFingerprint', 'resourceVersions'])
-    && isGraphPath(value.graphPath)
+    && isGraphResourcePath(value.graphPath)
     && isSafeRevision(value.graphRevision)
     && typeof value.registryFingerprint === 'string'
     && FINGERPRINT_PATTERN.test(value.registryFingerprint)
@@ -244,7 +228,7 @@ function isResolvedPort(value: unknown): boolean {
       'address', 'templateKey', 'display', 'direction', 'kind', 'instanceKind', 'orphan',
       'canRemove', 'connections', 'input', 'resolvedType', 'resolvedSchema', 'status',
     ])) return false;
-  return isPortAddress(value.address)
+  return isPortAddressDto(value.address)
     && typeof value.templateKey === 'string'
     && isRecord(value.display)
     && hasExactKeys(value.display, ['label', 'instanceLabel'])
@@ -302,7 +286,7 @@ function isEditorNode(value: unknown): boolean {
       'graphPath', 'sourceRevision', 'nodeId', 'nodeTypeId', 'position', 'display', 'ports',
       'parameterEditors', 'capabilities', 'diagnostics',
     ])
-    && isGraphPath(value.graphPath)
+    && isGraphResourcePath(value.graphPath)
     && isSafeRevision(value.sourceRevision)
     && typeof value.nodeId === 'string'
     && typeof value.nodeTypeId === 'string'
@@ -332,8 +316,8 @@ function isEditorConnection(value: unknown): boolean {
   return isRecord(value)
     && hasExactKeys(value, ['connectionId', 'output', 'input', 'order'])
     && typeof value.connectionId === 'string'
-    && isPortAddress(value.output)
-    && isPortAddress(value.input)
+    && isPortAddressDto(value.output)
+    && isPortAddressDto(value.input)
     && isNullableString(value.order);
 }
 
@@ -344,7 +328,7 @@ function isEditorProjection(value: unknown): value is EditorGraphProjectionDto {
       'hasBlockingDiagnostics',
     ])
     && isProjectionBasis(value.basis)
-    && isGraphPath(value.graphPath)
+    && isGraphResourcePath(value.graphPath)
     && isSafeRevision(value.sourceRevision)
     && Array.isArray(value.nodes)
     && value.nodes.every(isEditorNode)
@@ -359,15 +343,28 @@ export function parseGraphProjectionReplacementDto(
   value: unknown,
 ): GraphProjectionReplacementDto {
   if (!isRecord(value)
-    || !hasExactKeys(value, ['graphPath', 'projection'])
-    || !isGraphPath(value.graphPath)
+    || !isGraphResourcePath(value.graphPath)
     || !isEditorProjection(value.projection)
     || value.projection.graphPath !== value.graphPath
     || value.projection.basis.graphPath !== value.graphPath
     || value.projection.sourceRevision !== value.projection.basis.graphRevision) {
     throw new Error('Graph mutation projection replacement is malformed');
   }
-  return { graphPath: value.graphPath, projection: value.projection };
+  if (value.graphPath.startsWith('events/')) {
+    if (!hasExactKeys(value, ['graphPath', 'projection'])) {
+      throw new Error('Graph mutation projection replacement is malformed');
+    }
+    return { graphPath: value.graphPath, projection: value.projection };
+  }
+  if (!hasExactKeys(value, ['graphPath', 'projection', 'functionEditorProjection'])
+    || !isFunctionEditorProjectionDto(value.functionEditorProjection)) {
+    throw new Error('Graph mutation projection replacement is malformed');
+  }
+  return {
+    graphPath: value.graphPath,
+    projection: value.projection,
+    functionEditorProjection: value.functionEditorProjection,
+  };
 }
 
 export function parseHistoryStatusDto(value: unknown): HistoryStatusDto {
@@ -385,7 +382,7 @@ export function parseGraphDeltaDto(value: unknown): GraphDeltaDto {
     || !hasExactKeys(value, ['graphPath', 'fromRevision', 'toRevision', 'causedBy', 'payload'])) {
     throw new Error('GraphDelta must have exact graphPath, revision, causedBy, and payload fields');
   }
-  if (!isGraphPath(value.graphPath)) throw new Error('GraphDelta graphPath is malformed');
+  if (!isGraphResourcePath(value.graphPath)) throw new Error('GraphDelta graphPath is malformed');
   if (!isSafeRevision(value.fromRevision)
     || !isSafeRevision(value.toRevision)
     || value.toRevision !== value.fromRevision + 1) {

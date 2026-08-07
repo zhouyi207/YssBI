@@ -7,7 +7,7 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
-import { functionSignaturePins } from '@/features/application/graphDocument/functionSignatureSync';
+
 import {
   buildGraphResourceMeta,
   resourceKey,
@@ -103,16 +103,15 @@ function prepareVariables(index: ProjectIndexRow) {
 
 function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta> {
   return Object.fromEntries(graphs.flatMap((graph) => {
-    if (graph.type !== 'function'
-      || graph.functionRevision == null
-      || !graph.functionSignature) return [];
+    if (graph.type !== 'function') return [];
     return [[graph.path, {
       path: graph.path,
       name: graph.name,
       type: 'function' as const,
-      functionRevision: graph.functionRevision,
+      functionRevision: graph.functionEditorProjection.functionRevision,
       functionSignature: structuredClone(graph.functionSignature),
-      ...functionSignaturePins(graph.functionSignature),
+      functionInputs: structuredClone(graph.functionEditorProjection.inputs),
+      functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
     }]];
   }));
 }
@@ -125,7 +124,7 @@ export function buildProjectResourceState(input: {
   loadedWorksheetIds?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
   const resources: ProjectResourceMeta[] = input.graphs.map((graph) =>
-    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision ?? 0 }));
+    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }));
   for (const worksheet of input.worksheets) {
     resources.push({
       id: worksheet.id,

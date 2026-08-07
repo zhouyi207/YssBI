@@ -264,7 +264,41 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
         current_basis: &CompilationBasis<GraphRevision>,
         products: CompileProducts<Analysis, Plan>,
     ) -> PublishReport {
-        let outcome = self.classify(task, current_basis);
+        self.publish_tracked(
+            task,
+            current_basis,
+            &current_basis.resource_versions,
+            &task.basis,
+            products,
+        )
+    }
+
+    pub fn publish_tracked(
+        &mut self,
+        task: &CompilationTask,
+        current_basis: &CompilationBasis<GraphRevision>,
+        current_resource_versions: &ResourceVersionSet,
+        final_basis: &CompilationBasis<GraphRevision>,
+        products: CompileProducts<Analysis, Plan>,
+    ) -> PublishReport {
+        self.publish_with_observations(
+            task,
+            current_basis,
+            &states_from_versions(final_basis, current_resource_versions),
+            final_basis,
+            products,
+        )
+    }
+
+    pub fn publish_with_observations(
+        &mut self,
+        task: &CompilationTask,
+        current_basis: &CompilationBasis<GraphRevision>,
+        current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+        final_basis: &CompilationBasis<GraphRevision>,
+        products: CompileProducts<Analysis, Plan>,
+    ) -> PublishReport {
+        let outcome = self.classify(task, current_basis, current_resource_states, final_basis);
         let plan_outcome = products
             .plan
             .as_ref()
@@ -273,7 +307,7 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
         if outcome == PublishOutcome::Current {
             self.published_analysis = Some(CompileProjection {
                 graph_path: self.graph_path.clone(),
-                basis: task.basis.clone(),
+                basis: final_basis.clone(),
                 compile_id: task.compile_id,
                 payload: products.analysis,
             });
@@ -282,7 +316,7 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
             } else {
                 products.plan.map(|payload| CompileProjection {
                     graph_path: self.graph_path.clone(),
-                    basis: task.basis.clone(),
+                    basis: final_basis.clone(),
                     compile_id: task.compile_id,
                     payload,
                 })
@@ -320,6 +354,7 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
             .any(|task| task.compile_id == compile_id && &task.basis == basis)
     }
 
+    #[cfg(test)]
     fn current_products(
         &self,
         graph_path: &GraphResourcePath,
@@ -329,10 +364,68 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
         Analysis: Clone,
         Plan: Clone,
     {
-        let analysis = self
+        self.current_products_tracked(graph_path, basis, &basis.resource_versions)
+    }
+
+    fn candidate_products(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)>
+    where
+        Analysis: Clone,
+        Plan: Clone,
+    {
+        let analysis = self.published_analysis.as_ref().filter(|analysis| {
+            &analysis.graph_path == graph_path
+                && analysis.basis.graph_revision == basis.graph_revision
+                && analysis.basis.registry_fingerprint == basis.registry_fingerprint
+        })?;
+        let plan = self
+            .published_plan
+            .as_ref()
+            .filter(|plan| {
+                plan.graph_path == analysis.graph_path
+                    && plan.basis == analysis.basis
+                    && plan.compile_id == analysis.compile_id
+            })
+            .cloned();
+        Some((analysis.clone(), plan))
+    }
+
+    fn current_products_tracked(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        current_resource_versions: &ResourceVersionSet,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)>
+    where
+        Analysis: Clone,
+        Plan: Clone,
+    {
+        let published_basis = self
             .published_analysis
             .as_ref()
-            .filter(|analysis| &analysis.graph_path == graph_path && &analysis.basis == basis)?;
+            .map(|analysis| &analysis.basis)?;
+        let current_resource_states =
+            states_from_versions(published_basis, current_resource_versions);
+        self.current_products_with_observations(graph_path, basis, &current_resource_states)
+    }
+
+    fn current_products_with_observations(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)>
+    where
+        Analysis: Clone,
+        Plan: Clone,
+    {
+        let analysis = self.published_analysis.as_ref().filter(|analysis| {
+            &analysis.graph_path == graph_path
+                && basis_is_current(&analysis.basis, basis, current_resource_states)
+        })?;
         let plan = self
             .published_plan
             .as_ref()
@@ -349,12 +442,16 @@ impl<Analysis, Plan> CompilationSlot<Analysis, Plan> {
         &self,
         task: &CompilationTask,
         current_basis: &CompilationBasis<GraphRevision>,
+        current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+        final_basis: &CompilationBasis<GraphRevision>,
     ) -> PublishOutcome {
         if task.cancellation.is_cancelled()
             || self.active.as_ref().map(|active| active.compile_id) != Some(task.compile_id)
         {
             PublishOutcome::Cancelled
-        } else if &task.basis != current_basis {
+        } else if &task.basis != current_basis
+            || !basis_is_current(final_basis, current_basis, current_resource_states)
+        {
             PublishOutcome::Stale
         } else {
             PublishOutcome::Current
@@ -422,13 +519,53 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
         current_basis: &CompilationBasis<GraphRevision>,
         products: CompileProducts<Analysis, Plan>,
     ) -> PublishReport {
+        self.publish_tracked(
+            task,
+            current_basis,
+            &current_basis.resource_versions,
+            &task.basis,
+            products,
+        )
+    }
+
+    pub fn publish_tracked(
+        &self,
+        task: &CompilationTask,
+        current_basis: &CompilationBasis<GraphRevision>,
+        current_resource_versions: &ResourceVersionSet,
+        final_basis: &CompilationBasis<GraphRevision>,
+        products: CompileProducts<Analysis, Plan>,
+    ) -> PublishReport {
+        self.publish_with_observations(
+            task,
+            current_basis,
+            &states_from_versions(final_basis, current_resource_versions),
+            final_basis,
+            products,
+        )
+    }
+
+    pub fn publish_with_observations(
+        &self,
+        task: &CompilationTask,
+        current_basis: &CompilationBasis<GraphRevision>,
+        current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+        final_basis: &CompilationBasis<GraphRevision>,
+        products: CompileProducts<Analysis, Plan>,
+    ) -> PublishReport {
         let report = {
             let mut slots = self
                 .slots
                 .lock()
                 .expect("compile coordinator lock poisoned");
             match slots.get_mut(&task.graph_path) {
-                Some(slot) => slot.publish(task, current_basis, products),
+                Some(slot) => slot.publish_with_observations(
+                    task,
+                    current_basis,
+                    current_resource_states,
+                    final_basis,
+                    products,
+                ),
                 None => PublishReport {
                     analysis: PublishOutcome::Cancelled,
                     plan: products
@@ -478,7 +615,7 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
 }
 
 impl<Analysis: Clone, Plan: Clone> CompileCoordinator<Analysis, Plan> {
-    pub fn get_current(
+    pub fn get_candidate(
         &self,
         graph_path: &GraphResourcePath,
         basis: &CompilationBasis<GraphRevision>,
@@ -487,10 +624,48 @@ impl<Analysis: Clone, Plan: Clone> CompileCoordinator<Analysis, Plan> {
             .lock()
             .expect("compile coordinator lock poisoned")
             .get(graph_path)
-            .and_then(|slot| slot.current_products(graph_path, basis))
+            .and_then(|slot| slot.candidate_products(graph_path, basis))
     }
 
-    pub fn wait_for_current(
+    pub fn get_current(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        self.get_current_tracked(graph_path, basis, &basis.resource_versions)
+    }
+
+    pub fn get_current_tracked(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        current_resource_versions: &ResourceVersionSet,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        self.slots
+            .lock()
+            .expect("compile coordinator lock poisoned")
+            .get(graph_path)
+            .and_then(|slot| {
+                slot.current_products_tracked(graph_path, basis, current_resource_versions)
+            })
+    }
+
+    pub fn get_current_with_observations(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        self.slots
+            .lock()
+            .expect("compile coordinator lock poisoned")
+            .get(graph_path)
+            .and_then(|slot| {
+                slot.current_products_with_observations(graph_path, basis, current_resource_states)
+            })
+    }
+
+    pub fn wait_for_candidate(
         &self,
         graph_path: &GraphResourcePath,
         basis: &CompilationBasis<GraphRevision>,
@@ -502,7 +677,46 @@ impl<Analysis: Clone, Plan: Clone> CompileCoordinator<Analysis, Plan> {
             .expect("compile coordinator lock poisoned");
         loop {
             let slot = slots.get(graph_path)?;
-            if let Some(products) = slot.current_products(graph_path, basis) {
+            if let Some(products) = slot.candidate_products(graph_path, basis)
+                && products.0.compile_id == compile_id
+            {
+                return Some(products);
+            }
+            if !slot.has_task(basis, compile_id) {
+                return None;
+            }
+            slots = self
+                .changed
+                .wait(slots)
+                .expect("compile coordinator lock poisoned while waiting");
+        }
+    }
+
+    pub fn wait_for_current(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        compile_id: CompileId,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        self.wait_for_current_tracked(graph_path, basis, &basis.resource_versions, compile_id)
+    }
+
+    pub fn wait_for_current_tracked(
+        &self,
+        graph_path: &GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        current_resource_versions: &ResourceVersionSet,
+        compile_id: CompileId,
+    ) -> Option<(CompileProjection<Analysis>, Option<CompileProjection<Plan>>)> {
+        let mut slots = self
+            .slots
+            .lock()
+            .expect("compile coordinator lock poisoned");
+        loop {
+            let slot = slots.get(graph_path)?;
+            if let Some(products) =
+                slot.current_products_tracked(graph_path, basis, current_resource_versions)
+            {
                 if products.0.compile_id == compile_id {
                     return Some(products);
                 }
@@ -518,6 +732,51 @@ impl<Analysis: Clone, Plan: Clone> CompileCoordinator<Analysis, Plan> {
     }
 }
 
+fn states_from_versions(
+    published: &CompilationBasis<GraphRevision>,
+    current_resource_versions: &ResourceVersionSet,
+) -> crate::node_system::analysis::ResourceObservationSet {
+    let mut states = current_resource_versions
+        .iter()
+        .map(|(key, version)| {
+            (
+                key.clone(),
+                crate::node_system::analysis::ResourceObservedState::Present(version.clone()),
+            )
+        })
+        .collect::<crate::node_system::analysis::ResourceObservationSet>();
+    for (key, state) in &published.resource_observations {
+        if matches!(
+            state,
+            crate::node_system::analysis::ResourceObservedState::Absent(_)
+        ) {
+            states.entry(key.clone()).or_insert_with(|| {
+                crate::node_system::analysis::ResourceObservedState::Absent(None)
+            });
+        }
+    }
+    states
+}
+
+fn basis_is_current(
+    published: &CompilationBasis<GraphRevision>,
+    request: &CompilationBasis<GraphRevision>,
+    current_resource_states: &crate::node_system::analysis::ResourceObservationSet,
+) -> bool {
+    published.graph_revision == request.graph_revision
+        && published.registry_fingerprint == request.registry_fingerprint
+        && published.resource_versions.iter().all(|(key, version)| {
+            current_resource_states.get(key)
+                == Some(
+                    &crate::node_system::analysis::ResourceObservedState::Present(version.clone()),
+                )
+        })
+        && published
+            .resource_observations
+            .iter()
+            .all(|(key, state)| current_resource_states.get(key) == Some(state))
+}
+
 pub fn compilation_basis(
     graph_revision: GraphRevision,
     registry_fingerprint: RegistryFingerprint,
@@ -527,6 +786,7 @@ pub fn compilation_basis(
         graph_revision,
         registry_fingerprint,
         resource_versions,
+        resource_observations: Default::default(),
     }
 }
 
@@ -597,6 +857,119 @@ mod tests {
         let promoted = coordinator.finish(&path(), first.compile_id).unwrap();
         assert_eq!(promoted.compile_id, third_id);
         assert_eq!(promoted.basis, third_basis);
+    }
+
+    #[test]
+    fn observed_missing_resource_appearance_makes_publication_stale() {
+        let coordinator = CompileCoordinator::<&str, &str>::new();
+        let request = compilation_basis(
+            GraphRevision::INITIAL,
+            RegistryFingerprint::from_bytes([3; 32]),
+            BTreeMap::new(),
+        );
+        let task = started(coordinator.request(path(), request.clone()));
+        let key = ResourceKey::new("functions/missing");
+        let mut final_basis = request.clone();
+        final_basis.resource_observations.insert(
+            key.clone(),
+            crate::node_system::analysis::ResourceObservedState::Absent(None),
+        );
+        coordinator.publish_tracked(
+            &task,
+            &request,
+            &BTreeMap::new(),
+            &final_basis,
+            CompileProducts {
+                analysis: "missing analysis",
+                has_blocking_diagnostics: true,
+                plan: None,
+            },
+        );
+        coordinator.finish(&path(), task.compile_id);
+
+        assert!(
+            coordinator
+                .get_current_tracked(&path(), &request, &BTreeMap::new())
+                .is_some()
+        );
+        assert!(
+            coordinator
+                .get_current_tracked(
+                    &path(),
+                    &request,
+                    &BTreeMap::from([(key, ResourceVersion::new("appeared"))]),
+                )
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn observed_tombstone_generation_must_match_exactly() {
+        let coordinator = CompileCoordinator::<&str, &str>::new();
+        let request = compilation_basis(
+            GraphRevision::INITIAL,
+            RegistryFingerprint::from_bytes([4; 32]),
+            BTreeMap::new(),
+        );
+        let task = started(coordinator.request(path(), request.clone()));
+        let key = ResourceKey::new("variables/missing");
+        let tombstone = ResourceVersion::new("revision:7");
+        let mut final_basis = request.clone();
+        final_basis.resource_observations.insert(
+            key.clone(),
+            crate::node_system::analysis::ResourceObservedState::Absent(Some(tombstone.clone())),
+        );
+        coordinator.publish_with_observations(
+            &task,
+            &request,
+            &BTreeMap::from([(
+                key.clone(),
+                crate::node_system::analysis::ResourceObservedState::Absent(Some(
+                    tombstone.clone(),
+                )),
+            )]),
+            &final_basis,
+            CompileProducts {
+                analysis: "missing analysis",
+                has_blocking_diagnostics: true,
+                plan: None,
+            },
+        );
+        coordinator.finish(&path(), task.compile_id);
+
+        assert!(
+            coordinator
+                .get_current_tracked(&path(), &request, &BTreeMap::new())
+                .is_none()
+        );
+        assert!(
+            coordinator
+                .get_current_with_observations(
+                    &path(),
+                    &request,
+                    &BTreeMap::from([(
+                        key.clone(),
+                        crate::node_system::analysis::ResourceObservedState::Absent(Some(
+                            tombstone
+                        )),
+                    )]),
+                )
+                .is_some()
+        );
+        assert!(
+            coordinator
+                .get_current_with_observations(
+                    &path(),
+                    &request,
+                    &BTreeMap::from([(
+                        key,
+                        crate::node_system::analysis::ResourceObservedState::Absent(Some(
+                            ResourceVersion::new("revision:8"),
+                        )),
+                    )]),
+                )
+                .is_none()
+        );
     }
 
     #[test]

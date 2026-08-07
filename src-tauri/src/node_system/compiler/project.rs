@@ -70,20 +70,18 @@ impl InterfaceResolver for FunctionInterfaceResolver {
         request: InterfaceResolverRequest<'_>,
     ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
         let function = function_path(&request)?;
-        let document = request
+        let resolved = request
             .resources
-            .function_document(&function)
-            .ok_or_else(|| {
-                InterfaceResolverError::new(format!(
-                    "function resource '{}' is not present in the compilation snapshot",
-                    function.0
-                ))
-            })?;
+            .resolve_function(&function)
+            .map_err(|error| InterfaceResolverError::from_resource(&error))?;
+        let document = resolved.value.function.clone();
         Ok(match self.projection {
             FunctionInterfaceProjection::Parameters => {
-                parameter_members(&request, &function, document)
+                parameter_members(request.basis, &function, &document)
             }
-            FunctionInterfaceProjection::Result => result_members(&request, &function, document),
+            FunctionInterfaceProjection::Result => {
+                result_members(request.basis, &function, &document)
+            }
         })
     }
 }
@@ -114,7 +112,9 @@ fn function_path(
 }
 
 fn parameter_members(
-    request: &InterfaceResolverRequest<'_>,
+    basis: &crate::node_system::analysis::CompilationBasis<
+        crate::node_system::document::GraphRevision,
+    >,
     function: &GraphResourcePath,
     document: &FunctionDocument,
 ) -> Box<[InterfaceResolverMember]> {
@@ -123,7 +123,7 @@ fn parameter_members(
         .parameters
         .iter()
         .map(|parameter| InterfaceResolverMember {
-            basis: request.basis.clone(),
+            basis: basis.clone(),
             locator: DynamicMemberLocator::FunctionParameter {
                 function: function.clone(),
                 parameter: parameter.id.clone(),
@@ -136,7 +136,9 @@ fn parameter_members(
 }
 
 fn result_members(
-    request: &InterfaceResolverRequest<'_>,
+    basis: &crate::node_system::analysis::CompilationBasis<
+        crate::node_system::document::GraphRevision,
+    >,
     function: &GraphResourcePath,
     document: &FunctionDocument,
 ) -> Box<[InterfaceResolverMember]> {
@@ -145,7 +147,7 @@ fn result_members(
         .return_type
         .as_ref()
         .map(|return_type| InterfaceResolverMember {
-            basis: request.basis.clone(),
+            basis: basis.clone(),
             locator: DynamicMemberLocator::FunctionParameter {
                 function: function.clone(),
                 parameter: FunctionParameterId("return".into()),

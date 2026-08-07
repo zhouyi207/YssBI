@@ -10,6 +10,7 @@ import type {
 } from '@/shared/types/dto/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
+import { ProjectService } from '@/services/project/projectService';
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
   executeFunctionSignatureMutation,
@@ -29,6 +30,15 @@ const beforeSignature: FunctionSignatureDto = {
 const afterSignature: FunctionSignatureDto = {
   parameters: [{ id: 'value', name: 'Renamed', type_name: 'Float64' }],
   return_type: 'Int64',
+};
+const authoritativeFunctionProjection = {
+  functionRevision: 3,
+  inputs: [{ id: 'value', name: 'Observed value', dataType: { kind: 'Float64' as const } }],
+  outputs: [{
+    id: 'computed',
+    name: 'Computed value',
+    dataType: { kind: 'Struct' as const, inner: 'RegressionModel' },
+  }],
 };
 
 vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
@@ -93,6 +103,7 @@ function result(
             sourceRevision: 7,
             title: 'Committed signature projection',
           }).projection,
+          functionEditorProjection: authoritativeFunctionProjection,
         }]
       : [],
     projectionStatus,
@@ -103,7 +114,8 @@ function result(
 function dependencies(
   mutateSignature: FunctionSignatureCoordinatorDependencies['mutateSignature'],
   hydrateGraph = vi.fn(async () => true),
-  loadFunctionResources = vi.fn(async () => []),
+  loadFunctionResources: FunctionSignatureCoordinatorDependencies['loadFunctionResources'] =
+    vi.fn(async () => []),
 ): Partial<FunctionSignatureCoordinatorDependencies> {
   return {
     createOperationId: () => operationId,
@@ -248,8 +260,8 @@ describe('executeFunctionSignatureMutation', () => {
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
       functionRevision: 3,
       functionSignature: afterSignature,
-      functionInputs: [{ id: 'value', name: 'Renamed', dataType: { kind: 'Float64' } }],
-      functionOutputs: [{ id: 'return', name: 'Result', dataType: { kind: 'Int64' } }],
+      functionInputs: authoritativeFunctionProjection.inputs,
+      functionOutputs: authoritativeFunctionProjection.outputs,
     });
     expect(useHistoryStore.getState()).toEqual({
       canUndo: true,
@@ -259,7 +271,7 @@ describe('executeFunctionSignatureMutation', () => {
     expect(getPendingMutation(operationId)).toBeUndefined();
   });
 
-  it('installs signature status and hydrates invalidated graphs for an incomplete result', async () => {
+  it('preserves function authority until an incomplete result receives authoritative projection metadata', async () => {
     const callerPath = 'events/Caller.yssbi-event';
     const committed = result({
       status: 'incomplete',
@@ -267,6 +279,27 @@ describe('executeFunctionSignatureMutation', () => {
     }, false);
     const eventHandler = new ResourceMutationCommittedHandler();
     const hydrateGraph = vi.fn(async () => true);
+    const beforeMeta = structuredClone(useGraphMetaStore.getState().graphs[functionPath]);
+    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
+      projectInstanceId,
+      projectName: 'Recovery fixture',
+      appVersion: '0.1.0',
+      exportTime: '2026-08-07T00:00:00.000Z',
+      publicationRevision: 1,
+      history: { canUndo: true, canRedo: false },
+      graphs: [{
+        path: functionPath,
+        name: 'Compute',
+        type: 'function',
+        revision: 7,
+        functionRevision: 3,
+        functionSignature: afterSignature,
+        functionEditorProjection: authoritativeFunctionProjection,
+      }],
+      databases: [],
+      variables: [],
+      worksheets: [],
+    });
 
     const outcome = await executeFunctionSignatureMutation(
       {
@@ -286,12 +319,15 @@ describe('executeFunctionSignatureMutation', () => {
     expect(outcome).toEqual({ status: 'applied', result: committed });
     expect(useGraphDataStore.getState().graphEntities[functionPath]).toMatchObject({
       sourceRevision: 7,
-      nodes: { 'local-node': { title: 'Current graph projection' } },
+      nodes: { 'local-node': { title: 'Projected node' } },
     });
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
       functionRevision: 3,
       functionSignature: afterSignature,
+      functionInputs: authoritativeFunctionProjection.inputs,
+      functionOutputs: authoritativeFunctionProjection.outputs,
     });
+    expect(useGraphMetaStore.getState().graphs[functionPath]).not.toEqual(beforeMeta);
     expect(hydrateGraph).not.toHaveBeenCalled();
     expect(GraphProjectionService.loadGraph).toHaveBeenCalledWith(
       functionPath,
@@ -299,12 +335,8 @@ describe('executeFunctionSignatureMutation', () => {
       expect.any(Number),
       projectInstanceId,
     );
-    expect(GraphProjectionService.loadGraph).toHaveBeenCalledWith(
-      callerPath,
-      expect.any(String),
-      expect.any(Number),
-      projectInstanceId,
-    );
+    expect(GraphProjectionService.loadGraph).toHaveBeenCalledOnce();
+
     expect(useHistoryStore.getState()).toEqual({
       canUndo: true,
       canRedo: false,
@@ -312,11 +344,18 @@ describe('executeFunctionSignatureMutation', () => {
     });
   });
 
-  it('refreshes canonical function state and hydrates without local writes on a revision conflict', async () => {
+  it('refreshes canonical function projection and hydrates without local writes on a revision conflict', async () => {
     const beforeGraph = useGraphDataStore.getState().graphEntities[functionPath];
-    const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
     const hydrateGraph = vi.fn(async () => true);
-    const loadFunctionResources = vi.fn(async () => []);
+    const loadFunctionResources = vi.fn(async () => [{
+      path: functionPath,
+      name: 'Compute',
+      type: 'function' as const,
+      revision: 7,
+      functionRevision: 3,
+      functionSignature: afterSignature,
+      functionEditorProjection: authoritativeFunctionProjection,
+    }]);
 
     const outcome = await executeFunctionSignatureMutation(
       {
@@ -331,7 +370,12 @@ describe('executeFunctionSignatureMutation', () => {
 
     expect(outcome).toEqual({ status: 'conflict' });
     expect(useGraphDataStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
-    expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
+    expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
+      functionRevision: 3,
+      functionSignature: afterSignature,
+      functionInputs: authoritativeFunctionProjection.inputs,
+      functionOutputs: authoritativeFunctionProjection.outputs,
+    });
     expect(loadFunctionResources).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledWith(functionPath, 'en-US');

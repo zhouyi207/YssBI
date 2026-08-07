@@ -38,6 +38,10 @@ D:\Desktop\YssBI\target
 | 运行全部本地验证 | `pnpm verify` |
 | 清除标准 Rust 构建产物 | `pnpm rust:clean` |
 
+`pnpm rust:test` 和 `pnpm rust:test:sci` 通过 Cargo `--jobs 1` 序列化 Rust
+测试链接，以避免 Windows 链接器内存峰值。`pnpm rust:check` 和开发构建
+仍保留 Cargo 的正常并行度。
+
 `pnpm verify` 会执行前端类型检查、前端测试、Rust 格式/编译/测试，以及
 `git diff --check`。它不会启动应用、打包安装包或修改项目状态。
 

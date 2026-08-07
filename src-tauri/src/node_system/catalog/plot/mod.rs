@@ -4,7 +4,8 @@ use super::builtin::{
 use super::localization::Message;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, KernelFragment as LoweredKernelFragment, LoweredKernel,
-    LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    LoweredNode, LoweringContext, LoweringError, LoweringInvariant, NodeImplementation,
+    NodeLowerer,
 };
 use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
@@ -355,16 +356,17 @@ impl NodeLowerer for PlotLowerer {
             .iter()
             .find(|(address, _)| matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result"))
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("plot output 'result' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         Ok(LoweredNode {
             kernel: LoweredKernel::Kernel(LoweredKernelFragment {
                 kernel: KernelHandle::new(self.kernel)
-                    .map_err(|error| LoweringError::new(error.to_string()))?,
+                    .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
                 metadata: FragmentMetadata {
                     effect: EffectSemantics::Ordered,
                     resources: vec![CompiledResourceRequirement {
-                        resource: ResourceId::new(PLOT_SINK)
-                            .map_err(|error| LoweringError::new(error.to_string()))?,
+                        resource: ResourceId::new(PLOT_SINK).map_err(|_| {
+                            LoweringError::internal(LoweringInvariant::InvalidStaticHandle)
+                        })?,
                         kind: ResourceKind::ExternalArtifact,
                         access: ResourceAccess::Shared,
                         optional: false,
@@ -378,7 +380,7 @@ impl NodeLowerer for PlotLowerer {
                 },
             }),
             parameters: CompiledParameterHandle::new(format!("node.{}", context.node_id))
-                .map_err(|error| LoweringError::new(error.to_string()))?,
+                .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
         })
     }
 }

@@ -35,8 +35,14 @@ function graphMutationWireResult(): unknown {
       projection: makeEditorProjectionFixture({
         graphPath,
         sourceRevision: 2,
+        nodeId: '00000000-0000-0000-0000-000000000603',
         title: 'Committed',
       }).projection,
+      functionEditorProjection: {
+        functionRevision: 2,
+        inputs: [],
+        outputs: [],
+      },
     },
     history: { canUndo: true, canRedo: false },
   };

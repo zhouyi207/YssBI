@@ -125,6 +125,7 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),
                 resource_versions: BTreeMap::new(),
+                resource_observations: BTreeMap::new(),
             },
             compile_id: CompileId::new(1),
         },

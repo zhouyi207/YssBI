@@ -18,6 +18,13 @@ pub enum ProjectFilesystemError {
     StaleProjectLifecycle { message: String },
     #[error("catalog resource stale: {message}")]
     CatalogResourceStale { message: String },
+    #[error("database access failed: {message}")]
+    DatabaseAccessFailed { message: String },
+    #[error("resource revision overflow for '{path}' at {retained}")]
+    ResourceRevisionOverflow {
+        path: super::GraphResourcePath,
+        retained: u64,
+    },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -47,6 +54,8 @@ impl ProjectFilesystemError {
             Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::CatalogResourceStale { .. } => "catalog_resource_stale",
+            Self::DatabaseAccessFailed { .. } => "database_access_failed",
+            Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",

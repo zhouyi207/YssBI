@@ -903,6 +903,7 @@ mod tests {
             graph_revision: crate::node_system::document::GraphRevision::new(1),
             registry_fingerprint: RegistryFingerprint::from_bytes([8; 32]),
             resource_versions: std::collections::BTreeMap::new(),
+            resource_observations: std::collections::BTreeMap::new(),
         };
         let correlation = CorrelationContext {
             project_session_id: ProjectSessionId::new("session"),
@@ -1445,6 +1446,7 @@ mod tests {
             graph_revision: crate::node_system::document::GraphRevision::new(unsafe_id),
             registry_fingerprint: RegistryFingerprint::from_bytes([2; 32]),
             resource_versions: Default::default(),
+            resource_observations: Default::default(),
         };
         let correlation = CorrelationContext {
             project_session_id: ProjectSessionId::new("session"),

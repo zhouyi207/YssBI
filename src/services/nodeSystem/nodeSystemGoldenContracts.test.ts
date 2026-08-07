@@ -4,6 +4,7 @@ import i18nInventory from '@/tests/fixtures/node-system-contracts/i18n-inventory
 import localizedCatalog from '@/tests/fixtures/node-system-contracts/localized-catalog.json';
 import editorProjection from '@/tests/fixtures/node-system-contracts/editor-projection.json';
 import fingerprintWire from '@/tests/fixtures/node-system-contracts/fingerprint-wire.json';
+import functionEditorProjection from '@/tests/fixtures/node-system-contracts/function-editor-projection.json';
 import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
 import {
   isLocalizedCatalogDto,
@@ -16,6 +17,8 @@ import { isSchemaAwareParameterEditorDto } from '@/shared/types/dto/parameterEdi
 import {
   parseProjectMutationEvent,
 } from '@/features/core/sync/utils/projectEventWireParser';
+import { parseProjectGraphIndexRow } from '@/services/project/projectService';
+import { parseGraphProjectionReplacementDto } from '@/shared/types/dto/editorMutationWireParser';
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -28,6 +31,21 @@ function deleteKey(value: object, key: string): void {
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 
 describe('Rust-generated node-system golden contracts', () => {
+  it('consumes one real Rust function editor projection shape across index and replacement', () => {
+    expect(functionEditorProjection.format).toBe('yssbi.function-editor-projection.v1');
+    const row = parseProjectGraphIndexRow(functionEditorProjection.indexRow);
+    const replacement = parseGraphProjectionReplacementDto(functionEditorProjection.replacement);
+
+    expect(row.type).toBe('function');
+    if (row.type !== 'function') throw new Error('expected function row');
+    expect(replacement).toHaveProperty('functionEditorProjection');
+    if (!('functionEditorProjection' in replacement)) {
+      throw new Error('expected function replacement');
+    }
+    expect(row.functionEditorProjection).toEqual(replacement.functionEditorProjection);
+    expect(row.functionEditorProjection.outputs[0].name).toBe('Array<String>');
+  });
+
   it('consumes the exact production GraphDelta and ResourceMutationCommitted event shapes', () => {
     expect(projectEvents.format).toBe('yssbi.project-events.v1');
     expect(projectEvents.events.map((event) => [event.type, event.payload.type])).toEqual([
@@ -140,6 +158,17 @@ describe('Rust-generated node-system golden contracts', () => {
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       (node.ports as Array<Record<string, unknown>>)[0].address = value;
       expect(isEditorGraphProjectionDto(projection)).toBe(true);
+
+      const validNodeId = value.nodeId;
+      value.nodeId = 'not-a-uuid';
+      expect(isEditorGraphProjectionDto(projection)).toBe(false);
+      value.nodeId = validNodeId;
+      if (value.kind === 'instance') {
+        const validInstanceId = value.instanceId;
+        Object.assign(value, { instanceId: 'not-a-uuid' });
+        expect(isEditorGraphProjectionDto(projection)).toBe(false);
+        Object.assign(value, { instanceId: validInstanceId });
+      }
 
       Object.assign(value, { compatibility: true });
       expect(isEditorGraphProjectionDto(projection)).toBe(false);

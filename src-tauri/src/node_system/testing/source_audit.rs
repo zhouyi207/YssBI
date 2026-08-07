@@ -3880,6 +3880,257 @@ fn fixture() { let _ = diagnostic("compiler.file.test"); }
     std::fs::remove_dir_all(root).unwrap();
 }
 
+const RAW_GRAPH_DOCUMENT_MUTATIONS: [&str; 6] = [
+    "create_node",
+    "delete_node",
+    "bind_port",
+    "connect",
+    "disconnect",
+    "set_literal",
+];
+
+fn is_raw_graph_document_mutation(name: &syn::Ident) -> bool {
+    RAW_GRAPH_DOCUMENT_MUTATIONS.contains(&name.to_string().as_str())
+}
+
+fn is_strict_cfg_test(attributes: &[syn::Attribute]) -> bool {
+    let cfg_attributes = attributes
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("cfg"))
+        .collect::<Vec<_>>();
+    cfg_attributes.len() == 1
+        && cfg_attributes[0]
+            .meta
+            .require_list()
+            .ok()
+            .and_then(|cfg| syn::parse2::<Meta>(cfg.tokens.clone()).ok())
+            .is_some_and(|predicate| matches!(predicate, Meta::Path(path) if path.is_ident("test")))
+}
+
+fn is_graph_document_type(value_type: &Type) -> bool {
+    matches!(
+        value_type,
+        Type::Path(path)
+            if path.path.segments.last().is_some_and(|segment| segment.ident == "GraphDocument")
+    )
+}
+
+fn expr_attributes(expr: &Expr) -> &[syn::Attribute] {
+    match expr {
+        Expr::Array(expr) => &expr.attrs,
+        Expr::Assign(expr) => &expr.attrs,
+        Expr::Async(expr) => &expr.attrs,
+        Expr::Await(expr) => &expr.attrs,
+        Expr::Binary(expr) => &expr.attrs,
+        Expr::Block(expr) => &expr.attrs,
+        Expr::Break(expr) => &expr.attrs,
+        Expr::Call(expr) => &expr.attrs,
+        Expr::Cast(expr) => &expr.attrs,
+        Expr::Closure(expr) => &expr.attrs,
+        Expr::Const(expr) => &expr.attrs,
+        Expr::Continue(expr) => &expr.attrs,
+        Expr::Field(expr) => &expr.attrs,
+        Expr::ForLoop(expr) => &expr.attrs,
+        Expr::Group(expr) => &expr.attrs,
+        Expr::If(expr) => &expr.attrs,
+        Expr::Index(expr) => &expr.attrs,
+        Expr::Infer(expr) => &expr.attrs,
+        Expr::Let(expr) => &expr.attrs,
+        Expr::Lit(expr) => &expr.attrs,
+        Expr::Loop(expr) => &expr.attrs,
+        Expr::Macro(expr) => &expr.attrs,
+        Expr::Match(expr) => &expr.attrs,
+        Expr::MethodCall(expr) => &expr.attrs,
+        Expr::Paren(expr) => &expr.attrs,
+        Expr::Path(expr) => &expr.attrs,
+        Expr::Range(expr) => &expr.attrs,
+        Expr::RawAddr(expr) => &expr.attrs,
+        Expr::Reference(expr) => &expr.attrs,
+        Expr::Repeat(expr) => &expr.attrs,
+        Expr::Return(expr) => &expr.attrs,
+        Expr::Struct(expr) => &expr.attrs,
+        Expr::Try(expr) => &expr.attrs,
+        Expr::TryBlock(expr) => &expr.attrs,
+        Expr::Tuple(expr) => &expr.attrs,
+        Expr::Unary(expr) => &expr.attrs,
+        Expr::Unsafe(expr) => &expr.attrs,
+        Expr::While(expr) => &expr.attrs,
+        Expr::Yield(expr) => &expr.attrs,
+        _ => &[],
+    }
+}
+
+struct RawGraphDocumentMutationVisitor {
+    violations: Vec<String>,
+    production_methods: HashSet<String>,
+    strict_test_methods: HashSet<String>,
+    test_only_scope: bool,
+}
+
+impl RawGraphDocumentMutationVisitor {
+    fn report(&mut self, kind: &str, name: &syn::Ident) {
+        self.violations.push(format!(
+            "production raw GraphDocument mutation {kind}:{}",
+            name
+        ));
+    }
+
+    fn inspect_graph_document_impl(&mut self, node: &syn::ItemImpl) {
+        if !is_graph_document_type(&node.self_ty) {
+            return;
+        }
+        let impl_is_test_only = is_test_only(&node.attrs);
+        let strict_test_impl = !self.test_only_scope && is_strict_cfg_test(&node.attrs);
+        for item in &node.items {
+            let syn::ImplItem::Fn(method) = item else {
+                continue;
+            };
+            if !is_raw_graph_document_mutation(&method.sig.ident) {
+                continue;
+            }
+            let name = method.sig.ident.to_string();
+            let method_is_test_only = is_test_only(&method.attrs);
+            if !self.test_only_scope && !impl_is_test_only && !method_is_test_only {
+                self.production_methods.insert(name.clone());
+                self.violations.push(format!(
+                    "production GraphDocument impl exposes raw mutation:{name}"
+                ));
+            } else if strict_test_impl
+                && !method.attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+            {
+                self.strict_test_methods.insert(name.clone());
+                let crate_visible = matches!(
+                    &method.vis,
+                    syn::Visibility::Restricted(restricted)
+                        if restricted.path.is_ident("crate")
+                );
+                if !crate_visible {
+                    self.violations.push(format!(
+                        "test-only GraphDocument mutation must be pub(crate):{name}"
+                    ));
+                }
+            }
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for RawGraphDocumentMutationVisitor {
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_item_mod(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        self.inspect_graph_document_impl(node);
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_item_impl(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_item_fn(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_impl_item_fn(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_trait_item_fn(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_expr(&mut self, node: &'ast Expr) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(expr_attributes(node));
+        visit::visit_expr(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_local(&mut self, node: &'ast syn::Local) {
+        let parent_scope = self.test_only_scope;
+        self.test_only_scope |= is_test_only(&node.attrs);
+        visit::visit_local(self, node);
+        self.test_only_scope = parent_scope;
+    }
+
+    fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+        if !self.test_only_scope
+            && !is_test_only(&node.attrs)
+            && is_raw_graph_document_mutation(&node.method)
+        {
+            self.report("method call", &node.method);
+        }
+        visit::visit_expr_method_call(self, node);
+    }
+
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        if !self.test_only_scope
+            && !is_test_only(&node.attrs)
+            && let Some(name) = node.path.segments.last().map(|segment| &segment.ident)
+            && is_raw_graph_document_mutation(name)
+            && (node.qself.is_some() || node.path.segments.len() > 1)
+        {
+            self.report("UFCS or alias reference", name);
+        }
+        visit::visit_expr_path(self, node);
+    }
+
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        if self.test_only_scope || is_test_only(&node.attrs) {
+            return;
+        }
+        let mut paths = Vec::new();
+        expand_use_tree(&node.tree, &mut Vec::new(), &mut paths);
+        for path in paths {
+            if let Some(name) = path
+                .iter()
+                .find(|segment| RAW_GRAPH_DOCUMENT_MUTATIONS.contains(&segment.as_str()))
+            {
+                self.violations.push(format!(
+                    "production raw GraphDocument mutation import alias:{name}"
+                ));
+            }
+        }
+        visit::visit_item_use(self, node);
+    }
+}
+
+fn audit_raw_graph_document_mutations(transaction_source: &str) -> Vec<String> {
+    let transaction = syn::parse_file(transaction_source).unwrap();
+    let mut visitor = RawGraphDocumentMutationVisitor {
+        violations: Vec::new(),
+        production_methods: HashSet::new(),
+        strict_test_methods: HashSet::new(),
+        test_only_scope: false,
+    };
+    visitor.visit_file(&transaction);
+
+    for name in RAW_GRAPH_DOCUMENT_MUTATIONS {
+        if !visitor.production_methods.contains(name) && !visitor.strict_test_methods.contains(name)
+        {
+            visitor.violations.push(format!(
+                "GraphDocument test mutation is missing strict cfg(test) impl:{name}"
+            ));
+        }
+    }
+
+    visitor.violations.sort();
+    visitor.violations.dedup();
+    visitor.violations
+}
+
 fn audit_production_graph_write_surface(
     document_source: &str,
     mutation_source: &str,
@@ -3980,6 +4231,167 @@ fn audit_production_graph_write_surface(
     }
 
     violations
+}
+
+#[test]
+fn raw_graph_document_audit_rejects_nested_production_declarations() {
+    let violations = audit_raw_graph_document_mutations(
+        r#"
+#[cfg(test)]
+impl GraphDocument {
+    pub(crate) fn create_node(&mut self) {}
+    pub(crate) fn delete_node(&mut self) {}
+    pub(crate) fn bind_port(&mut self) {}
+    pub(crate) fn connect(&mut self) {}
+    pub(crate) fn disconnect(&mut self) {}
+    pub(crate) fn set_literal(&mut self) {}
+}
+
+#[cfg(not(test))]
+mod nested {
+    impl GraphDocument {
+        fn create_node(&mut self) {}
+    }
+}
+"#,
+    );
+
+    assert!(
+        violations.iter().any(|violation| violation
+            .contains("production GraphDocument impl exposes raw mutation:create_node")),
+        "nested production GraphDocument declaration escaped the audit:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn raw_graph_document_audit_allows_strict_test_only_ancestor_scopes() {
+    let violations = audit_raw_graph_document_mutations(
+        r#"
+#[cfg(test)]
+impl GraphDocument {
+    pub(crate) fn create_node(&mut self) {}
+    pub(crate) fn delete_node(&mut self) {}
+    pub(crate) fn bind_port(&mut self) {}
+    pub(crate) fn connect(&mut self) {}
+    pub(crate) fn disconnect(&mut self) {}
+    pub(crate) fn set_literal(&mut self) {}
+}
+
+#[cfg(test)]
+mod fixture_module {
+    fn calls(document: &mut GraphDocument) {
+        document.create_node();
+        let raw = GraphDocument::delete_node;
+        raw(document);
+    }
+}
+
+struct Fixture;
+
+#[cfg(test)]
+impl Fixture {
+    fn calls(document: &mut GraphDocument) {
+        document.bind_port();
+    }
+}
+
+impl Fixture {
+    #[cfg(test)]
+    fn method(document: &mut GraphDocument) {
+        document.connect();
+    }
+
+    fn scoped(document: &mut GraphDocument) {
+        #[cfg(test)]
+        {
+            document.disconnect();
+        }
+
+        #[cfg(test)]
+        GraphDocument::set_literal(document);
+
+        #[cfg(test)]
+        let raw = GraphDocument::create_node;
+        #[cfg(test)]
+        raw(document);
+    }
+}
+"#,
+    );
+
+    assert!(
+        violations.is_empty(),
+        "strict test-only ancestor scopes produced false positives:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn production_graph_document_exposes_no_raw_mutation_methods() {
+    let bypasses = audit_raw_graph_document_mutations(
+        r#"
+use crate::node_system::document::GraphDocument;
+
+fn method_call(document: &mut GraphDocument) {
+    document.create_node(todo!()).unwrap();
+}
+
+fn ufcs(document: &mut GraphDocument) {
+    GraphDocument::delete_node(document, todo!()).unwrap();
+}
+
+fn alias(document: &mut GraphDocument) {
+    let raw = GraphDocument::bind_port;
+    raw(document, todo!(), todo!()).unwrap();
+}
+
+#[cfg(any(test, feature = "fixture"))]
+fn weak_call(document: &mut GraphDocument) {
+    document.set_literal(todo!(), todo!()).unwrap();
+}
+
+#[cfg(any(test, feature = "fixture"))]
+impl GraphDocument {
+    pub(crate) fn connect(&mut self) {}
+}
+
+#[cfg(test)]
+impl GraphDocument {
+    pub(crate) fn create_node(&mut self) {}
+    pub(crate) fn delete_node(&mut self) {}
+    pub(crate) fn bind_port(&mut self) {}
+    pub(crate) fn disconnect(&mut self) {}
+    pub(crate) fn set_literal(&mut self) {}
+}
+"#,
+    );
+    for expected in [
+        "method call:create_node",
+        "UFCS or alias reference:delete_node",
+        "UFCS or alias reference:bind_port",
+        "method call:set_literal",
+        "production GraphDocument impl exposes raw mutation:connect",
+    ] {
+        assert!(
+            bypasses
+                .iter()
+                .any(|violation| violation.contains(expected)),
+            "raw GraphDocument mutation audit missed {expected}:\n{}",
+            bypasses.join("\n")
+        );
+    }
+
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let violations = audit_raw_graph_document_mutations(
+        &std::fs::read_to_string(source_root.join("node_system/document/transaction.rs")).unwrap(),
+    );
+
+    assert!(
+        violations.is_empty(),
+        "production GraphDocument raw mutation violations:\n{}",
+        violations.join("\n")
+    );
 }
 
 #[test]

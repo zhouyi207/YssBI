@@ -453,7 +453,7 @@ fn read_project_index_with(
         &capture.variable_revisions,
         &capture.database_revisions,
         &mut index,
-    );
+    )?;
     index.project_instance_id = capture.project_instance_id.clone();
     index.publication_revision = capture.publication_revision;
     index.history = capture.history;
@@ -565,7 +565,7 @@ fn overlay_authoritative_project_index(
     >,
     database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
-) {
+) -> Result<(), ProjectFilesystemError> {
     let mut variables = std::collections::BTreeMap::new();
     for mut variable in std::mem::take(&mut index.variables) {
         if matches!(variable.scope, crate::variable::VariableScope::Global) {
@@ -653,8 +653,14 @@ fn overlay_authoritative_project_index(
         if let Some(function) = resource.function.as_ref() {
             entry.function_revision = Some(function.revision);
             entry.function_signature = Some(function.signature.clone());
+            entry.function_editor_projection = Some(
+                crate::node_system::analysis::build_function_editor_projection(function).map_err(
+                    |message| ProjectFilesystemError::TransactionPrepareFailed { message },
+                )?,
+            );
         }
     }
+    Ok(())
 }
 
 fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
@@ -666,7 +672,7 @@ fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
 #[cfg(test)]
 mod tests {
     use crate::graph::value::{DataType, DataValue};
-    use crate::node_system::document::FunctionSignature;
+    use crate::node_system::document::{FunctionParameter, FunctionParameterId, FunctionSignature};
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
         ProjectFilesystemError, ProjectState, WorksheetDocument, fixtures,
@@ -803,8 +809,12 @@ mod tests {
         function.function = Some(crate::node_system::document::FunctionDocument {
             revision: crate::node_system::document::GraphRevision::new(7),
             signature: FunctionSignature {
-                parameters: Vec::new(),
-                return_type: Some("Int64".into()),
+                parameters: vec![FunctionParameter {
+                    id: FunctionParameterId("sales".into()),
+                    name: "Observed sales".into(),
+                    type_name: "DataSeries<Float64>".into(),
+                }],
+                return_type: Some("Array<String>".into()),
             },
         });
         let before = serde_json::to_value(&authoritative).unwrap();
@@ -832,7 +842,29 @@ mod tests {
                 .unwrap()
                 .return_type
                 .as_deref(),
-            Some("Int64")
+            Some("Array<String>")
+        );
+        assert_eq!(
+            serde_json::to_value(function.function_editor_projection.as_ref().unwrap()).unwrap(),
+            serde_json::json!({
+                "functionRevision": 7,
+                "inputs": [{
+                    "id": "sales",
+                    "name": "Observed sales",
+                    "dataType": {
+                        "kind": "DataSeries",
+                        "inner": { "kind": "Float64" }
+                    }
+                }],
+                "outputs": [{
+                    "id": "return",
+                    "name": "Array<String>",
+                    "dataType": {
+                        "kind": "Array",
+                        "inner": { "kind": "String" }
+                    }
+                }]
+            })
         );
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
@@ -919,7 +951,8 @@ mod tests {
                 &capture.variable_revisions,
                 &capture.database_revisions,
                 &mut index,
-            );
+            )
+            .unwrap();
             let database = index
                 .databases
                 .iter()

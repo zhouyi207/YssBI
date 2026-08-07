@@ -17,15 +17,18 @@ use super::specialization::{
 use super::type_analysis::{TypeConstraintGraph, TypeEnvironment};
 use super::{
     CompilerDiagnostic, CompilerDiagnosticLocation, CompilerNodeDiagnostic, LoweredKernel,
-    LoweringContext, NodeImplementation, compare_diagnostics, managed_node_role_name,
-    node_scope_name, port_kind_name,
+    LoweringContext, LoweringError, NodeImplementation, ValidatedNodeConfig, compare_diagnostics,
+    managed_node_role_name, node_scope_name, port_kind_name,
 };
 use crate::node_system::analysis::{
-    AnalysisSnapshot, AnalyzedNode, CompilationBasis, CompileId, CompileProvenance, ControlEdge,
-    CorrelationContext, DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId,
-    ResolvedInterface, ResolvedPort, ResourceVersionSet, SemanticDependency, SpanEvent, SpanKind,
-    SpanStatus, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode, ValidatedSemanticPort,
-    ValueEdge,
+    AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
+    CompilationBasis, CompileId, CompileProvenance, ControlEdge, CorrelationContext,
+    DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId, ResolvedDatabase,
+    ResolvedFunction, ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource,
+    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
+    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanEvent,
+    SpanKind, SpanStatus, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
+    ValidatedSemanticPort, ValueEdge,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
@@ -40,9 +43,9 @@ use crate::node_system::plan::{
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, EffectSemantics, EvaluationPolicy, InputConsumption, LiteralPolicy,
-    NodeProtocol, NodeTypeId, OutputProduction, ParameterConstraint, ParameterEditorSpec,
+    NodeProtocol, NodeTypeId, OutputProduction, ParameterEditorSpec, ParameterIssueKind,
     PortDirection, PortInstances, PortKind, PortSpec, Purity, TypeClassId, TypeConstructorId,
-    TypeExpr, TypeId,
+    TypeExpr, TypeId, validate_parameter_values,
 };
 use crate::node_system::registry::{
     NodeRegistry, ProtocolFingerprint, RegistryFingerprint, StructuralNodeRole,
@@ -112,6 +115,14 @@ pub trait CompilerRegistry: TypeEnvironment {
     ) -> Option<Result<(), String>> {
         None
     }
+
+    fn prepare_nominal_parameter(
+        &self,
+        _type_id: &TypeId,
+        _value: &serde_json::Value,
+    ) -> Option<Result<crate::node_system::registry::PreparedNominalValue, String>> {
+        None
+    }
 }
 
 impl TypeEnvironment for NodeRegistry {
@@ -166,10 +177,28 @@ impl CompilerRegistry for NodeRegistry {
     ) -> Option<Result<(), String>> {
         NodeRegistry::validate_nominal_parameter(self, type_id, value)
     }
+
+    fn prepare_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<crate::node_system::registry::PreparedNominalValue, String>> {
+        NodeRegistry::prepare_nominal_parameter(self, type_id, value)
+    }
 }
 
 pub trait ResourceSnapshot {
     fn versions(&self) -> ResourceVersionSet;
+
+    fn version(&self, key: &ResourceKey) -> Option<ResourceVersion> {
+        self.versions().remove(key)
+    }
+
+    fn observed_state(&self, key: &ResourceKey) -> ResourceObservedState {
+        self.version(key)
+            .map(ResourceObservedState::Present)
+            .unwrap_or(ResourceObservedState::Absent(None))
+    }
 
     fn function_document(&self, _path: &GraphResourcePath) -> Option<&FunctionDocument> {
         None
@@ -177,6 +206,140 @@ pub trait ResourceSnapshot {
 
     fn function_graph_document(&self, _path: &GraphResourcePath) -> Option<&GraphDocument> {
         None
+    }
+
+    fn variable(
+        &self,
+        _id: &crate::variable::VariableId,
+    ) -> Option<&crate::variable::VariableInstance> {
+        None
+    }
+
+    fn database_schema(&self, _id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
+        None
+    }
+}
+
+struct TrackedResourceResolver<'a, S> {
+    snapshot: &'a S,
+    reads: AnalysisResourceReads,
+    observations: ResourceObservationSet,
+}
+
+impl<'a, S> TrackedResourceResolver<'a, S> {
+    fn new(snapshot: &'a S) -> Self {
+        Self {
+            snapshot,
+            reads: AnalysisResourceReads::new(),
+            observations: ResourceObservationSet::new(),
+        }
+    }
+}
+
+impl<S: ResourceSnapshot> TrackedResourceResolver<'_, S> {
+    fn failure(
+        &mut self,
+        key: ResourceKey,
+        state: ResourceObservedState,
+        reason: impl Into<Box<str>>,
+    ) -> ResourceResolutionError {
+        let reason = reason.into();
+        self.observations.insert(key.clone(), state.clone());
+        ResourceResolutionError::new(key, state, reason)
+    }
+
+    fn successful(&mut self, key: ResourceKey, version: ResourceVersion) {
+        self.observations.remove(&key);
+        self.reads.insert(key, version);
+    }
+}
+
+impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'_, S> {
+    fn resolve_function(
+        &mut self,
+        path: &GraphResourcePath,
+    ) -> Result<ResolvedFunction<'_>, ResourceResolutionError> {
+        let key = ResourceKey::new(path.0.clone());
+        let state = self.snapshot.observed_state(&key);
+        let ResourceObservedState::Present(version) = state.clone() else {
+            return Err(self.failure(
+                key,
+                state,
+                format!("function resource '{}' is missing", path.0),
+            ));
+        };
+        let Some(function) = self.snapshot.function_document(path) else {
+            return Err(self.failure(
+                key,
+                state,
+                format!("function resource '{}' has no signature", path.0),
+            ));
+        };
+        let Some(graph) = self.snapshot.function_graph_document(path) else {
+            return Err(self.failure(
+                key,
+                state,
+                format!("function graph '{}' is missing", path.0),
+            ));
+        };
+        self.successful(key.clone(), version.clone());
+        Ok(ResolvedResource {
+            key,
+            version,
+            value: ResolvedFunctionValue { function, graph },
+        })
+    }
+
+    fn resolve_variable(
+        &mut self,
+        id: &crate::variable::VariableId,
+    ) -> Result<ResolvedVariable<'_>, ResourceResolutionError> {
+        let key = ResourceKey::new(format!("variables/{id}"));
+        let state = self.snapshot.observed_state(&key);
+        let ResourceObservedState::Present(version) = state.clone() else {
+            return Err(self.failure(key, state, format!("variable resource '{id}' is missing")));
+        };
+        let Some(value) = self.snapshot.variable(id) else {
+            return Err(self.failure(key, state, format!("variable resource '{id}' has no value")));
+        };
+        self.successful(key.clone(), version.clone());
+        Ok(ResolvedResource {
+            key,
+            version,
+            value,
+        })
+    }
+
+    fn resolve_database(
+        &mut self,
+        id: &str,
+    ) -> Result<ResolvedDatabase<'_>, ResourceResolutionError> {
+        let key = ResourceKey::new(format!("databases/{id}"));
+        let state = self.snapshot.observed_state(&key);
+        let ResourceObservedState::Present(version) = state.clone() else {
+            return Err(self.failure(key, state, format!("database resource '{id}' is missing")));
+        };
+        let Some(value) = self.snapshot.database_schema(id) else {
+            return Err(self.failure(
+                key,
+                state,
+                format!("database resource '{id}' has no schema"),
+            ));
+        };
+        self.successful(key.clone(), version.clone());
+        Ok(ResolvedResource {
+            key,
+            version,
+            value,
+        })
+    }
+
+    fn reads(&self) -> &AnalysisResourceReads {
+        &self.reads
+    }
+
+    fn observations(&self) -> &ResourceObservationSet {
+        &self.observations
     }
 }
 
@@ -200,6 +363,32 @@ pub struct CompileResult {
     pub execution_basis: Option<ExecutionPlanBasis>,
     pub plan: Option<ExecutionPlan>,
     pub function_abi: Option<FunctionPlanAbi>,
+}
+
+fn finalize_resource_basis(
+    mut result: CompileResult,
+    resources: &dyn AnalysisResourceResolver,
+) -> CompileResult {
+    let versions = resources.reads().clone();
+    let observations = resources.observations().clone();
+    let apply = |basis: &mut CompilationBasis<GraphRevision>| {
+        basis.resource_versions = versions.clone();
+        basis.resource_observations = observations.clone();
+    };
+    apply(&mut result.analysis.basis);
+    if let Some(semantic) = result.semantic.as_mut() {
+        apply(&mut semantic.basis);
+    }
+    if let Some(execution_basis) = result.execution_basis.as_mut() {
+        apply(&mut execution_basis.provenance.basis);
+    }
+    if let Some(plan) = result.plan.as_mut() {
+        apply(&mut plan.provenance.basis);
+    }
+    if let Some(abi) = result.function_abi.as_mut() {
+        apply(&mut abi.provenance.basis);
+    }
+    result
 }
 
 pub struct GraphCompiler<'a, R, S> {
@@ -312,7 +501,8 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             basis: CompilationBasis {
                 graph_revision: document.revision,
                 registry_fingerprint: self.registry.fingerprint().clone(),
-                resource_versions: self.resources.versions(),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: ResourceObservationSet::new(),
             },
             compile_id,
         };
@@ -355,6 +545,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             ));
             return Err(error);
         }
+        let mut resources = TrackedResourceResolver::new(self.resources);
         let mut state = AnalysisState::new(
             &snapshot.document,
             snapshot.provenance.graph_path.clone(),
@@ -364,7 +555,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             self.registry,
             &self.schema_resolvers,
             &self.interface_resolvers,
-            self.resources,
+            &mut resources,
             cancellation,
         ) {
             self.trace.record(SpanEvent::new(
@@ -374,8 +565,40 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             ));
             return Err(error);
         }
-        let mut analysis = state.snapshot();
+        let provisional_semantic = state.semantic_graph();
         let interface_projection = state.interface_projection();
+        let mut function_abi = match derive_function_abi(
+            self.registry,
+            &provisional_semantic,
+            &interface_projection,
+            &snapshot.provenance,
+        ) {
+            Ok(abi) => abi,
+            Err(diagnostic) => {
+                state.diagnostics.push(diagnostic);
+                None
+            }
+        };
+        let closure =
+            match self.function_abis_for_calls(&provisional_semantic, &mut resources, cancellation)
+            {
+                Ok(closure) => closure,
+                Err(error) => {
+                    self.trace.record(SpanEvent::new(
+                        SpanKind::Analysis,
+                        SpanStatus::Cancelled,
+                        correlation,
+                    ));
+                    return Err(error);
+                }
+            };
+        state.diagnostics.extend(closure.diagnostics);
+        let mut function_abis = closure.abis;
+        state.basis.resource_versions = resources.reads().clone();
+        state.basis.resource_observations = resources.observations().clone();
+        let prepared_configs = state.prepared_configs(self.registry);
+        let decoded_literals = state.decoded_literals.clone();
+        let mut analysis = state.snapshot();
         if let Err(error) = cancellation.checkpoint() {
             self.trace.record(SpanEvent::new(
                 SpanKind::Analysis,
@@ -390,18 +613,21 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 SpanStatus::Blocked,
                 correlation,
             ));
-            return Ok(CompileResult {
-                analysis,
-                interface_projection,
-                semantic: None,
-                execution_basis: None,
-                plan: None,
-                function_abi: None,
-            });
+            return Ok(finalize_resource_basis(
+                CompileResult {
+                    analysis,
+                    interface_projection,
+                    semantic: None,
+                    execution_basis: None,
+                    plan: None,
+                    function_abi: None,
+                },
+                &resources,
+            ));
         }
 
         let semantic = state.semantic_graph();
-        let semantic = match analysis.validated(semantic) {
+        let mut semantic = match analysis.validated(semantic) {
             Ok(graph) => graph,
             Err(_) => {
                 analysis.diagnostics = append_diagnostic(
@@ -413,14 +639,17 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Failed,
                     correlation,
                 ));
-                return Ok(CompileResult {
-                    analysis,
-                    interface_projection,
-                    semantic: None,
-                    execution_basis: None,
-                    plan: None,
-                    function_abi: None,
-                });
+                return Ok(finalize_resource_basis(
+                    CompileResult {
+                        analysis,
+                        interface_projection,
+                        semantic: None,
+                        execution_basis: None,
+                        plan: None,
+                        function_abi: None,
+                    },
+                    &resources,
+                ));
             }
         };
         self.trace.record(SpanEvent::new(
@@ -433,47 +662,34 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             SpanStatus::Started,
             correlation.clone(),
         ));
-        let function_abi = match derive_function_abi(
-            self.registry,
-            &semantic,
-            &interface_projection,
-            &snapshot.provenance,
-        ) {
-            Ok(abi) => abi,
-            Err(diagnostic) => {
-                analysis.diagnostics = append_diagnostic(analysis.diagnostics, diagnostic);
-                return Ok(CompileResult {
-                    analysis,
-                    interface_projection,
-                    semantic: None,
-                    execution_basis: None,
-                    plan: None,
-                    function_abi: None,
-                });
-            }
-        };
-        let function_abis = match self.function_abis_for_calls(&semantic, cancellation) {
-            Ok(abis) => abis,
-            Err(LowerGraphFailure::Cancelled(error)) => return Err(error),
-            Err(LowerGraphFailure::Diagnostic(diagnostic)) => {
-                analysis.diagnostics = append_diagnostic(analysis.diagnostics, diagnostic);
-                return Ok(CompileResult {
-                    analysis,
-                    interface_projection,
-                    semantic: None,
-                    execution_basis: None,
-                    plan: None,
-                    function_abi,
-                });
-            }
-        };
+
+        let final_versions = resources.reads().clone();
+        let final_observations = resources.observations().clone();
+        analysis.basis.resource_versions = final_versions.clone();
+        analysis.basis.resource_observations = final_observations.clone();
+        semantic.basis.resource_versions = final_versions.clone();
+        semantic.basis.resource_observations = final_observations.clone();
+        let mut final_provenance = snapshot.provenance.clone();
+        final_provenance.basis.resource_versions = final_versions;
+        final_provenance.basis.resource_observations = final_observations;
+        if let Some(abi) = function_abi.as_mut() {
+            abi.provenance = final_provenance.clone();
+        }
+        for abi in function_abis.values_mut() {
+            abi.provenance.basis.resource_versions =
+                final_provenance.basis.resource_versions.clone();
+            abi.provenance.basis.resource_observations =
+                final_provenance.basis.resource_observations.clone();
+        }
         let (semantic, execution_basis, plan) = match lower_graph(
             self.registry,
             &snapshot.document,
             &semantic,
+            &prepared_configs,
+            &decoded_literals,
             &interface_projection,
             &function_abis,
-            snapshot.provenance.clone(),
+            final_provenance,
             cancellation,
         ) {
             Ok((basis, plan)) => {
@@ -499,25 +715,29 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Failed,
                     correlation.clone(),
                 ));
-                (None, None, None)
+                (Some(semantic), None, None)
             }
         };
-        Ok(CompileResult {
-            analysis,
-            interface_projection,
-            semantic,
-            execution_basis,
-            plan,
-            function_abi,
-        })
+        Ok(finalize_resource_basis(
+            CompileResult {
+                analysis,
+                interface_projection,
+                semantic,
+                execution_basis,
+                plan,
+                function_abi,
+            },
+            &resources,
+        ))
     }
 
     fn function_abis_for_calls(
         &self,
         graph: &CompilerSemanticGraph,
+        resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
     ) -> Result<BTreeMap<GraphResourcePath, FunctionPlanAbi>, LowerGraphFailure> {
-        let mut targets = BTreeSet::new();
+        let mut targets = BTreeMap::new();
         for node in graph.nodes.iter() {
             let resolved = resolve_for_lowering(self.registry, node)?;
             if resolved.structural_role() != Some(StructuralNodeRole::Call) {
@@ -526,45 +746,49 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             let Some(target) = function_target(&node.normalized_parameters) else {
                 continue;
             };
-            targets.insert(GraphResourcePath(target.into()));
+            targets
+                .entry(GraphResourcePath(target.into()))
+                .or_insert(node.node_id);
         }
 
         let mut abis = BTreeMap::new();
-        for target in targets {
+        for (target, call_node_id) in targets {
             cancellation.checkpoint()?;
-            let document = self
-                .resources
-                .function_graph_document(&target)
-                .ok_or_else(|| {
-                    CompilerDiagnostic::ControlCallAbiMissing {
-                        function_path: target.0.clone(),
-                    }
-                    .into_node(DiagnosticLocation::Graph)
-                })?;
+            let resolved = resources.resolve_function(&target).map_err(|error| {
+                CompilerDiagnostic::ResourceResolutionFailed {
+                    resource_key: error.key().as_str().into(),
+                    reason: error.reason().into(),
+                }
+                .into_node(DiagnosticLocation::Node(call_node_id))
+            })?;
+            let document = resolved.value.graph.clone();
             let provenance = CompileProvenance {
                 project_session_id: self.project_session_id.clone(),
                 graph_path: target.clone(),
                 basis: CompilationBasis {
                     graph_revision: document.revision,
                     registry_fingerprint: self.registry.fingerprint().clone(),
-                    resource_versions: self.resources.versions(),
+                    resource_versions: ResourceVersionSet::new(),
+                    resource_observations: ResourceObservationSet::new(),
                 },
                 compile_id: CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed)),
             };
-            let mut state = AnalysisState::new(document, target.clone(), provenance.basis.clone());
+            let mut state = AnalysisState::new(&document, target.clone(), provenance.basis.clone());
             state.analyze(
                 self.registry,
                 &self.schema_resolvers,
                 &self.interface_resolvers,
-                self.resources,
+                resources,
                 cancellation,
             )?;
+            state.basis.resource_versions = resources.reads().clone();
+            state.basis.resource_observations = resources.observations().clone();
             let analysis = state.snapshot();
             if analysis.has_blocking_errors() {
                 return Err(CompilerDiagnostic::ControlCallAbiInvalid {
                     function_path: target.0.clone(),
                 }
-                .into_node(DiagnosticLocation::Graph)
+                .into_node(DiagnosticLocation::Node(call_node_id))
                 .into());
             }
             let interface_projection = state.interface_projection();
@@ -572,7 +796,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 CompilerDiagnostic::ControlCallAbiInvalid {
                     function_path: target.0.clone(),
                 }
-                .into_node(DiagnosticLocation::Graph)
+                .into_node(DiagnosticLocation::Node(call_node_id))
             })?;
             let abi =
                 derive_function_abi(self.registry, &semantic, &interface_projection, &provenance)?
@@ -580,7 +804,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         CompilerDiagnostic::ControlCallAbiInvalid {
                             function_path: target.0.clone(),
                         }
-                        .into_node(DiagnosticLocation::Graph)
+                        .into_node(DiagnosticLocation::Node(call_node_id))
                     })?;
             abis.insert(target, abi);
         }
@@ -611,6 +835,7 @@ struct AnalysisState<'a> {
     resolved_schema_facts: BTreeMap<PortAddress, crate::node_system::protocol::ResolvedSchemaFact>,
     projection_only_ports: BTreeSet<PortAddress>,
     interface_projections: BTreeMap<NodeId, ValidatedNodeInterfaceProjection>,
+    decoded_literals: BTreeMap<PortAddress, crate::node_system::protocol::TypedValue>,
 }
 
 impl<'a> AnalysisState<'a> {
@@ -630,6 +855,7 @@ impl<'a> AnalysisState<'a> {
             resolved_schema_facts: BTreeMap::new(),
             projection_only_ports: BTreeSet::new(),
             interface_projections: BTreeMap::new(),
+            decoded_literals: BTreeMap::new(),
         }
     }
 
@@ -638,7 +864,7 @@ impl<'a> AnalysisState<'a> {
         registry: &'a R,
         schema_resolvers: &SchemaResolverSet,
         interface_resolvers: &InterfaceResolverSet,
-        resources: &dyn ResourceSnapshot,
+        resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
     ) -> Result<(), CompileCancelled> {
         for (&node_id, node) in &self.document.nodes {
@@ -691,6 +917,15 @@ impl<'a> AnalysisState<'a> {
                 continue;
             }
             let parameters = self.normalize_parameters(node_id, resolved.protocol, registry);
+            if let Some(error) = track_variable_resource(&node.node_type, &parameters, resources) {
+                self.push(
+                    CompilerDiagnostic::ResourceResolutionFailed {
+                        resource_key: error.key().as_str().into(),
+                        reason: error.reason().into(),
+                    },
+                    DiagnosticLocation::Node(node_id),
+                );
+            }
             let ports =
                 self.resolve_ports(node_id, resolved.protocol, resources, interface_resolvers);
             self.nodes.insert(
@@ -715,25 +950,30 @@ impl<'a> AnalysisState<'a> {
         cancellation.checkpoint()?;
         self.analyze_types(registry);
         cancellation.checkpoint()?;
-        self.analyze_schemas(schema_resolvers);
+        self.analyze_schemas(schema_resolvers, resources);
         cancellation.checkpoint()?;
         self.diagnostics.sort_by(compare_diagnostics);
         Ok(())
     }
 
-    fn validate_function_abi_contract(&mut self, resources: &dyn ResourceSnapshot) {
+    fn validate_function_abi_contract(&mut self, resources: &mut dyn AnalysisResourceResolver) {
         if !self.graph_path.0.starts_with("functions/") {
             return;
         }
-        let Some(function) = resources.function_document(&self.graph_path) else {
-            self.push(
-                CompilerDiagnostic::FunctionAbiSignatureMissing {
-                    function_path: self.graph_path.0.clone(),
-                },
-                DiagnosticLocation::Graph,
-            );
-            return;
+        let resolved = match resources.resolve_function(&self.graph_path) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                self.push(
+                    CompilerDiagnostic::ResourceResolutionFailed {
+                        resource_key: error.key().as_str().into(),
+                        reason: error.reason().into(),
+                    },
+                    DiagnosticLocation::Graph,
+                );
+                return;
+            }
         };
+        let function = resolved.value.function;
         let expected_parameters = function
             .signature
             .parameters
@@ -872,7 +1112,7 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn validate_call_abi_contract(&mut self, resources: &dyn ResourceSnapshot) {
+    fn validate_call_abi_contract(&mut self, resources: &mut dyn AnalysisResourceResolver) {
         let call_nodes = self
             .nodes
             .iter()
@@ -886,9 +1126,20 @@ impl<'a> AnalysisState<'a> {
                 continue;
             };
             let target = GraphResourcePath(target.into());
-            let Some(function) = resources.function_document(&target) else {
-                continue;
+            let resolved = match resources.resolve_function(&target) {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    self.push(
+                        CompilerDiagnostic::ResourceResolutionFailed {
+                            resource_key: error.key().as_str().into(),
+                            reason: error.reason().into(),
+                        },
+                        DiagnosticLocation::Node(node_id),
+                    );
+                    continue;
+                }
             };
+            let function = resolved.value.function;
             let expected_arguments = function
                 .signature
                 .parameters
@@ -1088,60 +1339,49 @@ impl<'a> AnalysisState<'a> {
         registry: &R,
     ) -> BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value> {
         let supplied = &self.document.nodes[&node_id].parameters;
-        let specs: BTreeMap<_, _> = protocol
+        let nominal = |type_id: &TypeId, value: &serde_json::Value| {
+            registry.validate_nominal_parameter(type_id, value)
+        };
+        for issue in validate_parameter_values(protocol, supplied, &nominal) {
+            let diagnostic = match issue.kind {
+                ParameterIssueKind::Unknown => CompilerDiagnostic::ParameterUnknown {
+                    parameter_key: issue.key.to_string().into(),
+                },
+                ParameterIssueKind::Required => CompilerDiagnostic::ParameterRequired {
+                    parameter_key: issue.key.to_string().into(),
+                },
+                ParameterIssueKind::InvalidType
+                | ParameterIssueKind::Constraint
+                | ParameterIssueKind::InvalidNominal(_)
+                | ParameterIssueKind::InvalidResourceId => CompilerDiagnostic::ParameterInvalid {
+                    parameter_key: issue.key.to_string().into(),
+                },
+            };
+            self.push(
+                diagnostic,
+                DiagnosticLocation::Parameter {
+                    node_id,
+                    key: issue.key,
+                },
+            );
+        }
+        let known = protocol
             .parameters
             .parameters
             .iter()
             .map(|spec| (&spec.key, spec))
-            .collect();
-        let mut normalized = BTreeMap::new();
-        for (key, value) in supplied {
-            if specs.contains_key(key) {
-                normalized.insert(key.clone(), value.clone());
-            } else {
-                self.push(
-                    CompilerDiagnostic::ParameterUnknown {
-                        parameter_key: key.to_string().into(),
-                    },
-                    DiagnosticLocation::Parameter {
-                        node_id,
-                        key: key.clone(),
-                    },
-                );
-            }
-        }
+            .collect::<BTreeMap<_, _>>();
+        let mut normalized = supplied
+            .iter()
+            .filter(|(key, _)| known.contains_key(key))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect::<BTreeMap<_, _>>();
         for spec in protocol.parameters.parameters.iter() {
-            if let (Some(value), TypeExpr::Concrete(type_id)) =
-                (normalized.get(&spec.key), &spec.value_type)
+            if !normalized.contains_key(&spec.key)
+                && let Some(default) = &spec.default_value
+                && let Ok(value) = serde_json::to_value(default)
             {
-                if let Some(Err(_)) = registry.validate_nominal_parameter(type_id, value) {
-                    self.push(
-                        CompilerDiagnostic::ParameterInvalid {
-                            parameter_key: spec.key.to_string().into(),
-                        },
-                        DiagnosticLocation::Parameter {
-                            node_id,
-                            key: spec.key.clone(),
-                        },
-                    );
-                }
-            }
-            if !normalized.contains_key(&spec.key) {
-                if let Some(default) = &spec.default_value {
-                    if let Ok(value) = serde_json::to_value(default) {
-                        normalized.insert(spec.key.clone(), value);
-                    }
-                } else if spec.constraints.contains(&ParameterConstraint::Required) {
-                    self.push(
-                        CompilerDiagnostic::ParameterRequired {
-                            parameter_key: spec.key.to_string().into(),
-                        },
-                        DiagnosticLocation::Parameter {
-                            node_id,
-                            key: spec.key.clone(),
-                        },
-                    );
-                }
+                normalized.insert(spec.key.clone(), value);
             }
         }
         normalized
@@ -1151,7 +1391,7 @@ impl<'a> AnalysisState<'a> {
         &mut self,
         node_id: NodeId,
         protocol: &NodeProtocol,
-        resources: &dyn ResourceSnapshot,
+        resources: &mut dyn AnalysisResourceResolver,
         resolvers: &InterfaceResolverSet,
     ) -> BTreeMap<PortAddress, ResolvedPort<PortAddress>> {
         self.validate_binding_templates(node_id, protocol);
@@ -1382,6 +1622,22 @@ impl<'a> AnalysisState<'a> {
                 .port_spec(&address, &port.template)
                 .cloned()
                 .expect("resolved port has protocol spec");
+            if let Some(literal) = literal {
+                match crate::node_system::protocol::validate_typed_literal(
+                    literal,
+                    &spec.value_type,
+                ) {
+                    Ok(decoded) => {
+                        self.decoded_literals.insert(address.clone(), decoded);
+                    }
+                    Err(_) => self.push(
+                        CompilerDiagnostic::InputLiteralInvalid {
+                            port: address.to_string().into(),
+                        },
+                        DiagnosticLocation::Port(address.clone()),
+                    ),
+                }
+            }
             if literal.is_some() && connections != 0 {
                 self.push(
                     CompilerDiagnostic::InputConflictingBindings {
@@ -1492,15 +1748,8 @@ impl<'a> AnalysisState<'a> {
                 graph.add_connection(connection.id, &connection.output, &connection.input);
             }
         }
-        for (address, state) in &self.document.input_states {
-            if let Some(value_type) = state
-                .literal_override
-                .as_ref()
-                .and_then(|literal| literal.get("value_type"))
-                .and_then(|value| serde_json::from_value::<TypeExpr>(value.clone()).ok())
-            {
-                graph.add_literal(address, &value_type);
-            }
+        for (address, literal) in &self.decoded_literals {
+            graph.add_literal(address, &literal.value_type);
         }
         let (facts, issues) = graph.solve(registry);
         self.type_facts = facts;
@@ -1509,7 +1758,11 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn analyze_schemas(&mut self, resolvers: &SchemaResolverSet) {
+    fn analyze_schemas(
+        &mut self,
+        resolvers: &SchemaResolverSet,
+        resources: &mut dyn AnalysisResourceResolver,
+    ) {
         let mut analyzer = SchemaAnalyzer::new(resolvers);
         for (&node_id, node) in &self.nodes {
             analyzer.add_node(
@@ -1530,7 +1783,7 @@ impl<'a> AnalysisState<'a> {
                 analyzer.add_connection(connection.output.clone(), connection.input.clone());
             }
         }
-        let (expressions, facts, issues) = analyzer.analyze();
+        let (expressions, facts, issues) = analyzer.analyze_with_resources(resources);
         self.schema_facts = expressions;
         self.resolved_schema_facts = facts;
         for issue in issues {
@@ -1567,6 +1820,25 @@ impl<'a> AnalysisState<'a> {
             basis: self.basis.clone(),
             nodes: self.interface_projections.clone(),
         }
+    }
+
+    fn prepared_configs<R: CompilerRegistry>(
+        &self,
+        registry: &R,
+    ) -> BTreeMap<NodeId, ValidatedNodeConfig> {
+        self.nodes
+            .iter()
+            .map(|(&node_id, node)| {
+                (
+                    node_id,
+                    ValidatedNodeConfig::from_analysis(
+                        node.registry.protocol,
+                        node.parameters.clone(),
+                        |type_id, value| registry.prepare_nominal_parameter(type_id, value),
+                    ),
+                )
+            })
+            .collect()
     }
 
     fn snapshot(&self) -> CompilerAnalysis {
@@ -1738,6 +2010,35 @@ fn call_member_role(template: &str) -> &'static str {
     }
 }
 
+fn track_variable_resource(
+    node_type: &NodeTypeId,
+    parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+    resources: &mut dyn AnalysisResourceResolver,
+) -> Option<ResourceResolutionError> {
+    if !matches!(
+        node_type.as_str(),
+        "yssbi.project.variable.get" | "yssbi.project.variable.set"
+    ) {
+        return None;
+    }
+    let Some(path) = parameters
+        .iter()
+        .find(|(key, _)| key.as_str() == "variable")
+        .and_then(|(_, value)| value.as_str())
+    else {
+        return None;
+    };
+    let Some(id) = path.strip_prefix("variables/") else {
+        return None;
+    };
+    let Ok(id) = uuid::Uuid::parse_str(id) else {
+        return None;
+    };
+    resources
+        .resolve_variable(&crate::variable::VariableId::from(id))
+        .err()
+}
+
 fn function_target(
     parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
 ) -> Option<&str> {
@@ -1831,6 +2132,8 @@ fn lower_graph<R: CompilerRegistry>(
     registry: &R,
     document: &GraphDocument,
     graph: &CompilerSemanticGraph,
+    prepared_configs: &BTreeMap<NodeId, ValidatedNodeConfig>,
+    decoded_literals: &BTreeMap<PortAddress, crate::node_system::protocol::TypedValue>,
     interface_projection: &ValidatedInterfaceProjection,
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     provenance: CompileProvenance,
@@ -1934,23 +2237,8 @@ fn lower_graph<R: CompilerRegistry>(
                         .any(|connection| connection.input == port.address);
                     let bound_value = if has_connection {
                         None
-                    } else if let Some(literal) = document
-                        .input_states
-                        .get(&port.address)
-                        .and_then(|state| state.literal_override.as_ref())
-                    {
-                        Some(
-                            serde_json::from_value::<crate::node_system::protocol::TypedValue>(
-                                literal.clone(),
-                            )
-                            .map_err(|_| {
-                                CompilerDiagnostic::LoweringFailed {
-                                    node_type: node.node_type_id.to_string().into(),
-                                }
-                                .into_node(DiagnosticLocation::Port(port.address.clone()))
-                            })?
-                            .value,
-                        )
+                    } else if let Some(literal) = decoded_literals.get(&port.address) {
+                        Some(literal.value.clone())
                     } else {
                         spec.input_binding
                             .as_ref()
@@ -1971,16 +2259,34 @@ fn lower_graph<R: CompilerRegistry>(
             cancellation,
             node_id: node.node_id,
             protocol: resolved.protocol,
-            parameters: &node.normalized_parameters,
+            parameters: &prepared_configs[&node.node_id],
             inputs: &inputs,
             outputs: &outputs,
         };
-        let lowered = implementation.lowerer.lower(&context).map_err(|_| {
-            CompilerDiagnostic::LoweringFailed {
-                node_type: node.node_type_id.to_string().into(),
+        let lowered = match implementation.lowerer.lower(&context) {
+            Ok(lowered) => lowered,
+            Err(LoweringError::Cancelled(error)) => {
+                return Err(LowerGraphFailure::Cancelled(error));
             }
-            .into_node(DiagnosticLocation::Node(node.node_id))
-        })?;
+            Err(error) => {
+                let node_type = node.node_type_id.to_string().into();
+                let diagnostic = match error {
+                    LoweringError::InternalInvariant(_) => {
+                        CompilerDiagnostic::LoweringInternalInvariant { node_type }
+                    }
+                    LoweringError::DeadlineExceeded => {
+                        CompilerDiagnostic::LoweringDeadlineExceeded { node_type }
+                    }
+                    LoweringError::ResourceExhausted => {
+                        CompilerDiagnostic::LoweringResourceExhausted { node_type }
+                    }
+                    LoweringError::Cancelled(_) => unreachable!("handled above"),
+                };
+                return Err(diagnostic
+                    .into_node(DiagnosticLocation::Node(node.node_id))
+                    .into());
+            }
+        };
         let mut owned_resources = BTreeMap::<ResourceId, CompiledResourceRequirement>::new();
         if let Some(metadata) = lowered.kernel.metadata() {
             if metadata.effect != resolved.protocol.execution.effects {
@@ -2044,10 +2350,9 @@ fn lower_graph<R: CompilerRegistry>(
             if parameter.editor != ParameterEditorSpec::Resource {
                 continue;
             }
-            let Some(resource) = node
-                .normalized_parameters
-                .get(&parameter.key)
-                .and_then(serde_json::Value::as_str)
+            let Some(resource) = prepared_configs[&node.node_id]
+                .resource(&parameter.key)
+                .cloned()
             else {
                 continue;
             };
@@ -2062,12 +2367,6 @@ fn lower_graph<R: CompilerRegistry>(
             } else {
                 ResourceAccess::Shared
             };
-            let resource = ResourceId::new(resource).map_err(|_| {
-                CompilerDiagnostic::LoweringResourceId {
-                    resource_id: resource.into(),
-                }
-                .into_node(DiagnosticLocation::Node(node.node_id))
-            })?;
             let requirement = CompiledResourceRequirement {
                 resource: resource.clone(),
                 kind,
@@ -2292,7 +2591,7 @@ fn lower_graph<R: CompilerRegistry>(
                     node_id: node.node_id,
                     role: resolved.structural_role(),
                     protocol: resolved.protocol,
-                    parameters: &node.normalized_parameters,
+                    parameters: &prepared_configs[&node.node_id],
                     ports: node
                         .ports
                         .iter()

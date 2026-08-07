@@ -339,6 +339,106 @@ fn resource_from_disk_document(
     }
 }
 
+fn duplicate_revision_conflict(
+    source: &GraphResourcePath,
+    message: impl Into<String>,
+) -> ProjectFilesystemError {
+    ProjectFilesystemError::ResourceRevisionConflict {
+        message: format!("duplicate source '{}': {}", source, message.into()),
+    }
+}
+
+fn validate_loaded_duplicate_source_authority(
+    source: &GraphResourcePath,
+    resource: &GraphResourceDocument,
+    authority_revision: ResourceRevision,
+) -> Result<(), ProjectFilesystemError> {
+    if resource.document.revision != authority_revision {
+        return Err(duplicate_revision_conflict(
+            source,
+            format!(
+                "owner revision {} differs from ledger revision {}",
+                resource.document.revision.get(),
+                authority_revision.get()
+            ),
+        ));
+    }
+    if resource.kind == GraphDocumentKind::Function {
+        let embedded_revision = resource
+            .function
+            .as_ref()
+            .map(|function| function.revision)
+            .ok_or_else(|| {
+                duplicate_revision_conflict(source, "loaded function metadata is missing")
+            })?;
+        if embedded_revision != authority_revision {
+            return Err(duplicate_revision_conflict(
+                source,
+                format!(
+                    "embedded function revision {} differs from ledger revision {}",
+                    embedded_revision.get(),
+                    authority_revision.get()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn bind_unloaded_duplicate_source_authority(
+    source: &GraphResourcePath,
+    document: &mut crate::project::project_io::GraphDocument,
+    authority_revision: ResourceRevision,
+) -> Result<(), ProjectFilesystemError> {
+    if document.kind != GraphDocumentKind::Function {
+        if document.revision != authority_revision {
+            return Err(duplicate_revision_conflict(
+                source,
+                "persisted event revision differs from the ledger revision",
+            ));
+        }
+        document.document.revision = authority_revision;
+        return Ok(());
+    }
+
+    let embedded_revision = document
+        .function
+        .as_ref()
+        .map(|function| function.revision)
+        .ok_or_else(|| {
+            duplicate_revision_conflict(source, "persisted function metadata is missing")
+        })?;
+    if document.revision != embedded_revision {
+        return Err(duplicate_revision_conflict(
+            source,
+            format!(
+                "persisted owner {} and embedded function {} revisions are incoherent",
+                document.revision.get(),
+                embedded_revision.get()
+            ),
+        ));
+    }
+    if document.revision > authority_revision || embedded_revision > authority_revision {
+        return Err(duplicate_revision_conflict(
+            source,
+            format!(
+                "persisted revision {} is ahead of retained ledger revision {}",
+                document.revision.get(),
+                authority_revision.get()
+            ),
+        ));
+    }
+
+    document.revision = authority_revision;
+    document.document.revision = authority_revision;
+    document
+        .function
+        .as_mut()
+        .expect("persisted function metadata was validated")
+        .revision = authority_revision;
+    Ok(())
+}
+
 impl ProjectState {
     pub(crate) fn reserve_resource_operation(
         &self,
@@ -379,7 +479,7 @@ impl ProjectState {
             Self::allocate_graph_path_from_snapshot(None, &planning_data, name, kind)
                 .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
         let lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let current_data = self.get_data()?;
@@ -409,11 +509,11 @@ impl ProjectState {
             validate_graph_bytes,
         )?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(&path));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(&path));
         self.validate_project_session(&session)?;
         let committed = prepared.commit()?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&path));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&path));
         self.insert_graph(path.clone(), resource)?;
         let unload_context = resource_context(
             self,
@@ -423,7 +523,10 @@ impl ProjectState {
             [],
         );
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::BeforePublication, Some(&path));
+        self.run_resource_mutation_test_hook(
+            ResourceMutationTestPoint::BeforePublication,
+            Some(&path),
+        );
         let result = match self.apply_resource_document_patch(
             &unload_context,
             ResourceDocumentPatch::UnloadGraph { path: path.clone() },
@@ -481,7 +584,7 @@ impl ProjectState {
         )
         .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
         let lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let source_bytes = crate::project::read_secure_project_file(
@@ -491,18 +594,52 @@ impl ProjectState {
         .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
-        let source_document: crate::project::project_io::GraphDocument =
+        let persisted_source: crate::project::project_io::GraphDocument =
             serde_json::from_slice(&source_bytes).map_err(|error| {
                 ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
                 }
             })?;
-        if source_document.revision != expected_revision {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!("revision for '{}' changed", source),
-            });
+        let (current_data, authority_revision) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            if publication.project_instance_id != session.instance_id.as_str() {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "project changed during graph duplication".into(),
+                });
+            }
+            let data = self.project_data.read().unwrap();
+            let revisions = self.graph_revisions.read().unwrap();
+            (data.clone(), revisions.get(source).copied())
+        };
+        let authority_revision = authority_revision.ok_or_else(|| {
+            duplicate_revision_conflict(source, "authoritative ledger revision is missing")
+        })?;
+        if authority_revision != expected_revision {
+            return Err(duplicate_revision_conflict(
+                source,
+                format!(
+                    "caller expected revision {}, ledger is {}",
+                    expected_revision.get(),
+                    authority_revision.get()
+                ),
+            ));
         }
-        let current_data = self.get_data()?;
+        let source_document = if let Some(resource) = current_data.graphs.get(source) {
+            validate_loaded_duplicate_source_authority(source, resource, authority_revision)?;
+            crate::project::project_io::snapshot_graph_document(&current_data, source).map_err(
+                |error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                },
+            )?
+        } else {
+            let mut persisted_source = persisted_source;
+            bind_unloaded_duplicate_source_authority(
+                source,
+                &mut persisted_source,
+                authority_revision,
+            )?;
+            persisted_source
+        };
         let (target, unique_name) = Self::allocate_graph_path_from_snapshot(
             session.root.as_path().to_str(),
             &current_data,
@@ -533,11 +670,11 @@ impl ProjectState {
             validate_graph_bytes,
         )?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(&target));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(&target));
         self.validate_project_session(&session)?;
         let committed = prepared.commit()?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&target));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&target));
         self.insert_graph(target.clone(), resource_from_disk_document(&duplicate))?;
         let unload_context = resource_context(
             self,
@@ -547,7 +684,7 @@ impl ProjectState {
             [],
         );
         #[cfg(test)]
-        run_resource_mutation_test_hook(
+        self.run_resource_mutation_test_hook(
             ResourceMutationTestPoint::BeforePublication,
             Some(&target),
         );
@@ -646,12 +783,15 @@ impl ProjectState {
             }],
         )?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(graph_path));
+        self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Prepared, Some(graph_path));
         let committed = prepared.commit()?;
         #[cfg(test)]
-        run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(graph_path));
+        self.run_resource_mutation_test_hook(
+            ResourceMutationTestPoint::Committed,
+            Some(graph_path),
+        );
         #[cfg(test)]
-        run_resource_mutation_test_hook(
+        self.run_resource_mutation_test_hook(
             ResourceMutationTestPoint::BeforePublication,
             Some(graph_path),
         );
@@ -886,9 +1026,6 @@ fn fixture_result_path(
 }
 
 #[cfg(test)]
-use std::sync::{Arc, Mutex, OnceLock};
-
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ResourceMutationTestPoint {
     Planned,
@@ -898,35 +1035,31 @@ pub(crate) enum ResourceMutationTestPoint {
 }
 
 #[cfg(test)]
-type ResourceMutationTestHook = Arc<
+pub(crate) type ResourceMutationTestHook = std::sync::Arc<
     dyn Fn(ResourceMutationTestPoint, Option<&crate::project::GraphResourcePath>) + Send + Sync,
 >;
 
 #[cfg(test)]
-fn resource_mutation_test_hook() -> &'static Mutex<Option<ResourceMutationTestHook>> {
-    static HOOK: OnceLock<Mutex<Option<ResourceMutationTestHook>>> = OnceLock::new();
-    HOOK.get_or_init(|| Mutex::new(None))
-}
+impl ProjectState {
+    pub(crate) fn set_resource_mutation_test_hook(&self, hook: Option<ResourceMutationTestHook>) {
+        *self.resource_mutation_test_hook.write().unwrap() = hook;
+    }
 
-#[cfg(test)]
-pub(crate) fn set_resource_mutation_test_hook(hook: Option<ResourceMutationTestHook>) {
-    *resource_mutation_test_hook().lock().unwrap() = hook;
-}
-
-#[cfg(test)]
-pub(crate) fn run_resource_mutation_test_hook(
-    point: ResourceMutationTestPoint,
-    path: Option<&crate::project::GraphResourcePath>,
-) {
-    let hook = resource_mutation_test_hook().lock().unwrap().clone();
-    if let Some(hook) = hook {
-        hook(point, path);
+    pub(crate) fn run_resource_mutation_test_hook(
+        &self,
+        point: ResourceMutationTestPoint,
+        path: Option<&crate::project::GraphResourcePath>,
+    ) {
+        let hook = self.resource_mutation_test_hook.read().unwrap().clone();
+        if let Some(hook) = hook {
+            hook(point, path);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ResourceMutationTestPoint, set_resource_mutation_test_hook};
+    use super::ResourceMutationTestPoint;
     use crate::graph::value::{DataType, DataValue};
     use crate::node_system::document::{
         DocumentNode, NodeId, OperationId, ParameterValues, ResourceRevision,
@@ -937,7 +1070,7 @@ mod tests {
         ProjectState,
     };
     use crate::variable::{VariableId, VariableInstance, VariableScope};
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::sync::{Arc, Mutex};
 
     struct TestProject {
@@ -973,7 +1106,6 @@ mod tests {
 
     impl Drop for TestProject {
         fn drop(&mut self) {
-            set_resource_mutation_test_hook(None);
             let _ = std::fs::remove_dir_all(&self.root);
         }
     }
@@ -982,7 +1114,156 @@ mod tests {
         GraphResourcePath::new(path).unwrap()
     }
 
+    fn function_data(
+        path: &GraphResourcePath,
+        owner_revision: ResourceRevision,
+        embedded_revision: ResourceRevision,
+    ) -> ProjectData {
+        let mut resource = GraphResourceDocument::new("Source", GraphDocumentKind::Function);
+        resource.document.revision = owner_revision;
+        resource.function.as_mut().unwrap().revision = embedded_revision;
+        let mut data = ProjectData::new();
+        data.graphs.insert(path.clone(), resource);
+        data
+    }
+
+    fn function_files(root: &std::path::Path) -> BTreeMap<String, Vec<u8>> {
+        let directory = root.join("functions");
+        std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (
+                    entry.file_name().to_string_lossy().into_owned(),
+                    std::fs::read(entry.path()).unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    fn duplicate_boundary_snapshot(
+        state: &ProjectState,
+        root: &std::path::Path,
+    ) -> (
+        serde_json::Value,
+        HashMap<GraphResourcePath, ResourceRevision>,
+        (u64, u64),
+        BTreeMap<String, Vec<u8>>,
+    ) {
+        let data = serde_json::to_value(state.get_data().unwrap()).unwrap();
+        let graph_revisions = state.graph_revisions.read().unwrap().clone();
+        let publication = state.mutation_publication.lock().unwrap();
+        let publication_state = (
+            publication.resource_revision,
+            publication.authority_generation(),
+        );
+        drop(publication);
+        (
+            data,
+            graph_revisions,
+            publication_state,
+            function_files(root),
+        )
+    }
+
+    fn assert_duplicate_revision_conflict_without_effects(
+        state: &ProjectState,
+        root: &std::path::Path,
+        source: &GraphResourcePath,
+        expected_revision: ResourceRevision,
+    ) {
+        let session = state.capture_project_session().unwrap();
+        let operation_id = OperationId::new();
+        let before = duplicate_boundary_snapshot(state, root);
+        for _ in 0..2 {
+            let error = state
+                .duplicate_graph_resource_transaction(
+                    &session.instance_id,
+                    source,
+                    expected_revision,
+                    operation_id,
+                )
+                .unwrap_err();
+            assert_eq!(error.code(), "resource_revision_conflict", "{error}");
+            assert_eq!(duplicate_boundary_snapshot(state, root), before);
+        }
+    }
+
+    fn rewrite_persisted_function_revisions(
+        root: &std::path::Path,
+        source: &GraphResourcePath,
+        owner_revision: ResourceRevision,
+        graph_revision: ResourceRevision,
+        embedded_revision: ResourceRevision,
+    ) {
+        let path = root.join(source.as_str());
+        let mut document: GraphDocument =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        document.revision = owner_revision;
+        document.document.revision = graph_revision;
+        document.function.as_mut().unwrap().revision = embedded_revision;
+        std::fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn resource_mutation_hooks_are_scoped_to_independent_project_states() {
+        let state_a = Arc::new(ProjectState::new());
+        let state_b = Arc::new(ProjectState::new());
+        let hits_a = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hits_b = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let expected_a = graph_path("events/A.yssbi-event");
+        let expected_b = graph_path("events/B.yssbi-event");
+
+        let observed_a = Arc::clone(&hits_a);
+        let hook_path_a = expected_a.clone();
+        state_a.set_resource_mutation_test_hook(Some(Arc::new(move |point, path| {
+            assert_eq!(point, ResourceMutationTestPoint::Planned);
+            assert_eq!(path, Some(&hook_path_a));
+            observed_a.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })));
+        let observed_b = Arc::clone(&hits_b);
+        let hook_path_b = expected_b.clone();
+        state_b.set_resource_mutation_test_hook(Some(Arc::new(move |point, path| {
+            assert_eq!(point, ResourceMutationTestPoint::Committed);
+            assert_eq!(path, Some(&hook_path_b));
+            observed_b.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })));
+
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let run_a = {
+            let state = Arc::clone(&state_a);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                state.run_resource_mutation_test_hook(
+                    ResourceMutationTestPoint::Planned,
+                    Some(&expected_a),
+                );
+            })
+        };
+        let run_b = {
+            let state = Arc::clone(&state_b);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                state.run_resource_mutation_test_hook(
+                    ResourceMutationTestPoint::Committed,
+                    Some(&expected_b),
+                );
+            })
+        };
+        barrier.wait();
+        run_a.join().unwrap();
+        run_b.join().unwrap();
+
+        assert_eq!(hits_a.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(hits_b.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
     fn result_graph_path(result: &crate::event::ResourceMutationResultDto) -> GraphResourcePath {
+        if let Some(resource_move) = result.moves.first() {
+            return graph_path(&resource_move.to);
+        }
         let paths = match &result.projection_status {
             crate::event::ProjectionStatusDto::Complete {
                 expected_graph_paths,
@@ -1001,7 +1282,7 @@ mod tests {
     fn reference_node(path: &GraphResourcePath) -> DocumentNode {
         let mut parameters = ParameterValues::new();
         parameters.insert(
-            crate::node_system::protocol::ParameterKey::new("function").unwrap(),
+            crate::node_system::protocol::ParameterKey::new("target").unwrap(),
             serde_json::json!(path.as_str()),
         );
         DocumentNode {
@@ -1068,7 +1349,7 @@ mod tests {
         let (resume_tx, resume_rx) = std::sync::mpsc::channel();
         let resume_rx = Mutex::new(resume_rx);
         let first_commit = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
             if point == ResourceMutationTestPoint::Committed
                 && first_commit.swap(false, std::sync::atomic::Ordering::SeqCst)
             {
@@ -1261,7 +1542,7 @@ mod tests {
         let state = project.state(ProjectData::new());
         let session = state.capture_project_session().unwrap();
         let operation_id = OperationId::new();
-        crate::project::set_project_filesystem_fault(Some(
+        state.set_project_filesystem_fault(Some(
             crate::project::ProjectFilesystemFaultPoint::FirstLiveReplacement,
         ));
 
@@ -1271,7 +1552,7 @@ mod tests {
             GraphDocumentKind::Event,
             operation_id,
         );
-        crate::project::set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
         assert_eq!(first.unwrap_err().code(), "transaction_commit_failed");
 
         let retry = state
@@ -1291,7 +1572,7 @@ mod tests {
         let state = Arc::new(project.state(ProjectData::new()));
         let session = state.capture_project_session().unwrap();
         let root = project.root.clone();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, candidate| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, candidate| {
             if point == ResourceMutationTestPoint::Planned {
                 let candidate = candidate.expect("create planning exposes candidate");
                 let target = root.join(candidate.as_str());
@@ -1491,7 +1772,7 @@ mod tests {
         let state = project.state(data);
         let session = state.capture_project_session().unwrap();
         let root = project.root.clone();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, candidate| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, candidate| {
             if point == ResourceMutationTestPoint::Planned {
                 let candidate = candidate.expect("duplicate planning exposes candidate");
                 let target = root.join(candidate.as_str());
@@ -1554,6 +1835,175 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_loaded_function_requires_owner_embedded_and_ledger_exact() {
+        let source = graph_path("functions/LoadedAuthority.yssbi-function");
+
+        let owner_mismatch = TestProject::new("duplicate-loaded-owner-ledger-mismatch");
+        let owner_state = owner_mismatch.state(function_data(
+            &source,
+            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL,
+        ));
+        owner_state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(source.clone(), ResourceRevision::new(1));
+        assert_duplicate_revision_conflict_without_effects(
+            &owner_state,
+            &owner_mismatch.root,
+            &source,
+            ResourceRevision::new(1),
+        );
+
+        let embedded_mismatch = TestProject::new("duplicate-loaded-embedded-mismatch");
+        let embedded_state = embedded_mismatch.state(function_data(
+            &source,
+            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL,
+        ));
+        embedded_state
+            .project_data
+            .write()
+            .unwrap()
+            .graphs
+            .get_mut(&source)
+            .unwrap()
+            .function
+            .as_mut()
+            .unwrap()
+            .revision = ResourceRevision::new(1);
+        assert_duplicate_revision_conflict_without_effects(
+            &embedded_state,
+            &embedded_mismatch.root,
+            &source,
+            ResourceRevision::INITIAL,
+        );
+    }
+
+    #[test]
+    fn duplicate_unloaded_function_rejects_ahead_or_incoherent_persisted_revisions() {
+        let cases = [
+            (
+                "owner-ahead",
+                ResourceRevision::new(1),
+                ResourceRevision::new(2),
+                ResourceRevision::new(2),
+                ResourceRevision::new(2),
+            ),
+            (
+                "embedded-ahead",
+                ResourceRevision::new(1),
+                ResourceRevision::INITIAL,
+                ResourceRevision::INITIAL,
+                ResourceRevision::new(2),
+            ),
+            (
+                "embedded-incoherent",
+                ResourceRevision::new(2),
+                ResourceRevision::INITIAL,
+                ResourceRevision::INITIAL,
+                ResourceRevision::new(1),
+            ),
+        ];
+
+        for (label, authority, owner, graph, embedded) in cases {
+            let project = TestProject::new(&format!("duplicate-unloaded-{label}"));
+            let source = graph_path("functions/UnloadedAuthority.yssbi-function");
+            let state = project.state(function_data(
+                &source,
+                ResourceRevision::INITIAL,
+                ResourceRevision::INITIAL,
+            ));
+            state.project_data.write().unwrap().graphs.remove(&source);
+            state
+                .graph_revisions
+                .write()
+                .unwrap()
+                .insert(source.clone(), authority);
+            rewrite_persisted_function_revisions(&project.root, &source, owner, graph, embedded);
+
+            assert_duplicate_revision_conflict_without_effects(
+                &state,
+                &project.root,
+                &source,
+                authority,
+            );
+        }
+    }
+
+    #[test]
+    fn duplicate_unloaded_function_uses_exact_retained_token_and_initial_target() {
+        let project = TestProject::new("duplicate-unloaded-retained-happy");
+        let source = graph_path("functions/Retained.yssbi-function");
+        let variable = scoped_variable("Retained local", &source);
+        let source_variable_id = variable.id;
+        let mut data = function_data(
+            &source,
+            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL,
+        );
+        data.variables.insert(variable.id, variable);
+        let state = project.state(data);
+        state.project_data.write().unwrap().graphs.remove(&source);
+        let retained = ResourceRevision::new(5);
+        state
+            .graph_revisions
+            .write()
+            .unwrap()
+            .insert(source.clone(), retained);
+        rewrite_persisted_function_revisions(
+            &project.root,
+            &source,
+            ResourceRevision::new(1),
+            ResourceRevision::new(1),
+            ResourceRevision::new(1),
+        );
+
+        assert_duplicate_revision_conflict_without_effects(
+            &state,
+            &project.root,
+            &source,
+            ResourceRevision::new(4),
+        );
+
+        let session = state.capture_project_session().unwrap();
+        let result = state
+            .duplicate_graph_resource_transaction(
+                &session.instance_id,
+                &source,
+                retained,
+                OperationId::new(),
+            )
+            .unwrap();
+        let target = result_graph_path(&result);
+        let target_document: GraphDocument =
+            serde_json::from_slice(&std::fs::read(project.root.join(target.as_str())).unwrap())
+                .unwrap();
+
+        assert_eq!(target_document.revision, ResourceRevision::INITIAL);
+        assert_eq!(target_document.document.revision, ResourceRevision::INITIAL);
+        assert_eq!(
+            target_document.function.as_ref().unwrap().revision,
+            ResourceRevision::INITIAL
+        );
+        assert!(
+            !target_document
+                .local_variables
+                .contains_key(&source_variable_id)
+        );
+        assert!(target_document.local_variables.values().all(|variable| {
+            matches!(&variable.scope, VariableScope::Function { function_path } if function_path == target.as_str())
+        }));
+        assert_eq!(state.graph_revisions.read().unwrap()[&source], retained);
+        assert_eq!(
+            state.graph_revisions.read().unwrap()[&target],
+            ResourceRevision::INITIAL
+        );
+        assert!(!state.get_data().unwrap().graphs.contains_key(&target));
+    }
+
+    #[test]
     fn remove_rolls_back_file_when_authoritative_revision_changed() {
         let project = TestProject::new("remove-stale-publication");
         let path = graph_path("events/Remove.yssbi-event");
@@ -1566,7 +2016,7 @@ mod tests {
         let before = std::fs::read(project.root.join(path.as_str())).unwrap();
         let concurrent = state.clone();
         let concurrent_path = path.clone();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
             if point == ResourceMutationTestPoint::BeforePublication {
                 let mut data = concurrent.project_data.write().unwrap();
                 data.graphs
@@ -1680,6 +2130,38 @@ mod tests {
             )
             .unwrap();
         let target = graph_path(&result.moves.first().unwrap().to);
+        let authority = state.get_data().unwrap();
+        let target_revision = authority.graphs[&target].document.revision.get();
+        let caller_revision = authority.graphs[&caller].document.revision.get();
+        drop(authority);
+        let target_replacement = result
+            .projection_replacements
+            .iter()
+            .find(|replacement| replacement.graph_path == target.as_str())
+            .expect("rename result must replace the loaded destination");
+        assert_eq!(
+            target_replacement.projection.source_revision,
+            target_revision
+        );
+        let caller_replacement = result
+            .projection_replacements
+            .iter()
+            .find(|replacement| replacement.graph_path == caller.as_str())
+            .expect("rename result must replace every loaded affected caller");
+        assert_eq!(
+            caller_replacement.projection.source_revision,
+            caller_revision
+        );
+        assert!(caller_replacement.projection.nodes.iter().any(|node| {
+            node.parameter_editors.iter().any(|editor| {
+                editor.value.as_ref().and_then(serde_json::Value::as_str) == Some(target.as_str())
+            })
+        }));
+        assert!(caller_replacement.projection.nodes.iter().all(|node| {
+            node.parameter_editors.iter().all(|editor| {
+                editor.value.as_ref().and_then(serde_json::Value::as_str) != Some(source.as_str())
+            })
+        }));
 
         let persisted: GraphDocument =
             serde_json::from_slice(&std::fs::read(project.root.join(caller.as_str())).unwrap())
@@ -1747,9 +2229,10 @@ mod tests {
         let caller_before = std::fs::read(project.root.join(caller.as_str())).unwrap();
         let globals_before =
             std::fs::read(project.root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+        let hook_state = state.clone();
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
             if point == ResourceMutationTestPoint::Prepared {
-                crate::project::set_project_filesystem_fault(Some(
+                hook_state.set_project_filesystem_fault(Some(
                     crate::project::ProjectFilesystemFaultPoint::SecondLiveReplacement,
                 ));
             }
@@ -1766,7 +2249,7 @@ mod tests {
                 OperationId::new(),
             )
             .unwrap_err();
-        crate::project::set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
 
         assert_eq!(
             error.code(),
@@ -1811,7 +2294,7 @@ mod tests {
         let before = std::fs::read(project.root.join(source.as_str())).unwrap();
         let concurrent = state.clone();
         let source_for_hook = source.clone();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
             if point == ResourceMutationTestPoint::BeforePublication {
                 concurrent
                     .project_data
@@ -1870,7 +2353,7 @@ mod tests {
         let variable_id = variable.id;
         let concurrent = state.clone();
         let unrelated_for_hook = unrelated_path.clone();
-        set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+        state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
             if point == ResourceMutationTestPoint::BeforePublication {
                 concurrent
                     .project_data
@@ -1950,7 +2433,7 @@ mod tests {
             if rollback {
                 let conflict_state = Arc::clone(&state);
                 let conflict_source = source.clone();
-                set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+                state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
                     if point == ResourceMutationTestPoint::BeforePublication {
                         conflict_state
                             .project_data
@@ -1964,15 +2447,13 @@ mod tests {
                     }
                 })));
                 let resume = Arc::clone(&resume_rx);
-                crate::project::set_project_filesystem_rollback_test_hook(Some(Arc::new(
-                    move || {
-                        barrier_tx.send(()).unwrap();
-                        resume.lock().unwrap().recv().unwrap();
-                    },
-                )));
+                state.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+                    barrier_tx.send(()).unwrap();
+                    resume.lock().unwrap().recv().unwrap();
+                })));
             } else {
                 let resume = Arc::clone(&resume_rx);
-                set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
+                state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
                     if point == ResourceMutationTestPoint::Committed {
                         barrier_tx.send(()).unwrap();
                         resume.lock().unwrap().recv().unwrap();
@@ -2057,8 +2538,10 @@ mod tests {
             let _ = save.join().unwrap();
             let _ = flush.join().unwrap();
             let _ = index.join().unwrap();
-            crate::project::set_project_filesystem_rollback_test_hook(None);
-            set_resource_mutation_test_hook(None);
+            state
+                .filesystem()
+                .set_project_filesystem_rollback_test_hook(None);
+            state.set_resource_mutation_test_hook(None);
         }
     }
 

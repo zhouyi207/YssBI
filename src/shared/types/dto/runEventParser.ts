@@ -3,7 +3,11 @@ import {
   type ExecutionDemandDto,
   type GraphOutputRefDto,
 } from './executionDemand';
-import { isPortAddressDto } from './editorProjectionGuards';
+import {
+  isGraphResourcePath,
+  isPortAddressDto,
+  isUuid,
+} from './editorProjectionGuards';
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
@@ -70,7 +74,7 @@ function parseResourceVersions(value: unknown): Record<string, string> {
 function parseGraphOutputRefDto(value: unknown): GraphOutputRefDto {
   if (!isRecord(value)
     || !hasExactKeys(value, ['graphPath', 'port'])
-    || typeof value.graphPath !== 'string'
+    || !isGraphResourcePath(value.graphPath)
     || !isPortAddressDto(value.port)) {
     return fail('graph output reference');
   }
@@ -156,14 +160,14 @@ function parseRunCorrelationDto(value: unknown): RunCorrelationDto {
       'compileId', 'selectionDigest', 'runId', 'nodeId', 'nodeTypeId', 'parentCall',
     ])
     || typeof value.projectSessionId !== 'string'
-    || typeof value.graphPath !== 'string'
+    || !isGraphResourcePath(value.graphPath)
     || !isDecimalId(value.graphRevision)
     || typeof value.registryFingerprint !== 'string'
     || !FINGERPRINT_PATTERN.test(value.registryFingerprint)
     || !isDecimalId(value.compileId)
     || !isNullableString(value.selectionDigest)
     || !(value.runId === null || isDecimalId(value.runId))
-    || !isNullableString(value.nodeId)
+    || !(value.nodeId === null || isUuid(value.nodeId))
     || !isNullableString(value.nodeTypeId)
     || !(value.parentCall === null || isDecimalId(value.parentCall))) {
     return fail('run correlation');

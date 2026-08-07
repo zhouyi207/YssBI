@@ -238,6 +238,36 @@ fn nominal_validators_are_registered_and_looked_up_generically() {
 }
 
 #[test]
+fn nominal_codec_prepares_a_typed_value_without_exposing_raw_json() {
+    #[derive(Debug, PartialEq, Eq)]
+    struct PreparedCount(u64);
+
+    let mut builder = NodeRegistryBuilder::new();
+    builder
+        .register_provider(provider_with_nominal_type("acme.nominal"))
+        .unwrap();
+    builder
+        .register_nominal_codec(id("acme.nominal"), id("acme.nominal.count"), 1, |value| {
+            value
+                .as_u64()
+                .map(PreparedCount)
+                .ok_or_else(|| "count must be unsigned".to_owned())
+        })
+        .unwrap();
+    let registry = builder.freeze().unwrap();
+
+    let prepared = registry
+        .prepare_nominal_parameter(&id("acme.nominal"), &serde_json::json!(7))
+        .expect("registered codec")
+        .expect("valid nominal value");
+
+    assert_eq!(
+        prepared.downcast_ref::<PreparedCount>(),
+        Some(&PreparedCount(7))
+    );
+}
+
+#[test]
 fn duplicate_nominal_validator_registration_preserves_first_validator() {
     let mut builder = NodeRegistryBuilder::new();
     builder
@@ -1106,7 +1136,11 @@ fn canonical_for_fingerprint(
                 NominalParameterValidator::new(
                     id(validator.identity),
                     validator.version,
-                    accepts_any_json,
+                    |value| {
+                        accepts_any_json(value)?;
+                        Ok(std::sync::Arc::new(())
+                            as std::sync::Arc<dyn std::any::Any + Send + Sync>)
+                    },
                 ),
             )])
         })

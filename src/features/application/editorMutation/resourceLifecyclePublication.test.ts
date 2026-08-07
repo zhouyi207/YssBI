@@ -22,6 +22,7 @@ function lifecycleResult(
   publicationRevision: number,
   before: { revision: number; path: string; kind: 'event' | 'function' } | null,
   after: { revision: number; path: string; kind: 'event' | 'function' } | null,
+  path = graphPath,
 ): ResourceMutationResultDto {
   return {
     operationId,
@@ -29,7 +30,7 @@ function lifecycleResult(
     publicationRevision,
     moves: [],
     deltas: [{
-      resource: { kind: 'graph', key: graphPath },
+      resource: { kind: 'graph', key: path },
       fromRevision: 0,
       toRevision: 1,
       causedBy: operationId,
@@ -39,7 +40,7 @@ function lifecycleResult(
       },
     }],
     projectionReplacements: [],
-    projectionStatus: { status: 'incomplete', invalidatedGraphPaths: [] },
+    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
     history: { canUndo: false, canRedo: false },
   } as unknown as ResourceMutationResultDto;
 }
@@ -66,6 +67,41 @@ describe('graph resource lifecycle publication', () => {
     expect(validateResourceMutationWireResult(mismatched)).toContain('resource deltas');
     expect(fingerprintResourceMutationResult(mismatched))
       .not.toBe(fingerprintResourceMutationResult(created));
+  });
+
+  it.each([
+    'events/Main.yssbi-function',
+    'events/../Main.yssbi-event',
+    'events//Main.yssbi-event',
+    'functions/Main.yssbi-event',
+  ])('rejects malformed result move identity %j', (from) => {
+    const result = lifecycleResult(1, null, present);
+    result.moves = [{
+      from,
+      to: 'events/Renamed.yssbi-event',
+      kind: 'event',
+      name: 'Renamed',
+    }];
+
+    expect(validateResourceMutationWireResult(result)).toBe('resource moves are malformed');
+  });
+
+  it('accepts nested event and function identities in resource results', () => {
+    const eventPath = 'events/folder/sub-folder/Main.v2.yssbi-event';
+    const functionPath = 'functions/library/math/Calculate.yssbi-function';
+
+    expect(validateResourceMutationWireResult(lifecycleResult(
+      1,
+      null,
+      { revision: 0, path: eventPath, kind: 'event' },
+      eventPath,
+    ))).toBeUndefined();
+    expect(validateResourceMutationWireResult(lifecycleResult(
+      1,
+      null,
+      { revision: 0, path: functionPath, kind: 'function' },
+      functionPath,
+    ))).toBeUndefined();
   });
 
   it('applies canonical create and remove lifecycle deltas to production stores', () => {

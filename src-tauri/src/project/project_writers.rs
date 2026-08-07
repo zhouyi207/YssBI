@@ -824,7 +824,6 @@ impl ProjectState {
         }
         let history = history.status();
         let publication_revision = publication.allocate_resource_revision();
-        self.invalidate_all_compile_products();
         let history_patch = staged
             .history_patch
             .as_ref()
@@ -1395,7 +1394,7 @@ mod tests {
     };
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemFaultPoint, ProjectState, WorksheetDocument, set_project_filesystem_fault,
+        ProjectFilesystemFaultPoint, ProjectState, WorksheetDocument,
     };
     use crate::variable::VariableScope;
     use std::collections::BTreeMap;
@@ -1590,11 +1589,12 @@ mod tests {
         .unwrap();
         let state = active_state(&project, data);
         let session = state.capture_project_session().unwrap();
-        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
+        state
+            .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
         let rename_error = state
             .rename_graph_resource_fixture(session.instance_id.as_str(), &graph_path, "After")
             .unwrap_err();
-        set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
         assert_eq!(rename_error.code(), "transaction_commit_failed");
         assert!(project.root.join(graph_path.as_str()).is_file());
         assert!(!project.root.join("events/After.yssbi-event").exists());
@@ -1865,12 +1865,12 @@ mod tests {
         state.initialize_worksheet_revision_for_test(&document.id);
         let session = state.capture_project_session().unwrap();
         document.name = "Renamed".into();
-        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
+        state.set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
 
         let error = state
             .save_worksheet_document(&session.instance_id, document, OperationId::new())
             .unwrap_err();
-        set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
 
         assert_eq!(error.code(), "transaction_commit_failed");
         assert_eq!(std::fs::read(canonical_path).unwrap(), original_bytes);

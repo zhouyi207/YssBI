@@ -4,10 +4,10 @@
  * 序列化时后端使用 snake_case，前端接收后保持 JSON 原始格式
  */
 
-import type { FunctionSignaturePin } from '../domain/graph';
+
 import type { PinDirection } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
-import type { NodeInstanceParamsDTO } from './nodeInstanceParams';
+
 
 // ==================== Node DTO ====================
 
@@ -16,21 +16,6 @@ export interface NodePositionDTO {
   y: number;
 }
 
-export type { ParamsKind, NodeInstanceParamsDTO, NodeSpawnParams } from './nodeInstanceParams';
-
-type NodeInstanceCoreDTO = {
-  id: string;
-  nodeType: string;
-  category: string[];
-  title: string;
-  inputs: string[];
-  outputs: string[];
-  description?: string;
-  position: NodePositionDTO;
-};
-
-/** 后端 NodeInstanceDTO：`instance_params` 经 `#[serde(flatten)]` 展开到顶层 */
-export type NodeInstanceDTO = NodeInstanceCoreDTO & NodeInstanceParamsDTO;
 
 // ==================== Pin DTO ====================
 
@@ -67,21 +52,6 @@ export interface ConnectionDTO {
   connections: ConnectionItemDTO[];
 }
 
-// ==================== Graph DTO ====================
-
-export type GraphTypeDTO = 'event' | 'function';
-
-/** 后端 GraphInstanceDTO 对应 */
-export interface GraphInstanceDTO {
-  path: string;
-  name: string;
-  type: GraphTypeDTO;
-  functionInputs?: FunctionSignaturePin[];
-  functionOutputs?: FunctionSignaturePin[];
-  nodes: NodeInstanceDTO[];
-  pins: PinInstanceDTO[];
-  connections: ConnectionDTO;
-}
 
 export interface GraphValidationWarningDTO {
   code: string;

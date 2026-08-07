@@ -66,8 +66,18 @@ struct ResultSourceRegistry {
     sources: BTreeMap<ResultSourceId, ResultSourceEntry>,
 }
 
+static NEXT_RESULT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_result_source_range(count: usize) -> u64 {
+    let count = u64::try_from(count).expect("result source batch length fits u64");
+    NEXT_RESULT_SOURCE_ID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+            next.checked_add(count)
+        })
+        .expect("result source id space exhausted")
+}
+
 struct ResultStoreInner {
-    next_id: AtomicU64,
     max_sources: usize,
     registry: Mutex<ResultSourceRegistry>,
 }
@@ -95,7 +105,6 @@ impl ResultStore {
         Self {
             artifacts: ArtifactStore::default(),
             inner: Arc::new(ResultStoreInner {
-                next_id: AtomicU64::new(0),
                 max_sources: max_sources.max(1),
                 registry: Mutex::new(ResultSourceRegistry::default()),
             }),
@@ -167,11 +176,7 @@ impl ResultStore {
 
         let (committed, evicted) = {
             let mut registry = self.registry();
-            let first_id = self
-                .inner
-                .next_id
-                .fetch_add(prepared.len() as u64, Ordering::Relaxed)
-                + 1;
+            let first_id = allocate_result_source_range(prepared.len());
             let descriptors = prepared
                 .into_iter()
                 .enumerate()
@@ -339,6 +344,7 @@ mod tests {
             graph_revision: GraphRevision::new(8),
             registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
             resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
         };
         let correlation = CorrelationContext {
             project_session_id: ProjectSessionId::new("session"),
@@ -382,15 +388,23 @@ mod tests {
     fn result_source_ids_are_process_global_when_allocated_concurrently() {
         const PUBLICATION_COUNT: usize = 16;
 
-        let source_ids = (0..PUBLICATION_COUNT)
+        let rendezvous = Arc::new(std::sync::Barrier::new(PUBLICATION_COUNT + 1));
+        let publications = (0..PUBLICATION_COUNT)
             .map(|index| {
+                let rendezvous = Arc::clone(&rendezvous);
                 std::thread::spawn(move || {
                     let store = ResultStore::new();
+                    rendezvous.wait();
                     publish_test_snapshot(&store, RunId::new(index as u64 + 1))
                         .source_id
                         .get()
                 })
             })
+            .collect::<Vec<_>>();
+
+        rendezvous.wait();
+        let source_ids = publications
+            .into_iter()
             .map(|publication| publication.join().unwrap())
             .collect::<std::collections::BTreeSet<_>>();
 
@@ -472,9 +486,13 @@ mod tests {
         assert_eq!(
             committed
                 .iter()
-                .map(|descriptor| (descriptor.source_id.get(), descriptor.name.as_ref()))
+                .map(|descriptor| descriptor.name.as_ref())
                 .collect::<Vec<_>>(),
-            vec![(2, "first"), (3, "second")]
+            vec!["first", "second"]
+        );
+        assert_eq!(
+            committed[1].source_id.get(),
+            committed[0].source_id.get() + 1
         );
         assert!(store.descriptor(old.source_id).is_none());
         assert!(store.artifacts().descriptor(old.artifact_id).is_none());

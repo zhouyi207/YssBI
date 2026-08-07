@@ -12,29 +12,40 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaResolutionError {
     pub message: Box<str>,
+    pub resource: Option<(crate::node_system::analysis::ResourceKey, Box<str>)>,
 }
 
 impl SchemaResolutionError {
     pub fn new(message: impl Into<Box<str>>) -> Self {
         Self {
             message: message.into(),
+            resource: None,
+        }
+    }
+
+    pub fn from_resource(error: &crate::node_system::analysis::ResourceResolutionError) -> Self {
+        Self {
+            message: error.to_string().into(),
+            resource: Some((error.key().clone(), error.reason().into())),
         }
     }
 }
 
 pub type SchemaFact = ResolvedSchemaFact;
 
-pub struct SchemaResolutionContext<'a> {
+pub struct SchemaResolutionContext<'a, 'resources> {
     pub node_id: NodeId,
     pub parameters: &'a BTreeMap<ParameterKey, serde_json::Value>,
     pub port_dependencies: &'a BTreeMap<PortKey, Option<SchemaFact>>,
     pub interface_dependencies: &'a [crate::node_system::protocol::InterfaceResolverId],
+    pub resources:
+        Option<&'resources mut dyn crate::node_system::analysis::AnalysisResourceResolver>,
 }
 
 pub trait SchemaResolver: Send + Sync {
     fn resolve(
         &self,
-        context: &SchemaResolutionContext<'_>,
+        context: &mut SchemaResolutionContext<'_, '_>,
     ) -> Result<SchemaFact, SchemaResolutionError>;
 }
 
@@ -118,8 +129,31 @@ impl<'a> SchemaAnalyzer<'a> {
         self.sources.insert(input, output);
     }
 
+    #[cfg(test)]
     pub fn analyze(
+        self,
+    ) -> (
+        BTreeMap<PortAddress, SchemaExpr>,
+        BTreeMap<PortAddress, SchemaFact>,
+        Vec<SchemaAnalysisIssue>,
+    ) {
+        self.analyze_internal(None)
+    }
+
+    pub fn analyze_with_resources(
+        self,
+        resources: &mut dyn crate::node_system::analysis::AnalysisResourceResolver,
+    ) -> (
+        BTreeMap<PortAddress, SchemaExpr>,
+        BTreeMap<PortAddress, SchemaFact>,
+        Vec<SchemaAnalysisIssue>,
+    ) {
+        self.analyze_internal(Some(resources))
+    }
+
+    fn analyze_internal(
         mut self,
+        mut resources: Option<&mut dyn crate::node_system::analysis::AnalysisResourceResolver>,
     ) -> (
         BTreeMap<PortAddress, SchemaExpr>,
         BTreeMap<PortAddress, SchemaFact>,
@@ -131,7 +165,7 @@ impl<'a> SchemaAnalyzer<'a> {
             .flat_map(|node| node.ports.iter().cloned())
             .collect::<Vec<_>>();
         for address in addresses {
-            self.evaluate_port(&address);
+            self.evaluate_port(&address, &mut resources);
         }
         let expressions = self
             .facts
@@ -141,7 +175,11 @@ impl<'a> SchemaAnalyzer<'a> {
         (expressions, self.facts, self.issues)
     }
 
-    fn evaluate_port(&mut self, address: &PortAddress) -> Option<SchemaFact> {
+    fn evaluate_port(
+        &mut self,
+        address: &PortAddress,
+        resources: &mut Option<&mut dyn crate::node_system::analysis::AnalysisResourceResolver>,
+    ) -> Option<SchemaFact> {
         if let Some(fact) = self.facts.get(address) {
             return Some(fact.clone());
         }
@@ -151,9 +189,9 @@ impl<'a> SchemaAnalyzer<'a> {
 
         let expression = self.port_schema(address).cloned();
         let result = if let Some(expression) = expression {
-            self.evaluate_expr(address, address.node_id, &expression)
+            self.evaluate_expr(address, address.node_id, &expression, resources)
         } else if let Some(source) = self.sources.get(address).cloned() {
-            self.evaluate_port(&source)
+            self.evaluate_port(&source, resources)
         } else {
             None
         };
@@ -170,14 +208,15 @@ impl<'a> SchemaAnalyzer<'a> {
         address: &PortAddress,
         node_id: NodeId,
         expression: &SchemaExpr,
+        resources: &mut Option<&mut dyn crate::node_system::analysis::AnalysisResourceResolver>,
     ) -> Option<SchemaFact> {
         match expression {
             SchemaExpr::Input(key) => self
                 .port_address(node_id, key)
                 .and_then(|address| self.sources.get(&address).cloned().or(Some(address)))
-                .and_then(|address| self.evaluate_port(&address)),
+                .and_then(|address| self.evaluate_port(&address, resources)),
             SchemaExpr::Filter { input, predicate } => {
-                let input = self.evaluate_expr(address, node_id, input)?;
+                let input = self.evaluate_expr(address, node_id, input, resources)?;
                 match predicate {
                     Some(predicate) => self.filter(node_id, input, predicate),
                     None => Some(SchemaFact::new(
@@ -190,7 +229,7 @@ impl<'a> SchemaAnalyzer<'a> {
                 }
             }
             SchemaExpr::Project { input, columns } => {
-                let input = self.evaluate_expr(address, node_id, input)?;
+                let input = self.evaluate_expr(address, node_id, input, resources)?;
                 let parameter = match columns {
                     ColumnSelectionExpr::FromParameter(key) => Some(key),
                     _ => None,
@@ -201,7 +240,7 @@ impl<'a> SchemaAnalyzer<'a> {
             SchemaExpr::Append { inputs } => {
                 let inputs = inputs
                     .iter()
-                    .map(|input| self.evaluate_expr(address, node_id, input))
+                    .map(|input| self.evaluate_expr(address, node_id, input, resources))
                     .collect::<Option<Vec<_>>>()?;
                 let fields = inputs
                     .first()
@@ -215,14 +254,14 @@ impl<'a> SchemaAnalyzer<'a> {
                 ))
             }
             SchemaExpr::Rename { input, mapping } => {
-                let input = self.evaluate_expr(address, node_id, input)?;
+                let input = self.evaluate_expr(address, node_id, input, resources)?;
                 let mapping = self.resolve_rename(node_id, mapping)?;
                 self.rename(node_id, input, mapping)
             }
             SchemaExpr::Derived {
                 resolver,
                 dependencies,
-            } => self.resolve_derived(address, node_id, resolver, dependencies),
+            } => self.resolve_derived(address, node_id, resolver, dependencies, resources),
         }
     }
 
@@ -232,6 +271,7 @@ impl<'a> SchemaAnalyzer<'a> {
         node_id: NodeId,
         resolver_id: &SchemaResolverId,
         dependencies: &[SchemaDependency],
+        resources: &mut Option<&mut dyn crate::node_system::analysis::AnalysisResourceResolver>,
     ) -> Option<SchemaFact> {
         let Some(resolver) = self.resolvers.get(resolver_id) else {
             self.issues.push(SchemaAnalysisIssue {
@@ -249,7 +289,7 @@ impl<'a> SchemaAnalyzer<'a> {
                 SchemaDependency::Port(key) => {
                     let schema = self
                         .port_address(node_id, key)
-                        .and_then(|address| self.evaluate_port(&address));
+                        .and_then(|address| self.evaluate_port(&address, resources));
                     port_dependencies.insert(key.clone(), schema);
                 }
                 SchemaDependency::Parameter(_) => {}
@@ -258,20 +298,31 @@ impl<'a> SchemaAnalyzer<'a> {
         }
         interface_dependencies.sort();
         let parameters = &self.nodes.get(&node_id)?.parameters;
-        let context = SchemaResolutionContext {
+        let mut context = SchemaResolutionContext {
             node_id,
             parameters,
             port_dependencies: &port_dependencies,
             interface_dependencies: &interface_dependencies,
+            resources: resources.take(),
         };
-        match resolver.resolve(&context) {
+        let result = resolver.resolve(&mut context);
+        *resources = context.resources.take();
+        match result {
             Ok(schema) => Some(schema),
-            Err(_) => {
+            Err(error) => {
+                let diagnostic = if let Some((resource_key, reason)) = error.resource {
+                    CompilerDiagnostic::ResourceResolutionFailed {
+                        resource_key: resource_key.as_str().into(),
+                        reason,
+                    }
+                } else {
+                    CompilerDiagnostic::SchemaResolverFailed {
+                        resolver_id: resolver_id.to_string().into(),
+                    }
+                };
                 self.issues.push(SchemaAnalysisIssue {
                     location: DiagnosticLocation::Port(address.clone()),
-                    diagnostic: CompilerDiagnostic::SchemaResolverFailed {
-                        resolver_id: resolver_id.to_string().into(),
-                    },
+                    diagnostic,
                 });
                 None
             }
@@ -1058,7 +1109,7 @@ mod tests {
     impl SchemaResolver for FailingConnectedSourceResolver {
         fn resolve(
             &self,
-            _: &SchemaResolutionContext<'_>,
+            _: &mut SchemaResolutionContext<'_, '_>,
         ) -> Result<SchemaFact, SchemaResolutionError> {
             Err(SchemaResolutionError::new("source schema unavailable"))
         }

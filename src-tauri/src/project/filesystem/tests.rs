@@ -1,7 +1,6 @@
 use super::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemFaultPoint,
-    ProjectFilesystemTransaction, StagedFilesystemMutation, set_before_remove_mutation_hook,
-    set_project_filesystem_fault, set_project_filesystem_rollback_fault,
+    ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
 use crate::node_system::document::OperationId;
 use crate::project::{
@@ -12,23 +11,33 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier, mpsc};
 use std::time::Duration;
 
-struct TestDirectory(PathBuf);
+struct TestDirectory {
+    path: PathBuf,
+    coordinator: ProjectFilesystemCoordinator,
+}
 
 impl TestDirectory {
     fn new(name: &str) -> Self {
         let path = std::env::temp_dir().join(format!("yssbi-{name}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
-        Self(path)
+        Self {
+            path,
+            coordinator: ProjectFilesystemCoordinator::default(),
+        }
     }
 
     fn path(&self) -> &Path {
-        &self.0
+        &self.path
+    }
+
+    fn coordinator(&self) -> &ProjectFilesystemCoordinator {
+        &self.coordinator
     }
 }
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }
 
@@ -50,14 +59,13 @@ fn transaction_context(root: NormalizedProjectRoot) -> ProjectTransactionContext
     }
 }
 
-fn prepare_json_transaction(
+fn prepare_json_transaction_with_coordinator(
+    coordinator: &ProjectFilesystemCoordinator,
     temporary: &TestDirectory,
     mutations: Vec<StagedFilesystemMutation>,
 ) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
     let root = normalized(temporary.path());
-    let lease = ProjectFilesystemCoordinator::default()
-        .acquire(root.clone())
-        .unwrap();
+    let lease = coordinator.acquire(root.clone()).unwrap();
     ProjectFilesystemTransaction::prepare_with_validator(
         transaction_context(root),
         lease,
@@ -68,6 +76,108 @@ fn prepare_json_transaction(
                 .map_err(|error| error.to_string())
         },
     )
+}
+
+fn prepare_json_transaction(
+    temporary: &TestDirectory,
+    mutations: Vec<StagedFilesystemMutation>,
+) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
+    prepare_json_transaction_with_coordinator(temporary.coordinator(), temporary, mutations)
+}
+
+#[test]
+fn filesystem_test_controls_are_scoped_to_independent_coordinators() {
+    let temporary_a = TestDirectory::new("coordinator-controls-a");
+    let temporary_b = TestDirectory::new("coordinator-controls-b");
+    std::fs::write(temporary_a.path().join("document.json"), br#"{"live":1}"#).unwrap();
+    std::fs::write(temporary_b.path().join("document.json"), br#"{"live":2}"#).unwrap();
+    let coordinator_a = ProjectFilesystemCoordinator::default();
+    let coordinator_b = ProjectFilesystemCoordinator::default();
+    let rollback_hits_a = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let rollback_hits_b = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let barrier = Arc::new(Barrier::new(3));
+
+    let install_a = {
+        let coordinator = coordinator_a.clone();
+        let barrier = Arc::clone(&barrier);
+        let hits = Arc::clone(&rollback_hits_a);
+        std::thread::spawn(move || {
+            barrier.wait();
+            coordinator.set_project_filesystem_fault(Some(
+                ProjectFilesystemFaultPoint::StagedSerialization,
+            ));
+            coordinator.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })));
+        })
+    };
+    let install_b = {
+        let coordinator = coordinator_b.clone();
+        let barrier = Arc::clone(&barrier);
+        let hits = Arc::clone(&rollback_hits_b);
+        std::thread::spawn(move || {
+            barrier.wait();
+            coordinator.set_project_filesystem_fault(Some(
+                ProjectFilesystemFaultPoint::FirstLiveReplacement,
+            ));
+            coordinator.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })));
+        })
+    };
+    barrier.wait();
+    install_a.join().unwrap();
+    install_b.join().unwrap();
+
+    let mutation = |contents: &[u8]| {
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "document.json".into(),
+            contents: contents.to_vec(),
+        }]
+    };
+    assert_eq!(
+        prepare_json_transaction_with_coordinator(
+            &coordinator_a,
+            &temporary_a,
+            mutation(br#"{"prepared":1}"#),
+        )
+        .unwrap_err()
+        .code(),
+        "transaction_prepare_failed",
+    );
+    let commit_error = prepare_json_transaction_with_coordinator(
+        &coordinator_b,
+        &temporary_b,
+        mutation(br#"{"prepared":2}"#),
+    )
+    .unwrap()
+    .commit()
+    .unwrap_err();
+    assert_eq!(commit_error.code(), "transaction_commit_failed");
+
+    prepare_json_transaction_with_coordinator(
+        &coordinator_a,
+        &temporary_a,
+        mutation(br#"{"rollback":1}"#),
+    )
+    .unwrap()
+    .commit()
+    .unwrap()
+    .rollback()
+    .unwrap();
+    prepare_json_transaction_with_coordinator(
+        &coordinator_b,
+        &temporary_b,
+        mutation(br#"{"rollback":2}"#),
+    )
+    .unwrap()
+    .commit()
+    .unwrap()
+    .rollback()
+    .unwrap();
+
+    assert_eq!(rollback_hits_a.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(rollback_hits_b.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 
 #[test]
@@ -366,7 +476,9 @@ fn prepare_serializes_every_document_before_touching_live_files() {
     std::fs::write(temporary.path().join("first.json"), br#"{"live":1}"#).unwrap();
     std::fs::write(temporary.path().join("second.json"), br#"{"live":2}"#).unwrap();
 
-    set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
     let error = prepare_json_transaction(
         &temporary,
         vec![
@@ -413,7 +525,9 @@ fn commit_failure_restores_only_touched_files_and_directory_topology() {
         ],
     )
     .unwrap();
-    set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
 
     let error = prepared.commit().unwrap_err();
 
@@ -447,14 +561,20 @@ fn rollback_failure_reports_transaction_rollback_failed_with_recovery_requiremen
         ],
     )
     .unwrap();
-    set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
-    set_project_filesystem_rollback_fault(true);
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_fault(true);
 
     let error = prepared.commit().unwrap_err();
 
     assert_eq!(error.code(), "transaction_rollback_failed");
     assert!(error.recovery_required());
-    set_project_filesystem_rollback_fault(false);
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_fault(false);
 }
 
 #[test]
@@ -490,7 +610,9 @@ fn staging_directory_is_removed_after_commit_and_rollback() {
     )
     .unwrap();
     let staging_root = prepared.staging_root().to_path_buf();
-    set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
     assert_eq!(
         prepared.commit().unwrap_err().code(),
         "transaction_commit_failed"
@@ -506,7 +628,9 @@ fn staging_directory_is_removed_after_commit_and_rollback() {
     )
     .unwrap();
     let staging_root = prepared.staging_root().to_path_buf();
-    set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagingCleanup));
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagingCleanup));
     assert_eq!(
         prepared.commit().unwrap_err().code(),
         "transaction_commit_failed"
@@ -763,14 +887,18 @@ fn remove_file_revalidates_immediately_before_mutation() {
     .unwrap();
     let parent_for_hook = parent.clone();
     let outside_for_hook = outside.path().to_path_buf();
-    set_before_remove_mutation_hook(Some(std::sync::Arc::new(move || {
-        std::fs::remove_file(parent_for_hook.join("victim.json")).unwrap();
-        std::fs::remove_dir(&parent_for_hook).unwrap();
-        junction(&parent_for_hook, &outside_for_hook);
-    })));
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(std::sync::Arc::new(move || {
+            std::fs::remove_file(parent_for_hook.join("victim.json")).unwrap();
+            std::fs::remove_dir(&parent_for_hook).unwrap();
+            junction(&parent_for_hook, &outside_for_hook);
+        })));
 
     let error = prepared.commit().unwrap_err();
-    set_before_remove_mutation_hook(None);
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(None);
 
     assert_eq!(error.code(), "transaction_rollback_failed");
     assert!(error.recovery_required());
@@ -811,14 +939,18 @@ fn remove_directory_revalidates_immediately_before_mutation() {
     std::fs::create_dir(outside.path().join("empty")).unwrap();
     let parent_for_hook = parent.clone();
     let outside_for_hook = outside.path().to_path_buf();
-    set_before_remove_mutation_hook(Some(std::sync::Arc::new(move || {
-        std::fs::remove_dir(parent_for_hook.join("empty")).unwrap();
-        std::fs::remove_dir(&parent_for_hook).unwrap();
-        junction(&parent_for_hook, &outside_for_hook);
-    })));
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(std::sync::Arc::new(move || {
+            std::fs::remove_dir(parent_for_hook.join("empty")).unwrap();
+            std::fs::remove_dir(&parent_for_hook).unwrap();
+            junction(&parent_for_hook, &outside_for_hook);
+        })));
 
     let error = prepared.commit().unwrap_err();
-    set_before_remove_mutation_hook(None);
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(None);
 
     assert_eq!(error.code(), "transaction_rollback_failed");
     assert!(error.recovery_required());

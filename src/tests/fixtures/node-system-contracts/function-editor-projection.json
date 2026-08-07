@@ -1,0 +1,114 @@
+{
+  "format": "yssbi.function-editor-projection.v1",
+  "indexRow": {
+    "functionEditorProjection": {
+      "functionRevision": 1,
+      "inputs": [
+        {
+          "dataType": {
+            "inner": {
+              "kind": "Float64"
+            },
+            "kind": "DataSeries"
+          },
+          "id": "sales",
+          "name": "Observed sales"
+        }
+      ],
+      "outputs": [
+        {
+          "dataType": {
+            "inner": {
+              "kind": "String"
+            },
+            "kind": "Array"
+          },
+          "id": "return",
+          "name": "Array<String>"
+        }
+      ]
+    },
+    "functionRevision": 1,
+    "functionSignature": {
+      "parameters": [
+        {
+          "id": "sales",
+          "name": "Observed sales",
+          "type_name": "DataSeries<Float64>"
+        }
+      ],
+      "return_type": "Array<String>"
+    },
+    "name": "Forecast",
+    "path": "functions/forecast.yssbi-function",
+    "revision": 1,
+    "type": "function"
+  },
+  "replacement": {
+    "functionEditorProjection": {
+      "functionRevision": 1,
+      "inputs": [
+        {
+          "dataType": {
+            "inner": {
+              "kind": "Float64"
+            },
+            "kind": "DataSeries"
+          },
+          "id": "sales",
+          "name": "Observed sales"
+        }
+      ],
+      "outputs": [
+        {
+          "dataType": {
+            "inner": {
+              "kind": "String"
+            },
+            "kind": "Array"
+          },
+          "id": "return",
+          "name": "Array<String>"
+        }
+      ]
+    },
+    "graphPath": "functions/forecast.yssbi-function",
+    "projection": {
+      "basis": {
+        "graphPath": "functions/forecast.yssbi-function",
+        "graphRevision": 1,
+        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "resourceVersions": {
+          "functions/forecast.yssbi-function": "[{\"revision\":1,\"signature\":{\"parameters\":[{\"id\":\"sales\",\"name\":\"Observed sales\",\"type_name\":\"DataSeries<Float64>\"}],\"return_type\":\"Array<String>\"}},{\"nodes\":{},\"port_bindings\":[],\"connections\":{},\"input_states\":[]}]"
+        }
+      },
+      "connections": [],
+      "diagnostics": [
+        {
+          "blocking": true,
+          "code": "compiler.function.abi.managed_role_invalid",
+          "location": {
+            "kind": "graph"
+          },
+          "message": "Function ABI requires one function_entry node but found 0.",
+          "related": [],
+          "severity": "error"
+        },
+        {
+          "blocking": true,
+          "code": "compiler.function.abi.managed_role_invalid",
+          "location": {
+            "kind": "graph"
+          },
+          "message": "Function ABI requires one function_return node but found 0.",
+          "related": [],
+          "severity": "error"
+        }
+      ],
+      "graphPath": "functions/forecast.yssbi-function",
+      "hasBlockingDiagnostics": true,
+      "nodes": [],
+      "sourceRevision": 1
+    }
+  }
+}

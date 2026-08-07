@@ -11,6 +11,37 @@ import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
 import { logger } from '@/utils/appLogger';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+
+type DatabaseMetadataUpdater = (
+  id: string,
+  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
+) => void;
+
+export async function hydrateDatabaseEditorMetadata(
+  id: string,
+  updateDatabase: DatabaseMetadataUpdater,
+  isCancelled: () => boolean = () => false,
+): Promise<void> {
+  const identity = captureProjectIdentity();
+  try {
+    const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, id);
+    if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
+    updateDatabase(id, {
+      name: meta.name,
+      columns: meta.columns,
+      rowCount: meta.rowCount,
+      columnCount: meta.columnCount,
+    });
+  } catch (error) {
+    if (!isCancelled() && isCurrentProjectIdentity(identity)) {
+      logger.data.warn('getDatabaseMeta failed: ' + String(error), 'DatabaseEditorWindow');
+    }
+  }
+}
 
 function getDatabaseIdFromUrl(): string | null {
   const searchValue = new URLSearchParams(window.location.search).get('database');
@@ -114,16 +145,11 @@ export const DatabaseEditorWindow: React.FC = () => {
     if (!df) return;
     if (df.name && (df.columns?.length ?? 0) > 0) return;
     let cancelled = false;
-    const id = selectedDfId;
-    DatabaseService.getDatabaseMeta(selectedDfId)
-      .then((meta) => {
-        if (cancelled || id !== selectedDfId) return;
-        useDatabaseStore.getState().updateDatabase(id, {
-          name: meta.name, columns: meta.columns,
-          rowCount: meta.rowCount, columnCount: meta.columnCount,
-        });
-      })
-      .catch((e) => logger.data.warn('getDatabaseMeta failed: ' + String(e), 'DatabaseEditorWindow'));
+    void hydrateDatabaseEditorMetadata(
+      selectedDfId,
+      useDatabaseStore.getState().updateDatabase,
+      () => cancelled,
+    );
     return () => { cancelled = true; };
   }, [selectedDfId, dataframes]);
 

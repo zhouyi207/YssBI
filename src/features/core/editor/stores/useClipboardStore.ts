@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 
-import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams';
-
 export interface ClipboardPinEntry {
   pinId: string;
   name: string;
@@ -12,7 +10,6 @@ export interface ClipboardPinEntry {
 export interface ClipboardEntry {
   nodeType: string;
   position: { x: number; y: number };
-  params?: NodeSpawnParams;
   pins: ClipboardPinEntry[];
 }
 

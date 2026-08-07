@@ -7,6 +7,7 @@ type PreviewLoader = () => Promise<WorksheetPreviewPayload>;
 const previewCache = new Map<string, WorksheetPreviewPayload>();
 const inFlight = new Map<string, Promise<WorksheetPreviewPayload>>();
 const databaseKeys = new Map<string, Set<string>>();
+let cacheGeneration = 0;
 
 function stableEncodingsKey(encodings: WorksheetDocument['encodings']): string {
   return JSON.stringify({
@@ -15,8 +16,12 @@ function stableEncodingsKey(encodings: WorksheetDocument['encodings']): string {
   });
 }
 
-export function worksheetPreviewCacheKey(document: WorksheetDocument): string {
+export function worksheetPreviewCacheKey(
+  projectInstanceId: string,
+  document: WorksheetDocument,
+): string {
   return JSON.stringify({
+    projectInstanceId,
     worksheetId: document.id,
     databaseId: document.databaseId,
     chartType: document.chartType,
@@ -25,9 +30,10 @@ export function worksheetPreviewCacheKey(document: WorksheetDocument): string {
 }
 
 export function getCachedWorksheetPreview(
+  projectInstanceId: string,
   document: WorksheetDocument,
 ): WorksheetPreviewPayload | undefined {
-  const key = worksheetPreviewCacheKey(document);
+  const key = worksheetPreviewCacheKey(projectInstanceId, document);
   const cached = previewCache.get(key);
   if (!cached) return undefined;
   previewCache.delete(key);
@@ -59,27 +65,35 @@ function writeCache(key: string, databaseId: string, preview: WorksheetPreviewPa
 }
 
 export async function getWorksheetPreview(
+  projectInstanceId: string,
   document: WorksheetDocument,
   loader: PreviewLoader,
 ): Promise<WorksheetPreviewPayload> {
-  const cached = getCachedWorksheetPreview(document);
+  const cached = getCachedWorksheetPreview(projectInstanceId, document);
   if (cached) {
     return cached;
   }
 
-  const key = worksheetPreviewCacheKey(document);
+  const key = worksheetPreviewCacheKey(projectInstanceId, document);
   const pending = inFlight.get(key);
   if (pending) return pending;
 
-  const request = loader()
+  const generation = cacheGeneration;
+  let request!: Promise<WorksheetPreviewPayload>;
+  request = loader()
     .then((preview) => {
-      writeCache(key, document.databaseId, preview);
+      if (generation === cacheGeneration && inFlight.get(key) === request) {
+        writeCache(key, document.databaseId, preview);
+      }
       return preview;
     })
     .finally(() => {
-      inFlight.delete(key);
+      if (generation === cacheGeneration && inFlight.get(key) === request) {
+        inFlight.delete(key);
+      }
     });
   inFlight.set(key, request);
+  rememberDatabaseKey(document.databaseId, key);
   return request;
 }
 
@@ -94,6 +108,7 @@ export function invalidateWorksheetPreviewCacheForDatabase(databaseId: string) {
 }
 
 export function clearWorksheetPreviewCache() {
+  cacheGeneration += 1;
   previewCache.clear();
   inFlight.clear();
   databaseKeys.clear();

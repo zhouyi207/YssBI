@@ -1,3 +1,11 @@
+import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
+
+export interface FunctionEditorProjectionDto {
+  functionRevision: number;
+  inputs: FunctionSignaturePin[];
+  outputs: FunctionSignaturePin[];
+}
+
 export interface ProjectionBasisDto {
   graphPath: string;
   graphRevision: number;
@@ -15,10 +23,21 @@ export interface EditorGraphProjectionDto {
   hasBlockingDiagnostics: boolean;
 }
 
-export interface GraphProjectionReplacementDto {
+export interface EventGraphProjectionReplacementDto {
   graphPath: string;
   projection: EditorGraphProjectionDto;
+  functionEditorProjection?: never;
 }
+
+export interface FunctionGraphProjectionReplacementDto {
+  graphPath: string;
+  projection: EditorGraphProjectionDto;
+  functionEditorProjection: FunctionEditorProjectionDto;
+}
+
+export type GraphProjectionReplacementDto =
+  | EventGraphProjectionReplacementDto
+  | FunctionGraphProjectionReplacementDto;
 
 export interface EditorNodeProjectionDto {
   graphPath: string;

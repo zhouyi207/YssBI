@@ -118,7 +118,6 @@ impl std::error::Error for ProjectExecutionError {}
 enum CompileProductInvalidation {
     None,
     Graphs(Vec<GraphResourcePath>),
-    All,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -234,6 +233,13 @@ pub(super) struct ProjectionSourceSnapshot {
     pub(super) environment: ProjectionEnvironmentSnapshot,
     pub(super) project_instance_id: String,
     pub(super) authority_generation: u64,
+    graph_revisions: std::collections::HashMap<
+        GraphResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
+    variable_revisions:
+        std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+    database_revisions: std::collections::HashMap<String, u64>,
 }
 
 struct CommittedGraphLoad {
@@ -524,6 +530,100 @@ pub(super) fn validate_context_revisions(
     Ok(())
 }
 
+fn authoritative_function_revision(
+    path: &GraphResourcePath,
+    incoming: crate::node_system::document::ResourceRevision,
+    retained: Option<crate::node_system::document::ResourceRevision>,
+) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    let Some(retained) = retained else {
+        return Ok(incoming);
+    };
+    let next = retained.get().checked_add(1).ok_or_else(|| {
+        ProjectFilesystemError::ResourceRevisionOverflow {
+            path: path.clone(),
+            retained: retained.get(),
+        }
+    })?;
+    Ok(std::cmp::max(
+        incoming,
+        crate::node_system::document::ResourceRevision::new(next),
+    ))
+}
+
+fn normalize_function_resource_revision(
+    path: &GraphResourcePath,
+    resource: &mut GraphResourceDocument,
+    retained: Option<crate::node_system::document::ResourceRevision>,
+) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    if resource.kind != crate::project::GraphDocumentKind::Function {
+        return Ok(resource.document.revision);
+    }
+    let revision = authoritative_function_revision(path, resource.document.revision, retained)?;
+    resource.document.revision = revision;
+    if let Some(function) = resource.function.as_mut() {
+        function.revision = revision;
+    }
+    Ok(revision)
+}
+
+fn normalize_function_patch_revisions(
+    patch: &mut ResourceDocumentPatch,
+    data: &ProjectData,
+    graph_revisions: &std::collections::HashMap<
+        GraphResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
+) -> Result<(), ProjectFilesystemError> {
+    match patch {
+        ResourceDocumentPatch::InsertGraph { path, resource } => {
+            normalize_function_resource_revision(
+                path,
+                resource,
+                graph_revisions.get(path).copied(),
+            )?;
+        }
+        ResourceDocumentPatch::RemoveGraph { path, revision } => {
+            if data.graphs.get(path).is_some_and(|resource| {
+                resource.kind == crate::project::GraphDocumentKind::Function
+            }) {
+                authoritative_function_revision(
+                    path,
+                    *revision,
+                    graph_revisions.get(path).copied(),
+                )?;
+            }
+        }
+        ResourceDocumentPatch::MoveGraph {
+            from,
+            to,
+            moved,
+            referenced_graphs,
+            ..
+        } => {
+            if moved.kind == crate::project::GraphDocumentKind::Function {
+                authoritative_function_revision(
+                    from,
+                    moved.document.revision,
+                    graph_revisions.get(from).copied(),
+                )?;
+            }
+            normalize_function_resource_revision(to, moved, graph_revisions.get(to).copied())?;
+            for (path, resource) in referenced_graphs {
+                normalize_function_resource_revision(
+                    path,
+                    resource,
+                    graph_revisions.get(path).copied(),
+                )?;
+            }
+        }
+        ResourceDocumentPatch::UnloadGraph { .. }
+        | ResourceDocumentPatch::PatchVariables { .. }
+        | ResourceDocumentPatch::UpsertWorksheet { .. }
+        | ResourceDocumentPatch::RemoveWorksheet { .. } => {}
+    }
+    Ok(())
+}
+
 fn canonical_graph_lifecycle_events(
     context: &ProjectTransactionContext,
     patch: &ResourceDocumentPatch,
@@ -564,12 +664,19 @@ fn canonical_graph_lifecycle_events(
     match patch {
         ResourceDocumentPatch::InsertGraph { path, resource } => {
             let revision = resource.document.revision;
-            return vec![lifecycle_delta(
-                path,
-                revision,
-                None,
-                Some(lifecycle_state(path, revision)),
-            )];
+            return vec![crate::node_system::document::ResourceDeltaEvent {
+                resource: graph_key(path),
+                from_revision: revision,
+                to_revision: revision,
+                caused_by: Some(context.operation_id),
+                payload:
+                    crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(
+                        crate::node_system::document::GraphResourceLifecyclePatch {
+                            before: None,
+                            after: Some(lifecycle_state(path, revision)),
+                        },
+                    ),
+            }];
         }
         ResourceDocumentPatch::UnloadGraph { path } => {
             let revision = context.expected_revisions[&graph_key(path)];
@@ -652,7 +759,7 @@ fn canonical_graph_lifecycle_events(
     deltas
 }
 
-fn patch_projection_paths(patch: &ResourceDocumentPatch) -> Vec<String> {
+fn patch_projection_paths(patch: &ResourceDocumentPatch, data: &ProjectData) -> Vec<String> {
     let mut paths = std::collections::BTreeSet::new();
     match patch {
         ResourceDocumentPatch::InsertGraph { path, .. }
@@ -663,14 +770,15 @@ fn patch_projection_paths(patch: &ResourceDocumentPatch) -> Vec<String> {
         ResourceDocumentPatch::MoveGraph {
             from,
             to,
-            referenced_graphs,
+            loaded_referenced_graphs,
             ..
         } => {
-            paths.insert(from.as_str().to_string());
-            paths.insert(to.as_str().to_string());
+            if data.graphs.contains_key(from) {
+                paths.insert(to.as_str().to_string());
+            }
             paths.extend(
-                referenced_graphs
-                    .keys()
+                loaded_referenced_graphs
+                    .iter()
                     .map(|path| path.as_str().to_string()),
             );
         }
@@ -686,12 +794,8 @@ fn compile_product_invalidation_for_resource_patch(
     data: &ProjectData,
 ) -> CompileProductInvalidation {
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, resource } => {
-            if resource.kind == crate::project::GraphDocumentKind::Function {
-                CompileProductInvalidation::All
-            } else {
-                CompileProductInvalidation::Graphs(vec![path.clone()])
-            }
+        ResourceDocumentPatch::InsertGraph { path, .. } => {
+            CompileProductInvalidation::Graphs(vec![path.clone()])
         }
         ResourceDocumentPatch::RemoveGraph { path, .. }
         | ResourceDocumentPatch::UnloadGraph { path } => {
@@ -702,11 +806,8 @@ fn compile_product_invalidation_for_resource_patch(
                 .variables
                 .values()
                 .any(|variable| variable_scope_references_path(&variable.scope, path.as_str()));
-            if removes_function || removes_variables {
-                CompileProductInvalidation::All
-            } else {
-                CompileProductInvalidation::Graphs(vec![path.clone()])
-            }
+            let _ = (removes_function, removes_variables);
+            CompileProductInvalidation::Graphs(vec![path.clone()])
         }
         ResourceDocumentPatch::MoveGraph {
             from,
@@ -716,20 +817,12 @@ fn compile_product_invalidation_for_resource_patch(
             referenced_variables,
             ..
         } => {
-            if moved.kind == crate::project::GraphDocumentKind::Function
-                || !referenced_variables.is_empty()
-                || referenced_graphs
-                    .values()
-                    .any(|resource| resource.kind == crate::project::GraphDocumentKind::Function)
-            {
-                CompileProductInvalidation::All
-            } else {
-                let mut paths = vec![from.clone(), to.clone()];
-                paths.extend(referenced_graphs.keys().cloned());
-                CompileProductInvalidation::Graphs(paths)
-            }
+            let _ = (moved, referenced_variables);
+            let mut paths = vec![from.clone(), to.clone()];
+            paths.extend(referenced_graphs.keys().cloned());
+            CompileProductInvalidation::Graphs(paths)
         }
-        ResourceDocumentPatch::PatchVariables { .. } => CompileProductInvalidation::All,
+        ResourceDocumentPatch::PatchVariables { .. } => CompileProductInvalidation::None,
         ResourceDocumentPatch::UpsertWorksheet { .. }
         | ResourceDocumentPatch::RemoveWorksheet { .. } => CompileProductInvalidation::None,
     }
@@ -827,9 +920,22 @@ impl ProjectionSourceSnapshot {
                 Ok(crate::event::GraphProjectionReplacementDto {
                     graph_path: graph_path.as_str().to_string(),
                     projection: self.graph_projection(&graph_path, locale)?,
+                    function_editor_projection: self.function_editor_projection(&graph_path)?,
                 })
             })
             .collect()
+    }
+
+    fn function_editor_projection(
+        &self,
+        graph_path: &GraphResourcePath,
+    ) -> Result<Option<crate::node_system::analysis::FunctionEditorProjectionDto>, String> {
+        self.data
+            .graphs
+            .get(graph_path)
+            .and_then(|resource| resource.function.as_ref())
+            .map(crate::node_system::analysis::build_function_editor_projection)
+            .transpose()
     }
 
     fn graph_projection(
@@ -922,6 +1028,9 @@ pub struct ProjectState {
     projection_environment_after_path_data_test_hook:
         Arc<RwLock<Option<ProjectionEnvironmentCaptureTestHook>>>,
     #[cfg(test)]
+    pub(super) resource_mutation_test_hook:
+        Arc<RwLock<Option<crate::project::resource_mutations::ResourceMutationTestHook>>>,
+    #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
     #[cfg(test)]
     authoritative_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
@@ -936,7 +1045,12 @@ pub struct ProjectState {
     #[cfg(test)]
     compile_capture_after_environment_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
+    compile_after_source_capture_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
+    #[cfg(test)]
     compile_before_authority_gate_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
+    #[cfg(test)]
+    compile_after_exact_authority_capture_test_hook:
+        Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
     compile_coalesced_before_wait_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
@@ -1182,6 +1296,8 @@ impl ProjectState {
             #[cfg(test)]
             projection_environment_after_path_data_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
+            resource_mutation_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             authoritative_publication_test_hook: Arc::new(RwLock::new(None)),
@@ -1196,7 +1312,11 @@ impl ProjectState {
             #[cfg(test)]
             compile_capture_after_environment_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
+            compile_after_source_capture_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
             compile_before_authority_gate_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            compile_after_exact_authority_capture_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             compile_coalesced_before_wait_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1560,6 +1680,15 @@ impl ProjectState {
         environment: ProjectionEnvironmentSnapshot,
         project_instance_id: String,
         authority_generation: u64,
+        graph_revisions: std::collections::HashMap<
+            GraphResourcePath,
+            crate::node_system::document::ResourceRevision,
+        >,
+        variable_revisions: std::collections::HashMap<
+            crate::variable::VariableId,
+            VariableRevisionEntry,
+        >,
+        database_revisions: std::collections::HashMap<String, u64>,
     ) -> ProjectionSourceSnapshot {
         ProjectionSourceSnapshot {
             state: self.clone(),
@@ -1567,6 +1696,9 @@ impl ProjectState {
             environment,
             project_instance_id,
             authority_generation,
+            graph_revisions,
+            variable_revisions,
+            database_revisions,
         }
     }
 
@@ -1877,12 +2009,46 @@ impl ProjectState {
     }
 
     #[cfg(test)]
+    pub(super) fn set_compile_after_source_capture_test_hook(
+        &self,
+        hook: CompilePublicationTestHook,
+    ) {
+        *self.compile_after_source_capture_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_compile_after_source_capture_test_hook(&self) {
+        if let Some(hook) = self
+            .compile_after_source_capture_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_compile_after_source_capture_test_hook(&self) {}
+
+    #[cfg(test)]
     pub(super) fn set_compile_before_authority_gate_test_hook(
         &self,
         hook: CompilePublicationTestHook,
     ) {
         *self
             .compile_before_authority_gate_test_hook
+            .write()
+            .unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_compile_after_exact_authority_capture_test_hook(
+        &self,
+        hook: CompilePublicationTestHook,
+    ) {
+        *self
+            .compile_after_exact_authority_capture_test_hook
             .write()
             .unwrap() = Some(hook);
     }
@@ -1916,6 +2082,21 @@ impl ProjectState {
 
     #[cfg(not(test))]
     pub(super) fn run_compile_before_authority_gate_test_hook(&self) {}
+
+    #[cfg(test)]
+    pub(super) fn run_compile_after_exact_authority_capture_test_hook(&self) {
+        if let Some(hook) = self
+            .compile_after_exact_authority_capture_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
+    }
+
+    #[cfg(not(test))]
+    pub(super) fn run_compile_after_exact_authority_capture_test_hook(&self) {}
 
     #[cfg(test)]
     pub(super) fn set_compile_coalesced_before_wait_test_hook(
@@ -2490,6 +2671,29 @@ impl ProjectState {
         &self.filesystem
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_project_filesystem_fault(
+        &self,
+        fault: Option<crate::project::ProjectFilesystemFaultPoint>,
+    ) {
+        self.filesystem.set_project_filesystem_fault(fault);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
+        self.filesystem
+            .set_project_filesystem_rollback_fault(enabled);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_filesystem_rollback_test_hook(
+        &self,
+        hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) {
+        self.filesystem
+            .set_project_filesystem_rollback_test_hook(hook);
+    }
+
     pub(crate) fn project_recovery_marker(&self) -> crate::project::ProjectRecoveryMarker {
         self.recovery_marker.clone()
     }
@@ -2615,24 +2819,6 @@ impl ProjectState {
         ));
     }
 
-    fn invalidate_graph_body_compile_products(
-        &self,
-        graph_path: &GraphResourcePath,
-        kind: crate::project::GraphDocumentKind,
-    ) {
-        match kind {
-            crate::project::GraphDocumentKind::Event => {
-                self.invalidate_graph_compile_products(graph_path)
-            }
-            crate::project::GraphDocumentKind::Function => self.invalidate_all_compile_products(),
-        }
-    }
-
-    pub(super) fn invalidate_all_compile_products(&self) {
-        let coordinator = self.compile_coordinator.read().unwrap().clone();
-        coordinator.invalidate_all();
-    }
-
     fn apply_compile_product_invalidation(&self, invalidation: CompileProductInvalidation) {
         match invalidation {
             CompileProductInvalidation::None => {}
@@ -2641,7 +2827,6 @@ impl ProjectState {
                     self.invalidate_graph_compile_products(&path);
                 }
             }
-            CompileProductInvalidation::All => self.invalidate_all_compile_products(),
         }
     }
 
@@ -2659,20 +2844,20 @@ impl ProjectState {
     pub fn insert_graph(
         &self,
         path: GraphResourcePath,
-        resource: GraphResourceDocument,
+        mut resource: GraphResourceDocument,
     ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         validate_graph_resource(&path, &resource)?;
-        let revision = resource.document.revision;
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         self.ensure_project_operational()?;
-        let invalidation = if resource.kind == crate::project::GraphDocumentKind::Function {
-            CompileProductInvalidation::All
-        } else {
-            CompileProductInvalidation::Graphs(vec![path.clone()])
-        };
+        let invalidation = CompileProductInvalidation::Graphs(vec![path.clone()]);
+        let revision = normalize_function_resource_revision(
+            &path,
+            &mut resource,
+            graph_revisions.get(&path).copied(),
+        )?;
         let inserted = Self::insert_graph_locked(&mut data, path.clone(), resource)?;
         graph_revisions.insert(path, revision);
         publication.advance_authority_generation();
@@ -2719,7 +2904,7 @@ impl ProjectState {
     fn apply_resource_document_patch_internal(
         &self,
         context: &ProjectTransactionContext,
-        patch: ResourceDocumentPatch,
+        mut patch: ResourceDocumentPatch,
         history_head: Option<(bool, HistoryEntryId)>,
         projection_environment: Option<ProjectionEnvironmentSnapshot>,
         mut rename_ownership: Option<&mut GraphRenameOwnershipLease>,
@@ -2731,58 +2916,7 @@ impl ProjectState {
             .map(Ok)
             .unwrap_or_else(|| self.capture_projection_environment_for_session(&context.session))
             .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
-        let projection_paths = patch_projection_paths(&patch);
-        let deltas = canonical_graph_lifecycle_events(context, &patch);
-        let moves = match &patch {
-            ResourceDocumentPatch::MoveGraph {
-                from, to, moved, ..
-            } => {
-                vec![crate::event::ResourceMoveDto {
-                    from: from.as_str().to_string(),
-                    to: to.as_str().to_string(),
-                    kind: match moved.kind {
-                        crate::project::GraphDocumentKind::Event => "event",
-                        crate::project::GraphDocumentKind::Function => "function",
-                    }
-                    .into(),
-                    name: moved.name.clone(),
-                }]
-            }
-            _ => Vec::new(),
-        };
-        let move_history = match &patch {
-            ResourceDocumentPatch::MoveGraph {
-                from,
-                to,
-                moved_before,
-                moved,
-                referenced_graphs_before,
-                referenced_graphs,
-                referenced_variables_before,
-                referenced_variables,
-                ..
-            } => Some(
-                crate::node_system::document::ProjectHistoryTransaction::graph_resource_move(
-                    context.operation_id,
-                    crate::node_system::document::GraphResourcePath(from.as_str().into()),
-                    crate::node_system::document::GraphResourcePath(to.as_str().into()),
-                    serde_json::to_value(GraphMoveHistoryPayload {
-                        moved_before: moved_before.clone(),
-                        moved_after: moved.clone(),
-                        referenced_graphs_before: referenced_graphs_before.clone(),
-                        referenced_graphs_after: referenced_graphs.clone(),
-                        referenced_variables_before: referenced_variables_before.clone(),
-                        referenced_variables_after: referenced_variables.clone(),
-                    })
-                    .map_err(|error| {
-                        ProjectFilesystemError::TransactionPrepareFailed {
-                            message: error.to_string(),
-                        }
-                    })?,
-                ),
-            ),
-            _ => None,
-        };
+
         let receipt = {
             let mut publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != context.session.instance_id.as_str() {
@@ -2809,6 +2943,57 @@ impl ProjectState {
                 &variable_revisions,
                 &worksheet_revisions,
             )?;
+            normalize_function_patch_revisions(&mut patch, &data, &graph_revisions)?;
+            let deltas = canonical_graph_lifecycle_events(context, &patch);
+            let moves = match &patch {
+                ResourceDocumentPatch::MoveGraph {
+                    from, to, moved, ..
+                } => vec![crate::event::ResourceMoveDto {
+                    from: from.as_str().to_string(),
+                    to: to.as_str().to_string(),
+                    kind: match moved.kind {
+                        crate::project::GraphDocumentKind::Event => "event",
+                        crate::project::GraphDocumentKind::Function => "function",
+                    }
+                    .into(),
+                    name: moved.name.clone(),
+                }],
+                _ => Vec::new(),
+            };
+            let move_history = match &patch {
+                ResourceDocumentPatch::MoveGraph {
+                    from,
+                    to,
+                    moved_before,
+                    moved,
+                    referenced_graphs_before,
+                    referenced_graphs,
+                    referenced_variables_before,
+                    referenced_variables,
+                    ..
+                } => Some(
+                    crate::node_system::document::ProjectHistoryTransaction::graph_resource_move(
+                        context.operation_id,
+                        crate::node_system::document::GraphResourcePath(from.as_str().into()),
+                        crate::node_system::document::GraphResourcePath(to.as_str().into()),
+                        serde_json::to_value(GraphMoveHistoryPayload {
+                            moved_before: moved_before.clone(),
+                            moved_after: moved.clone(),
+                            referenced_graphs_before: referenced_graphs_before.clone(),
+                            referenced_graphs_after: referenced_graphs.clone(),
+                            referenced_variables_before: referenced_variables_before.clone(),
+                            referenced_variables_after: referenced_variables.clone(),
+                        })
+                        .map_err(|error| {
+                            ProjectFilesystemError::TransactionPrepareFailed {
+                                message: error.to_string(),
+                            }
+                        })?,
+                    ),
+                ),
+                _ => None,
+            };
+            let projection_paths = patch_projection_paths(&patch, &data);
             let compile_invalidation =
                 compile_product_invalidation_for_resource_patch(&patch, &data);
             if let Some((undo, expected_history_id)) = &history_head {
@@ -2835,8 +3020,22 @@ impl ProjectState {
                     graph_revisions.insert(path, revision);
                 }
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
-                    data.graphs.remove(&path);
-                    graph_revisions.remove(&path);
+                    let removed = data.graphs.remove(&path);
+                    if removed.as_ref().is_some_and(|resource| {
+                        resource.kind == crate::project::GraphDocumentKind::Function
+                    }) {
+                        let retained = graph_revisions.get(&path).copied().or_else(|| {
+                            removed.as_ref().map(|resource| resource.document.revision)
+                        });
+                        let incoming = removed
+                            .as_ref()
+                            .map(|resource| resource.document.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                        let revision = authoritative_function_revision(&path, incoming, retained)?;
+                        graph_revisions.insert(path.clone(), revision);
+                    } else {
+                        graph_revisions.remove(&path);
+                    }
                     let removed_ids = data
                         .variables
                         .iter()
@@ -2870,8 +3069,21 @@ impl ProjectState {
                     referenced_variables,
                     ..
                 } => {
-                    let was_loaded = data.graphs.remove(&from).is_some();
-                    graph_revisions.remove(&from);
+                    let removed = data.graphs.remove(&from);
+                    let was_loaded = removed.is_some();
+                    if moved.kind == crate::project::GraphDocumentKind::Function {
+                        let retained = graph_revisions.get(&from).copied().or_else(|| {
+                            removed.as_ref().map(|resource| resource.document.revision)
+                        });
+                        let incoming = removed
+                            .as_ref()
+                            .map(|resource| resource.document.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                        let revision = authoritative_function_revision(&from, incoming, retained)?;
+                        graph_revisions.insert(from.clone(), revision);
+                    } else {
+                        graph_revisions.remove(&from);
+                    }
                     graph_revisions.insert(to.clone(), moved.document.revision);
                     if was_loaded {
                         Self::insert_graph_locked(&mut data, to, moved)?;
@@ -2973,6 +3185,9 @@ impl ProjectState {
                 projection_environment,
                 publication.project_instance_id.clone(),
                 publication.authority_generation(),
+                graph_revisions.clone(),
+                variable_revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
             );
             #[cfg(test)]
             let completion_test_hook = self
@@ -3290,15 +3505,7 @@ impl ProjectState {
         let changed = graph_removed || variables_removed;
         if changed {
             publication.advance_authority_generation();
-            if variables_removed
-                || removed.as_ref().is_some_and(|resource| {
-                    resource.kind == crate::project::GraphDocumentKind::Function
-                })
-            {
-                self.invalidate_all_compile_products();
-            } else {
-                self.invalidate_graph_compile_products(graph_path);
-            }
+            self.invalidate_graph_compile_products(graph_path);
         }
         Ok(())
     }
@@ -3582,13 +3789,13 @@ impl ProjectState {
             .capture_projection_environment_for_session(&context.session)
             .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         #[cfg(test)]
-        crate::project::resource_mutations::run_resource_mutation_test_hook(
+        self.run_resource_mutation_test_hook(
             crate::project::resource_mutations::ResourceMutationTestPoint::Prepared,
             Some(&target),
         );
         let committed = prepared.commit()?;
         #[cfg(test)]
-        crate::project::resource_mutations::run_resource_mutation_test_hook(
+        self.run_resource_mutation_test_hook(
             crate::project::resource_mutations::ResourceMutationTestPoint::Committed,
             Some(&target),
         );
@@ -3597,7 +3804,7 @@ impl ProjectState {
             checkpoint();
         }
         #[cfg(test)]
-        crate::project::resource_mutations::run_resource_mutation_test_hook(
+        self.run_resource_mutation_test_hook(
             crate::project::resource_mutations::ResourceMutationTestPoint::BeforePublication,
             Some(&target),
         );
@@ -3829,7 +4036,7 @@ impl ProjectState {
         &self,
         operation: &GraphLifecycleOperation,
         guard: &mut crate::project::GraphLifecycleGuard,
-        resource: GraphResourceDocument,
+        mut resource: GraphResourceDocument,
         local_variables: Option<
             std::collections::HashMap<
                 crate::variable::VariableId,
@@ -3875,7 +4082,6 @@ impl ProjectState {
         let mut lifecycle = self.graph_lifecycle.boundary();
         lifecycle.validate(&operation.owner)?;
         self.ensure_project_operational()?;
-        let revision = resource.document.revision;
         let invalidate_all = resource.kind == crate::project::GraphDocumentKind::Function
             || local_variables
                 .as_ref()
@@ -3883,6 +4089,11 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
+        let revision = normalize_function_resource_revision(
+            &operation.owner.graph_path,
+            &mut resource,
+            graph_revisions.get(&operation.owner.graph_path).copied(),
+        )?;
         let inserted =
             Self::insert_graph_locked(&mut data, operation.owner.graph_path.clone(), resource)?;
         graph_revisions.insert(operation.owner.graph_path.clone(), revision);
@@ -3907,17 +4118,17 @@ impl ProjectState {
         }
         lifecycle.commit_guard(guard, GraphLifecycleIntent::Load)?;
         publication.advance_authority_generation();
-        if invalidate_all {
-            self.invalidate_all_compile_products();
-        } else {
-            self.invalidate_graph_compile_products(&operation.owner.graph_path);
-        }
+        let _ = invalidate_all;
+        self.invalidate_graph_compile_products(&operation.owner.graph_path);
         let projection_source = include_projection.then(|| {
             self.projection_source_snapshot(
                 &data,
                 projection_environment.expect("projection environment was captured"),
                 publication.project_instance_id.clone(),
                 publication.authority_generation(),
+                graph_revisions.clone(),
+                variable_revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
             )
         });
         drop(variable_revisions);
@@ -4104,15 +4315,7 @@ impl ProjectState {
         let changed = graph_removed || variables_removed;
         if changed {
             publication.advance_authority_generation();
-            if variables_removed
-                || removed.as_ref().is_some_and(|resource| {
-                    resource.kind == crate::project::GraphDocumentKind::Function
-                })
-            {
-                self.invalidate_all_compile_products();
-            } else {
-                self.invalidate_graph_compile_products(graph_path);
-            }
+            self.invalidate_graph_compile_products(graph_path);
         }
         Ok(changed)
     }
@@ -4185,6 +4388,10 @@ impl ProjectState {
                 .projection_source
                 .graph_projection(graph_path, locale)
                 .map_err(|error| MutationConflict::Projection(error.into()))?,
+            function_editor_projection: committed
+                .projection_source
+                .function_editor_projection(graph_path)
+                .map_err(|error| MutationConflict::Projection(error.into()))?,
         };
         Ok(GraphMutationResultDto {
             project_instance_id: committed.project_instance_id,
@@ -4246,8 +4453,18 @@ impl ProjectState {
                 graph.document = document;
             }
         }
+        let revision = data
+            .graphs
+            .get(graph_path)
+            .expect("mutated graph remains loaded")
+            .document
+            .revision;
+        self.graph_revisions
+            .write()
+            .unwrap()
+            .insert(graph_path.clone(), revision);
         publication.advance_authority_generation();
-        self.invalidate_graph_body_compile_products(graph_path, resource.kind);
+        self.invalidate_graph_compile_products(graph_path);
         Ok(event)
     }
 
@@ -4385,7 +4602,6 @@ impl ProjectState {
                 current_revision: graph.document.revision,
             });
         }
-        let graph_kind = graph.kind;
         let patch = plan(&graph.document, projection_environment.registry.as_ref())?;
         let mut documents = ProjectDocumentState::new(
             data.graphs
@@ -4421,12 +4637,15 @@ impl ProjectState {
         graph_revisions.insert(graph_path.clone(), to_revision);
         let history = history.status();
         publication.advance_authority_generation();
-        self.invalidate_graph_body_compile_products(graph_path, graph_kind);
+        self.invalidate_graph_compile_products(graph_path);
         let projection_source = self.projection_source_snapshot(
             &data,
             projection_environment,
             publication.project_instance_id.clone(),
             publication.authority_generation(),
+            graph_revisions.clone(),
+            self.variable_revisions.read().unwrap().clone(),
+            self.database_authority_revisions.read().unwrap().clone(),
         );
         Ok(CommittedGraphMutation {
             project_instance_id: publication.project_instance_id.clone(),
@@ -4567,12 +4786,14 @@ impl ProjectState {
         }];
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
         let publication_revision = publication.allocate_resource_revision();
-        self.invalidate_all_compile_products();
         let projection_source = self.projection_source_snapshot(
             &data,
             projection_environment,
             publication.project_instance_id.clone(),
             publication.authority_generation(),
+            graph_revisions.clone(),
+            revisions.clone(),
+            self.database_authority_revisions.read().unwrap().clone(),
         );
         #[cfg(test)]
         let completion_test_hook = self
@@ -4912,12 +5133,14 @@ impl ProjectState {
         }
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
         let publication_revision = publication.allocate_resource_revision();
-        self.invalidate_all_compile_products();
         let projection_source = self.projection_source_snapshot(
             &data,
             projection_environment,
             publication.project_instance_id.clone(),
             publication.authority_generation(),
+            graph_revisions.clone(),
+            revisions.clone(),
+            self.database_authority_revisions.read().unwrap().clone(),
         );
         #[cfg(test)]
         let completion_test_hook = self
@@ -5000,12 +5223,6 @@ impl ProjectState {
             .authority_generation
             .checked_add(1)
             .expect("project authority generation overflowed");
-        let projection_source = self.projection_source_snapshot(
-            &prepared.loaded_after_data,
-            projection_environment.clone(),
-            prepared.basis.session.instance_id.as_str().to_owned(),
-            projected_generation,
-        );
         let history_status = prepared.proposed_history.status();
         #[cfg(test)]
         let completion_test_hook = self
@@ -5138,15 +5355,24 @@ impl ProjectState {
             *history = prepared.proposed_history;
             let publication_revision = publication.allocate_resource_revision();
             debug_assert_eq!(publication.authority_generation(), projected_generation);
-            self.invalidate_all_compile_products();
+            let projection_source = self.projection_source_snapshot(
+                &data,
+                projection_environment.clone(),
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+                graph_revisions.clone(),
+                variable_revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
+            );
             Ok((
                 publication.project_instance_id.clone(),
                 publication_revision,
+                projection_source,
             ))
         })();
 
         match authority_result {
-            Ok((project_instance_id, publication_revision)) => {
+            Ok((project_instance_id, publication_revision, projection_source)) => {
                 committed_filesystem.finalize();
                 Ok(CommittedResourceMutation {
                     operation_id: request.operation_id,
@@ -5396,12 +5622,14 @@ impl ProjectState {
             *self.history.write().unwrap() = next_history;
             drop(store);
             let publication_revision = publication.allocate_resource_revision();
-            self.invalidate_all_compile_products();
             let projection_source = self.projection_source_snapshot(
                 &data,
                 projection_environment,
                 publication.project_instance_id.clone(),
                 publication.authority_generation(),
+                graph_revisions.clone(),
+                revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
             );
             #[cfg(test)]
             let completion_test_hook = self
@@ -5854,14 +6082,15 @@ impl ProjectState {
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != expected_project_instance_id.as_str()
             || publication.project_instance_id != compilation.authority.project_instance_id
-            || publication.authority_generation() != compilation.authority.authority_generation
         {
             return Err(
                 "stale_project_lifecycle: execution authority changed before snapshot".into(),
             );
         }
         let data = self.project_data.read().unwrap().clone();
+        let graph_revisions = self.graph_revisions.read().unwrap().clone();
         let variable_revisions = self.variable_revisions.read().unwrap().clone();
+        let database_revisions = self.database_authority_revisions.read().unwrap().clone();
         let store = self.project_store.read().unwrap();
         let database_instances = store.databases.clone();
         let registry = Arc::clone(&store.node_registry);
@@ -5888,7 +6117,9 @@ impl ProjectState {
             document,
             data,
             database_instances,
+            graph_revisions,
             variable_revisions,
+            database_revisions,
             project_root: identity.project_root,
             database_schemas: compilation.source.environment.database_schemas.clone(),
             registry,
@@ -5987,8 +6218,15 @@ impl ProjectState {
             graph_path,
             &compilation,
         )?;
-        let compile_resources =
+        let mut compile_resources =
             compile_resources_from_data(&execution.data, execution.database_schemas.clone())?;
+        apply_compile_resource_authority(
+            &mut compile_resources,
+            &execution.data,
+            execution.graph_revisions.clone(),
+            execution.variable_revisions.clone(),
+            execution.database_revisions.clone(),
+        );
         if compile_resources.versions != compilation.authority.basis.resource_versions {
             return Err("stale_project_lifecycle: execution resource basis changed".into());
         }
@@ -6468,12 +6706,14 @@ impl ProjectState {
             *self.history.write().unwrap() = next_history;
             drop(store);
             let publication_revision = publication.allocate_resource_revision();
-            self.invalidate_all_compile_products();
             let projection_source = self.projection_source_snapshot(
                 &data,
                 projection_environment,
                 publication.project_instance_id.clone(),
                 publication.authority_generation(),
+                graph_revisions.clone(),
+                revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
             );
             #[cfg(test)]
             let completion_test_hook = self
@@ -6812,6 +7052,7 @@ impl std::fmt::Display for VariableEffectCommitError {
 #[derive(Clone)]
 pub(super) struct CompileResourceSnapshot {
     pub(super) versions: crate::node_system::analysis::ResourceVersionSet,
+    resource_states: crate::node_system::analysis::ResourceObservationSet,
     functions: BTreeMap<
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
@@ -6820,6 +7061,8 @@ pub(super) struct CompileResourceSnapshot {
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::GraphDocument,
     >,
+    variables:
+        std::collections::HashMap<crate::variable::VariableId, crate::variable::VariableInstance>,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
@@ -6832,22 +7075,18 @@ impl CompileResourceSnapshot {
                 crate::node_system::catalog::DATAFRAME_RESOURCE_SCHEMA_RESOLVER,
             )
             .expect("built-in dataframe schema resolver ID is valid"),
-            ProjectDatabaseSchemaResolver {
-                schemas: self.database_schemas.clone(),
-            },
+            ProjectDatabaseSchemaResolver,
         );
         resolvers
     }
 }
 
-struct ProjectDatabaseSchemaResolver {
-    schemas: BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
-}
+struct ProjectDatabaseSchemaResolver;
 
 impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResolver {
     fn resolve(
         &self,
-        context: &crate::node_system::compiler::SchemaResolutionContext<'_>,
+        context: &mut crate::node_system::compiler::SchemaResolutionContext<'_, '_>,
     ) -> Result<
         crate::node_system::compiler::SchemaFact,
         crate::node_system::compiler::SchemaResolutionError,
@@ -6862,15 +7101,24 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
                     "dataframe source requires a database resource",
                 )
             })?;
-        let resource = crate::node_system::plan::ResourceId::new(resource).map_err(|error| {
-            crate::node_system::compiler::SchemaResolutionError::new(error.to_string())
-        })?;
-        let fields = self.schemas.get(&resource).ok_or_else(|| {
+        let id = resource.strip_prefix("databases/").ok_or_else(|| {
             crate::node_system::compiler::SchemaResolutionError::new(format!(
-                "database resource '{}' has no compiled schema",
-                resource.as_str()
+                "database resource '{resource}' is not canonical"
             ))
         })?;
+        let fields = context
+            .resources
+            .as_deref_mut()
+            .ok_or_else(|| {
+                crate::node_system::compiler::SchemaResolutionError::new(
+                    "database schema resolution requires analysis resources",
+                )
+            })?
+            .resolve_database(id)
+            .map_err(|error| {
+                crate::node_system::compiler::SchemaResolutionError::from_resource(&error)
+            })?;
+        let fields = fields.value;
         Ok(crate::node_system::compiler::SchemaFact::new(
             crate::node_system::protocol::SchemaExpr::Input(
                 crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
@@ -6893,6 +7141,22 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         self.versions.clone()
     }
 
+    fn version(
+        &self,
+        key: &crate::node_system::analysis::ResourceKey,
+    ) -> Option<crate::node_system::analysis::ResourceVersion> {
+        self.versions.get(key).cloned()
+    }
+
+    fn observed_state(
+        &self,
+        key: &crate::node_system::analysis::ResourceKey,
+    ) -> crate::node_system::analysis::ResourceObservedState {
+        self.resource_states.get(key).cloned().unwrap_or(
+            crate::node_system::analysis::ResourceObservedState::Absent(None),
+        )
+    }
+
     fn function_document(
         &self,
         path: &crate::node_system::document::GraphResourcePath,
@@ -6905,6 +7169,18 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         path: &crate::node_system::document::GraphResourcePath,
     ) -> Option<&crate::node_system::document::GraphDocument> {
         self.function_graphs.get(path)
+    }
+
+    fn variable(
+        &self,
+        id: &crate::variable::VariableId,
+    ) -> Option<&crate::variable::VariableInstance> {
+        self.variables.get(id)
+    }
+
+    fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
+        let resource = crate::node_system::plan::ResourceId::new(format!("databases/{id}")).ok()?;
+        self.database_schemas.get(&resource).map(Vec::as_slice)
     }
 }
 
@@ -6929,8 +7205,13 @@ struct ExecutionSnapshot {
     document: crate::node_system::document::GraphDocument,
     data: ProjectData,
     database_instances: std::collections::HashMap<String, crate::database::DatabaseInstance>,
+    graph_revisions: std::collections::HashMap<
+        GraphResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
     variable_revisions:
         std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+    database_revisions: std::collections::HashMap<String, u64>,
     project_root: Option<NormalizedProjectRoot>,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
@@ -6942,10 +7223,100 @@ struct ExecutionSnapshot {
     session_id: crate::node_system::analysis::ProjectSessionId,
 }
 
+#[cfg(test)]
+static COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+#[cfg(test)]
+pub(super) fn compile_resource_snapshot_constructions() -> u64 {
+    COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS.load(std::sync::atomic::Ordering::Acquire)
+}
+
 pub(super) fn compile_resources_from_projection_snapshot(
     source: &ProjectionSourceSnapshot,
 ) -> Result<CompileResourceSnapshot, String> {
-    compile_resources_from_data(&source.data, source.environment.database_schemas.clone())
+    #[cfg(test)]
+    COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+    let mut resources =
+        compile_resources_from_data(&source.data, source.environment.database_schemas.clone())?;
+    apply_compile_resource_authority(
+        &mut resources,
+        &source.data,
+        source.graph_revisions.clone(),
+        source.variable_revisions.clone(),
+        source.database_revisions.clone(),
+    );
+    Ok(resources)
+}
+
+fn apply_compile_resource_authority(
+    resources: &mut CompileResourceSnapshot,
+    data: &ProjectData,
+    graph_revisions: std::collections::HashMap<
+        GraphResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
+    variable_revisions: std::collections::HashMap<
+        crate::variable::VariableId,
+        VariableRevisionEntry,
+    >,
+    database_revisions: std::collections::HashMap<String, u64>,
+) {
+    use crate::node_system::analysis::{
+        ResourceKey as AnalysisResourceKey, ResourceObservedState, ResourceVersion,
+    };
+
+    resources.versions.clear();
+    resources.resource_states.clear();
+    for (path, revision) in graph_revisions {
+        if !path.as_str().starts_with("functions/") {
+            continue;
+        }
+        let key = AnalysisResourceKey::new(path.as_str());
+        let version = ResourceVersion::new(format!("revision:{}", revision.get()));
+        if data
+            .graphs
+            .get(&path)
+            .is_some_and(|resource| resource.function.is_some())
+        {
+            resources.versions.insert(key.clone(), version.clone());
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Present(version));
+        } else {
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Absent(Some(version)));
+        }
+    }
+    for (id, entry) in variable_revisions {
+        let key = AnalysisResourceKey::new(format!("variables/{id}"));
+        let version = ResourceVersion::new(format!("revision:{}", entry.revision.get()));
+        if entry.is_present() && data.variables.contains_key(&id) {
+            resources.versions.insert(key.clone(), version.clone());
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Present(version));
+        } else {
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Absent(Some(version)));
+        }
+    }
+    for (id, revision) in database_revisions {
+        let key = AnalysisResourceKey::new(format!("databases/{id}"));
+        let version = ResourceVersion::new(format!("revision:{revision}"));
+        if data.databases.contains_key(&id) {
+            resources.versions.insert(key.clone(), version.clone());
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Present(version));
+        } else {
+            resources
+                .resource_states
+                .insert(key, ResourceObservedState::Absent(Some(version)));
+        }
+    }
 }
 
 pub(super) fn compile_resources_from_data(
@@ -7021,10 +7392,21 @@ pub(super) fn compile_resources_from_data(
         );
     }
 
+    let resource_states = versions
+        .iter()
+        .map(|(key, version)| {
+            (
+                key.clone(),
+                crate::node_system::analysis::ResourceObservedState::Present(version.clone()),
+            )
+        })
+        .collect();
     Ok(CompileResourceSnapshot {
         versions,
+        resource_states,
         functions,
         function_graphs,
+        variables: data.variables.clone(),
         database_schemas,
     })
 }
@@ -7175,6 +7557,7 @@ pub(super) fn snapshot_project_resources(
         .map(|path| crate::project::project_root_from_path(&path));
     let mut database_schemas = BTreeMap::new();
     let variable_revisions = state.variable_revisions.read().unwrap().clone();
+    let compile_variables = variables.clone();
     let mut runtime =
         crate::node_system::runtime::ProjectResourceSnapshot::new(session_id, versions.clone())
             .with_plot_sink(Arc::new(ProductionPlotSink));
@@ -7215,9 +7598,21 @@ pub(super) fn snapshot_project_resources(
 
     Ok(ProductionResourceSnapshots {
         compile: CompileResourceSnapshot {
+            resource_states: versions
+                .iter()
+                .map(|(key, version)| {
+                    (
+                        key.clone(),
+                        crate::node_system::analysis::ResourceObservedState::Present(
+                            version.clone(),
+                        ),
+                    )
+                })
+                .collect(),
             versions,
             functions: function_resources,
             function_graphs,
+            variables: compile_variables,
             database_schemas,
         },
         runtime,
@@ -7617,6 +8012,7 @@ mod execution_identity_tests {
                 [8; 32],
             ),
             resource_versions: std::collections::BTreeMap::new(),
+            resource_observations: std::collections::BTreeMap::new(),
         };
         let correlation = crate::node_system::analysis::CorrelationContext {
             project_session_id: crate::node_system::analysis::ProjectSessionId::new("session"),
@@ -8001,6 +8397,7 @@ mod run_parameter_tests {
                     graph_revision: GraphRevision::new(1),
                     registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
                     resource_versions: BTreeMap::new(),
+                    resource_observations: BTreeMap::new(),
                 },
                 compile_id: CompileId::new(1),
             },
@@ -8082,8 +8479,10 @@ mod run_parameter_tests {
         let store = crate::node_system::runtime::FunctionPlanStore::new(session.clone(), 64);
         let resources = CompileResourceSnapshot {
             versions: crate::node_system::analysis::ResourceVersionSet::new(),
+            resource_states: crate::node_system::analysis::ResourceObservationSet::new(),
             functions: BTreeMap::new(),
             function_graphs: BTreeMap::new(),
+            variables: std::collections::HashMap::new(),
             database_schemas: BTreeMap::new(),
         };
         let mut parameters = crate::node_system::runtime::CompiledParameterStore::new();

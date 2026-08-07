@@ -56,7 +56,7 @@ export type EditorSessionDataframeActions = ReturnType<typeof useDatabaseManagem
 
 export type EditorSessionNodeActions = Pick<
   ReturnType<typeof useNodeManagement>,
-  'createNode' | 'createNodes' | 'deleteNode' | 'deleteNodes'
+  'createNode' | 'deleteNode' | 'deleteNodes'
 >;
 
 /** 全窗口 EditorSessionProvider 契约 */
@@ -171,7 +171,6 @@ export function pickEditorSessionNodeActions(
 ): EditorSessionNodeActions {
   return {
     createNode: nodeMgmt.createNode,
-    createNodes: nodeMgmt.createNodes,
     deleteNode: nodeMgmt.deleteNode,
     deleteNodes: nodeMgmt.deleteNodes,
   };

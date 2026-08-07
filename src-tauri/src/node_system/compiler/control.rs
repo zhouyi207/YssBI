@@ -1,4 +1,4 @@
-use super::{CompilerDiagnostic, managed_node_role_name};
+use super::{CompilerDiagnostic, ValidatedNodeConfig, managed_node_role_name};
 use crate::node_system::document::{
     DynamicMemberLocator, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
 };
@@ -18,7 +18,7 @@ pub(crate) struct ControlNode<'a> {
     pub node_id: NodeId,
     pub role: Option<StructuralNodeRole>,
     pub protocol: &'a NodeProtocol,
-    pub parameters: &'a BTreeMap<ParameterKey, Value>,
+    pub parameters: &'a ValidatedNodeConfig,
     pub ports: Box<[PortAddress]>,
     pub values: BTreeMap<PortAddress, ValueRef>,
     pub dynamic_members: BTreeMap<PortAddress, DynamicMemberLocator>,
@@ -345,8 +345,12 @@ impl<'a> RegionBuilder<'a> {
                 let condition = self.value_for_key(node_id, "condition")?;
                 let body = self.single_region(node_id, "body")?;
                 let carried = self.loop_carried(node_id)?;
-                let max_iterations = parameter(self.nodes[&node_id].parameters, "max_iterations")
-                    .and_then(Value::as_u64)
+                let max_iterations_key =
+                    ParameterKey::new("max_iterations").expect("built-in parameter key is valid");
+                let max_iterations = self.nodes[&node_id]
+                    .parameters
+                    .int64(&max_iterations_key)
+                    .and_then(|value| u64::try_from(value).ok())
                     .ok_or_else(|| {
                         issue(
                             node_id,
@@ -365,7 +369,7 @@ impl<'a> RegionBuilder<'a> {
             }
             Some(StructuralNodeRole::Call) => {
                 let target_path = GraphResourcePath(
-                    call_target(self.nodes[&node_id].parameters)
+                    prepared_call_target(self.nodes[&node_id].parameters)
                         .ok_or_else(|| {
                             issue(
                                 node_id,
@@ -1171,7 +1175,16 @@ fn call_target(parameters: &BTreeMap<ParameterKey, Value>) -> Option<Box<str>> {
     ["target", "function_plan", "function"]
         .into_iter()
         .find_map(|name| parameter(parameters, name).and_then(Value::as_str))
-        .filter(|value| !value.trim().is_empty() && value.trim() == *value)
+        .map(Into::into)
+}
+
+fn prepared_call_target(parameters: &ValidatedNodeConfig) -> Option<Box<str>> {
+    ["target", "function_plan", "function"]
+        .into_iter()
+        .find_map(|name| {
+            let key = ParameterKey::new(name).ok()?;
+            parameters.string(&key)
+        })
         .map(Into::into)
 }
 
@@ -1274,7 +1287,7 @@ mod tests {
             function: function_path.clone(),
             parameter: parameter_id.clone(),
         };
-        let parameters = BTreeMap::new();
+        let parameters = ValidatedNodeConfig::empty();
         let nodes = BTreeMap::from([(
             call_id,
             ControlNode {
@@ -1337,7 +1350,7 @@ mod tests {
         let branch = node_id(1);
         let sequence = node_id(2);
         let merge = node_id(3);
-        let parameters = BTreeMap::new();
+        let parameters = ValidatedNodeConfig::empty();
         let nodes = BTreeMap::from([
             (
                 branch,

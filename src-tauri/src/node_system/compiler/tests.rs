@@ -26,6 +26,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -46,6 +47,32 @@ impl TraceSink for RecordingTrace {
     fn record(&self, event: SpanEvent) {
         self.0.lock().unwrap().push(event);
     }
+}
+
+struct CountingLowerer(Arc<AtomicUsize>);
+
+impl NodeLowerer for CountingLowerer {
+    fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        self.0.fetch_add(1, AtomicOrdering::Relaxed);
+        Ok(LoweredNode {
+            kernel: LoweredKernel::Native(KernelHandle::new("test.counting").unwrap()),
+            parameters: CompiledParameterHandle::new("test.counting.params").unwrap(),
+        })
+    }
+}
+
+fn assert_analysis_blocks_before_lowering(
+    result: &CompileResult,
+    trace: &RecordingTrace,
+    calls: &AtomicUsize,
+) {
+    assert!(result.semantic.is_none());
+    assert!(result.plan.is_none());
+    assert_eq!(calls.load(AtomicOrdering::Relaxed), 0);
+    assert!(trace.0.lock().unwrap().iter().all(|event| {
+        !(event.kind == SpanKind::Lowering
+            && event.status == crate::node_system::analysis::SpanStatus::Started)
+    }));
 }
 
 struct Resources;
@@ -146,6 +173,47 @@ struct ProtocolOverrideCompilerRegistry<'a> {
     node_type: NodeTypeId,
     protocol: NodeProtocol,
     structural_role: StructuralNodeRole,
+}
+
+struct AugmentedCompilerRegistry<'a> {
+    frozen: &'a NodeRegistry,
+    protocol: NodeProtocol,
+    implementation: NodeImplementation,
+}
+
+impl TypeEnvironment for AugmentedCompilerRegistry<'_> {
+    fn concrete_implements(&self, value_type: &TypeId, class: &TypeClassId) -> Option<bool> {
+        self.frozen.concrete_implements(value_type, class)
+    }
+
+    fn constructor_arity(&self, constructor: &TypeConstructorId) -> Option<usize> {
+        self.frozen.constructor_arity(constructor)
+    }
+}
+
+impl CompilerRegistry for AugmentedCompilerRegistry<'_> {
+    fn fingerprint(&self) -> &RegistryFingerprint {
+        self.frozen.fingerprint()
+    }
+
+    fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>> {
+        if node_type == &self.protocol.type_id {
+            return Some(RegistryNode {
+                protocol: &self.protocol,
+                protocol_fingerprint: ProtocolFingerprint::from_bytes([0x8; 32]),
+                behavior: RegistryNodeBehavior::Leaf(&self.implementation),
+            });
+        }
+        self.frozen.resolve(node_type)
+    }
+
+    fn validate_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        self.frozen.validate_nominal_parameter(type_id, value)
+    }
 }
 
 impl TypeEnvironment for ProtocolOverrideCompilerRegistry<'_> {
@@ -302,6 +370,199 @@ fn blocking_compile_emits_no_lowering_or_run_span() {
             .iter()
             .all(|event| { !matches!(event.kind, SpanKind::Lowering | SpanKind::Run) })
     );
+}
+
+#[test]
+fn lowerability_invalid_dataframe_parameters_block_in_analysis() {
+    let builtins = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    for (node_type, parameter, value) in [
+        ("yssbi.dataframe.limit", "rows", serde_json::json!(0)),
+        ("yssbi.dataframe.limit", "rows", serde_json::json!("ten")),
+        ("yssbi.dataframe.rename", "from", serde_json::json!(42)),
+        (
+            "yssbi.dataframe.source.get",
+            "dataframe",
+            serde_json::json!(" databases/main"),
+        ),
+    ] {
+        let protocol = builtins
+            .registry
+            .protocol(&NodeTypeId::new(node_type).unwrap())
+            .unwrap()
+            .clone();
+        let node_type_id = protocol.type_id.clone();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let registry = TestRegistry::new(vec![protocol])
+            .with_lowerer(&node_type_id, CountingLowerer(calls.clone()));
+        let mut graph = graph_with_node_types([(1, node_type.to_owned())]);
+        graph
+            .nodes
+            .get_mut(&node_id(1))
+            .unwrap()
+            .parameters
+            .insert(ParameterKey::new(parameter).unwrap(), value);
+        if node_type == "yssbi.dataframe.rename" {
+            graph.nodes.get_mut(&node_id(1)).unwrap().parameters.insert(
+                ParameterKey::new("to").unwrap(),
+                serde_json::json!("renamed"),
+            );
+        }
+        let trace = RecordingTrace::default();
+
+        let result = GraphCompiler::new(&registry, &Resources)
+            .with_observability(ProjectSessionId::new("lowerability"), &trace)
+            .compile(&graph);
+
+        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        assert!(
+            result.analysis.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code.as_str() == "compiler.parameter.invalid"
+                    && matches!(
+                        &diagnostic.primary,
+                        DiagnosticLocation::Parameter { node_id: actual, key }
+                            if *actual == node_id(1) && key.as_str() == parameter
+                    )
+            }),
+            "missing precise parameter diagnostic for {node_type}:{parameter}"
+        );
+    }
+}
+
+#[test]
+fn lowerability_malformed_persisted_literal_blocks_at_port_in_analysis() {
+    let protocol = test_protocol(
+        "malformed_literal",
+        vec![data_port(
+            "value",
+            PortDirection::Input,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let node_type = protocol.type_id.clone();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let registry =
+        TestRegistry::new(vec![protocol]).with_lowerer(&node_type, CountingLowerer(calls.clone()));
+    let address = PortAddress::declared(node_id(1), key("value"));
+    let mut graph = graph_with_nodes(&[(1, "malformed_literal")]);
+    graph.input_states.insert(
+        address.clone(),
+        InputState {
+            literal_override: Some(serde_json::json!({"value_type": "not-a-type"})),
+        },
+    );
+    let trace = RecordingTrace::default();
+
+    let result = GraphCompiler::new(&registry, &Resources)
+        .with_observability(ProjectSessionId::new("lowerability"), &trace)
+        .compile(&graph);
+
+    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.input.literal_invalid"
+            && diagnostic.primary == DiagnosticLocation::Port(address.clone())
+    }));
+}
+
+#[test]
+fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
+    struct FunctionResources {
+        path: GraphResourcePath,
+        function: FunctionDocument,
+        graph: GraphDocument,
+    }
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::from([(
+                ResourceKey::new(self.path.0.as_ref()),
+                ResourceVersion::new("callee-v1"),
+            )])
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            (path == &self.path).then_some(&self.function)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.path).then_some(&self.graph)
+        }
+    }
+
+    let builtins = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = test_protocol("callee_guard", vec![], vec![], vec![]);
+    let registry = AugmentedCompilerRegistry {
+        frozen: &builtins.registry,
+        protocol: counted,
+        implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
+    };
+    let function_path = GraphResourcePath("functions/blocking".into());
+    let blocking_resources = FunctionResources {
+        path: function_path.clone(),
+        function: FunctionDocument::new(FunctionSignature {
+            parameters: Vec::new(),
+            return_type: None,
+        }),
+        graph: builtin_graph_with_nodes(&[(20, "yssbi.test.missing")]),
+    };
+
+    for (name, target, expected_code) in [
+        (
+            "missing",
+            GraphResourcePath("functions/missing".into()),
+            "compiler.resource.resolution_failed",
+        ),
+        (
+            "blocking",
+            function_path,
+            "compiler.control.call.abi_invalid",
+        ),
+    ] {
+        calls.store(0, AtomicOrdering::Relaxed);
+        let mut graph = builtin_graph_with_nodes(&[
+            (1, "yssbi.project.function.call"),
+            (2, "yssbi.test.callee_guard"),
+            (3, "yssbi.project.function.call"),
+        ]);
+        set_parameters(
+            &mut graph,
+            1,
+            &[("target", serde_json::json!(target.0.as_ref()))],
+        );
+        set_parameters(
+            &mut graph,
+            3,
+            &[("target", serde_json::json!(target.0.as_ref()))],
+        );
+        let trace = RecordingTrace::default();
+        let compiler = GraphCompiler::with_interface_resolvers(
+            &registry,
+            &blocking_resources,
+            build_builtin_interface_resolvers(),
+        );
+
+        let result = compiler
+            .with_observability(ProjectSessionId::new("lowerability"), &trace)
+            .compile(&graph);
+
+        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        let locations = result
+            .analysis
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code.as_str() == expected_code)
+            .map(|diagnostic| diagnostic.primary.clone())
+            .collect::<Vec<_>>();
+        for expected in [node_id(1), node_id(3)] {
+            assert!(
+                locations.contains(&DiagnosticLocation::Node(expected)),
+                "missing precise {name} callee diagnostic at {expected}: {:?}",
+                result.analysis.diagnostics
+            );
+        }
+    }
 }
 
 #[test]
@@ -700,15 +961,38 @@ fn bind_member_port(
 }
 
 struct FailingLowerer;
+struct CancelledLowerer;
+
+impl NodeLowerer for CancelledLowerer {
+    fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+        Err(LoweringError::Cancelled(CompileCancelled))
+    }
+}
 
 impl NodeLowerer for FailingLowerer {
     fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        Err(LoweringError::new("expected lowering failure"))
+        Err(LoweringError::internal(
+            LoweringInvariant::InvalidPreparedConfiguration,
+        ))
     }
 }
 
 #[test]
-fn lowering_diagnostic_clears_semantic_and_plan() {
+fn typed_lowering_cancellation_cancels_compilation() {
+    let protocol = test_protocol("lowering_cancelled", vec![], vec![], vec![]);
+    let node_type = protocol.type_id.clone();
+    let registry = TestRegistry::new(vec![protocol]).with_lowerer(&node_type, CancelledLowerer);
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let graph = graph_with_nodes(&[(1, "lowering_cancelled")]);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/cancelled".into()), &graph);
+
+    let result = compiler.compile_snapshot(&snapshot, &CompileCancellationToken::new());
+
+    assert!(matches!(result, Err(CompileCancelled)));
+}
+
+#[test]
+fn internal_lowering_failure_preserves_semantic_without_plan() {
     let protocol = test_protocol("lowering_failure", vec![], vec![], vec![]);
     let node_type = protocol.type_id.clone();
     let registry = TestRegistry::new(vec![protocol]).with_lowerer(&node_type, FailingLowerer);
@@ -716,13 +1000,13 @@ fn lowering_diagnostic_clears_semantic_and_plan() {
     let result = GraphCompiler::new(&registry, &Resources)
         .compile(&graph_with_nodes(&[(1, "lowering_failure")]));
 
-    assert!(result.semantic.is_none());
+    assert!(result.semantic.is_some());
     assert!(result.plan.is_none());
     let diagnostic = result
         .analysis
         .diagnostics
         .iter()
-        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.failed")
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.internal_invariant")
         .expect("lowering diagnostic");
     assert_eq!(
         diagnostic.arguments,
@@ -2680,10 +2964,7 @@ fn invalid_analysis_snapshot_is_deterministic_across_insertion_orders() {
             snapshot.provenance.basis.registry_fingerprint,
             RegistryFingerprint::from_bytes([9; 32])
         );
-        assert_eq!(
-            snapshot.provenance.basis.resource_versions,
-            BTreeMap::from([(ResourceKey::new("resource.test"), ResourceVersion::new("1"))])
-        );
+        assert!(snapshot.provenance.basis.resource_versions.is_empty());
     }
 
     let results = snapshots
@@ -2703,6 +2984,7 @@ fn invalid_analysis_snapshot_is_deterministic_across_insertion_orders() {
     assert!(baseline.semantic.is_none());
     assert!(baseline.plan.is_none());
     assert!(baseline_diagnostics.len() >= 3);
+
     for code in [
         "compiler.node.unknown",
         "compiler.input.unbound",
@@ -2745,6 +3027,325 @@ fn invalid_analysis_snapshot_is_deterministic_across_insertion_orders() {
             assert_eq!(actual.related, expected.related);
         }
     }
+}
+
+struct AnalysisReadMatrixResources {
+    versions: crate::node_system::analysis::ResourceVersionSet,
+    functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+    function_graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+    variables: BTreeMap<crate::variable::VariableId, crate::variable::VariableInstance>,
+    databases: BTreeMap<String, Vec<crate::schema::ColumnInfoDTO>>,
+}
+
+impl ResourceSnapshot for AnalysisReadMatrixResources {
+    fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+        self.versions.clone()
+    }
+
+    fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+        self.functions.get(path)
+    }
+
+    fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+        self.function_graphs.get(path)
+    }
+
+    fn variable(
+        &self,
+        id: &crate::variable::VariableId,
+    ) -> Option<&crate::variable::VariableInstance> {
+        self.variables.get(id)
+    }
+
+    fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
+        self.databases.get(id).map(Vec::as_slice)
+    }
+}
+
+struct AnalysisReadMatrixDatabaseResolver;
+
+impl SchemaResolver for AnalysisReadMatrixDatabaseResolver {
+    fn resolve(
+        &self,
+        context: &mut SchemaResolutionContext<'_, '_>,
+    ) -> Result<SchemaFact, SchemaResolutionError> {
+        let path = context
+            .parameters
+            .iter()
+            .find(|(key, _)| key.as_str() == "dataframe")
+            .and_then(|(_, value)| value.as_str())
+            .and_then(|path| path.strip_prefix("databases/"))
+            .ok_or_else(|| SchemaResolutionError::new("missing database resource"))?;
+        context
+            .resources
+            .as_deref_mut()
+            .ok_or_else(|| SchemaResolutionError::new("missing analysis resolver"))?
+            .resolve_database(path)
+            .map_err(|error| SchemaResolutionError::from_resource(&error))?;
+        Ok(SchemaFact::new(
+            SchemaExpr::Input(key("dataframe")),
+            std::iter::empty::<SchemaField>(),
+        ))
+    }
+}
+
+fn analysis_read_matrix_variable(
+    id: crate::variable::VariableId,
+) -> crate::variable::VariableInstance {
+    crate::variable::VariableInstance {
+        id,
+        name: "Matrix variable".into(),
+        data_type: crate::graph::value::DataType::Int64,
+        data_value: crate::graph::value::DataValue::Int64(1),
+        tabular: None,
+        description: String::new(),
+        scope: crate::variable::VariableScope::Global,
+        tags: Vec::new(),
+    }
+}
+
+#[test]
+fn compilation_basis_contains_only_resources_read_by_analysis() {
+    use crate::node_system::catalog::{
+        DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_builtin_node_system,
+    };
+
+    let used_function = GraphResourcePath("functions/used.yssbi-function".into());
+    let unrelated_function = GraphResourcePath("functions/unrelated.yssbi-function".into());
+    let used_variable = crate::variable::VariableId::from(Uuid::from_u128(0x701));
+    let unrelated_variable = crate::variable::VariableId::from(Uuid::from_u128(0x702));
+    let version = |key: &str| {
+        (
+            ResourceKey::new(key),
+            ResourceVersion::new(format!("{key}-v1")),
+        )
+    };
+    let resources = AnalysisReadMatrixResources {
+        versions: [
+            version(used_function.0.as_ref()),
+            version(unrelated_function.0.as_ref()),
+            version(&format!("variables/{used_variable}")),
+            version(&format!("variables/{unrelated_variable}")),
+            version("databases/used"),
+            version("databases/unrelated"),
+        ]
+        .into_iter()
+        .collect(),
+        functions: [used_function.clone(), unrelated_function.clone()]
+            .into_iter()
+            .map(|path| {
+                (
+                    path,
+                    FunctionDocument::new(FunctionSignature {
+                        parameters: Vec::new(),
+                        return_type: None,
+                    }),
+                )
+            })
+            .collect(),
+        function_graphs: [used_function.clone(), unrelated_function]
+            .into_iter()
+            .map(|path| (path, GraphDocument::default()))
+            .collect(),
+        variables: [used_variable, unrelated_variable]
+            .into_iter()
+            .map(|id| (id, analysis_read_matrix_variable(id)))
+            .collect(),
+        databases: BTreeMap::from([
+            ("used".into(), Vec::new()),
+            ("unrelated".into(), Vec::new()),
+        ]),
+    };
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+
+    let empty = GraphCompiler::new(&registry, &resources).compile(&GraphDocument::default());
+    assert!(empty.analysis.basis.resource_versions.is_empty());
+
+    let mut variable_graph = builtin_graph_with_nodes(&[(1, "yssbi.project.variable.get")]);
+    variable_graph
+        .nodes
+        .get_mut(&node_id(1))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{used_variable}")),
+    )]);
+    let variable = GraphCompiler::new(&registry, &resources).compile(&variable_graph);
+    assert_eq!(variable.analysis.basis.resource_versions.len(), 1);
+    assert!(
+        variable
+            .analysis
+            .basis
+            .resource_versions
+            .contains_key(&ResourceKey::new(format!("variables/{used_variable}")))
+    );
+
+    let mut database_graph = builtin_graph_with_nodes(&[(2, "yssbi.dataframe.source.get")]);
+    database_graph
+        .nodes
+        .get_mut(&node_id(2))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/used"),
+    )]);
+    let mut schema_resolvers = SchemaResolverSet::new();
+    schema_resolvers.insert(
+        SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+        AnalysisReadMatrixDatabaseResolver,
+    );
+    let database = GraphCompiler::with_schema_resolvers(&registry, &resources, schema_resolvers)
+        .compile(&database_graph);
+    assert_eq!(database.analysis.basis.resource_versions.len(), 1);
+    assert!(
+        database
+            .analysis
+            .basis
+            .resource_versions
+            .contains_key(&ResourceKey::new("databases/used"))
+    );
+
+    let mut function_graph = builtin_graph_with_nodes(&[(3, "yssbi.project.function.call")]);
+    function_graph
+        .nodes
+        .get_mut(&node_id(3))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("target").unwrap(),
+        serde_json::json!(used_function.0.as_ref()),
+    )]);
+    let function = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(&function_graph);
+    assert_eq!(
+        function.analysis.basis.resource_versions,
+        BTreeMap::from([version(used_function.0.as_ref())]),
+        "duplicate function reads must be deduplicated and unrelated functions excluded"
+    );
+
+    let missing_variable_id = crate::variable::VariableId::from(Uuid::from_u128(0x703));
+    let mut missing_variable_graph = builtin_graph_with_nodes(&[(4, "yssbi.project.variable.get")]);
+    missing_variable_graph
+        .nodes
+        .get_mut(&node_id(4))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("variable").unwrap(),
+        serde_json::json!(format!("variables/{missing_variable_id}")),
+    )]);
+    let missing_variable =
+        GraphCompiler::new(&registry, &resources).compile(&missing_variable_graph);
+    assert!(missing_variable.analysis.basis.resource_versions.is_empty());
+    assert_eq!(
+        missing_variable
+            .analysis
+            .basis
+            .resource_observations
+            .keys()
+            .map(ResourceKey::as_str)
+            .collect::<Vec<_>>(),
+        vec![format!("variables/{missing_variable_id}")]
+    );
+    let variable_diagnostic = missing_variable
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.resource.resolution_failed")
+        .unwrap();
+    assert_eq!(
+        variable_diagnostic.arguments["resource_key"].as_ref(),
+        format!("variables/{missing_variable_id}"),
+    );
+    assert!(variable_diagnostic.arguments["reason"].contains("missing"));
+
+    let mut missing_database_graph = builtin_graph_with_nodes(&[(5, "yssbi.dataframe.source.get")]);
+    missing_database_graph
+        .nodes
+        .get_mut(&node_id(5))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/missing"),
+    )]);
+    let mut schema_resolvers = SchemaResolverSet::new();
+    schema_resolvers.insert(
+        SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+        AnalysisReadMatrixDatabaseResolver,
+    );
+    let missing_database =
+        GraphCompiler::with_schema_resolvers(&registry, &resources, schema_resolvers)
+            .compile(&missing_database_graph);
+    assert!(missing_database.analysis.basis.resource_versions.is_empty());
+    assert_eq!(
+        missing_database
+            .analysis
+            .basis
+            .resource_observations
+            .keys()
+            .map(ResourceKey::as_str)
+            .collect::<Vec<_>>(),
+        vec!["databases/missing"]
+    );
+    let database_diagnostic = missing_database
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.resource.resolution_failed")
+        .unwrap();
+    assert_eq!(
+        database_diagnostic
+            .arguments
+            .get("resource_key")
+            .map(AsRef::as_ref),
+        Some("databases/missing"),
+    );
+    assert!(database_diagnostic.arguments["reason"].contains("missing"));
+
+    let missing_function_path = GraphResourcePath("functions/missing.yssbi-function".into());
+    let mut missing_function_graph =
+        builtin_graph_with_nodes(&[(6, "yssbi.project.function.call")]);
+    missing_function_graph
+        .nodes
+        .get_mut(&node_id(6))
+        .unwrap()
+        .parameters = BTreeMap::from([(
+        ParameterKey::new("target").unwrap(),
+        serde_json::json!(missing_function_path.0.as_ref()),
+    )]);
+    let missing_function = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(&missing_function_graph);
+    assert!(missing_function.analysis.basis.resource_versions.is_empty());
+    assert_eq!(
+        missing_function
+            .analysis
+            .basis
+            .resource_observations
+            .keys()
+            .map(ResourceKey::as_str)
+            .collect::<Vec<_>>(),
+        vec![missing_function_path.0.as_ref()]
+    );
+    let function_diagnostic = missing_function
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.resource.resolution_failed")
+        .unwrap();
+    assert_eq!(
+        function_diagnostic
+            .arguments
+            .get("resource_key")
+            .map(AsRef::as_ref),
+        Some(missing_function_path.0.as_ref()),
+    );
+    assert!(function_diagnostic.arguments["reason"].contains("missing"));
 }
 
 #[test]
@@ -3132,7 +3733,7 @@ struct SourceSchemaResolver;
 impl SchemaResolver for SourceSchemaResolver {
     fn resolve(
         &self,
-        _: &SchemaResolutionContext<'_>,
+        _: &mut SchemaResolutionContext<'_, '_>,
     ) -> Result<SchemaFact, SchemaResolutionError> {
         Ok(SchemaFact::new(
             SchemaExpr::Input(key("raw")),
@@ -3302,7 +3903,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
         basis.provenance.graph_path,
         GraphResourcePath(graph_path.into())
     );
-    assert!(!basis.provenance.basis.resource_versions.is_empty());
+    assert!(basis.provenance.basis.resource_versions.is_empty());
 
     let final_plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
@@ -5512,6 +6113,24 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             )
             .unwrap();
         assert!(products.plan.is_none(), "missing {missing} ABI must block");
+        let nested = compiler
+            .compile_snapshot(
+                &compiler.snapshot(GraphResourcePath("events/nested-caller".into()), &caller),
+                &CompileCancellationToken::new(),
+            )
+            .unwrap();
+        assert!(
+            nested.plan.is_none(),
+            "nested {missing} ABI must block the caller"
+        );
+        assert_eq!(
+            nested.analysis.basis.resource_versions,
+            BTreeMap::from([(
+                ResourceKey::new(function_path.0.as_ref()),
+                ResourceVersion::new("function-v1"),
+            )]),
+            "nested blocking finalization must retain every successful resource read",
+        );
         let codes = products
             .analysis
             .diagnostics
@@ -5793,14 +6412,22 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
     struct FunctionResources {
         path: GraphResourcePath,
         function: FunctionDocument,
+        graph: GraphDocument,
     }
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
-            BTreeMap::new()
+            BTreeMap::from([(
+                ResourceKey::new(self.path.0.clone()),
+                ResourceVersion::new("fixture-v1"),
+            )])
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.function)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.path).then_some(&self.graph)
         }
     }
 
@@ -5830,6 +6457,7 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
             parameters: vec![],
             return_type: None,
         }),
+        graph: GraphDocument::default(),
     };
     let graph = graph_with_nodes(&[
         (1, "duplicate_function_entry"),
@@ -5875,14 +6503,22 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
     struct FunctionResources {
         path: GraphResourcePath,
         function: FunctionDocument,
+        graph: GraphDocument,
     }
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
-            BTreeMap::new()
+            BTreeMap::from([(
+                ResourceKey::new(self.path.0.clone()),
+                ResourceVersion::new("fixture-v1"),
+            )])
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.function)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.path).then_some(&self.graph)
         }
     }
 
@@ -5919,6 +6555,7 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
             }],
             return_type: None,
         }),
+        graph: GraphDocument::default(),
     };
     let mut graph =
         graph_with_nodes(&[(1, "wrong_direction_entry"), (2, "wrong_direction_return")]);
@@ -5957,8 +6594,8 @@ fn missing_call_resource_parameter_is_blocking() {
 struct PanicLowerer;
 impl NodeLowerer for PanicLowerer {
     fn lower(&self, _: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        Err(LoweringError::new(
-            "structural node reached the leaf lowerer",
+        Err(LoweringError::internal(
+            LoweringInvariant::StructuralNodeReachedLeafLowerer,
         ))
     }
 }

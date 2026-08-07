@@ -27,10 +27,7 @@ pub(crate) use root::{
 };
 
 #[cfg(test)]
-pub use transaction::{
-    ProjectFilesystemFaultPoint, set_before_remove_mutation_hook, set_project_filesystem_fault,
-    set_project_filesystem_rollback_fault, set_project_filesystem_rollback_test_hook,
-};
+pub use transaction::ProjectFilesystemFaultPoint;
 
 #[cfg(test)]
 mod source_audit_tests;

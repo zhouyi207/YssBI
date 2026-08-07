@@ -76,7 +76,11 @@ describe('ProjectService execution contract', () => {
         type: 'outputs' as const,
         outputs: [{
           graphPath: 'events/Main.yssbi-event',
-          port: { kind: 'declared' as const, nodeId: 'node-1', portKey: 'result' },
+          port: {
+            kind: 'declared' as const,
+            nodeId: '00000000-0000-0000-0000-000000000002',
+            portKey: 'result',
+          },
         }],
         includeDefaultResults: false,
       },
@@ -89,9 +93,9 @@ describe('ProjectService execution contract', () => {
           graphPath: 'events/Main.yssbi-event',
           port: {
             kind: 'instance' as const,
-            nodeId: 'node-1',
+            nodeId: '00000000-0000-0000-0000-000000000002',
             templateKey: 'value',
-            instanceId: 'instance-7',
+            instanceId: '00000000-0000-0000-0000-000000000003',
           },
         }],
         includeDefaultResults: false,

@@ -7,15 +7,19 @@ import {
     parseExecuteGraphResultDto,
     parseExecutionDemandDto,
 } from "@/shared/types/dto/runEventParser";
-import type { Graph } from "@/shared/types/domain";
-import type { GraphInstanceDTO } from "@/shared/types/dto";
-import type { HistoryStatusDto } from "@/shared/types/dto/editorMutation";
+
+import type {
+  FunctionSignatureDto,
+  HistoryStatusDto,
+} from "@/shared/types/dto/editorMutation";
+import type { FunctionEditorProjectionDto } from '@/shared/types/dto/editorProjection';
 import type { DatabaseEngineDTO } from '@/shared/types/dto/database';
-import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
-  graphDataToDomainGraph,
-  graphInstanceDtoToGraphData,
-} from "@/shared/types/dto/graphModel";
+  isFunctionEditorProjectionDto,
+  isGraphResourcePath,
+} from '@/shared/types/dto/editorProjectionGuards';
+import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
+
 import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
@@ -54,14 +58,24 @@ function commandSentTerminalRunEvent(error: unknown): boolean {
     );
 }
 
-export interface ProjectGraphIndexRow {
+interface ProjectGraphIndexRowBase {
     path: string;
     name: string;
-    type: "event" | "function";
-    revision?: number;
-    functionRevision?: number;
-    functionSignature?: import('@/shared/types/dto/editorMutation').FunctionSignatureDto;
+    revision: number;
 }
+
+export interface ProjectEventGraphIndexRow extends ProjectGraphIndexRowBase {
+    type: "event";
+}
+
+export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
+    type: "function";
+    functionRevision: number;
+    functionSignature: FunctionSignatureDto;
+    functionEditorProjection: FunctionEditorProjectionDto;
+}
+
+export type ProjectGraphIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
 
 export interface ProjectWorksheetIndexRow {
   id: string;
@@ -101,6 +115,70 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).length === keys.length && keys.every((key) => key in value);
+}
+
+function isSafeRevision(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+
+function isFunctionSignature(value: unknown): value is FunctionSignatureDto {
+  return isRecord(value)
+    && !Array.isArray(value)
+    && hasExactKeys(value, ['parameters', 'return_type'])
+    && Array.isArray(value.parameters)
+    && value.parameters.every((parameter) => isRecord(parameter)
+      && !Array.isArray(parameter)
+      && hasExactKeys(parameter, ['id', 'name', 'type_name'])
+      && typeof parameter.id === 'string'
+      && typeof parameter.name === 'string'
+      && typeof parameter.type_name === 'string')
+    && (value.return_type === null || typeof value.return_type === 'string');
+}
+
+
+export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow {
+  if (!isRecord(value) || Array.isArray(value)) {
+    throw new Error('Invalid project graph index row');
+  }
+  const path = isGraphResourcePath(value.path) ? value.path : null;
+  const common = path !== null
+    && typeof value.name === 'string'
+    && isSafeRevision(value.revision);
+  if (value.type === 'event'
+    && path?.startsWith('events/')
+    && common
+    && hasExactKeys(value, ['path', 'name', 'type', 'revision'])) {
+    return value as unknown as ProjectEventGraphIndexRow;
+  }
+  if (value.type === 'function'
+    && path?.startsWith('functions/')
+    && common
+    && hasExactKeys(value, [
+      'path', 'name', 'type', 'revision', 'functionRevision', 'functionSignature',
+      'functionEditorProjection',
+    ])
+    && isSafeRevision(value.functionRevision)
+    && isFunctionSignature(value.functionSignature)
+    && isFunctionEditorProjectionDto(value.functionEditorProjection)
+    && value.functionEditorProjection.functionRevision === value.functionRevision) {
+    return value as unknown as ProjectFunctionGraphIndexRow;
+  }
+  throw new Error('Invalid project graph index row');
+}
+
+function parseProjectIndexRow(value: unknown): ProjectIndexRow {
+  if (!isRecord(value) || !Array.isArray(value.graphs)) {
+    throw new Error('Invalid project index response');
+  }
+  try {
+    return {
+      ...(value as unknown as ProjectIndexRow),
+      graphs: value.graphs.map(parseProjectGraphIndexRow),
+    };
+  } catch {
+    throw new Error('Invalid project index response');
+  }
 }
 
 function isSqlEngine(value: unknown): boolean {
@@ -193,18 +271,6 @@ export interface ProjectIndexRow {
   databases: ProjectDatabaseIndexRow[];
 }
 
-/**
- * 将后端 Graph 数据转换为前端格式（供 connectPins 等复用）
- */
-export function toFrontendGraph(data: GraphInstanceDTO): Graph {
-    logger.app.trace(`[toFrontendGraph] Input data: ${JSON.stringify(data)}`, 'ProjectService');
-    const graph = graphDataToDomainGraph(graphInstanceDtoToGraphData(data));
-    logger.app.trace(
-        `[toFrontendGraph] Converted: nodes=${graph.nodes.length}, pins=${graph.pins.length}, connections=${graph.connections.connections.length}`,
-        'ProjectService',
-    );
-    return graph;
-}
 
 // ==================== 项目状态管理 API ====================
 
@@ -243,7 +309,8 @@ export class ProjectService {
     }
 
     static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
-        return await invoke("get_project_index", { projectInstanceId });
+        const value = await invoke<unknown>("get_project_index", { projectInstanceId });
+        return parseProjectIndexRow(value);
     }
 
     /**

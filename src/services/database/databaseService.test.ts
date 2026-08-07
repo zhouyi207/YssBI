@@ -23,6 +23,43 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('DatabaseService project lifecycle contract', () => {
+  it.each([
+    ['getDatabaseMeta', 'get_database_meta', [projectInstanceId, 'sales'], {}],
+    ['getDatabaseRows', 'get_database_rows', [projectInstanceId, 'sales', 0, 50], { offset: 0, limit: 50 }],
+    ['getColumnStats', 'get_column_stats', [projectInstanceId, 'sales'], {}],
+    ['getColumnDistribution', 'get_column_distribution', [projectInstanceId, 'sales'], {}],
+    ['getDatasetOverview', 'get_dataset_overview', [projectInstanceId, 'sales'], {}],
+    ['getEditState', 'get_edit_state', [projectInstanceId, 'sales'], {}],
+    ['exportDatabase', 'export_database', [projectInstanceId, 'sales', 'C:/sales.csv', 'csv'], { path: 'C:/sales.csv', format: 'csv' }],
+  ] as const)('passes exact project identity through %s', async (method, command, args, extra) => {
+    vi.mocked(invoke).mockResolvedValue(method === 'getDatabaseRows' ? { rows: [], rowIds: [] } : undefined);
+
+    await (DatabaseService[method] as (...values: any[]) => Promise<unknown>)(...args);
+
+    expect(invoke).toHaveBeenCalledWith(command, {
+      projectInstanceId,
+      id: 'sales',
+      ...extra,
+    });
+  });
+
+  it('keeps external-source discovery commands project-independent', async () => {
+    vi.mocked(invoke).mockResolvedValue([]);
+
+    await DatabaseService.listSqliteTables('C:/source.sqlite');
+    await DatabaseService.listSqlTables('postgres', 'postgres://localhost/source');
+    await DatabaseService.listExcelSheets('C:/source.xlsx');
+
+    expect(invoke).toHaveBeenNthCalledWith(1, 'list_sqlite_tables', { dbPath: 'C:/source.sqlite' });
+    expect(invoke).toHaveBeenNthCalledWith(2, 'list_sql_tables', {
+      engine: 'postgres',
+      connectionString: 'postgres://localhost/source',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'list_excel_sheets', { filePath: 'C:/source.xlsx' });
+  });
+});
+
 describe('DatabaseService revisioned mutation contract', () => {
   it('passes caller project and operation identity for expected-absent imports and returns the aggregate', async () => {
     const engine = { csv: { path: 'C:/sales.csv', delimiter: ',', hasHeader: true } } as const;

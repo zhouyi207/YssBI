@@ -209,6 +209,7 @@ fn expected_basis(
         graph_revision: document.revision,
         registry_fingerprint: registry.fingerprint.clone(),
         resource_versions: BTreeMap::new(),
+        resource_observations: BTreeMap::new(),
     }
 }
 

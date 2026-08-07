@@ -193,8 +193,10 @@ describe('useProjectIOStore snapshot paths', () => {
         path: 'functions/New.yssbi-function',
         name: 'New',
         type: 'function',
+        revision: 1,
         functionRevision: 1,
         functionSignature: { parameters: [], return_type: null },
+        functionEditorProjection: { functionRevision: 1, inputs: [], outputs: [] },
       }],
       variables: [],
       worksheets: [],
@@ -237,6 +239,54 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(useEditorTabStore.getState()).toBe(before.tabs);
     expect(useLayoutStore.getState()).toBe(before.layout);
     expect(projectPublicationCoordinator.getSnapshotForTests()).toEqual(before.coordinator);
+  });
+
+  it('prepares project load with authoritative function editor projection pins', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000603';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
+    vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/functions.yssbi');
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 4,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Functions',
+      graphs: [{
+        path: 'functions/Model.yssbi-function',
+        name: 'Model',
+        type: 'function',
+        revision: 6,
+        functionRevision: 6,
+        functionSignature: { parameters: [], return_type: 'Object' },
+        functionEditorProjection: {
+          functionRevision: 6,
+          inputs: [],
+          outputs: [{
+            id: 'computed',
+            name: 'Computed value',
+            dataType: { kind: 'Struct', inner: 'RegressionModel' },
+          }],
+        },
+      }],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+      appVersion: '0.2.7',
+    });
+
+    const plan = await prepareAuthoritativeProjectLoad(captureProjectIdentity());
+
+    expect(plan.storeState.graphMeta['functions/Model.yssbi-function']).toMatchObject({
+      functionSignature: { parameters: [], return_type: 'Object' },
+      functionInputs: [],
+      functionOutputs: [{
+        id: 'computed',
+        name: 'Computed value',
+        dataType: { kind: 'Struct', inner: 'RegressionModel' },
+      }],
+    });
   });
 
   it('authoritatively replaces variable and database resource path metadata from ProjectIndex', async () => {
@@ -510,7 +560,7 @@ describe('useProjectIOStore snapshot paths', () => {
       publicationRevision: 7,
       history: { canUndo: true, canRedo: true },
       projectName: 'Demo',
-      graphs: [{ path: 'evt-1', name: 'Main', type: 'event' }],
+      graphs: [{ path: 'evt-1', name: 'Main', type: 'event', revision: 0 }],
       variables: [],
       worksheets: [],
       databases: [],

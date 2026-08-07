@@ -26,6 +26,7 @@ import {
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 const graphPath = 'functions/Main.yssbi-function';
+const projectedNodeId = '00000000-0000-0000-0000-000000000603';
 
 function deleteNodeMutation(): EditorGraphMutationDto {
   return { type: 'deleteNode', payload: { nodeId: 'local-node' } };
@@ -50,8 +51,14 @@ function graphResult(
       projection: makeEditorProjectionFixture({
         graphPath,
         sourceRevision: toRevision,
+        nodeId: projectedNodeId,
         title: `Revision ${toRevision}`,
       }).projection,
+      functionEditorProjection: {
+        functionRevision: toRevision,
+        inputs: [],
+        outputs: [],
+      },
     },
     history: { canUndo: true, canRedo: false },
   };
@@ -366,7 +373,7 @@ describe('executeEditorMutation', () => {
     expect(outcome.status).toBe('applied');
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toMatchObject({
       sourceRevision: 2,
-      nodes: { 'local-node': { title: 'Revision 2' } },
+      nodes: { [projectedNodeId]: { title: 'Revision 2' } },
     });
     expect(updateHistoryStatus).toHaveBeenCalledWith({ canUndo: true, canRedo: false });
     expect(getPendingMutation('operation-1')).toBeUndefined();

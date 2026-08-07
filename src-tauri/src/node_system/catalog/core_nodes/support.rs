@@ -5,7 +5,7 @@ use crate::node_system::catalog::builtin::{assembled_interface, assembled_parame
 use crate::node_system::catalog::localization::{Aliases, Text};
 use crate::node_system::compiler::{
     FragmentMetadata, KernelFragment as CompiledKernelFragment, LoweredKernel, LoweredNode,
-    LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    LoweringContext, LoweringError, LoweringInvariant, NodeImplementation, NodeLowerer,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
@@ -98,9 +98,9 @@ struct CoreKernelLowerer {
 impl NodeLowerer for CoreKernelLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
         let kernel = KernelHandle::new(self.handle)
-            .map_err(|error| LoweringError::new(error.to_string()))?;
+            .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?;
         let parameters = CompiledParameterHandle::new(format!("node.{}", context.node_id))
-            .map_err(|error| LoweringError::new(error.to_string()))?;
+            .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?;
         Ok(LoweredNode {
             kernel: LoweredKernel::Kernel(CompiledKernelFragment {
                 kernel,

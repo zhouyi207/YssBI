@@ -235,16 +235,20 @@ pub fn filter_comparison_is_compatible(
     }
 }
 
+pub fn prepare_project_columns_json(value: &serde_json::Value) -> Result<ProjectColumns, String> {
+    serde_json::from_value::<ProjectColumns>(value.clone()).map_err(|error| error.to_string())
+}
+
 pub fn validate_project_columns_json(value: &serde_json::Value) -> Result<(), String> {
-    serde_json::from_value::<ProjectColumns>(value.clone())
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    prepare_project_columns_json(value).map(|_| ())
+}
+
+pub fn prepare_filter_predicate_json(value: &serde_json::Value) -> Result<FilterPredicate, String> {
+    serde_json::from_value::<FilterPredicate>(value.clone()).map_err(|error| error.to_string())
 }
 
 pub fn validate_filter_predicate_json(value: &serde_json::Value) -> Result<(), String> {
-    serde_json::from_value::<FilterPredicate>(value.clone())
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    prepare_filter_predicate_json(value).map(|_| ())
 }
 
 #[cfg(test)]

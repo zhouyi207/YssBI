@@ -15,12 +15,48 @@ import { usePersistedWindow, useWindowMaximized } from '@/features/application/w
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormulaStep, SamplerStep, SymbolRoleStep, type BayesDatasetOption } from './components/BayesPanels';
 import { ResultOverview } from './components/BayesResultPanels';
 import { BayesProgressStatus } from './components/BayesProgressStatus';
+
+type DatabaseMetadataUpdater = (
+  id: string,
+  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
+) => void;
+
+export async function hydrateBayesDatabaseMetadata(
+  databases: Record<string, { id: string; name?: string; columns?: unknown[] }>,
+  updateDatabase: DatabaseMetadataUpdater,
+  isCancelled: () => boolean = () => false,
+): Promise<void> {
+  const databasesMissingMetadata = Object.values(databases)
+    .filter((database) => (database.columns?.length ?? 0) === 0);
+  if (databasesMissingMetadata.length === 0) return;
+  const identity = captureProjectIdentity();
+  await Promise.all(databasesMissingMetadata.map(async (database) => {
+    try {
+      const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, database.id);
+      if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
+      updateDatabase(database.id, {
+        name: meta.name,
+        columns: meta.columns,
+        rowCount: meta.rowCount,
+        columnCount: meta.columnCount,
+      });
+    } catch (error) {
+      if (!isCancelled() && isCurrentProjectIdentity(identity)) {
+        logger.data.warn('getDatabaseMeta failed: ' + String(error), 'BayesView');
+      }
+    }
+  }));
+}
 
 export function BayesView() {
   const { t } = useTranslation();
@@ -62,21 +98,7 @@ export function BayesView() {
 
   useEffect(() => {
     let cancelled = false;
-    for (const database of Object.values(databases)) {
-      if ((database.columns?.length ?? 0) > 0) continue;
-      const id = database.id;
-      void DatabaseService.getDatabaseMeta(id)
-        .then((meta) => {
-          if (cancelled) return;
-          updateDatabase(id, {
-            name: meta.name,
-            columns: meta.columns,
-            rowCount: meta.rowCount,
-            columnCount: meta.columnCount,
-          });
-        })
-        .catch((error) => logger.data.warn('getDatabaseMeta failed: ' + String(error), 'BayesView'));
-    }
+    void hydrateBayesDatabaseMetadata(databases, updateDatabase, () => cancelled);
     return () => { cancelled = true; };
   }, [databases, updateDatabase]);
 

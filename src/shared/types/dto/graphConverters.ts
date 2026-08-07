@@ -2,10 +2,7 @@
  * Graph / Connection DTO 转换
  */
 
-import type {
-  ConnectionItemDTO,
-  GraphInstanceDTO,
-} from './graph';
+import type { ConnectionItemDTO } from './graph';
 import type { ConnectionData } from '../store/graph';
 import type { ProjectData } from '../domain';
 
@@ -28,27 +25,6 @@ export function connectionDataToItems(conns: ConnectionData[]): ConnectionItemDT
   return conns.map(connectionDataToItem);
 }
 
-/** 验证 Graph DTO */
-export function validateGraphDTO(graphDTO: GraphInstanceDTO): {
-  valid: boolean;
-  errors: string[];
-} {
-  const errors: string[] = [];
-
-  if (!graphDTO.path) errors.push('Missing graph path');
-  if (!graphDTO.name) errors.push('Missing graph name');
-  if (!graphDTO.type) errors.push('Missing graph type');
-  if (!Array.isArray(graphDTO.nodes)) errors.push('Invalid nodes array');
-  if (!Array.isArray(graphDTO.pins)) errors.push('Invalid pins array');
-  if (
-    !graphDTO.connections ||
-    !Array.isArray(graphDTO.connections.connections)
-  ) {
-    errors.push('Invalid connections structure');
-  }
-
-  return { valid: errors.length === 0, errors };
-}
 
 /** 深度克隆 DTO */
 export function cloneDTO<T>(dto: T): T {

@@ -1,6 +1,6 @@
 import type { PinDirection } from '@/shared/types/domain/pin';
 import type { DataType } from '@/shared/types/domain/dataType';
-import type { GraphDataLike, PinData } from '@/shared/types/store/graph';
+import type { GraphData, PinData } from '@/shared/types/store/graph';
 
 export interface MakeTestGraphOptions {
   path: string;
@@ -49,8 +49,8 @@ function makeTestPinData(params: {
   };
 }
 
-/** Hydrate-safe `GraphDataLike` factory for store / canvas / sync tests. */
-export function makeTestGraph(options: MakeTestGraphOptions): GraphDataLike {
+/** Canonical `GraphData` factory for store / canvas / sync tests. */
+export function makeTestGraph(options: MakeTestGraphOptions): GraphData {
   const path = options.path;
   const name = options.name ?? path;
   const nodeId = options.nodeId ?? 'local-node';
@@ -66,6 +66,7 @@ export function makeTestGraph(options: MakeTestGraphOptions): GraphDataLike {
     nodes: [
       {
         id: nodeId,
+        graphPath: path,
         nodeType: options.nodeType ?? 'Data:Constant',
         category: ['Data'],
         title: nodeTitle,
@@ -99,7 +100,7 @@ export function makeTestGraph(options: MakeTestGraphOptions): GraphDataLike {
 export function makeOverlappingLocalIdGraphPair(
   first: { path: string; title: string },
   second: { path: string; title: string },
-): Record<string, GraphDataLike> {
+): Record<string, GraphData> {
   return {
     [first.path]: makeTestGraph({ path: first.path, title: first.title }),
     [second.path]: makeTestGraph({ path: second.path, title: second.title }),

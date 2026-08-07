@@ -16,10 +16,12 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
+import { prepareGraphResourceMove } from './projectPublicationMovePlan';
 import {
-  commitGraphResourceMove,
-  prepareGraphResourceMove,
-} from './projectPublicationMovePlan';
+  commitPreparedPublication,
+  prepareSynchronousPublicationCommit,
+} from './resourceMutationResult';
+import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 
 const from = 'events/Old.yssbi-event';
 const to = 'events/New.yssbi-event';
@@ -126,36 +128,52 @@ describe('project publication graph resource move plan', () => {
       },
     }));
     const before = snapshotPathOwnedState();
-    const destination = makeEditorProjectionFixture({ graphPath: to, title: 'New' }).projection;
-
     const plan = prepareGraphResourceMove({
       from,
       to,
       kind: 'event',
       name: 'New',
-    }, destination);
+    }, true);
 
     expect(snapshotPathOwnedState()).toEqual(before);
-    expect(plan).toMatchObject({ from, to, kind: 'event', name: 'New' });
-    expect(plan.destinationProjection).toBe(destination);
-    expect(plan.referenceSnapshot.callers).toEqual([{
-      graphPath: from,
-      nodeId: 'stable-call',
-      before: from,
-      after: to,
-    }]);
+    expect(plan).toMatchObject({
+      from,
+      to,
+      kind: 'event',
+      name: 'New',
+      hasAuthoritativeDestinationReplacement: true,
+    });
   });
 
   it('commits the prepared move synchronously and preserves document flags and owners', () => {
     const destination = makeEditorProjectionFixture({ graphPath: to, title: 'New' }).projection;
-    const plan = prepareGraphResourceMove({
-      from,
-      to,
-      kind: 'event',
-      name: 'New',
-    }, destination);
+    const move = { from, to, kind: 'event' as const, name: 'New' };
+    const preparedMove = prepareGraphResourceMove(move, true);
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000903',
+      projectInstanceId: '00000000-0000-0000-0000-000000000901',
+      publicationRevision: 1,
+      moves: [move],
+      deltas: [{
+        resource: { kind: 'graph', key: to },
+        fromRevision: 0,
+        toRevision: 1,
+        causedBy: null,
+        payload: { kind: 'graph_resource_move', patch: { from, to } },
+      }],
+      projectionReplacements: [{ graphPath: to, projection: destination }],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [to] },
+      history: { canUndo: true, canRedo: false },
+    };
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId: result.projectInstanceId,
+      epoch: 1,
+      fingerprint: 'loaded-move',
+      affectedGraphPaths: new Set([from, to]),
+      moves: [preparedMove],
+    });
 
-    expect(commitGraphResourceMove(plan)).toBeUndefined();
+    expect(commitPreparedPublication(plan)).toBeUndefined();
 
     expect(useGraphDataStore.getState().graphEntities[from]).toBeUndefined();
     expect(useGraphDataStore.getState().graphEntities[to]?.basis.graphPath).toBe(to);
@@ -164,7 +182,7 @@ describe('project publication graph resource move plan', () => {
     });
     expect(useVariableStore.getState().variables.scoped.scope).toEqual({
       type: 'event',
-      eventPath: to,
+      eventPath: from,
     });
     expect(useGraphSessionStore.getState().focusedSession).toEqual({
       groupId: 'editor',
@@ -202,33 +220,96 @@ describe('project publication graph resource move plan', () => {
     });
   });
 
-  it('rejects malformed projections and conflicting destinations before commit', () => {
-    const wrongProjection = makeEditorProjectionFixture({ graphPath: from, title: 'Wrong' }).projection;
-    expect(() => prepareGraphResourceMove({
-      from,
-      to,
-      kind: 'event',
-      name: 'New',
-    }, wrongProjection)).toThrow('destination projection');
+  it('installs an authoritative caller replacement exactly instead of scanning local call targets', () => {
+    const caller = 'events/Caller.yssbi-event';
+    const localCaller = makeEditorProjectionFixture({
+      graphPath: caller,
+      sourceRevision: 1,
+      nodeId: 'stable-call',
+      nodeTypeId: 'yssbi.project.function.call',
+      title: 'Locally inferred caller',
+    }).projection;
+    useGraphDataStore.getState().replaceProjection(caller, localCaller, 1);
+    useGraphDataStore.setState((state) => ({
+      graphEntities: {
+        ...state.graphEntities,
+        [caller]: {
+          ...state.graphEntities[caller],
+          nodes: {
+            ...state.graphEntities[caller].nodes,
+            'stable-call': {
+              ...state.graphEntities[caller].nodes['stable-call'],
+              subGraphPath: from,
+            },
+          },
+        },
+      },
+    }));
+    const destination = makeEditorProjectionFixture({
+      graphPath: to,
+      sourceRevision: 1,
+      title: 'Authoritative destination',
+    }).projection;
+    const authoritativeCaller = makeEditorProjectionFixture({
+      graphPath: caller,
+      sourceRevision: 2,
+      nodeId: 'stable-call',
+      nodeTypeId: 'yssbi.project.function.call',
+      title: 'Authoritative caller replacement',
+    }).projection;
+    const move = { from, to, kind: 'event' as const, name: 'New' };
+    const preparedMove = prepareGraphResourceMove(move, true);
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000904',
+      projectInstanceId: '00000000-0000-0000-0000-000000000901',
+      publicationRevision: 1,
+      moves: [move],
+      deltas: [{
+        resource: { kind: 'graph', key: to },
+        fromRevision: 0,
+        toRevision: 1,
+        causedBy: null,
+        payload: { kind: 'graph_resource_move', patch: { from, to } },
+      }],
+      projectionReplacements: [
+        { graphPath: to, projection: destination },
+        { graphPath: caller, projection: authoritativeCaller },
+      ],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [to, caller] },
+      history: { canUndo: true, canRedo: false },
+    };
 
-    const malformedProjection = structuredClone(
-      makeEditorProjectionFixture({ graphPath: to, title: 'Malformed' }).projection,
-    );
-    malformedProjection.nodes[0].graphPath = from;
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId: result.projectInstanceId,
+      epoch: 1,
+      fingerprint: 'authoritative-move-replacements',
+      affectedGraphPaths: new Set([from, to, caller]),
+      moves: [preparedMove],
+    });
+    commitPreparedPublication(plan);
+
+    const installed = useGraphDataStore.getState().graphEntities[caller]?.nodes['stable-call'];
+    expect(installed).toMatchObject({
+      id: 'stable-call',
+      title: 'Authoritative caller replacement',
+    });
+    expect(installed).not.toHaveProperty('subGraphPath');
+  });
+
+  it('rejects replacement residency mismatches and conflicting destinations before commit', () => {
     expect(() => prepareGraphResourceMove({
       from,
       to,
       kind: 'event',
       name: 'New',
-    }, malformedProjection)).toThrow('destination projection');
+    }, false)).toThrow('replacement disagrees with source loaded ownership');
 
     useResourceStore.getState().upsertResource(buildGraphResourceMeta('event', to, 'Existing'));
-    const destination = makeEditorProjectionFixture({ graphPath: to, title: 'New' }).projection;
     expect(() => prepareGraphResourceMove({
       from,
       to,
       kind: 'event',
       name: 'New',
-    }, destination)).toThrow('destination resource');
+    }, true)).toThrow('destination resource');
   });
 });

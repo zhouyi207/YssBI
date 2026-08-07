@@ -1,15 +1,5 @@
-import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
 import type { ResourceMoveDto } from '@/shared/types/dto/editorMutation';
-import type { Variable } from '@/shared/types';
-import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
-import { toProjectionEntities } from '@/features/domain/editorProjection';
-import { normalizeGraphResourcePath } from '@/shared/types/domain/graphResourcePath';
-import { useGraphDataStore, useGraphMetaStore, useVariableStore } from '@/features/core/dataStore';
-import {
-  commitPreparedGraphProjectionReplacements,
-  prepareGraphProjectionReplacements,
-  type PreparedGraphProjectionReplacements,
-} from '@/features/core/dataStore/graphDataStore';
+import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
 import { useGraphSessionStore, type FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
 import {
@@ -30,13 +20,13 @@ import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewpor
 import { useViewportStore } from '@/features/core/viewport/useViewportStore';
 import type { EditorViewport } from '@/features/core/viewport/editorViewport';
 
+
 export interface PreparedResourceMoveSnapshot {
   readonly fromKey: ResourceKey;
   readonly toKey: ResourceKey;
   readonly source: ProjectResourceMeta;
   readonly destinationBefore: undefined;
-  readonly destinationBeforeLoadedMark: ProjectResourceMeta;
-  readonly destinationAfterLoadedMark: ProjectResourceMeta;
+  readonly destinationAfter: ProjectResourceMeta;
   readonly graphOrderAfter: readonly string[];
 }
 
@@ -45,8 +35,7 @@ export interface PreparedDocumentMoveSnapshot {
   readonly toKey: ResourceKey;
   readonly source?: DocumentState;
   readonly destinationBefore: undefined;
-  readonly destinationBeforeLoadedMark?: DocumentState;
-  readonly destinationAfterLoadedMark?: DocumentState;
+  readonly destinationAfter?: DocumentState;
 }
 
 export interface PreparedTabMoveSnapshot {
@@ -59,26 +48,6 @@ export interface PreparedSessionMoveSnapshot {
   readonly after: FocusedGraphSession | null;
 }
 
-interface PreparedCallerReference {
-  readonly graphPath: string;
-  readonly nodeId: string;
-  readonly before: string;
-  readonly after: string;
-}
-
-export interface PreparedGraphReferenceMoveSnapshot {
-  readonly callers: readonly PreparedCallerReference[];
-}
-
-interface PreparedVariableScopeInstall {
-  readonly id: string;
-  readonly before: Variable['scope'];
-  readonly after: Variable['scope'];
-}
-
-export interface PreparedVariableScopeMoveSnapshot {
-  readonly installs: readonly PreparedVariableScopeInstall[];
-}
 
 interface PreparedGraphMetaMoveSnapshot {
   readonly source?: GraphMeta;
@@ -96,36 +65,21 @@ export interface PreparedGraphResourceMove {
   readonly to: string;
   readonly kind: 'event' | 'function';
   readonly name: string;
-  readonly destinationProjection: EditorGraphProjectionDto;
-  readonly destinationRequestGeneration: number;
-  readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
+  readonly hasAuthoritativeDestinationReplacement: boolean;
   readonly resourceSnapshot: PreparedResourceMoveSnapshot;
   readonly documentSnapshot: PreparedDocumentMoveSnapshot;
   readonly tabSnapshot: PreparedTabMoveSnapshot;
   readonly sessionSnapshot: PreparedSessionMoveSnapshot;
-  readonly referenceSnapshot: PreparedGraphReferenceMoveSnapshot;
-  readonly variableScopeSnapshot: PreparedVariableScopeMoveSnapshot;
+
   readonly graphMetaSnapshot: PreparedGraphMetaMoveSnapshot;
   readonly viewportSnapshot: PreparedViewportMoveSnapshot;
 }
 
-function assertMove(move: ResourceMoveDto, projection: EditorGraphProjectionDto): void {
+function assertMove(move: ResourceMoveDto): void {
   if (!move.from || !move.to || move.from === move.to
     || (move.kind !== 'event' && move.kind !== 'function')
     || !move.name.trim()) {
     throw new Error('graph resource move is malformed');
-  }
-  if (projection.graphPath !== move.to || projection.basis?.graphPath !== move.to
-    || !Number.isSafeInteger(projection.sourceRevision) || projection.sourceRevision < 0) {
-    throw new Error('destination projection identity or basis is malformed');
-  }
-  try {
-    const entities = toProjectionEntities(projection);
-    if (entities.graphPath !== move.to) {
-      throw new Error('projection graph path does not match destination');
-    }
-  } catch {
-    throw new Error('destination projection entities are malformed');
   }
 }
 
@@ -159,56 +113,12 @@ function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot
   return { before, after };
 }
 
-function prepareReferences(from: string, to: string): PreparedGraphReferenceMoveSnapshot {
-  const normalizedFrom = normalizeGraphResourcePath(from);
-  const normalizedTo = normalizeGraphResourcePath(to);
-  const callers: PreparedCallerReference[] = [];
-  for (const [graphPath, bucket] of Object.entries(useGraphDataStore.getState().graphEntities)) {
-    for (const node of Object.values(bucket.nodes)) {
-      if (isCallFunctionNodeType(node.nodeType)
-        && node.subGraphPath
-        && normalizeGraphResourcePath(node.subGraphPath) === normalizedFrom) {
-        callers.push({
-          graphPath,
-          nodeId: node.id,
-          before: node.subGraphPath,
-          after: normalizedTo,
-        });
-      }
-    }
-  }
-  return { callers };
-}
-
-function prepareVariableScopes(from: string, to: string): PreparedVariableScopeMoveSnapshot {
-  const normalizedFrom = normalizeGraphResourcePath(from);
-  const normalizedTo = normalizeGraphResourcePath(to);
-  const installs: PreparedVariableScopeInstall[] = [];
-  for (const variable of Object.values(useVariableStore.getState().variables)) {
-    const scope = variable.scope;
-    if (scope.type === 'event' && normalizeGraphResourcePath(scope.eventPath) === normalizedFrom) {
-      installs.push({
-        id: variable.id,
-        before: scope,
-        after: { type: 'event', eventPath: normalizedTo },
-      });
-    } else if (scope.type === 'function'
-      && normalizeGraphResourcePath(scope.functionPath) === normalizedFrom) {
-      installs.push({
-        id: variable.id,
-        before: scope,
-        after: { type: 'function', functionPath: normalizedTo },
-      });
-    }
-  }
-  return { installs };
-}
 
 export function prepareGraphResourceMove(
   move: ResourceMoveDto,
-  destinationProjection: EditorGraphProjectionDto,
+  hasAuthoritativeDestinationReplacement: boolean,
 ): PreparedGraphResourceMove {
-  assertMove(move, destinationProjection);
+  assertMove(move);
   const resourceState = useResourceStore.getState();
   const source = lookupGraphResource(resourceState.resources, move.from, move.kind);
   if (!source || source.id !== move.from || source.kind !== move.kind) {
@@ -216,6 +126,9 @@ export function prepareGraphResourceMove(
   }
   if (lookupGraphResource(resourceState.resources, move.to, move.kind)) {
     throw new Error(`destination resource '${move.to}' already exists`);
+  }
+  if (source.loaded !== hasAuthoritativeDestinationReplacement) {
+    throw new Error(`move destination replacement disagrees with source loaded ownership '${move.from}'`);
   }
   const graphState = useGraphDataStore.getState();
   if (graphState.graphEntities[move.to]) {
@@ -229,45 +142,31 @@ export function prepareGraphResourceMove(
   const documents = useDocumentStateStore.getState().documents;
   if (documents[toKey]) throw new Error(`destination document '${move.to}' already exists`);
   const sourceDocument = documents[fromKey];
-  const destinationAfterLoadedMark = buildGraphResourceMeta(move.kind, move.to, move.name, {
-    loaded: true,
+  const destinationAfter = buildGraphResourceMeta(move.kind, move.to, move.name, {
+    revision: source.revision,
+    loaded: source.loaded,
     hasDirtyDocument: source.hasDirtyDocument,
     hasStaleDocument: source.hasStaleDocument,
     hasConflictDocument: source.hasConflictDocument,
   });
   const destinationDocument = sourceDocument
-    ? { ...sourceDocument, resourceKey: toKey }
+    ? { ...sourceDocument, resourceKey: toKey, loaded: sourceDocument.loaded }
     : undefined;
   const focused = useGraphSessionStore.getState().focusedSession;
   const sourceMeta = graphMeta[move.from];
-  const preparedProjection = prepareGraphProjectionReplacements(
-    [{ graphPath: move.to, projection: destinationProjection }],
-    graphState.graphEntities,
-  );
-  if (!preparedProjection.prepared) {
-    throw new Error(`destination projection '${move.to}' could not be prepared`);
-  }
-  const graphEntitiesAfter = { ...preparedProjection.plan.graphEntities };
-  delete graphEntitiesAfter[move.from];
 
   return Object.freeze({
     from: move.from,
     to: move.to,
     kind: move.kind,
     name: move.name,
-    destinationProjection,
-    destinationRequestGeneration: (graphState.graphEntities[move.to]?.requestGeneration ?? 0) + 1,
-    graphProjectionPlan: Object.freeze({
-      graphPaths: preparedProjection.plan.graphPaths,
-      graphEntities: graphEntitiesAfter,
-    }),
+    hasAuthoritativeDestinationReplacement,
     resourceSnapshot: Object.freeze({
       fromKey,
       toKey,
       source: structuredClone(source),
       destinationBefore: undefined,
-      destinationBeforeLoadedMark: { ...destinationAfterLoadedMark, loaded: false },
-      destinationAfterLoadedMark,
+      destinationAfter,
       graphOrderAfter: resourceState.graphOrder.map((path) => path === move.from ? move.to : path),
     }),
     documentSnapshot: Object.freeze({
@@ -275,20 +174,14 @@ export function prepareGraphResourceMove(
       toKey,
       source: sourceDocument ? structuredClone(sourceDocument) : undefined,
       destinationBefore: undefined,
-      destinationBeforeLoadedMark: destinationDocument
-        ? { ...destinationDocument, loaded: false }
-        : undefined,
-      destinationAfterLoadedMark: destinationDocument
-        ? { ...destinationDocument, loaded: true }
-        : undefined,
+      destinationAfter: destinationDocument,
     }),
     tabSnapshot: Object.freeze(prepareTabs(move.from, move.to)),
     sessionSnapshot: Object.freeze({
       before: focused ? structuredClone(focused) : null,
       after: focused?.graphPath === move.from ? { ...focused, graphPath: move.to } : focused,
     }),
-    referenceSnapshot: Object.freeze(prepareReferences(move.from, move.to)),
-    variableScopeSnapshot: Object.freeze(prepareVariableScopes(move.from, move.to)),
+
     graphMetaSnapshot: Object.freeze({
       source: sourceMeta ? structuredClone(sourceMeta) : undefined,
       destinationBefore: undefined,
@@ -301,99 +194,4 @@ export function prepareGraphResourceMove(
     }),
     viewportSnapshot: Object.freeze(prepareViewport(move.from, move.to)),
   });
-}
-
-function commitResourceSnapshot(plan: PreparedGraphResourceMove): void {
-  useResourceStore.setState((state) => {
-    const resources = { ...state.resources };
-    delete resources[plan.resourceSnapshot.fromKey];
-    resources[plan.resourceSnapshot.toKey] = plan.resourceSnapshot.destinationBeforeLoadedMark;
-    return { resources, graphOrder: [...plan.resourceSnapshot.graphOrderAfter] };
-  });
-}
-
-function commitDocumentSnapshot(plan: PreparedGraphResourceMove): void {
-  useDocumentStateStore.setState((state) => {
-    const documents = { ...state.documents };
-    delete documents[plan.documentSnapshot.fromKey];
-    if (plan.documentSnapshot.destinationBeforeLoadedMark) {
-      documents[plan.documentSnapshot.toKey] = plan.documentSnapshot.destinationBeforeLoadedMark;
-    }
-    return { documents };
-  });
-}
-
-function commitGraphMetaSnapshot(plan: PreparedGraphResourceMove): void {
-  useGraphMetaStore.setState((state) => {
-    const graphs = { ...state.graphs };
-    delete graphs[plan.from];
-    graphs[plan.to] = plan.graphMetaSnapshot.destinationAfter;
-    return { graphs };
-  });
-}
-
-function commitReferenceSnapshot(plan: PreparedGraphResourceMove): void {
-  if (plan.referenceSnapshot.callers.length === 0) return;
-  useGraphDataStore.setState((state) => {
-    const graphEntities = { ...state.graphEntities };
-    for (const install of plan.referenceSnapshot.callers) {
-      const bucket = graphEntities[install.graphPath];
-      const node = bucket?.nodes[install.nodeId];
-      if (!bucket || !node || node.subGraphPath !== install.before) continue;
-      graphEntities[install.graphPath] = {
-        ...bucket,
-        nodes: {
-          ...bucket.nodes,
-          [install.nodeId]: { ...node, subGraphPath: install.after },
-        },
-      };
-    }
-    return { graphEntities };
-  });
-}
-
-function commitVariableScopes(plan: PreparedGraphResourceMove): void {
-  if (plan.variableScopeSnapshot.installs.length === 0) return;
-  useVariableStore.setState((state) => {
-    const variables = { ...state.variables };
-    for (const install of plan.variableScopeSnapshot.installs) {
-      const variable = variables[install.id];
-      if (variable) variables[install.id] = { ...variable, scope: install.after };
-    }
-    return { variables };
-  });
-}
-
-function commitLoadedMark(plan: PreparedGraphResourceMove): void {
-  useResourceStore.setState((state) => ({
-    resources: {
-      ...state.resources,
-      [plan.resourceSnapshot.toKey]: plan.resourceSnapshot.destinationAfterLoadedMark,
-    },
-  }));
-  if (plan.documentSnapshot.destinationAfterLoadedMark) {
-    useDocumentStateStore.setState((state) => ({
-      documents: {
-        ...state.documents,
-        [plan.documentSnapshot.toKey]: plan.documentSnapshot.destinationAfterLoadedMark as DocumentState,
-      },
-    }));
-  }
-}
-
-export function commitGraphResourceMoveOwnership(plan: PreparedGraphResourceMove): void {
-  commitResourceSnapshot(plan);
-  commitDocumentSnapshot(plan);
-  commitGraphMetaSnapshot(plan);
-  commitReferenceSnapshot(plan);
-  commitVariableScopes(plan);
-  useGraphSessionStore.setState({ focusedSession: plan.sessionSnapshot.after });
-  useEditorTabStore.getState().applyMemento(plan.tabSnapshot.after);
-  useViewportStore.setState({ viewports: { ...plan.viewportSnapshot.after } });
-  commitLoadedMark(plan);
-}
-
-export function commitGraphResourceMove(plan: PreparedGraphResourceMove): void {
-  commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
-  commitGraphResourceMoveOwnership(plan);
 }

@@ -526,7 +526,6 @@ mod tests {
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
         ProjectFilesystemFaultPoint, WorksheetDocument, fixtures, load_project_from_file,
-        set_project_filesystem_fault,
     };
     use crate::variable::VariableScope;
     use std::sync::{Arc, Barrier};
@@ -727,7 +726,7 @@ mod tests {
         assert_eq!(state.revision_state_for_test(), before_revisions);
         assert_eq!(state.authority_generation_for_test(), before_generation + 1);
         assert!(!coordinator.contains_slot_for_test(&document_path));
-        assert!(!coordinator.contains_slot_for_test(&retained_document_path));
+        assert!(coordinator.contains_slot_for_test(&retained_document_path));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -1096,12 +1095,12 @@ mod tests {
         std::fs::create_dir_all(&destination).unwrap();
         let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
         let before_path = state.get_path();
-        set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
+        state.set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
 
         let result =
             state.save_project_as_transaction(&instance_id, &destination, OperationId::new());
 
-        set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
         assert!(result.is_err());
         assert_eq!(state.get_path(), before_path);
         assert_eq!(

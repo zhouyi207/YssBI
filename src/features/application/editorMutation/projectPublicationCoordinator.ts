@@ -30,6 +30,7 @@ import type { EditorViewport } from '@/features/core/viewport/editorViewport';
 import type { DocumentState, ProjectResourceMeta, ResourceKey } from '@/features/core/resource';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
 import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
+import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useHistoryStore } from '@/features/core/history';
@@ -185,7 +186,7 @@ export interface ProjectPublicationDependencies {
   prepareRecovery(plan: ProjectRecoveryPreparation): PreparedProjectRecovery;
   prepareMove(
     move: ResourceMoveDto,
-    preparedDestination: EditorGraphProjectionDto,
+    hasAuthoritativeDestinationReplacement: boolean,
   ): PreparedGraphResourceMove;
   commitPublication(plan: PreparedProjectPublication): void;
   commitRecovery(plan: PreparedProjectRecovery): void;
@@ -255,6 +256,7 @@ export class ProjectPublicationCoordinator {
 
   startProject(projectInstanceId: string, appliedRevision: number): void {
     this.validateProjectStart(projectInstanceId, appliedRevision);
+    clearWorksheetPreviewCache();
     startProjectLifecycle(projectInstanceId);
     this.resetPublicationState(appliedRevision);
   }
@@ -267,11 +269,15 @@ export class ProjectPublicationCoordinator {
     }
     const result = acceptProjectLifecycleActivation(projectInstanceId, activationRevision);
     if (result === 'stale') return false;
-    if (result === 'activated') this.resetPublicationState(0);
+    if (result === 'activated') {
+      clearWorksheetPreviewCache();
+      this.resetPublicationState(0);
+    }
     return true;
   }
 
   cancelProject(): void {
+    clearWorksheetPreviewCache();
     clearProjectLifecycle();
     this.resetPublicationState(0);
   }
@@ -472,23 +478,15 @@ export class ProjectPublicationCoordinator {
     const { projectInstanceId, epoch } = identity;
     try {
       const result = pending.input.result;
-      const statusPaths = result.projectionStatus.status === 'complete'
-        ? result.projectionStatus.expectedGraphPaths
-        : result.projectionStatus.invalidatedGraphPaths;
-      const preparationPaths = new Set([
-        ...(pending.input.fallbackPaths ?? []),
-        ...statusPaths,
-        ...result.moves.map((move) => move.to),
-      ]);
-      const projections = new Map<string, EditorGraphProjectionDto>();
-      for (const path of preparationPaths) {
-        projections.set(path, await this.prepareProjection(path, projectInstanceId, epoch));
+      if (result.projectionStatus.status === 'incomplete') {
+        pending.requiresRecovery = true;
+        return;
       }
-      const moves = result.moves.map((move) => {
-        const destination = projections.get(move.to);
-        if (!destination) throw new Error(`move destination '${move.to}' was not prepared`);
-        return this.dependencies.prepareMove(move, destination);
-      });
+      const replacementPaths = new Set(
+        result.projectionReplacements.map((replacement) => replacement.graphPath),
+      );
+      const moves = result.moves.map((move) =>
+        this.dependencies.prepareMove(move, replacementPaths.has(move.to)));
       this.assertLifecycle(projectInstanceId, epoch);
       if (pending.revision !== this.state.appliedRevision + 1) return;
       const plan = this.dependencies.preparePublication(result, {

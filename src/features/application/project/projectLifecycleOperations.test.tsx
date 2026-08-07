@@ -37,7 +37,7 @@ vi.mock('@/features/application/editor/saveAllDirtyGraphs', () => ({
   saveAllDirtyGraphs: vi.fn(async () => true),
 }));
 vi.mock('@/features/core/execution', () => ({
-  useExecutionStore: { getState: vi.fn() },
+  useExecutionStore: { getState: vi.fn(), setState: vi.fn() },
   getExecutionEventGraph: vi.fn(),
   resolveExecutionGraphPath: vi.fn(),
   graphHasClearableArtifacts: vi.fn(),

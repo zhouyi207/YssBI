@@ -43,6 +43,7 @@ fn empty_plan(
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: registry.clone(),
                 resource_versions,
+                resource_observations: Default::default(),
             },
             compile_id: CompileId::new(1),
         },

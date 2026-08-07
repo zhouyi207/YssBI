@@ -33,7 +33,6 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
-import { functionSignaturePins } from '@/features/application/graphDocument/functionSignatureSync';
 import { useHistoryStore } from '@/features/core/history';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useEditorTabStore, type EditorTabMemento } from '@/features/core/layout/editorTabStore';
@@ -417,11 +416,12 @@ export function prepareProjectRecoveryCommit(
   );
 
   const graphMeta = Object.fromEntries(plan.index.graphs.map((graph) => {
-    const functionState = graph.type === 'function' && graph.functionSignature
+    const functionState = graph.type === 'function'
       ? {
-          functionRevision: graph.functionRevision,
+          functionRevision: graph.functionEditorProjection.functionRevision,
           functionSignature: structuredClone(graph.functionSignature),
-          ...functionSignaturePins(graph.functionSignature),
+          functionInputs: structuredClone(graph.functionEditorProjection.inputs),
+          functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
         }
       : {};
     return [graph.path, {

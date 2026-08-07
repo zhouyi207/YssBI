@@ -40,8 +40,8 @@ export class DatabaseService {
     /**
      * 获取数据库元数据（name, columns, rowCount, columnCount）
      */
-    static async getDatabaseMeta(id: string): Promise<LoadDatabaseResult> {
-        return await invoke("get_database_meta", { id });
+    static async getDatabaseMeta(projectInstanceId: string, id: string): Promise<LoadDatabaseResult> {
+        return await invoke("get_database_meta", { projectInstanceId, id });
     }
 
     /**
@@ -99,10 +99,15 @@ export class DatabaseService {
     /**
      * 获取数据库行数据（分页，含稳定 rowIds）
      */
-    static async getDatabaseRows(id: string, offset: number, limit: number): Promise<DatabaseRowsResult> {
+    static async getDatabaseRows(
+        projectInstanceId: string,
+        id: string,
+        offset: number,
+        limit: number,
+    ): Promise<DatabaseRowsResult> {
         const payload = await invoke<{ rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]>(
             "get_database_rows",
-            { id, offset, limit },
+            { projectInstanceId, id, offset, limit },
         );
         if (Array.isArray(payload)) {
             return { rows: payload, rowIds: [] };
@@ -116,19 +121,22 @@ export class DatabaseService {
     /**
      * 获取数据库所有列的统计信息
      */
-    static async getColumnStats(id: string): Promise<ColumnStats[]> {
-        return await invoke("get_column_stats", { id });
+    static async getColumnStats(projectInstanceId: string, id: string): Promise<ColumnStats[]> {
+        return await invoke("get_column_stats", { projectInstanceId, id });
     }
 
     /**
      * 获取数据库所有列的分布数据（直方图/频次）
      */
-    static async getColumnDistribution(id: string): Promise<ColumnDistribution[]> {
-        return await invoke("get_column_distribution", { id });
+    static async getColumnDistribution(
+        projectInstanceId: string,
+        id: string,
+    ): Promise<ColumnDistribution[]> {
+        return await invoke("get_column_distribution", { projectInstanceId, id });
     }
 
-    static async getDatasetOverview(id: string): Promise<DatasetOverview> {
-        return await invoke("get_dataset_overview", { id });
+    static async getDatasetOverview(projectInstanceId: string, id: string): Promise<DatasetOverview> {
+        return await invoke("get_dataset_overview", { projectInstanceId, id });
     }
 
     static async editCell(
@@ -254,11 +262,16 @@ export class DatabaseService {
         });
     }
 
-    static async exportDatabase(id: string, path: string, format: string): Promise<void> {
-        await invoke("export_database", { id, path, format });
+    static async exportDatabase(
+        projectInstanceId: string,
+        id: string,
+        path: string,
+        format: string,
+    ): Promise<void> {
+        await invoke("export_database", { projectInstanceId, id, path, format });
     }
 
-    static async getEditState(id: string): Promise<EditState> {
-        return await invoke("get_edit_state", { id });
+    static async getEditState(projectInstanceId: string, id: string): Promise<EditState> {
+        return await invoke("get_edit_state", { projectInstanceId, id });
     }
 }

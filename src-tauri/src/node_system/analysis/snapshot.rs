@@ -214,6 +214,7 @@ mod tests {
                     crate::node_system::analysis::ResourceKey::new("resource.test"),
                     ResourceVersion::new("1"),
                 )]),
+                resource_observations: Default::default(),
             },
             nodes: Box::new([]),
             resolved_interfaces: Box::new([]),

@@ -71,6 +71,7 @@ fn plan(
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
                 resource_versions: BTreeMap::new(),
+                resource_observations: BTreeMap::new(),
             },
             compile_id: CompileId::new(1),
         },

@@ -5,6 +5,7 @@ import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useExecutionStore } from '@/features/core/execution';
 import { useResourceStore } from '@/features/core/resource';
 import { ProjectService } from '@/services/project/projectService';
 import type { LifecycleMutationResultDto, ProjectRecordRow } from '@/shared/types/dto/project';
@@ -16,9 +17,24 @@ import {
 } from './projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from './projectLifecycleReceiptDependencies';
 import { logger } from '@/utils/appLogger';
+import {
+  clearWorksheetPreviewCache,
+  getCachedWorksheetPreview,
+  getWorksheetPreview,
+} from '@/services/worksheet/worksheetPreviewCache';
+import type { WorksheetDocument } from '@/shared/types/domain';
 
 const projectA = '00000000-0000-0000-0000-000000000601';
 const projectB = '00000000-0000-0000-0000-000000000602';
+const worksheet: WorksheetDocument = {
+  schemaVersion: 3,
+  revision: 0,
+  id: 'worksheet-1',
+  name: 'Worksheet',
+  databaseId: 'sales',
+  chartType: 'scatter',
+  encodings: { x: 'x', y: 'y' },
+};
 
 function record(): ProjectRecordRow {
   return {
@@ -73,12 +89,19 @@ function index(projectInstanceId: string, publicationRevision: number) {
 describe('production project lifecycle hydration dependency', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    clearWorksheetPreviewCache();
     resetProjectLifecycleReceiptHandlerForTests();
     useProjectIOStore.setState({
       projectInstanceId: projectA,
       currentPath: 'C:/project-a/metadata.yssbi',
     });
     projectPublicationCoordinator.startProject(projectA, 4);
+    useExecutionStore.setState({
+      graphs: {},
+      previewGeneration: 0,
+      playbackGraphPath: null,
+      isPlaying: false,
+    });
     vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/authoritative/metadata.yssbi');
     vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
       databases: {},
@@ -103,8 +126,10 @@ describe('production project lifecycle hydration dependency', () => {
           path: 'functions/Add.yssbi-function',
           name: 'Add',
           type: 'function',
+          revision: 3,
           functionRevision: 3,
           functionSignature: { parameters: [], return_type: null },
+          functionEditorProjection: { functionRevision: 3, inputs: [], outputs: [] },
         }],
       });
       vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
@@ -143,6 +168,49 @@ describe('production project lifecycle hydration dependency', () => {
       });
     },
   );
+
+  it('synchronously clears execution state before replacement callbacks run', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const port = {
+      kind: 'declared' as const,
+      nodeId: 'node-1',
+      portKey: 'result',
+    };
+    const execution = useExecutionStore.getState();
+    execution.beginPinPreview(graphPath, port);
+    execution.startExecution(graphPath);
+    useExecutionStore.setState({
+      playbackGraphPath: graphPath,
+      isPlaying: true,
+    });
+    const onProjectCleared = vi.fn(() => {
+      expect(useExecutionStore.getState()).toMatchObject({
+        graphs: {},
+        previewGeneration: 0,
+        playbackGraphPath: null,
+        isPlaying: false,
+      });
+    });
+
+    createProjectLifecycleReceiptDependencies(onProjectCleared).clearProject();
+
+    expect(onProjectCleared).toHaveBeenCalledOnce();
+  });
+
+  it('synchronously clears worksheet preview cache before replacement hydration commits', async () => {
+    const oldPreview = { kind: 'empty' as const };
+    await getWorksheetPreview(projectA, worksheet, async () => oldPreview);
+    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue(index(projectB, 0));
+    const pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
+
+    await applyProjectLifecycleReceipt(
+      result(pending.operationId, 'committed'),
+      'direct',
+      createProjectLifecycleReceiptDependencies(),
+    );
+
+    expect(getCachedWorksheetPreview(projectA, worksheet)).toBeUndefined();
+  });
 
   it.each([
     ['committed', projectB, 0],

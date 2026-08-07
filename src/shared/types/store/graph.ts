@@ -4,17 +4,12 @@
  * `graphDataStore` buckets are editor projections. `replaceProjection` is the
  * only bucket creation path and always installs projection basis, revision,
  * request generation, and diagnostics together with normalized entities.
-
- * `GraphData`, `GraphDataInput`, and `GraphDataLike` remain legacy DTO/domain
- * conversion types used outside the projection store boundary.
  */
 
 import type { NodeId, PinId, GraphPath, ConnectionId } from '../domain/ids';
 export type { NodeId, PinId, GraphPath, ConnectionId };
-import type { Graph } from '../domain/graph';
 import type { PinDirection, PinUI, RuntimePinKind } from '../domain/pin';
 import type { DataType } from '../domain/dataType';
-import type { GraphInstanceDTO } from '../dto/graph';
 import type {
   DiagnosticDto,
   EditorInputBindingDto,
@@ -30,8 +25,6 @@ import type {
   SchemaSummaryDto,
   TypeSummaryDto,
 } from '../dto/editorProjection';
-
-import type { ParamsKind } from '../dto/nodeInstanceParams';
 
 // ==================== NodeData ====================
 /** 节点数据（Store 规范化格式，camelCase 与 DESIGN_RULE 一致） */
@@ -52,8 +45,8 @@ export interface NodeData {
   diagnostics?: DiagnosticDto[];
   /** 以下为 UI 扩展字段 */
   isInternal?: boolean;
-  /** 参数类型判别（扁平字段，见 `NodeInstanceParamsDTO` tagged union） */
-  paramsKind?: ParamsKind;
+  /** UI projection discriminator; not a creation identity. */
+  paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
   variableId?: string;
   variableName?: string;
   variableType?: string;
@@ -121,34 +114,3 @@ export interface GraphData {
   pins: PinData[];
   connections: ConnectionData[];
 }
-
-/**
- * 运行时节点入站形态。
- * @see 模块顶部的 Hydrate 契约 — `inputs`/`outputs` 可为 PinId 或完整 Pin 对象。
- */
-export interface RuntimeNodeInput {
-  id: string;
-  graphPath?: string;
-  nodeType: string;
-  category?: string[];
-  title?: string;
-  position?: { x: number; y: number };
-  inputs?: (string | PinData | PinView)[];
-  outputs?: (string | PinData | PinView)[];
-  description?: string;
-  isInternal?: boolean;
-  paramsKind?: ParamsKind;
-  variableId?: string;
-  variableName?: string;
-  variableType?: string;
-  subGraphPath?: string;
-  dataframeId?: string;
-}
-
-/** 图数据输入：`nodes` 为 `RuntimeNodeInput[]`，其余字段同 `GraphData` */
-export interface GraphDataInput extends Omit<GraphData, 'nodes'> {
-  nodes: RuntimeNodeInput[];
-}
-
-/** Legacy graph-body input accepted by DTO/domain conversion utilities outside the projection store. */
-export type GraphDataLike = GraphData | GraphDataInput | Graph | GraphInstanceDTO;

@@ -392,7 +392,7 @@ mod tests {
         let (root, state, project_instance_id) = active_state("create-failure");
         let before = command_snapshot(&state);
         let mut events = Vec::new();
-        crate::project::set_project_filesystem_fault(Some(
+        state.set_project_filesystem_fault(Some(
             crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
         ));
 
@@ -410,7 +410,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        crate::project::set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
 
         assert_eq!(error.code, "transaction_prepare_failed", "{error:?}");
         assert_eq!(command_snapshot(&state), before);
@@ -442,7 +442,7 @@ mod tests {
         let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
         let before = command_snapshot(&state);
         let mut events = Vec::new();
-        crate::project::set_project_filesystem_fault(Some(
+        state.set_project_filesystem_fault(Some(
             crate::project::ProjectFilesystemFaultPoint::FirstLiveReplacement,
         ));
 
@@ -460,7 +460,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        crate::project::set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
 
         assert_eq!(error.code, "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);
@@ -495,7 +495,7 @@ mod tests {
         let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
         let before = command_snapshot(&state);
         let mut events = Vec::new();
-        crate::project::set_project_filesystem_fault(Some(
+        state.set_project_filesystem_fault(Some(
             crate::project::ProjectFilesystemFaultPoint::FirstLiveReplacement,
         ));
 
@@ -508,7 +508,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        crate::project::set_project_filesystem_fault(None);
+        state.set_project_filesystem_fault(None);
 
         assert_eq!(error.code, "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);

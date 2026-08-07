@@ -257,6 +257,7 @@ mod tests {
                     ResourceKey::new("functions/shared"),
                     ResourceVersion::new("9"),
                 )]),
+                resource_observations: BTreeMap::new(),
             },
             compile_id: CompileId::new(13),
         }

@@ -32,10 +32,7 @@ impl ParameterSchema {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ParameterValues {
-    pub values: BTreeMap<ParameterKey, ParameterValue>,
-}
+pub type ParameterValues = BTreeMap<ParameterKey, serde_json::Value>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParameterConstraint {

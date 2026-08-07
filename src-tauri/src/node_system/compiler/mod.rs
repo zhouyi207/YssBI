@@ -31,8 +31,8 @@ pub use dynamic_interface::{
 };
 pub use lowering::{
     FragmentMetadata, FragmentResult, KernelFragment, LoweredKernel, LoweredNode, LoweringContext,
-    LoweringError, NodeImplementation, NodeLowerer, RelationalInputBinding, RelationalNodeFragment,
-    ScalarFragment,
+    LoweringError, LoweringInvariant, NodeImplementation, NodeLowerer, PreparedParameterValue,
+    RelationalInputBinding, RelationalNodeFragment, ScalarFragment, ValidatedNodeConfig,
 };
 #[cfg(test)]
 pub(crate) use pipeline::compile_snapshot_invocations;

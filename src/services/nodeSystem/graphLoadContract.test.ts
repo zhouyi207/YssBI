@@ -11,10 +11,8 @@ const explicitlyAuditedGraphLoadModules = [
 ] as const;
 
 const legacyLoadSymbols = [
-  'GraphInstanceDTO',
   'resolve_graph_dynamic_pins',
   'resolveEffectiveDefinition',
-  'toFrontendGraph',
 ] as const;
 
 describe('explicit production graph-load module audit', () => {

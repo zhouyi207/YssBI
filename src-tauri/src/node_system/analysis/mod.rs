@@ -13,8 +13,10 @@ mod trace_store;
 
 pub use crate::node_system::document::PortAddressDto;
 pub use basis::{
-    CompilationBasis, CompileId, CompileProjection, ResourceKey, ResourceVersion,
-    ResourceVersionSet,
+    AnalysisResourceReads, AnalysisResourceResolver, CompilationBasis, CompileId,
+    CompileProjection, ResolvedDatabase, ResolvedFunction, ResolvedFunctionValue, ResolvedResource,
+    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
+    ResourceResolutionError, ResourceVersion, ResourceVersionSet,
 };
 pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, Location,
@@ -28,12 +30,13 @@ pub use observability::{
 pub use projection::{
     DiagnosticDto, DiagnosticLocationDto, DiagnosticSeverityDto, EditorConnectionProjectionDto,
     EditorGraphProjectionDto, EditorInputBindingDto, EditorNodeProjectionDto,
-    EffectiveInputBindingKindDto, GraphProjectionDelta, LocalizationBundle, LocalizationLookup,
-    NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto, ParameterEditorDto,
+    EffectiveInputBindingKindDto, FunctionEditorPinDto, FunctionEditorProjectionDto,
+    GraphProjectionDelta, LocalizationBundle, LocalizationLookup, NodeCapabilitiesDto,
+    NodeDisplayDto, NodePositionDto, ParameterDisplayDto, ParameterEditorDto,
     ParameterEditorKindDto, PortConnectionCapabilityDto, PortDirectionDto, PortDisplayDto,
     PortInstanceKindDto, PortKindDto, ProjectionBasis, ProjectionError, ResolvedPortDto,
     ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
-    build_editor_graph_projection,
+    build_editor_graph_projection, build_function_editor_projection,
 };
 pub use semantic::{
     ControlEdge, EffectDependency, SemanticDependency, ValidatedSemanticGraph,
@@ -72,6 +75,7 @@ mod tests {
                 (ResourceKey::new("z.resource"), ResourceVersion::new("2")),
                 (ResourceKey::new("a.resource"), ResourceVersion::new("1")),
             ]),
+            resource_observations: BTreeMap::new(),
         }
     }
 

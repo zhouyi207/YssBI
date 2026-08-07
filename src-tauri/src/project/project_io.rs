@@ -72,6 +72,9 @@ pub struct ProjectGraphIndexEntry {
     pub function_revision: Option<crate::node_system::document::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_signature: Option<crate::node_system::document::FunctionSignature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_editor_projection:
+        Option<crate::node_system::analysis::FunctionEditorProjectionDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -183,12 +186,21 @@ pub fn serialize_graph_document(
     data: &ProjectData,
     graph_path: &GraphResourcePath,
 ) -> Result<(PathBuf, Vec<u8>), ProjectError> {
+    let document = snapshot_graph_document(data, graph_path)?;
+    serde_json::to_vec_pretty(&document)
+        .map(|contents| (PathBuf::from(graph_path.as_str()), contents))
+        .map_err(ProjectError::Serialize)
+}
+
+pub(crate) fn snapshot_graph_document(
+    data: &ProjectData,
+    graph_path: &GraphResourcePath,
+) -> Result<GraphDocument, ProjectError> {
     let graph = data.graphs.get(graph_path).ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
     })?;
     let local_variables = local_variables_for_graph(&data.variables, graph_path, graph.kind);
-    serialize_graph_resource_document(graph, local_variables)
-        .map(|contents| (PathBuf::from(graph_path.as_str()), contents))
+    Ok(graph_document_from_resource(graph, local_variables))
 }
 
 #[cfg(test)]
@@ -203,7 +215,15 @@ pub(crate) fn serialize_graph_resource_document(
     graph: &GraphResourceDocument,
     local_variables: HashMap<VariableId, VariableInstance>,
 ) -> Result<Vec<u8>, ProjectError> {
-    serde_json::to_vec_pretty(&GraphDocument {
+    serde_json::to_vec_pretty(&graph_document_from_resource(graph, local_variables))
+        .map_err(ProjectError::Serialize)
+}
+
+fn graph_document_from_resource(
+    graph: &GraphResourceDocument,
+    local_variables: HashMap<VariableId, VariableInstance>,
+) -> GraphDocument {
+    GraphDocument {
         schema_version: SCHEMA_VERSION,
         kind: graph.kind,
         name: graph.name.clone(),
@@ -211,8 +231,7 @@ pub(crate) fn serialize_graph_resource_document(
         document: graph.document.clone(),
         function: graph.function.clone(),
         local_variables,
-    })
-    .map_err(ProjectError::Serialize)
+    }
 }
 
 #[cfg(test)]
@@ -658,6 +677,17 @@ fn read_graph_index_entries(
             )));
         }
         let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.name);
+        let function_editor_projection = header
+            .function
+            .as_ref()
+            .map(crate::node_system::analysis::build_function_editor_projection)
+            .transpose()
+            .map_err(|error| {
+                ProjectError::InvalidProjectFormat(format!(
+                    "function graph file '{}' has an invalid editor projection: {error}",
+                    path.display()
+                ))
+            })?;
         let (function_revision, function_signature) = header
             .function
             .map(|function| (Some(function.revision), Some(function.signature)))
@@ -669,6 +699,7 @@ fn read_graph_index_entries(
             revision: header.revision,
             function_revision,
             function_signature,
+            function_editor_projection,
         });
     }
     Ok(entries)

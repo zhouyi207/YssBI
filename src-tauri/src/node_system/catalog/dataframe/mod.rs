@@ -12,7 +12,8 @@ use super::builtin::{
 use super::localization::{Aliases, Message, Text};
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
-    NodeImplementation, NodeLowerer, RelationalInputBinding, RelationalNodeFragment,
+    LoweringInvariant, NodeImplementation, NodeLowerer, RelationalInputBinding,
+    RelationalNodeFragment,
 };
 use crate::node_system::document::PortRef;
 use crate::node_system::parameter_types::dataframe::{
@@ -21,7 +22,7 @@ use crate::node_system::parameter_types::dataframe::{
 use crate::node_system::plan::{
     CompiledParameterHandle, RelationalBackendId, RelationalExpression, RelationalFragmentId,
     RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalProjection,
-    RelationalRename, ResourceId,
+    RelationalRename,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
@@ -623,7 +624,8 @@ fn category(kind: InterfaceKind) -> &'static str {
 }
 
 fn lowering_parameter_key(value: &'static str) -> Result<ParameterKey, LoweringError> {
-    ParameterKey::new(value).map_err(|error| LoweringError::new(error.to_string()))
+    ParameterKey::new(value)
+        .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))
 }
 
 struct SourceLowerer;
@@ -631,15 +633,9 @@ struct SourceLowerer;
 impl NodeLowerer for SourceLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
         let key = lowering_parameter_key("dataframe")?;
-        let resource = context
-            .parameters
-            .get(&key)
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| {
-                LoweringError::new("source parameter 'dataframe' must be a resource id")
-            })?;
-        let resource =
-            ResourceId::new(resource).map_err(|error| LoweringError::new(error.to_string()))?;
+        let resource = context.parameters.resource(&key).cloned().ok_or_else(|| {
+            LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
+        })?;
         let relation = resource.as_str().into();
         relational_node(
             context,
@@ -655,7 +651,7 @@ struct ProjectLowerer;
 
 impl NodeLowerer for ProjectLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        let columns = decode_parameter::<ProjectColumns>(context, "columns")?;
+        let columns = prepared_nominal_parameter::<ProjectColumns>(context, "columns")?;
         let columns = columns
             .as_slice()
             .iter()
@@ -679,7 +675,7 @@ struct FilterRowsLowerer;
 
 impl NodeLowerer for FilterRowsLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        let predicate = decode_parameter::<FilterPredicate>(context, "predicate")?;
+        let predicate = prepared_nominal_parameter::<FilterPredicate>(context, "predicate")?;
         relational_transform_node(
             context,
             RelationalOperator::Filter {
@@ -690,17 +686,16 @@ impl NodeLowerer for FilterRowsLowerer {
     }
 }
 
-fn decode_parameter<T: serde::de::DeserializeOwned>(
+fn prepared_nominal_parameter<T: Clone + Send + Sync + 'static>(
     context: &LoweringContext<'_>,
     key: &'static str,
 ) -> Result<T, LoweringError> {
     let parameter_key = lowering_parameter_key(key)?;
-    let value = context
+    context
         .parameters
-        .get(&parameter_key)
-        .ok_or_else(|| LoweringError::new(format!("required parameter '{key}' is missing")))?;
-    serde_json::from_value(value.clone())
-        .map_err(|error| LoweringError::new(format!("invalid parameter '{key}': {error}")))
+        .nominal::<T>(&parameter_key)
+        .cloned()
+        .ok_or_else(|| LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration))
 }
 
 fn lower_filter_predicate(
@@ -714,7 +709,7 @@ fn lower_filter_predicate(
         ))),
         operator => {
             let value = predicate.value.ok_or_else(|| {
-                LoweringError::new("comparison filter predicate requires a literal")
+                LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
             })?;
             let literal = RelationalExpression::Literal(lower_filter_literal(value));
             let column = Box::new(column);
@@ -759,7 +754,7 @@ fn relational_transform_node(
             matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
         })
         .map(|(address, _)| address.clone())
-        .ok_or_else(|| LoweringError::new("relational input 'source' was not materialized"))?;
+        .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
     let result = context
         .outputs
         .iter()
@@ -767,7 +762,7 @@ fn relational_transform_node(
             matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
         })
         .map(|(address, _)| address.clone())
-        .ok_or_else(|| LoweringError::new("relational output 'result' was not materialized"))?;
+        .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
     relational_node(
         context,
         vec![
@@ -804,7 +799,7 @@ impl NodeLowerer for RenameLowerer {
                 matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
             })
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("rename input 'source' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         let result = context
             .outputs
             .iter()
@@ -812,7 +807,7 @@ impl NodeLowerer for RenameLowerer {
                 matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
             })
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("rename output 'result' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         relational_node(
             context,
             vec![
@@ -847,10 +842,9 @@ fn rename_parameter(
     let parameter_key = lowering_parameter_key(key)?;
     context
         .parameters
-        .get(&parameter_key)
-        .and_then(serde_json::Value::as_str)
+        .string(&parameter_key)
         .map(Into::into)
-        .ok_or_else(|| LoweringError::new(format!("rename parameter '{key}' must be a string")))
+        .ok_or_else(|| LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration))
 }
 
 struct LimitLowerer;
@@ -858,14 +852,12 @@ struct LimitLowerer;
 impl NodeLowerer for LimitLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
         let key = lowering_parameter_key("rows")?;
-        let rows = context
-            .parameters
-            .get(&key)
-            .and_then(serde_json::Value::as_u64)
-            .filter(|rows| (1..=1_000_000).contains(rows))
-            .ok_or_else(|| {
-                LoweringError::new("limit parameter 'rows' must be between 1 and 1000000")
-            })?;
+        let rows = context.parameters.int64(&key).ok_or_else(|| {
+            LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
+        })?;
+        let rows = u64::try_from(rows).map_err(|_| {
+            LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
+        })?;
         let input = context
             .inputs
             .iter()
@@ -873,7 +865,7 @@ impl NodeLowerer for LimitLowerer {
                 matches!(&address.port, PortRef::Declared { key } if key.as_str() == "source")
             })
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("limit input 'source' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         let result = context
             .outputs
             .iter()
@@ -881,7 +873,7 @@ impl NodeLowerer for LimitLowerer {
                 matches!(&address.port, PortRef::Declared { key } if key.as_str() == "result")
             })
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("limit output 'result' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         relational_node(
             context,
             vec![
@@ -919,10 +911,10 @@ fn relational_node(
     Ok(LoweredNode {
         kernel: LoweredKernel::Relational(RelationalNodeFragment {
             backend: RelationalBackendId::new("relational.default")
-                .map_err(|error| LoweringError::new(error.to_string()))?,
+                .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
             fragment: crate::node_system::compiler::relational::RelationalFragment {
                 id: RelationalFragmentId::new(format!("node.{}", context.node_id))
-                    .map_err(|error| LoweringError::new(error.to_string()))?,
+                    .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
                 operators: operators.into_boxed_slice(),
                 root,
             },
@@ -930,7 +922,7 @@ fn relational_node(
             metadata,
         }),
         parameters: CompiledParameterHandle::new(format!("node.{}", context.node_id))
-            .map_err(|error| LoweringError::new(error.to_string()))?,
+            .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
     })
 }
 

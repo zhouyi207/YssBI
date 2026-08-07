@@ -4,7 +4,8 @@ use super::builtin::{
 use super::localization::Message;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, KernelFragment as LoweredKernelFragment, LoweredKernel,
-    LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    LoweredNode, LoweringContext, LoweringError, LoweringInvariant, NodeImplementation,
+    NodeLowerer,
 };
 use crate::node_system::document::PortRef;
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
@@ -613,11 +614,11 @@ impl NodeLowerer for DistributionLowerer {
             .iter()
             .find(|(address, _)| matches!(&address.port, PortRef::Declared { key } if key.as_str() == "samples"))
             .map(|(address, _)| address.clone())
-            .ok_or_else(|| LoweringError::new("distribution output 'samples' was not materialized"))?;
+            .ok_or_else(|| LoweringError::internal(LoweringInvariant::MissingMaterializedPort))?;
         Ok(LoweredNode {
             kernel: LoweredKernel::Kernel(LoweredKernelFragment {
                 kernel: KernelHandle::new(self.kernel)
-                    .map_err(|error| LoweringError::new(error.to_string()))?,
+                    .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
                 metadata: FragmentMetadata {
                     effect: EffectSemantics::None,
                     resources: Box::new([]),
@@ -629,7 +630,7 @@ impl NodeLowerer for DistributionLowerer {
                 },
             }),
             parameters: CompiledParameterHandle::new(format!("node.{}", context.node_id))
-                .map_err(|error| LoweringError::new(error.to_string()))?,
+                .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
         })
     }
 }

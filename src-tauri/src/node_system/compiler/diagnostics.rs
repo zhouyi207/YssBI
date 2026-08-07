@@ -480,14 +480,14 @@ define_compiler_diagnostics! {
         en: "Function ABI member {field_name} is unexpected.",
         zh: "函数 ABI 成员 {field_name} 不符合预期。",
     },
-    FunctionAbiSignatureMissing { function_path } => {
-        code: "compiler.function.abi.signature_missing",
-        message_key: "diagnostics.compiler.function.abi.signature_missing",
-        severity: Error,
-        en: "Function ABI signature is missing for {function_path}.",
-        zh: "函数 {function_path} 缺少 ABI 签名。",
-    },
 
+    ResourceResolutionFailed { resource_key, reason } => {
+        code: "compiler.resource.resolution_failed",
+        message_key: "diagnostics.compiler.resource.resolution_failed",
+        severity: Error,
+        en: "Resource {resource_key} could not be resolved: {reason}.",
+        zh: "无法解析资源 {resource_key}：{reason}。",
+    },
     FunctionAbiTargetMismatch { function_path } => {
         code: "compiler.function.abi_target_mismatch",
         message_key: "diagnostics.compiler.function.abi_target_mismatch",
@@ -508,6 +508,13 @@ define_compiler_diagnostics! {
         severity: Error,
         en: "Input {port} does not allow a literal binding.",
         zh: "输入 {port} 不允许字面量绑定。",
+    },
+    InputLiteralInvalid { port } => {
+        code: "compiler.input.literal_invalid",
+        message_key: "diagnostics.compiler.input.literal_invalid",
+        severity: Error,
+        en: "Input {port} has an invalid persisted literal.",
+        zh: "输入 {port} 的持久化字面量无效。",
     },
     InputNotInput { port } => {
         code: "compiler.input.not_input",
@@ -579,12 +586,26 @@ define_compiler_diagnostics! {
         en: "Lowered operation violates its effect contract.",
         zh: "降低后的操作违反其效果契约。",
     },
-    LoweringFailed { node_type } => {
-        code: "compiler.lowering.failed",
-        message_key: "diagnostics.compiler.lowering.failed",
+    LoweringDeadlineExceeded { node_type } => {
+        code: "compiler.lowering.deadline_exceeded",
+        message_key: "diagnostics.compiler.lowering.deadline_exceeded",
         severity: Error,
-        en: "Node lowering failed for {node_type}.",
-        zh: "节点类型 {node_type} 降低失败。",
+        en: "Node lowering exceeded its deadline for {node_type}.",
+        zh: "节点类型 {node_type} 的降低超过截止时间。",
+    },
+    LoweringInternalInvariant { node_type } => {
+        code: "compiler.lowering.internal_invariant",
+        message_key: "diagnostics.compiler.lowering.internal_invariant",
+        severity: Error,
+        en: "Node lowering hit an internal invariant for {node_type}.",
+        zh: "节点类型 {node_type} 的降低触发内部不变量。",
+    },
+    LoweringResourceExhausted { node_type } => {
+        code: "compiler.lowering.resource_exhausted",
+        message_key: "diagnostics.compiler.lowering.resource_exhausted",
+        severity: Error,
+        en: "Node lowering exhausted resources for {node_type}.",
+        zh: "节点类型 {node_type} 的降低耗尽资源。",
     },
     LoweringImplementationMissing { node_type } => {
         code: "compiler.lowering.implementation_missing",
@@ -600,13 +621,7 @@ define_compiler_diagnostics! {
         en: "Lowered resource {resource_id} conflicts with another resource.",
         zh: "降低后的资源 {resource_id} 与其他资源冲突。",
     },
-    LoweringResourceId { resource_id } => {
-        code: "compiler.lowering.resource_id",
-        message_key: "diagnostics.compiler.lowering.resource_id",
-        severity: Error,
-        en: "Lowered resource ID {resource_id} is invalid.",
-        zh: "降低后的资源 ID {resource_id} 无效。",
-    },
+
     LoweringResultDuplicate { result_name } => {
         code: "compiler.lowering.result_duplicate",
         message_key: "diagnostics.compiler.lowering.result_duplicate",
@@ -1431,7 +1446,7 @@ mod tests {
                 BTreeMap::from([(Box::from("port"), Box::from("node/input"))]),
             ),
             (
-                CompilerDiagnostic::LoweringFailed {
+                CompilerDiagnostic::LoweringInternalInvariant {
                     node_type: "test.node".into(),
                 }
                 .into_node(DiagnosticLocation::Graph),

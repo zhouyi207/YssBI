@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { portAddressKey } from '@/features/domain/editorProjection';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import * as projectLifecycleAuthority from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -153,6 +154,43 @@ describe('requestPinPreview', () => {
     )).toMatchObject({ status: 'ready', sourceId: 'source-1' });
   });
 
+  it('settles capture failure as a pure stale lifecycle rejection', async () => {
+    const { outputKey } = installGraph();
+    clearProjectLifecycle();
+    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
+    const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
+
+    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'stale-project-lifecycle',
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
+    expect(getExecutionState).not.toHaveBeenCalled();
+  });
+
+  it('settles replacement before the pre-invoke assertion without side effects', async () => {
+    const { outputKey } = installGraph();
+    const capture = projectLifecycleAuthority.captureProjectIdentity;
+    vi.spyOn(projectLifecycleAuthority, 'captureProjectIdentity').mockImplementation(() => {
+      const identity = capture();
+      startProjectLifecycle('replacement-project-instance');
+      return identity;
+    });
+    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
+    const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
+
+    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'stale-project-lifecycle',
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
+    expect(getExecutionState).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       name: 'nested function graph',
@@ -232,18 +270,6 @@ describe('requestPinPreview', () => {
         return { graphPath: eventGraphPath, pinId: 'missing', reason: 'missing-resource' } as const;
       },
     },
-    {
-      name: 'stale project lifecycle',
-      prepare: () => {
-        const graph = installGraph();
-        clearProjectLifecycle();
-        return {
-          graphPath: eventGraphPath,
-          pinId: graph.outputKey,
-          reason: 'stale-project-lifecycle',
-        } as const;
-      },
-    },
   ])('rejects $name before IPC', async ({ prepare }) => {
     const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
     const request = prepare();
@@ -315,73 +341,96 @@ describe('requestPinPreview', () => {
     });
   });
 
-  it('ignores delayed events and completion after project lifecycle replacement', async () => {
-    const { outputKey, outputAddress } = installGraph();
-    useExecutionStore.getState().startExecution(eventGraphPath);
-    useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
-    let emit!: (event: RunEvent) => void;
-    let resolveExecution!: (value: { runId: string }) => void;
-    const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
-      (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
-        emit = onEvent ?? (() => undefined);
-        resolveExecution = resolve;
-      }),
-    );
+  it.each(['resolution', 'rejection'] as const)(
+    'leaves a same-generation replacement preview untouched after stale %s',
+    async (settlement) => {
+      const { outputKey, outputAddress } = installGraph();
+      const originalStore = useExecutionStore.getState();
+      const completePinPreview = vi.spyOn(originalStore, 'completePinPreview');
+      const failPinPreview = vi.spyOn(originalStore, 'failPinPreview');
+      const removePinPreview = vi.spyOn(originalStore, 'removePinPreview');
+      const setActiveRunId = vi.spyOn(originalStore, 'setActiveRunId');
+      let emit!: (event: RunEvent) => void;
+      let resolveExecution!: (value: { runId: string }) => void;
+      let rejectExecution!: (reason: unknown) => void;
+      const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
+        (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve, reject) => {
+          emit = onEvent ?? (() => undefined);
+          resolveExecution = resolve;
+          rejectExecution = reject;
+        }),
+      );
 
-    const preview = requestPinPreview(eventGraphPath, outputKey);
-    expect(execute).toHaveBeenCalledWith(
-      frontendProjectInstanceId,
-      eventGraphPath,
-      expect.objectContaining({ type: 'outputs' }),
-      expect.any(Function),
-    );
-    startProjectLifecycle('project-session-2');
-    emit(runEvent({ type: 'runStarted' }));
-    emit(runEvent({
-      type: 'outputReady',
-      output: { graphPath: eventGraphPath, port: outputAddress },
-      sourceId: 'source-stale-project',
-    }));
-    emit(runEvent({ type: 'runCompleted' }));
-    resolveExecution({ runId: 'run-1' });
+      const preview = requestPinPreview(eventGraphPath, outputKey);
+      const cacheKey = pinPreviewCacheKey(eventGraphPath, outputAddress);
+      const originalGeneration = originalStore.getGraph(eventGraphPath).pinPreviews.get(cacheKey)?.generation;
+      expect(execute).toHaveBeenCalledWith(
+        frontendProjectInstanceId,
+        eventGraphPath,
+        expect.objectContaining({ type: 'outputs' }),
+        expect.any(Function),
+      );
 
-    await expect(preview).resolves.toEqual({
-      status: 'rejected',
-      reason: 'stale-project-lifecycle',
-    });
-    expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
-      pinPreviewCacheKey(eventGraphPath, outputAddress),
-    )).toBeUndefined();
-    expect(useExecutionStore.getState().getGraph(eventGraphPath)).toMatchObject({
-      status: 'running',
-      runId: 'ordinary-run',
-    });
-  });
+      startProjectLifecycle('project-session-2');
+      useExecutionStore.setState({
+        graphs: {},
+        previewGeneration: 0,
+        playbackGraphPath: null,
+        isPlaying: false,
+      });
+      const replacementStore = useExecutionStore.getState();
+      replacementStore.startExecution(eventGraphPath);
+      replacementStore.setActiveRunId(eventGraphPath, 'replacement-run');
+      const replacementGeneration = replacementStore.beginPinPreview(eventGraphPath, outputAddress);
+      expect(replacementGeneration).toBe(originalGeneration);
+      const replacementGraphSnapshot = structuredClone(replacementStore.getGraph(eventGraphPath));
+      completePinPreview.mockClear();
+      failPinPreview.mockClear();
+      removePinPreview.mockClear();
+      setActiveRunId.mockClear();
+      vi.mocked(uiStore.showToast).mockClear();
+      const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
 
-  it.each([
-    {
-      name: 'project replacement',
-      makeStale: () => startProjectLifecycle('project-session-2'),
+      if (settlement === 'resolution') {
+        emit(runEvent({ type: 'runStarted' }));
+        emit(runEvent({
+          type: 'outputReady',
+          output: { graphPath: eventGraphPath, port: outputAddress },
+          sourceId: 'source-stale-project',
+        }));
+        emit(runEvent({ type: 'runCompleted' }));
+        resolveExecution({ runId: 'run-1' });
+      } else {
+        rejectExecution({ code: 'stale_request', message: 'old request rejected' });
+      }
+
+      await expect(preview).resolves.toEqual({
+        status: 'rejected',
+        reason: 'stale-project-lifecycle',
+      });
+      expect(getExecutionState).not.toHaveBeenCalled();
+      expect(completePinPreview).not.toHaveBeenCalled();
+      expect(failPinPreview).not.toHaveBeenCalled();
+      expect(removePinPreview).not.toHaveBeenCalled();
+      expect(setActiveRunId).not.toHaveBeenCalled();
+      expect(uiStore.showToast).not.toHaveBeenCalled();
+      expect(replacementStore.getGraph(eventGraphPath)).toEqual(replacementGraphSnapshot);
     },
-    {
-      name: 'projection replacement',
-      makeStale: () => {
-        const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
-        useGraphDataStore.setState({
-          graphEntities: {
-            ...useGraphDataStore.getState().graphEntities,
-            [eventGraphPath]: { ...current, pins: { ...current.pins } },
-          },
-        });
-      },
-    },
-  ])('cleans pending preview when command rejection follows $name', async ({ makeStale }) => {
+  );
+
+  it('cleans its pending generation when command rejection follows projection replacement', async () => {
     const { outputKey, outputAddress } = installGraph();
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
     const commandError = { code: 'test_stop', message: 'stale after invoke' };
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(async () => {
-      makeStale();
+      const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
+      useGraphDataStore.setState({
+        graphEntities: {
+          ...useGraphDataStore.getState().graphEntities,
+          [eventGraphPath]: { ...current, pins: { ...current.pins } },
+        },
+      });
       throw commandError;
     });
 

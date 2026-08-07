@@ -1,3 +1,7 @@
+#[cfg(test)]
+use crate::application::database::{
+    cleanup_export_temporary_file, export_database_for_project_with_before_publish,
+};
 use crate::error::AppError;
 use crate::event::{Event, EventProject, ResourceMutationCommandResultDto, emit_project_event};
 use crate::node_system::document::{OperationId, ResourceRevision};
@@ -130,6 +134,107 @@ struct DatabaseRowsPayload {
     row_ids: Vec<i64>,
 }
 
+fn database_project_error(error: crate::project::ProjectFilesystemError) -> AppError {
+    AppError::new(error.code(), error.to_string())
+}
+
+fn serialize_database_value<T: serde::Serialize>(value: T) -> Result<serde_json::Value, AppError> {
+    serde_json::to_value(value)
+        .map_err(|error| AppError::new("database_serialization_failed", error.to_string()))
+}
+
+fn with_database_read_for_project<R>(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    read: impl FnOnce(&mut crate::database::DatabaseInstance) -> Result<R, String>,
+) -> Result<R, AppError> {
+    state
+        .with_database_snapshot_for_project(project_instance_id, id, read)
+        .map_err(database_project_error)?
+        .map_err(|message| AppError::new("database_computation_failed", message))
+}
+
+fn get_database_meta_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let result = with_database_read_for_project(state, project_instance_id, id, |database| {
+        crate::application::database::get_database_meta_from_instance(id, database)
+    })?;
+    serialize_database_value(result)
+}
+
+fn get_database_rows_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<serde_json::Value, AppError> {
+    let page = with_database_read_for_project(state, project_instance_id, id, |database| {
+        database
+            .query_page_with_rowids(offset, limit)
+            .map_err(|error| format!("Failed to query database page: {error}"))
+    })?;
+    serialize_database_value(DatabaseRowsPayload {
+        rows: dataframe_to_row_matrix(&page.dataframe),
+        row_ids: page.row_ids,
+    })
+}
+
+fn get_column_stats_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let stats = with_database_read_for_project(state, project_instance_id, id, |database| {
+        database
+            .compute_column_stats()
+            .map_err(|error| error.to_string())
+    })?;
+    serialize_database_value(stats)
+}
+
+fn get_column_distribution_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let distributions =
+        with_database_read_for_project(state, project_instance_id, id, |database| {
+            database
+                .compute_column_distributions()
+                .map_err(|error| error.to_string())
+        })?;
+    serialize_database_value(distributions)
+}
+
+fn get_dataset_overview_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let overview = with_database_read_for_project(state, project_instance_id, id, |database| {
+        database
+            .compute_dataset_overview()
+            .map_err(|error| error.to_string())
+    })?;
+    serialize_database_value(overview)
+}
+
+fn get_edit_state_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let edit_state = with_database_read_for_project(state, project_instance_id, id, |database| {
+        Ok(database.edit_state())
+    })?;
+    serialize_database_value(edit_state)
+}
+
 #[tauri::command]
 pub async fn load_database(
     app: AppHandle,
@@ -197,10 +302,10 @@ pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, AppErro
 #[tauri::command]
 pub fn get_database_meta(
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let result = crate::application::database::get_database_meta(state.inner(), &id)?;
-    serde_json::to_value(result).map_err(AppError::internal)
+    get_database_meta_for_project(state.inner(), &project_instance_id, &id)
 }
 
 #[tauri::command]
@@ -272,74 +377,49 @@ pub fn rename_database(
 #[tauri::command]
 pub fn get_database_rows(
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, AppError> {
-    let page = state.with_database_snapshot(&id, |db| {
-        db.query_page_with_rowids(offset, limit)
-            .map_err(|e| format!("Failed to query database page: {}", e))
-    })?;
-
-    let payload = DatabaseRowsPayload {
-        rows: dataframe_to_row_matrix(&page.dataframe),
-        row_ids: page.row_ids,
-    };
-    serde_json::to_value(payload).map_err(AppError::internal)
+    get_database_rows_for_project(state.inner(), &project_instance_id, &id, offset, limit)
 }
 
 #[tauri::command]
 pub async fn get_column_stats(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = state.inner().clone();
-    let stats = run_on_blocking_pool(move || {
-        state
-            .with_database_snapshot(&id, |db| {
-                db.compute_column_stats().map_err(|e| e.to_string())
-            })
-            .map_err(AppError::from)
-    })
-    .await?;
-
-    serde_json::to_value(stats).map_err(AppError::internal)
+    run_on_blocking_pool(move || get_column_stats_for_project(&state, &project_instance_id, &id))
+        .await
 }
 
 #[tauri::command]
 pub async fn get_column_distribution(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = state.inner().clone();
-    let dists = run_on_blocking_pool(move || {
-        state
-            .with_database_snapshot(&id, |db| {
-                db.compute_column_distributions().map_err(|e| e.to_string())
-            })
-            .map_err(AppError::from)
+    run_on_blocking_pool(move || {
+        get_column_distribution_for_project(&state, &project_instance_id, &id)
     })
-    .await?;
-
-    serde_json::to_value(dists).map_err(AppError::internal)
+    .await
 }
 
 #[tauri::command]
 pub async fn get_dataset_overview(
     state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = state.inner().clone();
-    let overview = run_on_blocking_pool(move || {
-        state
-            .with_database_snapshot(&id, |db| {
-                db.compute_dataset_overview().map_err(|e| e.to_string())
-            })
-            .map_err(AppError::from)
+    run_on_blocking_pool(move || {
+        get_dataset_overview_for_project(&state, &project_instance_id, &id)
     })
-    .await?;
-
-    serde_json::to_value(overview).map_err(AppError::internal)
+    .await
 }
 
 // ==================== Edit Commands ====================
@@ -561,36 +641,59 @@ pub fn save_database_changes(
 /// Export the current dataset view (including unsaved in-memory edits) to an external file.
 /// Use `save_database_changes` to persist edits into `project.duckdb`.
 #[tauri::command]
-pub fn export_database(
-    state: State<ProjectState>,
+pub async fn export_database(
+    state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
     path: String,
     format: String,
 ) -> Result<(), AppError> {
-    let view = state
-        .access_database(&id, crate::database::DatabaseAccess::Execution)
-        .map_err(AppError::internal)?;
-
-    let mut df = view.dataframe;
-    Ok(crate::database::export_dataframe(&mut df, &path, &format)?)
+    let state = state.inner().clone();
+    run_on_blocking_pool(move || {
+        crate::application::database::export_database_for_project(
+            &state,
+            &project_instance_id,
+            &id,
+            &path,
+            &format,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 pub fn get_edit_state(
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, AppError> {
-    let edit_state = state.with_database_snapshot(&id, |db| Ok(db.edit_state()))?;
-    serde_json::to_value(edit_state).map_err(AppError::internal)
+    get_edit_state_for_project(state.inner(), &project_instance_id, &id)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{DatabaseDecl, DatabaseEngine};
+    use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseState};
     use crate::event::{Event, EventProject};
     use crate::node_system::document::{OperationId, ResourceRevision};
     use crate::project::ProjectData;
+
+    struct FailingSerialize;
+
+    impl serde::Serialize for FailingSerialize {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("injected serialization failure"))
+        }
+    }
+
+    #[test]
+    fn database_serialization_errors_are_typed() {
+        let error = serialize_database_value(FailingSerialize).unwrap_err();
+        assert_eq!(error.code, "database_serialization_failed");
+    }
 
     fn assert_exact_event<T>(
         events: &[Event],
@@ -604,6 +707,239 @@ mod tests {
             panic!("database command emitted a non-canonical event")
         };
         assert_eq!(emitted, &result.mutation);
+    }
+
+    fn install_export_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
+        let mut project = ProjectData::new();
+        let decl = DatabaseDecl {
+            id: "sales".into(),
+            engine: DatabaseEngine::InMemory {
+                name: "sales".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: Some(project_name.into()),
+        };
+        project.databases.insert("sales".into(), decl.clone());
+        state.activate_project_fixture(project_name.into(), project);
+        let dataframe = polars::df!("amount" => &[1_i64, 2_i64]).unwrap();
+        state.project_store.write().unwrap().databases.insert(
+            "sales".into(),
+            crate::database::DatabaseInstance {
+                decl,
+                state: crate::database::DatabaseState::Loaded {
+                    dataframe: std::sync::Arc::new(dataframe.clone()),
+                    original: std::sync::Arc::new(dataframe),
+                    history: crate::database::EditHistory::new(),
+                },
+            },
+        );
+        state.capture_project_session().unwrap().instance_id
+    }
+
+    fn assert_only_destination_exists(root: &std::path::Path, destination: &std::path::Path) {
+        let entries = std::fs::read_dir(root)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        assert_eq!(entries, vec![destination.to_path_buf()]);
+    }
+
+    #[test]
+    fn database_reads_reject_stale_project_identity() {
+        let state = ProjectState::new();
+        let stale = install_export_database(&state, "read-original");
+        install_export_database(&state, "read-replacement");
+
+        let errors = [
+            get_database_meta_for_project(&state, &stale, "sales").unwrap_err(),
+            get_database_rows_for_project(&state, &stale, "sales", 0, 10).unwrap_err(),
+            get_column_stats_for_project(&state, &stale, "sales").unwrap_err(),
+            get_column_distribution_for_project(&state, &stale, "sales").unwrap_err(),
+            get_dataset_overview_for_project(&state, &stale, "sales").unwrap_err(),
+            get_edit_state_for_project(&state, &stale, "sales").unwrap_err(),
+        ];
+
+        for error in errors {
+            assert_eq!(error.code, "stale_project_lifecycle");
+        }
+    }
+
+    #[test]
+    fn database_export_rejects_replacement_before_publication() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-database-export-lifecycle-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let destination = root.join("sales.csv");
+        std::fs::write(&destination, b"sentinel").unwrap();
+        let state = ProjectState::new();
+        let stale = install_export_database(&state, "export-original");
+        install_export_database(&state, "export-replacement");
+
+        let before_entry = export_database_for_project_with_before_publish(
+            &state,
+            &stale,
+            "sales",
+            destination.to_string_lossy().as_ref(),
+            "csv",
+            |_| {},
+            |_| {},
+        );
+        assert_eq!(before_entry.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
+        assert_only_destination_exists(&root, &destination);
+
+        let current = state.capture_project_session().unwrap().instance_id;
+        let replacement_state = state.clone();
+        let before_publication = export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            destination.to_string_lossy().as_ref(),
+            "csv",
+            move |_| {
+                install_export_database(&replacement_state, "export-final-replacement");
+            },
+            |_| {},
+        );
+        assert_eq!(
+            before_publication.unwrap_err().code,
+            "stale_project_lifecycle"
+        );
+        assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
+        assert_only_destination_exists(&root, &destination);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn database_export_publication_wins_before_replacement_activation() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-database-export-publication-wins-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let destination = root.join("sales.csv");
+        std::fs::write(&destination, b"sentinel").unwrap();
+        let state = ProjectState::new();
+        let current = install_export_database(&state, "export-publication-current");
+        let (observed_tx, observed_rx) = std::sync::mpsc::channel();
+        let observed_destination = destination.clone();
+        state.set_project_activation_test_hook(std::sync::Arc::new(move || {
+            observed_tx
+                .send(std::fs::read(&observed_destination).unwrap())
+                .unwrap();
+        }));
+        let activation = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let activation_for_hook = std::sync::Arc::clone(&activation);
+        let replacement_state = state.clone();
+
+        export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            destination.to_string_lossy().as_ref(),
+            "csv",
+            |_| {},
+            move |_| {
+                *activation_for_hook.lock().unwrap() = Some(std::thread::spawn(move || {
+                    install_export_database(&replacement_state, "export-publication-replacement");
+                }));
+            },
+        )
+        .unwrap();
+        activation.lock().unwrap().take().unwrap().join().unwrap();
+
+        let published = std::fs::read(&destination).unwrap();
+        assert_ne!(published, b"sentinel");
+        assert_eq!(observed_rx.recv().unwrap(), published);
+        assert_only_destination_exists(&root, &destination);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn database_export_returns_stable_stage_errors_and_cleans_temporary_output() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-database-export-stage-errors-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        let current = install_export_database(&state, "export-errors");
+        let destination = root.join("sales.csv");
+
+        let serialization = export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            destination.to_string_lossy().as_ref(),
+            "unsupported",
+            |_| {},
+            |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(serialization.code, "database_export_serialization_failed");
+        assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+
+        let missing_parent = root.join("missing").join("sales.csv");
+        let reservation = export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            missing_parent.to_string_lossy().as_ref(),
+            "csv",
+            |_| {},
+            |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(reservation.code, "database_export_temp_reservation_failed");
+
+        let blocked_destination = root.join("blocked.csv");
+        std::fs::create_dir(&blocked_destination).unwrap();
+        let publication = export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            blocked_destination.to_string_lossy().as_ref(),
+            "csv",
+            |_| {},
+            |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(publication.code, "database_export_publication_failed");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+
+        state
+            .project_store
+            .write()
+            .unwrap()
+            .databases
+            .get_mut("sales")
+            .unwrap()
+            .state = DatabaseState::Failed {
+            error: "broken".into(),
+        };
+        let computation = export_database_for_project_with_before_publish(
+            &state,
+            &current,
+            "sales",
+            destination.to_string_lossy().as_ref(),
+            "csv",
+            |_| {},
+            |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(computation.code, "database_computation_failed");
+
+        let cleanup_target = root.join("cleanup-target");
+        std::fs::create_dir(&cleanup_target).unwrap();
+        std::fs::write(cleanup_target.join("child"), b"keep").unwrap();
+        let cleanup = cleanup_export_temporary_file(&cleanup_target).unwrap_err();
+        assert_eq!(cleanup.code, "database_export_cleanup_failed");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

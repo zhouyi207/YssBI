@@ -68,7 +68,6 @@ impl ProjectState {
             Self::publish_variable_cache(&mut store, &id, cache);
         }
         publication.advance_authority_generation();
-        self.invalidate_all_compile_products();
         Ok(())
     }
 
@@ -125,7 +124,6 @@ impl ProjectState {
             ),
         );
         publication.advance_authority_generation();
-        self.invalidate_all_compile_products();
         Ok(committed)
     }
 
@@ -153,7 +151,6 @@ impl ProjectState {
             );
             remove_variable_cache(&mut store, variable_id);
             publication.advance_authority_generation();
-            self.invalidate_all_compile_products();
         }
         Ok(removed)
     }
@@ -225,14 +222,23 @@ impl ProjectState {
         self.validate_variable_staging_basis(&publication, &basis)?;
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
+        let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_project_operational()?;
         if !data.variables.contains_key(variable_id) {
             return Ok(None);
         }
         data.variables.insert(*variable_id, updated.clone());
         Self::publish_variable_cache(&mut store, variable_id, cache);
+        let revision = revisions
+            .get(variable_id)
+            .map(|entry| entry.revision)
+            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+            .next();
+        revisions.insert(
+            *variable_id,
+            crate::project::project_state::VariableRevisionEntry::present(revision),
+        );
         publication.advance_authority_generation();
-        self.invalidate_all_compile_products();
         Ok(Some(updated))
     }
 }

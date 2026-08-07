@@ -15,31 +15,82 @@ pub use model::{
 pub use validation::RegistryValidationError;
 
 use crate::node_system::protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct PreparedNominalValue {
+    type_id: TypeId,
+    codec_identity: TypeId,
+    codec_version: u32,
+    value: Arc<dyn Any + Send + Sync>,
+}
+
+impl PreparedNominalValue {
+    pub fn type_id(&self) -> &TypeId {
+        &self.type_id
+    }
+
+    pub fn codec_identity(&self) -> &TypeId {
+        &self.codec_identity
+    }
+
+    pub const fn codec_version(&self) -> u32 {
+        self.codec_version
+    }
+
+    pub fn downcast_ref<T: Any + Send + Sync>(&self) -> Option<&T> {
+        self.value.downcast_ref()
+    }
+}
+
+impl std::fmt::Debug for PreparedNominalValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreparedNominalValue")
+            .field("type_id", &self.type_id)
+            .field("codec_identity", &self.codec_identity)
+            .field("codec_version", &self.codec_version)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone)]
 pub struct NominalParameterValidator {
     identity: TypeId,
     version: u32,
-    validate: Arc<dyn Fn(&serde_json::Value) -> Result<(), String> + Send + Sync>,
+    prepare:
+        Arc<dyn Fn(&serde_json::Value) -> Result<Arc<dyn Any + Send + Sync>, String> + Send + Sync>,
 }
 
 impl NominalParameterValidator {
     fn new(
         identity: TypeId,
         version: u32,
-        validate: impl Fn(&serde_json::Value) -> Result<(), String> + Send + Sync + 'static,
+        prepare: impl Fn(&serde_json::Value) -> Result<Arc<dyn Any + Send + Sync>, String>
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         Self {
             identity,
             version,
-            validate: Arc::new(validate),
+            prepare: Arc::new(prepare),
         }
     }
 
-    fn validate(&self, value: &serde_json::Value) -> Result<(), String> {
-        (self.validate)(value)
+    fn prepare(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Result<PreparedNominalValue, String> {
+        Ok(PreparedNominalValue {
+            type_id: type_id.clone(),
+            codec_identity: self.identity.clone(),
+            codec_version: self.version,
+            value: (self.prepare)(value)?,
+        })
     }
 }
 
@@ -67,9 +118,18 @@ impl NodeRegistry {
         id: &TypeId,
         value: &serde_json::Value,
     ) -> Option<Result<(), String>> {
+        self.prepare_nominal_parameter(id, value)
+            .map(|result| result.map(|_| ()))
+    }
+
+    pub fn prepare_nominal_parameter(
+        &self,
+        id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<PreparedNominalValue, String>> {
         self.nominal_validators
             .get(id)
-            .map(|validator| validator.validate(value))
+            .map(|validator| validator.prepare(id, value))
     }
 }
 
@@ -108,7 +168,32 @@ impl NodeRegistryBuilder {
         }
         self.nominal_validators.insert(
             id,
-            NominalParameterValidator::new(identity, version, validator),
+            NominalParameterValidator::new(identity, version, move |value| {
+                validator(value)?;
+                Ok(Arc::new(()))
+            }),
+        );
+        Ok(())
+    }
+
+    pub fn register_nominal_codec<T>(
+        &mut self,
+        id: TypeId,
+        identity: TypeId,
+        version: u32,
+        prepare: impl Fn(&serde_json::Value) -> Result<T, String> + Send + Sync + 'static,
+    ) -> Result<(), NodeRegistrationError>
+    where
+        T: Any + Send + Sync + 'static,
+    {
+        if self.nominal_validators.contains_key(&id) {
+            return Err(RegistryValidationError::DuplicateNominalValidator(id).into());
+        }
+        self.nominal_validators.insert(
+            id,
+            NominalParameterValidator::new(identity, version, move |value| {
+                prepare(value).map(|value| Arc::new(value) as Arc<dyn Any + Send + Sync>)
+            }),
         );
         Ok(())
     }

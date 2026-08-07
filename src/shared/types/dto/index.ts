@@ -9,7 +9,6 @@ export * from './database';
 export * from './project';
 export * from './graph';
 export * from './graphCommands';
-export * from './graphModel';
 export type * from './editorProjection';
 export * from './editorMutation';
 export * from './runEvent';

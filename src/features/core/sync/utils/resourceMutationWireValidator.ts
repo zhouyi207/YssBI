@@ -1,6 +1,7 @@
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type { ResourceDeltaDto } from '@/shared/types/dto/editorMutation';
 import { isRustDataValueWire } from '@/shared/types/dto/dataValue';
+import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -245,14 +246,10 @@ function isVariableResourceKey(value: unknown): value is string {
   return prefix === 'variables' && rest.length === 0 && isUuid(id);
 }
 
-function isGraphPath(value: unknown): value is string {
-  return typeof value === 'string' && inferGraphResourceKind(value) != null;
-}
-
 function isResourcePathMovePatch(value: unknown): boolean {
   return isRecord(value)
-    && isGraphPath(value.from)
-    && isGraphPath(value.to)
+    && isGraphResourcePath(value.from)
+    && isGraphResourcePath(value.to)
     && value.from !== value.to;
 }
 
@@ -282,7 +279,7 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
   if (!isRecord(value.resource) || !isRecord(value.payload)) return false;
   const { kind, key } = value.resource;
   if (kind === 'graph') {
-    return isGraphPath(key)
+    return isGraphResourcePath(key)
       && ((value.payload.kind === 'graph' && isGraphPatch(value.payload.patch))
         || (value.payload.kind === 'graph_resource_lifecycle'
           && isGraphResourceLifecyclePatch(value.payload.patch, key))
@@ -290,7 +287,7 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
           && isResourcePathMovePatch(value.payload.patch)));
   }
   if (kind === 'function') {
-    return isGraphPath(key)
+    return isGraphResourcePath(key)
       && value.payload.kind === 'function'
       && isFunctionPatch(value.payload.patch);
   }

@@ -104,6 +104,29 @@ const lifecycleOwnedNodeCommandIdentityFields = {
   execute_graph_document: 'projectInstanceId',
 } as const;
 
+const projectDatabaseIdentityFields = {
+  load_database: 'projectInstanceId',
+  delete_database: 'projectInstanceId',
+  rename_database: 'projectInstanceId',
+  get_database_meta: 'projectInstanceId',
+  get_database_rows: 'projectInstanceId',
+  get_column_stats: 'projectInstanceId',
+  get_column_distribution: 'projectInstanceId',
+  get_dataset_overview: 'projectInstanceId',
+  edit_cell: 'projectInstanceId',
+  add_row: 'projectInstanceId',
+  delete_rows: 'projectInstanceId',
+  add_column: 'projectInstanceId',
+  delete_column: 'projectInstanceId',
+  cast_column: 'projectInstanceId',
+  rename_column: 'projectInstanceId',
+  undo_edit: 'projectInstanceId',
+  redo_edit: 'projectInstanceId',
+  save_database_changes: 'projectInstanceId',
+  export_database: 'projectInstanceId',
+  get_edit_state: 'projectInstanceId',
+} as const;
+
 const activeProjectCommandIdentityFields = {
   get_localized_node_catalog: 'projectInstanceId',
   get_project_databases_variables: 'projectInstanceId',
@@ -129,6 +152,8 @@ const activeProjectCommandIdentityFields = {
   load_worksheet: 'projectInstanceId',
   save_worksheet: 'projectInstanceId',
   delete_worksheet: 'projectInstanceId',
+  get_plot_column_pair: 'projectInstanceId',
+  ...projectDatabaseIdentityFields,
   ...lifecycleOwnedNodeCommandIdentityFields,
 } as const;
 
@@ -180,32 +205,12 @@ const capabilityCommandExemptions = [
   'cancel_graph_run',
   'list_graph_traces',
   'get_run_trace',
+  // Task 8 source IDs are process-global, monotonic, and non-reusable capabilities.
   'get_result_source_descriptor',
   'get_result_source_value',
   'get_result_source_page',
   'release_result_source',
   'release_run_result_sources',
-  'load_database',
-  'delete_database',
-  'rename_database',
-  'get_database_meta',
-  'get_database_rows',
-  'get_column_stats',
-  'get_column_distribution',
-  'get_dataset_overview',
-  'edit_cell',
-  'add_row',
-  'delete_rows',
-  'add_column',
-  'delete_column',
-  'cast_column',
-  'rename_column',
-  'undo_edit',
-  'redo_edit',
-  'save_database_changes',
-  'export_database',
-  'get_edit_state',
-  'get_plot_column_pair',
   'submit_bayes_inference',
   'get_bayes_inference_status',
   'cancel_bayes_inference',
@@ -251,19 +256,94 @@ function objectLiteralFields(node: ts.Expression | undefined): string[] | null {
   });
 }
 
+function importDeclarationOf(
+  binding: ts.ImportSpecifier | ts.NamespaceImport,
+): ts.ImportDeclaration | null {
+  const importClause = ts.isImportSpecifier(binding)
+    ? binding.parent.parent
+    : binding.parent;
+  return ts.isImportClause(importClause)
+    && ts.isImportDeclaration(importClause.parent)
+    ? importClause.parent
+    : null;
+}
+
+function isTauriCoreImport(
+  binding: ts.ImportSpecifier | ts.NamespaceImport,
+): boolean {
+  const declaration = importDeclarationOf(binding);
+  return declaration !== null
+    && ts.isStringLiteral(declaration.moduleSpecifier)
+    && declaration.moduleSpecifier.text === '@tauri-apps/api/core';
+}
+
+function symbolHasTauriInvokeImport(symbol: ts.Symbol | undefined): boolean {
+  return symbol?.declarations?.some((declaration) =>
+    ts.isImportSpecifier(declaration)
+    && (declaration.propertyName ?? declaration.name).text === 'invoke'
+    && isTauriCoreImport(declaration)) ?? false;
+}
+
+function symbolHasTauriNamespaceImport(symbol: ts.Symbol | undefined): boolean {
+  return symbol?.declarations?.some((declaration) =>
+    ts.isNamespaceImport(declaration) && isTauriCoreImport(declaration)) ?? false;
+}
+
+function isTauriInvokeCall(
+  expression: ts.LeftHandSideExpression,
+  checker: ts.TypeChecker,
+): boolean {
+  if (ts.isIdentifier(expression)) {
+    return symbolHasTauriInvokeImport(checker.getSymbolAtLocation(expression));
+  }
+  return ts.isPropertyAccessExpression(expression)
+    && expression.name.text === 'invoke'
+    && symbolHasTauriNamespaceImport(checker.getSymbolAtLocation(expression.expression));
+}
+
 function serviceInvokes(sources: readonly ArchitectureSource[]): ServiceInvoke[] {
-  return sources.flatMap(({ path, source }) => {
-    const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+  const options: ts.CompilerOptions = {
+    jsx: ts.JsxEmit.ReactJSX,
+    noResolve: true,
+    target: ts.ScriptTarget.Latest,
+  };
+  const host = ts.createCompilerHost(options, true);
+  const virtualSources = new Map(sources.map(({ path, source }) => [
+    resolve(path).replace(/\\/g, '/'),
+    { path, source },
+  ]));
+  const defaultGetSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const fixture = virtualSources.get(resolve(fileName).replace(/\\/g, '/'));
+    if (!fixture) {
+      return defaultGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    }
+    const scriptKind = fixture.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    return ts.createSourceFile(fileName, fixture.source, languageVersion, true, scriptKind);
+  };
+  host.fileExists = (fileName) => virtualSources.has(resolve(fileName).replace(/\\/g, '/'))
+    || ts.sys.fileExists(fileName);
+  host.readFile = (fileName) => virtualSources.get(resolve(fileName).replace(/\\/g, '/'))?.source
+    ?? ts.sys.readFile(fileName);
+
+  const program = ts.createProgram({
+    rootNames: [...virtualSources.keys()],
+    options,
+    host,
+  });
+  const checker = program.getTypeChecker();
+  return program.getSourceFiles().flatMap((sourceFile) => {
+    const fixture = virtualSources.get(resolve(sourceFile.fileName).replace(/\\/g, '/'));
+    if (!fixture) return [];
     const invokes: ServiceInvoke[] = [];
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node)
-        && ts.isIdentifier(node.expression)
-        && node.expression.text === 'invoke'
+        && isTauriInvokeCall(node.expression, checker)
         && node.arguments.length > 0
         && ts.isStringLiteralLike(node.arguments[0])) {
         invokes.push({
           command: node.arguments[0].text,
-          path,
+          path: fixture.path,
           payloadFields: objectLiteralFields(node.arguments[1]),
         });
       }
@@ -272,6 +352,19 @@ function serviceInvokes(sources: readonly ArchitectureSource[]): ServiceInvoke[]
     visit(sourceFile);
     return invokes;
   });
+}
+
+function commandClassificationViolations(
+  registered: readonly string[],
+  identityRequired: readonly string[],
+  exemptions: readonly string[],
+): { duplicates: string[]; unclassified: string[]; staleClassifications: string[] } {
+  const classified = [...identityRequired, ...exemptions];
+  return {
+    duplicates: classified.filter((command, index) => classified.indexOf(command) !== index),
+    unclassified: registered.filter((command) => !classified.includes(command)),
+    staleClassifications: classified.filter((command) => !registered.includes(command)),
+  };
 }
 
 function activeProjectInvokeIdentityViolations(
@@ -288,37 +381,6 @@ function activeProjectInvokeIdentityViolations(
   });
 }
 
-function rustCommandSources(directory = resolve('src-tauri/src/commands')): ArchitectureSource[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return rustCommandSources(path);
-    if (extname(path) !== '.rs') return [];
-    return [{ path: relative(resolve('.'), path).replace(/\\/g, '/'), source: readFileSync(path, 'utf8') }];
-  });
-}
-
-function rustCommandSignature(
-  sources: readonly ArchitectureSource[],
-  command: string,
-): { path: string; signature: string } | null {
-  const declaration = new RegExp(`^pub\\s+(?:async\\s+)?fn\\s+${command}\\s*\\(`, 'm');
-  for (const { path, source } of sources) {
-    const match = declaration.exec(source);
-    if (!match) continue;
-    const parametersStart = source.indexOf('(', match.index);
-    let depth = 0;
-    for (let offset = parametersStart; offset < source.length; offset += 1) {
-      if (source[offset] === '(') depth += 1;
-      if (source[offset] === ')') depth -= 1;
-      if (depth === 0) return { path, signature: source.slice(parametersStart + 1, offset) };
-    }
-  }
-  return null;
-}
-
-function toSnakeCase(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-}
 
 function unwrapParentheses(expression: ts.Expression): ts.Expression {
   let current = expression;
@@ -624,14 +686,13 @@ describe('projectFilesystemContract', () => {
     const registered = registeredTauriCommands(
       readFileSync(resolve('src-tauri/src/lib.rs'), 'utf8'),
     );
-    const classified = [...activeProjectCommands, ...identityExemptCommands];
-    const duplicates = classified.filter((command, index) => classified.indexOf(command) !== index);
-    const unclassified = registered.filter((command) => !classified.includes(
-      command as typeof classified[number],
-    ));
-    const staleClassifications = classified.filter((command) => !registered.includes(command));
+    const violations = commandClassificationViolations(
+      registered,
+      activeProjectCommands,
+      identityExemptCommands,
+    );
 
-    expect({ duplicates, unclassified, staleClassifications }).toEqual({
+    expect(violations).toEqual({
       duplicates: [],
       unclassified: [],
       staleClassifications: [],
@@ -642,6 +703,7 @@ describe('projectFilesystemContract', () => {
     const invokes = serviceInvokes([{
       path: 'src/services/project/fixture.ts',
       source: `
+        import { invoke } from '@tauri-apps/api/core';
         // invoke('execute_graph_document', { projectInstanceId });
         invoke('execute_graph_document', { other: projectInstanceId });
       `,
@@ -654,6 +716,100 @@ describe('projectFilesystemContract', () => {
     }]);
   });
 
+  it('recognizes aliased and namespace Tauri invoke bindings', () => {
+    const path = 'src/services/project/boundInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+      import * as core from '@tauri-apps/api/core';
+      tauriInvoke('get_database_rows', { id, offset, limit });
+      core.invoke('edit_cell', { projectId: projectInstanceId, id, row, colName, value });
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+      edit_cell: 'projectInstanceId',
+    })).toEqual([
+      `${path}: get_database_rows missing projectInstanceId`,
+      `${path}: edit_cell missing projectInstanceId`,
+    ]);
+  });
+
+  it('ignores local invoke decoys that are not bound to Tauri core', () => {
+    const path = 'src/services/project/localInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      function invoke(_command: string, _payload: unknown) {}
+      const core = { invoke };
+      invoke('get_database_rows', { projectInstanceId, id, offset, limit });
+      core.invoke('get_database_rows', { projectInstanceId, id, offset, limit });
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+    })).toEqual(['missing service invoke: get_database_rows']);
+  });
+
+  it('checks every real Tauri invocation when valid and invalid calls are mixed', () => {
+    const path = 'src/services/project/mixedInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import { invoke } from '@tauri-apps/api/core';
+      invoke('get_database_rows', { projectInstanceId, id, offset, limit });
+      invoke('get_database_rows', { projectId: projectInstanceId, id, offset, limit });
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+    })).toEqual([
+      `${path}: get_database_rows missing projectInstanceId`,
+    ]);
+  });
+
+  it('ignores lexically shadowed named Tauri imports', () => {
+    const path = 'src/services/project/shadowedNamedInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+      function decoy(tauriInvoke: (command: string, payload: unknown) => void) {
+        tauriInvoke('get_database_rows', { projectInstanceId, id, offset, limit });
+      }
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+    })).toEqual(['missing service invoke: get_database_rows']);
+  });
+
+  it('ignores lexically shadowed Tauri namespace imports', () => {
+    const path = 'src/services/project/shadowedNamespaceInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import * as core from '@tauri-apps/api/core';
+      function decoy(core: { invoke(command: string, payload: unknown): void }) {
+        core.invoke('edit_cell', { projectInstanceId, id, row, colName, value });
+      }
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      edit_cell: 'projectInstanceId',
+    })).toEqual(['missing service invoke: edit_cell']);
+  });
+
+  it('checks real calls while ignoring mixed shadowed named and namespace calls', () => {
+    const path = 'src/services/project/mixedShadowedInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+      import * as core from '@tauri-apps/api/core';
+      tauriInvoke('get_database_rows', { projectInstanceId, id, offset, limit });
+      function namedDecoy(tauriInvoke: (command: string, payload: unknown) => void) {
+        tauriInvoke('get_database_rows', { id, offset, limit });
+      }
+      function namespaceDecoy(core: { invoke(command: string, payload: unknown): void }) {
+        core.invoke('get_database_rows', { id, offset, limit });
+      }
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+    })).toEqual([]);
+  });
+
   it('classifies localized catalog reads as active-project identity-required', () => {
     expect(activeProjectCommandIdentityFields).toMatchObject({
       get_localized_node_catalog: 'projectInstanceId',
@@ -662,8 +818,8 @@ describe('projectFilesystemContract', () => {
   });
 
   it.each([
-    ['removed', "invoke('get_localized_node_catalog', { locale: 'en-US' });"],
-    ['renamed', "invoke('get_localized_node_catalog', { projectId: projectInstanceId, locale: 'en-US' });"],
+    ['removed', "import { invoke } from '@tauri-apps/api/core'; invoke('get_localized_node_catalog', { locale: 'en-US' });"],
+    ['renamed', "import { invoke } from '@tauri-apps/api/core'; invoke('get_localized_node_catalog', { projectId: projectInstanceId, locale: 'en-US' });"],
   ])('detects %s localized catalog payload identity', (_, source) => {
     const path = 'src/services/nodeSystem/catalogMutationFixture.ts';
     const invokes = serviceInvokes([{ path, source }]);
@@ -675,29 +831,42 @@ describe('projectFilesystemContract', () => {
     ]);
   });
 
+  it.each([
+    ['removed get_database_rows identity', 'get_database_rows', "import { invoke } from '@tauri-apps/api/core'; invoke('get_database_rows', { id, offset, limit });"],
+    ['renamed get_database_rows identity', 'get_database_rows', "import { invoke } from '@tauri-apps/api/core'; invoke('get_database_rows', { projectId: projectInstanceId, id, offset, limit });"],
+    ['removed edit_cell identity', 'edit_cell', "import { invoke } from '@tauri-apps/api/core'; invoke('edit_cell', { id, row, colName, value });"],
+    ['renamed edit_cell identity', 'edit_cell', "import { invoke } from '@tauri-apps/api/core'; invoke('edit_cell', { projectId: projectInstanceId, id, row, colName, value });"],
+  ])('detects %s in database invoke policy', (_label, command, source) => {
+    const path = 'src/services/database/databaseMutationFixture.ts';
+    const violations = activeProjectInvokeIdentityViolations(
+      serviceInvokes([{ path, source }]),
+      { [command]: 'projectInstanceId' },
+    );
+
+    expect(violations).toEqual([
+      `${path}: ${command} missing projectInstanceId`,
+    ]);
+  });
+
+
+  it('detects get_database_meta incorrectly classified as capability-authorized', () => {
+    expect(commandClassificationViolations(
+      ['get_database_meta'],
+      ['get_database_meta'],
+      ['get_database_meta'],
+    )).toEqual({
+      duplicates: ['get_database_meta'],
+      unclassified: [],
+      staleClassifications: [],
+    });
+  });
+
   it('sends the required identity field in every active-project service invoke', () => {
     const invokes = serviceInvokes(productionSources(resolve('src/services')));
 
     expect(activeProjectInvokeIdentityViolations(invokes)).toEqual([]);
   });
 
-  it('requires direct identity parameters in the seven lifecycle-owned Rust commands', () => {
-    const sources = rustCommandSources();
-    const commands = Object.keys(lifecycleOwnedNodeCommandIdentityFields) as Array<
-      keyof typeof lifecycleOwnedNodeCommandIdentityFields
-    >;
-    const offenders = commands.flatMap((command) => {
-      const declaration = rustCommandSignature(sources, command);
-      if (declaration === null) return [`missing Rust command signature: ${command}`];
-      const identityParameter = toSnakeCase(lifecycleOwnedNodeCommandIdentityFields[command]);
-      return new RegExp(`\\b${identityParameter}\\s*:\\s*ProjectInstanceId\\b`)
-        .test(declaration.signature)
-        ? []
-        : [`${declaration.path}: ${command} missing required ${identityParameter}`];
-    });
-
-    expect(offenders).toEqual([]);
-  });
 
   it('contains no direct invoke outside services for project filesystem commands', () => {
     const commandPattern = new RegExp(activeProjectCommands.join('|')); 

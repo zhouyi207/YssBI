@@ -10,14 +10,14 @@ use tauri::{AppHandle, State};
 
 const DEFAULT_MAX_PLOT_POINTS: usize = 10_000;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotPoint {
     x: f64,
     y: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotColumnPairPayload {
     data: Vec<PlotPoint>,
@@ -27,25 +27,30 @@ pub struct PlotColumnPairPayload {
     y_format: String,
 }
 
+fn database_computation_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new("database_computation_failed", error.to_string())
+}
+
 fn series_to_plot_f64(s: &Series) -> Result<Series, AppError> {
     let dt = s.dtype();
     let casted = if matches!(dt, PDataType::Date) {
         s.cast(&PDataType::Int32)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
             .cast(&PDataType::Float64)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
     } else if matches!(dt, PDataType::Datetime(_, _)) {
         s.cast(&PDataType::Int64)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
             .cast(&PDataType::Float64)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
     } else if matches!(dt, PDataType::Time) {
         s.cast(&PDataType::Int64)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
             .cast(&PDataType::Float64)
-            .map_err(AppError::internal)?
+            .map_err(database_computation_error)?
     } else {
-        s.cast(&PDataType::Float64).map_err(AppError::internal)?
+        s.cast(&PDataType::Float64)
+            .map_err(database_computation_error)?
     };
     Ok(casted)
 }
@@ -80,14 +85,18 @@ fn compute_plot_column_pair(
     y_col: &str,
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, AppError> {
-    let x_series = db.load_column_series(x_col).map_err(AppError::internal)?;
-    let y_series = db.load_column_series(y_col).map_err(AppError::internal)?;
+    let x_series = db
+        .load_column_series(x_col)
+        .map_err(database_computation_error)?;
+    let y_series = db
+        .load_column_series(y_col)
+        .map_err(database_computation_error)?;
 
     let x_cast = series_to_plot_f64(&x_series)?;
     let y_cast = series_to_plot_f64(&y_series)?;
 
-    let x_f64 = x_cast.f64().map_err(AppError::internal)?;
-    let y_f64 = y_cast.f64().map_err(AppError::internal)?;
+    let x_f64 = x_cast.f64().map_err(database_computation_error)?;
+    let y_f64 = y_cast.f64().map_err(database_computation_error)?;
 
     let mut data: Vec<PlotPoint> = x_f64
         .into_iter()
@@ -243,26 +252,100 @@ pub fn delete_worksheet(
     )
 }
 
+fn get_plot_column_pair_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    database_id: &str,
+    x_col: &str,
+    y_col: &str,
+    max_points: Option<usize>,
+) -> Result<PlotColumnPairPayload, AppError> {
+    state
+        .with_database_snapshot_for_project(project_instance_id, database_id, |database| {
+            compute_plot_column_pair(database, x_col, y_col, max_points)
+        })
+        .map_err(AppError::from)?
+}
+
 #[tauri::command]
 pub fn get_plot_column_pair(
     state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
     database_id: String,
     x_col: String,
     y_col: String,
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, AppError> {
-    state
-        .with_database_snapshot(&database_id, |db| {
-            compute_plot_column_pair(db, &x_col, &y_col, max_points).map_err(|e| e.message)
-        })
-        .map_err(AppError::from)
+    get_plot_column_pair_for_project(
+        state.inner(),
+        &project_instance_id,
+        &database_id,
+        &x_col,
+        &y_col,
+        max_points,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseState, EditHistory};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
+
+    fn install_plot_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
+        let mut project = ProjectData::new();
+        let decl = DatabaseDecl {
+            id: "sales".into(),
+            engine: DatabaseEngine::InMemory {
+                name: "sales".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: Some(project_name.into()),
+        };
+        project.databases.insert("sales".into(), decl.clone());
+        state.activate_project_fixture(project_name.into(), project);
+        let dataframe =
+            polars::df!("amount" => &[1_i64, 2_i64], "cost" => &[3_i64, 4_i64]).unwrap();
+        state.project_store.write().unwrap().databases.insert(
+            "sales".into(),
+            DatabaseInstance {
+                decl,
+                state: DatabaseState::Loaded {
+                    dataframe: std::sync::Arc::new(dataframe.clone()),
+                    original: std::sync::Arc::new(dataframe),
+                    history: EditHistory::new(),
+                },
+            },
+        );
+        state.capture_project_session().unwrap().instance_id
+    }
+
+    #[test]
+    fn worksheet_plot_read_rejects_stale_project_identity() {
+        let state = ProjectState::new();
+        let stale = install_plot_database(&state, "plot-original");
+        install_plot_database(&state, "plot-replacement");
+
+        let error =
+            get_plot_column_pair_for_project(&state, &stale, "sales", "amount", "cost", None)
+                .unwrap_err();
+
+        assert_eq!(error.code, "stale_project_lifecycle");
+    }
+
+    #[test]
+    fn worksheet_plot_computation_returns_stable_database_error() {
+        let state = ProjectState::new();
+        let current = install_plot_database(&state, "plot-computation");
+
+        let error =
+            get_plot_column_pair_for_project(&state, &current, "sales", "missing", "cost", None)
+                .unwrap_err();
+
+        assert_eq!(error.code, "database_computation_failed");
+    }
 
     #[test]
     fn worksheet_commands_preserve_identity_operation_emit_once_and_reject_stale() {

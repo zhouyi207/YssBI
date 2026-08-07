@@ -3,6 +3,7 @@ use crate::node_system::catalog::builtin::build_builtin_node_system;
 use crate::node_system::catalog::localization::Message;
 use crate::node_system::compiler::{
     CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
+    ValidatedNodeConfig,
 };
 use crate::node_system::document::{NodeId, PortAddress};
 use crate::node_system::plan::{
@@ -17,6 +18,16 @@ use crate::node_system::protocol::{
 use crate::node_system::registry::ImplementationKind;
 use crate::node_system::runtime::build_builtin_kernel_registry;
 use std::collections::{BTreeMap, BTreeSet};
+
+fn validated_config(
+    registry: &crate::node_system::registry::NodeRegistry,
+    protocol: &crate::node_system::protocol::NodeProtocol,
+    parameters: BTreeMap<ParameterKey, serde_json::Value>,
+) -> ValidatedNodeConfig {
+    ValidatedNodeConfig::from_analysis(protocol, parameters, |type_id, value| {
+        registry.prepare_nominal_parameter(type_id, value)
+    })
+}
 
 #[test]
 fn every_legacy_dataframe_node_has_one_stable_id() {
@@ -262,7 +273,7 @@ fn project_and_filter_rows_use_relational_lowerers_without_native_kernels() {
 }
 
 #[test]
-fn project_lowerer_preserves_exact_order_and_rejects_invalid_codec_values() {
+fn project_lowerer_preserves_exact_order() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let node = registry
         .get(&NodeTypeId::new("yssbi.dataframe.project").unwrap())
@@ -283,6 +294,7 @@ fn project_lowerer_preserves_exact_order_and_rejects_invalid_codec_values() {
         ParameterKey::new("columns").unwrap(),
         serde_json::json!(["b", "a"]),
     )]);
+    let parameters = validated_config(&registry, &node.protocol(), parameters);
     let context = LoweringContext {
         cancellation: &cancellation,
         node_id,
@@ -319,16 +331,6 @@ fn project_lowerer_preserves_exact_order_and_rejects_invalid_codec_values() {
     assert_eq!(fragment.fragment.root, RelationalOperatorIndex::new(1));
     assert_eq!(fragment.inputs[0].port, input);
     assert_eq!(fragment.metadata.results[0].output, output);
-
-    let invalid = BTreeMap::from([(
-        ParameterKey::new("columns").unwrap(),
-        serde_json::json!(["a", "a"]),
-    )]);
-    let invalid_context = LoweringContext {
-        parameters: &invalid,
-        ..context
-    };
-    assert!(implementation.lowerer.lower(&invalid_context).is_err());
 }
 
 #[test]
@@ -416,6 +418,7 @@ fn filter_rows_lowerer_maps_every_operator_and_literal_exactly() {
 
     for (wire, expected) in cases {
         let parameters = BTreeMap::from([(ParameterKey::new("predicate").unwrap(), wire)]);
+        let parameters = validated_config(&registry, &node.protocol(), parameters);
         let context = LoweringContext {
             cancellation: &cancellation,
             node_id,
@@ -439,20 +442,6 @@ fn filter_rows_lowerer_maps_every_operator_and_literal_exactly() {
         assert_eq!(fragment.inputs[0].port, input);
         assert_eq!(fragment.metadata.results[0].output, output);
     }
-
-    let invalid = BTreeMap::from([(
-        ParameterKey::new("predicate").unwrap(),
-        serde_json::json!({"column":"value","operator":"equal"}),
-    )]);
-    let invalid_context = LoweringContext {
-        cancellation: &cancellation,
-        node_id,
-        protocol: &node.protocol(),
-        parameters: &invalid,
-        inputs: &inputs,
-        outputs: &outputs,
-    };
-    assert!(implementation.lowerer.lower(&invalid_context).is_err());
 }
 
 #[test]
@@ -548,6 +537,7 @@ fn rename_dataframe_lowers_to_exact_input_and_rename_fragment() {
     let output_address = PortAddress::declared(node_id, PortKey::new("result").unwrap());
     let outputs = [(output_address.clone(), ValueRef::new(1))];
     let cancellation = CompileCancellationToken::new();
+    let parameters = validated_config(&registry, &rename.protocol(), parameters);
     let context = LoweringContext {
         cancellation: &cancellation,
         node_id,
@@ -662,6 +652,7 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
         PortAddress::declared(source_node_id, PortKey::new("dataframe").unwrap());
     let source_outputs = [(source_output_address, ValueRef::new(0))];
     let cancellation = CompileCancellationToken::new();
+    let source_parameters = validated_config(&registry, &source.protocol(), source_parameters);
     let source_context = LoweringContext {
         cancellation: &cancellation,
         node_id: source_node_id,
@@ -705,6 +696,7 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
         PortAddress::declared(limit_node_id, PortKey::new("result").unwrap()),
         ValueRef::new(1),
     )];
+    let limit_parameters = validated_config(&registry, &limit.protocol(), limit_parameters);
     let limit_context = LoweringContext {
         cancellation: &cancellation,
         node_id: limit_node_id,
@@ -776,7 +768,7 @@ fn dataframe_native_lowerings_have_production_implementations() {
             .as_any()
             .downcast_ref::<NodeImplementation>()
             .expect("dataframe compiler lowerer");
-        let parameters = BTreeMap::new();
+        let parameters = validated_config(&registry, &node.protocol(), BTreeMap::new());
         let context = LoweringContext {
             cancellation: &cancellation,
             node_id: NodeId::new(),

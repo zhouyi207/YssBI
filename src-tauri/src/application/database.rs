@@ -10,7 +10,10 @@ use crate::database::{
     ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
 };
 use crate::database::{EditHistory, EditState};
-use crate::project::{ProjectSession, ProjectState, relative_project_duckdb_path, unique_name};
+use crate::error::AppError;
+use crate::project::{
+    ProjectInstanceId, ProjectSession, ProjectState, relative_project_duckdb_path, unique_name,
+};
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use serde::Serialize;
 use uuid::Uuid;
@@ -347,7 +350,13 @@ pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaR
         .map_err(|error| format!("{}: {error}", error.code()))?;
     let store = state.project_store.read().unwrap();
     let db = store.databases.get(id).ok_or("Database not found")?;
+    get_database_meta_from_instance(id, db)
+}
 
+pub(crate) fn get_database_meta_from_instance(
+    id: &str,
+    db: &DatabaseInstance,
+) -> Result<DatabaseMetaResult, String> {
     match extract_database_schema(db) {
         DatabaseSchemaSnapshot::Ready {
             name,
@@ -365,6 +374,176 @@ pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaR
             Err(format!("Database '{name}' failed to load: {error}"))
         }
     }
+}
+
+fn database_project_error(error: crate::project::ProjectFilesystemError) -> AppError {
+    AppError::new(error.code(), error.to_string())
+}
+
+fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, AppError> {
+    let parent = destination.parent().ok_or_else(|| {
+        AppError::new(
+            "database_export_temp_reservation_failed",
+            "Export path has no parent",
+        )
+    })?;
+    let file_name = destination.file_name().ok_or_else(|| {
+        AppError::new(
+            "database_export_temp_reservation_failed",
+            "Export path has no file name",
+        )
+    })?;
+    for _ in 0..8 {
+        let temporary = parent.join(format!(
+            ".{}.{}.tmp",
+            file_name.to_string_lossy(),
+            Uuid::new_v4()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => {
+                drop(file);
+                return Ok(temporary);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(AppError::new(
+                    "database_export_temp_reservation_failed",
+                    error.to_string(),
+                ));
+            }
+        }
+    }
+    Err(AppError::new(
+        "database_export_temp_reservation_failed",
+        "Unable to reserve a unique sibling export path",
+    ))
+}
+
+pub(crate) fn cleanup_export_temporary_file(temporary: &Path) -> Result<(), AppError> {
+    match std::fs::remove_file(temporary) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::new(
+            "database_export_cleanup_failed",
+            error.to_string(),
+        )),
+    }
+}
+
+fn cleanup_after_export_error(temporary: &Path, mut primary: AppError) -> AppError {
+    let Err(mut cleanup) = cleanup_export_temporary_file(temporary) else {
+        return primary;
+    };
+    if primary.code == "stale_project_lifecycle" {
+        primary.details = Some(serde_json::json!({
+            "cleanupError": { "code": cleanup.code, "message": cleanup.message },
+        }));
+        primary
+    } else {
+        cleanup.details = Some(serde_json::json!({
+            "primaryError": { "code": primary.code, "message": primary.message },
+        }));
+        cleanup
+    }
+}
+
+#[cfg(not(windows))]
+fn atomic_replace_export(temporary: &Path, destination: &Path) -> std::io::Result<()> {
+    std::fs::rename(temporary, destination)
+}
+
+#[cfg(windows)]
+fn atomic_replace_export(temporary: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let target = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            target.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub(crate) fn export_database_for_project_with_before_publish(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    path: &str,
+    format: &str,
+    before_authority: impl FnOnce(&Path),
+    at_final_publication: impl FnOnce(&Path),
+) -> Result<(), AppError> {
+    let mut dataframe = state
+        .with_database_snapshot_for_project(project_instance_id, id, |database| {
+            database
+                .access(crate::database::DatabaseAccess::Execution)
+                .map(|view| view.dataframe)
+                .map_err(|error| error.to_string())
+        })
+        .map_err(database_project_error)?
+        .map_err(|message| AppError::new("database_computation_failed", message))?;
+    let destination = Path::new(path);
+    let temporary = reserve_export_temporary_file(destination)?;
+    let result = (|| {
+        crate::database::export_dataframe(
+            &mut dataframe,
+            temporary.to_string_lossy().as_ref(),
+            format,
+        )
+        .map_err(|error| AppError::new("database_export_serialization_failed", error))?;
+        before_authority(&temporary);
+        let _authority = state
+            .acquire_database_publication_authority(project_instance_id)
+            .map_err(database_project_error)?;
+        at_final_publication(&temporary);
+        atomic_replace_export(&temporary, destination)
+            .map_err(|error| AppError::new("database_export_publication_failed", error.to_string()))
+    })();
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => Err(cleanup_after_export_error(&temporary, error)),
+    }
+}
+
+pub(crate) fn export_database_for_project(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    path: &str,
+    format: &str,
+) -> Result<(), AppError> {
+    export_database_for_project_with_before_publish(
+        state,
+        project_instance_id,
+        id,
+        path,
+        format,
+        |_| {},
+        |_| {},
+    )
 }
 
 fn unique_database_name(state: &ProjectState, base_name: &str) -> String {

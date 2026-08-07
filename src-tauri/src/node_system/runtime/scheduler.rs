@@ -90,7 +90,13 @@ fn validate_published_call(
             "function plan Registry fingerprint is stale".into(),
         ));
     }
-    if callee.provenance.basis.resource_versions != caller.provenance.basis.resource_versions {
+    if !callee
+        .provenance
+        .basis
+        .resource_versions
+        .iter()
+        .all(|(key, version)| caller.provenance.basis.resource_versions.get(key) == Some(version))
+    {
         return Err(invalid("function plan resource versions are stale".into()));
     }
     let parameter_values = abi.parameters.values().copied().collect::<BTreeSet<_>>();

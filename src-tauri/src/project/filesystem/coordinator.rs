@@ -23,9 +23,20 @@ struct RootLeaseRegistry {
     available: Condvar,
 }
 
+#[cfg(test)]
+#[derive(Default)]
+struct ProjectFilesystemTestControls {
+    fault: Mutex<Option<super::ProjectFilesystemFaultPoint>>,
+    rollback_fault: Mutex<bool>,
+    rollback_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    before_remove_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+}
+
 #[derive(Clone, Default)]
 pub struct ProjectFilesystemCoordinator {
     registry: Arc<RootLeaseRegistry>,
+    #[cfg(test)]
+    test_controls: Arc<ProjectFilesystemTestControls>,
 }
 
 impl ProjectFilesystemCoordinator {
@@ -133,6 +144,67 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(test)]
+    pub(crate) fn set_project_filesystem_fault(
+        &self,
+        fault: Option<super::ProjectFilesystemFaultPoint>,
+    ) {
+        *self.test_controls.fault.lock().unwrap() = fault;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
+        *self.test_controls.rollback_fault.lock().unwrap() = enabled;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_filesystem_rollback_test_hook(
+        &self,
+        hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) {
+        *self.test_controls.rollback_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_before_remove_mutation_hook(
+        &self,
+        hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) {
+        *self.test_controls.before_remove_hook.lock().unwrap() = hook;
+    }
+
+    #[cfg(test)]
+    fn take_fault(&self, point: super::ProjectFilesystemFaultPoint) -> bool {
+        let mut fault = self.test_controls.fault.lock().unwrap();
+        if *fault == Some(point) {
+            *fault = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(test)]
+    fn take_rollback_fault(&self) -> bool {
+        std::mem::take(&mut *self.test_controls.rollback_fault.lock().unwrap())
+    }
+
+    #[cfg(test)]
+    fn run_rollback_hook(&self) {
+        let hook = self.test_controls.rollback_hook.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
+    fn run_before_remove_hook(&self) {
+        let hook = self.test_controls.before_remove_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn observe_acquire_many_attempts(
         &self,
     ) -> std::sync::mpsc::Receiver<Vec<NormalizedProjectRoot>> {
@@ -186,6 +258,26 @@ pub struct ProjectFilesystemLeaseSet {
 }
 
 impl ProjectFilesystemLeaseSet {
+    #[cfg(test)]
+    pub(super) fn take_fault(&self, point: super::ProjectFilesystemFaultPoint) -> bool {
+        self.coordinator.take_fault(point)
+    }
+
+    #[cfg(test)]
+    pub(super) fn take_rollback_fault(&self) -> bool {
+        self.coordinator.take_rollback_fault()
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_rollback_hook(&self) {
+        self.coordinator.run_rollback_hook();
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_before_remove_hook(&self) {
+        self.coordinator.run_before_remove_hook();
+    }
+
     pub fn roots(&self) -> &[NormalizedProjectRoot] {
         &self.roots
     }

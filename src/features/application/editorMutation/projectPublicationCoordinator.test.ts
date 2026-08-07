@@ -16,6 +16,12 @@ import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjecti
 import type { ResourceMoveDto, ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import type { ProjectIndexRow } from '@/services/project/projectService';
 import {
+  clearWorksheetPreviewCache,
+  getCachedWorksheetPreview,
+  getWorksheetPreview,
+} from '@/services/worksheet/worksheetPreviewCache';
+import type { WorksheetDocument } from '@/shared/types/domain';
+import {
   ProjectPublicationCoordinator,
   ProjectPublicationError,
   type PreparedProjectPublication,
@@ -33,6 +39,15 @@ const projectInstanceId = '00000000-0000-0000-0000-000000000801';
 const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000802';
 const beforePath = 'events/Before.yssbi-event';
 const afterPath = 'events/After.yssbi-event';
+const worksheet: WorksheetDocument = {
+  schemaVersion: 3,
+  revision: 0,
+  id: 'worksheet-1',
+  name: 'Worksheet',
+  databaseId: 'sales',
+  chartType: 'scatter',
+  encodings: { x: 'x', y: 'y' },
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -120,6 +135,7 @@ function index(
       path,
       name: path === afterPath ? 'After' : 'Before',
       type: 'event' as const,
+      revision: 0,
     })),
     variables: [],
     worksheets: [],
@@ -142,7 +158,7 @@ interface RecordedProjectionState {
 function prepareRecordedMove(
   state: RecordedProjectionState,
   move: ResourceMoveDto,
-  destinationProjection: EditorGraphProjectionDto,
+  hasAuthoritativeDestinationReplacement: boolean,
 ): PreparedGraphResourceMove {
   const flags = state.documentFlags[move.from];
   if (!state.resources.includes(move.from) || !flags) throw new Error('missing move source');
@@ -151,13 +167,11 @@ function prepareRecordedMove(
     to: move.to,
     kind: move.kind,
     name: move.name,
-    destinationProjection,
+    hasAuthoritativeDestinationReplacement,
     resourceSnapshot: { sourceFlags: { ...flags } },
     documentSnapshot: { sourceFlags: { ...flags } },
     tabSnapshot: {},
     sessionSnapshot: {},
-    referenceSnapshot: {},
-    variableScopeSnapshot: {},
   } as unknown as PreparedGraphResourceMove;
 }
 
@@ -174,7 +188,6 @@ function commitRecordedPublication(
     delete state.documentFlags[move.from];
     state.documentFlags[move.to] = flags;
     state.projections = state.projections.filter((path) => path !== move.from);
-    if (!state.projections.includes(move.to)) state.projections.push(move.to);
   }
   for (const replacement of plan.projectionReplacements) {
     if (!state.projections.includes(replacement.graphPath)) state.projections.push(replacement.graphPath);
@@ -207,8 +220,8 @@ function commitRecordedRecovery(
   );
   state.functionRevisions = Object.fromEntries(
     plan.index.graphs
-      .filter((graph) => graph.functionRevision != null)
-      .map((graph) => [graph.path, graph.functionRevision as number]),
+      .filter((graph) => graph.type === 'function')
+      .map((graph) => [graph.path, graph.functionRevision]),
   );
   state.history = { ...plan.index.history };
   state.watermark = plan.publicationRevision;
@@ -305,8 +318,8 @@ function createHarness() {
       },
       history: plan.index.history,
     })),
-    prepareMove: vi.fn((move, preparedProjection) =>
-      prepareRecordedMove(state, move, preparedProjection)),
+    prepareMove: vi.fn((move, hasAuthoritativeDestinationReplacement) =>
+      prepareRecordedMove(state, move, hasAuthoritativeDestinationReplacement)),
     commitPublication: vi.fn((plan) => commitRecordedPublication(state, plan)),
     commitRecovery: vi.fn((plan) => commitRecordedRecovery(state, plan)),
     markProjectProjectionStale: vi.fn(),
@@ -391,6 +404,16 @@ const moveBefore: ResourceMoveDto = {
 };
 
 describe('ProjectPublicationCoordinator', () => {
+  it('synchronously clears worksheet previews on every project lifecycle reset', async () => {
+    clearWorksheetPreviewCache();
+    const harness = createHarness();
+    await getWorksheetPreview(projectInstanceId, worksheet, async () => ({ kind: 'empty' }));
+
+    harness.coordinator.startProject(replacementProjectInstanceId, 0);
+
+    expect(getCachedWorksheetPreview(projectInstanceId, worksheet)).toBeUndefined();
+  });
+
   it('validates a new project baseline before cancelling the current coordinator', () => {
     const harness = createHarness();
     const before = harness.coordinator.getSnapshotForTests();
@@ -414,59 +437,36 @@ describe('ProjectPublicationCoordinator', () => {
   it('queues reverse arrival N+1 then N without installing N+1 first', async () => {
     const harness = createHarness();
     const before = structuredClone(harness.state);
-    const revision2Preparation = requestProjection(harness, 'events/Two.yssbi-event');
-    const revision1Preparation = requestProjection(harness, 'events/One.yssbi-event');
     const revision2 = harness.coordinator.submit({
-      result: publication(2),
-      fallbackPaths: ['events/Two.yssbi-event'],
+      result: publication(2, { expectedGraphPaths: [] }),
     });
     await waitForSnapshot(harness);
     const revision1 = harness.coordinator.submit({
-      result: publication(1),
-      fallbackPaths: ['events/One.yssbi-event'],
+      result: publication(1, { expectedGraphPaths: [] }),
     });
 
     expect(harness.state).toEqual(before);
     harness.snapshotRequests[0].resolve(index(0));
-    await vi.waitFor(() => {
-      expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledWith(
-        'events/One.yssbi-event',
-        projectInstanceId,
-        expect.any(Number),
-      );
-    });
-    revision1Preparation.resolve(projection('events/One.yssbi-event'));
     await expect(revision1).resolves.toMatchObject({ status: 'applied' });
-    expect(harness.state.commitOrder).toEqual([1]);
-
-    revision2Preparation.resolve(projection('events/Two.yssbi-event'));
     await expect(revision2).resolves.toMatchObject({ status: 'applied' });
     expect(harness.state.commitOrder).toEqual([1, 2]);
   });
 
   it('keeps normal apply serialized behind recovery', async () => {
     const harness = createHarness();
-    const revision1Preparation = requestProjection(harness, 'events/One.yssbi-event');
-    const revision2 = harness.coordinator.submit({ result: publication(2) });
+    const revision2 = harness.coordinator.submit({
+      result: publication(2, { expectedGraphPaths: [] }),
+    });
     await waitForSnapshot(harness);
 
     const revision1 = harness.coordinator.submit({
-      result: publication(1),
-      fallbackPaths: ['events/One.yssbi-event'],
+      result: publication(1, { expectedGraphPaths: [] }),
     });
 
     await Promise.resolve();
     expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
 
     harness.snapshotRequests[0].resolve(index(0));
-    await vi.waitFor(() => {
-      expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledWith(
-        'events/One.yssbi-event',
-        projectInstanceId,
-        expect.any(Number),
-      );
-    });
-    revision1Preparation.resolve(projection('events/One.yssbi-event'));
 
     await expect(revision1).resolves.toMatchObject({ status: 'applied' });
     await expect(revision2).resolves.toMatchObject({ status: 'applied' });
@@ -496,10 +496,9 @@ describe('ProjectPublicationCoordinator', () => {
     expect(harness.coordinator.getSnapshotForTests().pendingRevisions).toEqual([]);
   });
 
-  it('keeps N+1 provisional while snapshot N hydrates and applies it afterward', async () => {
+  it('applies N+1 immediately after snapshot N recovery commits', async () => {
     const harness = createHarness();
     const recoveryProjection = requestProjection(harness, beforePath);
-    const futureProjection = requestProjection(harness, afterPath);
     const revision2 = harness.coordinator.submit({ result: publication(2) });
     await waitForSnapshot(harness);
 
@@ -512,17 +511,14 @@ describe('ProjectPublicationCoordinator', () => {
       );
     });
     const revision3 = harness.coordinator.submit({
-      result: publication(3, { moves: [moveAfter] }),
+      result: publication(3, { moves: [moveAfter], expectedGraphPaths: [afterPath] }),
     });
     recoveryProjection.resolve(projection(beforePath));
 
     await expect(revision2).resolves.toMatchObject({ status: 'recovered' });
     const recoveryInput = vi.mocked(harness.dependencies.prepareRecovery).mock.calls[0][0];
     expect([...recoveryInput.pathRemaps]).toEqual([]);
-    expect(harness.state.resources).toEqual([beforePath]);
-    expect(harness.state.watermark).toBe(2);
 
-    futureProjection.resolve(projection(afterPath));
     await expect(revision3).resolves.toMatchObject({ status: 'applied' });
     expect(harness.state.resources).toEqual([afterPath]);
     expect(harness.state.commitOrder).toEqual([3]);
@@ -666,23 +662,18 @@ describe('ProjectPublicationCoordinator', () => {
     await expect(retry).resolves.toMatchObject({ status: 'recovered' });
   });
 
-  it('shares one promise and one commit for matching direct and event deliveries', async () => {
+  it('deduplicates matching event delivery after a synchronous direct commit', async () => {
     const harness = createHarness();
-    const preparation = requestProjection(harness, 'events/Caller.yssbi-event');
-    const result = publication(1);
-    const submission = { result, fallbackPaths: ['events/Caller.yssbi-event'] };
+    const result = publication(1, { expectedGraphPaths: [] });
+    const submission = { result };
 
     const direct = harness.coordinator.submit(submission);
-    const event = harness.coordinator.submit({
-      result: structuredClone(result),
-      fallbackPaths: ['events/Caller.yssbi-event'],
-    });
+    const event = harness.coordinator.submit({ result: structuredClone(result) });
 
     expect(direct).not.toBe(event);
-    preparation.resolve(projection('events/Caller.yssbi-event'));
     await expect(Promise.all([direct, event])).resolves.toMatchObject([
       { status: 'applied' },
-      { status: 'applied' },
+      { status: 'duplicate' },
     ]);
     expect(harness.dependencies.commitPublication).toHaveBeenCalledOnce();
   });
@@ -701,46 +692,88 @@ describe('ProjectPublicationCoordinator', () => {
     await expect(first).rejects.toMatchObject({ code: 'stale_project_lifecycle' });
   });
 
-  it('performs no path-owned mutation when destination preload returns false', async () => {
+  it('does not preload a loaded move destination already carried by replacements', async () => {
     const harness = createHarness();
-    const before = structuredClone(harness.state);
-    const destination = requestProjection(harness, afterPath);
+    const unexpectedDestination = requestProjection(harness, afterPath);
+    const submitted = harness.coordinator.submit({
+      result: publication(1, { moves: [moveAfter], expectedGraphPaths: [afterPath] }),
+    });
+    unexpectedDestination.resolve(false);
+
+    await expect(submitted).resolves.toMatchObject({ status: 'applied' });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.dependencies.prepareMove).toHaveBeenCalledWith(moveAfter, true);
+    expect(harness.state.projections).toEqual([afterPath]);
+  });
+
+  it('applies an unloaded complete move without preloading or inventing a destination projection', async () => {
+    const harness = createHarness();
+    harness.state.projections = [];
+    const unexpectedDestination = requestProjection(harness, afterPath);
+    const submitted = harness.coordinator.submit({
+      result: publication(1, {
+        moves: [moveAfter],
+        expectedGraphPaths: [],
+      }),
+    });
+    unexpectedDestination.resolve(projection(afterPath));
+
+    await expect(submitted).resolves.toMatchObject({ status: 'applied' });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.dependencies.prepareMove).toHaveBeenCalledWith(moveAfter, false);
+    expect(harness.state.resources).toEqual([afterPath]);
+    expect(harness.state.projections).toEqual([]);
+  });
+
+  it('routes incomplete move publication directly to recovery without a normal graph commit', async () => {
+    const harness = createHarness();
+    harness.state.projections = [];
+    const submitted = harness.coordinator.submit({
+      result: publication(1, {
+        moves: [moveAfter],
+        invalidatedGraphPaths: [afterPath],
+      }),
+    });
+
+    await waitForSnapshot(harness);
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    const recoveryDestination = requestProjection(harness, afterPath);
+    harness.snapshotRequests[0].resolve(index(1, [afterPath]));
+    recoveryDestination.resolve(projection(afterPath));
+
+    await expect(submitted).resolves.toMatchObject({ status: 'recovered' });
+    expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledTimes(1);
+    expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledWith(
+      afterPath,
+      projectInstanceId,
+      expect.any(Number),
+    );
+    expect(harness.dependencies.prepareMove).not.toHaveBeenCalled();
+    expect(harness.dependencies.commitPublication).not.toHaveBeenCalled();
+    expect(harness.state.resources).toEqual([afterPath]);
+    expect(harness.state.projections).toEqual([afterPath]);
+  });
+
+  it('installs a caller replacement without hydrating fallback paths', async () => {
+    const harness = createHarness();
+    const callerPath = 'events/Caller.yssbi-event';
+    const unexpectedCaller = requestProjection(harness, callerPath);
+    const submitted = harness.coordinator.submit({
+      result: publication(1, { expectedGraphPaths: [callerPath] }),
+      fallbackPaths: [callerPath],
+    });
+    unexpectedCaller.resolve(false);
+
+    await expect(submitted).resolves.toMatchObject({ status: 'applied' });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.state.projections).toEqual([beforePath, callerPath]);
+  });
+
+  it('recovers an incomplete move without losing metadata or document flags', async () => {
+    const harness = createHarness();
     const submitted = harness.coordinator.submit({
       result: publication(1, { moves: [moveAfter], invalidatedGraphPaths: [afterPath] }),
     });
-
-    destination.resolve(false);
-    await waitForSnapshot(harness);
-    expect(harness.state).toEqual(before);
-
-    harness.snapshotRequests[0].reject(new Error('stop recovery'));
-    await expect(submitted).rejects.toMatchObject({ code: 'publication_recovery_failed' });
-  });
-
-  it('performs no path-owned mutation when caller hydration returns false', async () => {
-    const harness = createHarness();
-    const before = structuredClone(harness.state);
-    const caller = requestProjection(harness, 'events/Caller.yssbi-event');
-    const submitted = harness.coordinator.submit({
-      result: publication(1),
-      fallbackPaths: ['events/Caller.yssbi-event'],
-    });
-
-    caller.resolve(false);
-    await waitForSnapshot(harness);
-    expect(harness.state).toEqual(before);
-
-    harness.snapshotRequests[0].reject(new Error('stop recovery'));
-    await expect(submitted).rejects.toMatchObject({ code: 'publication_recovery_failed' });
-  });
-
-  it('retries a failed move without losing metadata or document flags', async () => {
-    const harness = createHarness();
-    const firstDestination = requestProjection(harness, afterPath);
-    const submitted = harness.coordinator.submit({
-      result: publication(1, { moves: [moveAfter] }),
-    });
-    firstDestination.resolve(false);
     await waitForSnapshot(harness);
 
     const recoveryDestination = requestProjection(harness, afterPath);
@@ -758,15 +791,15 @@ describe('ProjectPublicationCoordinator', () => {
 
   it('installs authoritative destination names for rename undo and redo', async () => {
     const harness = createHarness();
-    const after = requestProjection(harness, afterPath);
-    const rename = harness.coordinator.submit({ result: publication(1, { moves: [moveAfter] }) });
-    after.resolve(projection(afterPath));
+    const rename = harness.coordinator.submit({
+      result: publication(1, { moves: [moveAfter], expectedGraphPaths: [afterPath] }),
+    });
     await expect(rename).resolves.toMatchObject({ status: 'applied' });
     expect(harness.state.names).toEqual({ [afterPath]: 'After' });
 
-    const before = requestProjection(harness, beforePath);
-    const undo = harness.coordinator.submit({ result: publication(2, { moves: [moveBefore] }) });
-    before.resolve(projection(beforePath));
+    const undo = harness.coordinator.submit({
+      result: publication(2, { moves: [moveBefore], expectedGraphPaths: [beforePath] }),
+    });
     await expect(undo).resolves.toMatchObject({ status: 'applied' });
     expect(harness.state.names).toEqual({ [beforePath]: 'Before' });
   });
@@ -1025,8 +1058,14 @@ describe('ProjectPublicationCoordinator', () => {
         path: functionPath,
         name: 'Calculate',
         type: 'function',
+        revision: 7,
         functionRevision: 7,
         functionSignature: { parameters: [], return_type: 'Int64' },
+        functionEditorProjection: {
+          functionRevision: 7,
+          inputs: [],
+          outputs: [{ id: 'return', name: 'Int64', dataType: { kind: 'Int64' } }],
+        },
       }],
       history: { canUndo: true, canRedo: true },
     }));
@@ -1057,7 +1096,9 @@ describe('ProjectPublicationCoordinator', () => {
 
   it('does not regress a watermark advanced while recovery I/O is pending', async () => {
     const harness = createHarness();
-    const revision2 = harness.coordinator.submit({ result: publication(2) });
+    const revision2 = harness.coordinator.submit({
+      result: publication(2, { expectedGraphPaths: [] }),
+    });
     await waitForSnapshot(harness);
     const revision1 = harness.coordinator.submit({ result: publication(1) });
 
@@ -1075,7 +1116,6 @@ describe('ProjectPublicationCoordinator', () => {
   it('recovers before committing when a replacement has malformed nested projection identity', async () => {
     const harness = createHarness();
     const before = structuredClone(harness.state);
-    const destination = requestProjection(harness, afterPath);
     const result = publication(1, {
       moves: [moveAfter],
       expectedGraphPaths: [afterPath],
@@ -1083,7 +1123,6 @@ describe('ProjectPublicationCoordinator', () => {
     result.projectionReplacements[0].projection.nodes[0].graphPath = beforePath;
     const submitted = harness.coordinator.submit({ result });
 
-    destination.resolve(projection(afterPath));
     await waitForSnapshot(harness);
     expect(harness.state).toEqual(before);
 

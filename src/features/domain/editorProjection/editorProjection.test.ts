@@ -170,7 +170,6 @@ describe('editor projection architecture', () => {
     'src/shared/types/dto/project.ts',
     'src/shared/types/dto/graph.ts',
     'src/shared/types/dto/graphCommands.ts',
-    'src/shared/types/dto/graphModel.ts',
     'src/shared/types/dto/editorMutation.ts',
     'src/shared/types/dto/runEvent.ts',
     'src/shared/types/dto/executionDemand.ts',
@@ -187,9 +186,12 @@ describe('editor projection architecture', () => {
       ['dtoIndex.ts', target, 'runtime'] as Edge
     )),
     ['dtoIndex.ts', 'editorProjection.ts', 'type-only'],
+    ['editorProjection.ts', 'src/shared/types/domain/graph.ts', 'type-only'],
     ['parameterEditorValidators.ts', 'editorProjection.ts', 'type-only'],
     ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
     ['editorProjectionGuards.ts', 'editorProjection.ts', 'type-only'],
+    ['editorProjectionGuards.ts', 'src/shared/types/domain/dataType.ts', 'type-only'],
+    ['editorProjectionGuards.ts', 'src/shared/types/domain/graphResourcePath.ts', 'runtime'],
     ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
     ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
     ['editorProjectionParser.ts', 'editorProjection.ts', 'type-only'],
@@ -201,7 +203,10 @@ describe('editor projection architecture', () => {
     ['dtoIndex.ts', new Set(dtoBarrelRuntimeTargets)],
     ['editorProjection.ts', new Set()],
     ['parameterEditorValidators.ts', new Set()],
-    ['editorProjectionGuards.ts', new Set(['parameterEditorValidators.ts'])],
+    ['editorProjectionGuards.ts', new Set([
+      'parameterEditorValidators.ts',
+      'src/shared/types/domain/graphResourcePath.ts',
+    ])],
     ['editorProjectionParser.ts', new Set([
       'editorProjectionGuards.ts',
       'parameterEditorValidators.ts',
@@ -543,6 +548,7 @@ describe('editor projection architecture', () => {
         ['dtoIndex.ts', target, 'runtime'] as Edge
       )),
       ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
+      ['editorProjectionGuards.ts', 'src/shared/types/domain/graphResourcePath.ts', 'runtime'],
       ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
       ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
       ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],

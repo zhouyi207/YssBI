@@ -9,6 +9,20 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 import { executeDatabaseMutation } from '@/features/application/dataManagement/databaseMutation';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+
+async function refreshDatabaseColumns(identity: ProjectIdentitySnapshot, databaseId: string) {
+  const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, databaseId);
+  if (!isCurrentProjectIdentity(identity)) return;
+  useDatabaseStore.getState().updateDatabase(databaseId, {
+    columns: meta.columns,
+    columnCount: meta.columnCount,
+  });
+}
 
 interface UseEditActionsParams {
   selectedDfId: string | null;
@@ -129,6 +143,7 @@ export function useEditActions({
 
   const handleExport = useCallback(async () => {
     if (!selectedDfId) return;
+    const identity = captureProjectIdentity();
     try {
       const filePath = await save({
         title: 'Export Data',
@@ -137,10 +152,20 @@ export function useEditActions({
           { name: 'Parquet', extensions: ['parquet'] },
         ],
       });
-      if (!filePath) return;
+      if (!isCurrentProjectIdentity(identity) || !filePath) return;
       const fmt = filePath.endsWith('.parquet') ? 'parquet' : 'csv';
-      await DatabaseService.exportDatabase(selectedDfId, filePath, fmt);
-    } catch (e) { logger.data.error('export failed: ' + String(e), 'DatabaseEditorWindow'); }
+      await DatabaseService.exportDatabase(
+        identity.projectInstanceId,
+        selectedDfId,
+        filePath,
+        fmt,
+      );
+      if (!isCurrentProjectIdentity(identity)) return;
+    } catch (e) {
+      if (isCurrentProjectIdentity(identity)) {
+        logger.data.error('export failed: ' + String(e), 'DatabaseEditorWindow');
+      }
+    }
   }, [selectedDfId]);
 
   const handleAddRow = useCallback(async (index?: number) => {
@@ -181,12 +206,13 @@ export function useEditActions({
 
   const handleAddColumn = useCallback(async () => {
     if (!selectedDfId) return;
+    const identity = captureProjectIdentity();
     const name = await uiStore.prompt({
       title: '新增列',
       label: '列名',
       placeholder: 'Column name',
     });
-    if (!name) return;
+    if (!isCurrentProjectIdentity(identity) || !name) return;
     const dtype = await uiStore.prompt({
       title: '新增列',
       message: '请输入列类型：string, float64, int64, bool',
@@ -194,7 +220,7 @@ export function useEditActions({
       defaultValue: 'string',
       placeholder: 'string',
     });
-    if (!dtype) return;
+    if (!isCurrentProjectIdentity(identity) || !dtype) return;
     try {
       const es = await executeDatabaseMutation(selectedDfId, (authority) =>
         DatabaseService.addColumn(
@@ -205,14 +231,20 @@ export function useEditActions({
           name,
           dtype,
         ));
+      if (!isCurrentProjectIdentity(identity)) return;
       await handleEditResult(es);
-      const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
-      useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-    } catch (e) { logger.data.error('addColumn failed: ' + String(e), 'DatabaseEditorWindow'); }
+      if (!isCurrentProjectIdentity(identity)) return;
+      await refreshDatabaseColumns(identity, selectedDfId);
+    } catch (e) {
+      if (isCurrentProjectIdentity(identity)) {
+        logger.data.error('addColumn failed: ' + String(e), 'DatabaseEditorWindow');
+      }
+    }
   }, [selectedDfId, handleEditResult]);
 
   const handleDeleteColumn = useCallback(async (name: string) => {
     if (!selectedDfId) return;
+    const identity = captureProjectIdentity();
     try {
       const es = await executeDatabaseMutation(selectedDfId, (authority) =>
         DatabaseService.deleteColumn(
@@ -222,21 +254,27 @@ export function useEditActions({
           selectedDfId,
           name,
         ));
+      if (!isCurrentProjectIdentity(identity)) return;
       await handleEditResult(es);
-      const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
-      useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-    } catch (e) { logger.data.error('deleteColumn failed: ' + String(e), 'DatabaseEditorWindow'); }
+      if (!isCurrentProjectIdentity(identity)) return;
+      await refreshDatabaseColumns(identity, selectedDfId);
+    } catch (e) {
+      if (isCurrentProjectIdentity(identity)) {
+        logger.data.error('deleteColumn failed: ' + String(e), 'DatabaseEditorWindow');
+      }
+    }
   }, [selectedDfId, handleEditResult]);
 
   const handleRenameColumn = useCallback(async (oldName: string) => {
     if (!selectedDfId) return;
+    const identity = captureProjectIdentity();
     const newName = await uiStore.prompt({
       title: '重命名列',
       label: '新列名',
       defaultValue: oldName,
       placeholder: oldName,
     });
-    if (!newName || newName === oldName) return;
+    if (!isCurrentProjectIdentity(identity) || !newName || newName === oldName) return;
     try {
       const es = await executeDatabaseMutation(selectedDfId, (authority) =>
         DatabaseService.renameColumn(
@@ -247,14 +285,20 @@ export function useEditActions({
           oldName,
           newName,
         ));
+      if (!isCurrentProjectIdentity(identity)) return;
       await handleEditResult(es);
-      const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
-      useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
-    } catch (e) { logger.data.error('renameColumn failed: ' + String(e), 'DatabaseEditorWindow'); }
+      if (!isCurrentProjectIdentity(identity)) return;
+      await refreshDatabaseColumns(identity, selectedDfId);
+    } catch (e) {
+      if (isCurrentProjectIdentity(identity)) {
+        logger.data.error('renameColumn failed: ' + String(e), 'DatabaseEditorWindow');
+      }
+    }
   }, [selectedDfId, handleEditResult]);
 
   const handleCastColumn = useCallback(async (colName: string, newDtype: string) => {
     if (!selectedDfId) return;
+    const identity = captureProjectIdentity();
     try {
       const es = await executeDatabaseMutation(selectedDfId, (authority) =>
         DatabaseService.castColumn(
@@ -266,10 +310,12 @@ export function useEditActions({
           newDtype,
           false,
         ));
+      if (!isCurrentProjectIdentity(identity)) return;
       await handleEditResult(es);
-      const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
-      useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
+      if (!isCurrentProjectIdentity(identity)) return;
+      await refreshDatabaseColumns(identity, selectedDfId);
     } catch (e) {
+      if (!isCurrentProjectIdentity(identity)) return;
       const msg = String(e);
       const force = await uiStore.confirm({
         title: '强制转换列类型',
@@ -277,7 +323,7 @@ export function useEditActions({
         type: 'danger',
         confirmText: '强制转换',
       });
-      if (force) {
+      if (force && isCurrentProjectIdentity(identity)) {
         try {
           const es = await executeDatabaseMutation(selectedDfId, (authority) =>
             DatabaseService.castColumn(
@@ -289,13 +335,16 @@ export function useEditActions({
               newDtype,
               true,
             ));
+          if (!isCurrentProjectIdentity(identity)) return;
           await handleEditResult(es);
-          const meta = await DatabaseService.getDatabaseMeta(selectedDfId);
-          useDatabaseStore.getState().updateDatabase(selectedDfId, { columns: meta.columns, columnCount: meta.columnCount });
+          if (!isCurrentProjectIdentity(identity)) return;
+          await refreshDatabaseColumns(identity, selectedDfId);
         } catch (e2) {
-          const forceError = String(e2);
-          logger.data.error('castColumn force failed: ' + forceError, 'DatabaseEditorWindow');
-          uiStore.showToast(forceError, 'error', 5000);
+          if (isCurrentProjectIdentity(identity)) {
+            const forceError = String(e2);
+            logger.data.error('castColumn force failed: ' + forceError, 'DatabaseEditorWindow');
+            uiStore.showToast(forceError, 'error', 5000);
+          }
         }
       }
     }

@@ -144,7 +144,10 @@ impl ProjectFilesystemTransaction {
                     continue;
                 };
                 #[cfg(test)]
-                if take_fault(ProjectFilesystemFaultPoint::StagedSerialization) {
+                if transaction
+                    .lease
+                    .take_fault(ProjectFilesystemFaultPoint::StagedSerialization)
+                {
                     return Err(prepare_error("injected staged serialization failure"));
                 }
                 let staged_path = prepared_root.join(relative_path);
@@ -182,7 +185,7 @@ impl ProjectFilesystemTransaction {
                 created_parent_directories: BTreeSet::new(),
             }),
             Err(error) => {
-                let _ = cleanup_staging(&staging_root);
+                let _ = cleanup_staging(&staging_root, &transaction.lease);
                 Err(error)
             }
         }
@@ -211,7 +214,7 @@ impl PreparedProjectFilesystemTransaction {
                 } else {
                     ProjectFilesystemFaultPoint::SecondLiveReplacement
                 };
-                if take_fault(point) {
+                if self.transaction.lease.take_fault(point) {
                     return self.commit_failed(
                         &root,
                         index,
@@ -237,12 +240,14 @@ impl PreparedProjectFilesystemTransaction {
                 mutation,
                 index,
                 &mut self.created_parent_directories,
+                &self.transaction.lease,
             ) {
                 return self.commit_failed(&root, index + 1, error.to_string());
             }
         }
 
-        if let Err(error) = cleanup_staging(&self.transaction.staging_root) {
+        if let Err(error) = cleanup_staging(&self.transaction.staging_root, &self.transaction.lease)
+        {
             let mutation_count = self.transaction.mutations.len();
             return self.commit_failed(&root, mutation_count, error.to_string());
         }
@@ -268,8 +273,10 @@ impl PreparedProjectFilesystemTransaction {
             root,
             &self.journal[..applied_count.min(self.journal.len())],
             &self.created_parent_directories,
+            &self.transaction.lease,
         );
-        let cleanup_result = cleanup_staging(&self.transaction.staging_root);
+        let cleanup_result =
+            cleanup_staging(&self.transaction.staging_root, &self.transaction.lease);
         if let Err(rollback_error) = rollback_result {
             let error = ProjectFilesystemError::TransactionRollbackFailed {
                 message: format!(
@@ -308,10 +315,14 @@ impl CommittedFilesystemMutation {
     pub fn rollback(mut self) -> Result<(), ProjectFilesystemError> {
         self.armed = false;
         #[cfg(test)]
-        run_project_filesystem_rollback_test_hook();
-        let rollback_result =
-            restore_before_images(&self.root, &self.journal, &self.created_parent_directories);
-        let cleanup_result = cleanup_staging(&self.staging_root);
+        self._lease.run_rollback_hook();
+        let rollback_result = restore_before_images(
+            &self.root,
+            &self.journal,
+            &self.created_parent_directories,
+            &self._lease,
+        );
+        let cleanup_result = cleanup_staging(&self.staging_root, &self._lease);
         match (rollback_result, cleanup_result) {
             (Ok(()), Ok(())) => Ok(()),
             (rollback, cleanup) => {
@@ -339,9 +350,13 @@ impl CommittedFilesystemMutation {
 impl Drop for CommittedFilesystemMutation {
     fn drop(&mut self) {
         if self.armed {
-            let rollback =
-                restore_before_images(&self.root, &self.journal, &self.created_parent_directories);
-            let cleanup = cleanup_staging(&self.staging_root);
+            let rollback = restore_before_images(
+                &self.root,
+                &self.journal,
+                &self.created_parent_directories,
+                &self._lease,
+            );
+            let cleanup = cleanup_staging(&self.staging_root, &self._lease);
             if rollback.is_err() || cleanup.is_err() {
                 let rollback_error = ProjectFilesystemError::TransactionRollbackFailed {
                     message: format!(
@@ -620,6 +635,7 @@ fn apply_mutation(
     mutation: &StagedFilesystemMutation,
     index: usize,
     created_parent_directories: &mut BTreeSet<PathBuf>,
+    _lease: &ProjectFilesystemLeaseSet,
 ) -> std::io::Result<()> {
     let relative = mutation.relative_path();
     let live = root.join(relative);
@@ -644,7 +660,8 @@ fn apply_mutation(
             Ok(())
         }
         StagedFilesystemMutation::RemoveFile { .. } => {
-            run_before_remove_mutation_hook();
+            #[cfg(test)]
+            _lease.run_before_remove_hook();
             validate_secure_path(root, relative, true)?;
             match std::fs::symlink_metadata(&live) {
                 Ok(metadata) if metadata_is_redirect(&metadata) => {
@@ -664,7 +681,8 @@ fn apply_mutation(
             }
         }
         StagedFilesystemMutation::RemoveDirectoryIfEmpty { .. } => {
-            run_before_remove_mutation_hook();
+            #[cfg(test)]
+            _lease.run_before_remove_hook();
             validate_secure_path(root, relative, false)?;
             match std::fs::symlink_metadata(&live) {
                 Ok(metadata) if metadata_is_redirect(&metadata) => Err(std::io::Error::other(
@@ -719,9 +737,10 @@ fn restore_before_images(
     root: &Path,
     journal: &[JournalEntry],
     created_parent_directories: &BTreeSet<PathBuf>,
+    _lease: &ProjectFilesystemLeaseSet,
 ) -> std::io::Result<()> {
     #[cfg(test)]
-    if ROLLBACK_FAULT.swap(false, std::sync::atomic::Ordering::SeqCst) {
+    if _lease.take_rollback_fault() {
         return Err(std::io::Error::other("injected rollback restore failure"));
     }
     for (index, entry) in journal.iter().rev().enumerate() {
@@ -791,9 +810,9 @@ fn remove_path_if_present(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn cleanup_staging(staging_root: &Path) -> std::io::Result<()> {
+fn cleanup_staging(staging_root: &Path, _lease: &ProjectFilesystemLeaseSet) -> std::io::Result<()> {
     #[cfg(test)]
-    if take_fault(ProjectFilesystemFaultPoint::StagingCleanup) {
+    if _lease.take_fault(ProjectFilesystemFaultPoint::StagingCleanup) {
         return Err(std::io::Error::other("injected staging cleanup failure"));
     }
     if staging_root.exists() {
@@ -841,69 +860,4 @@ pub enum ProjectFilesystemFaultPoint {
     FirstLiveReplacement,
     SecondLiveReplacement,
     StagingCleanup,
-}
-
-#[cfg(test)]
-static FAULT_POINT: std::sync::Mutex<Option<ProjectFilesystemFaultPoint>> =
-    std::sync::Mutex::new(None);
-#[cfg(test)]
-static ROLLBACK_FAULT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-#[cfg(test)]
-static BEFORE_REMOVE_MUTATION_HOOK: std::sync::Mutex<
-    Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
-> = std::sync::Mutex::new(None);
-
-#[cfg(test)]
-static ROLLBACK_TEST_HOOK: std::sync::Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>> =
-    std::sync::Mutex::new(None);
-
-#[cfg(test)]
-pub fn set_project_filesystem_rollback_test_hook(
-    hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
-) {
-    *ROLLBACK_TEST_HOOK.lock().unwrap() = hook;
-}
-
-#[cfg(test)]
-fn run_project_filesystem_rollback_test_hook() {
-    let hook = ROLLBACK_TEST_HOOK.lock().unwrap().clone();
-    if let Some(hook) = hook {
-        hook();
-    }
-}
-
-#[cfg(test)]
-pub fn set_before_remove_mutation_hook(hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>) {
-    *BEFORE_REMOVE_MUTATION_HOOK.lock().unwrap() = hook;
-}
-
-#[cfg(test)]
-fn run_before_remove_mutation_hook() {
-    if let Some(hook) = BEFORE_REMOVE_MUTATION_HOOK.lock().unwrap().take() {
-        hook();
-    }
-}
-
-#[cfg(not(test))]
-fn run_before_remove_mutation_hook() {}
-
-#[cfg(test)]
-pub fn set_project_filesystem_fault(fault: Option<ProjectFilesystemFaultPoint>) {
-    *FAULT_POINT.lock().unwrap() = fault;
-}
-
-#[cfg(test)]
-pub fn set_project_filesystem_rollback_fault(enabled: bool) {
-    ROLLBACK_FAULT.store(enabled, std::sync::atomic::Ordering::SeqCst);
-}
-
-#[cfg(test)]
-fn take_fault(point: ProjectFilesystemFaultPoint) -> bool {
-    let mut fault = FAULT_POINT.lock().unwrap();
-    if *fault == Some(point) {
-        *fault = None;
-        true
-    } else {
-        false
-    }
 }

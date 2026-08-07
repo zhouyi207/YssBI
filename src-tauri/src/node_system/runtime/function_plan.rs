@@ -235,7 +235,13 @@ fn validate_plan(
             message: "registry fingerprint does not match the current basis".into(),
         });
     }
-    if plan.provenance.basis.resource_versions != current.resource_versions {
+    if !plan
+        .provenance
+        .basis
+        .resource_versions
+        .iter()
+        .all(|(key, version)| current.resource_versions.get(key) == Some(version))
+    {
         return Err(FunctionPlanStoreError::InvalidBasis {
             path: path.clone(),
             message: "resource versions do not match the current basis".into(),

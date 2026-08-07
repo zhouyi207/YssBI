@@ -108,7 +108,7 @@ function buildResourceIndex(params: {
   const resources: ProjectResourceMeta[] = [];
   for (const graph of params.graphs) {
     resources.push(buildGraphResourceMeta(graph.type, graph.path, graph.name, {
-      revision: graph.revision ?? 0,
+      revision: graph.revision,
     }));
   }
   for (const worksheet of params.worksheets) {

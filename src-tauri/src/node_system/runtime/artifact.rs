@@ -252,6 +252,7 @@ mod tests {
             graph_revision: GraphRevision::new(3),
             registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),
             resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
         };
         let correlation = CorrelationContext {
             project_session_id: ProjectSessionId::new("session"),

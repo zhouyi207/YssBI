@@ -6,6 +6,7 @@ import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFix
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useEditorKeyboard } from './useEditorKeyboard';
 import { useEditorOperations } from './useEditorOperations';
+import { pickEditorSessionNodeActions } from './editorSessionTypes';
 
 const executeCommand = vi.hoisted(() => vi.fn());
 const updateSelected = vi.hoisted(() => vi.fn());
@@ -55,6 +56,22 @@ function installNode(canCopy: boolean | undefined, canDelete: boolean, managed =
   const storedNode = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
   if (storedNode) storedNode.isInternal = false;
 }
+
+describe('editor session node action contract', () => {
+  it('exposes only descriptor-backed creation and deletion actions', () => {
+    const createNode = vi.fn();
+    const deleteNode = vi.fn();
+    const deleteNodes = vi.fn();
+    const actions = pickEditorSessionNodeActions({
+      createNode,
+      createNodes: vi.fn(),
+      deleteNode,
+      deleteNodes,
+    } as never);
+
+    expect(actions).toEqual({ createNode, deleteNode, deleteNodes });
+  });
+});
 
 describe('useEditorOperations projected deletion capabilities', () => {
   let host: HTMLDivElement;
@@ -143,6 +160,32 @@ describe('useEditorOperations projected deletion capabilities', () => {
     await operations.cutNodes([nodeId]);
 
     expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('copies stable projection identity without legacy params or display identity', async () => {
+    installNode(true, true);
+    const storedNode = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
+    if (!storedNode) throw new Error('projected node was not installed');
+    Object.assign(storedNode, {
+      paramsKind: 'variable',
+      variableId: 'variable-id',
+      variableName: 'Display variable name',
+      variableType: 'Float64',
+      subGraphPath: 'functions/display-name',
+      dataframeId: 'database-id',
+    });
+    await renderOperations();
+
+    operations.copy();
+
+    expect(setClipboard).toHaveBeenCalledWith({
+      entries: [{
+        nodeType: 'tests.projected-node',
+        position: { x: 0, y: 0 },
+        pins: expect.any(Array),
+      }],
+      internalConnections: expect.any(Array),
+    });
   });
 
   it('preserves deletion and cut for an ordinary projected node', async () => {

@@ -46,6 +46,7 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
 const graphPath = 'events/Main.yssbi-event';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const operationId = '00000000-0000-0000-0000-000000000401';
+const functionPath = 'functions/Forecast.yssbi-function';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -73,10 +74,54 @@ function resourceResult(publicationRevision = 1): ResourceMutationResultDto {
       projection: makeEditorProjectionFixture({
         graphPath,
         sourceRevision: 2,
+        nodeId: '00000000-0000-0000-0000-000000000603',
         title: 'Committed',
       }).projection,
     }],
     projectionStatus: { status: 'complete', expectedGraphPaths: [graphPath] },
+    history: { canUndo: true, canRedo: false },
+  };
+}
+
+function functionResult(functionRevision: number) {
+  const projection = makeEditorProjectionFixture({
+    graphPath: functionPath,
+    sourceRevision: 1,
+    nodeId: '00000000-0000-0000-0000-000000000604',
+    title: 'Function committed',
+  }).projection;
+  return {
+    operationId,
+    projectInstanceId,
+    publicationRevision: 1,
+    moves: [],
+    deltas: [{
+      resource: { kind: 'function', key: functionPath },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: operationId,
+      payload: {
+        kind: 'function',
+        patch: {
+          before: { parameters: [], return_type: null },
+          after: { parameters: [], return_type: 'Array<String>' },
+        },
+      },
+    }],
+    projectionReplacements: [{
+      graphPath: functionPath,
+      projection,
+      functionEditorProjection: {
+        functionRevision,
+        inputs: [],
+        outputs: [{
+          id: 'return',
+          name: 'Array<String>',
+          dataType: { kind: 'Array', inner: { kind: 'String' } },
+        }],
+      },
+    }],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [functionPath] },
     history: { canUndo: true, canRedo: false },
   };
 }
@@ -315,6 +360,23 @@ describe('Project mutation event synchronization', () => {
     expect(pendingLookup).not.toHaveBeenCalled();
     expect(graphStateRead).not.toHaveBeenCalled();
     expect(invalidateGraphProjection).not.toHaveBeenCalled();
+  });
+
+  it('rejects incoherent function replacement revisions before any store effect', () => {
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit').mockResolvedValue({
+      status: 'applied',
+      affectedGraphPaths: new Set(),
+    });
+    const graphWrite = vi.spyOn(useGraphDataStore, 'setState');
+    const databaseWrite = vi.spyOn(useDatabaseStore, 'setState');
+    const historyWrite = vi.spyOn(useHistoryStore, 'setState');
+
+    new ResourceMutationCommittedHandler().handle({ result: functionResult(2) } as never);
+
+    expect(submit).not.toHaveBeenCalled();
+    expect(graphWrite).not.toHaveBeenCalled();
+    expect(databaseWrite).not.toHaveBeenCalled();
+    expect(historyWrite).not.toHaveBeenCalled();
   });
 
   it('ignores stale project events before coordinator submission', () => {

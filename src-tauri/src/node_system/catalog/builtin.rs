@@ -2,7 +2,7 @@ use super::localization::{Aliases, BuiltinCatalog, Message, Text};
 use super::{control, core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::node_system::compiler::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError, LoweredKernel, LoweredNode,
-    LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
+    LoweringContext, LoweringError, LoweringInvariant, NodeImplementation, NodeLowerer,
     builtin_function_interface_resolver_ids, validate_compiler_diagnostic_definitions,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
@@ -379,10 +379,10 @@ impl NodeLowerer for KernelLowerer {
                 } else {
                     format!("yssbi.{}", self.0)
                 })
-                .map_err(|e| LoweringError::new(e.to_string()))?,
+                .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
             ),
             parameters: CompiledParameterHandle::new(format!("node.{}", context.node_id))
-                .map_err(|e| LoweringError::new(e.to_string()))?,
+                .map_err(|_| LoweringError::internal(LoweringInvariant::InvalidStaticHandle))?,
         })
     }
 }
@@ -510,17 +510,17 @@ fn register_builtin_nominal_validators(
 ) -> Result<(), BuiltinAssemblyError> {
     let parse_type_id = |value| sid(value, TypeId::new);
     builder
-        .register_nominal_validator(
+        .register_nominal_codec(
             parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
             parse_type_id(
                 crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
             )?,
             crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::node_system::parameter_types::dataframe::validate_project_columns_json,
+            crate::node_system::parameter_types::dataframe::prepare_project_columns_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     builder
-        .register_nominal_validator(
+        .register_nominal_codec(
             parse_type_id(
                 crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
             )?,
@@ -528,7 +528,7 @@ fn register_builtin_nominal_validators(
                 crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
             )?,
             crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::node_system::parameter_types::dataframe::validate_filter_predicate_json,
+            crate::node_system::parameter_types::dataframe::prepare_filter_predicate_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     Ok(())

@@ -1,5 +1,7 @@
 use super::CompilerDiagnostic;
-use super::pipeline::ResourceSnapshot;
+use crate::node_system::analysis::{
+    AnalysisResourceResolver, ResourceKey, ResourceObservationSet, ResourceObservedState,
+};
 use crate::node_system::analysis::{
     CompilationBasis, DiagnosticLocation, NodeDiagnostic, ResolvedInterface, ResolvedPort,
     ResolvedPortStatus, ResourceVersionSet,
@@ -42,12 +44,21 @@ pub struct InterfaceResolverMember {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceResolverError {
     pub detail: Box<str>,
+    pub resource: Option<(ResourceKey, Box<str>)>,
 }
 
 impl InterfaceResolverError {
     pub fn new(detail: impl Into<Box<str>>) -> Self {
         Self {
             detail: detail.into(),
+            resource: None,
+        }
+    }
+
+    pub fn from_resource(error: &crate::node_system::analysis::ResourceResolutionError) -> Self {
+        Self {
+            detail: error.to_string().into(),
+            resource: Some((error.key().clone(), error.reason().into())),
         }
     }
 }
@@ -66,7 +77,7 @@ pub struct InterfaceResolverRequest<'a> {
     pub template: &'a PortSpec,
     pub protocol: &'a NodeProtocol,
     pub document: &'a GraphDocument,
-    pub resources: &'a dyn ResourceSnapshot,
+    pub resources: &'a mut dyn AnalysisResourceResolver,
 }
 
 pub trait InterfaceResolver: Send + Sync {
@@ -216,12 +227,16 @@ pub fn materialize_dynamic_interface(
     document: &GraphDocument,
     resolvers: &InterfaceResolverSet,
 ) -> DynamicInterfaceResolution {
+    let mut resources = EmptyResourceSnapshot {
+        reads: ResourceVersionSet::new(),
+        observations: ResourceObservationSet::new(),
+    };
     materialize_dynamic_interface_with_resources(
         basis,
         node_id,
         protocol,
         document,
-        &EmptyResourceSnapshot,
+        &mut resources,
         resolvers,
     )
 }
@@ -231,7 +246,7 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
     node_id: NodeId,
     protocol: &NodeProtocol,
     document: &GraphDocument,
-    resources: &dyn ResourceSnapshot,
+    resources: &mut dyn AnalysisResourceResolver,
     resolvers: &InterfaceResolverSet,
 ) -> DynamicInterfaceResolution {
     let mut state = MaterializationState::new(node_id, document);
@@ -257,10 +272,21 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
                     resources,
                 }) {
                     Ok(members) => state.add_resolved_instances(basis, spec, members),
-                    Err(_) => {
-                        state.push_node_diagnostic(CompilerDiagnostic::InterfaceResolverFailed {
-                            resolver_id: resolver.to_string().into(),
-                        });
+                    Err(error) => {
+                        if let Some((resource_key, reason)) = error.resource {
+                            state.push_node_diagnostic(
+                                CompilerDiagnostic::ResourceResolutionFailed {
+                                    resource_key: resource_key.as_str().into(),
+                                    reason,
+                                },
+                            );
+                        } else {
+                            state.push_node_diagnostic(
+                                CompilerDiagnostic::InterfaceResolverFailed {
+                                    resolver_id: resolver.to_string().into(),
+                                },
+                            );
+                        }
                         state.add_existing_instances(spec, None);
                     }
                 }
@@ -271,11 +297,69 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
     state.finish()
 }
 
-struct EmptyResourceSnapshot;
+struct EmptyResourceSnapshot {
+    reads: ResourceVersionSet,
+    observations: ResourceObservationSet,
+}
 
-impl ResourceSnapshot for EmptyResourceSnapshot {
-    fn versions(&self) -> ResourceVersionSet {
-        ResourceVersionSet::new()
+impl AnalysisResourceResolver for EmptyResourceSnapshot {
+    fn resolve_function(
+        &mut self,
+        path: &crate::node_system::document::GraphResourcePath,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedFunction<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        let key = ResourceKey::new(path.0.clone());
+        let state = ResourceObservedState::Absent(None);
+        self.observations.insert(key.clone(), state.clone());
+        Err(crate::node_system::analysis::ResourceResolutionError::new(
+            key,
+            state,
+            format!("function resource '{}' is unavailable", path.0),
+        ))
+    }
+
+    fn resolve_variable(
+        &mut self,
+        id: &crate::variable::VariableId,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedVariable<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        let key = ResourceKey::new(format!("variables/{id}"));
+        let state = ResourceObservedState::Absent(None);
+        self.observations.insert(key.clone(), state.clone());
+        Err(crate::node_system::analysis::ResourceResolutionError::new(
+            key,
+            state,
+            format!("variable resource '{id}' is unavailable"),
+        ))
+    }
+
+    fn resolve_database(
+        &mut self,
+        id: &str,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedDatabase<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        let key = ResourceKey::new(format!("databases/{id}"));
+        let state = ResourceObservedState::Absent(None);
+        self.observations.insert(key.clone(), state.clone());
+        Err(crate::node_system::analysis::ResourceResolutionError::new(
+            key,
+            state,
+            format!("database resource '{id}' is unavailable"),
+        ))
+    }
+
+    fn reads(&self) -> &ResourceVersionSet {
+        &self.reads
+    }
+
+    fn observations(&self) -> &ResourceObservationSet {
+        &self.observations
     }
 }
 

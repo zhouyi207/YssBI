@@ -9,8 +9,8 @@ import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 
 import { areResourceDeltasValid } from '@/features/core/sync/utils/resourceMutationWireValidator';
-import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
+import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
 import {
   normalizeDatabaseRecord,
   type DatabaseDocumentDto,
@@ -28,8 +28,9 @@ import type {
 import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import {
-  functionSignaturePins,
+  installFunctionEditorProjection,
 } from '@/features/application/graphDocument/functionSignatureSync';
+import { remapGraphNonViewportUiState } from '@/features/application/editor/cascadeGraphPathReferences';
 
 import type {
   PreparedFunctionDeltaInstall,
@@ -60,10 +61,6 @@ type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isGraphPath(value: unknown): value is string {
-  return typeof value === 'string' && inferGraphResourceKind(value) != null;
 }
 
 function isWorksheetDocument(value: unknown): value is WorksheetDocument {
@@ -135,20 +132,20 @@ export function collectResourceMutationGraphPaths(
   const moves = Array.isArray(result.moves) ? result.moves : [result.moves];
   for (const move of moves) {
     if (!isRecord(move)) continue;
-    if (isGraphPath(move.from)) paths.add(move.from);
-    if (isGraphPath(move.to)) paths.add(move.to);
+    if (isGraphResourcePath(move.from)) paths.add(move.from);
+    if (isGraphResourcePath(move.to)) paths.add(move.to);
   }
   const deltas = Array.isArray(result.deltas) ? result.deltas : [result.deltas];
   for (const delta of deltas) {
     if (!isRecord(delta) || !isRecord(delta.resource)) continue;
     if ((delta.resource.kind === 'graph' || delta.resource.kind === 'function')
-      && isGraphPath(delta.resource.key)) paths.add(delta.resource.key);
+      && isGraphResourcePath(delta.resource.key)) paths.add(delta.resource.key);
   }
   const replacements = Array.isArray(result.projectionReplacements)
     ? result.projectionReplacements
     : [result.projectionReplacements];
   for (const replacement of replacements) {
-    if (isRecord(replacement) && isGraphPath(replacement.graphPath)) {
+    if (isRecord(replacement) && isGraphResourcePath(replacement.graphPath)) {
       paths.add(replacement.graphPath);
     }
   }
@@ -156,19 +153,21 @@ export function collectResourceMutationGraphPaths(
     for (const key of ['expectedGraphPaths', 'invalidatedGraphPaths'] as const) {
       const declared = result.projectionStatus[key];
       const entries = Array.isArray(declared) ? declared : [declared];
-      for (const path of entries) if (isGraphPath(path)) paths.add(path);
+      for (const path of entries) if (isGraphResourcePath(path)) paths.add(path);
     }
   }
   return paths;
 }
 
 function validateUniqueGraphPaths(value: unknown, label: string): string[] | string {
-  if (!Array.isArray(value) || !value.every(isGraphPath)) return `${label} are malformed`;
+  if (!Array.isArray(value) || !value.every(isGraphResourcePath)) return `${label} are malformed`;
   if (new Set(value).size !== value.length) return `${label} contain duplicates`;
   return value;
 }
 
 function graphPathFromDelta(delta: ResourceDeltaDto): string | undefined {
+  if (delta.payload.kind === 'graph_resource_move'
+    || delta.payload.kind === 'graph_resource_lifecycle') return undefined;
   return delta.resource.kind === 'graph' || delta.resource.kind === 'function'
     ? delta.resource.key
     : undefined;
@@ -179,7 +178,7 @@ function validateReplacement(
   deltas: ResourceDeltaDto[],
 ): string | undefined {
   if (!isRecord(replacement)
-    || !isGraphPath(replacement.graphPath)
+    || !isGraphResourcePath(replacement.graphPath)
     || !isRecord(replacement.projection)
     || replacement.projection.graphPath !== replacement.graphPath
     || replacement.projection.basis?.graphPath !== replacement.graphPath
@@ -187,10 +186,17 @@ function validateReplacement(
     || replacement.projection.sourceRevision < 0) {
     return 'projection replacement path identity is malformed';
   }
-  const delta = deltas.find((candidate) => graphPathFromDelta(candidate) === replacement.graphPath);
-  if (delta?.resource.kind === 'graph'
-    && replacement.projection.sourceRevision !== delta.toRevision) {
+  const graphDelta = deltas.find((candidate) =>
+    candidate.resource.kind === 'graph' && candidate.resource.key === replacement.graphPath);
+  if (graphDelta && replacement.projection.sourceRevision !== graphDelta.toRevision) {
     return `replacement for '${replacement.graphPath}' disagrees with its graph delta`;
+  }
+  const functionDelta = deltas.find((candidate) =>
+    candidate.resource.kind === 'function' && candidate.resource.key === replacement.graphPath);
+  if (functionDelta
+    && (!('functionEditorProjection' in replacement)
+      || replacement.functionEditorProjection?.functionRevision !== functionDelta.toRevision)) {
+    return `replacement for '${replacement.graphPath}' disagrees with its function delta`;
   }
   return undefined;
 }
@@ -210,8 +216,8 @@ export function validateResourceMutationWireResult(
   }
   if (!Array.isArray(result.moves) || !result.moves.every((move) =>
     isRecord(move)
-    && isGraphPath(move.from)
-    && isGraphPath(move.to)
+    && isGraphResourcePath(move.from)
+    && isGraphResourcePath(move.to)
     && move.from !== move.to
     && (move.kind === 'event' || move.kind === 'function')
     && typeof move.name === 'string'
@@ -275,8 +281,15 @@ export function fingerprintResourceMutationResult(result: ResourceMutationResult
   return JSON.stringify(canonicalize(result));
 }
 
-function prepareFunctionInstalls(deltas: ResourceDeltaDto[]): PreparedFunctionDeltaInstall[] {
+function prepareFunctionInstalls(
+  deltas: ResourceDeltaDto[],
+  replacements: GraphProjectionReplacementDto[],
+): PreparedFunctionDeltaInstall[] {
   const graphs = useGraphMetaStore.getState().graphs;
+  const functionProjections = new Map(replacements.flatMap((replacement) =>
+    'functionEditorProjection' in replacement
+      ? [[replacement.graphPath, replacement.functionEditorProjection] as const]
+      : []));
   const installs: PreparedFunctionDeltaInstall[] = [];
   for (const delta of deltas) {
     if (delta.resource.kind !== 'function' || delta.payload.kind !== 'function') continue;
@@ -289,14 +302,13 @@ function prepareFunctionInstalls(deltas: ResourceDeltaDto[]): PreparedFunctionDe
       || !sameValue(delta.payload.patch.before, current.functionSignature)) {
       throw new Error(`function delta for '${delta.resource.key}' is inconsistent`);
     }
-    const pins = functionSignaturePins(delta.payload.patch.after);
-    installs.push({
-      graphPath: delta.resource.key,
-      revision: delta.toRevision,
-      signature: delta.payload.patch.after,
-      functionInputs: pins.functionInputs,
-      functionOutputs: pins.functionOutputs,
-    });
+    const projection = functionProjections.get(delta.resource.key);
+    if (!projection) continue;
+    installs.push(installFunctionEditorProjection(
+      delta.resource.key,
+      delta.payload.patch.after,
+      projection,
+    ));
   }
   return installs;
 }
@@ -549,39 +561,22 @@ function applyMovesToAggregate(
       throw new Error(`move aggregate resource identity is inconsistent for '${move.from}'`);
     }
     delete aggregate.resources[move.resourceSnapshot.fromKey];
-    aggregate.resources[move.resourceSnapshot.toKey] = move.resourceSnapshot.destinationAfterLoadedMark;
+    aggregate.resources[move.resourceSnapshot.toKey] = move.resourceSnapshot.destinationAfter;
     aggregate.graphOrder = aggregate.graphOrder.map((path) => path === move.from ? move.to : path);
 
     delete aggregate.documents[move.documentSnapshot.fromKey];
-    if (move.documentSnapshot.destinationAfterLoadedMark) {
+    if (move.documentSnapshot.destinationAfter) {
       if (aggregate.documents[move.documentSnapshot.toKey]) {
         throw new Error(`move aggregate document destination '${move.to}' exists`);
       }
-      aggregate.documents[move.documentSnapshot.toKey] = move.documentSnapshot.destinationAfterLoadedMark;
+      aggregate.documents[move.documentSnapshot.toKey] = move.documentSnapshot.destinationAfter;
     }
 
     if (aggregate.graphMeta[move.to]) throw new Error(`move aggregate metadata destination '${move.to}' exists`);
     delete aggregate.graphMeta[move.from];
     aggregate.graphMeta[move.to] = move.graphMetaSnapshot.destinationAfter;
 
-    for (const install of move.referenceSnapshot.callers) {
-      const bucket = aggregate.graphEntities[install.graphPath];
-      const node = bucket?.nodes[install.nodeId];
-      if (!bucket || !node || node.subGraphPath !== install.before) {
-        throw new Error(`move caller reference '${install.graphPath}/${install.nodeId}' changed`);
-      }
-      aggregate.graphEntities[install.graphPath] = {
-        ...bucket,
-        nodes: { ...bucket.nodes, [install.nodeId]: { ...node, subGraphPath: install.after } },
-      };
-    }
-    for (const install of move.variableScopeSnapshot.installs) {
-      const variable = aggregate.variables[install.id];
-      if (!variable || !sameValue(variable.scope, install.before)) {
-        throw new Error(`move variable scope '${install.id}' changed`);
-      }
-      aggregate.variables[install.id] = { ...variable, scope: install.after };
-    }
+
     if (aggregate.focusedSession?.graphPath === move.from) {
       aggregate.focusedSession = { ...aggregate.focusedSession, graphPath: move.to };
     }
@@ -684,6 +679,9 @@ export function prepareSynchronousPublicationCommit(
 ): PreparedProjectPublication {
   const wireError = validateResourceMutationWireResult(result);
   if (wireError) throw new Error(wireError);
+  if (result.projectionStatus.status === 'incomplete') {
+    throw new Error('incomplete projection status requires recovery');
+  }
   if (result.projectInstanceId !== context.projectInstanceId) {
     throw new Error('publication project identity changed during preparation');
   }
@@ -696,9 +694,7 @@ export function prepareSynchronousPublicationCommit(
     Object.entries(baseGraphEntities)
       .map(([path, bucket]) => [path, bucket.sourceRevision] as const),
   );
-  for (const move of context.moves) {
-    projectedRevisions.set(move.to, move.destinationProjection.sourceRevision);
-  }
+
   for (const replacement of result.projectionReplacements) {
     const entities = toProjectionEntities(replacement.projection);
     if (entities.graphPath !== replacement.graphPath) {
@@ -718,15 +714,8 @@ export function prepareSynchronousPublicationCommit(
       throw new Error('prepared move identity disagrees with publication');
     }
   }
-  const projectionByPath = new Map<string, GraphProjectionReplacementDto>();
-  for (const move of context.moves) {
-    projectionByPath.set(move.to, { graphPath: move.to, projection: move.destinationProjection });
-  }
-  for (const replacement of result.projectionReplacements) {
-    projectionByPath.set(replacement.graphPath, replacement);
-  }
   const preparedGraph = prepareGraphProjectionReplacements(
-    [...projectionByPath.values()],
+    result.projectionReplacements,
     baseGraphEntities,
   );
   if (!preparedGraph.prepared) {
@@ -738,7 +727,10 @@ export function prepareSynchronousPublicationCommit(
   applyMovesToAggregate(aggregate, context.moves);
   applyGraphLifecycleDeltasToAggregate(aggregate, result.deltas);
 
-  const functionInstalls = prepareFunctionInstalls(result.deltas);
+  const functionInstalls = prepareFunctionInstalls(
+    result.deltas,
+    result.projectionReplacements,
+  );
   for (const install of functionInstalls) {
     const graph = aggregate.graphMeta[install.graphPath];
     if (!graph) throw new Error(`function metadata target '${install.graphPath}' is absent`);
@@ -835,4 +827,5 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
   useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
   useEditorTabStore.setState(plan.storeState.tabs);
   useViewportStore.setState({ viewports: plan.storeState.viewports });
+  for (const move of plan.moves) remapGraphNonViewportUiState(move.from, move.to);
 }

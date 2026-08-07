@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { BatchCreateNodeRequest } from '@/shared/types/dto/batchCreateNode';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
@@ -8,7 +7,6 @@ import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEdit
 import { executeCommand } from '@/features/core/history';
 import { canDeleteNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { logger } from '@/utils/appLogger';
-import { notifyNodeCreationUnavailable } from '@/features/application/editor/editorMutationAvailability';
 
 export function useNodeManagement() {
   const { activeTabId } = useActiveEditorGroup();
@@ -30,14 +28,6 @@ export function useNodeManagement() {
       return outcome.status === 'applied';
     },
     [activeTabId, locale],
-  );
-
-  const createNodes = useCallback(
-    async (_requests: BatchCreateNodeRequest[]): Promise<string[]> => {
-      notifyNodeCreationUnavailable();
-      return [];
-    },
-    [],
   );
 
   const deleteNode = useCallback(
@@ -81,5 +71,5 @@ export function useNodeManagement() {
     [activeTabId],
   );
 
-  return { createNode, createNodes, deleteNode, deleteNodes };
+  return { createNode, deleteNode, deleteNodes };
 }

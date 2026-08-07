@@ -2,10 +2,14 @@ import { isSchemaAwareParameterEditorDto } from './parameterEditorValidators';
 import type {
   DiagnosticLocationDto,
   EditorGraphProjectionDto,
+  FunctionEditorProjectionDto,
   PortAddressDto,
 } from './editorProjection';
+import type { DataType } from '@/shared/types/domain/dataType';
+import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 
 const fingerprintPattern = /^[0-9a-f]{64}$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(['input', 'output']);
 const portKinds = new Set(['data', 'control', 'effect']);
 const portInstanceKinds = new Set(['declared', 'userCreated', 'derived']);
@@ -38,6 +42,45 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
+const functionDataTypeLeaves = new Set([
+  'Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time', 'Categorical',
+  'Object', 'Any', 'DataFrame',
+]);
+
+function isFunctionDataType(value: unknown): value is DataType {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  if (functionDataTypeLeaves.has(value.kind)) return hasExactKeys(value, ['kind']);
+  if (!hasExactKeys(value, ['kind', 'inner'])) return false;
+  if (value.kind === 'Struct') {
+    return typeof value.inner === 'string' && value.inner.trim().length > 0;
+  }
+  if (value.kind === 'Array' || value.kind === 'DataSeries') {
+    return isFunctionDataType(value.inner);
+  }
+  return value.kind === 'OneOf'
+    && Array.isArray(value.inner)
+    && value.inner.length > 0
+    && value.inner.every(isFunctionDataType);
+}
+
+function isFunctionEditorPin(value: unknown): boolean {
+  return hasExactKeys(value, ['id', 'name', 'dataType'])
+    && typeof value.id === 'string'
+    && typeof value.name === 'string'
+    && isFunctionDataType(value.dataType);
+}
+
+export function isFunctionEditorProjectionDto(
+  value: unknown,
+): value is FunctionEditorProjectionDto {
+  return hasExactKeys(value, ['functionRevision', 'inputs', 'outputs'])
+    && isNonNegativeSafeInteger(value.functionRevision)
+    && Array.isArray(value.inputs)
+    && value.inputs.every(isFunctionEditorPin)
+    && Array.isArray(value.outputs)
+    && value.outputs.every(isFunctionEditorPin);
+}
+
 function isJsonValue(value: unknown): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
@@ -49,11 +92,29 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
 }
 
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && uuidPattern.test(value);
+}
+
+export function isGraphResourcePath(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const segments = value.split('/');
+  if (segments.length < 2
+    || segments.some((segment) => !segment || segment === '.' || segment === '..')) return false;
+  const kind = inferGraphResourceKind(value);
+  return (kind === 'event'
+      && value.startsWith('events/')
+      && value.endsWith('.yssbi-event'))
+    || (kind === 'function'
+      && value.startsWith('functions/')
+      && value.endsWith('.yssbi-function'));
+}
+
 function isProjectionBasis(value: unknown): boolean {
   return hasExactKeys(value, [
     'graphPath', 'graphRevision', 'registryFingerprint', 'resourceVersions',
   ])
-    && typeof value.graphPath === 'string'
+    && isGraphResourcePath(value.graphPath)
     && isNonNegativeSafeInteger(value.graphRevision)
     && typeof value.registryFingerprint === 'string'
     && fingerprintPattern.test(value.registryFingerprint)
@@ -87,14 +148,14 @@ export function isPortAddressDto(value: unknown): value is PortAddressDto {
   if (!isRecord(value)) return false;
   if (value.kind === 'declared') {
     return hasExactKeys(value, ['kind', 'nodeId', 'portKey'])
-      && typeof value.nodeId === 'string'
+      && isUuid(value.nodeId)
       && typeof value.portKey === 'string';
   }
   if (value.kind === 'instance') {
     return hasExactKeys(value, ['kind', 'nodeId', 'templateKey', 'instanceId'])
-      && typeof value.nodeId === 'string'
+      && isUuid(value.nodeId)
       && typeof value.templateKey === 'string'
-      && typeof value.instanceId === 'string';
+      && isUuid(value.instanceId);
   }
   return false;
 }
@@ -206,7 +267,7 @@ function isNode(value: unknown): boolean {
     'graphPath', 'sourceRevision', 'nodeId', 'nodeTypeId', 'position', 'display', 'ports',
     'parameterEditors', 'capabilities', 'diagnostics',
   ])
-    && typeof value.graphPath === 'string'
+    && isGraphResourcePath(value.graphPath)
     && isNonNegativeSafeInteger(value.sourceRevision)
     && typeof value.nodeId === 'string'
     && typeof value.nodeTypeId === 'string'
@@ -232,7 +293,7 @@ export function isEditorGraphProjectionDto(value: unknown): value is EditorGraph
     'hasBlockingDiagnostics',
   ])
     && isProjectionBasis(value.basis)
-    && typeof value.graphPath === 'string'
+    && isGraphResourcePath(value.graphPath)
     && isNonNegativeSafeInteger(value.sourceRevision)
     && Array.isArray(value.nodes) && value.nodes.every(isNode)
     && Array.isArray(value.connections) && value.connections.every(isConnection)

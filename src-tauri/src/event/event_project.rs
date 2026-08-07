@@ -13,6 +13,9 @@ pub struct ProjectActivationResultDto {
 pub struct GraphProjectionReplacementDto {
     pub graph_path: String,
     pub projection: crate::node_system::analysis::EditorGraphProjectionDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_editor_projection:
+        Option<crate::node_system::analysis::FunctionEditorProjectionDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -413,6 +416,7 @@ mod tests {
             projection_replacement: GraphProjectionReplacementDto {
                 graph_path: "events/Main.yssbi-event".into(),
                 projection,
+                function_editor_projection: None,
             },
             history: Default::default(),
         };
