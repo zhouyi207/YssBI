@@ -35,13 +35,13 @@ export interface LocalizedCatalogItemDto {
   styleId: string;
   aliases: string[];
   technicalTerms: string[];
-  pinyin?: string;
+  backendSearchText: string[];
+  resourceNames: string[];
   ports: LocalizedPortDto[];
   parameters: LocalizedParameterDto[];
   resourcePath?: string;
   resourceRevision?: number;
   creation: NodeCreationDescriptorDto;
-  searchText: string;
 }
 
 export interface LocalizedCatalogDto {
@@ -104,8 +104,9 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
   const candidate = value as Record<string, unknown>;
   if (!hasExactKeys(candidate, [
     'nodeTypeId', 'title', 'description', 'documentation', 'categoryId', 'iconId', 'styleId',
-    'aliases', 'technicalTerms', 'ports', 'parameters', 'creation', 'searchText',
-  ], ['pinyin', 'resourcePath', 'resourceRevision'])) return false;
+    'aliases', 'technicalTerms', 'backendSearchText', 'resourceNames',
+    'ports', 'parameters', 'creation',
+  ], ['resourcePath', 'resourceRevision'])) return false;
   if (!isNodeCreationDescriptorDto(candidate.creation)) return false;
   const creation = candidate.creation;
   const coherent = creation.kind === 'resourceBound'
@@ -125,13 +126,13 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
     && typeof candidate.styleId === 'string'
     && isStringArray(candidate.aliases)
     && isStringArray(candidate.technicalTerms)
-    && (candidate.pinyin === undefined || typeof candidate.pinyin === 'string')
+    && isStringArray(candidate.backendSearchText)
+    && isStringArray(candidate.resourceNames)
     && Array.isArray(candidate.ports) && candidate.ports.every(isLocalizedPort)
     && Array.isArray(candidate.parameters) && candidate.parameters.every(isLocalizedParameter)
     && (candidate.resourcePath === undefined || typeof candidate.resourcePath === 'string')
     && (candidate.resourceRevision === undefined
-      || (Number.isSafeInteger(candidate.resourceRevision) && (candidate.resourceRevision as number) >= 0))
-    && typeof candidate.searchText === 'string';
+      || (Number.isSafeInteger(candidate.resourceRevision) && (candidate.resourceRevision as number) >= 0));
 }
 
 export function isLocalizedCatalogDto(value: unknown): value is LocalizedCatalogDto {

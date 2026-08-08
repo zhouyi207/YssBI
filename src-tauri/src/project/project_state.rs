@@ -45,6 +45,8 @@ type TraceQueryTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type VariableStagingTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
+type VariableAuthorityAssignmentPanicTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
 pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -109,7 +111,14 @@ impl PartialEq<&str> for ProjectExecutionError {
 
 impl From<crate::node_system::runtime::RunError> for ProjectExecutionError {
     fn from(error: crate::node_system::runtime::RunError) -> Self {
-        let message = crate::node_system::runtime::RunErrorCode::from(&error).public_message();
+        let message = match crate::node_system::runtime::RunErrorOutcome::from(&error) {
+            crate::node_system::runtime::RunErrorOutcome::Ordinary { code } => {
+                code.public_message()
+            }
+            crate::node_system::runtime::RunErrorOutcome::DeadlineExceeded { .. } => {
+                "run deadline was exceeded"
+            }
+        };
         Self {
             message: message.into(),
             run_error: Some(error),
@@ -309,9 +318,131 @@ struct CommittedResourceMutation {
     completion_test_hook: Option<CommittedResourceCompletionTestHook>,
 }
 
-struct CommittedVariableEffects {
-    variable_ids: Box<[crate::variable::VariableId]>,
-    resource_mutation: Option<CommittedResourceMutation>,
+type PreparedVariableEffectAuthority<'a> = Box<
+    dyn FnMut(
+            Option<(
+                &crate::node_system::runtime::CancellationToken,
+                Option<crate::node_system::runtime::RunDeadline>,
+            )>,
+        ) -> Result<VariableEffectCommitResult, VariableEffectCommitError>
+        + 'a,
+>;
+
+struct VariableAuthorityPriorState {
+    data: ProjectData,
+    revisions: std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+    variable_tabular: std::collections::HashMap<String, crate::tabular::VariableTabularCache>,
+    history: ProjectHistory,
+    publication_revision: u64,
+    authority_generation: u64,
+}
+
+struct VariableAuthorityInstallGuard<'a> {
+    data: &'a mut ProjectData,
+    revisions:
+        &'a mut std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
+    variable_tabular:
+        &'a mut std::collections::HashMap<String, crate::tabular::VariableTabularCache>,
+    history: &'a mut ProjectHistory,
+    publication: &'a mut MutationPublication,
+    prior: Option<VariableAuthorityPriorState>,
+    armed: bool,
+}
+
+impl<'a> VariableAuthorityInstallGuard<'a> {
+    fn new(
+        data: &'a mut ProjectData,
+        revisions: &'a mut std::collections::HashMap<
+            crate::variable::VariableId,
+            VariableRevisionEntry,
+        >,
+        variable_tabular: &'a mut std::collections::HashMap<
+            String,
+            crate::tabular::VariableTabularCache,
+        >,
+        history: &'a mut ProjectHistory,
+        publication: &'a mut MutationPublication,
+        prior: VariableAuthorityPriorState,
+    ) -> Self {
+        Self {
+            data,
+            revisions,
+            variable_tabular,
+            history,
+            publication,
+            prior: Some(prior),
+            armed: true,
+        }
+    }
+
+    fn install(
+        &mut self,
+        next_data: ProjectData,
+        next_revisions: std::collections::HashMap<
+            crate::variable::VariableId,
+            VariableRevisionEntry,
+        >,
+        next_variable_tabular: std::collections::HashMap<
+            String,
+            crate::tabular::VariableTabularCache,
+        >,
+        next_history: ProjectHistory,
+        publication_revision: u64,
+        authority_generation: u64,
+        #[cfg(test)] panic_hook: Option<&VariableAuthorityAssignmentPanicTestHook>,
+    ) {
+        *self.data = next_data;
+        #[cfg(test)]
+        if let Some(panic_hook) = panic_hook {
+            panic_hook();
+        }
+        *self.revisions = next_revisions;
+        #[cfg(test)]
+        if let Some(panic_hook) = panic_hook {
+            panic_hook();
+        }
+        *self.variable_tabular = next_variable_tabular;
+        #[cfg(test)]
+        if let Some(panic_hook) = panic_hook {
+            panic_hook();
+        }
+        *self.history = next_history;
+        #[cfg(test)]
+        if let Some(panic_hook) = panic_hook {
+            panic_hook();
+        }
+        self.publication.resource_revision = publication_revision;
+        self.publication.authority_generation = authority_generation;
+        #[cfg(test)]
+        if let Some(panic_hook) = panic_hook {
+            panic_hook();
+        }
+    }
+
+    fn commit(mut self) -> VariableAuthorityPriorState {
+        self.armed = false;
+        self.prior
+            .take()
+            .expect("variable authority prior state exists until commit")
+    }
+}
+
+impl Drop for VariableAuthorityInstallGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let prior = self
+            .prior
+            .take()
+            .expect("armed variable authority guard owns prior state");
+        self.publication.resource_revision = prior.publication_revision;
+        self.publication.authority_generation = prior.authority_generation;
+        *self.history = prior.history;
+        *self.variable_tabular = prior.variable_tabular;
+        *self.revisions = prior.revisions;
+        *self.data = prior.data;
+    }
 }
 
 pub(super) struct MutationPublication {
@@ -1088,6 +1219,9 @@ pub struct ProjectState {
     #[cfg(test)]
     variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
     #[cfg(test)]
+    variable_authority_assignment_panic_test_hook:
+        Arc<RwLock<Option<VariableAuthorityAssignmentPanicTestHook>>>,
+    #[cfg(test)]
     project_activation_test_hook: Arc<RwLock<Option<ProjectActivationTestHook>>>,
     #[cfg(test)]
     activation_store_replaced_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
@@ -1113,8 +1247,8 @@ mod startup_tests {
     #[test]
     fn variable_effect_validation_does_not_reinitialize_builtins() {
         let source = include_str!("project_state.rs");
-        let commit_marker = ["fn commit_variable_effects_", "receipt("].concat();
-        let end_marker = ["\n}\n\nfn install_variable_effect_", "snapshots"].concat();
+        let commit_marker = ["fn prepare_variable_effects_", "receipt<'a>("].concat();
+        let end_marker = ["\nfn variable_effect_", "run_error("].concat();
         let forbidden = ["ProjectStore::", "try_new()"].concat();
         let scratch_api = ["validation_", "scratch"].concat();
         let commit = source
@@ -1353,6 +1487,8 @@ impl ProjectState {
             trace_query_after_snapshot_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             variable_staging_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            variable_authority_assignment_panic_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             project_activation_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -2241,6 +2377,17 @@ impl ProjectState {
     #[cfg(test)]
     pub(crate) fn set_variable_staging_test_hook(&self, hook: VariableStagingTestHook) {
         *self.variable_staging_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_variable_authority_assignment_panic_for_test(
+        &self,
+        hook: VariableAuthorityAssignmentPanicTestHook,
+    ) {
+        *self
+            .variable_authority_assignment_panic_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -6039,12 +6186,8 @@ impl ProjectState {
     ) -> Result<Option<crate::node_system::runtime::ResultSourceDescriptor>, ProjectFilesystemError>
     {
         self.ensure_project_operational()?;
-        Ok(self
-            .project_store
-            .read()
-            .unwrap()
-            .results
-            .descriptor(source_id))
+        let results = self.project_store.read().unwrap().results.clone();
+        Ok(results.descriptor(source_id))
     }
 
     pub fn result_source_value(
@@ -6053,7 +6196,8 @@ impl ProjectState {
     ) -> Result<Option<Arc<crate::node_system::runtime::ArtifactSnapshot>>, ProjectFilesystemError>
     {
         self.ensure_project_operational()?;
-        Ok(self.project_store.read().unwrap().results.value(source_id))
+        let results = self.project_store.read().unwrap().results.clone();
+        Ok(results.value(source_id))
     }
 
     pub fn result_source_page(
@@ -6063,12 +6207,12 @@ impl ProjectState {
         limit: usize,
     ) -> Result<Option<crate::node_system::runtime::ResultSourcePage>, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        Ok(self
-            .project_store
-            .read()
-            .unwrap()
-            .results
-            .page(source_id, offset, limit))
+        let results = self.project_store.read().unwrap().results.clone();
+        results.page(source_id, offset, limit).map_err(|error| {
+            ProjectFilesystemError::ResultSourceReadFailed {
+                message: error.to_string(),
+            }
+        })
     }
 
     pub fn release_result_source(
@@ -6076,12 +6220,8 @@ impl ProjectState {
         source_id: crate::node_system::runtime::ResultSourceId,
     ) -> Result<bool, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        Ok(self
-            .project_store
-            .read()
-            .unwrap()
-            .results
-            .release(source_id))
+        let results = self.project_store.read().unwrap().results.clone();
+        Ok(results.release(source_id))
     }
 
     pub fn release_run_result_sources(
@@ -6089,12 +6229,8 @@ impl ProjectState {
         run_id: crate::node_system::analysis::RunId,
     ) -> Result<usize, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        Ok(self
-            .project_store
-            .read()
-            .unwrap()
-            .results
-            .release_run_sources(run_id))
+        let results = self.project_store.read().unwrap().results.clone();
+        Ok(results.release_run_sources(run_id))
     }
 
     fn capture_execution_snapshot(
@@ -6365,22 +6501,39 @@ impl ProjectState {
                 .track_pre_run(execution.session_id.clone(), cancellation.clone())
                 .map_err(|error| error.to_string())?
         };
-        let finalize =
-            |result: &mut crate::node_system::runtime::RunResult,
-             cancellation: &crate::node_system::runtime::CancellationToken| {
+        let prepared_authority = std::cell::RefCell::new(None);
+        let prepare =
+            |_: &mut crate::node_system::runtime::RunResult,
+             cancellation: &crate::node_system::runtime::CancellationToken,
+             deadline: Option<crate::node_system::runtime::RunDeadline>| {
                 self.run_execution_before_commit_gate_test_hook();
-                let _finalization = pre_run.begin_finalization(cancellation).map_err(|error| {
+                if let Some(deadline) = deadline {
+                    deadline.check(
+                        cancellation,
+                        crate::node_system::runtime::RunPhase::ResultPublication,
+                    )?;
+                }
+                let finalization = pre_run.begin_finalization(cancellation).map_err(|error| {
                     crate::node_system::runtime::RunError::ProjectDraining(error.to_string().into())
                 })?;
-                cancellation.check()?;
+                let terminal = Some((cancellation, deadline));
                 let effects = resources.snapshot().variable_effects();
-                let committed = self
-                    .commit_variable_effects(&execution.session_id, effects)
-                    .map_err(|error| {
-                        crate::node_system::runtime::RunError::ResourceSnapshotMismatch(
-                            error.to_string().into(),
-                        )
-                    })?;
+                let authority = self
+                    .prepare_variable_effects_receipt(&execution.session_id, effects, terminal)
+                    .map_err(variable_effect_run_error)?;
+                prepared_authority.replace(Some((finalization, authority)));
+                Ok(())
+            };
+        let finalize =
+            |result: &mut crate::node_system::runtime::RunResult,
+             cancellation: &crate::node_system::runtime::CancellationToken,
+             deadline: Option<crate::node_system::runtime::RunDeadline>| {
+                let mut prepared = prepared_authority.borrow_mut();
+                let (_finalization, authority) = prepared
+                    .as_mut()
+                    .expect("project success authority was prepared before finalization");
+                let committed =
+                    authority(Some((cancellation, deadline))).map_err(variable_effect_run_error)?;
                 result.committed_variable_ids = committed.variable_ids;
                 result.resource_mutation = committed.resource_mutation;
                 Ok(())
@@ -6397,7 +6550,7 @@ impl ProjectState {
         .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
         .with_result_store(&execution.results)
-        .with_success_finalizer(&finalize)
+        .with_atomic_success_transaction(&prepare, &finalize)
         .run(plan.as_ref(), cancellation)
         .map_err(ProjectExecutionError::from)
     }
@@ -6407,20 +6560,34 @@ impl ProjectState {
         expected_session_id: &crate::node_system::analysis::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
     ) -> Result<VariableEffectCommitResult, VariableEffectCommitError> {
-        let committed = self.commit_variable_effects_receipt(expected_session_id, effects)?;
-        Ok(VariableEffectCommitResult {
-            variable_ids: committed.variable_ids,
-            resource_mutation: committed
-                .resource_mutation
-                .map(|receipt| receipt.complete("en-US")),
-        })
+        let mut prepared =
+            self.prepare_variable_effects_receipt(expected_session_id, effects, None)?;
+        prepared(None)
     }
 
-    fn commit_variable_effects_receipt(
+    pub(super) fn commit_variable_effects_for_run(
         &self,
         expected_session_id: &crate::node_system::analysis::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
-    ) -> Result<CommittedVariableEffects, VariableEffectCommitError> {
+        cancellation: &crate::node_system::runtime::CancellationToken,
+        deadline: Option<crate::node_system::runtime::RunDeadline>,
+    ) -> Result<VariableEffectCommitResult, crate::node_system::runtime::RunError> {
+        let terminal = Some((cancellation, deadline));
+        let mut prepared = self
+            .prepare_variable_effects_receipt(expected_session_id, effects, terminal)
+            .map_err(variable_effect_run_error)?;
+        prepared(terminal).map_err(variable_effect_run_error)
+    }
+
+    fn prepare_variable_effects_receipt<'a>(
+        &'a self,
+        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
+        terminal: Option<(
+            &crate::node_system::runtime::CancellationToken,
+            Option<crate::node_system::runtime::RunDeadline>,
+        )>,
+    ) -> Result<PreparedVariableEffectAuthority<'a>, VariableEffectCommitError> {
         let current_session_id = self
             .project_store
             .read()
@@ -6433,11 +6600,43 @@ impl ProjectState {
                 current: current_session_id,
             });
         }
+        let expected_session_id = expected_session_id.clone();
         if effects.is_empty() {
-            return Ok(CommittedVariableEffects {
-                variable_ids: Box::new([]),
-                resource_mutation: None,
-            });
+            check_variable_effect_terminal(terminal)?;
+            let expected_path = self.get_path();
+            let (expected_project_instance_id, expected_revision, expected_generation) = {
+                let publication = self.mutation_publication.lock().unwrap();
+                (
+                    publication.project_instance_id.clone(),
+                    publication.resource_revision,
+                    publication.authority_generation(),
+                )
+            };
+            return Ok(Box::new(move |terminal| {
+                let publication = self.mutation_publication.lock().unwrap();
+                let path = self.project_path.read().unwrap();
+                let _data = self.project_data.write().unwrap();
+                let store = self.project_store.write().unwrap();
+                let _graph_revisions = self.graph_revisions.read().unwrap();
+                let _variable_revisions = self.variable_revisions.write().unwrap();
+                let _worksheet_revisions = self.worksheet_revisions.read().unwrap();
+                let _history = self.history.write().unwrap();
+                if publication.project_instance_id != expected_project_instance_id
+                    || publication.resource_revision != expected_revision
+                    || publication.authority_generation() != expected_generation
+                    || *path != expected_path
+                    || store.project_session_id != expected_session_id
+                {
+                    return Err(variable_effect_persistence_error(
+                        "project changed before empty variable authority commit",
+                    ));
+                }
+                check_variable_effect_terminal(terminal)?;
+                Ok(VariableEffectCommitResult {
+                    variable_ids: Box::new([]),
+                    resource_mutation: None,
+                })
+            }));
         }
 
         let session = self
@@ -6447,9 +6646,17 @@ impl ProjectState {
             variable_effect_persistence_error("no project is active for variable persistence")
         })?;
         let projection_environment = self
-            .capture_projection_environment_for_execution_session(&session, expected_session_id)
+            .capture_projection_environment_for_execution_session(&session, &expected_session_id)
             .map_err(variable_effect_persistence_error)?;
-        let (data_snapshot, graph_revisions, variable_revisions, history_snapshot) = {
+        let (
+            data_snapshot,
+            graph_revisions,
+            variable_revisions,
+            history_snapshot,
+            publication_revision_basis,
+            authority_generation_basis,
+            database_revisions,
+        ) = {
             let publication = self.mutation_publication.lock().unwrap();
             let path = self.project_path.read().unwrap();
             if publication.project_instance_id != session.instance_id.as_str()
@@ -6464,6 +6671,9 @@ impl ProjectState {
                 self.graph_revisions.read().unwrap().clone(),
                 self.variable_revisions.read().unwrap().clone(),
                 self.history.read().unwrap().clone(),
+                publication.resource_revision,
+                publication.authority_generation(),
+                self.database_authority_revisions.read().unwrap().clone(),
             )
         };
 
@@ -6576,7 +6786,7 @@ impl ProjectState {
         let mut proposed_data = data_snapshot.clone();
         let mut proposed_revisions = variable_revisions.clone();
         let mut proposed_documents = project_documents(&proposed_data, &proposed_revisions);
-        let mut proposed_history = history_snapshot;
+        let mut proposed_history = history_snapshot.clone();
         proposed_history
             .apply_transaction(&mut proposed_documents, transaction.clone())
             .map_err(|error| VariableEffectCommitError::History {
@@ -6591,7 +6801,7 @@ impl ProjectState {
             .map_err(variable_effect_invalid_error)?;
         let mut validation_store = {
             let store = self.project_store.read().unwrap();
-            if &store.project_session_id != expected_session_id {
+            if store.project_session_id != expected_session_id {
                 return Err(VariableEffectCommitError::SessionChanged {
                     expected: expected_session_id.clone(),
                     current: store.project_session_id.clone(),
@@ -6599,6 +6809,7 @@ impl ProjectState {
             }
             store.validation_scratch()
         };
+        let prior_variable_tabular = validation_store.variable_tabular.clone();
         for id in &ids {
             let variable = proposed_data
                 .variables
@@ -6608,6 +6819,7 @@ impl ProjectState {
             sync_variable_cache(&mut validation_store, variable)
                 .map_err(variable_effect_invalid_error)?;
         }
+        let proposed_variable_tabular = validation_store.variable_tabular.clone();
 
         let mut mutations = Vec::new();
         if writes_globals {
@@ -6686,114 +6898,223 @@ impl ProjectState {
             },
         )
         .map_err(variable_effect_persistence_error)?;
+        check_variable_effect_terminal(terminal)?;
         let committed_filesystem = prepared
             .commit()
             .map_err(variable_effect_persistence_error)?;
 
-        let authority_result = (|| {
-            let mut publication = self.mutation_publication.lock().unwrap();
-            let path = self.project_path.read().unwrap();
-            if publication.project_instance_id != context.session.instance_id.as_str()
-                || path.as_deref() != Some(expected_project_path.as_str())
-            {
-                return Err(variable_effect_persistence_error(
-                    "project changed before variable authority commit",
-                ));
-            }
-            if !projection_environment.matches_publication(&publication) {
-                return Err(variable_effect_persistence_error(
-                    "projection environment changed before variable authority commit",
-                ));
-            }
-            let mut data = self.project_data.write().unwrap();
-            let mut store = self.project_store.write().unwrap();
-            if &store.project_session_id != expected_session_id {
-                return Err(VariableEffectCommitError::SessionChanged {
-                    expected: expected_session_id.clone(),
-                    current: store.project_session_id.clone(),
-                });
-            }
-            let graph_revisions = self.graph_revisions.read().unwrap();
-            let mut revisions = self.variable_revisions.write().unwrap();
-            validate_context_revisions(
-                &context,
-                &data,
-                &graph_revisions,
-                &revisions,
-                &self.worksheet_revisions.read().unwrap(),
-            )
-            .map_err(variable_effect_persistence_error)?;
-            let mut documents = project_documents(&data, &revisions);
-            let mut next_history = self.history.read().unwrap().clone();
-            next_history
-                .apply_transaction(&mut documents, transaction.clone())
-                .map_err(|error| VariableEffectCommitError::History {
-                    message: error.to_string().into(),
-                })?;
-            let mut next_data = data.clone();
-            let mut next_revisions = revisions.clone();
-            replace_project_documents(&mut next_data, &mut next_revisions, documents);
-            let snapshot_ids =
-                install_variable_effect_snapshots(&mut next_data, &transaction, false)
-                    .map_err(variable_effect_invalid_error)?;
-            let cache_updates = variable_cache_updates(&next_data, &snapshot_ids)
-                .map_err(variable_effect_invalid_error)?;
-            self.run_mutation_publication_test_hook();
-            let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
-            *data = next_data;
-            *revisions = next_revisions;
-            apply_variable_cache_updates(&mut store, cache_updates);
-            let history_status = next_history.status();
-            *self.history.write().unwrap() = next_history;
-            drop(store);
-            let publication_revision = publication.allocate_resource_revision();
-            let projection_source = self.projection_source_snapshot(
-                &data,
-                projection_environment,
-                publication.project_instance_id.clone(),
-                publication.authority_generation(),
-                graph_revisions.clone(),
-                revisions.clone(),
-                self.database_authority_revisions.read().unwrap().clone(),
-            );
-            #[cfg(test)]
-            let completion_test_hook = self
-                .committed_resource_completion_test_hook
-                .read()
-                .unwrap()
-                .clone();
-            let resource_mutation = Some(CommittedResourceMutation {
+        self.run_mutation_publication_test_hook();
+        let publication_revision = publication_revision_basis
+            .checked_add(1)
+            .ok_or_else(|| variable_effect_persistence_error("resource revision overflowed"))?;
+        let authority_generation = authority_generation_basis
+            .checked_add(1)
+            .ok_or_else(|| variable_effect_persistence_error("authority generation overflowed"))?;
+        let expected_graph_paths = affected_projection_paths(&deltas, &proposed_data);
+        let history_status = proposed_history.status();
+        let projection_source = self.projection_source_snapshot(
+            &proposed_data,
+            projection_environment.clone(),
+            context.session.instance_id.to_string(),
+            authority_generation,
+            graph_revisions.clone(),
+            proposed_revisions.clone(),
+            database_revisions,
+        );
+        #[cfg(test)]
+        let completion_test_hook = self
+            .committed_resource_completion_test_hook
+            .read()
+            .unwrap()
+            .clone();
+        #[cfg(test)]
+        let assignment_panic_hook = self
+            .variable_authority_assignment_panic_test_hook
+            .read()
+            .unwrap()
+            .clone();
+        let resource_mutation = Some(
+            CommittedResourceMutation {
                 operation_id: transaction.caused_by,
-                project_instance_id: publication.project_instance_id.clone(),
+                project_instance_id: context.session.instance_id.to_string(),
                 publication_revision,
                 moves: Vec::new(),
-                deltas: deltas.clone(),
+                deltas,
                 history: history_status,
                 projection_source,
                 expected_graph_paths,
                 #[cfg(test)]
                 completion_test_hook,
-            });
-            Ok(CommittedVariableEffects {
-                variable_ids: ids.into_boxed_slice(),
-                resource_mutation,
-            })
-        })();
+            }
+            .complete("en-US"),
+        );
+        let mut variable_ids = Some(ids.into_boxed_slice());
+        let mut resource_mutation = resource_mutation;
+        let mut proposed_data = Some(proposed_data);
+        let mut proposed_revisions = Some(proposed_revisions);
+        let mut proposed_variable_tabular = Some(proposed_variable_tabular);
+        let mut proposed_history = Some(proposed_history);
+        let mut prior_state = Some(VariableAuthorityPriorState {
+            data: data_snapshot,
+            revisions: variable_revisions,
+            variable_tabular: prior_variable_tabular,
+            history: history_snapshot,
+            publication_revision: publication_revision_basis,
+            authority_generation: authority_generation_basis,
+        });
+        let mut committed_filesystem = Some(committed_filesystem);
 
-        match authority_result {
-            Ok(result) => {
-                committed_filesystem.finalize();
-                Ok(result)
+        Ok(Box::new(move |terminal| {
+            let authority_result = (|| {
+                let mut publication = self.mutation_publication.lock().unwrap();
+                let path = self.project_path.read().unwrap();
+                let mut data = self.project_data.write().unwrap();
+                let mut store = self.project_store.write().unwrap();
+                let graph_revisions = self.graph_revisions.read().unwrap();
+                let mut revisions = self.variable_revisions.write().unwrap();
+                let worksheet_revisions = self.worksheet_revisions.read().unwrap();
+                let mut history = self.history.write().unwrap();
+                if publication.project_instance_id != context.session.instance_id.as_str()
+                    || path.as_deref() != Some(expected_project_path.as_str())
+                    || publication.resource_revision != publication_revision_basis
+                    || publication.authority_generation() != authority_generation_basis
+                {
+                    return Err(variable_effect_persistence_error(
+                        "project changed before variable authority commit",
+                    ));
+                }
+                if !projection_environment.matches_publication(&publication) {
+                    return Err(variable_effect_persistence_error(
+                        "projection environment changed before variable authority commit",
+                    ));
+                }
+                if store.project_session_id != expected_session_id {
+                    return Err(VariableEffectCommitError::SessionChanged {
+                        expected: expected_session_id.clone(),
+                        current: store.project_session_id.clone(),
+                    });
+                }
+                validate_context_revisions(
+                    &context,
+                    &data,
+                    &graph_revisions,
+                    &revisions,
+                    &worksheet_revisions,
+                )
+                .map_err(variable_effect_persistence_error)?;
+                check_variable_effect_terminal(terminal)?;
+
+                // Result publication acquires its registry and artifact locks before entering
+                // this project authority section. Project-side code must never acquire those
+                // result locks while retaining any of the guards below.
+                let mut install = VariableAuthorityInstallGuard::new(
+                    &mut data,
+                    &mut revisions,
+                    &mut store.variable_tabular,
+                    &mut history,
+                    &mut publication,
+                    prior_state
+                        .take()
+                        .expect("prepared variable prior state installs once"),
+                );
+                let installed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    install.install(
+                        proposed_data
+                            .take()
+                            .expect("prepared variable data installs once"),
+                        proposed_revisions
+                            .take()
+                            .expect("prepared variable revisions install once"),
+                        proposed_variable_tabular
+                            .take()
+                            .expect("prepared variable cache installs once"),
+                        proposed_history
+                            .take()
+                            .expect("prepared variable history installs once"),
+                        publication_revision,
+                        authority_generation,
+                        #[cfg(test)]
+                        assignment_panic_hook.as_ref(),
+                    );
+                }));
+                if let Err(payload) = installed {
+                    drop(install);
+                    drop(history);
+                    drop(worksheet_revisions);
+                    drop(revisions);
+                    drop(graph_revisions);
+                    drop(store);
+                    drop(data);
+                    drop(path);
+                    drop(publication);
+                    std::panic::resume_unwind(payload);
+                }
+                Ok(install.commit())
+            })();
+
+            match authority_result {
+                Ok(prior) => {
+                    drop(prior);
+                    committed_filesystem
+                        .take()
+                        .expect("prepared filesystem commit finalizes once")
+                        .finalize();
+                    Ok(VariableEffectCommitResult {
+                        variable_ids: variable_ids
+                            .take()
+                            .expect("prepared variable ids publish once"),
+                        resource_mutation: resource_mutation.take(),
+                    })
+                }
+                Err(error) => Err(error),
             }
-            Err(error) => {
-                let rollback = committed_filesystem.rollback();
-                Err(rollback
-                    .err()
-                    .map(variable_effect_persistence_error)
-                    .unwrap_or(error))
-            }
-        }
+        }))
     }
+}
+
+fn variable_effect_run_error(
+    error: VariableEffectCommitError,
+) -> crate::node_system::runtime::RunError {
+    match error {
+        VariableEffectCommitError::DeadlineExceeded { phase } => {
+            crate::node_system::runtime::RunError::DeadlineExceeded { phase }
+        }
+        VariableEffectCommitError::Cancelled => crate::node_system::runtime::RunError::Cancelled,
+        error => crate::node_system::runtime::RunError::ResourceSnapshotMismatch(
+            error.to_string().into(),
+        ),
+    }
+}
+
+fn check_variable_effect_terminal(
+    terminal: Option<(
+        &crate::node_system::runtime::CancellationToken,
+        Option<crate::node_system::runtime::RunDeadline>,
+    )>,
+) -> Result<(), VariableEffectCommitError> {
+    let Some((cancellation, deadline)) = terminal else {
+        return Ok(());
+    };
+    cancellation
+        .check()
+        .map_err(|_| VariableEffectCommitError::Cancelled)?;
+    if let Some(deadline) = deadline {
+        deadline
+            .check(
+                cancellation,
+                crate::node_system::runtime::RunPhase::ResultPublication,
+            )
+            .map_err(|error| match error {
+                crate::node_system::runtime::RunError::DeadlineExceeded { phase } => {
+                    VariableEffectCommitError::DeadlineExceeded { phase }
+                }
+                crate::node_system::runtime::RunError::Cancelled => {
+                    VariableEffectCommitError::Cancelled
+                }
+                _ => unreachable!("terminal check has only cancellation or deadline outcomes"),
+            })?;
+    }
+    Ok(())
 }
 
 fn install_variable_effect_snapshots(
@@ -7044,6 +7365,10 @@ pub(super) struct VariableEffectCommitResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum VariableEffectCommitError {
+    Cancelled,
+    DeadlineExceeded {
+        phase: crate::node_system::runtime::RunPhase,
+    },
     SessionChanged {
         expected: crate::node_system::analysis::ProjectSessionId,
         current: crate::node_system::analysis::ProjectSessionId,
@@ -7067,6 +7392,10 @@ pub(super) enum VariableEffectCommitError {
 impl std::fmt::Display for VariableEffectCommitError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Cancelled => formatter.write_str("variable effect commit was cancelled"),
+            Self::DeadlineExceeded { phase } => {
+                write!(formatter, "run deadline exceeded during {phase:?}")
+            }
             Self::SessionChanged { expected, current } => write!(
                 formatter,
                 "project session changed from '{}' to '{}' before variable effects committed",
@@ -8085,6 +8414,7 @@ mod execution_identity_tests {
             node_id: None,
             node_type_id: None,
             parent_call: None,
+            trace_parent_span_id: None,
         };
         store.publish_snapshot(
             run_id,
@@ -8199,6 +8529,79 @@ mod execution_identity_tests {
 
         let _ = std::fs::remove_dir_all(old_root);
         let _ = std::fs::remove_dir_all(replacement_root);
+    }
+
+    #[test]
+    fn project_result_reader_does_not_deadlock_scoped_result_authority() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-result-reader-authority-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let results = state.project_store.read().unwrap().results.clone();
+        let prior =
+            publish_identity_test_snapshot(&results, crate::node_system::analysis::RunId::new(30));
+        let pending = results
+            .prepare_runtime_value(
+                prior.correlation.clone(),
+                prior.basis.clone(),
+                "replacement",
+                &crate::node_system::runtime::RuntimeValue::from(
+                    crate::node_system::protocol::Value::Integer(2),
+                ),
+            )
+            .unwrap();
+        let (source_tx, source_rx) = std::sync::mpsc::sync_channel(1);
+        let (reader_started_tx, reader_started_rx) = std::sync::mpsc::sync_channel(1);
+        let (store_acquired_tx, store_acquired_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        let authority_committed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let authority_committed_by_publisher = Arc::clone(&authority_committed);
+        let publication_state = state.clone();
+        let publication_results = results.clone();
+        let publisher = std::thread::spawn(move || {
+            let cancellation = crate::node_system::runtime::CancellationToken::new();
+            let mut transaction = publication_results
+                .begin_publication(crate::node_system::analysis::RunId::new(31), vec![pending]);
+            transaction.prepare(&cancellation, None).unwrap();
+            transaction
+                .publish_with_authority(&cancellation, None, |descriptors| {
+                    source_tx
+                        .send(descriptors[0].as_ref().unwrap().source_id)
+                        .unwrap();
+                    reader_started_rx.recv().unwrap();
+                    let store = publication_state.project_store.write().unwrap();
+                    store_acquired_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    drop(store);
+                    authority_committed_by_publisher
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    Ok(())
+                })
+                .unwrap()
+        });
+        let source_id = source_rx.recv().unwrap();
+        let reader_state = state.clone();
+        let authority_committed_for_reader = Arc::clone(&authority_committed);
+        let reader = std::thread::spawn(move || {
+            reader_started_tx.send(()).unwrap();
+            let descriptor = reader_state.result_source_descriptor(source_id).unwrap();
+            let committed =
+                authority_committed_for_reader.load(std::sync::atomic::Ordering::Acquire);
+            (descriptor, committed)
+        });
+
+        store_acquired_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("result reader retained project_store while waiting on result authority");
+        assert!(!reader.is_finished());
+        release_tx.send(()).unwrap();
+
+        let published = publisher.join().unwrap();
+        assert_eq!(reader.join().unwrap(), (published[0].clone(), true));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -8794,7 +9197,7 @@ mod run_parameter_tests {
         let error = run(&document).unwrap_err();
         assert!(matches!(
             error,
-            RunError::KernelFailed { operation, ref message }
+            RunError::KernelFailed { operation, ref message, .. }
                 if operation == OperationIndex::new(1)
                     && message.as_ref() == "unsupported ADF regression 'unexpected'"
         ));

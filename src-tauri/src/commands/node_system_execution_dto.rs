@@ -3,10 +3,11 @@ use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddress
 use crate::node_system::plan::{ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION};
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{
-    ArtifactSnapshotKind, ResultSourceDescriptor, ResultSourcePage, RunErrorCode, RunEvent,
-    RunEventKind,
+    ArtifactSnapshotKind, OrdinaryRunErrorCode, ResultSourceDescriptor, ResultSourcePage,
+    RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunPhase,
 };
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,40 +177,90 @@ impl From<CorrelationContext> for RunCorrelationDto {
     }
 }
 
-macro_rules! define_run_event_kind_dto {
-    ($($variant:ident => $wire_type:literal $({ $($field:ident: $field_type:ty),* $(,)? })?),* $(,)?) => {
-        #[cfg(test)]
-        pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str;
-            [$(stringify!($variant)),*].len()] = [$($wire_type),*];
+#[cfg(test)]
+pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 9] = [
+    "runStarted",
+    "runCompleted",
+    "runErrored",
+    "runCancelled",
+    "operationStarted",
+    "operationCompleted",
+    "operationErrored",
+    "resultReady",
+    "outputReady",
+];
 
-        #[derive(Debug, Serialize)]
-        #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
-        pub(crate) enum RunEventKindDto {
-            $($variant $({ $($field: $field_type),* })?),*
-        }
-    };
+#[derive(Debug)]
+pub(crate) enum RunErrorOutcomeDto {
+    Ordinary(OrdinaryRunErrorCode),
+    DeadlineExceeded(RunPhase),
 }
 
-define_run_event_kind_dto! {
-    RunStarted => "runStarted",
-    RunCompleted => "runCompleted",
-    RunErrored => "runErrored" { code: RunErrorCode },
-    RunCancelled => "runCancelled",
-    OperationStarted => "operationStarted" {
+impl Serialize for RunErrorOutcomeDto {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(2))?;
+        match self {
+            Self::Ordinary(code) => {
+                map.serialize_entry("code", code)?;
+                map.serialize_entry("phase", &Option::<RunPhase>::None)?;
+            }
+            Self::DeadlineExceeded(phase) => {
+                map.serialize_entry("code", &RunErrorCode::DeadlineExceeded)?;
+                map.serialize_entry("phase", phase)?;
+            }
+        }
+        map.end()
+    }
+}
+
+impl From<RunErrorOutcome> for RunErrorOutcomeDto {
+    fn from(outcome: RunErrorOutcome) -> Self {
+        match outcome {
+            RunErrorOutcome::Ordinary { code } => Self::Ordinary(code),
+            RunErrorOutcome::DeadlineExceeded { phase } => Self::DeadlineExceeded(phase),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub(crate) enum RunEventKindDto {
+    RunStarted,
+    RunCompleted,
+    RunErrored {
+        #[serde(flatten)]
+        outcome: RunErrorOutcomeDto,
+    },
+    RunCancelled,
+    OperationStarted {
         operation_index: u32,
         activation_id: String,
+        attempt_id: String,
     },
-    OperationCompleted => "operationCompleted" {
+    OperationCompleted {
         operation_index: u32,
         activation_id: String,
+        attempt_id: String,
     },
-    OperationErrored => "operationErrored" {
+    OperationErrored {
         operation_index: u32,
         activation_id: String,
-        code: RunErrorCode,
+        attempt_id: String,
+        #[serde(flatten)]
+        outcome: RunErrorOutcomeDto,
     },
-    ResultReady => "resultReady" { name: Box<str>, source_id: String },
-    OutputReady => "outputReady" {
+    ResultReady {
+        name: Box<str>,
+        source_id: String,
+    },
+    OutputReady {
         output: GraphOutputRefDto,
         generation: Option<u64>,
         source_id: String,
@@ -221,30 +272,38 @@ impl From<RunEventKind> for RunEventKindDto {
         match kind {
             RunEventKind::RunStarted => Self::RunStarted,
             RunEventKind::RunCompleted => Self::RunCompleted,
-            RunEventKind::RunErrored { code } => Self::RunErrored { code },
+            RunEventKind::RunErrored { outcome } => Self::RunErrored {
+                outcome: outcome.into(),
+            },
             RunEventKind::RunCancelled => Self::RunCancelled,
             RunEventKind::OperationStarted {
                 operation_index,
                 activation_id,
+                attempt_id,
             } => Self::OperationStarted {
                 operation_index,
                 activation_id: activation_id.to_string(),
+                attempt_id: attempt_id.to_string(),
             },
             RunEventKind::OperationCompleted {
                 operation_index,
                 activation_id,
+                attempt_id,
             } => Self::OperationCompleted {
                 operation_index,
                 activation_id: activation_id.to_string(),
+                attempt_id: attempt_id.to_string(),
             },
             RunEventKind::OperationErrored {
                 operation_index,
                 activation_id,
-                code,
+                attempt_id,
+                outcome,
             } => Self::OperationErrored {
                 operation_index,
                 activation_id: activation_id.to_string(),
-                code,
+                attempt_id: attempt_id.to_string(),
+                outcome: outcome.into(),
             },
             RunEventKind::ResultReady { name, source_id } => Self::ResultReady {
                 name,

@@ -3,6 +3,8 @@ import type { GraphOutputRefDto } from './executionDemand';
 export type RunErrorCode =
   | 'invalidPlan'
   | 'cancelled'
+  | 'activationIdExhausted'
+  | 'deadlineExceeded'
   | 'kernelNotFound'
   | 'kernelFailed'
   | 'relationalBackendNotFound'
@@ -30,6 +32,8 @@ export type RunErrorCode =
 export const RUN_ERROR_CODES = {
   invalidPlan: true,
   cancelled: true,
+  activationIdExhausted: true,
+  deadlineExceeded: true,
   kernelNotFound: true,
   kernelFailed: true,
   relationalBackendNotFound: true,
@@ -54,6 +58,25 @@ export const RUN_ERROR_CODES = {
   resourceSnapshotMismatch: true,
   resourceAcquire: true,
 } as const satisfies Record<RunErrorCode, true>;
+
+export type RunPhase =
+  | 'queueWait'
+  | 'kernel'
+  | 'streamSend'
+  | 'streamReceive'
+  | 'adapterIo'
+  | 'resultPublication'
+  | 'cleanup';
+
+export const RUN_PHASES = {
+  queueWait: true,
+  kernel: true,
+  streamSend: true,
+  streamReceive: true,
+  adapterIo: true,
+  resultPublication: true,
+  cleanup: true,
+} as const satisfies Record<RunPhase, true>;
 
 export type ResourceVersionSetDto = Record<string, string>;
 
@@ -80,15 +103,26 @@ export interface RunCorrelationDto {
 export type RunEventKind =
   | { type: 'runStarted' }
   | { type: 'runCompleted' }
-  | { type: 'runErrored'; code: RunErrorCode }
+  | { type: 'runErrored'; code: 'deadlineExceeded'; phase: RunPhase }
+  | { type: 'runErrored'; code: Exclude<RunErrorCode, 'deadlineExceeded'>; phase: null }
   | { type: 'runCancelled' }
-  | { type: 'operationStarted'; operationIndex: number; activationId: string }
-  | { type: 'operationCompleted'; operationIndex: number; activationId: string }
+  | { type: 'operationStarted'; operationIndex: number; activationId: string; attemptId: string }
+  | { type: 'operationCompleted'; operationIndex: number; activationId: string; attemptId: string }
   | {
       type: 'operationErrored';
       operationIndex: number;
       activationId: string;
-      code: RunErrorCode;
+      attemptId: string;
+      code: 'deadlineExceeded';
+      phase: RunPhase;
+    }
+  | {
+      type: 'operationErrored';
+      operationIndex: number;
+      activationId: string;
+      attemptId: string;
+      code: Exclude<RunErrorCode, 'deadlineExceeded'>;
+      phase: null;
     }
   | { type: 'resultReady'; name: string; sourceId: string }
   | {

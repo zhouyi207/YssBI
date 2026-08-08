@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::analysis::{
     CompileId, DiagnosticLocation, NOOP_TRACE_SINK, ProjectSessionId, ResourceKey, ResourceVersion,
-    SpanEvent, SpanKind, TraceSink,
+    SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -11,12 +11,12 @@ use crate::node_system::document::{
 use crate::node_system::plan::{
     BranchResultBinding, CallArgumentBinding, CallResultBinding, CompiledParameterHandle,
     CompiledResourceRequirement, ControlStep, ExecutionDemand, ExecutionPlan,
-    ExecutionSemanticsVersion, FunctionPlanHandle, GraphOutputRef, KernelHandle,
+    ExecutionSemanticsVersion, FunctionPlanAbi, FunctionPlanHandle, GraphOutputRef, KernelHandle,
     LoopCarriedBinding, OperationIndex, PlanResult, PlanValidationError, PlanValueSource,
     PlannedAdapter, PlannedKernel, PlannedOperation, PlannedPublication, PlannedRetry,
     RelationalBackendId, RelationalExpression, RelationalFragmentId, RelationalLiteral,
     RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint, ResourceAccess,
-    ResourceId, ResourceKind, StructuredControlRegion, ValueRef, WorkloadClass,
+    ResourceId, ResourceKind, StructuredControlRegion, ValueDependency, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -43,11 +43,15 @@ impl NodeLowerer for ConstantLowerer {
 }
 
 #[derive(Default)]
-struct RecordingTrace(Mutex<Vec<SpanEvent>>);
+struct RecordingTrace(Mutex<Vec<TraceSpan>>);
 
 impl TraceSink for RecordingTrace {
-    fn record(&self, event: SpanEvent) {
-        self.0.lock().unwrap().push(event);
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, span: TraceSpan) {
+        self.0.lock().unwrap().push(span);
     }
 }
 
@@ -71,10 +75,14 @@ fn assert_analysis_blocks_before_lowering(
     assert!(result.semantic.is_none());
     assert!(result.plan.is_none());
     assert_eq!(calls.load(AtomicOrdering::Relaxed), 0);
-    assert!(trace.0.lock().unwrap().iter().all(|event| {
-        !(event.kind == SpanKind::Lowering
-            && event.status == crate::node_system::analysis::SpanStatus::Started)
-    }));
+    assert!(
+        trace
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|span| span.kind != SpanKind::Lowering)
+    );
 }
 
 struct Resources;
@@ -346,17 +354,17 @@ fn compile_plan_and_trace_keep_the_exact_requested_correlation() {
     let plan = result.plan.unwrap();
 
     assert_eq!(plan.provenance, snapshot.provenance);
-    for event in trace.0.lock().unwrap().iter() {
+    for span in trace.0.lock().unwrap().iter() {
         assert_eq!(
-            event.correlation.project_session_id,
+            span.correlation.project_session_id,
             snapshot.provenance.project_session_id
         );
-        assert_eq!(event.correlation.graph_path, snapshot.provenance.graph_path);
+        assert_eq!(span.correlation.graph_path, snapshot.provenance.graph_path);
         assert_eq!(
-            event.correlation.graph_revision,
+            span.correlation.graph_revision,
             snapshot.provenance.basis.graph_revision
         );
-        assert_eq!(event.correlation.compile_id, snapshot.provenance.compile_id);
+        assert_eq!(span.correlation.compile_id, snapshot.provenance.compile_id);
     }
 }
 
@@ -375,7 +383,7 @@ fn blocking_compile_emits_no_lowering_or_run_span() {
             .lock()
             .unwrap()
             .iter()
-            .all(|event| { !matches!(event.kind, SpanKind::Lowering | SpanKind::Run) })
+            .all(|span| { !matches!(span.kind, SpanKind::Lowering | SpanKind::Run) })
     );
 }
 
@@ -1373,6 +1381,8 @@ fn test_protocol(
             evaluation: EvaluationPolicy::DemandDriven,
             cache: CachePolicy::PerRun,
             effects: EffectSemantics::None,
+            idempotent: false,
+            retry: None,
         },
         scope: NodeScope::Any,
         managed_role: None,
@@ -1391,6 +1401,257 @@ fn effective_cache_policy_disables_every_effect_semantics_independently() {
             ),
             CachePolicy::Disabled
         );
+    }
+}
+
+#[test]
+fn retry_compiler_authority_retains_only_explicit_safe_protocol_policy() {
+    let policy = RetryPolicy::new(
+        std::num::NonZeroU32::new(3).unwrap(),
+        std::time::Duration::from_millis(2),
+        std::time::Duration::from_millis(8),
+    )
+    .unwrap();
+    let native = super::pipeline::PendingKernel::Native(KernelHandle::new("test.retry").unwrap());
+    let safe = super::pipeline::effective_retry_policy(
+        true,
+        Some(policy),
+        Determinism::Deterministic,
+        Purity::Pure,
+        EffectSemantics::None,
+        false,
+        &native,
+        &[],
+    );
+    assert_eq!(
+        safe,
+        PlannedRetry {
+            idempotent: true,
+            policy: Some(policy),
+        }
+    );
+
+    let shared_resource = CompiledResourceRequirement {
+        resource: ResourceId::new("database/read").unwrap(),
+        kind: ResourceKind::DatabaseConnection,
+        access: ResourceAccess::Shared,
+        optional: false,
+    };
+    let unsafe_cases = [
+        super::pipeline::effective_retry_policy(
+            false,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            false,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::NonDeterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            false,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Effectful,
+            EffectSemantics::None,
+            false,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::Ordered,
+            false,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            true,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            false,
+            &native,
+            std::slice::from_ref(&shared_resource),
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            None,
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            false,
+            &native,
+            &[],
+        ),
+        super::pipeline::effective_retry_policy(
+            true,
+            Some(policy),
+            Determinism::Deterministic,
+            Purity::Pure,
+            EffectSemantics::None,
+            false,
+            &super::pipeline::PendingKernel::Relational,
+            &[],
+        ),
+    ];
+    assert!(
+        unsafe_cases
+            .into_iter()
+            .all(|retry| retry == PlannedRetry::default())
+    );
+}
+
+#[test]
+fn retry_unsafe_operation_matrix_forces_effect_call_relational_and_resource_native_off() {
+    let policy = RetryPolicy::new(
+        std::num::NonZeroU32::new(2).unwrap(),
+        std::time::Duration::ZERO,
+        std::time::Duration::ZERO,
+    )
+    .unwrap();
+    let native = super::pipeline::PendingKernel::Native(KernelHandle::new("test.retry").unwrap());
+    let resource = CompiledResourceRequirement {
+        resource: ResourceId::new("database/read").unwrap(),
+        kind: ResourceKind::DatabaseConnection,
+        access: ResourceAccess::Shared,
+        optional: false,
+    };
+    let cases = [
+        (
+            "native effect edge",
+            super::pipeline::effective_retry_policy(
+                true,
+                Some(policy),
+                Determinism::Deterministic,
+                Purity::Effectful,
+                EffectSemantics::Ordered,
+                true,
+                &native,
+                &[],
+            ),
+        ),
+        (
+            "call",
+            super::pipeline::effective_retry_policy(
+                true,
+                Some(policy),
+                Determinism::Deterministic,
+                Purity::Pure,
+                EffectSemantics::None,
+                true,
+                &native,
+                &[],
+            ),
+        ),
+        (
+            "relational",
+            super::pipeline::effective_retry_policy(
+                true,
+                Some(policy),
+                Determinism::Deterministic,
+                Purity::Pure,
+                EffectSemantics::None,
+                false,
+                &super::pipeline::PendingKernel::Relational,
+                &[],
+            ),
+        ),
+        (
+            "resource-backed native",
+            super::pipeline::effective_retry_policy(
+                true,
+                Some(policy),
+                Determinism::Deterministic,
+                Purity::Pure,
+                EffectSemantics::None,
+                false,
+                &native,
+                std::slice::from_ref(&resource),
+            ),
+        ),
+    ];
+
+    for (case, retry) in cases {
+        assert_eq!(retry, PlannedRetry::default(), "{case}");
+    }
+}
+
+#[test]
+fn concrete_resource_lowerers_force_database_variable_and_filesystem_retry_off() {
+    let policy = RetryPolicy::new(
+        std::num::NonZeroU32::new(2).unwrap(),
+        std::time::Duration::ZERO,
+        std::time::Duration::ZERO,
+    )
+    .unwrap();
+    for (name, resource, kind) in [
+        (
+            "retry_database_write",
+            "database/main",
+            ResourceKind::DatabaseConnection,
+        ),
+        (
+            "retry_variable_write",
+            "variables/value",
+            ResourceKind::ExternalArtifact,
+        ),
+        (
+            "retry_filesystem_write",
+            "filesystem/output",
+            ResourceKind::TemporaryStorage,
+        ),
+    ] {
+        let mut protocol = test_protocol(name, vec![], vec![], vec![]);
+        protocol.execution.idempotent = true;
+        protocol.execution.retry = Some(policy);
+        let node_type = protocol.type_id.clone();
+        let registry = TestRegistry::new(vec![protocol]).with_lowerer(
+            &node_type,
+            FragmentLowerer {
+                fragment: kernel_fragment(
+                    EffectSemantics::None,
+                    FragmentMetadata {
+                        resources: Box::new([CompiledResourceRequirement {
+                            resource: ResourceId::new(resource).unwrap(),
+                            kind,
+                            access: ResourceAccess::Exclusive,
+                            optional: false,
+                        }]),
+                        ..FragmentMetadata::default()
+                    },
+                ),
+            },
+        );
+        let plan = GraphCompiler::new(&registry, &Resources)
+            .compile(&graph_with_nodes(&[(1, name)]))
+            .plan
+            .unwrap();
+        assert_eq!(plan.operations[0].retry, PlannedRetry::default(), "{name}");
     }
 }
 
@@ -2365,22 +2626,26 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     retry_basis.operations[1].retry = retry.clone();
     retry_basis.operations[0].semantics_version = ExecutionSemanticsVersion::from_bytes([1; 32]);
     retry_basis.operations[1].semantics_version = ExecutionSemanticsVersion::from_bytes([2; 32]);
-    let matching_retry = retry_basis.derive_full_plan().unwrap();
-    assert_eq!(matching_retry.operations[0].retry, retry);
-    assert_ne!(
-        matching_retry.operations[0].semantics_version,
-        retry_basis.operations[0].semantics_version
-    );
-    assert_ne!(
-        matching_retry.operations[0].semantics_version,
-        retry_basis.operations[1].semantics_version
-    );
+    assert!(matches!(
+        retry_basis.derive_full_plan().unwrap_err(),
+        DemandPlanError::InvalidDerivedPlan(message)
+            if message.contains("InvalidRetryPolicy")
+    ));
 
+    retry_basis.operations[0].retry = PlannedRetry::default();
     retry_basis.operations[1].retry = PlannedRetry::default();
     let conservative_retry = retry_basis.derive_full_plan().unwrap();
     assert_eq!(
         conservative_retry.operations[0].retry,
         PlannedRetry::default()
+    );
+    assert_ne!(
+        conservative_retry.operations[0].semantics_version,
+        retry_basis.operations[0].semantics_version
+    );
+    assert_ne!(
+        conservative_retry.operations[0].semantics_version,
+        retry_basis.operations[1].semantics_version
     );
 
     let mut reversed = graph_with_nodes(&[(2, "plan_relation_sink"), (1, "plan_relation_source")]);
@@ -2703,6 +2968,7 @@ fn demand_specialization_deletes_disconnected_if_control_sources() {
                 destination,
                 then_source,
                 else_source,
+                production: Some(OutputProduction::FullyMaterialized),
             }]),
         },
     );
@@ -2748,11 +3014,13 @@ fn demand_specialization_keeps_only_requested_if_result_declaration() {
                     destination: retained_destination,
                     then_source,
                     else_source,
+                    production: Some(OutputProduction::FullyMaterialized),
                 },
                 BranchResultBinding {
                     destination: deleted_destination,
                     then_source,
                     else_source,
+                    production: Some(OutputProduction::FullyMaterialized),
                 },
             ]),
         },
@@ -2842,6 +3110,7 @@ fn demand_specialization_deletes_disconnected_loop_control_sources() {
                 initial_source,
                 next_source,
                 result,
+                production: Some(OutputProduction::FullyMaterialized),
             }]),
             continue_condition,
             max_iterations: 3,
@@ -5867,10 +6136,12 @@ fn branch_builds_exclusive_true_and_false_regions() {
     let mut result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
-    let basis = result
-        .execution_basis
-        .as_mut()
-        .unwrap_or_else(|| panic!("branch diagnostics: {:?}", result.analysis.diagnostics));
+    let basis = result.execution_basis.as_mut().unwrap_or_else(|| {
+        panic!(
+            "branch diagnostics: {:?}; outcome: {:?}",
+            result.analysis.diagnostics, result.outcome
+        )
+    });
     let branch_local_pure = basis
         .operations
         .iter_mut()
@@ -6080,6 +6351,10 @@ fn branch_builds_exclusive_true_and_false_regions() {
     assert_eq!(results[0].destination, branch_destination);
     assert_eq!(results[0].then_source, then_binding_source);
     assert_eq!(results[0].else_source, else_binding_source);
+    assert_eq!(
+        results[0].production,
+        Some(OutputProduction::FullyMaterialized)
+    );
     assert!(region_contains_operation(then_region, then_operation));
     assert!(!region_contains_operation(then_region, else_operation));
     assert!(region_contains_operation(else_region, else_operation));
@@ -6098,7 +6373,42 @@ fn branch_builds_exclusive_true_and_false_regions() {
             |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation),
         )
         .expect("continuation is scheduled");
-    assert!(branch_index < adapter_index && adapter_index < continuation_index);
+    assert_eq!(adapter_index, branch_index + 1);
+    assert!(adapter_index < continuation_index);
+
+    let mut misplaced = plan.clone();
+    let StructuredControlRegion::Sequence(root_steps) = &mut misplaced.root_region else {
+        unreachable!()
+    };
+    let mut root = std::mem::take(root_steps).into_vec();
+    root.remove(adapter_index);
+    let ControlStep::Region(branch) = &mut root[branch_index] else {
+        unreachable!()
+    };
+    let StructuredControlRegion::If { then_region, .. } = branch.as_mut() else {
+        unreachable!()
+    };
+    let StructuredControlRegion::Sequence(then_steps) = then_region.as_mut() else {
+        unreachable!()
+    };
+    let mut then_steps = std::mem::take(then_steps).into_vec();
+    then_steps.insert(0, ControlStep::Operation(adapter_operation));
+    *then_region = Box::new(StructuredControlRegion::Sequence(
+        then_steps.into_boxed_slice(),
+    ));
+    *root_steps = root.into_boxed_slice();
+    assert!(
+        misplaced
+            .validate()
+            .unwrap_err()
+            .0
+            .iter()
+            .any(|error| matches!(
+                error,
+                PlanValidationError::MaterializationAdapterSourceUnavailable { value, .. }
+                    if *value == adapter.inputs[0].value
+            ))
+    );
 }
 
 #[test]
@@ -7893,4 +8203,464 @@ fn structural_nodes_never_invoke_leaf_lowerers() {
         .plan
         .expect("structural-only graph should produce a plan");
     assert!(plan.operations.is_empty());
+}
+
+#[test]
+fn call_closure_finalizes_nested_structured_result_productions_before_caller_lowering() {
+    use crate::node_system::catalog::build_builtin_node_system;
+
+    struct FunctionResources {
+        functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+        graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+        versions: crate::node_system::analysis::ResourceVersionSet,
+    }
+
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            self.versions.clone()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            self.functions.get(path)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            self.graphs.get(path)
+        }
+    }
+
+    let frozen = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let mut stream_output = data_port(
+        "value",
+        PortDirection::Output,
+        TypeExpr::Concrete(type_id("core.int64")),
+        None,
+    );
+    stream_output.production = Some(OutputProduction::Streaming);
+    let stream_protocol = test_protocol("closure_stream", vec![stream_output], vec![], vec![]);
+    let registry = AugmentedCompilerRegistry {
+        frozen: &frozen,
+        protocol: stream_protocol,
+        implementation: NodeImplementation::new(ConstantLowerer),
+    };
+
+    let branch_path = GraphResourcePath("functions/closure-branch".into());
+    let loop_path = GraphResourcePath("functions/closure-loop".into());
+    let call_path = GraphResourcePath("functions/closure-call".into());
+    let result_id = FunctionParameterId("return".into());
+    let signature = FunctionDocument::new(FunctionSignature {
+        parameters: Vec::new(),
+        return_type: Some("int64".into()),
+    });
+
+    let mut branch = builtin_graph_with_nodes(&[
+        (10, "yssbi.project.function.entry"),
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.test.closure_stream"),
+        (3, "yssbi.test.closure_stream"),
+        (4, "yssbi.control.branch"),
+        (5, "yssbi.control.merge"),
+        (30, "yssbi.project.function.return"),
+    ]);
+    set_parameters(
+        &mut branch,
+        10,
+        &[("function", serde_json::json!(branch_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut branch,
+        30,
+        &[("function", serde_json::json!(branch_path.0.as_ref()))],
+    );
+    let then_source = bind_member_port(&mut branch, 4, "then_source", 40, "a");
+    let else_source = bind_member_port(&mut branch, 4, "else_source", 40, "a");
+    let branch_result = bind_member_port(&mut branch, 4, "result", 40, "a");
+    let merge_true = bind_member_port(&mut branch, 5, "enter", 50, "a");
+    let merge_false = bind_member_port(&mut branch, 5, "enter", 51, "b");
+    let branch_return = bind_resolved_function_port(
+        &mut branch,
+        30,
+        "results",
+        300,
+        "a",
+        &branch_path,
+        &result_id,
+    );
+    connect(&mut branch, 100, 10, "then", 4, "enter");
+    connect(&mut branch, 101, 1, "value", 4, "condition");
+    connect_addresses(
+        &mut branch,
+        102,
+        PortAddress::declared(node_id(2), key("value")),
+        then_source,
+    );
+    connect_addresses(
+        &mut branch,
+        103,
+        PortAddress::declared(node_id(3), key("value")),
+        else_source,
+    );
+    connect_addresses(
+        &mut branch,
+        104,
+        PortAddress::declared(node_id(4), key("true")),
+        merge_true,
+    );
+    connect_addresses(
+        &mut branch,
+        105,
+        PortAddress::declared(node_id(4), key("false")),
+        merge_false,
+    );
+    connect(&mut branch, 106, 5, "then", 30, "enter");
+    connect_addresses(&mut branch, 107, branch_result, branch_return);
+
+    let mut loop_graph = builtin_graph_with_nodes(&[
+        (10, "yssbi.project.function.entry"),
+        (1, "yssbi.constant.bool"),
+        (2, "yssbi.test.closure_stream"),
+        (3, "yssbi.test.closure_stream"),
+        (4, "yssbi.control.loop"),
+        (30, "yssbi.project.function.return"),
+    ]);
+    set_parameters(
+        &mut loop_graph,
+        10,
+        &[("function", serde_json::json!(loop_path.0.as_ref()))],
+    );
+
+    set_parameters(
+        &mut loop_graph,
+        4,
+        &[("max_iterations", serde_json::json!(2))],
+    );
+    set_parameters(
+        &mut loop_graph,
+        30,
+        &[("function", serde_json::json!(loop_path.0.as_ref()))],
+    );
+
+    let initial_source = bind_member_port(&mut loop_graph, 4, "initial_source", 40, "a");
+    bind_member_port(&mut loop_graph, 4, "body_input", 40, "a");
+    let next_source = bind_member_port(&mut loop_graph, 4, "next_source", 40, "a");
+    let loop_result = bind_member_port(&mut loop_graph, 4, "result", 40, "a");
+    let loop_return = bind_resolved_function_port(
+        &mut loop_graph,
+        30,
+        "results",
+        300,
+        "a",
+        &loop_path,
+        &result_id,
+    );
+    connect(&mut loop_graph, 110, 10, "then", 4, "enter");
+    connect(&mut loop_graph, 111, 4, "then", 30, "enter");
+    connect(&mut loop_graph, 112, 1, "value", 4, "condition");
+    connect_addresses(
+        &mut loop_graph,
+        113,
+        PortAddress::declared(node_id(2), key("value")),
+        initial_source,
+    );
+    connect_addresses(
+        &mut loop_graph,
+        114,
+        PortAddress::declared(node_id(3), key("value")),
+        next_source,
+    );
+    connect_addresses(&mut loop_graph, 115, loop_result, loop_return);
+
+    let mut call_graph = builtin_graph_with_nodes(&[
+        (10, "yssbi.project.function.entry"),
+        (19, "yssbi.project.function.call"),
+        (20, "yssbi.project.function.call"),
+        (30, "yssbi.project.function.return"),
+    ]);
+    set_parameters(
+        &mut call_graph,
+        10,
+        &[("function", serde_json::json!(call_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut call_graph,
+        19,
+        &[("target", serde_json::json!(branch_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut call_graph,
+        20,
+        &[("target", serde_json::json!(loop_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut call_graph,
+        30,
+        &[("function", serde_json::json!(call_path.0.as_ref()))],
+    );
+    bind_resolved_function_port(
+        &mut call_graph,
+        19,
+        "results",
+        190,
+        "a",
+        &branch_path,
+        &result_id,
+    );
+    let nested_call_result = bind_resolved_function_port(
+        &mut call_graph,
+        20,
+        "results",
+        200,
+        "a",
+        &loop_path,
+        &result_id,
+    );
+    let call_return = bind_resolved_function_port(
+        &mut call_graph,
+        30,
+        "results",
+        300,
+        "a",
+        &call_path,
+        &result_id,
+    );
+    connect(&mut call_graph, 120, 10, "then", 19, "enter");
+    connect(&mut call_graph, 121, 19, "then", 20, "enter");
+    connect(&mut call_graph, 122, 20, "then", 30, "enter");
+    connect_addresses(&mut call_graph, 123, nested_call_result, call_return);
+
+    let versions = [&branch_path, &loop_path, &call_path]
+        .into_iter()
+        .map(|path| {
+            (
+                ResourceKey::new(path.0.as_ref()),
+                ResourceVersion::new("v1"),
+            )
+        })
+        .collect();
+    let resources = FunctionResources {
+        functions: BTreeMap::from([
+            (branch_path.clone(), signature.clone()),
+            (loop_path.clone(), signature.clone()),
+            (call_path.clone(), signature),
+        ]),
+        graphs: BTreeMap::from([
+            (branch_path.clone(), branch),
+            (loop_path.clone(), loop_graph),
+            (call_path.clone(), call_graph),
+        ]),
+        versions,
+    };
+
+    let mut caller = builtin_graph_with_nodes(&[
+        (1, "yssbi.project.event.begin"),
+        (2, "yssbi.project.function.call"),
+        (3, "yssbi.debug.view"),
+    ]);
+    set_parameters(
+        &mut caller,
+        2,
+        &[("target", serde_json::json!(call_path.0.as_ref()))],
+    );
+    let caller_result =
+        bind_resolved_function_port(&mut caller, 2, "results", 20, "a", &call_path, &result_id);
+    connect(&mut caller, 130, 1, "then", 2, "enter");
+    connect(&mut caller, 131, 2, "then", 3, "enter");
+    connect_addresses(
+        &mut caller,
+        132,
+        caller_result,
+        PortAddress::declared(node_id(3), key("data")),
+    );
+
+    let products = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(&caller);
+    let plan = products.plan.unwrap_or_else(|| {
+        panic!(
+            "closure caller must lower: outcome={:?}, diagnostics={:?}",
+            products.outcome, products.analysis.diagnostics
+        )
+    });
+    fn first_call_result(region: &StructuredControlRegion) -> Option<CallResultBinding> {
+        match region {
+            StructuredControlRegion::Sequence(steps) => steps.iter().find_map(|step| match step {
+                ControlStep::Operation(_) => None,
+                ControlStep::Region(region) => first_call_result(region),
+            }),
+            StructuredControlRegion::If {
+                then_region,
+                else_region,
+                ..
+            } => first_call_result(then_region).or_else(|| first_call_result(else_region)),
+            StructuredControlRegion::Loop { body, .. } => first_call_result(body),
+            StructuredControlRegion::Call { results, .. } => results.first().copied(),
+        }
+    }
+    let call_result =
+        first_call_result(&plan.root_region).expect("root caller has a Call result binding");
+    assert_eq!(call_result.production, Some(OutputProduction::Streaming));
+    assert!(
+        plan.value_sources
+            .contains(&PlanValueSource::ControlProduced(
+                call_result.caller_destination,
+                OutputProduction::Streaming,
+            ))
+    );
+    let adapter_input = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.source == call_result.caller_destination)
+        .expect("call result feeds an explicit adapter")
+        .destination;
+    let adapter = plan
+        .operations
+        .iter()
+        .find(|operation| {
+            operation
+                .inputs
+                .first()
+                .is_some_and(|input| input.value == adapter_input)
+                && matches!(operation.kernel, PlannedKernel::Adapter(_))
+        })
+        .expect("streaming call result is collected for the materialized consumer");
+    assert!(matches!(
+        adapter.kernel,
+        PlannedKernel::Adapter(PlannedAdapter::Collect { .. })
+    ));
+}
+
+fn structured_function_plan(
+    root_region: StructuredControlRegion,
+    value_sources: Box<[PlanValueSource]>,
+    value_dependencies: Box<[ValueDependency]>,
+    value_count: u32,
+    result_value: ValueRef,
+) -> (ExecutionPlan, FunctionPlanAbi, FunctionParameterId) {
+    let result = FunctionParameterId("return".into());
+    let provenance = crate::node_system::analysis::CompileProvenance {
+        project_session_id: ProjectSessionId::new("project-a"),
+        graph_path: GraphResourcePath("functions/structured-result".into()),
+        basis: crate::node_system::analysis::CompilationBasis {
+            graph_revision: crate::node_system::document::GraphRevision::new(1),
+            registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        },
+        compile_id: CompileId::new(1),
+    };
+    let plan = ExecutionPlan {
+        provenance: provenance.clone(),
+        value_count,
+        operations: Box::new([]),
+        value_sources,
+        value_dependencies,
+        root_region,
+        effect_dependencies: Box::new([]),
+        relational_subplans: Box::new([]),
+        resources: Box::new([]),
+        results: Box::new([]),
+        publications: Box::new([]),
+    };
+    let abi = FunctionPlanAbi {
+        provenance,
+        parameters: BTreeMap::new(),
+        results: BTreeMap::from([(result.clone(), result_value)]),
+        result_productions: BTreeMap::from([(result.clone(), OutputProduction::FullyMaterialized)]),
+    };
+    (plan, abi, result)
+}
+
+#[test]
+fn branch_function_abi_finalizes_from_lowered_result_source() {
+    let (plan, mut abi, result) = structured_function_plan(
+        StructuredControlRegion::If {
+            condition: ValueRef::new(3),
+            then_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            else_region: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            results: Box::new([BranchResultBinding {
+                destination: ValueRef::new(2),
+                then_source: ValueRef::new(0),
+                else_source: ValueRef::new(1),
+                production: Some(OutputProduction::Streaming),
+            }]),
+        },
+        Box::new([
+            PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::Streaming),
+            PlanValueSource::ExternalInput(ValueRef::new(1), OutputProduction::Streaming),
+            PlanValueSource::ExternalInput(ValueRef::new(3), OutputProduction::FullyMaterialized),
+            PlanValueSource::ControlProduced(ValueRef::new(2), OutputProduction::Streaming),
+        ]),
+        Box::new([ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(4),
+        }]),
+        5,
+        ValueRef::new(4),
+    );
+
+    pipeline::finalize_function_abi_productions(&plan, &mut abi).unwrap();
+
+    assert_eq!(abi.result_productions[&result], OutputProduction::Streaming);
+}
+
+#[test]
+fn loop_function_abi_finalizes_from_lowered_result_source() {
+    let (plan, mut abi, result) = structured_function_plan(
+        StructuredControlRegion::Loop {
+            body: Box::new(StructuredControlRegion::Sequence(Box::new([]))),
+            carried: Box::new([LoopCarriedBinding {
+                body_input: ValueRef::new(2),
+                initial_source: ValueRef::new(0),
+                next_source: ValueRef::new(1),
+                result: ValueRef::new(4),
+                production: Some(OutputProduction::Streaming),
+            }]),
+            continue_condition: ValueRef::new(3),
+            max_iterations: 2,
+        },
+        Box::new([
+            PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::Streaming),
+            PlanValueSource::ExternalInput(ValueRef::new(1), OutputProduction::Streaming),
+            PlanValueSource::ExternalInput(ValueRef::new(3), OutputProduction::FullyMaterialized),
+            PlanValueSource::ControlProduced(ValueRef::new(2), OutputProduction::Streaming),
+            PlanValueSource::ControlProduced(ValueRef::new(4), OutputProduction::Streaming),
+        ]),
+        Box::new([]),
+        5,
+        ValueRef::new(4),
+    );
+
+    pipeline::finalize_function_abi_productions(&plan, &mut abi).unwrap();
+
+    assert_eq!(abi.result_productions[&result], OutputProduction::Streaming);
+}
+
+#[test]
+fn call_function_abi_finalizes_from_lowered_result_source() {
+    let (plan, mut abi, result) = structured_function_plan(
+        StructuredControlRegion::Call {
+            target: FunctionPlanHandle::new("functions/callee").unwrap(),
+            arguments: Box::new([]),
+            results: Box::new([CallResultBinding {
+                callee_source: ValueRef::new(0),
+                caller_destination: ValueRef::new(1),
+                production: Some(OutputProduction::Streaming),
+            }]),
+            mandatory: true,
+        },
+        Box::new([PlanValueSource::ControlProduced(
+            ValueRef::new(1),
+            OutputProduction::Streaming,
+        )]),
+        Box::new([]),
+        2,
+        ValueRef::new(1),
+    );
+
+    pipeline::finalize_function_abi_productions(&plan, &mut abi).unwrap();
+
+    assert_eq!(abi.result_productions[&result], OutputProduction::Streaming);
 }

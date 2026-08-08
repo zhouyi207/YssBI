@@ -6,6 +6,7 @@ import editorProjection from '@/tests/fixtures/node-system-contracts/editor-proj
 import fingerprintWire from '@/tests/fixtures/node-system-contracts/fingerprint-wire.json';
 import functionEditorProjection from '@/tests/fixtures/node-system-contracts/function-editor-projection.json';
 import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
+import executionWire from '@/tests/fixtures/node-system-contracts/execution-wire.json';
 import {
   isLocalizedCatalogDto,
   type LocalizedCatalogDto,
@@ -19,6 +20,7 @@ import {
 } from '@/features/core/sync/utils/projectEventWireParser';
 import { parseProjectGraphIndexRow } from '@/services/project/projectService';
 import { parseGraphProjectionReplacementDto } from '@/shared/types/dto/editorMutationWireParser';
+import { parseRunEvent } from '@/shared/types/dto/runEventParser';
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -31,6 +33,31 @@ function deleteKey(value: object, key: string): void {
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 
 describe('Rust-generated node-system golden contracts', () => {
+  it('strictly freezes every Rust deadline phase before service effects', () => {
+    const deadlineEvents = executionWire.runEvents.filter(
+      (event) => event.kind.type === 'runErrored' && event.kind.code === 'deadlineExceeded',
+    );
+    expect(deadlineEvents.map((event) => event.kind.phase)).toEqual([
+      'queueWait',
+      'kernel',
+      'streamSend',
+      'streamReceive',
+      'adapterIo',
+      'resultPublication',
+      'cleanup',
+    ]);
+    expect(deadlineEvents.map(parseRunEvent)).toEqual(deadlineEvents);
+
+    for (const event of deadlineEvents) {
+      const missing = clone(event) as unknown as Record<string, unknown>;
+      deleteKey(missing.kind as object, 'phase');
+      expect(() => parseRunEvent(missing)).toThrow();
+
+      const wrong = clone(event) as unknown as Record<string, unknown>;
+      (wrong.kind as Record<string, unknown>).phase = 1;
+      expect(() => parseRunEvent(wrong)).toThrow();
+    }
+  });
   it('consumes one real Rust function editor projection shape across index and replacement', () => {
     expect(functionEditorProjection.format).toBe('yssbi.function-editor-projection.v1');
     const row = parseProjectGraphIndexRow(functionEditorProjection.indexRow);

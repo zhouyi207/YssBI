@@ -23,7 +23,8 @@ use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, 
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::{
-    RUN_EVENT_KIND_VARIANT_COUNT, ResultSourceId, RunErrorCode, RunEvent, RunEventKind,
+    OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultSourceId, RunErrorOutcome, RunEvent,
+    RunEventKind, RunPhase,
 };
 use crate::project::{
     GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectGraphIndexEntry,
@@ -96,7 +97,6 @@ fn resource(
         resource_revision: ResourceRevision::new(revision),
         create_args,
         technical_terms: vec![name.into()],
-        pinyin: None,
     }
 }
 
@@ -143,6 +143,43 @@ fn localized_catalog_contract(
         "00000000-0000-0000-0000-000000000001",
         registry.fingerprint().to_hex(),
         17,
+    ))
+    .unwrap()
+}
+
+fn catalog_search_wire_contract(
+    registry: &NodeRegistry,
+    catalog: &crate::node_system::catalog::BuiltinCatalog,
+) -> Value {
+    let resource = CatalogResourceEntry {
+        name: "Straße_Data Cafe\u{301} 数据".into(),
+        node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
+        resource_path: CatalogResourcePath::new("functions/catalog-search-wire"),
+        resource_revision: ResourceRevision::new(23),
+        create_args: ResourceBoundCreateArgsDto::Function,
+        technical_terms: vec!["技术_Term".into(), "Maße_Value\u{301}".into()],
+    };
+    let mut localized = catalog.localize_with_resources(registry, "en-US", &[resource]);
+    localized.items.retain(|item| {
+        item.node_type_id.as_ref() == "yssbi.numeric.add.int64"
+            || item
+                .resource_path
+                .as_ref()
+                .is_some_and(|path| path.as_str() == "functions/catalog-search-wire")
+    });
+    let category_ids = localized
+        .items
+        .iter()
+        .map(|item| item.category_id.clone())
+        .collect::<BTreeSet<_>>();
+    localized
+        .categories
+        .retain(|category| category_ids.contains(&category.category_id));
+
+    serde_json::to_value(localized.into_dto(
+        "00000000-0000-0000-0000-000000000017",
+        registry.fingerprint().to_hex(),
+        23,
     ))
     .unwrap()
 }
@@ -227,21 +264,63 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
         RunEventKind::RunStarted,
         RunEventKind::RunCompleted,
         RunEventKind::RunErrored {
-            code: RunErrorCode::KernelFailed,
+            outcome: RunErrorOutcome::Ordinary {
+                code: OrdinaryRunErrorCode::KernelFailed,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::QueueWait,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::Kernel,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::StreamSend,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::StreamReceive,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::AdapterIo,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::ResultPublication,
+            },
+        },
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::Cleanup,
+            },
         },
         RunEventKind::RunCancelled,
         RunEventKind::OperationStarted {
             operation_index: 3,
             activation_id: UNSAFE_ID,
+            attempt_id: UNSAFE_ID,
         },
         RunEventKind::OperationCompleted {
             operation_index: 3,
             activation_id: UNSAFE_ID,
+            attempt_id: UNSAFE_ID,
         },
         RunEventKind::OperationErrored {
             operation_index: 3,
             activation_id: UNSAFE_ID,
-            code: RunErrorCode::KernelFailed,
+            attempt_id: UNSAFE_ID,
+            outcome: RunErrorOutcome::Ordinary {
+                code: OrdinaryRunErrorCode::KernelFailed,
+            },
         },
         RunEventKind::ResultReady {
             name: "contract-result".into(),
@@ -435,6 +514,10 @@ fn contracts() -> BTreeMap<&'static str, Value> {
         ),
         ("i18n-inventory.json", i18n_contract(&registry)),
         ("localized-catalog.json", localized_catalog),
+        (
+            "catalog-search-wire.json",
+            catalog_search_wire_contract(&registry, &catalog),
+        ),
         ("editor-projection.json", editor_projection),
         (
             "function-editor-projection.json",
@@ -649,10 +732,64 @@ fn execution_and_project_event_contract_inventories_are_complete() {
 }
 
 #[test]
+fn focused_catalog_search_wire_golden_matches_rust_and_is_catalog_only() {
+    let builtin = build_builtin_node_system().expect("built-in node system must validate");
+    let focused = catalog_search_wire_contract(&builtin.registry, &builtin.catalog);
+    let path = fixture_path("catalog-search-wire.json");
+    if std::env::var(UPDATE_ENV).as_deref() == Ok("1") {
+        write_fixture(&path, &focused);
+    }
+    let checked_in = fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "missing focused Catalog fixture {}: {error}",
+            path.display()
+        )
+    });
+    let checked_in: Value = serde_json::from_str(&checked_in).unwrap_or_else(|error| {
+        panic!(
+            "invalid focused Catalog fixture {}: {error}",
+            path.display()
+        )
+    });
+
+    assert_eq!(checked_in, focused);
+    assert_eq!(
+        focused
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "categories".into(),
+            "items".into(),
+            "locale".into(),
+            "projectInstanceId".into(),
+            "registryFingerprint".into(),
+            "resourcePublicationRevision".into(),
+        ])
+    );
+    for item in focused["items"].as_array().unwrap() {
+        let fields = item.as_object().unwrap();
+        assert!(fields.contains_key("backendSearchText"));
+        assert!(fields.contains_key("resourceNames"));
+        assert!(!fields.contains_key("pinyin"));
+        assert!(!fields.contains_key("searchText"));
+        assert!(fields.contains_key("creation"));
+        assert!(fields.contains_key("ports"));
+        assert!(fields.contains_key("parameters"));
+    }
+}
+
+#[test]
 fn checked_in_node_system_contracts_match_rust() {
     let update = std::env::var(UPDATE_ENV).as_deref() == Ok("1");
     let contracts = contracts();
-    for required in ["project-events.json", "execution-wire.json"] {
+    for required in [
+        "catalog-search-wire.json",
+        "project-events.json",
+        "execution-wire.json",
+    ] {
         assert!(
             contracts.contains_key(required),
             "missing required node-system contract {required}"

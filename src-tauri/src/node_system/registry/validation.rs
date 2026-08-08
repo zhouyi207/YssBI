@@ -321,6 +321,12 @@ fn validate_node(
     nominal_type_ids: &BuiltinNominalTypeIds,
 ) -> Result<(), RegistryValidationError> {
     let protocol = &node.protocol;
+    validate_execution(protocol.execution).map_err(|source| {
+        RegistryValidationError::InvalidNodeProtocol {
+            node: protocol.type_id.clone(),
+            source,
+        }
+    })?;
     let fail = |reason: String| RegistryValidationError::InvalidNode {
         node: protocol.type_id.clone(),
         reason,
@@ -364,14 +370,7 @@ fn validate_node(
             ));
         }
     }
-    match (protocol.execution.purity, protocol.execution.effects) {
-        (Purity::Pure, EffectSemantics::None)
-        | (Purity::Effectful, EffectSemantics::Ordered | EffectSemantics::Exclusive) => {}
-        (Purity::Pure, _) => return Err(fail("pure nodes cannot declare effects".into())),
-        (Purity::Effectful, EffectSemantics::None) => {
-            return Err(fail("effectful nodes must declare effect ordering".into()));
-        }
-    }
+
     if !categories
         .categories
         .contains_key(&protocol.catalog.category_id)

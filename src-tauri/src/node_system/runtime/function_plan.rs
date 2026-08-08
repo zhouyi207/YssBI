@@ -152,6 +152,37 @@ fn validate_abi(
             message: "ABI provenance does not exactly match its plan".into(),
         });
     }
+    if abi.results.keys().collect::<BTreeSet<_>>()
+        != abi.result_productions.keys().collect::<BTreeSet<_>>()
+    {
+        return Err(FunctionPlanStoreError::InvalidBasis {
+            path: path.clone(),
+            message: "ABI results and result productions must have identical keys".into(),
+        });
+    }
+    for (result, value) in &abi.results {
+        let declared = abi.result_productions[result];
+        let Some(actual) = source_facts.production(*value) else {
+            return Err(FunctionPlanStoreError::InvalidBasis {
+                path: path.clone(),
+                message: format!(
+                    "ABI result production for value {} cannot be reconstructed from its plan",
+                    value.index()
+                )
+                .into(),
+            });
+        };
+        if declared != actual {
+            return Err(FunctionPlanStoreError::InvalidBasis {
+                path: path.clone(),
+                message: format!(
+                    "ABI result production for value {} is {declared:?}, but its plan produces {actual:?}",
+                    value.index()
+                )
+                .into(),
+            });
+        }
+    }
     for (direction, members) in [("parameter", &abi.parameters), ("result", &abi.results)] {
         let mut values = BTreeSet::new();
         for value in members.values() {

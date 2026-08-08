@@ -1,10 +1,11 @@
+use super::{Artifact, SpillArtifact};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, RunId};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::protocol::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -24,6 +25,8 @@ impl ArtifactId {
 pub enum ArtifactSnapshot {
     Value(Value),
     Sequence(Box<[Value]>),
+    Spilled(SpillArtifact),
+    RuntimeArtifact(Artifact),
 }
 
 impl ArtifactSnapshot {
@@ -31,6 +34,8 @@ impl ArtifactSnapshot {
         match self {
             Self::Value(_) => 1,
             Self::Sequence(values) => values.len(),
+            Self::Spilled(spill) => spill.len(),
+            Self::RuntimeArtifact(artifact) => artifact.materialized().len(),
         }
     }
 
@@ -38,13 +43,27 @@ impl ArtifactSnapshot {
         self.len() == 0
     }
 
-    fn page(&self, offset: usize, limit: usize) -> Box<[Value]> {
+    fn page(&self, offset: usize, limit: usize) -> Result<Box<[Value]>, super::RunError> {
         let start = offset.min(self.len());
         let end = start.saturating_add(limit).min(self.len());
         match self {
-            Self::Value(value) if start == 0 && end == 1 => vec![value.clone()].into_boxed_slice(),
-            Self::Value(_) => Box::default(),
-            Self::Sequence(values) => values[start..end].to_vec().into_boxed_slice(),
+            Self::Value(value) if start == 0 && end == 1 => {
+                Ok(vec![value.clone()].into_boxed_slice())
+            }
+            Self::Value(_) => Ok(Box::default()),
+            Self::Sequence(values) => Ok(values[start..end].to_vec().into_boxed_slice()),
+            Self::Spilled(spill) => spill
+                .cursor()?
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Vec::into_boxed_slice),
+            Self::RuntimeArtifact(artifact) => artifact
+                .cursor()?
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Vec::into_boxed_slice),
         }
     }
 }
@@ -84,6 +103,11 @@ struct ArtifactEntry {
     snapshot: Arc<ArtifactSnapshot>,
 }
 
+pub(crate) struct PreparedArtifactEntry {
+    artifact_id: ArtifactId,
+    entry: ArtifactEntry,
+}
+
 #[derive(Default)]
 struct ArtifactRegistry {
     entries: BTreeMap<ArtifactId, ArtifactEntry>,
@@ -102,6 +126,39 @@ pub struct ArtifactStore {
     inner: Arc<ArtifactStoreInner>,
 }
 
+pub(crate) struct ArtifactPublicationGuard<'a> {
+    registry: MutexGuard<'a, ArtifactRegistry>,
+}
+
+impl ArtifactPublicationGuard<'_> {
+    pub(crate) fn insert(&mut self, prepared: PreparedArtifactEntry) {
+        self.registry
+            .entries
+            .insert(prepared.artifact_id, prepared.entry);
+    }
+
+    pub(crate) fn remove(&mut self, artifact_id: ArtifactId) {
+        self.registry.entries.remove(&artifact_id);
+    }
+
+    pub(crate) fn release(&mut self, artifact_id: ArtifactId) -> bool {
+        let remove = {
+            let Some(entry) = self.registry.entries.get_mut(&artifact_id) else {
+                return false;
+            };
+            if entry.result_source_holds == 0 {
+                return false;
+            }
+            entry.result_source_holds -= 1;
+            !entry.run_owned && entry.result_source_holds == 0
+        };
+        if remove {
+            self.registry.entries.remove(&artifact_id);
+        }
+        true
+    }
+}
+
 impl ArtifactStore {
     pub fn new() -> Self {
         Self::default()
@@ -117,6 +174,7 @@ impl ArtifactStore {
         self.insert_with_result_source_holds(run_id, correlation, basis, snapshot, 0)
     }
 
+    #[cfg(test)]
     pub(crate) fn insert_retained_result_source(
         &self,
         run_id: RunId,
@@ -135,28 +193,60 @@ impl ArtifactStore {
         snapshot: ArtifactSnapshot,
         result_source_holds: usize,
     ) -> ArtifactDescriptor {
+        let (descriptor, prepared) =
+            self.prepare_entry(run_id, correlation, basis, snapshot, result_source_holds);
+        self.publication_registry().insert(prepared);
+        descriptor
+    }
+
+    pub(crate) fn prepare_retained_result_source(
+        &self,
+        run_id: RunId,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        snapshot: ArtifactSnapshot,
+    ) -> (ArtifactDescriptor, PreparedArtifactEntry) {
+        self.prepare_entry(run_id, correlation, basis, snapshot, 1)
+    }
+
+    fn prepare_entry(
+        &self,
+        run_id: RunId,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        snapshot: ArtifactSnapshot,
+        result_source_holds: usize,
+    ) -> (ArtifactDescriptor, PreparedArtifactEntry) {
         let artifact_id = ArtifactId::new(self.inner.next_id.fetch_add(1, Ordering::Relaxed) + 1);
         let descriptor = ArtifactDescriptor {
             artifact_id,
             kind: match &snapshot {
                 ArtifactSnapshot::Value(_) => ArtifactSnapshotKind::Value,
-                ArtifactSnapshot::Sequence(_) => ArtifactSnapshotKind::Sequence,
+                ArtifactSnapshot::Sequence(_)
+                | ArtifactSnapshot::Spilled(_)
+                | ArtifactSnapshot::RuntimeArtifact(_) => ArtifactSnapshotKind::Sequence,
             },
             total_count: snapshot.len(),
             correlation,
             basis,
         };
-        self.registry().entries.insert(
+        let prepared = PreparedArtifactEntry {
             artifact_id,
-            ArtifactEntry {
+            entry: ArtifactEntry {
                 run_id,
                 run_owned: true,
                 result_source_holds,
                 descriptor: descriptor.clone(),
                 snapshot: Arc::new(snapshot),
             },
-        );
-        descriptor
+        };
+        (descriptor, prepared)
+    }
+
+    pub(crate) fn publication_registry(&self) -> ArtifactPublicationGuard<'_> {
+        ArtifactPublicationGuard {
+            registry: self.registry(),
+        }
     }
 
     pub fn descriptor(&self, artifact_id: ArtifactId) -> Option<ArtifactDescriptor> {
@@ -178,18 +268,23 @@ impl ArtifactStore {
         artifact_id: ArtifactId,
         offset: usize,
         limit: usize,
-    ) -> Option<ArtifactPage> {
+    ) -> Result<Option<ArtifactPage>, super::RunError> {
         let limit = limit.max(1);
-        let registry = self.registry();
-        let entry = registry.entries.get(&artifact_id)?;
-        let start = offset.min(entry.snapshot.len());
-        Some(ArtifactPage {
+        let snapshot = {
+            let registry = self.registry();
+            let Some(entry) = registry.entries.get(&artifact_id) else {
+                return Ok(None);
+            };
+            Arc::clone(&entry.snapshot)
+        };
+        let start = offset.min(snapshot.len());
+        Ok(Some(ArtifactPage {
             artifact_id,
             offset: start,
             limit,
-            total_count: entry.snapshot.len(),
-            values: entry.snapshot.page(start, limit),
-        })
+            total_count: snapshot.len(),
+            values: snapshot.page(start, limit)?,
+        }))
     }
 
     pub fn retain_result_source(&self, artifact_id: ArtifactId) -> bool {
@@ -217,6 +312,11 @@ impl ArtifactStore {
             registry.entries.remove(&artifact_id);
         }
         true
+    }
+
+    #[cfg(test)]
+    pub(crate) fn entry_count(&self) -> usize {
+        self.registry().entries.len()
     }
 
     /// Ends run ownership without invalidating snapshots retained by result sources.
@@ -266,6 +366,7 @@ mod tests {
             node_id: None,
             node_type_id: None,
             parent_call: None,
+            trace_parent_span_id: None,
         };
         (correlation, basis)
     }
@@ -284,7 +385,7 @@ mod tests {
         );
         values[1] = Value::Integer(99);
 
-        let page = store.page(descriptor.artifact_id, 1, 2).unwrap();
+        let page = store.page(descriptor.artifact_id, 1, 2).unwrap().unwrap();
         assert_eq!(
             page.values.as_ref(),
             &[Value::Integer(2), Value::Integer(3)]

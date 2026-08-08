@@ -1,14 +1,84 @@
 use super::{
-    BoundedStreamReceiver, RelationalError, RelationalErrorCode, StreamReceiveError,
-    bounded_stream_channel,
+    BoundedStreamReceiver, KernelErrorKind, RelationalError, RelationalErrorCode, ReplayArtifact,
+    RunResourceBudgets, SchedulingPolicy, SpillArtifact, StreamReceiveError,
 };
 use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
 use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
 use crate::node_system::protocol::Value;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::{Arc, Condvar, LazyLock, Mutex, Weak};
+use std::time::{Duration, Instant};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunPhase {
+    QueueWait,
+    Kernel,
+    StreamSend,
+    StreamReceive,
+    AdapterIo,
+    ResultPublication,
+    Cleanup,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunDeadline(Instant);
+
+impl RunDeadline {
+    pub fn at(instant: Instant) -> Self {
+        Self(instant)
+    }
+
+    pub fn after(duration: Duration) -> Self {
+        Self(Instant::now() + duration)
+    }
+
+    pub(crate) fn exceeded_at(self, instant: Instant) -> bool {
+        instant >= self.0
+    }
+
+    pub(crate) fn remaining_monotonic(self, phase: RunPhase) -> Result<Duration, RunError> {
+        self.0
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(RunError::DeadlineExceeded { phase })
+    }
+
+    pub fn remaining(
+        self,
+        cancellation: &CancellationToken,
+        phase: RunPhase,
+    ) -> Result<Duration, RunError> {
+        cancellation.check()?;
+        self.remaining_monotonic(phase)
+    }
+
+    pub fn check(self, cancellation: &CancellationToken, phase: RunPhase) -> Result<(), RunError> {
+        self.remaining(cancellation, phase).map(|_| ())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RunOptions {
+    pub deadline: Option<RunDeadline>,
+    pub budgets: RunResourceBudgets,
+    pub scheduling: SchedulingPolicy,
+}
+
+pub(crate) fn check_terminal(
+    cancellation: &CancellationToken,
+    deadline: Option<RunDeadline>,
+    phase: RunPhase,
+) -> Result<(), RunError> {
+    cancellation.check()?;
+    if let Some(deadline) = deadline {
+        deadline.check(cancellation, phase)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactKind {
@@ -18,17 +88,81 @@ pub enum ArtifactKind {
     Replayable,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum MaterializedArtifact {
+    InMemory(Box<[Value]>),
+    Spilled(SpillArtifact),
+    Replayable(ReplayArtifact),
+}
+
+impl MaterializedArtifact {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::InMemory(values) => values.len(),
+            Self::Spilled(spill) => spill.len(),
+            Self::Replayable(replay) => replay.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn promote(
+        &self,
+        cancellation: &CancellationToken,
+        deadline: Option<RunDeadline>,
+    ) -> Result<(), RunError> {
+        match self {
+            Self::InMemory(_) => Ok(()),
+            Self::Spilled(spill) => spill.promote(cancellation, deadline),
+            Self::Replayable(replay) => replay.promote(cancellation, deadline),
+        }
+    }
+
+    pub const fn is_memoization_complete(&self) -> bool {
+        matches!(self, Self::InMemory(_))
+    }
+}
+
+#[derive(Debug)]
+struct ArtifactStorage {
+    materialized: MaterializedArtifact,
+    _memory_reservation: Option<super::materialization::MemoryReservation>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Artifact {
     kind: ArtifactKind,
-    values: Box<[Value]>,
+    storage: Arc<ArtifactStorage>,
 }
 
 impl Artifact {
     pub fn new(kind: ArtifactKind, values: impl Into<Box<[Value]>>) -> Self {
+        Self::from_materialized(kind, MaterializedArtifact::InMemory(values.into()))
+    }
+
+    pub fn from_materialized(kind: ArtifactKind, materialized: MaterializedArtifact) -> Self {
         Self {
             kind,
-            values: values.into(),
+            storage: Arc::new(ArtifactStorage {
+                materialized,
+                _memory_reservation: None,
+            }),
+        }
+    }
+
+    pub(crate) fn from_materialized_with_reservation(
+        kind: ArtifactKind,
+        materialized: MaterializedArtifact,
+        memory_reservation: super::materialization::MemoryReservation,
+    ) -> Self {
+        Self {
+            kind,
+            storage: Arc::new(ArtifactStorage {
+                materialized,
+                _memory_reservation: Some(memory_reservation),
+            }),
         }
     }
 
@@ -36,40 +170,126 @@ impl Artifact {
         self.kind
     }
 
-    pub fn values(&self) -> &[Value] {
-        &self.values
+    pub fn materialized(&self) -> &MaterializedArtifact {
+        &self.storage.materialized
+    }
+
+    pub fn in_memory_values(&self) -> Option<&[Value]> {
+        match &self.storage.materialized {
+            MaterializedArtifact::InMemory(values) => Some(values),
+            MaterializedArtifact::Spilled(_) | MaterializedArtifact::Replayable(_) => None,
+        }
+    }
+
+    pub fn cursor(&self) -> Result<ArtifactCursor, RunError> {
+        ArtifactCursor::from_storage(Arc::clone(&self.storage))
+    }
+
+    pub(crate) fn into_cursor(self) -> Result<ArtifactCursor, RunError> {
+        ArtifactCursor::from_storage(self.storage)
+    }
+
+    pub(crate) fn promote(
+        &self,
+        cancellation: &CancellationToken,
+        deadline: Option<RunDeadline>,
+    ) -> Result<(), RunError> {
+        self.storage.materialized.promote(cancellation, deadline)
+    }
+
+    pub(crate) fn is_memoization_complete(&self) -> bool {
+        self.storage.materialized.is_memoization_complete()
+    }
+}
+
+impl PartialEq for Artifact {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.storage.materialized == other.storage.materialized
+    }
+}
+
+impl Eq for Artifact {}
+
+pub struct InMemoryArtifactCursor {
+    storage: Arc<ArtifactStorage>,
+    index: usize,
+}
+
+pub enum ArtifactCursor {
+    InMemory(InMemoryArtifactCursor),
+    Spilled(super::SpillCursor),
+}
+
+impl ArtifactCursor {
+    fn from_storage(storage: Arc<ArtifactStorage>) -> Result<Self, RunError> {
+        match &storage.materialized {
+            MaterializedArtifact::InMemory(_) => {
+                Ok(Self::InMemory(InMemoryArtifactCursor { storage, index: 0 }))
+            }
+            MaterializedArtifact::Spilled(spill) => Ok(Self::Spilled(spill.cursor()?)),
+            MaterializedArtifact::Replayable(replay) => Ok(Self::Spilled(replay.cursor()?)),
+        }
+    }
+}
+
+impl Iterator for ArtifactCursor {
+    type Item = Result<Value, RunError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::InMemory(cursor) => {
+                let MaterializedArtifact::InMemory(values) = &cursor.storage.materialized else {
+                    unreachable!("in-memory cursor storage kind is stable");
+                };
+                let value = values.get(cursor.index)?.clone();
+                cursor.index += 1;
+                Some(Ok(value))
+            }
+            Self::Spilled(values) => values.next(),
+        }
     }
 }
 
 #[derive(Clone)]
 pub struct StreamValue {
     receiver: BoundedStreamReceiver<Value>,
+    producer_error: Arc<Mutex<Option<Box<str>>>>,
 }
 
 impl StreamValue {
-    pub fn from_receiver(receiver: BoundedStreamReceiver<Value>) -> Self {
-        Self { receiver }
+    #[cfg(test)]
+    pub(crate) fn from_receiver(receiver: BoundedStreamReceiver<Value>) -> Self {
+        Self {
+            receiver,
+            producer_error: Arc::new(Mutex::new(None)),
+        }
     }
 
-    pub fn from_values(
-        values: impl IntoIterator<Item = Value>,
-        cancellation: CancellationToken,
-    ) -> Result<Self, RunError> {
-        let values = values.into_iter().collect::<Vec<_>>();
-        let capacity = values.len().max(1);
-        let (sender, receiver) = bounded_stream_channel(capacity, cancellation)
-            .map_err(|error| RunError::Stream(error.to_string().into()))?;
-        for value in values {
-            sender
-                .send(value)
-                .map_err(|_| RunError::Stream("stream closed while being initialized".into()))?;
+    pub(crate) fn from_receiver_with_error(
+        receiver: BoundedStreamReceiver<Value>,
+        producer_error: Arc<Mutex<Option<Box<str>>>>,
+    ) -> Self {
+        Self {
+            receiver,
+            producer_error,
         }
-        sender.close();
-        Ok(Self { receiver })
     }
 
     pub fn recv(&self) -> Result<Value, StreamReceiveError> {
-        self.receiver.recv()
+        match self.receiver.recv() {
+            Err(StreamReceiveError::Closed) => {
+                let error = self
+                    .producer_error
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .clone();
+                match error {
+                    Some(error) => Err(StreamReceiveError::Failed(error)),
+                    None => Err(StreamReceiveError::Closed),
+                }
+            }
+            result => result,
+        }
     }
 
     pub fn close(&self) {
@@ -135,12 +355,38 @@ macro_rules! runtime_id {
 runtime_id!(ActivationId);
 runtime_id!(FrameId);
 
-static NEXT_ACTIVATION_ID: AtomicU64 = AtomicU64::new(1);
+pub(crate) static ACTIVATION_IDS: LazyLock<ActivationIdAllocator> =
+    LazyLock::new(|| ActivationIdAllocator::new(NonZeroU64::MIN));
 static NEXT_FRAME_ID: AtomicU64 = AtomicU64::new(1);
 
+#[derive(Debug)]
+pub(crate) struct ActivationIdAllocator {
+    next: Mutex<Option<NonZeroU64>>,
+}
+
+impl ActivationIdAllocator {
+    const fn new(next: NonZeroU64) -> Self {
+        Self {
+            next: Mutex::new(Some(next)),
+        }
+    }
+
+    pub(crate) fn allocate(&self) -> Result<ActivationId, RunError> {
+        let mut next = self.next.lock().unwrap_or_else(|error| error.into_inner());
+        let current = next.ok_or(RunError::ActivationIdExhausted)?;
+        *next = current.get().checked_add(1).and_then(NonZeroU64::new);
+        Ok(ActivationId(current.get()))
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn for_test(next: NonZeroU64) -> Self {
+        Self::new(next)
+    }
+}
+
 impl ActivationId {
-    pub(crate) fn next() -> Self {
-        Self(NEXT_ACTIVATION_ID.fetch_add(1, Ordering::Relaxed))
+    pub(crate) fn next() -> Result<Self, RunError> {
+        ACTIVATION_IDS.allocate()
     }
 }
 
@@ -153,6 +399,9 @@ impl FrameId {
 #[derive(Debug)]
 struct CancellationState {
     cancelled: Arc<AtomicBool>,
+    cancelled_at: Mutex<Option<Instant>>,
+    wait_lock: Mutex<()>,
+    cancelled_ready: Condvar,
     waiters: Mutex<Vec<Weak<Condvar>>>,
 }
 
@@ -166,6 +415,9 @@ impl Default for CancellationToken {
         Self {
             state: Arc::new(CancellationState {
                 cancelled: Arc::new(AtomicBool::new(false)),
+                cancelled_at: Mutex::new(None),
+                wait_lock: Mutex::new(()),
+                cancelled_ready: Condvar::new(),
                 waiters: Mutex::new(Vec::new()),
             }),
         }
@@ -178,7 +430,21 @@ impl CancellationToken {
     }
 
     pub fn cancel(&self) {
-        self.state.cancelled.store(true, Ordering::Release);
+        let wait = self
+            .state
+            .wait_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !self.state.cancelled.load(Ordering::Acquire) {
+            *self
+                .state
+                .cancelled_at
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = Some(Instant::now());
+            self.state.cancelled.store(true, Ordering::Release);
+        }
+        self.state.cancelled_ready.notify_all();
+        drop(wait);
         let mut waiters = self
             .state
             .waiters
@@ -197,12 +463,37 @@ impl CancellationToken {
         self.state.cancelled.load(Ordering::Acquire)
     }
 
+    pub(crate) fn cancelled_at(&self) -> Option<Instant> {
+        *self
+            .state
+            .cancelled_at
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
+
     pub(crate) fn shared_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.state.cancelled)
     }
 
     pub(crate) fn shares_state_with(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.state, &other.state)
+    }
+
+    pub(crate) fn wait_timeout(&self, timeout: Duration) -> bool {
+        let wait = self
+            .state
+            .wait_lock
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.is_cancelled() {
+            return true;
+        }
+        let _ = self
+            .state
+            .cancelled_ready
+            .wait_timeout_while(wait, timeout, |_| !self.is_cancelled())
+            .unwrap_or_else(|error| error.into_inner());
+        self.is_cancelled()
     }
 
     pub(crate) fn register_waiter(&self, waiter: &Arc<Condvar>) {
@@ -240,9 +531,14 @@ pub struct RunResult {
 pub enum RunError {
     InvalidPlan(Box<str>),
     Cancelled,
+    ActivationIdExhausted,
+    DeadlineExceeded {
+        phase: RunPhase,
+    },
     KernelNotFound(Box<str>),
     KernelFailed {
         operation: OperationIndex,
+        kind: KernelErrorKind,
         message: Box<str>,
     },
     RelationalBackendNotFound(RelationalBackendId),
@@ -294,6 +590,10 @@ impl RunError {
     pub fn from_relational_acquire(backend: RelationalBackendId, error: RelationalError) -> Self {
         if error.code() == RelationalErrorCode::Cancelled {
             Self::Cancelled
+        } else if error.code() == RelationalErrorCode::DeadlineExceeded {
+            Self::DeadlineExceeded {
+                phase: RunPhase::Kernel,
+            }
         } else {
             Self::RelationalAcquire {
                 backend,
@@ -306,6 +606,10 @@ impl RunError {
     pub fn from_relational(operation: OperationIndex, error: RelationalError) -> Self {
         if error.code() == RelationalErrorCode::Cancelled {
             Self::Cancelled
+        } else if error.code() == RelationalErrorCode::DeadlineExceeded {
+            Self::DeadlineExceeded {
+                phase: RunPhase::Kernel,
+            }
         } else {
             Self::RelationalFailed {
                 operation,
@@ -321,10 +625,16 @@ impl fmt::Display for RunError {
         match self {
             Self::InvalidPlan(message) => write!(formatter, "invalid execution plan: {message}"),
             Self::Cancelled => formatter.write_str("run was cancelled"),
+            Self::ActivationIdExhausted => formatter.write_str("activation ID space is exhausted"),
+            Self::DeadlineExceeded { phase } => {
+                write!(formatter, "run deadline exceeded during {phase:?}")
+            }
             Self::KernelNotFound(handle) => {
                 write!(formatter, "kernel '{handle}' is not registered")
             }
-            Self::KernelFailed { operation, message } => write!(
+            Self::KernelFailed {
+                operation, message, ..
+            } => write!(
                 formatter,
                 "operation {} failed: {message}",
                 operation.index()

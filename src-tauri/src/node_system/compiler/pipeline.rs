@@ -26,9 +26,9 @@ use crate::node_system::analysis::{
     DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId, ResolvedDatabase,
     ResolvedFunction, ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource,
     ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
-    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanEvent,
-    SpanKind, SpanStatus, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
-    ValidatedSemanticPort, ValueEdge,
+    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanId,
+    SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
+    ValidatedSemanticPort, ValueEdge, start_span_safely,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
@@ -46,7 +46,7 @@ use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction,
     ParameterEditorSpec, ParameterIssueKind, PortDirection, PortInstances, PortKind, PortSpec,
-    Purity, TypeClassId, TypeConstructorId, TypeExpr, TypeId, Value,
+    Purity, RetryPolicy, TypeClassId, TypeConstructorId, TypeExpr, TypeId, Value,
     validate_and_prepare_parameter_values,
 };
 use crate::node_system::registry::{
@@ -364,6 +364,7 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
 pub struct CompilationSnapshot {
     pub provenance: CompileProvenance,
     pub document: GraphDocument,
+    pub trace_span_id: SpanId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -546,20 +547,25 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             compile_id,
         };
         let correlation = CorrelationContext::compile(&provenance);
-        self.trace.record(SpanEvent::new(
-            SpanKind::Snapshot,
-            SpanStatus::Started,
-            correlation.clone(),
-        ));
+        let mut span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: None,
+                run_id: None,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Snapshot,
+                correlation,
+            },
+        );
+        let trace_span_id = span.span_id();
         let snapshot = CompilationSnapshot {
             provenance,
             document: document.clone(),
+            trace_span_id,
         };
-        self.trace.record(SpanEvent::new(
-            SpanKind::Snapshot,
-            SpanStatus::Succeeded,
-            correlation,
-        ));
+        span.finish(SpanOutcome::Success);
         snapshot
     }
 
@@ -571,17 +577,20 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         #[cfg(test)]
         COMPILE_SNAPSHOT_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
         let correlation = CorrelationContext::compile(&snapshot.provenance);
-        self.trace.record(SpanEvent::new(
-            SpanKind::Analysis,
-            SpanStatus::Started,
-            correlation.clone(),
-        ));
+        let mut analysis_span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: Some(snapshot.trace_span_id),
+                run_id: None,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Analysis,
+                correlation: correlation.clone(),
+            },
+        );
         if let Err(error) = cancellation.checkpoint() {
-            self.trace.record(SpanEvent::new(
-                SpanKind::Analysis,
-                SpanStatus::Cancelled,
-                correlation,
-            ));
+            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         let mut resources = TrackedResourceResolver::new(self.resources);
@@ -597,11 +606,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             &mut resources,
             cancellation,
         ) {
-            self.trace.record(SpanEvent::new(
-                SpanKind::Analysis,
-                SpanStatus::Cancelled,
-                correlation,
-            ));
+            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         let prepared_configs = state.prepared_configs();
@@ -624,11 +629,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             {
                 Ok(closure) => closure,
                 Err(error) => {
-                    self.trace.record(SpanEvent::new(
-                        SpanKind::Analysis,
-                        SpanStatus::Cancelled,
-                        correlation,
-                    ));
+                    analysis_span.finish(SpanOutcome::Cancellation);
                     return Err(error);
                 }
             };
@@ -639,19 +640,11 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let decoded_literals = state.decoded_literals.clone();
         let mut analysis = state.snapshot();
         if let Err(error) = cancellation.checkpoint() {
-            self.trace.record(SpanEvent::new(
-                SpanKind::Analysis,
-                SpanStatus::Cancelled,
-                correlation,
-            ));
+            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         if analysis.has_blocking_errors() {
-            self.trace.record(SpanEvent::new(
-                SpanKind::Analysis,
-                SpanStatus::Blocked,
-                correlation,
-            ));
+            analysis_span.finish(SpanOutcome::Error);
             return Ok(finalize_resource_basis(
                 CompileResult {
                     analysis,
@@ -674,11 +667,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     analysis.diagnostics,
                     CompilerDiagnostic::SemanticInvalid {}.into_node(DiagnosticLocation::Graph),
                 );
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Analysis,
-                    SpanStatus::Failed,
-                    correlation,
-                ));
+                analysis_span.finish(SpanOutcome::Error);
                 return Ok(finalize_resource_basis(
                     CompileResult {
                         analysis,
@@ -697,16 +686,19 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 ));
             }
         };
-        self.trace.record(SpanEvent::new(
-            SpanKind::Analysis,
-            SpanStatus::Succeeded,
-            correlation.clone(),
-        ));
-        self.trace.record(SpanEvent::new(
-            SpanKind::Lowering,
-            SpanStatus::Started,
-            correlation.clone(),
-        ));
+        analysis_span.finish(SpanOutcome::Success);
+        let mut lowering_span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: Some(snapshot.trace_span_id),
+                run_id: None,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Lowering,
+                correlation: correlation.clone(),
+            },
+        );
 
         let final_versions = resources.reads().clone();
         let final_observations = resources.observations().clone();
@@ -738,32 +730,38 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             cancellation,
         ) {
             Ok((basis, plan)) => {
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Lowering,
-                    SpanStatus::Succeeded,
-                    correlation.clone(),
-                ));
-                (
-                    Some(semantic),
-                    Some(basis),
-                    Some(plan),
-                    CompilationOutcome::Succeeded,
-                )
+                let abi_finalized = function_abi
+                    .as_mut()
+                    .map(|abi| finalize_function_abi_productions(&plan, abi))
+                    .transpose();
+                if abi_finalized.is_err() {
+                    lowering_span.finish(SpanOutcome::Error);
+                    (
+                        Some(semantic),
+                        None,
+                        None,
+                        CompilationOutcome::InternalFailure(InternalCompilationFailure {
+                            stage: CompilationStage::Lowering,
+                            code: "compiler.plan.invalid".into(),
+                            node_id: None,
+                        }),
+                    )
+                } else {
+                    lowering_span.finish(SpanOutcome::Success);
+                    (
+                        Some(semantic),
+                        Some(basis),
+                        Some(plan),
+                        CompilationOutcome::Succeeded,
+                    )
+                }
             }
             Err(LowerGraphFailure::Cancelled(error)) => {
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Lowering,
-                    SpanStatus::Cancelled,
-                    correlation,
-                ));
+                lowering_span.finish(SpanOutcome::Cancellation);
                 return Err(error);
             }
             Err(LowerGraphFailure::Internal(failure)) => {
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Lowering,
-                    SpanStatus::Failed,
-                    correlation.clone(),
-                ));
+                lowering_span.finish(SpanOutcome::Error);
                 (
                     Some(semantic),
                     None,
@@ -818,6 +816,13 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             dependencies.insert(target, node);
         }
 
+        let initially_invalid = invalid_call_targets(&dependencies);
+        self.finalize_call_dependency_abis(
+            &mut dependencies,
+            &initially_invalid,
+            resources,
+            cancellation,
+        )?;
         let invalid = invalid_call_targets(&dependencies);
         for (target, node) in dependencies {
             if !invalid.contains(&target)
@@ -832,6 +837,138 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             }
         }
         Ok(closure)
+    }
+
+    fn finalize_call_dependency_abis(
+        &self,
+        dependencies: &mut BTreeMap<GraphResourcePath, CallDependencyNode>,
+        initially_invalid: &BTreeSet<GraphResourcePath>,
+        resources: &dyn AnalysisResourceResolver,
+        cancellation: &CompileCancellationToken,
+    ) -> Result<(), CompileCancelled> {
+        let final_versions = resources.reads().clone();
+        let final_observations = resources.observations().clone();
+        for (target, node) in dependencies.iter_mut() {
+            if initially_invalid.contains(target) {
+                continue;
+            }
+            if let Some(abi) = node.abi.as_mut() {
+                abi.provenance.basis.resource_versions = final_versions.clone();
+                abi.provenance.basis.resource_observations = final_observations.clone();
+            }
+            if let Some(lowering) = node.lowering.as_mut() {
+                lowering.provenance.basis.resource_versions = final_versions.clone();
+                lowering.provenance.basis.resource_observations = final_observations.clone();
+                lowering.semantic.basis.resource_versions = final_versions.clone();
+                lowering.semantic.basis.resource_observations = final_observations.clone();
+            }
+        }
+
+        let components = strongly_connected_call_components(dependencies);
+        for component in components.into_iter().rev() {
+            cancellation.checkpoint()?;
+            let invalid = invalid_call_targets(dependencies);
+            if component.iter().any(|target| invalid.contains(target)) {
+                continue;
+            }
+            match self.finalize_call_component(dependencies, &component, cancellation) {
+                Ok(()) => {}
+                Err(CallAbiFinalizationFailure::Cancelled(error)) => return Err(error),
+                Err(CallAbiFinalizationFailure::Invalid) => {
+                    for target in component {
+                        if let Some(node) = dependencies.get_mut(&target) {
+                            node.abi = None;
+                            node.locally_valid = false;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn finalize_call_component(
+        &self,
+        dependencies: &mut BTreeMap<GraphResourcePath, CallDependencyNode>,
+        component: &[GraphResourcePath],
+        cancellation: &CompileCancellationToken,
+    ) -> Result<(), CallAbiFinalizationFailure> {
+        const MAX_ITERATIONS: usize = 32;
+        let mut seen = BTreeSet::new();
+        for _ in 0..MAX_ITERATIONS {
+            cancellation
+                .checkpoint()
+                .map_err(CallAbiFinalizationFailure::Cancelled)?;
+            let state = component
+                .iter()
+                .map(|target| {
+                    (
+                        target.clone(),
+                        dependencies[target]
+                            .abi
+                            .as_ref()
+                            .map(|abi| abi.result_productions.clone()),
+                    )
+                })
+                .collect::<Vec<_>>();
+            if !seen.insert(state) {
+                return Err(CallAbiFinalizationFailure::Invalid);
+            }
+            let call_abis = dependencies
+                .iter()
+                .filter_map(|(target, node)| {
+                    node.abi.as_ref().map(|abi| (target.clone(), abi.clone()))
+                })
+                .collect::<BTreeMap<_, _>>();
+            let mut finalized = Vec::with_capacity(component.len());
+            for target in component {
+                let node = &dependencies[target];
+                let lowering = node
+                    .lowering
+                    .as_ref()
+                    .ok_or(CallAbiFinalizationFailure::Invalid)?;
+                let (_, plan) = lower_graph(
+                    self.registry,
+                    &lowering.document,
+                    &lowering.semantic,
+                    &lowering.prepared_configs,
+                    &lowering.decoded_literals,
+                    &lowering.interface_projection,
+                    &call_abis,
+                    lowering.provenance.clone(),
+                    cancellation,
+                )
+                .map_err(|error| match error {
+                    LowerGraphFailure::Cancelled(error) => {
+                        CallAbiFinalizationFailure::Cancelled(error)
+                    }
+                    LowerGraphFailure::Internal(_) => CallAbiFinalizationFailure::Invalid,
+                })?;
+                let mut abi = node
+                    .abi
+                    .clone()
+                    .ok_or(CallAbiFinalizationFailure::Invalid)?;
+                finalize_function_abi_productions(&plan, &mut abi)
+                    .map_err(|_| CallAbiFinalizationFailure::Invalid)?;
+                finalized.push((target.clone(), abi));
+            }
+            let stable = finalized.iter().all(|(target, abi)| {
+                dependencies[target]
+                    .abi
+                    .as_ref()
+                    .is_some_and(|current| current.result_productions == abi.result_productions)
+            });
+            for (target, abi) in finalized {
+                dependencies
+                    .get_mut(&target)
+                    .expect("call component target exists")
+                    .abi = Some(abi);
+            }
+            if stable {
+                return Ok(());
+            }
+        }
+        Err(CallAbiFinalizationFailure::Invalid)
     }
 
     fn analyze_call_dependency(
@@ -880,7 +1017,8 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             resources,
             cancellation,
         )?;
-        let _prepared_configs = state.prepared_configs();
+        let prepared_configs = state.prepared_configs();
+        let decoded_literals = state.decoded_literals.clone();
         state.basis.resource_versions = resources.reads().clone();
         state.basis.resource_observations = resources.observations().clone();
         let provisional_semantic = state.semantic_graph();
@@ -896,6 +1034,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     abi: None,
                     dependencies,
                     locally_valid: false,
+                    lowering: None,
                 },
                 false,
             ));
@@ -909,6 +1048,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         abi: None,
                         dependencies,
                         locally_valid: false,
+                        lowering: None,
                     },
                     false,
                 ));
@@ -925,6 +1065,14 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 abi: Some(abi),
                 dependencies,
                 locally_valid: nested_diagnostics.is_empty(),
+                lowering: Some(CallDependencyLowering {
+                    document,
+                    semantic,
+                    prepared_configs,
+                    decoded_literals,
+                    interface_projection,
+                    provenance,
+                }),
             },
             false,
         ))
@@ -985,10 +1133,25 @@ struct CallClosureAnalysis {
     diagnostics: Vec<CompilerNodeDiagnostic>,
 }
 
+enum CallAbiFinalizationFailure {
+    Cancelled(CompileCancelled),
+    Invalid,
+}
+
 struct CallDependencyNode {
     abi: Option<FunctionPlanAbi>,
     dependencies: BTreeSet<GraphResourcePath>,
     locally_valid: bool,
+    lowering: Option<CallDependencyLowering>,
+}
+
+struct CallDependencyLowering {
+    document: GraphDocument,
+    semantic: CompilerSemanticGraph,
+    prepared_configs: BTreeMap<NodeId, ValidatedNodeConfig>,
+    decoded_literals: BTreeMap<PortAddress, crate::node_system::protocol::TypedValue>,
+    interface_projection: ValidatedInterfaceProjection,
+    provenance: CompileProvenance,
 }
 
 impl CallDependencyNode {
@@ -997,6 +1160,7 @@ impl CallDependencyNode {
             abi: None,
             dependencies: BTreeSet::new(),
             locally_valid: false,
+            lowering: None,
         }
     }
 }
@@ -2323,7 +2487,7 @@ struct PendingOperation {
 }
 
 #[derive(Clone)]
-enum PendingKernel {
+pub(crate) enum PendingKernel {
     Native(KernelHandle),
     Relational,
 }
@@ -2348,6 +2512,32 @@ pub(crate) fn effective_cache_policy(
         requested
     } else {
         CachePolicy::Disabled
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn effective_retry_policy(
+    idempotent: bool,
+    policy: Option<RetryPolicy>,
+    determinism: Determinism,
+    purity: Purity,
+    effects: EffectSemantics,
+    has_control_or_effect_ports: bool,
+    kernel: &PendingKernel,
+    resources: &[CompiledResourceRequirement],
+) -> PlannedRetry {
+    let compiler_approved = idempotent
+        && policy.is_some()
+        && determinism == Determinism::Deterministic
+        && purity == Purity::Pure
+        && effects == EffectSemantics::None
+        && !has_control_or_effect_ports
+        && matches!(kernel, PendingKernel::Native(_))
+        && resources.is_empty();
+    if compiler_approved {
+        PlannedRetry { idempotent, policy }
+    } else {
+        PlannedRetry::default()
     }
 }
 
@@ -2530,6 +2720,30 @@ fn allocate_port_values<R: CompilerRegistry>(
     Ok((next_value, values))
 }
 
+#[derive(Debug)]
+pub(super) enum FinalizeFunctionAbiError {
+    InvalidPlan,
+    MissingResultProduction,
+}
+
+pub(super) fn finalize_function_abi_productions(
+    plan: &ExecutionPlan,
+    abi: &mut FunctionPlanAbi,
+) -> Result<(), FinalizeFunctionAbiError> {
+    let source_facts = plan
+        .validate_with_source_facts()
+        .map_err(|_| FinalizeFunctionAbiError::InvalidPlan)?;
+    let mut productions = BTreeMap::new();
+    for (result, value) in &abi.results {
+        let production = source_facts
+            .production(*value)
+            .ok_or(FinalizeFunctionAbiError::MissingResultProduction)?;
+        productions.insert(result.clone(), production);
+    }
+    abi.result_productions = productions;
+    Ok(())
+}
+
 fn derive_function_abi<R: CompilerRegistry>(
     registry: &R,
     graph: &CompilerSemanticGraph,
@@ -2584,15 +2798,14 @@ fn derive_function_abi<R: CompilerRegistry>(
                                 .iter()
                                 .find(|candidate| candidate.node_id == edge.source.node_id)?;
                             let source = resolve_for_lowering(registry, source_node).ok()?;
-                            Some(
-                                protocol_port(source.protocol, &edge.source)
-                                    .production
-                                    .unwrap_or(OutputProduction::FullyMaterialized),
-                            )
+                            protocol_port(source.protocol, &edge.source).production
                         }
                         _ => None,
                     })
-                    .unwrap_or(OutputProduction::FullyMaterialized);
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}
+                            .into_node(DiagnosticLocation::Port(port.address.clone()))
+                    })?;
                 result_productions.insert(parameter.clone(), production);
             }
             if destination.insert(parameter.clone(), value).is_some() {
@@ -2959,6 +3172,26 @@ fn lower_graph<R: CompilerRegistry>(
             execution.effects,
             &owned_resources,
         );
+        let has_control_or_effect_ports = resolved
+            .protocol
+            .interface
+            .ports
+            .iter()
+            .any(|port| port.kind != PortKind::Data);
+        let retry = effective_retry_policy(
+            execution.idempotent,
+            execution.retry,
+            execution.determinism,
+            execution.purity,
+            execution.effects,
+            has_control_or_effect_ports,
+            &kernel,
+            owned_resources
+                .values()
+                .cloned()
+                .collect::<Vec<_>>()
+                .as_slice(),
+        );
         let resource_dependencies = owned_resources
             .keys()
             .map(|resource| ResourceKey::new(resource.as_str()))
@@ -2968,12 +3201,7 @@ fn lower_graph<R: CompilerRegistry>(
             stable_id,
             node_id: node.node_id,
             node_type_id: node.node_type_id.clone(),
-            has_control_or_effect_ports: resolved
-                .protocol
-                .interface
-                .ports
-                .iter()
-                .any(|port| port.kind != PortKind::Data),
+            has_control_or_effect_ports,
             kernel,
             input_ports: inputs
                 .into_iter()
@@ -2992,7 +3220,7 @@ fn lower_graph<R: CompilerRegistry>(
             cache_policy,
             semantics_version,
             workload,
-            retry: PlannedRetry::default(),
+            retry,
             evaluation: execution.evaluation,
             purity: execution.purity,
             effects: execution.effects,
@@ -3213,7 +3441,7 @@ fn lower_graph<R: CompilerRegistry>(
         }
     }
     collect_control_value_sources(
-        &root_region,
+        &mut root_region,
         &mut value_sources,
         &mut production_by_value,
         function_abis,
@@ -3316,7 +3544,7 @@ fn deduplicate_region_operations(region: &mut StructuredControlRegion) {
 }
 
 fn collect_control_value_sources(
-    region: &StructuredControlRegion,
+    region: &mut StructuredControlRegion,
     sources: &mut BTreeSet<PlanValueSource>,
     productions: &mut BTreeMap<ValueRef, OutputProduction>,
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
@@ -3338,19 +3566,26 @@ fn collect_control_value_sources(
             collect_control_value_sources(then_region, sources, productions, function_abis)?;
             collect_control_value_sources(else_region, sources, productions, function_abis)?;
             for binding in results {
-                let then_production = productions
-                    .get(&binding.then_source)
-                    .copied()
-                    .unwrap_or(OutputProduction::FullyMaterialized);
-                let else_production = productions
-                    .get(&binding.else_source)
-                    .copied()
-                    .unwrap_or(OutputProduction::FullyMaterialized);
+                let then_production =
+                    productions
+                        .get(&binding.then_source)
+                        .copied()
+                        .ok_or_else(|| {
+                            CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                        })?;
+                let else_production =
+                    productions
+                        .get(&binding.else_source)
+                        .copied()
+                        .ok_or_else(|| {
+                            CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                        })?;
                 if then_production != else_production {
                     return Err(CompilerDiagnostic::PlanInvalid {}
                         .into_node(DiagnosticLocation::Graph)
                         .into());
                 }
+                binding.production = Some(then_production);
                 productions.insert(binding.destination, then_production);
                 sources.insert(PlanValueSource::ControlProduced(
                     binding.destination,
@@ -3359,27 +3594,37 @@ fn collect_control_value_sources(
             }
         }
         StructuredControlRegion::Loop { body, carried, .. } => {
-            collect_control_value_sources(body, sources, productions, function_abis)?;
-            for binding in carried {
+            for binding in carried.iter_mut() {
                 let initial = productions
                     .get(&binding.initial_source)
                     .copied()
-                    .unwrap_or(OutputProduction::FullyMaterialized);
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                    })?;
+                binding.production = Some(initial);
+                productions.insert(binding.body_input, initial);
+                sources.insert(PlanValueSource::ControlProduced(
+                    binding.body_input,
+                    initial,
+                ));
+            }
+            collect_control_value_sources(body, sources, productions, function_abis)?;
+            for binding in carried {
+                let initial = binding.production.ok_or_else(|| {
+                    CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                })?;
                 let next = productions
                     .get(&binding.next_source)
                     .copied()
-                    .unwrap_or(OutputProduction::FullyMaterialized);
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                    })?;
                 if initial != next {
                     return Err(CompilerDiagnostic::PlanInvalid {}
                         .into_node(DiagnosticLocation::Graph)
                         .into());
                 }
-                productions.insert(binding.body_input, initial);
                 productions.insert(binding.result, initial);
-                sources.insert(PlanValueSource::ControlProduced(
-                    binding.body_input,
-                    initial,
-                ));
                 sources.insert(PlanValueSource::ControlProduced(binding.result, initial));
             }
         }
@@ -3399,7 +3644,14 @@ fn collect_control_value_sources(
                             .then(|| abi.result_productions.get(parameter).copied())
                             .flatten()
                     })
-                    .unwrap_or(OutputProduction::FullyMaterialized);
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                    })?;
+                if Some(production) != binding.production {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
                 productions.insert(binding.caller_destination, production);
                 sources.insert(PlanValueSource::ControlProduced(
                     binding.caller_destination,

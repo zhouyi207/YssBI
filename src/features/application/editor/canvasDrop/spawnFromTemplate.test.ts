@@ -75,12 +75,13 @@ describe('spawnNodeFromTemplate', () => {
       styleId: 'call',
       aliases: [],
       technicalTerms: [],
+      backendSearchText: ['opaque'],
+      resourceNames: ['Opaque'],
       ports: [],
       parameters: [],
       resourcePath: descriptor.resourcePath,
       resourceRevision: 9,
       creation: descriptor,
-      searchText: 'opaque',
     }];
 
     expect(findResourceNodeSpawnTemplate(

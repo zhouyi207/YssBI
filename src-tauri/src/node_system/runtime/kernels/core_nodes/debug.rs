@@ -1,8 +1,6 @@
 use super::support::{KernelFragment, expect_arity};
 use crate::node_system::protocol::Value;
-use crate::node_system::runtime::{
-    Artifact, ArtifactKind, Kernel, KernelContext, KernelError, RuntimeValue,
-};
+use crate::node_system::runtime::{ArtifactKind, Kernel, KernelContext, KernelError, RuntimeValue};
 
 pub(super) fn register(fragment: &mut KernelFragment) {
     fragment.register("yssbi.debug.print", PrintKernel);
@@ -36,20 +34,27 @@ struct ViewKernel;
 impl Kernel for ViewKernel {
     fn execute(
         &self,
-        _context: &KernelContext<'_>,
+        context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 1)?;
-        let values = match &inputs[0] {
-            RuntimeValue::Scalar(value) => vec![value.clone()],
-            RuntimeValue::Artifact(artifact) => artifact.values().to_vec(),
+        let artifact = match &inputs[0] {
+            RuntimeValue::Scalar(value) => context
+                .resource_owner
+                .materialize_artifact(ArtifactKind::Replayable, std::iter::once(Ok(value.clone()))),
+            RuntimeValue::Artifact(artifact) => {
+                let cursor = artifact
+                    .cursor()
+                    .map_err(|error| KernelError::new(error.to_string()))?;
+                context
+                    .resource_owner
+                    .materialize_artifact(ArtifactKind::Replayable, cursor)
+            }
             RuntimeValue::Stream(_) => {
                 return Err(KernelError::new("View requires a fully materialized input"));
             }
-        };
-        Ok(vec![RuntimeValue::Artifact(Artifact::new(
-            ArtifactKind::Replayable,
-            values,
-        ))])
+        }
+        .map_err(|error| KernelError::new(error.to_string()))?;
+        Ok(vec![RuntimeValue::Artifact(artifact)])
     }
 }

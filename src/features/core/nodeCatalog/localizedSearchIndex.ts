@@ -1,27 +1,32 @@
-import { searchLocalizedCatalogItems } from '@/features/domain/nodeCatalog/search';
 import {
-  catalogResponseKey,
-  type LocalizedCatalogResponse,
-} from './nodeCatalogStore';
+  buildCatalogSearchDocument,
+  matchesCatalogSearchDocument,
+} from '@/features/domain/nodeCatalog/searchDocument';
+import type { LocalizedCatalogResponse } from './nodeCatalogStore';
 
 export interface LocalizedSearchIndex {
   readonly response: LocalizedCatalogResponse;
   search(query: string): LocalizedCatalogResponse['items'];
 }
 
-const indexes = new Map<string, LocalizedSearchIndex>();
+const indexes = new WeakMap<LocalizedCatalogResponse, LocalizedSearchIndex>();
 
 export function getLocalizedSearchIndex(
   response: LocalizedCatalogResponse,
 ): LocalizedSearchIndex {
-  const key = catalogResponseKey(response);
-  const cached = indexes.get(key);
+  const cached = indexes.get(response);
   if (cached) return cached;
 
+  const documents = response.items.map((item) => ({
+    item,
+    document: buildCatalogSearchDocument(item),
+  }));
   const index: LocalizedSearchIndex = {
     response,
-    search: (query) => searchLocalizedCatalogItems(response.items, query),
+    search: (query) => documents
+      .filter(({ document }) => matchesCatalogSearchDocument(document, query))
+      .map(({ item }) => item),
   };
-  indexes.set(key, index);
+  indexes.set(response, index);
   return index;
 }

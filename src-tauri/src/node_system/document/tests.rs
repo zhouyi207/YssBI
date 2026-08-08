@@ -85,6 +85,8 @@ const EDITOR_MUTATION_EXECUTION: crate::node_system::protocol::ExecutionSemantic
         evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
         effects: EffectSemantics::None,
+        idempotent: false,
+        retry: None,
     };
 
 struct EditorMutationTestLowerer;

@@ -8,7 +8,8 @@ use crate::node_system::document::{
 };
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::runtime::{
-    ProjectResourceLeaseObserver, RunErrorCode, RunEvent, RunEventKind, RunEventSink,
+    OrdinaryRunErrorCode, ProjectResourceLeaseObserver, RunErrorOutcome, RunEvent, RunEventKind,
+    RunEventSink,
 };
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::collections::BTreeMap;
@@ -1314,7 +1315,9 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
     let root_errored_run_id = root_run_id(
         &recorded,
         RunEventKind::RunErrored {
-            code: RunErrorCode::RecursionLimitExceeded,
+            outcome: RunErrorOutcome::Ordinary {
+                code: OrdinaryRunErrorCode::RecursionLimitExceeded,
+            },
         },
     );
     assert_eq!(root_started_run_id, root_errored_run_id);
@@ -1332,7 +1335,9 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
     assert!(recorded.iter().any(|event| {
         event.kind
             == RunEventKind::RunErrored {
-                code: RunErrorCode::RecursionLimitExceeded,
+                outcome: RunErrorOutcome::Ordinary {
+                    code: OrdinaryRunErrorCode::RecursionLimitExceeded,
+                },
             }
     }));
     assert_eq!(
@@ -1627,7 +1632,9 @@ fn builtin_loop_reports_iteration_limit_without_committing_result() {
     assert!(events.iter().any(|event| {
         event.kind
             == RunEventKind::RunErrored {
-                code: RunErrorCode::LoopLimitExceeded,
+                outcome: RunErrorOutcome::Ordinary {
+                    code: OrdinaryRunErrorCode::LoopLimitExceeded,
+                },
             }
     }));
     assert_no_completed_result(&events);
@@ -1956,7 +1963,9 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
                     && matches!(
                         event.kind,
                         RunEventKind::OperationErrored {
-                            code: RunErrorCode::KernelFailed,
+                            outcome: RunErrorOutcome::Ordinary {
+                                code: OrdinaryRunErrorCode::KernelFailed,
+                            },
                             ..
                         }
                     )
@@ -1970,7 +1979,9 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
             .filter(|event| {
                 event.kind
                     == RunEventKind::RunErrored {
-                        code: RunErrorCode::KernelFailed,
+                        outcome: RunErrorOutcome::Ordinary {
+                            code: OrdinaryRunErrorCode::KernelFailed,
+                        },
                     }
             })
             .count(),

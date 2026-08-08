@@ -228,10 +228,7 @@ impl<'a> Evaluator<'a> {
             ProductionRelationalCheckpoint::OperatorEvaluation,
             self.context.cancellation,
         );
-        self.context
-            .cancellation
-            .check()
-            .map_err(RelationalError::from)?;
+        self.context.check_terminal()?;
         if let Some(value) = self.values.get(index.index()).and_then(Clone::clone) {
             return Ok(value);
         }
@@ -267,10 +264,7 @@ impl<'a> Evaluator<'a> {
                     ProductionRelationalCheckpoint::SourceScan,
                     self.context.cancellation,
                 );
-                self.context
-                    .cancellation
-                    .check()
-                    .map_err(RelationalError::from)?;
+                self.context.check_terminal()?;
                 let limit = self.source_limits.get(&index).copied();
                 self.backend.record_scan_limit(limit);
                 let lease = self
@@ -315,15 +309,9 @@ impl<'a> Evaluator<'a> {
                     ProductionRelationalCheckpoint::PredicateEvaluation,
                     self.context.cancellation,
                 );
-                self.context
-                    .cancellation
-                    .check()
-                    .map_err(RelationalError::from)?;
+                self.context.check_terminal()?;
                 let filtered = filter_dataframe(source.as_ref().clone(), &predicate)?;
-                self.context
-                    .cancellation
-                    .check()
-                    .map_err(RelationalError::from)?;
+                self.context.check_terminal()?;
                 Arc::new(filtered)
             }
             RelationalOperator::Rename { input, columns } => {
@@ -369,10 +357,7 @@ impl<'a> Evaluator<'a> {
             ProductionRelationalCheckpoint::ResultMaterialization,
             self.context.cancellation,
         );
-        self.context
-            .cancellation
-            .check()
-            .map_err(RelationalError::from)?;
+        self.context.check_terminal()?;
         #[cfg(test)]
         if let Some(observer) = &self.backend.observer {
             observer.observe_materialization(value.as_ref());
@@ -384,14 +369,16 @@ impl<'a> Evaluator<'a> {
                 self.context.cancellation,
             );
             self.context
-                .cancellation
-                .check()
-                .map_err(|_| KernelError::cancelled("relational result conversion was cancelled"))
+                .check_terminal()
+                .map_err(|error| match error.code() {
+                    RelationalErrorCode::Cancelled => {
+                        KernelError::cancelled("relational result conversion was cancelled")
+                    }
+                    RelationalErrorCode::DeadlineExceeded => KernelError::deadline_exceeded(),
+                    _ => KernelError::new("relational result conversion failed"),
+                })
         });
-        self.context
-            .cancellation
-            .check()
-            .map_err(RelationalError::from)?;
+        self.context.check_terminal()?;
         converted.map(RuntimeValue::Scalar).map_err(|_| {
             RelationalError::new(
                 RelationalErrorCode::TypeMismatch,
@@ -408,6 +395,7 @@ impl RelationalBackend for ProductionRelationalBackend {
         plan: &CompiledRelationalPlan,
         operation_inputs: &[RuntimeValue],
     ) -> Result<RelationalExecution, RelationalError> {
+        context.check_terminal()?;
         let inferred_pushdown_hints = infer_relational_pushdown_hints(&plan.operators, &plan.roots);
         if plan.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
             return Err(RelationalError::new(
@@ -424,6 +412,7 @@ impl RelationalBackend for ProductionRelationalBackend {
         for root in &plan.roots {
             outputs.push(evaluator.materialize_index(*root)?);
         }
+        context.check_terminal()?;
         Ok(RelationalExecution { outputs })
     }
 }
@@ -506,11 +495,22 @@ mod tests {
     use crate::node_system::protocol::Value;
     use crate::node_system::runtime::{
         CancellationToken, ProjectResourceProvider, ProjectResourceSnapshot, RelationalBackend,
-        RelationalContext, RelationalError, RunResourceSet, RuntimeValue,
+        RelationalContext, RelationalError, RelationalErrorCode, RunDeadline, RunResourceBudgets,
+        RunResourceOwner, RunResourceSet, RuntimeValue,
     };
     use polars::prelude::{Column, DataFrame};
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    fn relational_test_owner(cancellation: &CancellationToken) -> RunResourceOwner {
+        RunResourceOwner::new(
+            RunId::new(1),
+            RunResourceBudgets::default(),
+            cancellation.clone(),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn rejects_forged_limit_pushdown_before_scanning_source() {
@@ -552,10 +552,13 @@ mod tests {
             }]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
@@ -612,10 +615,13 @@ mod tests {
         plan.pushdown_hints =
             infer_relational_pushdown_hints(&plan.operators, &plan.roots).into_boxed_slice();
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
@@ -682,10 +688,13 @@ mod tests {
             ]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
@@ -763,10 +772,13 @@ mod tests {
         ));
         let resources = RunResourceSet::acquire(&[], &provider).unwrap();
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let backend = ProductionRelationalBackend::default();
         let operation_inputs = [input];
@@ -914,10 +926,13 @@ mod tests {
         ));
         let resources = RunResourceSet::acquire(&[], &provider).unwrap();
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         backend
             .execute(&context, plan, &[input])
@@ -1124,10 +1139,13 @@ mod tests {
             pushdown_hints: Box::new([]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
 
         ProductionRelationalBackend::default()
@@ -1199,10 +1217,13 @@ mod tests {
             pushdown_hints: Box::new([]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
@@ -1234,10 +1255,13 @@ mod tests {
             pushdown_hints: Box::new([]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let observed_for_hook = Arc::clone(&observed);
@@ -1267,6 +1291,55 @@ mod tests {
                 ProductionRelationalCheckpoint::ResultMaterialization,
             ]
         );
+    }
+
+    #[test]
+    fn production_backend_observes_deadline_after_blocking_checkpoint() {
+        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
+            ProjectSessionId::new("deadline-test"),
+            Default::default(),
+        ));
+        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
+        let fragment = RelationalFragmentId::new("input").unwrap();
+        let plan = CompiledRelationalPlan {
+            fragment_order: Box::new([fragment.clone()]),
+            operators: Box::new([RelationalOperator::Input {
+                name: "input".into(),
+            }]),
+            fragment_roots: Box::new([RelationalFragmentRoot {
+                fragment,
+                operator: RelationalOperatorIndex::new(0),
+            }]),
+            roots: Box::new([RelationalOperatorIndex::new(0)]),
+            pushdown_hints: Box::new([]),
+        };
+        let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
+        let deadline = RunDeadline::after(Duration::from_millis(5));
+        let context = RelationalContext {
+            run_id: RunId::new(1),
+            resources: &resources,
+            resource_owner: &resource_owner,
+            cancellation: &cancellation,
+            deadline: Some(deadline),
+        };
+        let backend = ProductionRelationalBackend::default().with_test_checkpoint(Arc::new(
+            |checkpoint, _| {
+                if checkpoint == ProductionRelationalCheckpoint::ResultMaterialization {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            },
+        ));
+
+        let error = backend
+            .execute(
+                &context,
+                &plan,
+                &[RuntimeValue::Scalar(Value::Object(BTreeMap::new()))],
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code(), RelationalErrorCode::DeadlineExceeded);
     }
 
     #[test]
@@ -1316,10 +1389,13 @@ mod tests {
             }]),
         };
         let cancellation = CancellationToken::new();
+        let resource_owner = relational_test_owner(&cancellation);
         let context = RelationalContext {
             run_id: RunId::new(1),
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));

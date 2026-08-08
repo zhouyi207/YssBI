@@ -81,8 +81,8 @@ pub struct LocalizedCatalogItemDto {
     pub style_id: Box<str>,
     pub aliases: Vec<Box<str>>,
     pub technical_terms: Vec<Box<str>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pinyin: Option<Box<str>>,
+    pub backend_search_text: Vec<Box<str>>,
+    pub resource_names: Vec<Box<str>>,
     pub ports: Vec<LocalizedPortDto>,
     pub parameters: Vec<LocalizedParameterDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,7 +90,6 @@ pub struct LocalizedCatalogItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_revision: Option<crate::node_system::document::ResourceRevision>,
     pub creation: NodeCreationDescriptor,
-    pub search_text: Box<str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -191,7 +190,6 @@ pub struct CatalogResourceEntry {
     pub resource_revision: crate::node_system::document::ResourceRevision,
     pub create_args: ResourceBoundCreateArgsDto,
     pub technical_terms: Vec<Box<str>>,
-    pub pinyin: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -456,11 +454,10 @@ impl BuiltinCatalog {
             None => Vec::new(),
         };
         let technical_terms = self.technical_terms(protocol);
-        let search_text = search(
-            [title.as_ref()]
-                .into_iter()
-                .chain(aliases.iter().map(AsRef::as_ref)),
-        );
+        let backend_search_text = [title.clone()]
+            .into_iter()
+            .chain(aliases.iter().cloned())
+            .collect();
         LocalizedCatalogItemDto {
             node_type_id: protocol.type_id.as_str().into(),
             title,
@@ -471,13 +468,13 @@ impl BuiltinCatalog {
             style_id: protocol.catalog.style_id.as_str().into(),
             aliases,
             technical_terms,
-            pinyin: None,
+            backend_search_text,
+            resource_names: Vec::new(),
             ports: self.localized_ports(protocol, locale),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: None,
             resource_revision: None,
             creation,
-            search_text,
         }
     }
 
@@ -505,17 +502,8 @@ impl BuiltinCatalog {
         technical_terms.extend(entry.technical_terms.iter().cloned());
         technical_terms.sort();
         technical_terms.dedup();
-        let pinyin = locale
-            .split('-')
-            .next()
-            .is_some_and(|language| language.eq_ignore_ascii_case("zh"))
-            .then(|| entry.pinyin.clone())
-            .flatten();
-        let search_text = search(
-            [entry.name.as_ref()]
-                .into_iter()
-                .chain(aliases.iter().map(AsRef::as_ref)),
-        );
+        let backend_search_text = aliases.clone();
+        let resource_names = vec![entry.name.clone()];
         LocalizedCatalogItemDto {
             node_type_id: entry.node_type_id.as_str().into(),
             title: entry.name.clone(),
@@ -526,7 +514,8 @@ impl BuiltinCatalog {
             style_id: protocol.catalog.style_id.as_str().into(),
             aliases,
             technical_terms,
-            pinyin,
+            backend_search_text,
+            resource_names,
             ports: self.localized_ports(protocol, locale),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: Some(entry.resource_path.clone()),
@@ -537,7 +526,6 @@ impl BuiltinCatalog {
                 resource_revision: entry.resource_revision,
                 create_args: entry.create_args,
             },
-            search_text,
         }
     }
 

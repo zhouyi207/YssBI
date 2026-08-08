@@ -198,6 +198,8 @@ fn protocol(
             evaluation: EvaluationPolicy::EagerWhenRegionEntered,
             cache: CachePolicy::Disabled,
             effects: EffectSemantics::Ordered,
+            idempotent: false,
+            retry: None,
         },
         scope: NodeScope::Any,
         managed_role: None,

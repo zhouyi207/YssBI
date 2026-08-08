@@ -1,16 +1,19 @@
 use super::{
-    ActivationId, CancellationToken, CompiledParameterStore, FrameId, RunId, RunResourceSet,
-    RuntimeValue,
+    ActivationId, CancellationToken, CompiledParameterStore, FrameId, RunDeadline, RunId, RunPhase,
+    RunResourceOwner, RunResourceSet, RuntimeValue,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KernelErrorKind {
-    Failed,
+    Permanent,
+    Transient,
     Cancelled,
+    DeadlineExceeded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +25,14 @@ pub struct KernelError {
 impl KernelError {
     pub fn new(message: impl Into<Box<str>>) -> Self {
         Self {
-            kind: KernelErrorKind::Failed,
+            kind: KernelErrorKind::Permanent,
+            message: message.into(),
+        }
+    }
+
+    pub fn transient(message: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: KernelErrorKind::Transient,
             message: message.into(),
         }
     }
@@ -31,6 +41,13 @@ impl KernelError {
         Self {
             kind: KernelErrorKind::Cancelled,
             message: message.into(),
+        }
+    }
+
+    pub fn deadline_exceeded() -> Self {
+        Self {
+            kind: KernelErrorKind::DeadlineExceeded,
+            message: "run deadline exceeded during kernel execution".into(),
         }
     }
 
@@ -58,10 +75,60 @@ pub struct KernelContext<'a> {
     pub params: &'a CompiledParameterHandle,
     pub compiled_parameters: Option<&'a CompiledParameterStore>,
     pub resources: &'a RunResourceSet,
+    pub resource_owner: &'a RunResourceOwner,
     pub cancellation: &'a CancellationToken,
+    pub deadline: Option<RunDeadline>,
 }
 
 impl KernelContext<'_> {
+    pub fn check_terminal(&self) -> Result<(), KernelError> {
+        self.cancellation
+            .check()
+            .map_err(|_| KernelError::cancelled("kernel execution was cancelled"))?;
+        if let Some(deadline) = self.deadline {
+            deadline
+                .check(self.cancellation, RunPhase::Kernel)
+                .map_err(|error| match error {
+                    super::RunError::Cancelled => {
+                        KernelError::cancelled("kernel execution was cancelled")
+                    }
+                    super::RunError::DeadlineExceeded { .. } => KernelError::deadline_exceeded(),
+                    _ => unreachable!("terminal check has only cancellation or deadline outcomes"),
+                })?;
+        }
+        Ok(())
+    }
+
+    pub fn wait_for(&self, duration: Duration) -> Result<(), KernelError> {
+        let operation_end = Instant::now() + duration;
+        loop {
+            self.check_terminal()?;
+            let now = Instant::now();
+            if now >= operation_end {
+                return Ok(());
+            }
+            let mut wait = operation_end - now;
+            if let Some(deadline) = self.deadline {
+                wait = wait.min(
+                    deadline
+                        .remaining(self.cancellation, RunPhase::Kernel)
+                        .map_err(|error| match error {
+                            super::RunError::Cancelled => {
+                                KernelError::cancelled("kernel execution was cancelled")
+                            }
+                            super::RunError::DeadlineExceeded { .. } => {
+                                KernelError::deadline_exceeded()
+                            }
+                            _ => unreachable!("terminal check has only terminal outcomes"),
+                        })?,
+                );
+            }
+            if self.cancellation.wait_timeout(wait) {
+                self.check_terminal()?;
+            }
+        }
+    }
+
     pub fn parameters<T>(&self) -> Result<&T, KernelError>
     where
         T: std::any::Any + Send + Sync,

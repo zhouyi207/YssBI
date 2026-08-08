@@ -1,0 +1,144 @@
+{
+  "categories": [
+    {
+      "categoryId": "numeric",
+      "searchText": "numeric",
+      "title": "Numeric"
+    },
+    {
+      "categoryId": "project",
+      "searchText": "project",
+      "title": "Project"
+    }
+  ],
+  "items": [
+    {
+      "aliases": [
+        "plus",
+        "sum",
+        "+"
+      ],
+      "backendSearchText": [
+        "Add",
+        "plus",
+        "sum",
+        "+"
+      ],
+      "categoryId": "numeric",
+      "creation": {
+        "kind": "static",
+        "nodeTypeId": "yssbi.numeric.add.int64"
+      },
+      "description": "Built-in deterministic node.",
+      "documentation": "This node is part of the trusted built-in provider.",
+      "iconId": "builtin.numeric",
+      "nodeTypeId": "yssbi.numeric.add.int64",
+      "parameters": [],
+      "ports": [
+        {
+          "direction": "input",
+          "key": "left",
+          "kind": "data",
+          "label": "Left"
+        },
+        {
+          "direction": "input",
+          "key": "right",
+          "kind": "data",
+          "label": "Right"
+        },
+        {
+          "direction": "output",
+          "key": "result",
+          "kind": "data",
+          "label": "Result"
+        }
+      ],
+      "resourceNames": [],
+      "styleId": "builtin.default",
+      "technicalTerms": [
+        "plus",
+        "sum",
+        "+"
+      ],
+      "title": "Add"
+    },
+    {
+      "aliases": [
+        "call",
+        "invoke",
+        "function"
+      ],
+      "backendSearchText": [
+        "call",
+        "invoke",
+        "function"
+      ],
+      "categoryId": "project",
+      "creation": {
+        "createArgs": {
+          "kind": "function"
+        },
+        "kind": "resourceBound",
+        "nodeTypeId": "yssbi.project.function.call",
+        "resourcePath": "functions/catalog-search-wire",
+        "resourceRevision": 23
+      },
+      "description": "Integrates project resources with graph execution.",
+      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "iconId": "builtin.project",
+      "nodeTypeId": "yssbi.project.function.call",
+      "parameters": [
+        {
+          "description": "Function resource to invoke.",
+          "key": "target",
+          "title": "Target Function"
+        }
+      ],
+      "ports": [
+        {
+          "direction": "input",
+          "key": "enter",
+          "kind": "control",
+          "label": "Enter"
+        },
+        {
+          "direction": "input",
+          "key": "arguments",
+          "kind": "data",
+          "label": "Arguments"
+        },
+        {
+          "direction": "output",
+          "key": "results",
+          "kind": "data",
+          "label": "Results"
+        },
+        {
+          "direction": "output",
+          "key": "then",
+          "kind": "control",
+          "label": "Then"
+        }
+      ],
+      "resourceNames": [
+        "Straße_Data Café 数据"
+      ],
+      "resourcePath": "functions/catalog-search-wire",
+      "resourceRevision": 23,
+      "styleId": "builtin.default",
+      "technicalTerms": [
+        "Maße_Valué",
+        "call",
+        "function",
+        "invoke",
+        "技术_Term"
+      ],
+      "title": "Straße_Data Café 数据"
+    }
+  ],
+  "locale": "en-US",
+  "projectInstanceId": "00000000-0000-0000-0000-000000000017",
+  "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+  "resourcePublicationRevision": 23
+}

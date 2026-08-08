@@ -266,7 +266,7 @@ describe('ProjectService execution contract', () => {
 
   it.each([
     {
-      terminal: { type: 'runErrored', code: 'kernelFailed' } as const,
+      terminal: { type: 'runErrored', code: 'kernelFailed', phase: null } as const,
       commandError: {
         code: 'run_failed',
         message: 'run failed',
@@ -416,7 +416,7 @@ describe('ProjectService execution contract', () => {
         registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
         resourceVersions: {},
       },
-      kind: { type: 'runErrored', code: 'kernelFailed' },
+      kind: { type: 'runErrored', code: 'kernelFailed', phase: null },
     };
     args.onEvent.onmessage?.(errored);
 

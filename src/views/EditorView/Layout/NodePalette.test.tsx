@@ -45,14 +45,20 @@ const productionPaletteChain = {
     { kind: 'import', moduleSpecifier: '@/services/nodeSystem/catalogService', symbol: 'CatalogService' },
   ],
   'src/features/core/nodeCatalog/localizedSearchIndex.ts': [
-    { kind: 'import', moduleSpecifier: '@/features/domain/nodeCatalog/search', symbol: 'searchLocalizedCatalogItems' },
-    { kind: 'import', moduleSpecifier: './nodeCatalogStore', symbol: 'catalogResponseKey' },
+    { kind: 'import', moduleSpecifier: '@/features/domain/nodeCatalog/searchDocument', symbol: 'buildCatalogSearchDocument' },
+    { kind: 'import', moduleSpecifier: '@/features/domain/nodeCatalog/searchDocument', symbol: 'matchesCatalogSearchDocument' },
+    { kind: 'import', moduleSpecifier: './nodeCatalogStore', symbol: 'LocalizedCatalogResponse' },
   ],
   'src/features/core/nodeCatalog/nodeCatalogStore.ts': [
     { kind: 'import', moduleSpecifier: '@/features/domain/nodeCatalog/catalogItem', symbol: 'LocalizedCatalogItem' },
   ],
   'src/features/domain/nodeCatalog/search.ts': [
     { kind: 'import', moduleSpecifier: './catalogItem', symbol: 'LocalizedCatalogItem' },
+    { kind: 'import', moduleSpecifier: './searchDocument', symbol: 'buildCatalogSearchDocument' },
+    { kind: 'import', moduleSpecifier: './searchDocument', symbol: 'matchesCatalogSearchDocument' },
+  ],
+  'src/features/domain/nodeCatalog/searchDocument.ts': [
+    { kind: 'import', moduleSpecifier: '@/shared/types/dto/localizedCatalog', symbol: 'LocalizedCatalogItemDto' },
   ],
   'src/features/domain/nodeCatalog/catalogItem.ts': [
     { kind: 'import', moduleSpecifier: '@/shared/types/dto/localizedCatalog', symbol: 'isLocalizedCatalogItemDto' },
@@ -222,12 +228,12 @@ const catalog: LocalizedCatalogResponse = {
       iconId: 'math',
       styleId: 'default',
       aliases: ['sum'],
-      technicalTerms: ['addition'],
-      pinyin: 'jia fa',
+      technicalTerms: ['addition', '加法术语'],
+      backendSearchText: ['backend-add-token'],
+      resourceNames: [],
       ports: [],
       parameters: [],
       creation: { kind: 'static', nodeTypeId: 'math.add' },
-      searchText: '加法 数学 sum addition jia fa',
     },
     {
       nodeTypeId: 'output.print',
@@ -239,11 +245,11 @@ const catalog: LocalizedCatalogResponse = {
       styleId: 'default',
       aliases: ['print'],
       technicalTerms: [],
-      pinyin: 'da yin',
+      backendSearchText: [],
+      resourceNames: [],
       ports: [],
       parameters: [],
       creation: { kind: 'static', nodeTypeId: 'output.print' },
-      searchText: '打印 输出 print da yin',
     },
     {
       nodeTypeId: 'function.call',
@@ -255,6 +261,8 @@ const catalog: LocalizedCatalogResponse = {
       styleId: 'call',
       aliases: ['Helper'],
       technicalTerms: [],
+      backendSearchText: ['invoke helper'],
+      resourceNames: ['Helper Resource'],
       ports: [],
       parameters: [],
       resourcePath: 'functions/Helper.yssbi-function',
@@ -266,7 +274,6 @@ const catalog: LocalizedCatalogResponse = {
         resourceRevision: 3,
         createArgs: { kind: 'function' },
       },
-      searchText: '调用 helper',
     },
   ],
 };
@@ -424,19 +431,34 @@ describe('NodePalette', () => {
     expect(host.textContent).toContain('打印');
   });
 
-  it('filters rendered items through title and aliases only', () => {
+  it.each([
+    ['localized title', '加法'],
+    ['alias', 'sum'],
+    ['technical term', 'addition'],
+    ['technical term full pinyin', 'jia fa shu yu'],
+    ['technical term pinyin initials', 'jfsy'],
+    ['stable node ID', 'math.add'],
+    ['backend search text', 'backend-add-token'],
+    ['full pinyin', 'jia fa'],
+    ['pinyin initials', 'jf'],
+  ])('filters rendered items through %s', (_field, query) => {
     renderPalette();
     const input = host.querySelector('input');
     expect(input).not.toBeNull();
 
-    act(() => setInputValue(input!, 'sum'));
+    act(() => setInputValue(input!, query));
     expect(host.textContent).toContain('加法');
     expect(host.textContent).not.toContain('打印');
+  });
 
-    for (const excluded of ['addition', 'math.add', 'jia fa', '数学']) {
-      act(() => setInputValue(input!, excluded));
-      expect(host.textContent).toContain('No matches found');
-    }
+  it('filters resource entries through authoritative resource names', () => {
+    renderPalette();
+    const input = host.querySelector('input')!;
+
+    act(() => setInputValue(input, 'helper resource'));
+
+    expect(host.textContent).toContain('调用 Helper');
+    expect(host.textContent).not.toContain('加法');
   });
 
   it('renders an empty state when search has no matches', () => {
@@ -492,7 +514,6 @@ describe('NodePalette', () => {
         ...first.creation,
         resourcePath: 'functions/Other.yssbi-function',
       } as NodeCreationDescriptor,
-      searchText: '调用 other other-only',
     };
     const multiCatalog = {
       ...catalog,

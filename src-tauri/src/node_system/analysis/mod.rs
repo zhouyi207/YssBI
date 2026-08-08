@@ -22,10 +22,14 @@ pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, Location,
     NodeDiagnostic, Severity,
 };
+#[cfg(test)]
+pub use observability::FakeTraceClock;
 pub use observability::{
-    CompileProvenance, CorrelationContext, NOOP_TRACE_SINK, NoopTraceSink, ParentCallId,
-    ProjectSessionId, RedactionPolicy, RunId, SensitiveFieldAction, SpanEvent, SpanKind,
-    SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
+    CompileProvenance, CorrelationContext, InvalidTraceIdentity, MonotonicTimestamp,
+    NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, ProjectSessionId, RedactionPolicy, RunId,
+    SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec,
+    SystemTraceClock, TraceClock, TraceFieldSensitivity, TraceSink, TraceSpan, TraceValue,
+    start_span_safely,
 };
 pub use projection::{
     CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
@@ -46,7 +50,7 @@ pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,
     SchemaFacts, TypeFacts, ValidationError,
 };
-pub use trace_store::{BoundedTraceSink, DEFAULT_PROJECT_TRACE_CAPACITY, TraceRecord};
+pub use trace_store::{BoundedTraceSink, DEFAULT_PROJECT_TRACE_CAPACITY};
 
 #[cfg(test)]
 mod tests {

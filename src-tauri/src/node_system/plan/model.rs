@@ -194,12 +194,30 @@ fn hex_digest(digest: &[u8; 32]) -> String {
 pub struct AttemptId(u64);
 
 impl AttemptId {
-    pub const fn new(value: u64) -> Self {
-        Self(value)
+    pub fn try_new(value: u64) -> Result<Self, crate::node_system::analysis::InvalidTraceIdentity> {
+        if value == 0 {
+            return Err(crate::node_system::analysis::InvalidTraceIdentity);
+        }
+        Ok(Self(value))
+    }
+
+    pub fn new(value: u64) -> Self {
+        Self::try_new(value).expect("attempt IDs must be non-zero")
+    }
+
+    pub const fn initial() -> Self {
+        Self(1)
     }
 
     pub const fn get(self) -> u64 {
         self.0
+    }
+
+    pub const fn next_checked(self) -> Option<Self> {
+        match self.0.checked_add(1) {
+            Some(next) => Some(Self(next)),
+            None => None,
+        }
     }
 }
 
@@ -359,12 +377,6 @@ impl MaterializationAdapterPlan {
     }
 }
 
-impl PlannedAdapter {
-    pub const fn for_contract(production: OutputProduction, consumption: InputConsumption) -> Self {
-        MaterializationAdapterPlan::for_contract(production, consumption).adapter
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlannedKernel {
     Native(KernelHandle),
@@ -423,6 +435,7 @@ pub struct CallArgumentBinding {
 pub struct CallResultBinding {
     pub callee_source: ValueRef,
     pub caller_destination: ValueRef,
+    pub production: Option<OutputProduction>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -430,6 +443,7 @@ pub struct BranchResultBinding {
     pub destination: ValueRef,
     pub then_source: ValueRef,
     pub else_source: ValueRef,
+    pub production: Option<OutputProduction>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -438,6 +452,7 @@ pub struct LoopCarriedBinding {
     pub initial_source: ValueRef,
     pub next_source: ValueRef,
     pub result: ValueRef,
+    pub production: Option<OutputProduction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

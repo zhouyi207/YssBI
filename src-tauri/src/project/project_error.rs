@@ -20,6 +20,8 @@ pub enum ProjectFilesystemError {
     CatalogResourceStale { message: String },
     #[error("database access failed: {message}")]
     DatabaseAccessFailed { message: String },
+    #[error("result source read failed: {message}")]
+    ResultSourceReadFailed { message: String },
     #[error("resource revision overflow for '{path}' at {retained}")]
     ResourceRevisionOverflow {
         path: super::GraphResourcePath,
@@ -55,6 +57,7 @@ impl ProjectFilesystemError {
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::CatalogResourceStale { .. } => "catalog_resource_stale",
             Self::DatabaseAccessFailed { .. } => "database_access_failed",
+            Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",

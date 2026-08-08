@@ -1,6 +1,206 @@
 use super::*;
 use crate::node_system::plan::infer_relational_pushdown_hints;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum RegionPathSegment {
+    Sequence(usize),
+    IfThen(usize),
+    IfElse(usize),
+    LoopBody(usize),
+}
+
+impl RegionPathSegment {
+    const fn parent_step(&self) -> usize {
+        match self {
+            Self::Sequence(step)
+            | Self::IfThen(step)
+            | Self::IfElse(step)
+            | Self::LoopBody(step) => *step,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct RegionPath(Vec<RegionPathSegment>);
+
+impl RegionPath {
+    fn child(&self, segment: RegionPathSegment) -> Self {
+        let mut path = self.0.clone();
+        path.push(segment);
+        Self(path)
+    }
+
+    fn nearest_common_dominator<'a>(paths: impl IntoIterator<Item = &'a Self>) -> Self {
+        let mut paths = paths.into_iter();
+        let Some(first) = paths.next() else {
+            return Self::default();
+        };
+        let mut common = first.0.clone();
+        for path in paths {
+            common.truncate(
+                common
+                    .iter()
+                    .zip(&path.0)
+                    .take_while(|(left, right)| left == right)
+                    .count(),
+            );
+        }
+        Self(common)
+    }
+
+    fn is_prefix_of(&self, other: &Self) -> bool {
+        other.0.starts_with(&self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum AnchorPosition {
+    Prelude,
+    AfterStep(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct PlacementAnchor {
+    region: RegionPath,
+    position: AnchorPosition,
+}
+
+impl PlacementAnchor {
+    fn dominates(&self, consumer: &OperationPlacement) -> bool {
+        if !self.region.is_prefix_of(&consumer.region) {
+            return false;
+        }
+        match (
+            &self.position,
+            self.region.0.len() == consumer.region.0.len(),
+        ) {
+            (AnchorPosition::Prelude, _) => true,
+            (AnchorPosition::AfterStep(anchor), true) => *anchor < consumer.step,
+            (AnchorPosition::AfterStep(anchor), false) => {
+                consumer.region.0[self.region.0.len()].parent_step() > *anchor
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct OperationPlacement {
+    region: RegionPath,
+    step: usize,
+}
+
+#[derive(Default)]
+struct ControlFlowIndex {
+    operations: BTreeMap<OperationIndex, OperationPlacement>,
+    definitions: BTreeMap<ValueRef, PlacementAnchor>,
+}
+
+impl ControlFlowIndex {
+    fn build(region: &StructuredControlRegion, operations: &[PlannedOperation]) -> Self {
+        let mut index = Self::default();
+        index.index_sequence(region, &RegionPath::default(), operations);
+        index
+    }
+
+    fn index_sequence(
+        &mut self,
+        region: &StructuredControlRegion,
+        path: &RegionPath,
+        operations: &[PlannedOperation],
+    ) {
+        let StructuredControlRegion::Sequence(steps) = region else {
+            return;
+        };
+        for (step_index, step) in steps.iter().enumerate() {
+            match step {
+                ControlStep::Operation(operation) => {
+                    self.operations.insert(
+                        *operation,
+                        OperationPlacement {
+                            region: path.clone(),
+                            step: step_index,
+                        },
+                    );
+                    if let Some(planned) = operations.get(operation.index()) {
+                        for output in &planned.outputs {
+                            self.definitions.insert(
+                                output.value,
+                                PlacementAnchor {
+                                    region: path.clone(),
+                                    position: AnchorPosition::AfterStep(step_index),
+                                },
+                            );
+                        }
+                    }
+                }
+                ControlStep::Region(child) => self.index_child(child, path, step_index, operations),
+            }
+        }
+    }
+
+    fn index_child(
+        &mut self,
+        region: &StructuredControlRegion,
+        parent: &RegionPath,
+        parent_step: usize,
+        operations: &[PlannedOperation],
+    ) {
+        let after_region = PlacementAnchor {
+            region: parent.clone(),
+            position: AnchorPosition::AfterStep(parent_step),
+        };
+        match region {
+            StructuredControlRegion::Sequence(_) => self.index_sequence(
+                region,
+                &parent.child(RegionPathSegment::Sequence(parent_step)),
+                operations,
+            ),
+            StructuredControlRegion::If {
+                then_region,
+                else_region,
+                results,
+                ..
+            } => {
+                self.index_sequence(
+                    then_region,
+                    &parent.child(RegionPathSegment::IfThen(parent_step)),
+                    operations,
+                );
+                self.index_sequence(
+                    else_region,
+                    &parent.child(RegionPathSegment::IfElse(parent_step)),
+                    operations,
+                );
+                for binding in results {
+                    self.definitions
+                        .insert(binding.destination, after_region.clone());
+                }
+            }
+            StructuredControlRegion::Loop { body, carried, .. } => {
+                let body_path = parent.child(RegionPathSegment::LoopBody(parent_step));
+                self.index_sequence(body, &body_path, operations);
+                for binding in carried {
+                    self.definitions.insert(
+                        binding.body_input,
+                        PlacementAnchor {
+                            region: body_path.clone(),
+                            position: AnchorPosition::Prelude,
+                        },
+                    );
+                    self.definitions
+                        .insert(binding.result, after_region.clone());
+                }
+            }
+            StructuredControlRegion::Call { results, .. } => {
+                for binding in results {
+                    self.definitions
+                        .insert(binding.caller_destination, after_region.clone());
+                }
+            }
+        }
+    }
+}
+
 fn insert_materialization_adapters(
     provenance: &crate::node_system::analysis::CompileProvenance,
     value_count: &mut u32,
@@ -9,6 +209,26 @@ fn insert_materialization_adapters(
     dependencies: &mut Vec<ValueDependency>,
     root_region: &mut StructuredControlRegion,
 ) -> Result<(), DemandPlanError> {
+    if !matches!(root_region, StructuredControlRegion::Sequence(_)) {
+        let original =
+            std::mem::replace(root_region, StructuredControlRegion::Sequence(Box::new([])));
+        *root_region =
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Region(Box::new(original))]));
+    }
+    let control_flow = ControlFlowIndex::build(root_region, operations);
+    let mut source_anchors = control_flow.definitions.clone();
+    for source in value_sources {
+        if matches!(source, PlanValueSource::ExternalInput(_, _)) {
+            source_anchors.insert(
+                source.value(),
+                PlacementAnchor {
+                    region: RegionPath::default(),
+                    position: AnchorPosition::Prelude,
+                },
+            );
+        }
+    }
+
     let mut outputs = operations
         .iter()
         .enumerate()
@@ -74,8 +294,7 @@ fn insert_materialization_adapters(
     dependencies
         .retain(|dependency| !replaced.contains(&(dependency.source, dependency.destination)));
 
-    let mut adapters_by_consumer = BTreeMap::<OperationIndex, Vec<OperationIndex>>::new();
-    let mut fanout_by_producer = BTreeMap::<OperationIndex, Vec<OperationIndex>>::new();
+    let mut operations_by_anchor = BTreeMap::<PlacementAnchor, Vec<OperationIndex>>::new();
     let mut boundary_indices_by_source = BTreeMap::<ValueRef, Vec<usize>>::new();
     for (index, boundary) in boundaries.iter().enumerate() {
         boundary_indices_by_source
@@ -88,34 +307,60 @@ fn insert_materialization_adapters(
             continue;
         }
         let production = boundaries[indices[0]].6;
-        let collect = indices.iter().any(|index| {
+        let shared_consumption = if indices.iter().any(|index| {
             matches!(
                 boundaries[*index].7,
                 InputConsumption::RandomAccess | InputConsumption::FullyMaterialized
             )
-        });
-        let adapter = if collect {
-            PlannedAdapter::Collect {
-                limits: crate::node_system::plan::MaterializationLimits {
-                    max_values: 1_000_000,
-                    max_bytes: 64 * 1024 * 1024,
-                },
-            }
+        }) {
+            InputConsumption::FullyMaterialized
         } else {
-            PlannedAdapter::Replay
+            InputConsumption::RewindableBatches
         };
-        let output_production = if collect {
-            OutputProduction::FullyMaterialized
-        } else {
-            OutputProduction::Batches
-        };
-        let input_consumption = match production {
-            OutputProduction::Streaming => InputConsumption::Streaming,
-            OutputProduction::Batches => InputConsumption::SinglePassBatches,
-            OutputProduction::FullyMaterialized => unreachable!(),
-        };
+        let adapter_plan = crate::node_system::plan::MaterializationAdapterPlan::for_contract(
+            production,
+            shared_consumption,
+        );
+        let adapter = adapter_plan.adapter;
+        let input_consumption = adapter_plan.input_consumption;
+        let output_production = adapter_plan.output_production;
         let source = boundaries[indices[0]].2;
         let producer = boundaries[indices[0]].4;
+        let anchor = source_anchors.get(&source).cloned().ok_or_else(|| {
+            DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "materialization source {} has no control-flow definition",
+                    source.index()
+                )
+                .into(),
+            )
+        })?;
+        let consumer_placements = indices
+            .iter()
+            .filter_map(|index| {
+                control_flow
+                    .operations
+                    .get(&OperationIndex::new(boundaries[*index].5 as u32))
+            })
+            .collect::<Vec<_>>();
+        let dominator = RegionPath::nearest_common_dominator(
+            consumer_placements
+                .iter()
+                .map(|placement| &placement.region),
+        );
+        if !anchor.region.is_prefix_of(&dominator)
+            || consumer_placements
+                .iter()
+                .any(|consumer| !anchor.dominates(consumer))
+        {
+            return Err(DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "materialization source {} does not dominate every consumer region",
+                    source.index()
+                )
+                .into(),
+            ));
+        }
         let producer_stable_id = boundaries[indices[0]].0.clone();
         let consumers = indices
             .iter()
@@ -179,22 +424,11 @@ fn insert_materialization_adapters(
             source,
             destination: adapter_input,
         });
-        if let Some(producer) = producer {
-            fanout_by_producer
-                .entry(OperationIndex::new(producer as u32))
-                .or_default()
-                .push(operation_index);
-        } else {
-            let first_consumer = indices
-                .iter()
-                .map(|index| boundaries[*index].5)
-                .min()
-                .expect("fanout has consumers");
-            adapters_by_consumer
-                .entry(OperationIndex::new(first_consumer as u32))
-                .or_default()
-                .push(operation_index);
-        }
+        operations_by_anchor
+            .entry(anchor.clone())
+            .or_default()
+            .push(operation_index);
+        source_anchors.insert(adapter_output, anchor);
         for index in indices {
             boundaries[index].0 = stable_id.clone();
             boundaries[index].2 = adapter_output;
@@ -281,91 +515,101 @@ fn insert_materialization_adapters(
             source: adapter_output,
             destination,
         });
-        adapters_by_consumer
-            .entry(OperationIndex::new(consumer as u32))
+        let anchor = source_anchors.get(&source).cloned().ok_or_else(|| {
+            DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "adapter source {} has no control-flow definition",
+                    source.index()
+                )
+                .into(),
+            )
+        })?;
+        let consumer_placement = control_flow
+            .operations
+            .get(&OperationIndex::new(consumer as u32))
+            .ok_or_else(|| {
+                DemandPlanError::InvalidDerivedPlan(
+                    format!("adapter consumer {consumer} has no control-flow placement").into(),
+                )
+            })?;
+        if !anchor.dominates(consumer_placement) {
+            return Err(DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "adapter source {} does not dominate consumer {consumer}",
+                    source.index()
+                )
+                .into(),
+            ));
+        }
+        operations_by_anchor
+            .entry(anchor)
             .or_default()
             .push(operation_index);
     }
     dependencies.sort_by_key(|dependency| (dependency.source, dependency.destination));
-    inject_fanout_steps(root_region, &fanout_by_producer);
-    inject_adapter_steps(root_region, &adapters_by_consumer);
+    inject_placement_steps(root_region, &RegionPath::default(), &operations_by_anchor);
     Ok(())
 }
 
-fn inject_fanout_steps(
+fn inject_placement_steps(
     region: &mut StructuredControlRegion,
-    fanout_by_producer: &BTreeMap<OperationIndex, Vec<OperationIndex>>,
+    path: &RegionPath,
+    operations_by_anchor: &BTreeMap<PlacementAnchor, Vec<OperationIndex>>,
 ) {
-    match region {
-        StructuredControlRegion::Sequence(steps) => {
-            let mut expanded = Vec::new();
-            for mut step in std::mem::take(steps).into_vec() {
-                if let ControlStep::Region(child) = &mut step {
-                    inject_fanout_steps(child, fanout_by_producer);
+    let StructuredControlRegion::Sequence(steps) = region else {
+        return;
+    };
+    let mut expanded = operations_by_anchor
+        .get(&PlacementAnchor {
+            region: path.clone(),
+            position: AnchorPosition::Prelude,
+        })
+        .into_iter()
+        .flatten()
+        .copied()
+        .map(ControlStep::Operation)
+        .collect::<Vec<_>>();
+    for (step_index, mut step) in std::mem::take(steps).into_vec().into_iter().enumerate() {
+        if let ControlStep::Region(child) = &mut step {
+            match child.as_mut() {
+                StructuredControlRegion::Sequence(_) => inject_placement_steps(
+                    child,
+                    &path.child(RegionPathSegment::Sequence(step_index)),
+                    operations_by_anchor,
+                ),
+                StructuredControlRegion::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    inject_placement_steps(
+                        then_region,
+                        &path.child(RegionPathSegment::IfThen(step_index)),
+                        operations_by_anchor,
+                    );
+                    inject_placement_steps(
+                        else_region,
+                        &path.child(RegionPathSegment::IfElse(step_index)),
+                        operations_by_anchor,
+                    );
                 }
-                let producer = match &step {
-                    ControlStep::Operation(operation) => Some(*operation),
-                    ControlStep::Region(_) => None,
-                };
-                expanded.push(step);
-                if let Some(producer) = producer
-                    && let Some(fanouts) = fanout_by_producer.get(&producer)
-                {
-                    expanded.extend(fanouts.iter().copied().map(ControlStep::Operation));
-                }
+                StructuredControlRegion::Loop { body, .. } => inject_placement_steps(
+                    body,
+                    &path.child(RegionPathSegment::LoopBody(step_index)),
+                    operations_by_anchor,
+                ),
+                StructuredControlRegion::Call { .. } => {}
             }
-            *steps = expanded.into_boxed_slice();
         }
-        StructuredControlRegion::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            inject_fanout_steps(then_region, fanout_by_producer);
-            inject_fanout_steps(else_region, fanout_by_producer);
+        expanded.push(step);
+        if let Some(operations) = operations_by_anchor.get(&PlacementAnchor {
+            region: path.clone(),
+            position: AnchorPosition::AfterStep(step_index),
+        }) {
+            expanded.extend(operations.iter().copied().map(ControlStep::Operation));
         }
-        StructuredControlRegion::Loop { body, .. } => {
-            inject_fanout_steps(body, fanout_by_producer);
-        }
-        StructuredControlRegion::Call { .. } => {}
     }
-}
-
-fn inject_adapter_steps(
-    region: &mut StructuredControlRegion,
-    adapters_by_consumer: &BTreeMap<OperationIndex, Vec<OperationIndex>>,
-) {
-    match region {
-        StructuredControlRegion::Sequence(steps) => {
-            let mut expanded = Vec::new();
-            for mut step in std::mem::take(steps).into_vec() {
-                match &mut step {
-                    ControlStep::Operation(operation) => {
-                        if let Some(adapters) = adapters_by_consumer.get(operation) {
-                            expanded.extend(adapters.iter().copied().map(ControlStep::Operation));
-                        }
-                    }
-                    ControlStep::Region(child) => {
-                        inject_adapter_steps(child, adapters_by_consumer);
-                    }
-                }
-                expanded.push(step);
-            }
-            *steps = expanded.into_boxed_slice();
-        }
-        StructuredControlRegion::If {
-            then_region,
-            else_region,
-            ..
-        } => {
-            inject_adapter_steps(then_region, adapters_by_consumer);
-            inject_adapter_steps(else_region, adapters_by_consumer);
-        }
-        StructuredControlRegion::Loop { body, .. } => {
-            inject_adapter_steps(body, adapters_by_consumer);
-        }
-        StructuredControlRegion::Call { .. } => {}
-    }
+    *steps = expanded.into_boxed_slice();
 }
 
 impl ExecutionPlanBasis {
@@ -725,8 +969,9 @@ impl ExecutionPlanBasis {
             results: selected_results.into_boxed_slice(),
             publications,
         };
-        plan.validate()
-            .map_err(|error| DemandPlanError::InvalidDerivedPlan(error.to_string().into()))?;
+        plan.validate().map_err(|error| {
+            DemandPlanError::InvalidDerivedPlan(format!("{error}: {:?}", error.0).into())
+        })?;
         Ok(plan)
     }
 
@@ -932,6 +1177,101 @@ mod materialization_tests {
             adapter.semantics_version,
             dependencies,
         )
+    }
+
+    #[test]
+    fn external_stream_fanout_is_hoisted_once_before_sibling_branch_arms() {
+        let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
+        let mut operations = vec![
+            operation(
+                "stable.then",
+                1,
+                native("test.then"),
+                Some(ValueRef::new(1)),
+                ValueRef::new(4),
+            ),
+            operation(
+                "stable.else",
+                2,
+                native("test.else"),
+                Some(ValueRef::new(2)),
+                ValueRef::new(5),
+            ),
+        ];
+        let mut dependencies = vec![
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(1),
+            },
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(2),
+            },
+        ];
+        let mut region = StructuredControlRegion::Sequence(Box::new([ControlStep::Region(
+            Box::new(StructuredControlRegion::If {
+                condition: ValueRef::new(3),
+                then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                    ControlStep::Operation(OperationIndex::new(0)),
+                ]))),
+                else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                    ControlStep::Operation(OperationIndex::new(1)),
+                ]))),
+                results: Box::new([]),
+            }),
+        )]));
+        let provenance = crate::node_system::analysis::CompileProvenance {
+            project_session_id: ProjectSessionId::new("test-session"),
+            graph_path: GraphResourcePath("events/external-branch-fanout".into()),
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(1),
+                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: Default::default(),
+            },
+            compile_id: CompileId::new(1),
+        };
+        let mut value_count = 6;
+
+        insert_materialization_adapters(
+            &provenance,
+            &mut value_count,
+            &mut operations,
+            &[
+                PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::Streaming),
+                PlanValueSource::ExternalInput(
+                    ValueRef::new(3),
+                    OutputProduction::FullyMaterialized,
+                ),
+            ],
+            &mut dependencies,
+            &mut region,
+        )
+        .unwrap();
+
+        let StructuredControlRegion::Sequence(steps) = region else {
+            unreachable!()
+        };
+        let branch_index = steps
+            .iter()
+            .position(|step| matches!(step, ControlStep::Region(_)))
+            .unwrap();
+        assert_eq!(
+            branch_index, 3,
+            "shared fanout and two adapters are root prelude"
+        );
+        assert!(
+            steps[..branch_index]
+                .iter()
+                .all(|step| matches!(step, ControlStep::Operation(_)))
+        );
+        assert_eq!(
+            operations
+                .iter()
+                .filter(|operation| operation.params.as_str() == "adapter.fanout")
+                .count(),
+            1
+        );
     }
 
     #[test]

@@ -625,6 +625,7 @@ impl<'a> RegionBuilder<'a> {
                 destination: values["result"],
                 then_source: values["then_source"],
                 else_source: values["else_source"],
+                production: None,
             })
         })
         .collect()
@@ -647,6 +648,7 @@ impl<'a> RegionBuilder<'a> {
                 initial_source: values["initial_source"],
                 next_source: values["next_source"],
                 result: values["result"],
+                production: None,
             })
         })
         .collect()
@@ -853,9 +855,22 @@ impl<'a> RegionBuilder<'a> {
                         },
                     )
                 })?;
+                let production =
+                    abi.result_productions
+                        .get(&parameter)
+                        .copied()
+                        .ok_or_else(|| {
+                            issue(
+                                node_id,
+                                CompilerDiagnostic::ControlCallAbiMemberMissing {
+                                    field_name: parameter.0.clone(),
+                                },
+                            )
+                        })?;
                 Ok(CallResultBinding {
                     callee_source,
                     caller_destination,
+                    production: Some(production),
                 })
             })
             .collect()

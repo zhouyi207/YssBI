@@ -71,6 +71,8 @@ function catalog(locale: string, localized: {
       styleId: 'call',
       aliases: [localized.alias],
       technicalTerms: [],
+      backendSearchText: [localized.title, localized.alias],
+      resourceNames: [localized.title],
       ports: [
         { key: 'flow-in', label: locale === 'zh-CN' ? '执行' : 'Execute', direction: 'input', kind: 'control' },
         { key: 'result', label: locale === 'zh-CN' ? '结果' : 'Result', direction: 'output', kind: 'data' },
@@ -89,7 +91,6 @@ function catalog(locale: string, localized: {
         resourceRevision: 9,
         createArgs: { kind: 'function' },
       },
-      searchText: `${localized.title} ${localized.alias}`,
     }],
   };
 }
@@ -198,8 +199,7 @@ describe('NodeDocumentationModal', () => {
     });
     response.registryFingerprint = 'registry-en-US-documentation-search';
     response.items[0].technicalTerms = ['technical-only-secret'];
-    response.items[0].searchText = 'function.call backend-search-only-secret';
-    response.items[0].pinyin = 'pin yin only secret';
+    response.items[0].backendSearchText = ['backend-search-only-secret'];
     catalogState.current = stateFor(response);
     render();
     const search = document.querySelector<HTMLInputElement>(

@@ -12,7 +12,6 @@ pub use identity::{
     NodeTypeId, ParameterKey, PortKey, ProviderId, SchemaResolverId, TypeClassId,
     TypeConstructorId, TypeId, TypeParameterId,
 };
-#[cfg(test)]
 pub(crate) use model::validate_execution;
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,

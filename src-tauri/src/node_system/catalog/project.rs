@@ -318,6 +318,8 @@ fn pure() -> ExecutionSemantics {
         evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
         effects: EffectSemantics::None,
+        idempotent: false,
+        retry: None,
     }
 }
 
@@ -328,6 +330,8 @@ fn structural() -> ExecutionSemantics {
         evaluation: EvaluationPolicy::EagerWhenRegionEntered,
         cache: CachePolicy::Disabled,
         effects: EffectSemantics::Ordered,
+        idempotent: false,
+        retry: None,
     }
 }
 

@@ -1,6 +1,6 @@
 use super::support::{KernelFragment, expect_arity};
 use crate::node_system::protocol::{CanonicalDecimal, Value};
-use crate::node_system::runtime::{Artifact, Kernel, KernelContext, KernelError, RuntimeValue};
+use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RunError, RuntimeValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertTarget {
@@ -135,7 +135,7 @@ struct SeriesConvertKernel {
 impl Kernel for SeriesConvertKernel {
     fn execute(
         &self,
-        _context: &KernelContext<'_>,
+        context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 1)?;
@@ -145,25 +145,32 @@ impl Kernel for SeriesConvertKernel {
             ));
         };
         let values = artifact
-            .values()
-            .iter()
+            .cursor()
+            .map_err(|error| KernelError::new(error.to_string()))?
             .enumerate()
             .map(|(index, value)| {
+                let value = value?;
                 if matches!(value, Value::Null) {
                     return Ok(Value::Null);
                 }
-                require_kind(value, self.source).map_err(|error| {
-                    KernelError::new(format!("DataSeries element {index}: {error}"))
-                })?;
-                convert(value, self.target).map_err(|error| {
-                    KernelError::new(format!("DataSeries element {index}: {error}"))
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(vec![RuntimeValue::Artifact(Artifact::new(
-            artifact.kind(),
-            values,
-        ))])
+                require_kind(&value, self.source)
+                    .and_then(|()| convert(&value, self.target))
+                    .map_err(|error| {
+                        RunError::Stream(format!("DataSeries element {index}: {error}").into())
+                    })
+            });
+        let output = context
+            .resource_owner
+            .materialize_artifact(artifact.kind(), values)
+            .map_err(kernel_error_from_run)?;
+        Ok(vec![RuntimeValue::Artifact(output)])
+    }
+}
+
+fn kernel_error_from_run(error: RunError) -> KernelError {
+    match error {
+        RunError::Stream(message) => KernelError::new(message),
+        error => KernelError::new(error.to_string()),
     }
 }
 

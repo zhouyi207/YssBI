@@ -1,10 +1,9 @@
 use super::support::{KernelFragment, expect_arity};
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const MAX_SLEEP_SECONDS: f64 = 60.0;
-const SLEEP_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 pub(super) fn register(fragment: &mut KernelFragment) {
     fragment.register("yssbi.control.do", DoKernel);
@@ -46,16 +45,7 @@ impl Kernel for SleepKernel {
             ));
         }
 
-        let deadline = Instant::now() + Duration::from_secs_f64(seconds);
-        loop {
-            if context.cancellation.is_cancelled() {
-                return Err(KernelError::cancelled("Sleep was cancelled"));
-            }
-            let now = Instant::now();
-            if now >= deadline {
-                return Ok(Vec::new());
-            }
-            std::thread::sleep((deadline - now).min(SLEEP_POLL_INTERVAL));
-        }
+        context.wait_for(Duration::from_secs_f64(seconds))?;
+        Ok(Vec::new())
     }
 }

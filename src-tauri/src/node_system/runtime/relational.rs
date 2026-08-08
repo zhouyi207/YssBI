@@ -1,14 +1,54 @@
-use super::{CancellationToken, RunError, RunId, RunResourceSet, RuntimeValue};
+use super::{
+    CancellationToken, RunDeadline, RunError, RunId, RunPhase, RunResourceOwner, RunResourceSet,
+    RuntimeValue,
+};
 use crate::node_system::plan::{CompiledRelationalPlan, RelationalBackendId, RelationalSubplan};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 pub struct RelationalContext<'a> {
     pub run_id: RunId,
     pub resources: &'a RunResourceSet,
+    pub resource_owner: &'a RunResourceOwner,
     pub cancellation: &'a CancellationToken,
+    pub deadline: Option<RunDeadline>,
+}
+
+impl RelationalContext<'_> {
+    pub fn check_terminal(&self) -> Result<(), RelationalError> {
+        self.cancellation.check().map_err(RelationalError::from)?;
+        if let Some(deadline) = self.deadline {
+            deadline
+                .check(self.cancellation, RunPhase::Kernel)
+                .map_err(RelationalError::from)?;
+        }
+        Ok(())
+    }
+
+    pub fn wait_for(&self, duration: Duration) -> Result<(), RelationalError> {
+        let operation_end = Instant::now() + duration;
+        loop {
+            self.check_terminal()?;
+            let now = Instant::now();
+            if now >= operation_end {
+                return Ok(());
+            }
+            let mut wait = operation_end - now;
+            if let Some(deadline) = self.deadline {
+                wait = wait.min(
+                    deadline
+                        .remaining(self.cancellation, RunPhase::Kernel)
+                        .map_err(RelationalError::from)?,
+                );
+            }
+            if self.cancellation.wait_timeout(wait) {
+                self.check_terminal()?;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +65,7 @@ pub enum RelationalErrorCode {
     InputShapeInvalid,
     HintInvalid,
     Cancelled,
+    DeadlineExceeded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,6 +86,10 @@ impl RelationalError {
         Self::new(RelationalErrorCode::OperatorInvalid, message)
     }
 
+    pub fn deadline_exceeded(message: impl Into<Box<str>>) -> Self {
+        Self::new(RelationalErrorCode::DeadlineExceeded, message)
+    }
+
     pub fn cancelled(message: impl Into<Box<str>>) -> Self {
         Self::new(RelationalErrorCode::Cancelled, message)
     }
@@ -62,6 +107,9 @@ impl From<RunError> for RelationalError {
     fn from(error: RunError) -> Self {
         match error {
             RunError::Cancelled => Self::cancelled("relational execution was cancelled"),
+            RunError::DeadlineExceeded { .. } => {
+                Self::deadline_exceeded("run deadline exceeded during relational execution")
+            }
             _ => Self::operator_invalid("relational execution failed"),
         }
     }

@@ -898,6 +898,8 @@ fn pure() -> ExecutionSemantics {
         evaluation: EvaluationPolicy::DemandDriven,
         cache: CachePolicy::PerRun,
         effects: EffectSemantics::None,
+        idempotent: false,
+        retry: None,
     }
 }
 

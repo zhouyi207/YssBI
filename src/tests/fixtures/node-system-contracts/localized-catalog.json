@@ -93,6 +93,12 @@
         "literal",
         "value"
       ],
+      "backendSearchText": [
+        "Boolean Constant",
+        "constant",
+        "literal",
+        "value"
+      ],
       "categoryId": "constants",
       "creation": {
         "kind": "static",
@@ -117,7 +123,7 @@
           "label": "Value"
         }
       ],
-      "searchText": "boolean constant constant literal value",
+      "resourceNames": [],
       "styleId": "builtin.default",
       "technicalTerms": [
         "constant",
@@ -128,6 +134,12 @@
     },
     {
       "aliases": [
+        "select columns",
+        "projection",
+        "dataframe"
+      ],
+      "backendSearchText": [
+        "Project DataFrame",
         "select columns",
         "projection",
         "dataframe"
@@ -165,7 +177,7 @@
           "label": "Result"
         }
       ],
-      "searchText": "project dataframe select columns projection dataframe",
+      "resourceNames": [],
       "styleId": "builtin.dataframe",
       "technicalTerms": [
         "select columns",
@@ -176,6 +188,11 @@
     },
     {
       "aliases": [
+        "data frame",
+        "table",
+        "source"
+      ],
+      "backendSearchText": [
         "data frame",
         "table",
         "source"
@@ -209,9 +226,11 @@
           "label": "dataframe"
         }
       ],
+      "resourceNames": [
+        "Contract Database"
+      ],
       "resourcePath": "databases/contract-database",
       "resourceRevision": 13,
-      "searchText": "contract database data frame table source",
       "styleId": "builtin.dataframe",
       "technicalTerms": [
         "Contract Database",
@@ -223,6 +242,11 @@
     },
     {
       "aliases": [
+        "call",
+        "invoke",
+        "function"
+      ],
+      "backendSearchText": [
         "call",
         "invoke",
         "function"
@@ -274,9 +298,11 @@
           "label": "Then"
         }
       ],
+      "resourceNames": [
+        "Contract Function"
+      ],
       "resourcePath": "functions/contract-function",
       "resourceRevision": 11,
-      "searchText": "contract function call invoke function",
       "styleId": "builtin.default",
       "technicalTerms": [
         "Contract Function",
@@ -288,6 +314,11 @@
     },
     {
       "aliases": [
+        "get",
+        "read",
+        "variable"
+      ],
+      "backendSearchText": [
         "get",
         "read",
         "variable"
@@ -321,9 +352,11 @@
           "label": "Value"
         }
       ],
+      "resourceNames": [
+        "Contract Variable"
+      ],
       "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
       "resourceRevision": 12,
-      "searchText": "contract variable get read variable",
       "styleId": "builtin.default",
       "technicalTerms": [
         "Contract Variable",
@@ -336,6 +369,6 @@
   ],
   "locale": "en-US",
   "projectInstanceId": "00000000-0000-0000-0000-000000000001",
-  "registryFingerprint": "3fdcb6c6f2c42b68b937c045c32ab76741054356ff84f5d7e27dbccb17880476",
+  "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
   "resourcePublicationRevision": 17
 }

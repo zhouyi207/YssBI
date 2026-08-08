@@ -154,6 +154,72 @@ fn error(provider: ProviderRegistration) -> RegistryValidationError {
     }
 }
 
+#[test]
+fn registry_rejects_invalid_retry_semantics_before_compile() {
+    let cases = [
+        ExecutionSemantics {
+            retry: Some(RetryPolicy {
+                max_attempts: std::num::NonZeroU32::new(2).unwrap(),
+                initial_backoff: std::time::Duration::from_millis(2),
+                max_backoff: std::time::Duration::from_millis(1),
+            }),
+            idempotent: true,
+            ..protocol().execution
+        },
+        ExecutionSemantics {
+            retry: Some(
+                RetryPolicy::new(
+                    std::num::NonZeroU32::new(2).unwrap(),
+                    std::time::Duration::ZERO,
+                    std::time::Duration::ZERO,
+                )
+                .unwrap(),
+            ),
+            idempotent: false,
+            ..protocol().execution
+        },
+        ExecutionSemantics {
+            retry: Some(
+                RetryPolicy::new(
+                    std::num::NonZeroU32::new(2).unwrap(),
+                    std::time::Duration::ZERO,
+                    std::time::Duration::ZERO,
+                )
+                .unwrap(),
+            ),
+            idempotent: true,
+            determinism: Determinism::NonDeterministic,
+            ..protocol().execution
+        },
+        ExecutionSemantics {
+            retry: Some(
+                RetryPolicy::new(
+                    std::num::NonZeroU32::new(2).unwrap(),
+                    std::time::Duration::ZERO,
+                    std::time::Duration::ZERO,
+                )
+                .unwrap(),
+            ),
+            idempotent: true,
+            purity: Purity::Effectful,
+            effects: EffectSemantics::Ordered,
+            ..protocol().execution
+        },
+    ];
+
+    for execution in cases {
+        let mut provider = valid_provider();
+        Arc::make_mut(&mut provider.nodes[0].protocol).execution = execution;
+        assert!(matches!(
+            error(provider),
+            RegistryValidationError::InvalidNodeProtocol {
+                source: ProtocolError::InvalidExecutionSemantics(_),
+                ..
+            }
+        ));
+    }
+}
+
 fn provider_with_member_groups(groups: serde_json::Value) -> ProviderRegistration {
     let mut provider = valid_provider();
     let node = Arc::make_mut(&mut provider.nodes[0].protocol);

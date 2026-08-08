@@ -9,7 +9,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -60,7 +62,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.bool"
       },
-      "protocolFingerprint": "37c2ac4fa95ab9801f77280efaca6465219231b4a52c9bdbb8a9bbe852b9b052"
+      "protocolFingerprint": "e8916db2cded4a51d0cfe108225d2144da5ea874d9c83a74caeba88341229011"
     },
     {
       "nodeTypeId": "yssbi.constant.float64",
@@ -70,7 +72,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -121,7 +125,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.float64"
       },
-      "protocolFingerprint": "f60d24baa2a0f9598398d9fad8286a97e6ea3ccc313288dac2eced646382c5b5"
+      "protocolFingerprint": "481ad8e571687f7358ce37444fe4b158f34c97b2bb83b8449ca2ce48ae7303a7"
     },
     {
       "nodeTypeId": "yssbi.constant.int64",
@@ -131,7 +135,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -182,7 +188,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.int64"
       },
-      "protocolFingerprint": "204da00cb56919f2a29081f9feda7948706193fdc582d2fcbce33b789c96f4db"
+      "protocolFingerprint": "21532ae651d09a72ce626f71000969e32594aa930b1bee68cbf5f6a720de3040"
     },
     {
       "nodeTypeId": "yssbi.constant.string",
@@ -192,7 +198,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -243,7 +251,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.string"
       },
-      "protocolFingerprint": "5f42f6bab88f92e8aab1288cf3ec7b1723398e75d915995cd0c86f5d79d4c9df"
+      "protocolFingerprint": "ac70dd040029936d1eb4a89354685eeccb40a78cd075fe95b25dda9adec7acf7"
     },
     {
       "nodeTypeId": "yssbi.control.branch",
@@ -253,7 +261,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [
@@ -403,7 +413,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.branch"
       },
-      "protocolFingerprint": "2eaa214c695484cc8399a1b9b2126f7cc77c50221b56495af16daf2a293c14ac"
+      "protocolFingerprint": "153e2e31d776693cb7ed07bbeee7befe443cfd700f425cb146e0d6982e187687"
     },
     {
       "nodeTypeId": "yssbi.control.do",
@@ -413,7 +423,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -490,7 +502,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.do"
       },
-      "protocolFingerprint": "b0d64434d891061f1bb28ab9ed3ac8bd4858632a2275ed4d55645da8408bca92"
+      "protocolFingerprint": "4e88516c99280a4b882d15d734825a3abab39241be308b9a04d1c9402f4d5244"
     },
     {
       "nodeTypeId": "yssbi.control.loop",
@@ -500,7 +512,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [
@@ -690,7 +704,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.loop"
       },
-      "protocolFingerprint": "00235c56215da170d3cd9e333c4d8227be32986e68a16db37a9ee37e0afe2153"
+      "protocolFingerprint": "04a9b3917bc0b42a8e01a8936bd2289e37d3e4a025e58f3e0bae4ac2a12e3cbb"
     },
     {
       "nodeTypeId": "yssbi.control.merge",
@@ -700,7 +714,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -749,7 +765,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.merge"
       },
-      "protocolFingerprint": "2a0c9e19a955cc8859f3ee4dd1ca109b7f0f44563dce7d32eb53317bb87229c4"
+      "protocolFingerprint": "806acf9e8c8d1b97faea92afae454f8d9f34154c7a801937adbd015bb88c2d1e"
     },
     {
       "nodeTypeId": "yssbi.control.sequence",
@@ -759,7 +775,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -808,7 +826,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.sequence"
       },
-      "protocolFingerprint": "e85b6c7a8c81af970582b71aae7ff21055f0febca9937d750f0d9e66765109d6"
+      "protocolFingerprint": "19d060910a933cdd05202b704779d8cad23f4419a11f8d23333490ba6d8b7a13"
     },
     {
       "nodeTypeId": "yssbi.control.sleep",
@@ -818,7 +836,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -921,7 +941,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.sleep"
       },
-      "protocolFingerprint": "b7c55daf0d52135dafb82d535dda9f9c281e462bcaebf3ecbd943dd78fab0b84"
+      "protocolFingerprint": "cdc6b70279722d04c5f174ed2b7a979feb4006455c9b0b6a6b02e3062c25f6e9"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.categorical_to_float64",
@@ -931,7 +951,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -996,7 +1018,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.categorical_to_float64"
       },
-      "protocolFingerprint": "7b26951eab40044e24eaa0bda185d5f7415a9cb89adeed2bf68c1f433477472a"
+      "protocolFingerprint": "31a921d0a551080fa4976d3023c3194044c63d75162ee551e2d7dd244a650ee3"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.categorical_to_int64",
@@ -1006,7 +1028,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1071,7 +1095,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.categorical_to_int64"
       },
-      "protocolFingerprint": "b8cae0852ceaf3463299e58a99d0b800d45bb778e40d88cab9378b2dbb3baf68"
+      "protocolFingerprint": "e544e25ddbe787458ed6e0564553a4e804d3c822c449d0efba57c2888fa1ba96"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.categorical_to_string",
@@ -1081,7 +1105,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1146,7 +1172,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.categorical_to_string"
       },
-      "protocolFingerprint": "08f777119802c6ab7d11f229cc31a20845be7d0fc50eca5e7b80ccda2e2c244f"
+      "protocolFingerprint": "72ab85ee1f1af94dde2a007b6cc3dc15ac059f3f933e4341d84648a5e53162aa"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.float64_to_bool",
@@ -1156,7 +1182,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1221,7 +1249,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.float64_to_bool"
       },
-      "protocolFingerprint": "9201f6667d595f3ca3c04e40803853f77e0309a55768f30d42d33be380081b19"
+      "protocolFingerprint": "8e4371450eecacecab516dd5f94f58f940bfccd46b0ad11a978ecafb2554a2e4"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.float64_to_categorical",
@@ -1231,7 +1259,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1296,7 +1326,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.float64_to_categorical"
       },
-      "protocolFingerprint": "729a9f7c56654b9286e7596a9f1247662edc4198df15824590d2267d46a46a5c"
+      "protocolFingerprint": "a5fd6a2bbc4951fd04127e9526dc30fed519c665c0f387c42d5bba8f5a9a6613"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.float64_to_int64",
@@ -1306,7 +1336,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1371,7 +1403,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.float64_to_int64"
       },
-      "protocolFingerprint": "9acfc51d8170719e685686540507bc5ccca456add6f248e3ea5ee9ab07e86c2f"
+      "protocolFingerprint": "6686a395e044d5f1b20ed49e1edf3eb12bb888fb08c92bc8495c7672d50a717b"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.float64_to_string",
@@ -1381,7 +1413,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1446,7 +1480,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.float64_to_string"
       },
-      "protocolFingerprint": "09cf9f6e2b3ba9a8fb262c9535d02a7e656e27e610ae390fe88bbe7b969253f2"
+      "protocolFingerprint": "7dbad495d6a8501172bc9a85e919e3af01f7247674f3585444cabf835dbfa0e9"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.int64_to_bool",
@@ -1456,7 +1490,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1521,7 +1557,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.int64_to_bool"
       },
-      "protocolFingerprint": "b5dc8998639d58a9e0ada301a54796e7b9ed2f7a4790ab91cd3d9ca488ab5deb"
+      "protocolFingerprint": "962eb36a21e68ac7b051c297f568e45e675a3a8e8446c4ce9194980852121f20"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.int64_to_categorical",
@@ -1531,7 +1567,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1596,7 +1634,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.int64_to_categorical"
       },
-      "protocolFingerprint": "79af5d3d0fb31c93472c0d429261e9e5a67c4b93e31e562caf9158efe72531fa"
+      "protocolFingerprint": "b812a33e4a426ee6695d2cb3fb9eff190384b6470b9ffd2eab3cdfef39813ebe"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.int64_to_float64",
@@ -1606,7 +1644,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1671,7 +1711,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.int64_to_float64"
       },
-      "protocolFingerprint": "5f0549eb6500c3831aa06dd0afb8e83f52b21dc0060af75fbaad75ecf2d91f5e"
+      "protocolFingerprint": "20b7c6038f904b56412b3ed0879538a6a0a71ff631a581dd6540ba2515a6f886"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.int64_to_string",
@@ -1681,7 +1721,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1746,7 +1788,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.int64_to_string"
       },
-      "protocolFingerprint": "2397732227d8627a28d2b642cd043725e5c021ff60e7b25f6b3643104626842c"
+      "protocolFingerprint": "64ecdedcaa7dddae030756b8f1179f5ffa190b7f2aa1bbcad90d00998b1b76e1"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.string_to_categorical",
@@ -1756,7 +1798,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1821,7 +1865,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.string_to_categorical"
       },
-      "protocolFingerprint": "62e0d07dcfee4c90e50d5eaa9a2f6cd2e3c34ad43dd7f1a8782df80aa6005cd0"
+      "protocolFingerprint": "661da39aaabaffa60061831548a6e79c4c6c705cd2c80f15b2ef2f1cf2017407"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.string_to_float64",
@@ -1831,7 +1875,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1896,7 +1942,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.string_to_float64"
       },
-      "protocolFingerprint": "85bbafbddefa60e24d049e79f99610db62f2c6cbea2230cbf8d6bf982bc4141e"
+      "protocolFingerprint": "8502c2a53154a20c3ca369c0f34098a92c39336912fd79260e6c3324dcbcaede"
     },
     {
       "nodeTypeId": "yssbi.data_series.convert.string_to_int64",
@@ -1906,7 +1952,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -1971,7 +2019,7 @@
         "scope": "Any",
         "typeId": "yssbi.data_series.convert.string_to_int64"
       },
-      "protocolFingerprint": "c6d5d30a3b15541e2c49d497bef9566f3a2380303645229c96f9bfeefe2c6be6"
+      "protocolFingerprint": "803adbec73a5488015f5c49ac23755ae4aa4bff3467c63bceef27267d1b58e95"
     },
     {
       "nodeTypeId": "yssbi.dataframe.combine",
@@ -1981,7 +2029,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2045,7 +2095,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.combine"
       },
-      "protocolFingerprint": "612cb5ea0606398018e8656ce2df78746a37f59f061191c718632da2613d9d0a"
+      "protocolFingerprint": "deeffa83e4afdea3c1d83d59dec6f8375f4429eab76f79409614695a11e76307"
     },
     {
       "nodeTypeId": "yssbi.dataframe.decompose",
@@ -2055,7 +2105,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2110,7 +2162,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.decompose"
       },
-      "protocolFingerprint": "8119d68984af55562fcd64745083feb98655fdf8d39cb93804e2f248912e2c91"
+      "protocolFingerprint": "322b6594fb143cdd600a1f03048547f7ba924e7458b4c17e41953d22efc56840"
     },
     {
       "nodeTypeId": "yssbi.dataframe.filter",
@@ -2120,7 +2172,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2196,7 +2250,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.filter"
       },
-      "protocolFingerprint": "3c3cc5619be1b06c61c61bd289ac95c054f5f7afcfa671d0b6843e46df387987"
+      "protocolFingerprint": "ac12ca3f7df2ae05f9dd8d15180f913a230f8e3001bb7cef9e130d95f25694de"
     },
     {
       "nodeTypeId": "yssbi.dataframe.filter.rows",
@@ -2206,7 +2260,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2278,7 +2334,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.filter.rows"
       },
-      "protocolFingerprint": "89ec6095d23e20d54f6ef159a754e6a7317ad0fcc2ff42c4f8a2c306d5fa5cd4"
+      "protocolFingerprint": "badfc3a739748aa841fed298ca6ff8be439ce0e104bfc0f4161b21b843cfb6b6"
     },
     {
       "nodeTypeId": "yssbi.dataframe.limit",
@@ -2288,7 +2344,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2367,7 +2425,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.limit"
       },
-      "protocolFingerprint": "b10dbea39ab63b6ec96312e790b1e299104f2e06ddd72e9e68f6b0fe12dd6b4e"
+      "protocolFingerprint": "77b72816ddaa4d2228c3a72424cfd83e3c8046dc99114bfd480547dae9a00c4c"
     },
     {
       "nodeTypeId": "yssbi.dataframe.panel.align",
@@ -2377,7 +2435,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2475,7 +2535,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.panel.align"
       },
-      "protocolFingerprint": "50829c721deb5bc93507c92de5e626d1e0a5426b0e407473e93d26dfdef5567e"
+      "protocolFingerprint": "b36a130ecdc0982783d9a7e4a3874c6fab632497ee3026bb9845d17e52b30b85"
     },
     {
       "nodeTypeId": "yssbi.dataframe.panel.difference",
@@ -2485,7 +2545,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2581,7 +2643,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.panel.difference"
       },
-      "protocolFingerprint": "5a0c16edf28dd71136ee9eafae139509d725321fe7446266ef5c4c568607b468"
+      "protocolFingerprint": "4b6dbf41152890a716213f6ab9ac5579e51a99d7472b7fbcbcb5a850255a7e68"
     },
     {
       "nodeTypeId": "yssbi.dataframe.project",
@@ -2591,7 +2653,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2665,7 +2729,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.project"
       },
-      "protocolFingerprint": "a982759e2c14660a527773caab6419614d2e42884c312e13b32b511411a109cb"
+      "protocolFingerprint": "d1d849966b466f5c50a37a92f8f6fff0ea64d2110ae7bff21fb8e5d1745bf0f2"
     },
     {
       "nodeTypeId": "yssbi.dataframe.rename",
@@ -2675,7 +2739,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2773,7 +2839,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.rename"
       },
-      "protocolFingerprint": "bbbb22c9bb6c6a34575b646b83e7c49bd40faca4259b9bb4842036fe2e6b0266"
+      "protocolFingerprint": "43b12edd620a9afff6cc645fd7db53a0c3fc19071f67c2336f6eb9189491428a"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.annotate_dummy",
@@ -2783,7 +2849,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2850,7 +2918,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.annotate_dummy"
       },
-      "protocolFingerprint": "bf1424f8a788db5e1f0488263b675eb521e9f8165fa0dfc6ec15d5126d99285f"
+      "protocolFingerprint": "a69761e3199e00ae02cac74691d6d2fc737d6b730c1f7f4064b1e835bc581f65"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.equal",
@@ -2860,7 +2928,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -2937,7 +3007,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.equal"
       },
-      "protocolFingerprint": "2eb4bd61121bd74ddb3835419f4a9709956c98703a72c33325645d861d58afe2"
+      "protocolFingerprint": "1736400f52df62194de992cea8d9be17333017dfb7853c4db9042e3a34ead852"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.greater",
@@ -2947,7 +3017,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3024,7 +3096,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.greater"
       },
-      "protocolFingerprint": "b09ae78323f431e5925102325e4c634bb83d386a746dcd2e82ac918f2072a6da"
+      "protocolFingerprint": "c48c03662850e8b99b248a9a09b7aacc1a5121fbd1d332dec6119619a7ae9296"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.greater_equal",
@@ -3034,7 +3106,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3111,7 +3185,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.greater_equal"
       },
-      "protocolFingerprint": "94c9aa9206ad007a262b7e74b6b322b87735ce9e7db9fc83308d51b996ad687d"
+      "protocolFingerprint": "b097fac0ca339f502a11fa19b91bec3fa5fd00eae4debc876a9203935e8f9c21"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.less",
@@ -3121,7 +3195,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3198,7 +3274,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.less"
       },
-      "protocolFingerprint": "3727bcad203b260b6c01a551984c3fe061f36329e7dc83edcfa3c49cb98bb06f"
+      "protocolFingerprint": "103fe9c80ecbaf27b5c9c8df16349a2ebd2cdeeec3974d0ffd3a9841aaad61f3"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.less_equal",
@@ -3208,7 +3284,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3285,7 +3363,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.less_equal"
       },
-      "protocolFingerprint": "6169ea3cbd9f236b5f2af23d5bbd7ecd3e0006697217bb47f2850993d13f83a6"
+      "protocolFingerprint": "52e58d69a9020246ad91ef4ff528515da8f4fa43eff82feccc807b2d36161750"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.not_equal",
@@ -3295,7 +3373,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3372,7 +3452,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.compare.not_equal"
       },
-      "protocolFingerprint": "905a0c84e27a7ad595a807b44d51a8b1b74a88359cadcc31ce4e49f8187d8189"
+      "protocolFingerprint": "90a46a7cd91fd7b3f32ba51e780b41e287906bdac63714808d71c6bad7e37e2d"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.int_range",
@@ -3382,7 +3462,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3471,7 +3553,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.int_range"
       },
-      "protocolFingerprint": "3356b9cbdc4f2af6036a39f1efc2026655feeed0e7bdd85956b7d3573f98acf4"
+      "protocolFingerprint": "69ad083bd68961df2decbe972359fdf7219738e0f9634f74f45aad2be8861b59"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.inverse_standardize",
@@ -3481,7 +3563,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3570,7 +3654,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.inverse_standardize"
       },
-      "protocolFingerprint": "f93dd976222f0cb8d161467b6f6177893fa41df20f3a3ad0181715b75afc0972"
+      "protocolFingerprint": "87697ca604b9493755204894e235cc04433aeab3b65c04344ba556351a69ccba"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.length",
@@ -3580,7 +3664,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3631,7 +3717,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.length"
       },
-      "protocolFingerprint": "8dae109843cfd0460d69f19add4e09c70b9a8df557bb0554236f6941eacade5d"
+      "protocolFingerprint": "0713aeccc75b2e8a1c945c47cc00dbd181b57bd1052f479a0ab150af5e5bef26"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.mean",
@@ -3641,7 +3727,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3692,7 +3780,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.mean"
       },
-      "protocolFingerprint": "00c061aebee90808fb9ce48d0d2c8f8226e1a58a4b55d6203dfa78e2edd829b7"
+      "protocolFingerprint": "752eb756bf8032541ea6443fb2a4a586c5ef687f396c65f539f232a64583ebee"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.select",
@@ -3702,7 +3790,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3767,7 +3857,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.select"
       },
-      "protocolFingerprint": "a0e9ea8e6c9a3d8a9249ce327b268ab93be88f25968edcebe5256d75c05bc6bf"
+      "protocolFingerprint": "65ca479769267e117218be3c797318fa5d79f5bfb4af0521de04093e2e6bd7d0"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.standardize",
@@ -3777,7 +3867,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3860,7 +3952,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.standardize"
       },
-      "protocolFingerprint": "903031b7a5d6a76408fbb0acf650ca58621536f8c871ceb4a05eddde3e116d94"
+      "protocolFingerprint": "92b66e6671ff10581ecc6eba05a19ade0fa6ca13b48b93752160f7a3a9fbc546"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.sum",
@@ -3870,7 +3962,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3921,7 +4015,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.sum"
       },
-      "protocolFingerprint": "3f93cd54fb87d25731e7f6f5f151cd81ad9400ceeb875564d21ea51c9f24702c"
+      "protocolFingerprint": "bddc495db0d2bad6d848602a6199b8388d57aa6c638898c7e1332d9f85a4a60d"
     },
     {
       "nodeTypeId": "yssbi.dataframe.source.get",
@@ -3931,7 +4025,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -3982,7 +4078,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.source.get"
       },
-      "protocolFingerprint": "9c814376b4dead5fa8769593a9252419374e2542ab77c123abf2941874afba0b"
+      "protocolFingerprint": "0572da7ee3bd090523dbad5f1ea5fe4e7ccf128a125da1f1c079cb016cc5d25b"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.align",
@@ -3992,7 +4088,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4078,7 +4176,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.align"
       },
-      "protocolFingerprint": "fb536bafb4c7762a237d251a08ea13bb0846d27c755f0f7934b5ae55ba0ccca8"
+      "protocolFingerprint": "b1e13d9fbb3b35e5c73aeb162715aa8f85c3a55c5008f27d07befc26c0b38c1e"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.difference",
@@ -4088,7 +4186,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4165,7 +4265,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.difference"
       },
-      "protocolFingerprint": "03f4f735e00bdee08cf57e38c11095e8123dc5654b13ac237421a3fe209cffcd"
+      "protocolFingerprint": "ef4bab31ce869230071ae1892878cd5555d32f1238354d2a12db934b90f1495c"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.lag",
@@ -4175,7 +4275,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4252,7 +4354,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.lag"
       },
-      "protocolFingerprint": "007ed6e0d09995c9b994e86fca7c9d4e85dc586eb80fdc9596818d21cdf58926"
+      "protocolFingerprint": "8360cd5b5b8cbfe375ac8c9c0445b00885145306e0b5e57c51ed16747b3954ac"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.percent_change",
@@ -4262,7 +4364,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4339,7 +4443,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.percent_change"
       },
-      "protocolFingerprint": "f06e4c29749cbde00c9e7c7ee0c80451dbe08f7f210cd94deff85ec4f1954653"
+      "protocolFingerprint": "af591f46d2c0c2aa5c50c382eb8a6886ce0ec19c190776fadeeff4d01c2db1a6"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.rolling_mean",
@@ -4349,7 +4453,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4426,7 +4532,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.rolling_mean"
       },
-      "protocolFingerprint": "f0a8ff8e6fbdc39005d32448b0fe345db314c0b2b0ed036b8e29314c484dc85b"
+      "protocolFingerprint": "2327503e9c8497d20e91e77363c3079fc203279817f0b9f321d7f84c485b7020"
     },
     {
       "nodeTypeId": "yssbi.debug.print",
@@ -4436,7 +4542,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4506,7 +4614,7 @@
         "scope": "Any",
         "typeId": "yssbi.debug.print"
       },
-      "protocolFingerprint": "76c0e8f6f8c2aa43bc6f416e61ef78437a04b346b00a36887ba8ea36ae3de86b"
+      "protocolFingerprint": "88e801f858fd999b6b41a844d3a72403f99f2432132039ee8d5eca5dfa2a98f5"
     },
     {
       "nodeTypeId": "yssbi.debug.view",
@@ -4516,7 +4624,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4591,7 +4701,7 @@
         "scope": "Any",
         "typeId": "yssbi.debug.view"
       },
-      "protocolFingerprint": "36f4bef5805e1638bff6b2aec207b4ec91e8bc626057f2bbf8d297bd193c491d"
+      "protocolFingerprint": "7dabf53b973351a10df9dcd9ee8c75eb02df90e0ea5d3cc52c3bd476ae6efe1a"
     },
     {
       "nodeTypeId": "yssbi.distribution.bernoulli.sample",
@@ -4601,7 +4711,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4676,7 +4788,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.bernoulli.sample"
       },
-      "protocolFingerprint": "74bdd9240fb3e8f2aa572534740168ecbc1e9293d8d232de91b37bf5d90b386e"
+      "protocolFingerprint": "2ff977cb5a923c68ac7a8df551a814a1c36f25d32549b230b6bff582d3d3b9e2"
     },
     {
       "nodeTypeId": "yssbi.distribution.beta.sample",
@@ -4686,7 +4798,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4780,7 +4894,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.beta.sample"
       },
-      "protocolFingerprint": "25cb5faa5a1767bec89d9c47e9f945a2b1fc1406e7f5da07cab92e1c6f670185"
+      "protocolFingerprint": "09c0f920574839ef37ce93cc4c6c4c3f2e6954fef51339adb10ddc5960977a6d"
     },
     {
       "nodeTypeId": "yssbi.distribution.binomial.sample",
@@ -4790,7 +4904,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4884,7 +5000,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.binomial.sample"
       },
-      "protocolFingerprint": "a958e4a2e02888f0049e9c0c7ad0ad52fafb0e560f487808b2fd41e5e06919b8"
+      "protocolFingerprint": "7158e937c08684f37ed7e2875ffd416167273d62e4faad02fd3a447beb5a572b"
     },
     {
       "nodeTypeId": "yssbi.distribution.cauchy.sample",
@@ -4894,7 +5010,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -4988,7 +5106,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.cauchy.sample"
       },
-      "protocolFingerprint": "41c6a00d41ca6c1fbfc399052ec717d275e679a1bc8c42edccac748bd79a9188"
+      "protocolFingerprint": "79186b28230dad24952a158ecb732297100fc3752fd448244f5216f97fcd0132"
     },
     {
       "nodeTypeId": "yssbi.distribution.chi_squared.sample",
@@ -4998,7 +5116,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5073,7 +5193,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.chi_squared.sample"
       },
-      "protocolFingerprint": "5200bef3250a9b08b977495c132bf14ab5af522f4c0823cd91de07c5832426b7"
+      "protocolFingerprint": "df5a07e5e2c8db2ba358e84b588257e33a32a9e7610415c35adca90ea73a4c43"
     },
     {
       "nodeTypeId": "yssbi.distribution.discrete_uniform.sample",
@@ -5083,7 +5203,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5177,7 +5299,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.discrete_uniform.sample"
       },
-      "protocolFingerprint": "8800ffe0bbac506093b61902ca9593d403ab98c6e1c38df10276b39d1e9f94b2"
+      "protocolFingerprint": "2b85ca5ea5ffc6f80c54cf73b39f1cf4ca9aefbd77a459b45b9f09c0f4432664"
     },
     {
       "nodeTypeId": "yssbi.distribution.erlang.sample",
@@ -5187,7 +5309,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5281,7 +5405,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.erlang.sample"
       },
-      "protocolFingerprint": "c3e8e64fb44c9922ddf484422bf794b9a159bea69d74e8b4abe98268944a45eb"
+      "protocolFingerprint": "8a1d8cafdc4b514f3582c81f50b5a96b384904319ae535de8555fc9c5d479ea9"
     },
     {
       "nodeTypeId": "yssbi.distribution.exponential.sample",
@@ -5291,7 +5415,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5366,7 +5492,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.exponential.sample"
       },
-      "protocolFingerprint": "315fbd7f6be144b9d133ff2ac93ad532e1c045161300d9e47b1a96c165e9eebe"
+      "protocolFingerprint": "69dcdeefa806f63534f9f973aa0f6ab42fc70924a6b0ba6343db33cbc8c6a81b"
     },
     {
       "nodeTypeId": "yssbi.distribution.fisher_snedecor.sample",
@@ -5376,7 +5502,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5470,7 +5598,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.fisher_snedecor.sample"
       },
-      "protocolFingerprint": "a257c5a9f45d2cc1b06c8395672a5b15e335b8786a737d7019fee36c248dcf4d"
+      "protocolFingerprint": "2d2737602193fe0afae315d3f49b6468cb99dd63e8117c3f10ed52fc1e27ee8c"
     },
     {
       "nodeTypeId": "yssbi.distribution.gamma.sample",
@@ -5480,7 +5608,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5574,7 +5704,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.gamma.sample"
       },
-      "protocolFingerprint": "e5e7832b4e39213662e81320166fd20b5be74836a27c852b7e61bef2d9b3fab1"
+      "protocolFingerprint": "603a8b2d54438863239c628dd827f0e878743c3458a54acf7235ae8babfabded"
     },
     {
       "nodeTypeId": "yssbi.distribution.geometric.sample",
@@ -5584,7 +5714,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5659,7 +5791,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.geometric.sample"
       },
-      "protocolFingerprint": "413bac42c8d9f7f61c911242d3146d90695e684091222c19bbbc7474875c3c56"
+      "protocolFingerprint": "603c8f88f14c7625f01ea1c4393bf857ef7f36a4827e04eb2831edd87c44f684"
     },
     {
       "nodeTypeId": "yssbi.distribution.hypergeometric.sample",
@@ -5669,7 +5801,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5782,7 +5916,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.hypergeometric.sample"
       },
-      "protocolFingerprint": "593b6ada1eedd79353029dd9772a814570c48a038bcb1ca79a2c0a273eb9f58b"
+      "protocolFingerprint": "a5d5cea181b2a917572bde5158dff043454aa9438852e346314f68d33f16e586"
     },
     {
       "nodeTypeId": "yssbi.distribution.inverse_gamma.sample",
@@ -5792,7 +5926,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5886,7 +6022,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.inverse_gamma.sample"
       },
-      "protocolFingerprint": "dfb0a28d4738121746e7b853bc673fdeeb9e175cd7b9257c3ffedfdfc19b924d"
+      "protocolFingerprint": "c62d8cef28bcfd1e13d1e32b893693d17e6d6e8c9533c76fe27b213ed04a14d2"
     },
     {
       "nodeTypeId": "yssbi.distribution.laplace.sample",
@@ -5896,7 +6032,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -5990,7 +6128,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.laplace.sample"
       },
-      "protocolFingerprint": "64539412f7913d368120881cf86585c6daf8333e9273606a4a83c7f4922f7811"
+      "protocolFingerprint": "e27cc30472ee97a0dfa67bf1f2a8def6afb0223b63e1a66f7069aa3b2a4bb104"
     },
     {
       "nodeTypeId": "yssbi.distribution.log_normal.sample",
@@ -6000,7 +6138,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6094,7 +6234,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.log_normal.sample"
       },
-      "protocolFingerprint": "e8b8a1a3c6872d2d0e2d076675520ae2f69a4b87d5c056c6eab84131095b70e4"
+      "protocolFingerprint": "5069ad74cda9f911a1fea19e60aabf56e2f867f6598a63227b0b02cfd96a69f9"
     },
     {
       "nodeTypeId": "yssbi.distribution.negative_binomial.sample",
@@ -6104,7 +6244,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6198,7 +6340,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.negative_binomial.sample"
       },
-      "protocolFingerprint": "94573a3805a3aba13c4b068000fe8c8824878dead7a44a808e38f8c1e621c9a0"
+      "protocolFingerprint": "fdec3ed2f30c14f1e1acc1e8fb899e7d2d0b502ec1c42007c59c9787cb65027f"
     },
     {
       "nodeTypeId": "yssbi.distribution.normal.sample",
@@ -6208,7 +6350,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6302,7 +6446,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.normal.sample"
       },
-      "protocolFingerprint": "837fdc3038c965fa4b696d1e469f86fa7dc42a7e25f9f2cf7d41fd481a9e75e3"
+      "protocolFingerprint": "b6586a96cbac12f4725e14b57cce4430306b5082bcd53f95dec5bc629ada6479"
     },
     {
       "nodeTypeId": "yssbi.distribution.pareto.sample",
@@ -6312,7 +6456,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6406,7 +6552,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.pareto.sample"
       },
-      "protocolFingerprint": "c0d45867437be2fb0c65ad074b5f05b4ba1c523192dda8e0567de87aa0bf38e3"
+      "protocolFingerprint": "f77024359bdc76cc5251bdaea18a212ea4cf8119390d91996356531ab85e27da"
     },
     {
       "nodeTypeId": "yssbi.distribution.poisson.sample",
@@ -6416,7 +6562,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6491,7 +6639,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.poisson.sample"
       },
-      "protocolFingerprint": "a55fc7c2f0ab848d679833d55d6eae188900ca5b70d6f618b541a28241a60e99"
+      "protocolFingerprint": "8079a498587f1135289eefb4a4728b4b278dcd2901fa7d675b5ac41c81e8f652"
     },
     {
       "nodeTypeId": "yssbi.distribution.students_t.sample",
@@ -6501,7 +6649,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6576,7 +6726,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.students_t.sample"
       },
-      "protocolFingerprint": "59da4c59356b03b2383a70618f72c430e5aad8f0723e52ce9f8908da2dc36935"
+      "protocolFingerprint": "bc5cfbdae7e0825de73d7dca18306227705862c4fa1b61836aeca5f82d3fd739"
     },
     {
       "nodeTypeId": "yssbi.distribution.triangular.sample",
@@ -6586,7 +6736,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6699,7 +6851,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.triangular.sample"
       },
-      "protocolFingerprint": "9bb785a94b0f23f2ef68bd87822da52561f087c97720cb617090d61bef4a816b"
+      "protocolFingerprint": "dbd178038159b5446474078759b44ed6bd473e30eb7d236925dd5b9f8745445f"
     },
     {
       "nodeTypeId": "yssbi.distribution.uniform.sample",
@@ -6709,7 +6861,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6803,7 +6957,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.uniform.sample"
       },
-      "protocolFingerprint": "e6bd88f6c5ed173640b55f661b4ddbef7d2ccf6ef2c3049f1e09d2bc5be13d61"
+      "protocolFingerprint": "7672ada0879312c6406de69ebfeb913cb93a5b82895ed70cfed6ae63c9ea3563"
     },
     {
       "nodeTypeId": "yssbi.distribution.weibull.sample",
@@ -6813,7 +6967,9 @@
           "determinism": "NonDeterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6907,7 +7063,7 @@
         "scope": "Any",
         "typeId": "yssbi.distribution.weibull.sample"
       },
-      "protocolFingerprint": "b1a11b120b2d87fda591fd756ce2804a75e6e87827b420212439e7221cf7d363"
+      "protocolFingerprint": "b4cac6ac5f372a100997ff831432d8a36b3ddbc96d448ba83b9b9cc911337ae1"
     },
     {
       "nodeTypeId": "yssbi.logic.and",
@@ -6917,7 +7073,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -6987,7 +7145,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.and"
       },
-      "protocolFingerprint": "a950c26e0bc50873cf0425edb199dc6dce02fe26318f9f576cd74a12ae846ac6"
+      "protocolFingerprint": "0d727b4aa66523e88e6c4e17f012de92c91aea6d30b6f86748e604dbc9ca78e5"
     },
     {
       "nodeTypeId": "yssbi.logic.equal",
@@ -6997,7 +7155,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7069,7 +7229,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.equal"
       },
-      "protocolFingerprint": "dc3f64cef2f0e6bbfa7d3e0d0eca808dc3ed7836ba64b5c46490724e971f1802"
+      "protocolFingerprint": "1daf868b96a6d918865fa3864c8427ba2eb904653ef6ce3453f9b0aaec8b19db"
     },
     {
       "nodeTypeId": "yssbi.logic.greater",
@@ -7079,7 +7239,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7149,7 +7311,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.greater"
       },
-      "protocolFingerprint": "bb40957f0a790fbf77cf809d4f7c45fd7170377918f169aff1df1cda139240b7"
+      "protocolFingerprint": "d330c8119829de089081405e437934f10c87a328f449ef5ad86a79d6d0ff1c64"
     },
     {
       "nodeTypeId": "yssbi.logic.greater_equal",
@@ -7159,7 +7321,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7229,7 +7393,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.greater_equal"
       },
-      "protocolFingerprint": "c9b07f9d55b02c96728b5d7a5d70ca3e929d4d35fe30333f50ec1ae1550c0e8e"
+      "protocolFingerprint": "aba57832ac0444a7a7d4da25993e39eeb41c0b7714b6b3a4fae4a5df5fd391d7"
     },
     {
       "nodeTypeId": "yssbi.logic.less",
@@ -7239,7 +7403,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7309,7 +7475,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.less"
       },
-      "protocolFingerprint": "c38fa341ea69df6acc1472f0a1afb6e881d4692c8b2bdd9081a4b6ae4041d44e"
+      "protocolFingerprint": "e2a648b5af2b8893d6a53d3b99f4ff2eef3cc438b8d0456c1dcc2153fd251d23"
     },
     {
       "nodeTypeId": "yssbi.logic.less_equal",
@@ -7319,7 +7485,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7389,7 +7557,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.less_equal"
       },
-      "protocolFingerprint": "b2c443e7805d2ab401020300ffd7baf12cdf75b11b1e4416047a20529ee6e8b3"
+      "protocolFingerprint": "0fd0d5cb48d01eef2e3b98d303780530fc8308b166cc6108a9debd4b82d2262e"
     },
     {
       "nodeTypeId": "yssbi.logic.not",
@@ -7399,7 +7567,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7450,7 +7620,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.not"
       },
-      "protocolFingerprint": "a84181a7c05eb395eb60054ed4a723d13e2071992c9f2bb998af4695ac6ac346"
+      "protocolFingerprint": "bf260cdf28dc39c4eec38e5cf652efb77de7f50fbcbb521f7a027c62be86cd0a"
     },
     {
       "nodeTypeId": "yssbi.logic.not_equal",
@@ -7460,7 +7630,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7532,7 +7704,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.not_equal"
       },
-      "protocolFingerprint": "0f66f3b911d3be3b175ac6a092b006816c8beb19cd4d4f512ae36d551e81fdd7"
+      "protocolFingerprint": "5388378b295dd264a42dd31d1c0827c68d3df5156df14fcd3cb22a49fe86be8f"
     },
     {
       "nodeTypeId": "yssbi.logic.or",
@@ -7542,7 +7714,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7612,7 +7786,7 @@
         "scope": "Any",
         "typeId": "yssbi.logic.or"
       },
-      "protocolFingerprint": "64123df284b3e7a581898158a29f6a2f728c4ed9e142e8eb41ca16cba5791050"
+      "protocolFingerprint": "ecdae89b9aca3718698fdf76374fa41eb35e762d10ada50c88320a44d6647c4d"
     },
     {
       "nodeTypeId": "yssbi.numeric.add.float64",
@@ -7622,7 +7796,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7692,7 +7868,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.add.float64"
       },
-      "protocolFingerprint": "62a6ac8c5874249593357ad9b9006974501d5241327289a86ae77c3e8335e74d"
+      "protocolFingerprint": "158ff29c1635eb254ebd9e635b989846ef3974323c30916667ff843494d50f9d"
     },
     {
       "nodeTypeId": "yssbi.numeric.add.int64",
@@ -7702,7 +7878,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7772,7 +7950,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.add.int64"
       },
-      "protocolFingerprint": "26eb53aefa2b2a1980e27a30337f9b71ad1deaedd66d6553510f14df8aea814b"
+      "protocolFingerprint": "ce44e822549a8e4733acc16c5a73a72756f61f19d142744c171fa7a2a7e6a074"
     },
     {
       "nodeTypeId": "yssbi.numeric.divide.float64",
@@ -7782,7 +7960,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7852,7 +8032,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.divide.float64"
       },
-      "protocolFingerprint": "3c6f8c6a376104ef24150705240712ce964fc7f49fec2c1a6eed4882523bbbfd"
+      "protocolFingerprint": "3893a6b3c662346ffcfbfd8b306653358fb5c8b79b5476cb258ece6f5527f0fb"
     },
     {
       "nodeTypeId": "yssbi.numeric.divide.int64",
@@ -7862,7 +8042,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -7932,7 +8114,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.divide.int64"
       },
-      "protocolFingerprint": "6f0d4a7650d90f60000bbeb4a43f78962e5fc361e5885f5cef457f966ebb0f08"
+      "protocolFingerprint": "338550efda50007b8153dd81929c3e7a591a6fe20dc244ebed85015d3cc04fd6"
     },
     {
       "nodeTypeId": "yssbi.numeric.exp",
@@ -7942,7 +8124,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8021,7 +8205,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.exp"
       },
-      "protocolFingerprint": "1df635d2effba4019d12b4ad0fbc16175674c16cad3b97bd1f3331240be193f0"
+      "protocolFingerprint": "71cfd557061a3c07ccd638c3f890f2371dc1a65f55b85f72e027f036d2b82fc7"
     },
     {
       "nodeTypeId": "yssbi.numeric.ln",
@@ -8031,7 +8215,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8110,7 +8296,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.ln"
       },
-      "protocolFingerprint": "ff5d7abc47d3e4b7c38ae2812de8dfd0d53b42a044d5d8a8eeae99bf0b124666"
+      "protocolFingerprint": "819ea91be61405f435328e5f2a9c7db7b8636f8c1c5e1a74f649ba9f9ec693e8"
     },
     {
       "nodeTypeId": "yssbi.numeric.log10",
@@ -8120,7 +8306,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8199,7 +8387,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.log10"
       },
-      "protocolFingerprint": "328f0b861560415da1a6308b4b9eaa44218aaf6f2558e4143bbcff3801ef2729"
+      "protocolFingerprint": "b84684457bb9e529502f69827b4988bb083e6d7b1eb48d6afc6ba1546311a843"
     },
     {
       "nodeTypeId": "yssbi.numeric.log2",
@@ -8209,7 +8397,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8288,7 +8478,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.log2"
       },
-      "protocolFingerprint": "7e0a93f5553b08f9baff8830bd0e0fd49a08007a5fe1b9c3224c237282b681d5"
+      "protocolFingerprint": "db013a843e0853c9828406f1cf6aa1272e9417b0e4bec0befc88c09e98a7a8b1"
     },
     {
       "nodeTypeId": "yssbi.numeric.multiply.float64",
@@ -8298,7 +8488,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8368,7 +8560,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.multiply.float64"
       },
-      "protocolFingerprint": "15a5ad848c516d8117c8498b5fb03bf78e5e86fb32355edb35e8c58b1a6f49be"
+      "protocolFingerprint": "4af839bf9bfc648fe44931227603beea62c04d25c9f4af9ba86da80034074b1a"
     },
     {
       "nodeTypeId": "yssbi.numeric.multiply.int64",
@@ -8378,7 +8570,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8448,7 +8642,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.multiply.int64"
       },
-      "protocolFingerprint": "ce82e029fd47066b9f659890f8ce19dbd41df5b552e9e739df40c5b76b3603ca"
+      "protocolFingerprint": "6060e5232cc91f6496c491e640c850dd07202db54ecc89561efa2c41f3d43c95"
     },
     {
       "nodeTypeId": "yssbi.numeric.series.add",
@@ -8458,7 +8652,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8535,7 +8731,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.series.add"
       },
-      "protocolFingerprint": "220ef0d3ead1ecd044dafde72d75712c755eedcf2e25e8841cc6b2edccf38edd"
+      "protocolFingerprint": "3fcfcd5252c09852a97873e7a83d8a22d83bc078fe339778f4278dcfdb68ee4a"
     },
     {
       "nodeTypeId": "yssbi.numeric.series.divide",
@@ -8545,7 +8741,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8650,7 +8848,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.series.divide"
       },
-      "protocolFingerprint": "2a5d0ca78c9598d393f72587517dad342d4520d05b68129e65f26b8f0a866645"
+      "protocolFingerprint": "adce3f192e7ed593207d57466a72a0516ec9306ce8bb0ed7e08211023aafdd14"
     },
     {
       "nodeTypeId": "yssbi.numeric.series.multiply",
@@ -8660,7 +8858,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8765,7 +8965,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.series.multiply"
       },
-      "protocolFingerprint": "80a8b330f01cadac133165a45cb4f0ba94f00c52a0720d0b8866e251b9ac4311"
+      "protocolFingerprint": "1460f8d69895841ff8ff43727b6a45cfe193655a17493c77036a7627022a537f"
     },
     {
       "nodeTypeId": "yssbi.numeric.series.subtract",
@@ -8775,7 +8975,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8880,7 +9082,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.series.subtract"
       },
-      "protocolFingerprint": "f166e4ba4feb4979ef19302f4263731ecc627e191d6a7104d9f6783000a89c27"
+      "protocolFingerprint": "c82ce58e933be52408574423da32a2b3ede4781ce6f1d4507db0023b7c9a9549"
     },
     {
       "nodeTypeId": "yssbi.numeric.sqrt",
@@ -8890,7 +9092,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -8969,7 +9173,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.sqrt"
       },
-      "protocolFingerprint": "72cf8e81e94f4b30e78a3a5e810f9bfd560558bfaed0279083ea4fbd2a417923"
+      "protocolFingerprint": "13b36ccdd5be8bb4d245331b4404c1fd3fb4a79202c271922819112495de8003"
     },
     {
       "nodeTypeId": "yssbi.numeric.square",
@@ -8979,7 +9183,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9058,7 +9264,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.square"
       },
-      "protocolFingerprint": "9a1e1d47eb89f0b7fa5a2c31ddd7b37ba061dc6536e56572770bae45161fed97"
+      "protocolFingerprint": "70752c17b7653830e366ed24ce3539bec3243aae5a03025db641efa930500f08"
     },
     {
       "nodeTypeId": "yssbi.numeric.subtract.float64",
@@ -9068,7 +9274,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9138,7 +9346,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.subtract.float64"
       },
-      "protocolFingerprint": "45e0e568104aa34b37ba0ba7caa9452090b68692bc0d5ff1941f5f6d27ddff3c"
+      "protocolFingerprint": "f02bb7c90607975b37f178c608a8f5da39d912e98f5385eb97023bcd0754c734"
     },
     {
       "nodeTypeId": "yssbi.numeric.subtract.int64",
@@ -9148,7 +9356,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9218,7 +9428,7 @@
         "scope": "Any",
         "typeId": "yssbi.numeric.subtract.int64"
       },
-      "protocolFingerprint": "c0fa8f6616e4de41ec9bfc666207a54fc14da5a2bcc97194fb0a4d16eb4de46b"
+      "protocolFingerprint": "15e11af99c3d00f327c54cd1754b1016e0e05e0e29c064267603ea4209e7ff55"
     },
     {
       "nodeTypeId": "yssbi.plot.correlation.view",
@@ -9228,7 +9438,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9329,7 +9541,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.correlation.view"
       },
-      "protocolFingerprint": "3836b10592a38c3918f5192107619a001ba926b0d8155d71594a097ac4fd081d"
+      "protocolFingerprint": "1d63489bd67a0fab6d252910b270f66806c4b11cadb8ea36ff50a07138031e6c"
     },
     {
       "nodeTypeId": "yssbi.plot.correlogram.view",
@@ -9339,7 +9551,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9454,7 +9668,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.correlogram.view"
       },
-      "protocolFingerprint": "701720d173d9837ef5a98378d3ea0a4233ab7a1772b3a8cee77a22ad792bc000"
+      "protocolFingerprint": "01e03669d664355e417b6523f861817925f9b40cc9f27de14882a61aa3a848bc"
     },
     {
       "nodeTypeId": "yssbi.plot.ecdf.view",
@@ -9464,7 +9678,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9560,7 +9776,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.ecdf.view"
       },
-      "protocolFingerprint": "0bf0aa42cc05309e902e21aa92924c09975e5ce52b5f35531703188903d8f4a5"
+      "protocolFingerprint": "65c62153bf31751ae87d7079a050cdd66528abc7583f9ccfea23f822ebd97c22"
     },
     {
       "nodeTypeId": "yssbi.plot.histogram.view",
@@ -9570,7 +9786,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9666,7 +9884,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.histogram.view"
       },
-      "protocolFingerprint": "adbd0272e44b6208b9840806ca07c8516658e741928e1914822c9650454de5a0"
+      "protocolFingerprint": "1f44d928ba8aac0b74225193386d86b56112cef5c0be3b1612bd5a12d6cba715"
     },
     {
       "nodeTypeId": "yssbi.plot.kde.view",
@@ -9676,7 +9894,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9772,7 +9992,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.kde.view"
       },
-      "protocolFingerprint": "d7961d1fe98b115527d9a0718bac7763428ca3b307ec2b0a79bbe2e78a37bc3e"
+      "protocolFingerprint": "dbde534ba6dd40828563cf425a45a27119d9c7f20bdfdd5bfc82b0bda3b545cd"
     },
     {
       "nodeTypeId": "yssbi.plot.line.view",
@@ -9782,7 +10002,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -9910,7 +10132,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.line.view"
       },
-      "protocolFingerprint": "338d37cb751d282300a131de31e163ef77f4f26cb7e3445caf67b5b96794ec64"
+      "protocolFingerprint": "427f8597153b27e9213347fc404da5c244eb741fb32decf9021d4a4fe1e01223"
     },
     {
       "nodeTypeId": "yssbi.plot.scatter.view",
@@ -9920,7 +10142,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10048,7 +10272,7 @@
         "scope": "Any",
         "typeId": "yssbi.plot.scatter.view"
       },
-      "protocolFingerprint": "a6826ed6a22d11c06ddb34858895b0d6284d193b0f8cd02a4a889999404e0c0e"
+      "protocolFingerprint": "98ea7a297a7e28198a28d5ce7fe8af462cdcc907e027169d9c45571606159e3f"
     },
     {
       "nodeTypeId": "yssbi.project.event.begin",
@@ -10058,7 +10282,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10088,7 +10314,7 @@
         "scope": "Event",
         "typeId": "yssbi.project.event.begin"
       },
-      "protocolFingerprint": "890f24e310158be30be9d9a2b5d10c2694736465ed3ae524fdb2eec322413719"
+      "protocolFingerprint": "f1761b8504268fbb347d69a19b9351c110967a6038aeb467b2126372412503c3"
     },
     {
       "nodeTypeId": "yssbi.project.function.call",
@@ -10098,7 +10324,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10195,7 +10423,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.function.call"
       },
-      "protocolFingerprint": "9c2281996d78d07edd91a336707553154e525e19c478a1c2b838f53eaeec3ac7"
+      "protocolFingerprint": "89f848e662718651a6a3b423054976e443a66e34ac089ca4e6d8d19ad7d2bb32"
     },
     {
       "nodeTypeId": "yssbi.project.function.entry",
@@ -10205,7 +10433,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10267,7 +10497,7 @@
         "scope": "Function",
         "typeId": "yssbi.project.function.entry"
       },
-      "protocolFingerprint": "9efed7d4acc91776dbb9504dff384ad2b7be2246c06de137bbcadfebefc8dfed"
+      "protocolFingerprint": "d7eccf66eaffe206816f41ed0d5d12e614ee0068694f11c0d016fcf9b3e962d5"
     },
     {
       "nodeTypeId": "yssbi.project.function.return",
@@ -10277,7 +10507,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10342,7 +10574,7 @@
         "scope": "Function",
         "typeId": "yssbi.project.function.return"
       },
-      "protocolFingerprint": "0cf3638d2d89277ac8da8bbc69e8a083f9f0fa4af8282cb0a3db5bed0db5c350"
+      "protocolFingerprint": "ac3f8c7799210ef7027a4f47af0c96df11414c6116baa1b176bb770ef5dcd72e"
     },
     {
       "nodeTypeId": "yssbi.project.variable.get",
@@ -10352,7 +10584,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10400,7 +10634,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.variable.get"
       },
-      "protocolFingerprint": "a783365369ed2042386423e4033748820e22fc2c9b3ffcde796f41f3ec3e81b3"
+      "protocolFingerprint": "740f622b57fc5bc738247e6a12db861eae1fcfcdcf4d7ebbeec966019c2593d1"
     },
     {
       "nodeTypeId": "yssbi.project.variable.set",
@@ -10410,7 +10644,9 @@
           "determinism": "EnvironmentDependent",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10489,7 +10725,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.variable.set"
       },
-      "protocolFingerprint": "16500c1e937962d3df0c88827adfa606c0b5c13bf44dd6ca5df5ab925f51b44b"
+      "protocolFingerprint": "8e7448378242c18a08837df309a1b04e72b9a965b44a38fc54ab09a6381de724"
     },
     {
       "nodeTypeId": "yssbi.statistics.adf.summary",
@@ -10499,7 +10735,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10618,7 +10856,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.adf.summary"
       },
-      "protocolFingerprint": "9bf1a260a50a8a75f7472c3434ce204102e5e3b95d9b63854a5b9925fc45925c"
+      "protocolFingerprint": "8145e097d795b0065c139e93062928c3b2febc26928b5d80d5c3fc26a052b161"
     },
     {
       "nodeTypeId": "yssbi.statistics.adf.test",
@@ -10628,7 +10866,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10753,7 +10993,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.adf.test"
       },
-      "protocolFingerprint": "bd131c024ca178cf8f1848e565066fdc9f4a9e2cd0f0fdf753503a34108ac0e1"
+      "protocolFingerprint": "47984d36408ab3f0524e5886258930328be95eff206a3d8d736aa71e9238ccd7"
     },
     {
       "nodeTypeId": "yssbi.statistics.gls.configure",
@@ -10763,7 +11003,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -10834,7 +11076,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.gls.configure"
       },
-      "protocolFingerprint": "ce127c19b93818a2b84fea07390a432f25f4760d5131f7bc6b210ecf98430f31"
+      "protocolFingerprint": "1b9eb032d1c90ec04a5d54cac46d2a75781cdf0bd8baada6be075597272afeba"
     },
     {
       "nodeTypeId": "yssbi.statistics.gls.fit",
@@ -10844,7 +11086,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11003,7 +11247,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.gls.fit"
       },
-      "protocolFingerprint": "406a1cfd45bfdfd93540a750bc58ae2fb1abd3712bb991b7c4ad54051d358447"
+      "protocolFingerprint": "e05de5b4274e4a0bac4f4509e9a34ca78660124c31243f0b6df600a7a179bdfd"
     },
     {
       "nodeTypeId": "yssbi.statistics.gls.summary",
@@ -11013,7 +11257,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11156,7 +11402,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.gls.summary"
       },
-      "protocolFingerprint": "3de4b8f31c67298e7e82077b7f386e1bb1e0488857a579c91841c1874c590411"
+      "protocolFingerprint": "f7fbc16bf3cdba02334ebfc2d0d75bb2bf939b222cfc9bedbb3bb638760afa63"
     },
     {
       "nodeTypeId": "yssbi.statistics.iv.2sls.configure",
@@ -11166,7 +11412,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11237,7 +11485,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.iv.2sls.configure"
       },
-      "protocolFingerprint": "1ebb7f850b5e1556d96ed66308af2d7912de16727758b51bf2cb07e3b9e837a1"
+      "protocolFingerprint": "de82966ace6419afc19d0a44c6b59359a35c2b14a50dab8e2f97624e6dd37602"
     },
     {
       "nodeTypeId": "yssbi.statistics.iv.2sls.summary",
@@ -11247,7 +11495,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11438,7 +11688,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.iv.2sls.summary"
       },
-      "protocolFingerprint": "e7234421a2b669ad2d33e174f7c5b29bd98e316ee71e447a94a856d7027b9dc5"
+      "protocolFingerprint": "24b8de62d4ab5b3625f280e7e9120aaec34eb4bebf4fdf503de80eb43b6978d5"
     },
     {
       "nodeTypeId": "yssbi.statistics.iv.liml.summary",
@@ -11448,7 +11698,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11639,7 +11891,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.iv.liml.summary"
       },
-      "protocolFingerprint": "51ca2c2cd026015cb1f08bae9ea0e28c8d24d9e4629c603f3a055b79a5c5c4c3"
+      "protocolFingerprint": "55a9df55754bed2ab4efc21dc16f91feff7f2ac643d276cedb35af9449635e8e"
     },
     {
       "nodeTypeId": "yssbi.statistics.linear.predict",
@@ -11649,7 +11901,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11752,7 +12006,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.linear.predict"
       },
-      "protocolFingerprint": "339ff9addc10d64d5948e88b40ee8918b91fe78f387bb49b37256d7164c40514"
+      "protocolFingerprint": "62054ff40c00ffd9757eb4455b853eda2e42e63d5fa3f3b115e8da6ec04c95bc"
     },
     {
       "nodeTypeId": "yssbi.statistics.logit.configure",
@@ -11762,7 +12016,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -11856,7 +12112,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.logit.configure"
       },
-      "protocolFingerprint": "e094a32361b9f5ef14eec0d1f57ed1803f85e44b47a4695e6ea23e5d1844834e"
+      "protocolFingerprint": "2e7dbfbcab36771dbc746ad7dc064f196e6d834971744d6ba62ab6e0d46250a4"
     },
     {
       "nodeTypeId": "yssbi.statistics.logit.fit",
@@ -11866,7 +12122,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12025,7 +12283,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.logit.fit"
       },
-      "protocolFingerprint": "e93054f1bfd7c7a703f9bd06073e1d201b127b2c6644dba0162b19ba48254b38"
+      "protocolFingerprint": "ca1a0450b80db2ac01034623692f68bce72a2e6e6f43f38ea656ad157d90194f"
     },
     {
       "nodeTypeId": "yssbi.statistics.logit.predict",
@@ -12035,7 +12293,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12138,7 +12398,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.logit.predict"
       },
-      "protocolFingerprint": "8207bbb98f36d0da1634b28687d001435a9409b2a9971bb2d89006453d54ca55"
+      "protocolFingerprint": "92ce0b4c44b64b6284015f837692ae4c8bb0b13d83fc6b589035f53ae95070f3"
     },
     {
       "nodeTypeId": "yssbi.statistics.logit.summary",
@@ -12148,7 +12408,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12291,7 +12553,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.logit.summary"
       },
-      "protocolFingerprint": "63460cd8a5e57d651ae8a35838a4876e979c7068c0173e1adca13358ddfa0c93"
+      "protocolFingerprint": "46e6a87f65ab3ae14acb7f6bf6ca2fda900971c558f2031535f5de8d2230c613"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.configure",
@@ -12301,7 +12563,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12376,7 +12640,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.configure"
       },
-      "protocolFingerprint": "0b569288711725c151b1a6bb562a23d1018bf9159e38eed9952f89be755b0a96"
+      "protocolFingerprint": "df3a838c7ed976b1b1b9f37316ddad12e4bd1084e7699a4a88d566c11acf2a04"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.fit",
@@ -12386,7 +12650,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12545,7 +12811,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.fit"
       },
-      "protocolFingerprint": "085bbe01ba30e8e433a27ecd5e7e43e2af73ac1545b18778dad2dd8380d82ca7"
+      "protocolFingerprint": "a7e17c5c0aec1f64cc72edbd3e62e7585ffac241433a684c78428ce9788985f2"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.summary",
@@ -12555,7 +12821,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12698,7 +12966,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.summary"
       },
-      "protocolFingerprint": "3b97daf8965b5c66ef196fde796bf8ea390e41f3d711921377330e4a234f3839"
+      "protocolFingerprint": "ee1e3d83387cd46f5df3a89b76c362dad18a6103a3ac93a0b251ea6705f40cca"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.cluster",
@@ -12708,7 +12976,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12789,7 +13059,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.cluster"
       },
-      "protocolFingerprint": "f0dab4bd5600d16613cc24419e8de0fec438d15bb4d63fcf0e677d64f1310904"
+      "protocolFingerprint": "94614f28cd387cef053ffd926799dab992798bbbeed83155893de9781ff08054"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.fixed_scale",
@@ -12799,7 +13069,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12874,7 +13146,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.fixed_scale"
       },
-      "protocolFingerprint": "ee17bc64e298277cbe8d18156faff0565651e66f7cba9436d94132ead1c9e4e7"
+      "protocolFingerprint": "6681f70ed073559cbcd8933f3eb6eb952d5827d0c74cdb2b1d471f95cd5ec05f"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hac",
@@ -12884,7 +13156,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -12986,7 +13260,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hac"
       },
-      "protocolFingerprint": "1d4c1819d6867618f1bea50db5ee226b03089793213c6be2fb55f6d174e78106"
+      "protocolFingerprint": "793edd050dc1cc2892009d211df9f2342032b3dfcc0767c7be64411fb5d624ec"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hc0",
@@ -12996,7 +13270,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13028,7 +13304,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hc0"
       },
-      "protocolFingerprint": "077ecdc51d9d7a03620797cb6c607c8d58126d73310f763a54c85b5de0d716ae"
+      "protocolFingerprint": "7541862ebaeceac3f09147d3a134f6446635aa6c700f9f56461348aa6ebdc5d7"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hc1",
@@ -13038,7 +13314,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13070,7 +13348,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hc1"
       },
-      "protocolFingerprint": "c6b00401eb669c6364352dbd11d92b859488481fd56dd37f5848b7f09582711c"
+      "protocolFingerprint": "3a84d9186bad78b2d56dabd0b1a6e383163034f62b599f5530ad644f213d5578"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hc2",
@@ -13080,7 +13358,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13112,7 +13392,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hc2"
       },
-      "protocolFingerprint": "b1b86819df79dc9b8077d6b9180e266d1d6a840d61af7d3ba883faa46198abec"
+      "protocolFingerprint": "878410d633d914e54727d2c4d0c4ea661a244a029e115a9fb0508a0d65729ff9"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hc3",
@@ -13122,7 +13402,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13154,7 +13436,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hc3"
       },
-      "protocolFingerprint": "326912d45da7c4efa535a0de77ab97fe30e4167fe833611b320574eda63cb0b4"
+      "protocolFingerprint": "bd0df96bb7aa02e0984d6315a4979377c41c910592758498058fb803261eb13a"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.newey_west",
@@ -13164,7 +13446,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13246,7 +13530,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.newey_west"
       },
-      "protocolFingerprint": "dae9d38bf48828d194494ec11d1db6491b5c287a48b98357b3f9d8695adf17bb"
+      "protocolFingerprint": "73b37c4141fbae321b63a27c43b6bcdee194e77cd92188ed4991f7cd34bc8fef"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.non_robust",
@@ -13256,7 +13540,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13288,7 +13574,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.non_robust"
       },
-      "protocolFingerprint": "0034959940b2af91585d03fc0e676d3e17b4e23fcd704cbb4ed1e12420e8f976"
+      "protocolFingerprint": "8f47720631dfbe7089f4488f23492dcd771aa9abb9474ef68eb69582872a8cfa"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.configure",
@@ -13298,7 +13584,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13389,7 +13677,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.configure"
       },
-      "protocolFingerprint": "7afbdba9f72d2249dc5a5ccfe15a645ca746330edd35eac5ba5428809dbe23e2"
+      "protocolFingerprint": "ce82870297aa3d32b0e198b33b803360aa54d39ebe2a76049975b3ee7ad0b5de"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.did.twfe",
@@ -13399,7 +13687,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13643,7 +13933,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.did.twfe"
       },
-      "protocolFingerprint": "15165d296c525c2a54bc496ff70f897f4910dfacb934e976343120ac90524aff"
+      "protocolFingerprint": "1666969bd9d45cb6c796067d0204ba2c7a2fdf6ab4de8b1d471e87b220eeaf05"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.summary",
@@ -13653,7 +13943,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13834,7 +14126,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.summary"
       },
-      "protocolFingerprint": "b5bfea569070e70eac91ae7609f9f5c489fdf8dd9fdc1ecefb9107d94b2998c8"
+      "protocolFingerprint": "cb10eb0465f8965f1b85905822ac8f1f04fea88bc06e3d5b041385963419cc0b"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.vce.cluster_entity",
@@ -13844,7 +14136,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13876,7 +14170,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.vce.cluster_entity"
       },
-      "protocolFingerprint": "3e0b0f134919f4b7f4c5124678c25319ab19b7e21d3abd623bf75ceed64c587d"
+      "protocolFingerprint": "8fe42b79173d2d1644d82103fdef21fbb544d21d2f7f97d6fde48e57c7c2f2db"
     },
     {
       "nodeTypeId": "yssbi.statistics.prais.configure",
@@ -13886,7 +14180,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -13957,7 +14253,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.prais.configure"
       },
-      "protocolFingerprint": "d710ad0e15854d71f2fe65cefdbd19077f15ce59317694e668b852cf01e52691"
+      "protocolFingerprint": "e91dc368ab375f56097567ec5e5d46e9ea661d2677edc5e99e6606bb81885c94"
     },
     {
       "nodeTypeId": "yssbi.statistics.prais.fit",
@@ -13967,7 +14263,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14126,7 +14424,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.prais.fit"
       },
-      "protocolFingerprint": "4b3d8ef692a5b0de7c7f15ab25416f89c63e4db8a7e090479bfff20679e16301"
+      "protocolFingerprint": "8acc889709e74b836a41c37ad24afbcc29083bf18b0a15d90088c73281719cde"
     },
     {
       "nodeTypeId": "yssbi.statistics.prais.summary",
@@ -14136,7 +14434,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14279,7 +14579,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.prais.summary"
       },
-      "protocolFingerprint": "ff20934c83aa84d51171ba1e8002c643f28a99da52341f18e150dc57875872f1"
+      "protocolFingerprint": "ec5cba1f8bbfe0f497fc6de68b4e5ac30f4625a0fb097d240f442cd2674c3190"
     },
     {
       "nodeTypeId": "yssbi.statistics.probit.configure",
@@ -14289,7 +14589,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14383,7 +14685,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.probit.configure"
       },
-      "protocolFingerprint": "e2bcf4b3be81e84523a30cdb9acaf057427846ec992b99ef58fb0ff5b819f271"
+      "protocolFingerprint": "684d99157f5fe4a4e30446b62f2f97e6bc910f09e04e88d5b24a52e7cb05e5d9"
     },
     {
       "nodeTypeId": "yssbi.statistics.probit.fit",
@@ -14393,7 +14695,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14552,7 +14856,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.probit.fit"
       },
-      "protocolFingerprint": "c2a4d2a774ce9a9b94394f817349ee6d091a8705b722da4992997232b3c70004"
+      "protocolFingerprint": "4c4edd00bdccaafdf311f49ed21abecdf45f2756791886de83c63a653a1cbc56"
     },
     {
       "nodeTypeId": "yssbi.statistics.probit.predict",
@@ -14562,7 +14866,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14665,7 +14971,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.probit.predict"
       },
-      "protocolFingerprint": "f8f80804f502331a73d7bfbee7b883ab8f9a6c24f2e47d0ae025c16a71abcd58"
+      "protocolFingerprint": "3a0d1886115ad35e9f499872c02a9371c6d69b4d122ca23712d940515b464f1f"
     },
     {
       "nodeTypeId": "yssbi.statistics.probit.summary",
@@ -14675,7 +14981,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14818,7 +15126,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.probit.summary"
       },
-      "protocolFingerprint": "cb3d54d48c6b78d0d8fc3868cda89c6d36a0999b6b444e21b76854fa037c1ca0"
+      "protocolFingerprint": "26e5c7d8c8aa42b12748b6fad471a0e41488e22833df6555661aeb10df0a42c6"
     },
     {
       "nodeTypeId": "yssbi.statistics.var.lag_order",
@@ -14828,7 +15136,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -14958,7 +15268,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.var.lag_order"
       },
-      "protocolFingerprint": "39c8131fcbbb7dc25e90084f6760ff3eec27a02803ec12f190fe7341c40f025f"
+      "protocolFingerprint": "6eaa9b9a8c5c3575a1dabd8eba87f4d21ac6e9c629a9473656405e6098efcc6a"
     },
     {
       "nodeTypeId": "yssbi.statistics.var.summary",
@@ -14968,7 +15278,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15138,7 +15450,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.var.summary"
       },
-      "protocolFingerprint": "9c16be168d4a7e9b52a77520817aab12cec5406b3a54e6ad8dcf8f6800ebb693"
+      "protocolFingerprint": "1c54e2b1ccab89ed4bf325ce859ac2c729c4305ce58965a10e5c5c9d212f8923"
     },
     {
       "nodeTypeId": "yssbi.statistics.vec.fit",
@@ -15148,7 +15460,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15359,7 +15673,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.vec.fit"
       },
-      "protocolFingerprint": "d2d0c6f6256fccaf2f05dd3724793a1ea30af1b2317574a771251b1b2fd565f6"
+      "protocolFingerprint": "a841ec0f208a9128c704f1043cf1343e1796e4fd0eba70d714ee23cb7886f6d5"
     },
     {
       "nodeTypeId": "yssbi.statistics.vec.rank_test",
@@ -15369,7 +15683,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15499,7 +15815,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.vec.rank_test"
       },
-      "protocolFingerprint": "db263e564995239ce6382134e5c6eea6dbe8348a2f860c11aeb786d6aa10b361"
+      "protocolFingerprint": "33583ae6ede6182743e3683656ddd8b85faec68e7f5d79ba37dd386613fb2b75"
     },
     {
       "nodeTypeId": "yssbi.statistics.wls.fit",
@@ -15509,7 +15825,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15687,7 +16005,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.wls.fit"
       },
-      "protocolFingerprint": "efea547d69ac3fa0152306fba5fac8ee143b04a3910c89a0a1eb00214274a23d"
+      "protocolFingerprint": "60fc3fcc4c2870f0e313944337e67f631f38f973e474dc7032cd7ba28fd89bec"
     },
     {
       "nodeTypeId": "yssbi.statistics.wls.summary",
@@ -15697,7 +16015,9 @@
           "determinism": "Deterministic",
           "effects": "Ordered",
           "evaluation": "EagerWhenRegionEntered",
-          "purity": "Effectful"
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15840,7 +16160,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.wls.summary"
       },
-      "protocolFingerprint": "04d9c7ba479fbab6fb03f8ae436d6dc90b522ac55bec1071e1f1ba38e405cda4"
+      "protocolFingerprint": "92e1eb50f61940ad96312a7be79fec6ca4a939795d68d62a356613cd58a430c9"
     },
     {
       "nodeTypeId": "yssbi.value.convert",
@@ -15850,7 +16170,9 @@
           "determinism": "Deterministic",
           "effects": "None",
           "evaluation": "DemandDriven",
-          "purity": "Pure"
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
         },
         "interface": {
           "member_groups": [],
@@ -15927,7 +16249,7 @@
         "scope": "Any",
         "typeId": "yssbi.value.convert"
       },
-      "protocolFingerprint": "5e7ec6a4d5ff97f85bf7e6a346b7fe8072127950548d8a7073f59143291edf5d"
+      "protocolFingerprint": "8ac73732acaf165cb88b08a1441208aa82ee62573479067f0c53b19f33e8a226"
     }
   ]
 }

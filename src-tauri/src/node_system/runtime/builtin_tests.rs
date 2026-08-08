@@ -105,17 +105,35 @@ fn execute_kernel_direct(
     compiled_parameters: Option<&CompiledParameterStore>,
     inputs: &[RuntimeValue],
 ) -> Result<Vec<RuntimeValue>, KernelError> {
+    execute_kernel_direct_with_deadline(kernel, params, compiled_parameters, inputs, None)
+}
+
+fn execute_kernel_direct_with_deadline(
+    kernel: &str,
+    params: &CompiledParameterHandle,
+    compiled_parameters: Option<&CompiledParameterStore>,
+    inputs: &[RuntimeValue],
+    deadline: Option<RunDeadline>,
+) -> Result<Vec<RuntimeValue>, KernelError> {
     let registry = build_builtin_kernel_registry();
     let resources = RunResourceSet::acquire(&[], &NoResources).unwrap();
     let cancellation = CancellationToken::new();
+    let resource_owner = RunResourceOwner::new(
+        RunId::new(1),
+        RunResourceBudgets::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next(),
-        activation_id: ActivationId::next(),
+        activation_id: ActivationId::next().unwrap(),
         params,
         compiled_parameters,
         resources: &resources,
+        resource_owner: &resource_owner,
         cancellation: &cancellation,
+        deadline,
     };
     registry
         .get(&handle(kernel, KernelHandle::new))
@@ -824,6 +842,17 @@ fn do_sleep_print_and_view_leaf_kernels_preserve_contracts() {
         sleep_error.message(),
         "Sleep duration must be between zero and sixty seconds"
     );
+    let started = std::time::Instant::now();
+    let deadline_error = execute_kernel_direct_with_deadline(
+        "yssbi.control.sleep",
+        &params,
+        None,
+        &[decimal("1").into()],
+        Some(RunDeadline::after(std::time::Duration::from_millis(10))),
+    )
+    .unwrap_err();
+    assert_eq!(deadline_error.kind(), KernelErrorKind::DeadlineExceeded);
+    assert!(started.elapsed() < std::time::Duration::from_millis(200));
     assert!(
         execute_kernel_direct(
             "yssbi.debug.print",

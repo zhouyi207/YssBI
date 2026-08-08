@@ -1,4 +1,4 @@
-use super::{RelationalErrorCode, ResultSourceId, RunError};
+use super::{RelationalErrorCode, ResultSourceId, RunError, RunPhase};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::GraphOutputRef;
@@ -29,14 +29,15 @@ macro_rules! define_run_event_kind {
 define_run_event_kind! {
     RunStarted,
     RunCompleted,
-    RunErrored { code: RunErrorCode },
+    RunErrored { outcome: RunErrorOutcome },
     RunCancelled,
-    OperationStarted { operation_index: u32, activation_id: u64 },
-    OperationCompleted { operation_index: u32, activation_id: u64 },
+    OperationStarted { operation_index: u32, activation_id: u64, attempt_id: u64 },
+    OperationCompleted { operation_index: u32, activation_id: u64, attempt_id: u64 },
     OperationErrored {
         operation_index: u32,
         activation_id: u64,
-        code: RunErrorCode,
+        attempt_id: u64,
+        outcome: RunErrorOutcome,
     },
     ResultReady { name: Box<str>, source_id: ResultSourceId },
     OutputReady {
@@ -48,9 +49,11 @@ define_run_event_kind! {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum RunErrorCode {
+pub enum OrdinaryRunErrorCode {
     InvalidPlan,
     Cancelled,
+    ActivationIdExhausted,
+
     KernelNotFound,
     KernelFailed,
     RelationalBackendNotFound,
@@ -74,11 +77,13 @@ pub enum RunErrorCode {
     ResourceAcquire,
 }
 
-impl RunErrorCode {
+impl OrdinaryRunErrorCode {
     pub const fn public_message(self) -> &'static str {
         match self {
             Self::InvalidPlan => "execution plan is invalid",
             Self::Cancelled => "run was cancelled",
+            Self::ActivationIdExhausted => "activation identity space is exhausted",
+
             Self::KernelNotFound => "required kernel is unavailable",
             Self::KernelFailed => "operation failed",
             Self::RelationalBackendNotFound => "relational backend is unavailable",
@@ -104,11 +109,153 @@ impl RunErrorCode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunErrorCode {
+    InvalidPlan,
+    Cancelled,
+    ActivationIdExhausted,
+    DeadlineExceeded,
+    KernelNotFound,
+    KernelFailed,
+    RelationalBackendNotFound,
+    RelationalOperatorInvalid,
+    RelationalColumnMissing,
+    RelationalTypeMismatch,
+    RelationalInputShapeInvalid,
+    RelationalHintInvalid,
+    Stream,
+    MissingValue,
+    InvalidCondition,
+    OutputCount,
+    OperationAlreadyExecuted,
+    UnsatisfiedEffectDependency,
+    LoopLimitExceeded,
+    FunctionPlanNotFound,
+    FunctionPlanFailed,
+    RecursionLimitExceeded,
+    ProjectDraining,
+    ResourceSnapshotMismatch,
+    ResourceAcquire,
+}
+
 impl From<&RunError> for RunErrorCode {
+    fn from(error: &RunError) -> Self {
+        match RunErrorOutcome::from(error) {
+            RunErrorOutcome::DeadlineExceeded { .. } => Self::DeadlineExceeded,
+            RunErrorOutcome::Ordinary { code } => match code {
+                OrdinaryRunErrorCode::InvalidPlan => Self::InvalidPlan,
+                OrdinaryRunErrorCode::Cancelled => Self::Cancelled,
+                OrdinaryRunErrorCode::ActivationIdExhausted => Self::ActivationIdExhausted,
+                OrdinaryRunErrorCode::KernelNotFound => Self::KernelNotFound,
+                OrdinaryRunErrorCode::KernelFailed => Self::KernelFailed,
+                OrdinaryRunErrorCode::RelationalBackendNotFound => Self::RelationalBackendNotFound,
+                OrdinaryRunErrorCode::RelationalOperatorInvalid => Self::RelationalOperatorInvalid,
+                OrdinaryRunErrorCode::RelationalColumnMissing => Self::RelationalColumnMissing,
+                OrdinaryRunErrorCode::RelationalTypeMismatch => Self::RelationalTypeMismatch,
+                OrdinaryRunErrorCode::RelationalInputShapeInvalid => {
+                    Self::RelationalInputShapeInvalid
+                }
+                OrdinaryRunErrorCode::RelationalHintInvalid => Self::RelationalHintInvalid,
+                OrdinaryRunErrorCode::Stream => Self::Stream,
+                OrdinaryRunErrorCode::MissingValue => Self::MissingValue,
+                OrdinaryRunErrorCode::InvalidCondition => Self::InvalidCondition,
+                OrdinaryRunErrorCode::OutputCount => Self::OutputCount,
+                OrdinaryRunErrorCode::OperationAlreadyExecuted => Self::OperationAlreadyExecuted,
+                OrdinaryRunErrorCode::UnsatisfiedEffectDependency => {
+                    Self::UnsatisfiedEffectDependency
+                }
+                OrdinaryRunErrorCode::LoopLimitExceeded => Self::LoopLimitExceeded,
+                OrdinaryRunErrorCode::FunctionPlanNotFound => Self::FunctionPlanNotFound,
+                OrdinaryRunErrorCode::FunctionPlanFailed => Self::FunctionPlanFailed,
+                OrdinaryRunErrorCode::RecursionLimitExceeded => Self::RecursionLimitExceeded,
+                OrdinaryRunErrorCode::ProjectDraining => Self::ProjectDraining,
+                OrdinaryRunErrorCode::ResourceSnapshotMismatch => Self::ResourceSnapshotMismatch,
+                OrdinaryRunErrorCode::ResourceAcquire => Self::ResourceAcquire,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunErrorOutcome {
+    Ordinary { code: OrdinaryRunErrorCode },
+    DeadlineExceeded { phase: RunPhase },
+}
+
+impl RunErrorOutcome {
+    pub const fn code(self) -> RunErrorCode {
+        match self {
+            Self::DeadlineExceeded { .. } => RunErrorCode::DeadlineExceeded,
+            Self::Ordinary { code } => match code {
+                OrdinaryRunErrorCode::InvalidPlan => RunErrorCode::InvalidPlan,
+                OrdinaryRunErrorCode::Cancelled => RunErrorCode::Cancelled,
+                OrdinaryRunErrorCode::ActivationIdExhausted => RunErrorCode::ActivationIdExhausted,
+                OrdinaryRunErrorCode::KernelNotFound => RunErrorCode::KernelNotFound,
+                OrdinaryRunErrorCode::KernelFailed => RunErrorCode::KernelFailed,
+                OrdinaryRunErrorCode::RelationalBackendNotFound => {
+                    RunErrorCode::RelationalBackendNotFound
+                }
+                OrdinaryRunErrorCode::RelationalOperatorInvalid => {
+                    RunErrorCode::RelationalOperatorInvalid
+                }
+                OrdinaryRunErrorCode::RelationalColumnMissing => {
+                    RunErrorCode::RelationalColumnMissing
+                }
+                OrdinaryRunErrorCode::RelationalTypeMismatch => {
+                    RunErrorCode::RelationalTypeMismatch
+                }
+                OrdinaryRunErrorCode::RelationalInputShapeInvalid => {
+                    RunErrorCode::RelationalInputShapeInvalid
+                }
+                OrdinaryRunErrorCode::RelationalHintInvalid => RunErrorCode::RelationalHintInvalid,
+                OrdinaryRunErrorCode::Stream => RunErrorCode::Stream,
+                OrdinaryRunErrorCode::MissingValue => RunErrorCode::MissingValue,
+                OrdinaryRunErrorCode::InvalidCondition => RunErrorCode::InvalidCondition,
+                OrdinaryRunErrorCode::OutputCount => RunErrorCode::OutputCount,
+                OrdinaryRunErrorCode::OperationAlreadyExecuted => {
+                    RunErrorCode::OperationAlreadyExecuted
+                }
+                OrdinaryRunErrorCode::UnsatisfiedEffectDependency => {
+                    RunErrorCode::UnsatisfiedEffectDependency
+                }
+                OrdinaryRunErrorCode::LoopLimitExceeded => RunErrorCode::LoopLimitExceeded,
+                OrdinaryRunErrorCode::FunctionPlanNotFound => RunErrorCode::FunctionPlanNotFound,
+                OrdinaryRunErrorCode::FunctionPlanFailed => RunErrorCode::FunctionPlanFailed,
+                OrdinaryRunErrorCode::RecursionLimitExceeded => {
+                    RunErrorCode::RecursionLimitExceeded
+                }
+                OrdinaryRunErrorCode::ProjectDraining => RunErrorCode::ProjectDraining,
+                OrdinaryRunErrorCode::ResourceSnapshotMismatch => {
+                    RunErrorCode::ResourceSnapshotMismatch
+                }
+                OrdinaryRunErrorCode::ResourceAcquire => RunErrorCode::ResourceAcquire,
+            },
+        }
+    }
+}
+
+impl From<&RunError> for RunErrorOutcome {
+    fn from(error: &RunError) -> Self {
+        match error {
+            RunError::DeadlineExceeded { phase } => Self::DeadlineExceeded { phase: *phase },
+            error => Self::Ordinary {
+                code: OrdinaryRunErrorCode::from(error),
+            },
+        }
+    }
+}
+
+impl From<&RunError> for OrdinaryRunErrorCode {
     fn from(error: &RunError) -> Self {
         match error {
             RunError::InvalidPlan(_) => Self::InvalidPlan,
             RunError::Cancelled => Self::Cancelled,
+            RunError::ActivationIdExhausted => Self::ActivationIdExhausted,
+            RunError::DeadlineExceeded { .. } => {
+                unreachable!("deadline errors use RunErrorOutcome::DeadlineExceeded")
+            }
             RunError::KernelNotFound(_) => Self::KernelNotFound,
             RunError::KernelFailed { .. } => Self::KernelFailed,
             RunError::RelationalBackendNotFound(_) => Self::RelationalBackendNotFound,
@@ -120,6 +267,9 @@ impl From<&RunError> for RunErrorCode {
                     RelationalErrorCode::InputShapeInvalid => Self::RelationalInputShapeInvalid,
                     RelationalErrorCode::HintInvalid => Self::RelationalHintInvalid,
                     RelationalErrorCode::Cancelled => Self::Cancelled,
+                    RelationalErrorCode::DeadlineExceeded => {
+                        unreachable!("deadline relational errors map to RunError::DeadlineExceeded")
+                    }
                 }
             }
             RunError::Stream(_) => Self::Stream,
@@ -180,12 +330,15 @@ mod tests {
             node_id: None,
             node_type_id: None,
             parent_call: None,
+            trace_parent_span_id: None,
         };
         let event = RunEvent {
             correlation,
             basis: basis.clone(),
             kind: RunEventKind::RunErrored {
-                code: RunErrorCode::KernelFailed,
+                outcome: RunErrorOutcome::Ordinary {
+                    code: OrdinaryRunErrorCode::KernelFailed,
+                },
             },
         };
 
@@ -200,6 +353,7 @@ mod tests {
     fn error_events_reduce_runtime_errors_to_stable_codes() {
         let error = RunError::KernelFailed {
             operation: crate::node_system::plan::OperationIndex::new(3),
+            kind: crate::node_system::runtime::KernelErrorKind::Permanent,
             message: "sensitive literal".into(),
         };
         let relational = RunError::RelationalFailed {

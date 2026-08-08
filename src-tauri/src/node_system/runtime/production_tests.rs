@@ -432,6 +432,105 @@ fn function_plan_generation_rejects_aliased_abi_members() {
 }
 
 #[test]
+fn function_plan_generation_requires_exact_result_production_keys() {
+    use crate::node_system::document::FunctionParameterId;
+    use crate::node_system::plan::PlanValueSource;
+
+    let session = ProjectSessionId::new("project-a");
+    let registry = RegistryFingerprint::from_bytes([7; 32]);
+    let resource_versions = versions(&[("functions/shared", "4")]);
+    let mut plan = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    plan.value_count = 1;
+    plan.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::Streaming,
+    )]);
+    let result = FunctionParameterId("return".into());
+    let generate = |result_productions| {
+        FunctionPlanStore::new(session.clone(), 64).generation(
+            registry.clone(),
+            resource_versions.clone(),
+            vec![(
+                GraphResourcePath("functions/shared".into()),
+                ResourceVersion::new("4"),
+                Arc::new(plan.clone()),
+                Arc::new(FunctionPlanAbi {
+                    provenance: plan.provenance.clone(),
+                    parameters: BTreeMap::new(),
+                    results: BTreeMap::from([(result.clone(), ValueRef::new(0))]),
+                    result_productions,
+                }),
+            )],
+        )
+    };
+
+    assert!(matches!(
+        generate(BTreeMap::new()),
+        Err(FunctionPlanStoreError::InvalidBasis { .. })
+    ));
+    assert!(matches!(
+        generate(BTreeMap::from([
+            (result.clone(), OutputProduction::Streaming),
+            (
+                FunctionParameterId("extra".into()),
+                OutputProduction::FullyMaterialized,
+            ),
+        ])),
+        Err(FunctionPlanStoreError::InvalidBasis { .. })
+    ));
+}
+
+#[test]
+fn function_plan_generation_rejects_stale_result_production_contract() {
+    use crate::node_system::document::FunctionParameterId;
+    use crate::node_system::plan::PlanValueSource;
+
+    let session = ProjectSessionId::new("project-a");
+    let registry = RegistryFingerprint::from_bytes([7; 32]);
+    let resource_versions = versions(&[("functions/shared", "4")]);
+    let mut plan = empty_plan(
+        &session,
+        "functions/shared",
+        &registry,
+        resource_versions.clone(),
+    );
+    plan.value_count = 1;
+    plan.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::Streaming,
+    )]);
+    let result = FunctionParameterId("return".into());
+    let abi = FunctionPlanAbi {
+        provenance: plan.provenance.clone(),
+        parameters: BTreeMap::new(),
+        results: BTreeMap::from([(result.clone(), ValueRef::new(0))]),
+        result_productions: BTreeMap::from([(result, OutputProduction::FullyMaterialized)]),
+    };
+
+    let error = match FunctionPlanStore::new(session, 64).generation(
+        registry,
+        resource_versions,
+        vec![(
+            GraphResourcePath("functions/shared".into()),
+            ResourceVersion::new("4"),
+            Arc::new(plan),
+            Arc::new(abi),
+        )],
+    ) {
+        Ok(_) => panic!("stale ABI production must not be published"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(error, FunctionPlanStoreError::InvalidBasis { .. }));
+    assert!(error.to_string().contains("result production"));
+}
+
+#[test]
 fn function_plan_generation_requires_initializable_parameters_and_sourced_results() {
     use crate::node_system::document::FunctionParameterId;
     use crate::node_system::plan::PlanValueSource;

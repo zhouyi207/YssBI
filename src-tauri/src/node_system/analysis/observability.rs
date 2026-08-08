@@ -3,6 +3,13 @@ use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::protocol::NodeTypeId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
+
+use crate::node_system::plan::{AttemptId, OperationStableId};
+use crate::node_system::runtime::ActivationId;
 
 macro_rules! numeric_id {
     ($name:ident) => {
@@ -42,8 +49,36 @@ impl ProjectSessionId {
     }
 }
 
-numeric_id!(RunId);
 numeric_id!(ParentCallId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RunId(NonZeroU64);
+
+impl RunId {
+    pub fn try_new(value: u64) -> Result<Self, InvalidTraceIdentity> {
+        NonZeroU64::new(value).map(Self).ok_or(InvalidTraceIdentity)
+    }
+
+    pub fn new(value: u64) -> Self {
+        Self::try_new(value).expect("run IDs must be non-zero")
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidTraceIdentity;
+
+impl std::fmt::Display for InvalidTraceIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("trace identities must be non-zero")
+    }
+}
+
+impl std::error::Error for InvalidTraceIdentity {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompileProvenance {
@@ -66,6 +101,7 @@ pub struct CorrelationContext {
     pub node_id: Option<NodeId>,
     pub node_type_id: Option<NodeTypeId>,
     pub parent_call: Option<ParentCallId>,
+    pub trace_parent_span_id: Option<SpanId>,
 }
 
 impl CorrelationContext {
@@ -82,12 +118,18 @@ impl CorrelationContext {
             node_id: None,
             node_type_id: None,
             parent_call: None,
+            trace_parent_span_id: None,
         }
     }
 
     pub fn for_run(mut self, run_id: RunId, parent_call: Option<ParentCallId>) -> Self {
         self.run_id = Some(run_id);
         self.parent_call = parent_call;
+        self
+    }
+
+    pub fn with_trace_parent(mut self, span_id: SpanId) -> Self {
+        self.trace_parent_span_id = Some(span_id);
         self
     }
 
@@ -116,20 +158,23 @@ pub enum SpanKind {
     Analysis,
     Lowering,
     Run,
-    Operation,
-    RelationalBackend,
+    OperationAttempt,
     ResourceAcquire,
+    AdapterIo,
+    ResultPublication,
     Cleanup,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum SpanStatus {
-    Started,
-    Succeeded,
-    Failed,
-    Cancelled,
-    Blocked,
+pub enum SpanOutcome {
+    Success,
+    Error,
+    Cancellation,
+    Timeout,
+    Retry,
+    Cleanup { error_count: u64, panicking: bool },
+    InternalAborted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,47 +240,185 @@ impl Default for RedactionPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SpanEvent {
-    pub kind: SpanKind,
-    pub status: SpanStatus,
-    pub correlation: CorrelationContext,
-    pub fields: BTreeMap<Box<str>, TraceValue>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SpanId(NonZeroU64);
+
+impl SpanId {
+    pub fn new(value: u64) -> Result<Self, InvalidTraceIdentity> {
+        NonZeroU64::new(value).map(Self).ok_or(InvalidTraceIdentity)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+
+    fn next() -> Self {
+        static NEXT_SPAN_ID: AtomicU64 = AtomicU64::new(1);
+        let id = NEXT_SPAN_ID
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1)
+            })
+            .expect("process span ID space exhausted");
+        Self::new(id).expect("span ID allocator starts at one")
+    }
 }
 
-impl SpanEvent {
-    pub fn new(kind: SpanKind, status: SpanStatus, correlation: CorrelationContext) -> Self {
-        Self {
-            kind,
-            status,
-            correlation,
-            fields: BTreeMap::new(),
-        }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MonotonicTimestamp(u64);
+
+impl MonotonicTimestamp {
+    pub const fn new(value: u64) -> Result<Self, InvalidTraceTimestamp> {
+        Ok(Self(value))
     }
 
-    pub fn with_field(
-        mut self,
-        key: impl Into<Box<str>>,
-        value: TraceValue,
-        sensitivity: TraceFieldSensitivity,
-        policy: RedactionPolicy,
-    ) -> Self {
-        if let Some(value) = policy.apply(sensitivity, value) {
-            self.fields.insert(key.into(), value);
-        }
-        self
+    pub const fn get(self) -> u64 {
+        self.0
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidTraceTimestamp;
+
+pub trait TraceClock: Send + Sync {
+    fn now(&self) -> MonotonicTimestamp;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SystemTraceClock;
+
+impl TraceClock for SystemTraceClock {
+    fn now(&self) -> MonotonicTimestamp {
+        static ORIGIN: LazyLock<Instant> = LazyLock::new(Instant::now);
+        let nanos = ORIGIN.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+        MonotonicTimestamp(nanos)
+    }
+}
+
+pub static SYSTEM_TRACE_CLOCK: SystemTraceClock = SystemTraceClock;
+
+#[cfg(test)]
+#[derive(Debug)]
+pub struct FakeTraceClock(Mutex<MonotonicTimestamp>);
+
+#[cfg(test)]
+impl FakeTraceClock {
+    pub fn new(now: MonotonicTimestamp) -> Self {
+        Self(Mutex::new(now))
+    }
+
+    pub fn set(&self, now: MonotonicTimestamp) {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner()) = now;
+    }
+}
+
+#[cfg(test)]
+impl TraceClock for FakeTraceClock {
+    fn now(&self) -> MonotonicTimestamp {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceSpan {
+    pub span_id: SpanId,
+    pub parent_span_id: Option<SpanId>,
+    pub run_id: Option<RunId>,
+    pub operation_id: Option<OperationStableId>,
+    pub activation_id: Option<ActivationId>,
+    pub attempt_id: Option<AttemptId>,
+    pub kind: SpanKind,
+    pub started_at: MonotonicTimestamp,
+    pub finished_at: MonotonicTimestamp,
+    pub outcome: SpanOutcome,
+    pub correlation: CorrelationContext,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpanSpec {
+    pub parent_span_id: Option<SpanId>,
+    pub run_id: Option<RunId>,
+    pub operation_id: Option<OperationStableId>,
+    pub activation_id: Option<ActivationId>,
+    pub attempt_id: Option<AttemptId>,
+    pub kind: SpanKind,
+    pub correlation: CorrelationContext,
 }
 
 pub trait TraceSink: Send + Sync {
-    fn record(&self, event: SpanEvent);
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_>;
+    fn complete_span(&self, span: TraceSpan);
+}
+
+pub fn start_span_safely<'a>(sink: &'a dyn TraceSink, spec: SpanSpec) -> SpanGuard<'a> {
+    let fallback_spec = spec.clone();
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.start_span(spec)))
+        .unwrap_or_else(|_| NOOP_TRACE_SINK.start_span(fallback_spec))
+}
+
+pub struct SpanGuard<'a> {
+    sink: &'a dyn TraceSink,
+    clock: &'a dyn TraceClock,
+    pending: Option<(SpanId, SpanSpec, MonotonicTimestamp)>,
+}
+
+impl<'a> SpanGuard<'a> {
+    pub fn new(sink: &'a dyn TraceSink, spec: SpanSpec, clock: &'a dyn TraceClock) -> Self {
+        Self {
+            sink,
+            clock,
+            pending: Some((SpanId::next(), spec, clock.now())),
+        }
+    }
+
+    pub fn span_id(&self) -> SpanId {
+        self.pending.as_ref().expect("finished span guard").0
+    }
+
+    pub fn finish(&mut self, outcome: SpanOutcome) {
+        self.complete(outcome);
+    }
+
+    fn complete(&mut self, outcome: SpanOutcome) {
+        let Some((span_id, spec, started_at)) = self.pending.take() else {
+            return;
+        };
+        let finished_at = self.clock.now().max(started_at);
+        let span = TraceSpan {
+            span_id,
+            parent_span_id: spec.parent_span_id,
+            run_id: spec.run_id,
+            operation_id: spec.operation_id,
+            activation_id: spec.activation_id,
+            attempt_id: spec.attempt_id,
+            kind: spec.kind,
+            started_at,
+            finished_at,
+            outcome,
+            correlation: spec.correlation,
+        };
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.sink.complete_span(span);
+        }));
+    }
+}
+
+impl Drop for SpanGuard<'_> {
+    fn drop(&mut self) {
+        self.complete(SpanOutcome::InternalAborted);
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoopTraceSink;
 
 impl TraceSink for NoopTraceSink {
-    fn record(&self, _: SpanEvent) {}
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, _: TraceSpan) {}
 }
 
 pub static NOOP_TRACE_SINK: NoopTraceSink = NoopTraceSink;
@@ -286,6 +469,106 @@ mod tests {
         assert_eq!(correlation.compile_id, provenance.compile_id);
         assert_eq!(correlation.run_id, Some(RunId::new(17)));
         assert_eq!(correlation.parent_call, Some(ParentCallId::new(19)));
+    }
+
+    #[test]
+    fn trace_span_identities_reject_zero() {
+        assert!(SpanId::new(0).is_err());
+        assert!(MonotonicTimestamp::new(0).is_ok());
+        assert!(RunId::try_new(0).is_err());
+        assert!(crate::node_system::plan::AttemptId::try_new(0).is_err());
+    }
+
+    #[test]
+    fn trace_span_guard_finishes_exactly_once_with_fake_clock() {
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingSink {
+            clock: Arc<FakeTraceClock>,
+            spans: Mutex<Vec<TraceSpan>>,
+        }
+
+        impl TraceSink for RecordingSink {
+            fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+                SpanGuard::new(self, spec, self.clock.as_ref())
+            }
+
+            fn complete_span(&self, span: TraceSpan) {
+                self.spans.lock().unwrap().push(span);
+            }
+        }
+
+        let clock = Arc::new(FakeTraceClock::new(MonotonicTimestamp::new(10).unwrap()));
+        let sink = RecordingSink {
+            clock: Arc::clone(&clock),
+            spans: Mutex::new(Vec::new()),
+        };
+        let parent = SpanId::new(7).unwrap();
+        let run_id = RunId::try_new(11).unwrap();
+        let mut guard = sink.start_span(SpanSpec {
+            parent_span_id: Some(parent),
+            run_id: Some(run_id),
+            operation_id: None,
+            activation_id: None,
+            attempt_id: None,
+            kind: SpanKind::Run,
+            correlation: CorrelationContext::compile(&provenance()).for_run(run_id, None),
+        });
+        clock.set(MonotonicTimestamp::new(25).unwrap());
+        guard.finish(SpanOutcome::Success);
+        guard.finish(SpanOutcome::Error);
+        drop(guard);
+
+        let spans = sink.spans.lock().unwrap();
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].parent_span_id, Some(parent));
+        assert_eq!(spans[0].run_id, Some(run_id));
+        assert_eq!(spans[0].started_at.get(), 10);
+        assert_eq!(spans[0].finished_at.get(), 25);
+        assert_eq!(spans[0].outcome, SpanOutcome::Success);
+    }
+
+    #[test]
+    fn dropped_trace_span_guard_emits_one_internal_aborted_span() {
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingSink {
+            clock: Arc<FakeTraceClock>,
+            spans: Mutex<Vec<TraceSpan>>,
+        }
+
+        impl TraceSink for RecordingSink {
+            fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+                SpanGuard::new(self, spec, self.clock.as_ref())
+            }
+
+            fn complete_span(&self, span: TraceSpan) {
+                self.spans.lock().unwrap().push(span);
+            }
+        }
+
+        let clock = Arc::new(FakeTraceClock::new(MonotonicTimestamp::new(3).unwrap()));
+        let sink = RecordingSink {
+            clock: Arc::clone(&clock),
+            spans: Mutex::new(Vec::new()),
+        };
+        {
+            let _guard = sink.start_span(SpanSpec {
+                parent_span_id: None,
+                run_id: None,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Snapshot,
+                correlation: CorrelationContext::compile(&provenance()),
+            });
+            clock.set(MonotonicTimestamp::new(4).unwrap());
+        }
+
+        let spans = sink.spans.lock().unwrap();
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].outcome, SpanOutcome::InternalAborted);
+        assert!(spans[0].finished_at >= spans[0].started_at);
     }
 
     #[test]

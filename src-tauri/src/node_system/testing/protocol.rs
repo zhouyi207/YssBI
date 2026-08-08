@@ -39,6 +39,8 @@ impl TestProtocolBuilder {
                 evaluation: EvaluationPolicy::DemandDriven,
                 cache: CachePolicy::PerRun,
                 effects: EffectSemantics::None,
+                idempotent: false,
+                retry: None,
             },
             scope: NodeScope::Any,
             managed_role: None,

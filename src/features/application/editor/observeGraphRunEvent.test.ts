@@ -210,7 +210,7 @@ describe('observeGraphRunEvent', () => {
 
   it.each([
     [{ type: 'runCompleted' } as const, 'completed'],
-    [{ type: 'runErrored', code: 'kernelFailed' } as const, 'error'],
+    [{ type: 'runErrored', code: 'kernelFailed', phase: null } as const, 'error'],
     [{ type: 'runCancelled' } as const, 'cancelled'],
   ])('keeps preview $type isolated from an active ordinary run', (terminal, expectedTerminal) => {
     const graphPath = 'events/Main.yssbi-event';
@@ -275,7 +275,7 @@ describe('observeGraphRunEvent', () => {
 
     observeGraphRunEvent(
       'events/Main.yssbi-event',
-      event({ type: 'runErrored', code: 'kernelFailed' }),
+      event({ type: 'runErrored', code: 'kernelFailed', phase: null }),
       outcome,
     );
     expect(outcome.outcome).toBe('error');

@@ -8051,10 +8051,18 @@ fn production_relational_backend_executes_project_dataframe_source() {
     let resources =
         crate::node_system::runtime::RunResourceSet::acquire(&[requirement], &provider).unwrap();
     let cancellation = crate::node_system::runtime::CancellationToken::new();
+    let resource_owner = crate::node_system::runtime::RunResourceOwner::new(
+        crate::node_system::analysis::RunId::new(1),
+        crate::node_system::runtime::RunResourceBudgets::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
     let context = crate::node_system::runtime::RelationalContext {
         run_id: crate::node_system::analysis::RunId::new(1),
         resources: &resources,
+        resource_owner: &resource_owner,
         cancellation: &cancellation,
+        deadline: None,
     };
     let plan = crate::node_system::plan::CompiledRelationalPlan {
         fragment_order: Box::new([]),
@@ -9088,6 +9096,175 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         .unwrap();
     assert_eq!(next.publication_revision, 2);
 
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn deadline_during_variable_effect_authority_gate_rolls_back_disk_and_state() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-deadline-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Deadline Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let history_before = state.history_status();
+    let project_instance_id = state.capture_project_session().unwrap().instance_id;
+    state.set_mutation_publication_test_hook(std::sync::Arc::new(|| {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }));
+    let cancellation = crate::node_system::runtime::CancellationToken::new();
+
+    let error = state
+        .commit_variable_effects_for_run(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+            &cancellation,
+            Some(crate::node_system::runtime::RunDeadline::after(
+                std::time::Duration::from_millis(5),
+            )),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        crate::node_system::runtime::RunError::DeadlineExceeded {
+            phase: crate::node_system::runtime::RunPhase::ResultPublication,
+        }
+    );
+    assert!(matches!(
+        state
+            .get_variable(&variable.id)
+            .unwrap()
+            .unwrap()
+            .data_value,
+        crate::graph::value::DataValue::Int64(1)
+    ));
+    assert_eq!(state.history_status(), history_before);
+    assert_eq!(
+        state
+            .read_project_index(&project_instance_id)
+            .unwrap()
+            .publication_revision,
+        0
+    );
+    assert_eq!(
+        std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+        disk_before
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn variable_effect_authority_assignment_panic_restores_every_authoritative_projection() {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-variable-effect-authority-panic-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let root_text = root.to_string_lossy().into_owned();
+    let variable = test_variable("Panic Rate");
+    let mut project = ProjectData::new();
+    project.variables.insert(variable.id, variable.clone());
+    crate::project::fixtures::write_project(&project, &root_text).unwrap();
+    let disk_before = std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root_text, project);
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let cache_before = state
+        .project_store
+        .read()
+        .unwrap()
+        .variable_tabular
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let history_before = state.history_status();
+    let history_lengths_before = state.history_lengths_for_test();
+    let revisions_before = state.revision_state_for_test();
+    let publication_before = state.publication_state_for_test();
+
+    let assignment_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let assignment_count_for_hook = std::sync::Arc::clone(&assignment_count);
+    state.set_variable_authority_assignment_panic_for_test(std::sync::Arc::new(move || {
+        if assignment_count_for_hook.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            panic!("injected variable authority assignment panic")
+        }
+    }));
+
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = state.commit_variable_effects_for_run(
+            &session_id,
+            vec![crate::node_system::runtime::VariableWriteEffect {
+                resource: crate::node_system::plan::ResourceId::new(format!(
+                    "variables/{}",
+                    variable.id
+                ))
+                .unwrap(),
+                expected_revision: GraphRevision::INITIAL,
+                before: variable.clone(),
+                after: crate::graph::value::DataValue::Int64(2),
+            }],
+            &crate::node_system::runtime::CancellationToken::new(),
+            None,
+        );
+    }));
+
+    assert!(panic.is_err());
+    assert_eq!(
+        assignment_count.load(std::sync::atomic::Ordering::SeqCst),
+        2
+    );
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        data_before
+    );
+    assert_eq!(
+        state
+            .project_store
+            .read()
+            .unwrap()
+            .variable_tabular
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>(),
+        cache_before
+    );
+    assert_eq!(state.history_status(), history_before);
+    assert_eq!(state.history_lengths_for_test(), history_lengths_before);
+    assert_eq!(state.revision_state_for_test(), revisions_before);
+    assert_eq!(state.publication_state_for_test(), publication_before);
+    assert_eq!(
+        std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
+        disk_before
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -11544,8 +11721,8 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
         let events = events.0.lock().unwrap();
         assert!(events.iter().any(|event| matches!(
             event.kind,
-            crate::node_system::runtime::RunEventKind::RunErrored { code }
-                if code == run_code
+            crate::node_system::runtime::RunEventKind::RunErrored { outcome }
+                if outcome.code() == run_code
         )));
         assert!(events.iter().all(|event| !matches!(
             event.kind,

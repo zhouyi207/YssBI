@@ -1,5 +1,5 @@
 use super::{GraphResourcePath, ProjectInstanceId, ProjectSession, ProjectState};
-use crate::node_system::analysis::{BoundedTraceSink, RunId, TraceRecord};
+use crate::node_system::analysis::{BoundedTraceSink, RunId, TraceSpan};
 use std::fmt;
 use std::sync::Arc;
 
@@ -25,11 +25,11 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-    ) -> Result<Vec<TraceRecord>, TraceQueryError> {
+    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
         let document_path =
             crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
         self.query_traces(expected_project_instance_id, |sink| {
-            sink.records_for_graph(&document_path)
+            sink.spans_for_graph(&document_path)
         })
     }
 
@@ -37,9 +37,9 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         run_id: RunId,
-    ) -> Result<Vec<TraceRecord>, TraceQueryError> {
+    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
         let records = self.query_traces(expected_project_instance_id, |sink| {
-            sink.records_for_run(run_id)
+            sink.spans_for_run(run_id)
         })?;
         if records.is_empty() {
             Err(TraceQueryError::NotFound)
@@ -51,8 +51,8 @@ impl ProjectState {
     fn query_traces(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        snapshot: impl FnOnce(&BoundedTraceSink) -> Vec<TraceRecord>,
-    ) -> Result<Vec<TraceRecord>, TraceQueryError> {
+        snapshot: impl FnOnce(&BoundedTraceSink) -> Vec<TraceSpan>,
+    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
         let session = self.expected_trace_session(expected_project_instance_id)?;
         self.validate_trace_session(&session)?;
         let sink = {

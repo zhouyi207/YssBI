@@ -7,6 +7,7 @@ use std::fmt;
 pub(crate) struct PlanSourceFacts {
     external_inputs: BTreeSet<ValueRef>,
     statically_sourced: Box<[bool]>,
+    productions: BTreeMap<ValueRef, OutputProduction>,
 }
 
 impl PlanSourceFacts {
@@ -19,6 +20,10 @@ impl PlanSourceFacts {
             .get(value.index())
             .copied()
             .unwrap_or(false)
+    }
+
+    pub(crate) fn production(&self, value: ValueRef) -> Option<OutputProduction> {
+        self.productions.get(&value).copied()
     }
 }
 
@@ -48,11 +53,18 @@ impl ExecutionPlan {
                     duplicate: operation,
                 });
             }
-            if planned
-                .retry
-                .policy
-                .as_ref()
-                .is_some_and(|policy| policy.validate().is_err() || !planned.retry.idempotent)
+            let retry_policy = planned.retry.policy.as_ref();
+            let retry_has_effect_edge = self
+                .effect_dependencies
+                .iter()
+                .any(|edge| edge.before == operation || edge.after == operation);
+            if planned.retry.idempotent != retry_policy.is_some()
+                || retry_policy.is_some_and(|policy| policy.validate().is_err())
+                || retry_policy.is_some()
+                    && (!matches!(planned.kernel, PlannedKernel::Native(_))
+                        || planned.workload != WorkloadClass::Cpu
+                        || !planned.resource_dependencies.is_empty()
+                        || retry_has_effect_edge)
             {
                 errors.push(PlanValidationError::InvalidRetryPolicy { operation });
             }
@@ -196,6 +208,51 @@ impl ExecutionPlan {
             errors.push(PlanValidationError::EffectDependencyCycle);
         }
 
+        let declared_control_productions = self
+            .value_sources
+            .iter()
+            .filter_map(|source| match source {
+                PlanValueSource::ControlProduced(value, production) => Some((*value, *production)),
+                PlanValueSource::ExternalInput(_, _) => None,
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut structured_productions = self
+            .operations
+            .iter()
+            .flat_map(|operation| {
+                operation
+                    .outputs
+                    .iter()
+                    .map(|output| (output.value, output.production))
+            })
+            .chain(self.value_sources.iter().filter_map(|source| match source {
+                PlanValueSource::ExternalInput(value, production) => Some((*value, *production)),
+                PlanValueSource::ControlProduced(_, _) => None,
+            }))
+            .collect::<BTreeMap<_, _>>();
+        let mut aliases_by_destination = BTreeMap::<ValueRef, Vec<ValueRef>>::new();
+        for dependency in &self.value_dependencies {
+            aliases_by_destination
+                .entry(dependency.destination)
+                .or_default()
+                .push(dependency.source);
+        }
+        for (destination, sources) in &mut aliases_by_destination {
+            sources.sort_unstable();
+            if sources.len() > 1 {
+                errors.push(PlanValidationError::DuplicateValueDependencyAlias {
+                    destination: *destination,
+                    sources: sources.clone().into_boxed_slice(),
+                });
+            }
+        }
+        let mut reported_alias_conflicts = BTreeSet::new();
+        propagate_alias_productions(
+            &aliases_by_destination,
+            &mut structured_productions,
+            &mut reported_alias_conflicts,
+            &mut errors,
+        );
         let mut structured = StructuredControlFacts::default();
         validate_region(
             &self.root_region,
@@ -203,6 +260,14 @@ impl ExecutionPlan {
             operation_count,
             value_count,
             &mut structured,
+            &mut structured_productions,
+            &declared_control_productions,
+        );
+        propagate_alias_productions(
+            &aliases_by_destination,
+            &mut structured_productions,
+            &mut reported_alias_conflicts,
+            &mut errors,
         );
         let source_roots = produced_values
             .iter()
@@ -218,6 +283,7 @@ impl ExecutionPlan {
                 &self.value_dependencies,
             )
             .into_boxed_slice(),
+            productions: structured_productions.clone(),
         };
         validate_structured_control_facts(
             &structured,
@@ -267,6 +333,45 @@ impl ExecutionPlan {
             Ok(source_facts)
         } else {
             Err(PlanValidationErrors(errors.into_boxed_slice()))
+        }
+    }
+}
+
+fn propagate_alias_productions(
+    aliases_by_destination: &BTreeMap<ValueRef, Vec<ValueRef>>,
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    reported_conflicts: &mut BTreeSet<ValueRef>,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    loop {
+        let mut changed = false;
+        for (destination, sources) in aliases_by_destination {
+            let mut actual = sources
+                .iter()
+                .filter_map(|source| productions.get(source).copied())
+                .collect::<BTreeSet<_>>();
+            if let Some(production) = productions.get(destination).copied() {
+                actual.insert(production);
+            }
+            if actual.len() > 1 {
+                if reported_conflicts.insert(*destination) {
+                    errors.push(PlanValidationError::ConflictingAliasProductions {
+                        destination: *destination,
+                        productions: actual.into_iter().collect(),
+                    });
+                }
+                continue;
+            }
+            let Some(production) = actual.first().copied() else {
+                continue;
+            };
+            if !productions.contains_key(destination) {
+                productions.insert(*destination, production);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
         }
     }
 }
@@ -449,43 +554,59 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
             continue;
         };
         if outgoing.len() > 1 {
-            let stable_fanout = outgoing.iter().all(|dependency| {
-                input_owners
-                    .get(&dependency.destination)
-                    .is_some_and(|(consumer, _)| {
-                        matches!(
-                            plan.operations[consumer.index()].kernel,
-                            PlannedKernel::Adapter(_)
-                        )
-                    })
-            });
-            let (expected_consumption, expected_production) = match actual {
-                PlannedAdapter::Replay => (
-                    match production {
-                        OutputProduction::Streaming => InputConsumption::Streaming,
-                        OutputProduction::Batches => InputConsumption::SinglePassBatches,
-                        OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
-                    },
-                    OutputProduction::Batches,
-                ),
-                PlannedAdapter::Collect { .. } => (
-                    match production {
-                        OutputProduction::Streaming => InputConsumption::Streaming,
-                        OutputProduction::Batches => InputConsumption::SinglePassBatches,
-                        OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
-                    },
-                    OutputProduction::FullyMaterialized,
-                ),
-                _ => {
-                    errors.push(PlanValidationError::ExtraMaterializationAdapter {
-                        operation: operation_index,
-                    });
-                    continue;
-                }
+            let downstream_consumptions = outgoing
+                .iter()
+                .filter_map(|dependency| {
+                    let (adapter, _) = input_owners.get(&dependency.destination)?;
+                    let adapter_operation = &plan.operations[adapter.index()];
+                    if !matches!(adapter_operation.kernel, PlannedKernel::Adapter(_))
+                        || adapter_operation.outputs.len() != 1
+                    {
+                        return None;
+                    }
+                    let mut adapter_outgoing = plan
+                        .value_dependencies
+                        .iter()
+                        .filter(|candidate| candidate.source == adapter_operation.outputs[0].value);
+                    let downstream = adapter_outgoing.next()?;
+                    if adapter_outgoing.next().is_some() {
+                        return None;
+                    }
+                    let (consumer, consumption) = input_owners.get(&downstream.destination)?;
+                    (!matches!(
+                        plan.operations[consumer.index()].kernel,
+                        PlannedKernel::Adapter(_)
+                    ))
+                    .then_some(*consumption)
+                })
+                .collect::<Vec<_>>();
+            if downstream_consumptions.len() != outgoing.len() {
+                errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                    operation: operation_index,
+                });
+                continue;
+            }
+            let shared_consumption = if downstream_consumptions.iter().any(|consumption| {
+                matches!(
+                    consumption,
+                    InputConsumption::RandomAccess | InputConsumption::FullyMaterialized
+                )
+            }) {
+                InputConsumption::FullyMaterialized
+            } else {
+                InputConsumption::RewindableBatches
             };
-            if !stable_fanout
-                || operation.inputs[0].consumption != expected_consumption
-                || operation.outputs[0].production != expected_production
+            let expected =
+                MaterializationAdapterPlan::for_contract(*production, shared_consumption);
+            if *actual != expected.adapter {
+                errors.push(PlanValidationError::IncompatibleMaterializationAdapter {
+                    operation: operation_index,
+                    expected: expected.adapter,
+                    actual: actual.clone(),
+                });
+            }
+            if operation.inputs[0].consumption != expected.input_consumption
+                || operation.outputs[0].production != expected.output_production
             {
                 errors.push(
                     PlanValidationError::InvalidMaterializationAdapterSemantics {
@@ -880,7 +1001,17 @@ fn validate_operation_block(
     for operation in pending {
         let operation = &plan.operations[operation.index()];
         for input in &operation.inputs {
-            if input.bound_value.is_none() {
+            if input.bound_value.is_some() || available.contains(&input.value) {
+                continue;
+            }
+            if matches!(operation.kernel, PlannedKernel::Adapter(_)) {
+                errors.push(
+                    PlanValidationError::MaterializationAdapterSourceUnavailable {
+                        operation: operation.stable_id.clone(),
+                        value: input.value,
+                    },
+                );
+            } else {
                 require_available("operation input", input.value, available, errors);
             }
         }
@@ -973,6 +1104,8 @@ fn validate_region(
     operation_count: usize,
     value_count: usize,
     facts: &mut StructuredControlFacts,
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    declared_control_productions: &BTreeMap<ValueRef, OutputProduction>,
 ) {
     match region {
         StructuredControlRegion::Sequence(steps) => {
@@ -981,9 +1114,15 @@ fn validate_region(
                     ControlStep::Operation(index) => {
                         check_operation(errors, "control step", *index, operation_count)
                     }
-                    ControlStep::Region(region) => {
-                        validate_region(region, errors, operation_count, value_count, facts)
-                    }
+                    ControlStep::Region(region) => validate_region(
+                        region,
+                        errors,
+                        operation_count,
+                        value_count,
+                        facts,
+                        productions,
+                        declared_control_productions,
+                    ),
                 }
             }
         }
@@ -994,8 +1133,24 @@ fn validate_region(
             results,
         } => {
             check_value(errors, "if condition", *condition, value_count);
-            validate_region(then_region, errors, operation_count, value_count, facts);
-            validate_region(else_region, errors, operation_count, value_count, facts);
+            validate_region(
+                then_region,
+                errors,
+                operation_count,
+                value_count,
+                facts,
+                productions,
+                declared_control_productions,
+            );
+            validate_region(
+                else_region,
+                errors,
+                operation_count,
+                value_count,
+                facts,
+                productions,
+                declared_control_productions,
+            );
             facts.source("branch condition", *condition);
             let mut destinations = BTreeSet::new();
             for binding in results {
@@ -1028,6 +1183,15 @@ fn validate_region(
                 {
                     errors.push(PlanValidationError::InvalidBranchResultRoles(*binding));
                 }
+                validate_merged_structured_production(
+                    errors,
+                    productions,
+                    declared_control_productions,
+                    "branch result",
+                    binding.destination,
+                    binding.production,
+                    [binding.then_source, binding.else_source],
+                );
                 facts.producer(errors, binding.destination, value_count, "branch result");
                 facts.source("branch then source", binding.then_source);
                 facts.source("branch else source", binding.else_source);
@@ -1039,7 +1203,26 @@ fn validate_region(
             continue_condition,
             max_iterations,
         } => {
-            validate_region(body, errors, operation_count, value_count, facts);
+            for binding in carried {
+                validate_declared_structured_production(
+                    errors,
+                    productions,
+                    declared_control_productions,
+                    "loop body input",
+                    binding.body_input,
+                    binding.production,
+                    binding.initial_source,
+                );
+            }
+            validate_region(
+                body,
+                errors,
+                operation_count,
+                value_count,
+                facts,
+                productions,
+                declared_control_productions,
+            );
             check_value(errors, "loop condition", *continue_condition, value_count);
             facts.source("loop condition", *continue_condition);
             if *max_iterations == 0 {
@@ -1079,6 +1262,15 @@ fn validate_region(
                 if roles.iter().copied().collect::<BTreeSet<_>>().len() != roles.len() {
                     errors.push(PlanValidationError::InvalidLoopCarriedRoles(*binding));
                 }
+                validate_merged_structured_production(
+                    errors,
+                    productions,
+                    declared_control_productions,
+                    "loop result",
+                    binding.result,
+                    binding.production,
+                    [binding.initial_source, binding.next_source],
+                );
                 facts.producer(errors, binding.body_input, value_count, "loop body input");
                 facts.producer(errors, binding.result, value_count, "loop result");
                 facts.source("loop initial source", binding.initial_source);
@@ -1104,6 +1296,12 @@ fn validate_region(
                     binding.caller_destination,
                     value_count,
                 );
+                validate_call_structured_production(
+                    errors,
+                    productions,
+                    declared_control_productions,
+                    binding,
+                );
                 facts.producer(
                     errors,
                     binding.caller_destination,
@@ -1113,6 +1311,136 @@ fn validate_region(
             }
         }
     }
+}
+
+fn validate_declared_structured_production(
+    errors: &mut Vec<PlanValidationError>,
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    declarations: &BTreeMap<ValueRef, OutputProduction>,
+    producer: &'static str,
+    destination: ValueRef,
+    declared: Option<OutputProduction>,
+    source: ValueRef,
+) {
+    let Some(declared) = declared else {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer,
+            value: destination,
+        });
+        return;
+    };
+    let Some(actual) = productions.get(&source).copied() else {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer,
+            value: source,
+        });
+        return;
+    };
+    if !declarations.contains_key(&destination) {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer,
+            value: destination,
+        });
+        return;
+    }
+    if actual != declared || declarations.get(&destination).copied() != Some(actual) {
+        errors.push(PlanValidationError::StructuredProductionMismatch {
+            producer,
+            value: destination,
+            expected: actual,
+            actual: declared,
+        });
+        return;
+    }
+    productions.insert(destination, actual);
+}
+
+fn validate_merged_structured_production<const N: usize>(
+    errors: &mut Vec<PlanValidationError>,
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    declarations: &BTreeMap<ValueRef, OutputProduction>,
+    producer: &'static str,
+    destination: ValueRef,
+    declared: Option<OutputProduction>,
+    sources: [ValueRef; N],
+) {
+    let Some(declared) = declared else {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer,
+            value: destination,
+        });
+        return;
+    };
+    let actual = sources
+        .iter()
+        .filter_map(|source| productions.get(source).copied())
+        .collect::<BTreeSet<_>>();
+    if let Some(value) = sources
+        .iter()
+        .copied()
+        .find(|source| !productions.contains_key(source))
+    {
+        errors.push(PlanValidationError::MissingStructuredProductionFact { producer, value });
+        return;
+    }
+    if actual.len() != 1 {
+        errors.push(PlanValidationError::ConflictingStructuredProductions {
+            producer,
+            value: destination,
+            productions: actual.into_iter().collect(),
+        });
+        return;
+    }
+    let actual = *actual.first().expect("one production");
+    if !declarations.contains_key(&destination) {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer,
+            value: destination,
+        });
+        return;
+    }
+    if actual != declared || declarations.get(&destination).copied() != Some(actual) {
+        errors.push(PlanValidationError::StructuredProductionMismatch {
+            producer,
+            value: destination,
+            expected: actual,
+            actual: declared,
+        });
+        return;
+    }
+    productions.insert(destination, actual);
+}
+
+fn validate_call_structured_production(
+    errors: &mut Vec<PlanValidationError>,
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    declarations: &BTreeMap<ValueRef, OutputProduction>,
+    binding: &CallResultBinding,
+) {
+    let Some(actual) = binding.production else {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer: "call result",
+            value: binding.caller_destination,
+        });
+        return;
+    };
+    let Some(expected) = declarations.get(&binding.caller_destination).copied() else {
+        errors.push(PlanValidationError::MissingStructuredProductionFact {
+            producer: "call result",
+            value: binding.caller_destination,
+        });
+        return;
+    };
+    if expected != actual {
+        errors.push(PlanValidationError::StructuredProductionMismatch {
+            producer: "call result",
+            value: binding.caller_destination,
+            expected,
+            actual,
+        });
+        return;
+    }
+    productions.insert(binding.caller_destination, actual);
 }
 
 fn check_operation(
@@ -1282,6 +1610,14 @@ pub enum PlanValidationError {
     },
     ValueDependencySelfLoop(ValueRef),
     ValueDependencyCycle,
+    DuplicateValueDependencyAlias {
+        destination: ValueRef,
+        sources: Box<[ValueRef]>,
+    },
+    ConflictingAliasProductions {
+        destination: ValueRef,
+        productions: Box<[OutputProduction]>,
+    },
     MissingMaterializationAdapter {
         source: ValueRef,
         destination: ValueRef,
@@ -1296,6 +1632,10 @@ pub enum PlanValidationError {
     },
     InvalidMaterializationAdapterSemantics {
         operation: OperationIndex,
+    },
+    MaterializationAdapterSourceUnavailable {
+        operation: OperationStableId,
+        value: ValueRef,
     },
     DuplicateValueSource(ValueRef),
     EffectDependencySelfLoop(OperationIndex),
@@ -1330,6 +1670,21 @@ pub enum PlanValidationError {
     MissingStructuredBindingSource {
         context: &'static str,
         value: ValueRef,
+    },
+    MissingStructuredProductionFact {
+        producer: &'static str,
+        value: ValueRef,
+    },
+    ConflictingStructuredProductions {
+        producer: &'static str,
+        value: ValueRef,
+        productions: Box<[OutputProduction]>,
+    },
+    StructuredProductionMismatch {
+        producer: &'static str,
+        value: ValueRef,
+        expected: OutputProduction,
+        actual: OutputProduction,
     },
     InvalidResultName(Box<str>),
     DuplicateResultName(Box<str>),

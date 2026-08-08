@@ -1,20 +1,24 @@
 use crate::error::AppError;
-use crate::node_system::analysis::{
-    CorrelationContext, RunId, SpanKind, SpanStatus, TraceRecord, TraceValue,
-};
+use crate::node_system::analysis::{CorrelationContext, RunId, SpanKind, SpanOutcome, TraceSpan};
 use crate::project::{GraphResourcePath, ProjectInstanceId, ProjectState, TraceQueryError};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::State;
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TraceRecordDto {
-    sequence: String,
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TraceSpanDto {
+    span_id: String,
+    parent_span_id: Option<String>,
+    run_id: Option<String>,
+    operation_id: Option<String>,
+    activation_id: Option<String>,
+    attempt_id: Option<String>,
     kind: TraceKindDto,
-    status: TraceStatusDto,
+    started_at: String,
+    finished_at: String,
+    outcome: TraceOutcomeDto,
     correlation: TraceCorrelationDto,
-    fields: BTreeMap<String, TraceValueDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -24,24 +28,30 @@ enum TraceKindDto {
     Analysis,
     Lowering,
     Run,
-    Operation,
-    RelationalBackend,
+    OperationAttempt,
     ResourceAcquire,
+    AdapterIo,
+    ResultPublication,
     Cleanup,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum TraceStatusDto {
-    Started,
-    Succeeded,
-    Failed,
-    Cancelled,
-    Blocked,
+enum TraceOutcomeDto {
+    Success,
+    Error,
+    Cancellation,
+    Timeout,
+    Retry,
+    Cleanup {
+        error_count: String,
+        panicking: bool,
+    },
+    InternalAborted,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct TraceCorrelationDto {
     project_session_id: String,
     graph_path: String,
@@ -56,22 +66,20 @@ struct TraceCorrelationDto {
     parent_call: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-enum TraceValueDto {
-    Integer { value: i64 },
-    Text { value: String },
-    Redacted,
-}
-
-impl From<TraceRecord> for TraceRecordDto {
-    fn from(record: TraceRecord) -> Self {
+impl From<TraceSpan> for TraceSpanDto {
+    fn from(span: TraceSpan) -> Self {
         Self {
-            sequence: record.sequence.to_string(),
-            kind: record.event.kind.into(),
-            status: record.event.status.into(),
-            correlation: record.event.correlation.into(),
-            fields: public_fields(record.event.fields),
+            span_id: span.span_id.get().to_string(),
+            parent_span_id: span.parent_span_id.map(|id| id.get().to_string()),
+            run_id: span.run_id.map(|id| id.get().to_string()),
+            operation_id: span.operation_id.map(|id| id.as_str().to_owned()),
+            activation_id: span.activation_id.map(|id| id.get().to_string()),
+            attempt_id: span.attempt_id.map(|id| id.get().to_string()),
+            kind: span.kind.into(),
+            started_at: span.started_at.get().to_string(),
+            finished_at: span.finished_at.get().to_string(),
+            outcome: span.outcome.into(),
+            correlation: span.correlation.into(),
         }
     }
 }
@@ -83,22 +91,31 @@ impl From<SpanKind> for TraceKindDto {
             SpanKind::Analysis => Self::Analysis,
             SpanKind::Lowering => Self::Lowering,
             SpanKind::Run => Self::Run,
-            SpanKind::Operation => Self::Operation,
-            SpanKind::RelationalBackend => Self::RelationalBackend,
+            SpanKind::OperationAttempt => Self::OperationAttempt,
             SpanKind::ResourceAcquire => Self::ResourceAcquire,
+            SpanKind::AdapterIo => Self::AdapterIo,
+            SpanKind::ResultPublication => Self::ResultPublication,
             SpanKind::Cleanup => Self::Cleanup,
         }
     }
 }
 
-impl From<SpanStatus> for TraceStatusDto {
-    fn from(status: SpanStatus) -> Self {
-        match status {
-            SpanStatus::Started => Self::Started,
-            SpanStatus::Succeeded => Self::Succeeded,
-            SpanStatus::Failed => Self::Failed,
-            SpanStatus::Cancelled => Self::Cancelled,
-            SpanStatus::Blocked => Self::Blocked,
+impl From<SpanOutcome> for TraceOutcomeDto {
+    fn from(outcome: SpanOutcome) -> Self {
+        match outcome {
+            SpanOutcome::Success => Self::Success,
+            SpanOutcome::Error => Self::Error,
+            SpanOutcome::Cancellation => Self::Cancellation,
+            SpanOutcome::Timeout => Self::Timeout,
+            SpanOutcome::Retry => Self::Retry,
+            SpanOutcome::Cleanup {
+                error_count,
+                panicking,
+            } => Self::Cleanup {
+                error_count: error_count.to_string(),
+                panicking,
+            },
+            SpanOutcome::InternalAborted => Self::InternalAborted,
         }
     }
 }
@@ -125,26 +142,6 @@ impl From<CorrelationContext> for TraceCorrelationDto {
     }
 }
 
-fn public_fields(fields: BTreeMap<Box<str>, TraceValue>) -> BTreeMap<String, TraceValueDto> {
-    fields
-        .into_iter()
-        .filter_map(|(key, value)| {
-            allowed_public_field(&key, value).map(|value| (key.into(), value))
-        })
-        .collect()
-}
-
-fn allowed_public_field(key: &str, value: TraceValue) -> Option<TraceValueDto> {
-    match (key, value) {
-        ("backendId", TraceValue::Text(value)) => Some(TraceValueDto::Text {
-            value: value.into(),
-        }),
-        ("subplanIndex", TraceValue::Integer(value)) => Some(TraceValueDto::Integer { value }),
-        ("backendId" | "subplanIndex", TraceValue::Redacted) => Some(TraceValueDto::Redacted),
-        _ => None,
-    }
-}
-
 fn trace_error(error: TraceQueryError) -> AppError {
     match error {
         TraceQueryError::ProjectStale => AppError::new(
@@ -159,24 +156,28 @@ fn trace_error(error: TraceQueryError) -> AppError {
 }
 
 fn parse_run_id(run_id: &str) -> Result<RunId, AppError> {
-    run_id.parse::<u64>().map(RunId::new).map_err(|_| {
-        AppError::new(
-            "invalid_opaque_id",
-            "runId must be an unsigned decimal string.",
-        )
-    })
+    run_id
+        .parse::<u64>()
+        .ok()
+        .and_then(|id| RunId::try_new(id).ok())
+        .ok_or_else(|| {
+            AppError::new(
+                "invalid_opaque_id",
+                "runId must be a non-zero unsigned decimal string.",
+            )
+        })
 }
 
 pub(crate) fn list_graph_traces_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<Vec<TraceRecordDto>, AppError> {
+) -> Result<Vec<TraceSpanDto>, AppError> {
     let graph_path = GraphResourcePath::new(graph_path)
         .map_err(|_| AppError::new("invalid_graph_path", "graphPath is invalid."))?;
     state
         .list_graph_traces(&project_instance_id, &graph_path)
-        .map(|records| records.into_iter().map(TraceRecordDto::from).collect())
+        .map(|spans| spans.into_iter().map(TraceSpanDto::from).collect())
         .map_err(trace_error)
 }
 
@@ -184,10 +185,10 @@ pub(crate) fn get_run_trace_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     run_id: String,
-) -> Result<Vec<TraceRecordDto>, AppError> {
+) -> Result<Vec<TraceSpanDto>, AppError> {
     state
         .get_run_trace(&project_instance_id, parse_run_id(&run_id)?)
-        .map(|records| records.into_iter().map(TraceRecordDto::from).collect())
+        .map(|spans| spans.into_iter().map(TraceSpanDto::from).collect())
         .map_err(trace_error)
 }
 
@@ -196,7 +197,7 @@ pub fn list_graph_traces(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<Vec<TraceRecordDto>, AppError> {
+) -> Result<Vec<TraceSpanDto>, AppError> {
     list_graph_traces_from_state(state.inner(), project_instance_id, graph_path)
 }
 
@@ -205,6 +206,6 @@ pub fn get_run_trace(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     run_id: String,
-) -> Result<Vec<TraceRecordDto>, AppError> {
+) -> Result<Vec<TraceSpanDto>, AppError> {
     get_run_trace_from_state(state.inner(), project_instance_id, run_id)
 }

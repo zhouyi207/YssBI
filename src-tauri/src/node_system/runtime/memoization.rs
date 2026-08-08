@@ -1,4 +1,4 @@
-use super::{ArtifactKind, CancellationToken, RunError, RuntimeValue};
+use super::{ArtifactKind, CancellationToken, MaterializedArtifact, RunError, RuntimeValue};
 use crate::node_system::analysis::ResourceVersionSet;
 use crate::node_system::plan::{
     CallArgumentBinding, CallResultBinding, ExecutionPlan, ExecutionSemanticsVersion,
@@ -16,10 +16,15 @@ impl ValueFingerprint {
     pub fn from_runtime_value(value: &RuntimeValue) -> Option<Self> {
         let digest = match value {
             RuntimeValue::Scalar(value) => hash_canonical("yssbi.runtime-value.scalar.v1", value),
-            RuntimeValue::Artifact(artifact) => hash_canonical(
-                "yssbi.runtime-value.artifact.v1",
-                &(artifact_kind_name(artifact.kind()), artifact.values()),
-            ),
+            RuntimeValue::Artifact(artifact) => {
+                let MaterializedArtifact::InMemory(values) = artifact.materialized() else {
+                    return None;
+                };
+                hash_canonical(
+                    "yssbi.runtime-value.artifact.v1",
+                    &(artifact_kind_name(artifact.kind()), values),
+                )
+            }
             RuntimeValue::Stream(_) => return None,
         }
         .expect("runtime values have a canonical JSON representation");
@@ -172,6 +177,42 @@ impl RunMemoization {
         Self::default()
     }
 
+    pub(crate) fn completed(&self, key: &OperationMemoKey) -> Option<Box<[RuntimeValue]>> {
+        let owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
+        let flight = owner.entries.get(key)?;
+        let state = flight
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        match &*state {
+            FlightState::Complete(outputs) => Some(outputs.clone()),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn commit_completed(&self, key: OperationMemoKey, outputs: &[RuntimeValue]) -> bool {
+        let cacheable = outputs.iter().all(|value| match value {
+            RuntimeValue::Scalar(_) => true,
+            RuntimeValue::Artifact(artifact) => artifact.is_memoization_complete(),
+            RuntimeValue::Stream(_) => false,
+        });
+        if !cacheable {
+            return false;
+        }
+        let mut owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
+        if owner.finalized {
+            return false;
+        }
+        let flight = Arc::new(Flight::producing());
+        *flight
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) =
+            FlightState::Complete(outputs.to_vec().into_boxed_slice());
+        owner.entries.insert(key, flight);
+        true
+    }
+
     pub fn get_or_produce(
         &self,
         key: OperationMemoKey,
@@ -239,9 +280,11 @@ impl RunMemoization {
                     };
                 }
             };
-            let cacheable = outputs
-                .iter()
-                .all(|value| !matches!(value, RuntimeValue::Stream(_)));
+            let cacheable = outputs.iter().all(|value| match value {
+                RuntimeValue::Scalar(_) => true,
+                RuntimeValue::Artifact(artifact) => artifact.is_memoization_complete(),
+                RuntimeValue::Stream(_) => false,
+            });
             let mut owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
             if owner.finalized {
                 guard.disarm();

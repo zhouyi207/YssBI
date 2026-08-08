@@ -107,6 +107,24 @@ describe('execution wire parsers', () => {
       .toEqual(Object.keys(RUN_EVENT_KIND_TYPES));
   });
 
+  it('requires exact decimal attempt identity on every operation event', () => {
+    const operations = executionWire.runEvents.filter(
+      (event) => event.kind.type === 'operationStarted'
+        || event.kind.type === 'operationCompleted'
+        || event.kind.type === 'operationErrored',
+    );
+    expect(operations.length).toBe(3);
+    for (const operation of operations) {
+      expect(operation.kind).toHaveProperty('attemptId');
+      const missing = clone(operation);
+      delete record(record(missing).kind).attemptId;
+      expect(() => parseRunEvent(missing)).toThrow();
+      const wrong = clone(operation);
+      record(record(wrong).kind).attemptId = 1;
+      expect(() => parseRunEvent(wrong)).toThrow();
+    }
+  });
+
   it.each(executionWire.runEvents)('rejects extra keys on RunEvent $kind.type', (valid) => {
     expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
@@ -132,6 +150,25 @@ describe('execution wire parsers', () => {
     delete record(record(missingGeneration).kind).generation;
     expect(() => parseRunEvent(missingGeneration)).toThrow();
     expect(parseRunEvent(outputReady)).toEqual(outputReady);
+  });
+
+  it('strictly parses typed deadline phases and rejects malformed timeout wire', () => {
+    const valid = executionWire.runEvents[0];
+    const deadline = {
+      ...valid,
+      kind: { type: 'runErrored', code: 'deadlineExceeded', phase: 'queueWait' },
+    };
+
+    expect(parseRunEvent(deadline)).toEqual(deadline);
+    for (const kind of [
+      { type: 'runErrored', code: 'deadlineExceeded' },
+      { type: 'runErrored', code: 'deadlineExceeded', phase: null },
+      { type: 'runErrored', code: 'deadlineExceeded', phase: 'unknown' },
+      { type: 'runErrored', code: 'kernelFailed', phase: 'kernel' },
+      { type: 'runErrored', code: 'kernelFailed' },
+    ]) {
+      expect(() => parseRunEvent({ ...valid, kind })).toThrow();
+    }
   });
 
   it('rejects unknown and malformed run event variants', () => {

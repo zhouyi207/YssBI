@@ -36,7 +36,9 @@ describe('createExecutionStreamDrain', () => {
     const wait = drain.waitForStreamEnd();
 
     drain.onmessage(runEvent({ type: 'runStarted' }));
-    drain.onmessage(runEvent({ type: 'operationStarted', operationIndex: 0, activationId: '1' }));
+    drain.onmessage(runEvent({
+          type: 'operationStarted', operationIndex: 0, activationId: '1', attemptId: '1',
+        }));
     expect(recording).toEqual(['runStarted', 'operationStarted']);
 
     let settled = false;
@@ -53,7 +55,7 @@ describe('createExecutionStreamDrain', () => {
   });
 
   it.each([
-    { type: 'runErrored', code: 'kernelFailed' } as const,
+    { type: 'runErrored', code: 'kernelFailed', phase: null } as const,
     { type: 'runCancelled' } as const,
   ])('treats $type as terminal', async (terminal) => {
     const drain = createExecutionStreamDrain();
@@ -66,7 +68,7 @@ describe('createExecutionStreamDrain', () => {
 
   it.each([
     { type: 'runCompleted' } as const,
-    { type: 'runErrored', code: 'kernelFailed' } as const,
+    { type: 'runErrored', code: 'kernelFailed', phase: null } as const,
     { type: 'runCancelled' } as const,
   ])('settles $type transport and rejects the waiter when the consumer throws', async (terminal) => {
     const consumerError = new Error(`consumer failed on ${terminal.type}`);

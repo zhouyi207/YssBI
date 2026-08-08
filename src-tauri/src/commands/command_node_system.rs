@@ -725,17 +725,30 @@ fn get_result_source_value_from_state(
     source_id: &str,
 ) -> Result<Option<ResultSourceValueDto>, AppError> {
     let source_id = parse_opaque_u64("sourceId", source_id)?;
-    state
+    let snapshot = state
         .result_source_value(ResultSourceId::new(source_id))
-        .map_err(AppError::from)
-        .map(|snapshot| {
-            snapshot.map(|snapshot| match snapshot.as_ref() {
-                ArtifactSnapshot::Value(value) => ResultSourceValueDto::Value(value.clone()),
-                ArtifactSnapshot::Sequence(values) => {
-                    ResultSourceValueDto::Sequence(values.clone())
-                }
-            })
+        .map_err(AppError::from)?;
+    snapshot
+        .map(|snapshot| match snapshot.as_ref() {
+            ArtifactSnapshot::Value(value) => Ok(ResultSourceValueDto::Value(value.clone())),
+            ArtifactSnapshot::Sequence(values) => {
+                Ok(ResultSourceValueDto::Sequence(values.clone()))
+            }
+            ArtifactSnapshot::Spilled(_) => Err(AppError::new(
+                "result_source_requires_paging",
+                "Disk-backed result sources must be read through the paged API",
+            )),
+            ArtifactSnapshot::RuntimeArtifact(artifact) => artifact
+                .in_memory_values()
+                .map(|values| ResultSourceValueDto::Sequence(values.to_vec().into_boxed_slice()))
+                .ok_or_else(|| {
+                    AppError::new(
+                        "result_source_requires_paging",
+                        "Disk-backed result sources must be read through the paged API",
+                    )
+                }),
         })
+        .transpose()
 }
 
 #[tauri::command]
@@ -963,6 +976,7 @@ mod tests {
             node_id: None,
             node_type_id: None,
             parent_call: None,
+            trace_parent_span_id: None,
         };
         store.publish_snapshot(
             run_id,
@@ -1527,6 +1541,7 @@ mod tests {
             node_id: None,
             node_type_id: None,
             parent_call: Some(ParentCallId::new(unsafe_id)),
+            trace_parent_span_id: None,
         };
         let operation = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
             correlation: correlation.clone(),
@@ -1534,6 +1549,7 @@ mod tests {
             kind: RunEventKind::OperationStarted {
                 operation_index: 3,
                 activation_id: unsafe_id,
+                attempt_id: unsafe_id,
             },
         });
         let preview = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {

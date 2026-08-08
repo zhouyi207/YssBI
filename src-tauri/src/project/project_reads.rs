@@ -268,7 +268,6 @@ fn build_catalog_snapshots(
             resource_revision: revision,
             create_args: ResourceBoundCreateArgsDto::Function,
             technical_terms: vec!["call".into(), "function".into()],
-            pinyin: None,
         });
         validation_resources.insert(
             resource_path,
@@ -331,7 +330,6 @@ fn build_catalog_snapshots(
                 resource_revision: revision,
                 create_args: ResourceBoundCreateArgsDto::Variable,
                 technical_terms: vec!["variable".into()],
-                pinyin: None,
             });
         }
         validation_resources.insert(
@@ -358,7 +356,6 @@ fn build_catalog_snapshots(
             resource_revision: revision,
             create_args: ResourceBoundCreateArgsDto::Database,
             technical_terms: vec!["dataframe".into(), "database".into()],
-            pinyin: None,
         });
         validation_resources.insert(
             resource_path,
@@ -1191,7 +1188,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .signature
-            .return_type = Some("DiskReturn".into());
+            .return_type = Some("int64".into());
         disk.variables
             .insert(unloaded_variable_id, unloaded_variable);
         disk.variables
@@ -1203,7 +1200,7 @@ mod tests {
             GraphResourceDocument::new("Authoritative loaded", GraphDocumentKind::Function);
         loaded.function.as_mut().unwrap().revision =
             crate::node_system::document::ResourceRevision::new(7);
-        loaded.function.as_mut().unwrap().signature.return_type = Some("LoadedReturn".into());
+        loaded.function.as_mut().unwrap().signature.return_type = Some("float64".into());
         authoritative.graphs.insert(loaded_path.clone(), loaded);
         authoritative
             .variables
@@ -1548,7 +1545,7 @@ mod tests {
             panic!("unloaded function fact")
         };
         assert_eq!(revision.get(), 3);
-        assert_eq!(signature.return_type.as_deref(), Some("DiskReturn"));
+        assert_eq!(signature.return_type.as_deref(), Some("int64"));
         assert_eq!(allowed_node_type_id.as_str(), "yssbi.project.function.call");
         assert_eq!(parameter_binding.as_ref(), "target");
 
@@ -1567,7 +1564,7 @@ mod tests {
             panic!("loaded function fact")
         };
         assert_eq!(revision.get(), 7);
-        assert_eq!(signature.return_type.as_deref(), Some("LoadedReturn"));
+        assert_eq!(signature.return_type.as_deref(), Some("float64"));
 
         for variable_id in [unloaded_variable_id, loaded_variable_id] {
             let variable = snapshot

@@ -65,7 +65,8 @@ describe('CatalogService', () => {
           styleId: 'default',
           aliases: ['加法'],
           technicalTerms: ['Int64'],
-          pinyin: 'zheng shu xiang jia',
+          backendSearchText: ['integer addition'],
+          resourceNames: [],
           ports: [
             { key: 'a', label: 'A', direction: 'input', kind: 'data' },
           ],
@@ -76,7 +77,6 @@ describe('CatalogService', () => {
             kind: 'static',
             nodeTypeId: 'yssbi.numeric.add.int64',
           },
-          searchText: 'yssbi numeric add int64 整数相加 加法 int64',
         },
       ],
     };
@@ -115,10 +115,11 @@ describe('CatalogService', () => {
         styleId: 'builtin.dataframe',
         aliases: ['select columns'],
         technicalTerms: ['select columns'],
+        backendSearchText: ['project dataframe', 'select columns'],
+        resourceNames: [],
         ports: [],
         parameters: [{ key: 'columns', title: 'Columns', description: null }],
         creation,
-        searchText: 'project dataframe select columns',
       }],
     });
 
@@ -143,6 +144,8 @@ describe('CatalogService', () => {
         styleId: 'call',
         aliases: ['Helper'],
         technicalTerms: [],
+        backendSearchText: ['call helper'],
+        resourceNames: ['Helper'],
         ports: [{ key: 'exec', label: 'Exec', direction: 'input', kind: 'control' }],
         parameters: [{ key: 'target', title: 'Target', description: null }],
         resourcePath: 'functions/Helper.yssbi-function',
@@ -154,7 +157,6 @@ describe('CatalogService', () => {
           resourceRevision: 3,
           createArgs: { kind: 'function' },
         },
-        searchText: 'call helper',
       }],
     };
     vi.mocked(invoke).mockResolvedValue(catalog);
@@ -173,13 +175,12 @@ describe('CatalogService', () => {
       items: [{
         nodeTypeId: 'function.call', title: 'Call A', description: null, documentation: null,
         categoryId: 'functions', iconId: 'function', styleId: 'call', aliases: [],
-        technicalTerms: [], ports: [], parameters: [],
+        technicalTerms: [], backendSearchText: [], resourceNames: [], ports: [], parameters: [],
         resourcePath: 'functions/A', resourceRevision: 2,
         creation: {
           kind: 'resourceBound', nodeTypeId: 'function.call', resourcePath: 'functions/B',
           resourceRevision: 2, createArgs: { kind: 'function' },
         },
-        searchText: 'call a',
       }],
     });
 
@@ -230,14 +231,27 @@ describe('CatalogService', () => {
         styleId: 'call',
         aliases: [],
         technicalTerms: [],
+        backendSearchText: [],
+        resourceNames: [],
         ports: [],
         parameters: [],
         creation,
-        searchText: 'call a',
       }],
     });
 
     await expect(CatalogService.getLocalizedCatalog('project-instance-1', 'en-US'))
       .rejects.toThrow('Invalid localized node catalog response');
+  });
+
+  it.each(['pinyin', 'searchText'])('rejects the singular legacy %s field', async (field) => {
+    const catalog = structuredClone(localizedCatalog) as Record<string, unknown>;
+    const items = catalog.items as Record<string, unknown>[];
+    items[0][field] = 'legacy flattened search metadata';
+    vi.mocked(invoke).mockResolvedValue(catalog);
+
+    await expect(CatalogService.getLocalizedCatalog(
+      catalog.projectInstanceId as string,
+      catalog.locale as string,
+    )).rejects.toThrow('Invalid localized node catalog response');
   });
 });

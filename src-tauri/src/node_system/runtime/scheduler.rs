@@ -1,25 +1,31 @@
 use super::relational::RunRelationalBackends;
+use super::scheduling::ClassScheduler;
 use super::{
-    ActivationId, CancellationToken, CompiledParameterStore, DemandFingerprint, FrameId,
-    KernelContext, KernelErrorKind, KernelRegistry, NOOP_RUN_EVENT_SINK, OperationMemoKey,
-    PendingResultSource, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
-    RelationalContext, ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore,
-    RunError, RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunResourceSet,
-    RunResult, RuntimeValue, execute_planned_adapter,
+    ACTIVATION_IDS, ActivationId, ActivationIdAllocator, CancellationToken, CompiledParameterStore,
+    DemandFingerprint, FrameId, KernelContext, KernelErrorKind, KernelRegistry,
+    NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey, PendingResultSource,
+    ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
+    ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore, RunDeadline,
+    RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions,
+    RunPhase, RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
+    SchedulingPolicy, check_terminal, execute_planned_adapter,
 };
 use crate::node_system::analysis::{
-    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RedactionPolicy, ResourceVersionSet, RunId,
-    SpanEvent, SpanKind, SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
+    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
+    SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
+    start_span_safely,
 };
 use crate::node_system::plan::{
-    CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan, FunctionPlanHandle,
-    GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication, RelationalSubplanIndex,
-    StructuredControlRegion, ValueRef,
+    AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
+    FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
+    RelationalSubplanIndex, StructuredControlRegion, ValueRef, WorkloadClass,
 };
-use crate::node_system::protocol::{CachePolicy, Value};
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 const DEFAULT_RECURSION_LIMIT: usize = 64;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
@@ -30,6 +36,31 @@ static NEXT_PARENT_CALL_ID: AtomicU64 = AtomicU64::new(1);
 pub(crate) enum SchedulerCheckpoint {
     ResultSourceStaged,
     FinalResultPublication,
+    WorkerOutcomeProduced,
+    AdmissionBlocked(WorkloadClass),
+    RetryBackoff {
+        operation: OperationIndex,
+        activation: ActivationId,
+        attempt: AttemptId,
+    },
+    AttemptPrepared {
+        operation: OperationIndex,
+        activation: ActivationId,
+        attempt: AttemptId,
+    },
+    AdmissionBookkept {
+        operation: OperationIndex,
+        activation: ActivationId,
+        attempt: AttemptId,
+    },
+    AdmissionRolledBack {
+        operation: OperationIndex,
+        attempt: AttemptId,
+        running_count: usize,
+        tracked_running: usize,
+        memo_owned: bool,
+        frame_attempt: Option<AttemptId>,
+    },
 }
 
 enum PendingSourceEvent {
@@ -45,6 +76,258 @@ enum PendingSourceEvent {
 struct PendingSourcePublication {
     source: PendingResultSource,
     event: PendingSourceEvent,
+}
+
+struct PreparedOperation {
+    operation: OperationIndex,
+    owner_activation: ActivationId,
+    activation: ActivationId,
+    attempt: AttemptId,
+    inputs: Box<[RuntimeValue]>,
+    memo_key: Option<OperationMemoKey>,
+    owns_memo_flight: bool,
+    class: WorkloadClass,
+}
+
+struct DelayedRetry {
+    eligible_at: Instant,
+    tie_break: u64,
+    operation: OperationIndex,
+    owner_activation: ActivationId,
+    attempt: AttemptId,
+    inputs: Box<[RuntimeValue]>,
+    memo_key: Option<OperationMemoKey>,
+    class: WorkloadClass,
+}
+
+impl PartialEq for DelayedRetry {
+    fn eq(&self, other: &Self) -> bool {
+        (self.eligible_at, self.tie_break) == (other.eligible_at, other.tie_break)
+    }
+}
+
+impl Eq for DelayedRetry {}
+
+impl PartialOrd for DelayedRetry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DelayedRetry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.eligible_at, self.tie_break).cmp(&(other.eligible_at, other.tie_break))
+    }
+}
+
+struct RunningOperation {
+    class: WorkloadClass,
+    owner_activation: ActivationId,
+    activation: ActivationId,
+    attempt: AttemptId,
+    inputs: Box<[RuntimeValue]>,
+    memo_key: Option<OperationMemoKey>,
+}
+
+struct AdmissionBookkeeping {
+    operation: OperationIndex,
+    class: WorkloadClass,
+    activation_key: MemoKey,
+    previous_attempt: Option<AttemptId>,
+    memo_key: Option<OperationMemoKey>,
+}
+
+struct OperationWorkerContext<'a> {
+    run_id: RunId,
+    frame_id: FrameId,
+    plan: &'a ExecutionPlan,
+    kernels: &'a KernelRegistry,
+    compiled_parameters: Option<&'a CompiledParameterStore>,
+    resources: &'a RunResourceSet,
+    resource_owner: &'a RunResourceOwner,
+    relational_backends: &'a RunRelationalBackends,
+    cancellation: &'a CancellationToken,
+    deadline: Option<RunDeadline>,
+    run_parent_span_id: SpanId,
+    parent_call: Option<ParentCallId>,
+    #[cfg(test)]
+    checkpoint:
+        Option<&'a Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>>,
+}
+
+struct WorkerCompletion {
+    completed_at: Instant,
+    completion: OperationCompletion,
+    trace_spans: Box<[TraceSpan]>,
+    panic: Option<Box<dyn std::any::Any + Send>>,
+}
+
+struct SchedulerSignal {
+    generation: Mutex<u64>,
+    ready: Arc<Condvar>,
+}
+
+impl SchedulerSignal {
+    fn new(cancellation: &CancellationToken) -> Self {
+        let ready = Arc::new(Condvar::new());
+        cancellation.register_waiter(&ready);
+        Self {
+            generation: Mutex::new(0),
+            ready,
+        }
+    }
+
+    fn notify(&self) {
+        let mut generation = self
+            .generation
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        *generation = generation.saturating_add(1);
+        drop(generation);
+        self.ready.notify_all();
+    }
+}
+
+#[derive(Default)]
+struct WorkerTrace(Mutex<Vec<TraceSpan>>);
+
+impl WorkerTrace {
+    fn into_spans(self) -> Box<[TraceSpan]> {
+        self.0
+            .into_inner()
+            .unwrap_or_else(|error| error.into_inner())
+            .into_boxed_slice()
+    }
+}
+
+impl TraceSink for WorkerTrace {
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, span: TraceSpan) {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(span);
+    }
+}
+
+struct WorkerQueue<T> {
+    capacity: usize,
+    state: Mutex<WorkerQueueState<T>>,
+    ready: Condvar,
+    space: Condvar,
+    cancellation: CancellationToken,
+    deadline: Option<RunDeadline>,
+}
+
+struct WorkerQueueState<T> {
+    closed: bool,
+    jobs: VecDeque<T>,
+}
+
+struct WorkerQueueCloseGuard<'a, T>(&'a WorkerQueue<T>);
+
+impl<T> Drop for WorkerQueueCloseGuard<'_, T> {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+impl<T> WorkerQueue<T> {
+    fn new(
+        capacity: usize,
+        cancellation: CancellationToken,
+        deadline: Option<RunDeadline>,
+    ) -> Self {
+        Self {
+            capacity,
+            state: Mutex::new(WorkerQueueState {
+                closed: false,
+                jobs: VecDeque::new(),
+            }),
+            ready: Condvar::new(),
+            space: Condvar::new(),
+            cancellation,
+            deadline,
+        }
+    }
+
+    fn push(&self, job: T) -> Result<(), T> {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if self.deadline.is_none() {
+            state = self
+                .space
+                .wait_while(state, |state| {
+                    !state.closed && state.jobs.len() == self.capacity
+                })
+                .unwrap_or_else(|error| error.into_inner());
+        } else {
+            while !state.closed && state.jobs.len() == self.capacity {
+                let Some(deadline) = self.deadline else {
+                    unreachable!("untimed queue wait handled above");
+                };
+                let Ok(remaining) = deadline.remaining(&self.cancellation, RunPhase::QueueWait)
+                else {
+                    return Err(job);
+                };
+                let (next, _) = self
+                    .space
+                    .wait_timeout(state, remaining)
+                    .unwrap_or_else(|error| error.into_inner());
+                state = next;
+            }
+            if check_terminal(&self.cancellation, self.deadline, RunPhase::QueueWait).is_err() {
+                return Err(job);
+            }
+        }
+        if state.closed {
+            return Err(job);
+        }
+        state.jobs.push_back(job);
+        drop(state);
+        self.ready.notify_one();
+        Ok(())
+    }
+
+    fn pop(&self) -> Option<T> {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if self.deadline.is_none() {
+            state = self
+                .ready
+                .wait_while(state, |state| !state.closed && state.jobs.is_empty())
+                .unwrap_or_else(|error| error.into_inner());
+        } else {
+            while !state.closed && state.jobs.is_empty() {
+                let Some(deadline) = self.deadline else {
+                    unreachable!("untimed queue wait handled above");
+                };
+                let Ok(remaining) = deadline.remaining(&self.cancellation, RunPhase::QueueWait)
+                else {
+                    return None;
+                };
+                let (next, _) = self
+                    .ready
+                    .wait_timeout(state, remaining)
+                    .unwrap_or_else(|error| error.into_inner());
+                state = next;
+            }
+        }
+        let job = state.jobs.pop_front();
+        if job.is_some() {
+            self.space.notify_one();
+        }
+        job
+    }
+
+    fn close(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        state.closed = true;
+        drop(state);
+        self.ready.notify_all();
+        self.space.notify_all();
+    }
 }
 
 pub trait FunctionPlanProvider: Send + Sync {
@@ -125,6 +408,21 @@ fn validate_published_call(
             "function result ABI is out of bounds or not statically producible".into(),
         ));
     }
+    if abi.results.keys().collect::<BTreeSet<_>>()
+        != abi.result_productions.keys().collect::<BTreeSet<_>>()
+    {
+        return Err(invalid(
+            "function result ABI production keys are stale".into(),
+        ));
+    }
+    for (result, value) in &abi.results {
+        let declared = abi.result_productions[result];
+        if source_facts.production(*value) != Some(declared) {
+            return Err(invalid(
+                "function result ABI production does not match its plan".into(),
+            ));
+        }
+    }
 
     let argument_destinations = arguments
         .iter()
@@ -153,6 +451,20 @@ fn validate_published_call(
             "Call results do not exactly match the current function ABI".into(),
         ));
     }
+    for binding in results {
+        let expected = abi
+            .results
+            .iter()
+            .find_map(|(result, value)| {
+                (*value == binding.callee_source).then(|| abi.result_productions[result])
+            })
+            .expect("exact result value sets were checked above");
+        if binding.production != Some(expected) {
+            return Err(invalid(
+                "Call result production does not match the current function ABI".into(),
+            ));
+        }
+    }
     let caller_result_destinations = results
         .iter()
         .map(|binding| binding.caller_destination)
@@ -177,8 +489,21 @@ pub struct RunExecutor<'a> {
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
     results: Option<&'a ResultStore>,
-    success_finalizer:
-        Option<&'a dyn Fn(&mut RunResult, &CancellationToken) -> Result<(), RunError>>,
+    success_finalizer: Option<
+        &'a dyn Fn(&mut RunResult, &CancellationToken, Option<RunDeadline>) -> Result<(), RunError>,
+    >,
+    atomic_success_preparer: Option<
+        &'a dyn Fn(&mut RunResult, &CancellationToken, Option<RunDeadline>) -> Result<(), RunError>,
+    >,
+    atomic_success_finalizer: Option<
+        &'a dyn Fn(&mut RunResult, &CancellationToken, Option<RunDeadline>) -> Result<(), RunError>,
+    >,
+    options: RunOptions,
+    activation_ids: &'a ActivationIdAllocator,
+    #[cfg(test)]
+    spill_root: Option<std::path::PathBuf>,
+    #[cfg(test)]
+    cleanup_delay: Option<std::time::Duration>,
     #[cfg(test)]
     checkpoint:
         Option<Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>>,
@@ -203,6 +528,14 @@ impl<'a> RunExecutor<'a> {
             events: &NOOP_RUN_EVENT_SINK,
             results: None,
             success_finalizer: None,
+            atomic_success_preparer: None,
+            atomic_success_finalizer: None,
+            options: RunOptions::default(),
+            activation_ids: &ACTIVATION_IDS,
+            #[cfg(test)]
+            spill_root: None,
+            #[cfg(test)]
+            cleanup_delay: None,
             #[cfg(test)]
             checkpoint: None,
         }
@@ -248,11 +581,86 @@ impl<'a> RunExecutor<'a> {
         self
     }
 
+    pub fn with_resource_budgets(mut self, budgets: RunResourceBudgets) -> Self {
+        self.options.budgets = budgets;
+        self
+    }
+
+    pub fn with_scheduling_policy(mut self, policy: SchedulingPolicy) -> Self {
+        self.options.scheduling = policy;
+        self
+    }
+
+    pub fn with_deadline(mut self, deadline: RunDeadline) -> Self {
+        self.options.deadline = Some(deadline);
+        self
+    }
+
+    pub fn with_options(mut self, options: RunOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_activation_allocator_for_test(
+        mut self,
+        allocator: &'a ActivationIdAllocator,
+    ) -> Self {
+        self.activation_ids = allocator;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_cleanup_delay_for_test(mut self, delay: std::time::Duration) -> Self {
+        self.cleanup_delay = Some(delay);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_spill_root(mut self, spill_root: std::path::PathBuf) -> Self {
+        self.spill_root = Some(spill_root);
+        self
+    }
+
     pub fn with_success_finalizer(
         mut self,
-        finalizer: &'a dyn Fn(&mut RunResult, &CancellationToken) -> Result<(), RunError>,
+        finalizer: &'a dyn Fn(
+            &mut RunResult,
+            &CancellationToken,
+            Option<RunDeadline>,
+        ) -> Result<(), RunError>,
     ) -> Self {
         self.success_finalizer = Some(finalizer);
+        self
+    }
+
+    pub fn with_atomic_success_finalizer(
+        mut self,
+        finalizer: &'a dyn Fn(
+            &mut RunResult,
+            &CancellationToken,
+            Option<RunDeadline>,
+        ) -> Result<(), RunError>,
+    ) -> Self {
+        self.atomic_success_finalizer = Some(finalizer);
+        self
+    }
+
+    pub fn with_atomic_success_transaction(
+        mut self,
+        preparer: &'a dyn Fn(
+            &mut RunResult,
+            &CancellationToken,
+            Option<RunDeadline>,
+        ) -> Result<(), RunError>,
+        finalizer: &'a dyn Fn(
+            &mut RunResult,
+            &CancellationToken,
+            Option<RunDeadline>,
+        ) -> Result<(), RunError>,
+    ) -> Self {
+        self.atomic_success_preparer = Some(preparer);
+        self.atomic_success_finalizer = Some(finalizer);
         self
     }
 
@@ -281,7 +689,8 @@ impl<'a> RunExecutor<'a> {
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
     ) -> Result<RunResult, RunError> {
-        let run_id = RunId::new(NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed));
+        let run_id = RunId::try_new(NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed))
+            .map_err(|_| RunError::InvalidPlan("run identity space exhausted".into()))?;
         let _registration = self
             .run_registry
             .map(|registry| {
@@ -298,12 +707,118 @@ impl<'a> RunExecutor<'a> {
             correlation = correlation.with_selection_digest(digest);
         }
         self.record_event(plan, correlation.clone(), RunEventKind::RunStarted);
-        self.trace.record(SpanEvent::new(
-            SpanKind::Run,
-            SpanStatus::Started,
+        let mut run_span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: None,
+                run_id: Some(run_id),
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Run,
+                correlation: correlation.clone(),
+            },
+        );
+        correlation = correlation.with_trace_parent(run_span.span_id());
+        #[cfg(test)]
+        let resource_owner = match &self.spill_root {
+            Some(root) => RunResourceOwner::with_spill_root_and_deadline(
+                run_id,
+                self.options.budgets,
+                cancellation.clone(),
+                self.options.deadline,
+                root.clone(),
+            ),
+            None => RunResourceOwner::new_with_deadline(
+                run_id,
+                self.options.budgets,
+                cancellation.clone(),
+                self.options.deadline,
+            ),
+        };
+        #[cfg(not(test))]
+        let resource_owner = RunResourceOwner::new_with_deadline(
+            run_id,
+            self.options.budgets,
+            cancellation.clone(),
+            self.options.deadline,
+        );
+        let result = resource_owner.and_then(|resource_owner| {
+            #[cfg(test)]
+            if let Some(delay) = self.cleanup_delay {
+                resource_owner.register_cleanup_delay_for_test(delay);
+            }
+            let execution = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.finish_run(
+                    plan,
+                    cancellation.clone(),
+                    run_id,
+                    correlation.clone(),
+                    &resource_owner,
+                )
+            }));
+            match execution {
+                Ok(result) => {
+                    self.record_resource_cleanup(&resource_owner, correlation.clone(), false);
+                    if result.is_ok() {
+                        check_terminal(&cancellation, self.options.deadline, RunPhase::Cleanup)?;
+                    }
+                    result
+                }
+                Err(payload) => {
+                    self.record_resource_cleanup(&resource_owner, correlation.clone(), true);
+                    std::panic::resume_unwind(payload)
+                }
+            }
+        });
+        run_span.finish(span_outcome(&result));
+        let event = match &result {
+            Ok(_) => RunEventKind::RunCompleted,
+            Err(RunError::Cancelled) => RunEventKind::RunCancelled,
+            Err(error) => RunEventKind::RunErrored {
+                outcome: RunErrorOutcome::from(error),
+            },
+        };
+        self.record_event(plan, correlation, event);
+        if let Some(results) = self.results {
+            if result.is_err() {
+                results.release_run_sources(run_id);
+            }
+            results.cleanup_run(run_id);
+        }
+        result
+    }
+
+    fn finish_run(
+        &self,
+        plan: &ExecutionPlan,
+        cancellation: CancellationToken,
+        run_id: RunId,
+        correlation: CorrelationContext,
+        resource_owner: &RunResourceOwner,
+    ) -> Result<RunResult, RunError> {
+        check_terminal(&cancellation, self.options.deadline, RunPhase::Kernel)?;
+        let mut result = self.run_root(
+            plan,
+            cancellation.clone(),
+            run_id,
             correlation.clone(),
-        ));
-        let mut result = self.run_root(plan, cancellation.clone(), run_id, correlation.clone());
+            resource_owner,
+        );
+        if result.is_ok()
+            && let Err(error) = check_terminal(
+                &cancellation,
+                self.options.deadline,
+                RunPhase::ResultPublication,
+            )
+        {
+            result = Err(error);
+        }
+        if let Ok(run_result) = result.as_ref()
+            && let Err(error) = promote_run_result(run_result, &cancellation, self.options.deadline)
+        {
+            result = Err(error);
+        }
         let mut pending_sources = Vec::new();
         if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
             && let Err(error) = self.stage_result_sources(
@@ -323,45 +838,96 @@ impl<'a> RunExecutor<'a> {
             self.run_test_checkpoint(SchedulerCheckpoint::FinalResultPublication, &cancellation);
         }
         if result.is_ok()
-            && let Err(error) = cancellation.check()
+            && let Err(error) = check_terminal(
+                &cancellation,
+                self.options.deadline,
+                RunPhase::ResultPublication,
+            )
         {
             result = Err(error);
             pending_sources.clear();
         }
         if let (Some(finalizer), Ok(run_result)) = (self.success_finalizer, result.as_mut())
-            && let Err(error) = finalizer(run_result, &cancellation)
+            && let Err(error) = finalizer(run_result, &cancellation, self.options.deadline)
         {
-            result = Err(error);
             pending_sources.clear();
+            result = Err(error);
+        }
+        if let (Some(preparer), Ok(run_result)) = (self.atomic_success_preparer, result.as_mut())
+            && let Err(error) = preparer(run_result, &cancellation, self.options.deadline)
+        {
+            pending_sources.clear();
+            result = Err(error);
+        }
+        if let (Some(finalizer), Some(results), Ok(run_result)) =
+            (self.atomic_success_finalizer, self.results, result.as_mut())
+        {
+            let (sources, source_events): (Vec<_>, Vec<_>) = pending_sources
+                .drain(..)
+                .map(|pending| (pending.source, pending.event))
+                .unzip();
+            let mut publication = results.begin_publication(run_id, sources);
+            publication.prepare(&cancellation, self.options.deadline)?;
+            match publication.publish_with_authority(&cancellation, self.options.deadline, |_| {
+                finalizer(run_result, &cancellation, self.options.deadline)
+            }) {
+                Ok(descriptors) => {
+                    for (event, descriptor) in source_events.into_iter().zip(descriptors) {
+                        if let Some(descriptor) = descriptor {
+                            self.record_source_event(descriptor, event);
+                        }
+                    }
+                }
+                Err(error) => result = Err(error),
+            }
         }
         if result.is_ok()
+            && self.atomic_success_finalizer.is_none()
             && let Some(results) = self.results
         {
-            self.commit_result_sources(results, run_id, pending_sources);
-        }
-        let status = run_status(&result);
-        self.trace.record(SpanEvent::new(
-            SpanKind::Cleanup,
-            status,
-            correlation.clone(),
-        ));
-        self.trace
-            .record(SpanEvent::new(SpanKind::Run, status, correlation.clone()));
-        let event = match &result {
-            Ok(_) => RunEventKind::RunCompleted,
-            Err(RunError::Cancelled) => RunEventKind::RunCancelled,
-            Err(error) => RunEventKind::RunErrored {
-                code: RunErrorCode::from(error),
-            },
-        };
-        self.record_event(plan, correlation, event);
-        if let Some(results) = self.results {
-            if result.is_err() {
-                results.release_run_sources(run_id);
+            let committed_publications = self.commit_result_sources(
+                results,
+                run_id,
+                pending_sources,
+                &cancellation,
+                self.success_finalizer.is_some(),
+            )?;
+            for (descriptor, event) in committed_publications {
+                self.record_source_event(descriptor, event);
             }
-            results.cleanup_run(run_id);
         }
         result
+    }
+
+    fn record_resource_cleanup(
+        &self,
+        resource_owner: &RunResourceOwner,
+        correlation: CorrelationContext,
+        _panicking: bool,
+    ) {
+        let cleanup_errors = resource_owner.cleanup();
+        for error in &cleanup_errors {
+            tauri_plugin_log::log::warn!(
+                target: "yssbi::node_system::runtime::cleanup",
+                "{error}"
+            );
+        }
+        let mut span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: correlation.trace_parent_span_id,
+                run_id: correlation.run_id,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::Cleanup,
+                correlation,
+            },
+        );
+        span.finish(SpanOutcome::Cleanup {
+            error_count: cleanup_errors.len() as u64,
+            panicking: _panicking,
+        });
     }
 
     fn stage_result_sources(
@@ -428,7 +994,11 @@ impl<'a> RunExecutor<'a> {
                 #[cfg(test)]
                 self.run_test_checkpoint(SchedulerCheckpoint::ResultSourceStaged, cancellation);
             }
-            cancellation.check()?;
+            check_terminal(
+                cancellation,
+                self.options.deadline,
+                RunPhase::ResultPublication,
+            )?;
         }
         Ok(())
     }
@@ -438,18 +1008,28 @@ impl<'a> RunExecutor<'a> {
         results: &ResultStore,
         run_id: RunId,
         pending_sources: Vec<PendingSourcePublication>,
-    ) {
+        cancellation: &CancellationToken,
+        finalizer_linearized: bool,
+    ) -> Result<Vec<(ResultSourceDescriptor, PendingSourceEvent)>, RunError> {
         let (sources, events): (Vec<_>, Vec<_>) = pending_sources
             .into_iter()
             .map(|pending| (pending.source, pending.event))
             .unzip();
-        let descriptors = results.commit_batch(run_id, sources);
-        for (event, descriptor) in events.into_iter().zip(descriptors) {
-            let Some(descriptor) = descriptor else {
-                continue;
-            };
-            self.record_source_event(descriptor, event);
-        }
+        let descriptors = if finalizer_linearized {
+            results.commit_batch(run_id, sources)
+        } else {
+            results.commit_batch_with_deadline(
+                run_id,
+                sources,
+                cancellation,
+                self.options.deadline,
+            )?
+        };
+        Ok(events
+            .into_iter()
+            .zip(descriptors)
+            .filter_map(|(event, descriptor)| descriptor.map(|descriptor| (descriptor, event)))
+            .collect())
     }
 
     fn record_source_event(&self, descriptor: ResultSourceDescriptor, event: PendingSourceEvent) {
@@ -492,6 +1072,7 @@ impl<'a> RunExecutor<'a> {
         cancellation: CancellationToken,
         run_id: RunId,
         correlation: CorrelationContext,
+        resource_owner: &RunResourceOwner,
     ) -> Result<RunResult, RunError> {
         plan.validate()
             .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
@@ -513,11 +1094,15 @@ impl<'a> RunExecutor<'a> {
                 &plan.root_region,
                 &mut frame,
                 &resource_set,
+                resource_owner,
                 &relational_backends,
                 &memoization,
                 &root_demand,
                 &cancellation,
                 1,
+                correlation
+                    .trace_parent_span_id
+                    .expect("run span parent is set"),
                 None,
             )?;
             cancellation.check()?;
@@ -545,11 +1130,18 @@ impl<'a> RunExecutor<'a> {
         plan: &ExecutionPlan,
         correlation: &CorrelationContext,
     ) -> Result<RunResourceSet, RunError> {
-        self.trace.record(SpanEvent::new(
-            SpanKind::ResourceAcquire,
-            SpanStatus::Started,
-            correlation.clone(),
-        ));
+        let mut span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: correlation.trace_parent_span_id,
+                run_id: correlation.run_id,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind: SpanKind::ResourceAcquire,
+                correlation: correlation.clone(),
+            },
+        );
         let result = self
             .resources
             .validate_plan(&plan.provenance, &plan.resources)
@@ -561,11 +1153,7 @@ impl<'a> RunExecutor<'a> {
                 ResourceErrorKind::Acquire => RunError::InvalidPlan(error.into_message()),
             })
             .and_then(|()| RunResourceSet::acquire(&plan.resources, self.resources));
-        self.trace.record(SpanEvent::new(
-            SpanKind::ResourceAcquire,
-            run_status(&result),
-            correlation.clone(),
-        ));
+        span.finish(span_outcome(&result));
         result
     }
 
@@ -577,11 +1165,13 @@ impl<'a> RunExecutor<'a> {
         region: &StructuredControlRegion,
         frame: &mut Frame,
         resources: &RunResourceSet,
+        resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
         memoization: &RunMemoization,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
+        run_parent_span_id: SpanId,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         cancellation.check()?;
@@ -594,11 +1184,13 @@ impl<'a> RunExecutor<'a> {
                 steps,
                 frame,
                 resources,
+                resource_owner,
                 relational_backends,
                 memoization,
                 demand,
                 cancellation,
                 frame_depth,
+                run_parent_span_id,
                 parent_call,
             )?,
             StructuredControlRegion::If {
@@ -619,11 +1211,13 @@ impl<'a> RunExecutor<'a> {
                     selected,
                     frame,
                     resources,
+                    resource_owner,
                     relational_backends,
                     memoization,
                     demand,
                     cancellation,
                     frame_depth,
+                    run_parent_span_id,
                     parent_call,
                 )?;
                 for binding in results {
@@ -653,11 +1247,13 @@ impl<'a> RunExecutor<'a> {
                         body,
                         frame,
                         resources,
+                        resource_owner,
                         relational_backends,
                         memoization,
                         demand,
                         cancellation,
                         frame_depth,
+                        run_parent_span_id,
                         parent_call,
                     )?;
                     should_continue = boolean(frame, *continue_condition)?;
@@ -697,13 +1293,21 @@ impl<'a> RunExecutor<'a> {
                 let callee = Arc::clone(&published.plan);
                 let call_id =
                     ParentCallId::new(NEXT_PARENT_CALL_ID.fetch_add(1, Ordering::Relaxed));
-                let correlation =
+                let mut correlation =
                     CorrelationContext::compile(&callee.provenance).for_run(run_id, Some(call_id));
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Run,
-                    SpanStatus::Started,
-                    correlation.clone(),
-                ));
+                let mut call_span = start_span_safely(
+                    self.trace,
+                    SpanSpec {
+                        parent_span_id: Some(run_parent_span_id),
+                        run_id: Some(run_id),
+                        operation_id: None,
+                        activation_id: None,
+                        attempt_id: None,
+                        kind: SpanKind::Run,
+                        correlation: correlation.clone(),
+                    },
+                );
+                correlation = correlation.with_trace_parent(call_span.span_id());
                 let call_result = (|| {
                     callee
                         .validate()
@@ -737,11 +1341,15 @@ impl<'a> RunExecutor<'a> {
                             &callee.root_region,
                             &mut callee_frame,
                             &callee_resources,
+                            resource_owner,
                             &callee_backends,
                             memoization,
                             &callee_demand,
                             cancellation,
                             frame_depth + 1,
+                            correlation
+                                .trace_parent_span_id
+                                .expect("callee run span parent is set"),
                             Some(call_id),
                         )?;
                         for binding in results {
@@ -757,14 +1365,23 @@ impl<'a> RunExecutor<'a> {
                     }
                     result
                 })();
-                let status = run_status(&call_result);
-                self.trace.record(SpanEvent::new(
-                    SpanKind::Cleanup,
-                    status,
-                    correlation.clone(),
-                ));
-                self.trace
-                    .record(SpanEvent::new(SpanKind::Run, status, correlation));
+                let mut cleanup_span = start_span_safely(
+                    self.trace,
+                    SpanSpec {
+                        parent_span_id: correlation.trace_parent_span_id,
+                        run_id: correlation.run_id,
+                        operation_id: None,
+                        activation_id: None,
+                        attempt_id: None,
+                        kind: SpanKind::Cleanup,
+                        correlation: correlation.clone(),
+                    },
+                );
+                cleanup_span.finish(SpanOutcome::Cleanup {
+                    error_count: 0,
+                    panicking: false,
+                });
+                call_span.finish(span_outcome(&call_result));
                 call_result?;
             }
         }
@@ -779,14 +1396,16 @@ impl<'a> RunExecutor<'a> {
         steps: &[ControlStep],
         frame: &mut Frame,
         resources: &RunResourceSet,
+        resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
         memoization: &RunMemoization,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
+        run_parent_span_id: SpanId,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
-        let activation_id = ActivationId::next();
+        let activation_id = self.activation_ids.allocate()?;
         let mut activated = BTreeSet::new();
         let mut operations = Vec::new();
 
@@ -803,10 +1422,12 @@ impl<'a> RunExecutor<'a> {
                         &mut activated,
                         frame,
                         resources,
+                        resource_owner,
                         relational_backends,
                         memoization,
                         demand,
                         cancellation,
+                        run_parent_span_id,
                         parent_call,
                     )?;
                     operations.clear();
@@ -816,11 +1437,13 @@ impl<'a> RunExecutor<'a> {
                         child,
                         frame,
                         resources,
+                        resource_owner,
                         relational_backends,
                         memoization,
                         demand,
                         cancellation,
                         frame_depth,
+                        run_parent_span_id,
                         parent_call,
                     )?;
                 }
@@ -834,10 +1457,12 @@ impl<'a> RunExecutor<'a> {
             &mut activated,
             frame,
             resources,
+            resource_owner,
             relational_backends,
             memoization,
             demand,
             cancellation,
+            run_parent_span_id,
             parent_call,
         )
     }
@@ -852,10 +1477,12 @@ impl<'a> RunExecutor<'a> {
         activated: &mut BTreeSet<OperationIndex>,
         frame: &mut Frame,
         resources: &RunResourceSet,
+        resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
         memoization: &RunMemoization,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
+        run_parent_span_id: SpanId,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         self.propagate_value_dependencies(plan, frame)?;
@@ -869,37 +1496,467 @@ impl<'a> RunExecutor<'a> {
             }
         }
 
-        while !pending.is_empty() {
-            cancellation.check()?;
-            let ready = pending.iter().copied().find(|operation| {
-                self.operation_is_ready(plan, *operation, activation_id, activated, frame)
-            });
-            let Some(operation) = ready else {
-                return Err(self.blocked_operation_error(
-                    plan,
-                    *pending.first().expect("pending is not empty"),
-                    activation_id,
-                    activated,
-                    frame,
-                ));
-            };
-            self.execute_operation(
-                run_id,
-                plan,
-                operation,
-                activation_id,
-                frame,
-                resources,
-                relational_backends,
-                memoization,
-                demand,
-                cancellation,
-                parent_call,
-            )?;
-            self.propagate_value_dependencies(plan, frame)?;
-            pending.remove(&operation);
+        let mut prepared = BTreeMap::new();
+        let mut queued = BTreeSet::new();
+        let mut running = BTreeMap::new();
+        let mut delayed_retries: BinaryHeap<Reverse<DelayedRetry>> = BinaryHeap::new();
+        let mut delayed_operations = BTreeSet::new();
+        let mut next_retry_tie = 0_u64;
+        let mut memo_inflight = BTreeSet::new();
+        let mut admission = ClassScheduler::new(self.options.scheduling);
+        let worker_count = self.options.scheduling.worker_count();
+        let job_queue: WorkerQueue<PreparedOperation> =
+            WorkerQueue::new(worker_count, cancellation.clone(), self.options.deadline);
+        let (completion_sender, completion_receiver) = mpsc::sync_channel(worker_count);
+        let scheduler_signal = SchedulerSignal::new(cancellation);
+        let mut worker_panic = None;
+        let worker_context = OperationWorkerContext {
+            run_id,
+            frame_id: frame.id,
+            plan,
+            kernels: self.kernels,
+            compiled_parameters: self.compiled_parameters,
+            resources,
+            resource_owner,
+            relational_backends,
+            cancellation,
+            deadline: self.options.deadline,
+            run_parent_span_id,
+            parent_call,
+            #[cfg(test)]
+            checkpoint: self.checkpoint.as_ref(),
+        };
+
+        let result = std::thread::scope(|scope| {
+            let _queue_close = WorkerQueueCloseGuard(&job_queue);
+            for _ in 0..worker_count {
+                let sender = completion_sender.clone();
+                let queue = &job_queue;
+                let context = &worker_context;
+                let signal = &scheduler_signal;
+                scope.spawn(move || {
+                    while let Some(job) = queue.pop() {
+                        let operation = job.operation;
+                        let activation = job.activation;
+                        let attempt = job.attempt;
+                        let trace = WorkerTrace::default();
+                        let (outputs, panic, completed_at) =
+                            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                let outputs = execute_operation_worker(context, job, &trace);
+                                (outputs, Instant::now())
+                            })) {
+                                Ok((outputs, completed_at)) => (outputs, None, completed_at),
+                                Err(payload) => (
+                                    Err(RunError::InvalidPlan("operation worker panicked".into())),
+                                    Some(payload),
+                                    Instant::now(),
+                                ),
+                            };
+                        #[cfg(test)]
+                        if let Some(checkpoint) = context.checkpoint {
+                            checkpoint(
+                                SchedulerCheckpoint::WorkerOutcomeProduced,
+                                context.cancellation,
+                            );
+                        }
+                        if sender
+                            .send(WorkerCompletion {
+                                completed_at,
+                                completion: OperationCompletion {
+                                    operation,
+                                    activation,
+                                    attempt,
+                                    outputs,
+                                },
+                                trace_spans: trace.into_spans(),
+                                panic,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                        signal.notify();
+                    }
+                });
+            }
+
+            let scheduler_result = (|| {
+                let mut terminal_error = None;
+                loop {
+                    if terminal_error.is_none() {
+                        let phase =
+                            if admission.has_queued() || !prepared.is_empty() || !queued.is_empty()
+                            {
+                                RunPhase::QueueWait
+                            } else {
+                                RunPhase::Kernel
+                            };
+                        if let Err(error) =
+                            check_terminal(cancellation, self.options.deadline, phase)
+                        {
+                            terminal_error = Some(error);
+                        }
+                    }
+                    if terminal_error.is_none() && cancellation.is_cancelled() && running.is_empty()
+                    {
+                        terminal_error = Some(RunError::Cancelled);
+                    }
+
+                    if terminal_error.is_none() && !cancellation.is_cancelled() {
+                        while delayed_retries
+                            .peek()
+                            .is_some_and(|Reverse(retry)| retry.eligible_at <= Instant::now())
+                        {
+                            let Reverse(retry) =
+                                delayed_retries.pop().expect("peeked delayed retry exists");
+                            delayed_operations.remove(&retry.operation);
+                            if let Err(error) = check_terminal(
+                                cancellation,
+                                self.options.deadline,
+                                RunPhase::QueueWait,
+                            ) {
+                                if let Some(key) = &retry.memo_key {
+                                    memo_inflight.remove(key);
+                                }
+                                terminal_error = Some(error);
+                                break;
+                            }
+                            let activation = match self.activation_ids.allocate() {
+                                Ok(activation) => activation,
+                                Err(error) => {
+                                    if let Some(key) = &retry.memo_key {
+                                        memo_inflight.remove(key);
+                                    }
+                                    terminal_error = Some(error);
+                                    break;
+                                }
+                            };
+                            let prepared_retry = PreparedOperation {
+                                operation: retry.operation,
+                                owner_activation: retry.owner_activation,
+                                activation,
+                                attempt: retry.attempt,
+                                inputs: retry.inputs,
+                                memo_key: retry.memo_key,
+                                owns_memo_flight: true,
+                                class: retry.class,
+                            };
+                            #[cfg(test)]
+                            self.run_test_checkpoint(
+                                SchedulerCheckpoint::AttemptPrepared {
+                                    operation: prepared_retry.operation,
+                                    activation: prepared_retry.activation,
+                                    attempt: prepared_retry.attempt,
+                                },
+                                cancellation,
+                            );
+                            prepared.insert(prepared_retry.operation, prepared_retry);
+                        }
+
+                        for operation in pending.iter().copied().collect::<Vec<_>>() {
+                            if prepared.contains_key(&operation)
+                                || queued.contains(&operation)
+                                || running.contains_key(&operation)
+                                || delayed_operations.contains(&operation)
+                                || !self.operation_is_ready(
+                                    plan,
+                                    operation,
+                                    activation_id,
+                                    activated,
+                                    frame,
+                                )
+                            {
+                                continue;
+                            }
+                            match self.prepare_operation(
+                                plan,
+                                operation,
+                                activation_id,
+                                frame,
+                                demand,
+                            ) {
+                                Ok(operation) => {
+                                    #[cfg(test)]
+                                    self.run_test_checkpoint(
+                                        SchedulerCheckpoint::AttemptPrepared {
+                                            operation: operation.operation,
+                                            activation: operation.activation,
+                                            attempt: operation.attempt,
+                                        },
+                                        cancellation,
+                                    );
+                                    prepared.insert(operation.operation, operation);
+                                }
+                                Err(error) => terminal_error = Some(error),
+                            }
+                        }
+
+                        for (operation, job) in &prepared {
+                            if queued.contains(operation)
+                                || job.memo_key.as_ref().is_some_and(|key| {
+                                    memo_inflight.contains(key) && !job.owns_memo_flight
+                                })
+                            {
+                                continue;
+                            }
+                            admission.enqueue(*operation, job.class);
+                            queued.insert(*operation);
+                        }
+
+                        while let Some((operation, class)) = admission.admit() {
+                            queued.remove(&operation);
+                            let job = prepared
+                                .remove(&operation)
+                                .expect("admitted operations are prepared");
+
+                            if let Some(outputs) = job
+                                .memo_key
+                                .as_ref()
+                                .and_then(|key| memoization.completed(key))
+                            {
+                                self.bookkeep_admission(
+                                    frame,
+                                    &mut admission,
+                                    &mut running,
+                                    &mut memo_inflight,
+                                    &job,
+                                    class,
+                                    false,
+                                );
+                                let correlation =
+                                    operation_correlation(plan, run_id, parent_call, operation);
+                                self.record_operation_started(
+                                    plan,
+                                    correlation,
+                                    operation,
+                                    job.activation,
+                                    job.attempt,
+                                );
+                                self.finish_operation_completion(
+                                    plan,
+                                    frame,
+                                    memoization,
+                                    &mut admission,
+                                    &mut running,
+                                    &mut prepared,
+                                    &mut delayed_retries,
+                                    &mut delayed_operations,
+                                    &mut next_retry_tie,
+                                    &mut memo_inflight,
+                                    &mut pending,
+                                    &mut terminal_error,
+                                    cancellation,
+                                    parent_call,
+                                    run_id,
+                                    &mut worker_panic,
+                                    WorkerCompletion {
+                                        completed_at: Instant::now(),
+                                        completion: OperationCompletion {
+                                            operation,
+                                            activation: job.activation,
+                                            attempt: job.attempt,
+                                            outputs: Ok(outputs),
+                                        },
+                                        trace_spans: Box::new([]),
+                                        panic: None,
+                                    },
+                                );
+                                continue;
+                            }
+                            if let Err(error) = self.submit_admitted_operation(
+                                plan,
+                                frame,
+                                &mut admission,
+                                &mut running,
+                                &mut memo_inflight,
+                                &job_queue,
+                                job,
+                                class,
+                                cancellation,
+                                parent_call,
+                                run_id,
+                            ) {
+                                terminal_error.get_or_insert(error);
+                                break;
+                            }
+                        }
+                        #[cfg(test)]
+                        if let Some(class) = admission.blocked_class() {
+                            self.run_test_checkpoint(
+                                SchedulerCheckpoint::AdmissionBlocked(class),
+                                cancellation,
+                            );
+                        }
+                    }
+
+                    let mut drained_completion = false;
+                    while let Ok(completion) = completion_receiver.try_recv() {
+                        drained_completion = true;
+                        self.finish_operation_completion(
+                            plan,
+                            frame,
+                            memoization,
+                            &mut admission,
+                            &mut running,
+                            &mut prepared,
+                            &mut delayed_retries,
+                            &mut delayed_operations,
+                            &mut next_retry_tie,
+                            &mut memo_inflight,
+                            &mut pending,
+                            &mut terminal_error,
+                            cancellation,
+                            parent_call,
+                            run_id,
+                            &mut worker_panic,
+                            completion,
+                        );
+                    }
+                    if drained_completion && terminal_error.is_none() {
+                        continue;
+                    }
+
+                    if running.is_empty() {
+                        if let Some(error) = terminal_error {
+                            return Err(error);
+                        }
+                        if pending.is_empty() {
+                            return Ok(());
+                        }
+                        if !admission.has_queued()
+                            && prepared.is_empty()
+                            && delayed_retries.is_empty()
+                        {
+                            return Err(self.blocked_operation_error(
+                                plan,
+                                *pending.first().expect("pending is not empty"),
+                                activation_id,
+                                activated,
+                                frame,
+                            ));
+                        }
+                    }
+
+                    if terminal_error.is_some() && !running.is_empty() {
+                        match completion_receiver.recv() {
+                            Ok(completion) => self.finish_operation_completion(
+                                plan,
+                                frame,
+                                memoization,
+                                &mut admission,
+                                &mut running,
+                                &mut prepared,
+                                &mut delayed_retries,
+                                &mut delayed_operations,
+                                &mut next_retry_tie,
+                                &mut memo_inflight,
+                                &mut pending,
+                                &mut terminal_error,
+                                cancellation,
+                                parent_call,
+                                run_id,
+                                &mut worker_panic,
+                                completion,
+                            ),
+                            Err(_) => {
+                                terminal_error.get_or_insert_with(|| {
+                                    RunError::InvalidPlan(
+                                        "operation completion channel closed".into(),
+                                    )
+                                });
+                            }
+                        }
+                        continue;
+                    }
+
+                    if terminal_error.is_none()
+                        && (!running.is_empty() || !delayed_retries.is_empty())
+                    {
+                        let phase = if admission.has_queued() || !delayed_retries.is_empty() {
+                            RunPhase::QueueWait
+                        } else {
+                            RunPhase::Kernel
+                        };
+                        let retry_wait = delayed_retries.peek().map(|Reverse(retry)| {
+                            retry.eligible_at.saturating_duration_since(Instant::now())
+                        });
+                        let deadline_wait = match self.options.deadline {
+                            Some(deadline) => match deadline.remaining(cancellation, phase) {
+                                Ok(remaining) => Some(remaining),
+                                Err(error) => {
+                                    terminal_error = Some(error);
+                                    continue;
+                                }
+                            },
+                            None => None,
+                        };
+                        let timeout = match (retry_wait, deadline_wait) {
+                            (Some(retry), Some(deadline)) => Some(retry.min(deadline)),
+                            (Some(retry), None) => Some(retry),
+                            (None, Some(deadline)) => Some(deadline),
+                            (None, None) => None,
+                        };
+                        if timeout.is_some_and(|timeout| timeout.is_zero()) {
+                            continue;
+                        }
+
+                        let generation = scheduler_signal
+                            .generation
+                            .lock()
+                            .unwrap_or_else(|error| error.into_inner());
+                        let observed = *generation;
+                        if let Ok(completion) = completion_receiver.try_recv() {
+                            drop(generation);
+                            self.finish_operation_completion(
+                                plan,
+                                frame,
+                                memoization,
+                                &mut admission,
+                                &mut running,
+                                &mut prepared,
+                                &mut delayed_retries,
+                                &mut delayed_operations,
+                                &mut next_retry_tie,
+                                &mut memo_inflight,
+                                &mut pending,
+                                &mut terminal_error,
+                                cancellation,
+                                parent_call,
+                                run_id,
+                                &mut worker_panic,
+                                completion,
+                            );
+                            continue;
+                        }
+                        if cancellation.is_cancelled() {
+                            drop(generation);
+                            continue;
+                        }
+                        if let Some(timeout) = timeout {
+                            let _ = scheduler_signal
+                                .ready
+                                .wait_timeout_while(generation, timeout, |generation| {
+                                    *generation == observed && !cancellation.is_cancelled()
+                                })
+                                .unwrap_or_else(|error| error.into_inner());
+                        } else {
+                            let _guard = scheduler_signal
+                                .ready
+                                .wait_while(generation, |generation| {
+                                    *generation == observed && !cancellation.is_cancelled()
+                                })
+                                .unwrap_or_else(|error| error.into_inner());
+                        }
+                        continue;
+                    }
+                }
+            })();
+            scheduler_result
+        });
+        if let Some(payload) = worker_panic {
+            std::panic::resume_unwind(payload);
         }
-        Ok(())
+        result
     }
 
     fn propagate_value_dependencies(
@@ -1003,124 +2060,15 @@ impl<'a> RunExecutor<'a> {
         RunError::InvalidPlan("dependency gating produced no ready operation".into())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn execute_operation(
+    fn prepare_operation(
         &self,
-        run_id: RunId,
         plan: &ExecutionPlan,
         operation_index: OperationIndex,
         activation_id: ActivationId,
         frame: &mut Frame,
-        resources: &RunResourceSet,
-        relational_backends: &RunRelationalBackends,
-        memoization: &RunMemoization,
         demand: &DemandFingerprint,
-        cancellation: &CancellationToken,
-        parent_call: Option<ParentCallId>,
-    ) -> Result<(), RunError> {
-        let operation = &plan.operations[operation_index.index()];
-        let correlation = CorrelationContext::compile(&plan.provenance)
-            .for_run(run_id, parent_call)
-            .for_node(
-                operation.source_node_id,
-                operation.source_node_type_id.clone(),
-            );
-        self.record_event(
-            plan,
-            correlation.clone(),
-            RunEventKind::OperationStarted {
-                operation_index: operation_index.index() as u32,
-                activation_id: activation_id.get(),
-            },
-        );
-        self.trace.record(SpanEvent::new(
-            SpanKind::Operation,
-            SpanStatus::Started,
-            correlation.clone(),
-        ));
-        let result = self.execute_operation_inner(
-            run_id,
-            &correlation,
-            plan,
-            operation_index,
-            activation_id,
-            frame,
-            resources,
-            relational_backends,
-            memoization,
-            demand,
-            cancellation,
-        );
-        self.trace.record(SpanEvent::new(
-            SpanKind::Operation,
-            run_status(&result),
-            correlation.clone(),
-        ));
-        match &result {
-            Ok(()) => {
-                self.record_event(
-                    plan,
-                    correlation,
-                    RunEventKind::OperationCompleted {
-                        operation_index: operation_index.index() as u32,
-                        activation_id: activation_id.get(),
-                    },
-                );
-            }
-            Err(error) => self.record_event(
-                plan,
-                correlation,
-                RunEventKind::OperationErrored {
-                    operation_index: operation_index.index() as u32,
-                    activation_id: activation_id.get(),
-                    code: RunErrorCode::from(error),
-                },
-            ),
-        }
-        result
-    }
-
-    fn record_event(
-        &self,
-        plan: &ExecutionPlan,
-        correlation: CorrelationContext,
-        kind: RunEventKind,
-    ) {
-        self.events.record(RunEvent {
-            correlation,
-            basis: plan.provenance.basis.clone(),
-            kind,
-        });
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn execute_operation_inner(
-        &self,
-        run_id: RunId,
-        correlation: &CorrelationContext,
-        plan: &ExecutionPlan,
-        operation_index: OperationIndex,
-        activation_id: ActivationId,
-        frame: &mut Frame,
-        resources: &RunResourceSet,
-        relational_backends: &RunRelationalBackends,
-        memoization: &RunMemoization,
-        demand: &DemandFingerprint,
-        cancellation: &CancellationToken,
-    ) -> Result<(), RunError> {
-        cancellation.check()?;
-        let activation_key = MemoKey {
-            frame: frame.id,
-            activation: activation_id,
-            operation: operation_index,
-        };
-        if !frame.attempted.insert(activation_key) {
-            return Err(RunError::OperationAlreadyExecuted {
-                operation: operation_index,
-                activation: activation_id,
-            });
-        }
-
+    ) -> Result<PreparedOperation, RunError> {
+        let attempt = AttemptId::initial();
         let operation = &plan.operations[operation_index.index()];
         let inputs = operation
             .inputs
@@ -1134,8 +2082,9 @@ impl<'a> RunExecutor<'a> {
                     frame.value(input.value).cloned()
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
-        let operation_memo_key = if operation.cache_policy == CachePolicy::PerRun
+            .collect::<Result<Vec<_>, _>>()?
+            .into_boxed_slice();
+        let memo_key = if operation.cache_policy == CachePolicy::PerRun
             && operation_memoization_safe(plan, operation_index)
         {
             operation_resource_versions(plan, operation_index).and_then(|resource_versions| {
@@ -1150,104 +2099,711 @@ impl<'a> RunExecutor<'a> {
         } else {
             None
         };
-        let produce = || -> Result<Box<[RuntimeValue]>, RunError> {
-            let outputs = match &operation.kernel {
-                PlannedKernel::Native(handle) => {
-                    let kernel = self
-                        .kernels
-                        .get(handle)
-                        .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
-                    let context = KernelContext {
-                        run_id,
-                        frame_id: frame.id,
-                        activation_id,
-                        params: &operation.params,
-                        compiled_parameters: self.compiled_parameters,
-                        resources,
-                        cancellation,
-                    };
-                    match kernel.execute(&context, &inputs) {
-                        Ok(outputs) => outputs,
-                        Err(error) if error.kind() == KernelErrorKind::Cancelled => {
-                            return Err(RunError::Cancelled);
-                        }
-                        Err(error) => {
-                            return Err(RunError::KernelFailed {
-                                operation: operation_index,
-                                message: error.message().into(),
-                            });
-                        }
-                    }
-                }
-                PlannedKernel::Adapter(adapter) => {
-                    let input = inputs.into_iter().next().ok_or_else(|| {
-                        RunError::InvalidPlan("adapter operation has no input".into())
-                    })?;
-                    let output = execute_planned_adapter(adapter, input, cancellation)?;
-                    vec![output]
-                }
-                PlannedKernel::Relational(index) => {
-                    let subplan = &plan.relational_subplans[index.index()];
-                    let backend = relational_backends.get(&subplan.backend).ok_or_else(|| {
-                        RunError::RelationalBackendNotFound(subplan.backend.clone())
-                    })?;
-                    let context = RelationalContext {
-                        run_id,
-                        resources,
-                        cancellation,
-                    };
-                    self.trace.record(relational_backend_event(
-                        SpanStatus::Started,
-                        correlation.clone(),
-                        subplan.backend.as_str(),
-                        *index,
-                    ));
-                    let backend_result = backend.execute(&context, &subplan.compiled_plan, &inputs);
-                    let backend_status = if cancellation.check().is_err() {
-                        SpanStatus::Cancelled
-                    } else if backend_result.is_ok() {
-                        SpanStatus::Succeeded
-                    } else {
-                        SpanStatus::Failed
-                    };
-                    self.trace.record(relational_backend_event(
-                        backend_status,
-                        correlation.clone(),
-                        subplan.backend.as_str(),
-                        *index,
-                    ));
-                    let execution = match backend_result {
-                        Ok(execution) => execution,
-                        Err(error) => {
-                            cancellation.check()?;
-                            return Err(RunError::from_relational(operation_index, error));
-                        }
-                    };
-                    execution.outputs
-                }
-            };
-            cancellation.check()?;
-            if outputs.len() != operation.outputs.len() {
-                return Err(RunError::OutputCount {
-                    operation: operation_index,
-                    expected: operation.outputs.len(),
-                    actual: outputs.len(),
-                });
-            }
-            Ok(outputs.into_boxed_slice())
+        Ok(PreparedOperation {
+            operation: operation_index,
+            owner_activation: activation_id,
+            activation: activation_id,
+            attempt,
+            inputs,
+            memo_key,
+            owns_memo_flight: false,
+            class: operation.workload,
+        })
+    }
+
+    fn bookkeep_admission(
+        &self,
+        frame: &mut Frame,
+        admission: &mut ClassScheduler,
+        running: &mut BTreeMap<OperationIndex, RunningOperation>,
+        memo_inflight: &mut BTreeSet<OperationMemoKey>,
+        job: &PreparedOperation,
+        class: WorkloadClass,
+        track_memo: bool,
+    ) -> AdmissionBookkeeping {
+        let activation_key = MemoKey {
+            frame: frame.id,
+            activation: job.owner_activation,
+            operation: job.operation,
         };
-        let outputs = if let Some(key) = operation_memo_key {
-            memoization.get_or_produce(key, cancellation, produce)?
+        let previous_attempt = frame.attempted.insert(activation_key, job.attempt);
+        if job.attempt == AttemptId::initial() {
+            debug_assert!(previous_attempt.is_none());
         } else {
-            produce()?
-        };
-        for (output, value) in operation.outputs.iter().zip(outputs) {
-            frame.set(output.value, value)?;
+            debug_assert_eq!(
+                previous_attempt.and_then(AttemptId::next_checked),
+                Some(job.attempt)
+            );
         }
-        frame.completed.insert(activation_key);
-        *frame.completion_counts.entry(operation_index).or_default() += 1;
+        let previous_running = running.insert(
+            job.operation,
+            RunningOperation {
+                class,
+                owner_activation: job.owner_activation,
+                activation: job.activation,
+                attempt: job.attempt,
+                inputs: job.inputs.clone(),
+                memo_key: job.memo_key.clone(),
+            },
+        );
+        debug_assert!(previous_running.is_none());
+        if track_memo && let Some(key) = &job.memo_key {
+            if job.owns_memo_flight {
+                debug_assert!(memo_inflight.contains(key));
+            } else {
+                debug_assert!(memo_inflight.insert(key.clone()));
+            }
+        }
+        debug_assert_eq!(admission.running_count(), running.len());
+        AdmissionBookkeeping {
+            operation: job.operation,
+            class,
+            activation_key,
+            previous_attempt,
+            memo_key: if track_memo {
+                job.memo_key.clone()
+            } else {
+                None
+            },
+        }
+    }
+
+    fn rollback_admission(
+        &self,
+        frame: &mut Frame,
+        admission: &mut ClassScheduler,
+        running: &mut BTreeMap<OperationIndex, RunningOperation>,
+        memo_inflight: &mut BTreeSet<OperationMemoKey>,
+        bookkeeping: AdmissionBookkeeping,
+        _attempt: AttemptId,
+        _cancellation: &CancellationToken,
+    ) {
+        let removed = running.remove(&bookkeeping.operation);
+        debug_assert!(removed.is_some());
+        admission.release(bookkeeping.class);
+        match bookkeeping.previous_attempt {
+            Some(previous) => {
+                frame.attempted.insert(bookkeeping.activation_key, previous);
+            }
+            None => {
+                frame.attempted.remove(&bookkeeping.activation_key);
+            }
+        }
+        if let Some(key) = &bookkeeping.memo_key {
+            memo_inflight.remove(key);
+        }
+        debug_assert_eq!(admission.running_count(), running.len());
+        #[cfg(test)]
+        self.run_test_checkpoint(
+            SchedulerCheckpoint::AdmissionRolledBack {
+                operation: bookkeeping.operation,
+                attempt: _attempt,
+                running_count: admission.running_count(),
+                tracked_running: running.len(),
+                memo_owned: bookkeeping
+                    .memo_key
+                    .as_ref()
+                    .is_some_and(|key| memo_inflight.contains(key)),
+                frame_attempt: frame.attempted.get(&bookkeeping.activation_key).copied(),
+            },
+            _cancellation,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn submit_admitted_operation(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        admission: &mut ClassScheduler,
+        running: &mut BTreeMap<OperationIndex, RunningOperation>,
+        memo_inflight: &mut BTreeSet<OperationMemoKey>,
+        job_queue: &WorkerQueue<PreparedOperation>,
+        job: PreparedOperation,
+        class: WorkloadClass,
+        cancellation: &CancellationToken,
+        parent_call: Option<ParentCallId>,
+        run_id: RunId,
+    ) -> Result<(), RunError> {
+        let operation = job.operation;
+        let activation = job.activation;
+        let attempt = job.attempt;
+        let bookkeeping =
+            self.bookkeep_admission(frame, admission, running, memo_inflight, &job, class, true);
+        #[cfg(test)]
+        self.run_test_checkpoint(
+            SchedulerCheckpoint::AdmissionBookkept {
+                operation,
+                activation,
+                attempt,
+            },
+            cancellation,
+        );
+        if job_queue.push(job).is_err() {
+            self.rollback_admission(
+                frame,
+                admission,
+                running,
+                memo_inflight,
+                bookkeeping,
+                attempt,
+                cancellation,
+            );
+            return Err(
+                check_terminal(cancellation, self.options.deadline, RunPhase::QueueWait)
+                    .err()
+                    .unwrap_or_else(|| {
+                        RunError::InvalidPlan("operation worker queue closed".into())
+                    }),
+            );
+        }
+        let correlation = operation_correlation(plan, run_id, parent_call, operation);
+        self.record_operation_started(plan, correlation, operation, activation, attempt);
         Ok(())
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn finish_operation_completion(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        memoization: &RunMemoization,
+        admission: &mut ClassScheduler,
+        running: &mut BTreeMap<OperationIndex, RunningOperation>,
+        _prepared: &mut BTreeMap<OperationIndex, PreparedOperation>,
+        delayed_retries: &mut BinaryHeap<Reverse<DelayedRetry>>,
+        delayed_operations: &mut BTreeSet<OperationIndex>,
+        next_retry_tie: &mut u64,
+        memo_inflight: &mut BTreeSet<OperationMemoKey>,
+        pending: &mut BTreeSet<OperationIndex>,
+        terminal_error: &mut Option<RunError>,
+        cancellation: &CancellationToken,
+        parent_call: Option<ParentCallId>,
+        run_id: RunId,
+        worker_panic: &mut Option<Box<dyn std::any::Any + Send>>,
+        envelope: WorkerCompletion,
+    ) {
+        let completed_at = envelope.completed_at;
+        let completion = envelope.completion;
+        let Some(active) = running.get(&completion.operation) else {
+            return;
+        };
+        if active.activation != completion.activation || active.attempt != completion.attempt {
+            return;
+        }
+        let completed_before_deadline = self
+            .options
+            .deadline
+            .is_none_or(|deadline| !deadline.exceeded_at(completed_at));
+        let produced_ordinary_error = completion.outputs.as_ref().is_err_and(|error| {
+            !matches!(
+                error,
+                RunError::Cancelled | RunError::DeadlineExceeded { .. }
+            )
+        });
+        let active = running
+            .remove(&completion.operation)
+            .expect("validated running operation exists");
+        admission.release(active.class);
+        if matches!(terminal_error, Some(RunError::DeadlineExceeded { .. })) {
+            if cancellation.is_cancelled() {
+                *terminal_error = Some(RunError::Cancelled);
+            }
+            if completed_before_deadline
+                && ordinary_precedes_cancellation(
+                    produced_ordinary_error,
+                    completed_at,
+                    cancellation,
+                )
+            {
+                *terminal_error = completion.outputs.clone().err();
+            } else {
+                if let Some(key) = &active.memo_key {
+                    memo_inflight.remove(key);
+                }
+                return;
+            }
+        } else if !completed_before_deadline {
+            *terminal_error = Some(if cancellation.is_cancelled() {
+                RunError::Cancelled
+            } else {
+                RunError::DeadlineExceeded {
+                    phase: RunPhase::Kernel,
+                }
+            });
+            if let Some(key) = &active.memo_key {
+                memo_inflight.remove(key);
+            }
+            return;
+        } else if terminal_error.is_none()
+            && !produced_ordinary_error
+            && let Err(error) =
+                check_terminal(cancellation, self.options.deadline, RunPhase::Kernel)
+        {
+            *terminal_error = Some(error);
+        }
+        if terminal_error.is_none()
+            && cancellation.is_cancelled()
+            && !ordinary_precedes_cancellation(produced_ordinary_error, completed_at, cancellation)
+        {
+            *terminal_error = Some(RunError::Cancelled);
+        }
+        for span in envelope.trace_spans {
+            self.trace.complete_span(span);
+        }
+        if worker_panic.is_none() {
+            *worker_panic = envelope.panic;
+        }
+
+        let correlation = operation_correlation(plan, run_id, parent_call, completion.operation);
+        if terminal_error.is_some() {
+            if matches!(terminal_error, Some(RunError::Cancelled))
+                && completion
+                    .outputs
+                    .as_ref()
+                    .is_err_and(|error| !matches!(error, RunError::Cancelled))
+                && ordinary_precedes_cancellation(
+                    produced_ordinary_error,
+                    completed_at,
+                    cancellation,
+                )
+            {
+                *terminal_error = completion.outputs.clone().err();
+            }
+            self.record_operation_terminal_event(plan, correlation, &completion);
+            if let Some(key) = &active.memo_key {
+                memo_inflight.remove(key);
+            }
+            return;
+        }
+
+        let retry_policy = plan.operations[completion.operation.index()]
+            .retry
+            .policy
+            .filter(|_| {
+                completion.outputs.as_ref().is_err_and(|error| {
+                    matches!(
+                        error,
+                        RunError::KernelFailed {
+                            kind: KernelErrorKind::Transient,
+                            ..
+                        }
+                    )
+                })
+            })
+            .filter(|policy| completion.attempt.get() < u64::from(policy.max_attempts.get()));
+        if let Some(policy) = retry_policy {
+            self.record_operation_terminal_event(plan, correlation, &completion);
+            let backoff = retry_backoff(policy, completion.attempt);
+            let Some(eligible_at) = Instant::now().checked_add(backoff) else {
+                if let Some(key) = &active.memo_key {
+                    memo_inflight.remove(key);
+                }
+                *terminal_error = Some(RunError::DeadlineExceeded {
+                    phase: RunPhase::QueueWait,
+                });
+                return;
+            };
+            if cancellation.is_cancelled()
+                || self
+                    .options
+                    .deadline
+                    .is_some_and(|deadline| deadline.exceeded_at(eligible_at))
+            {
+                if let Some(key) = &active.memo_key {
+                    memo_inflight.remove(key);
+                }
+                *terminal_error = Some(if cancellation.is_cancelled() {
+                    RunError::Cancelled
+                } else {
+                    RunError::DeadlineExceeded {
+                        phase: RunPhase::QueueWait,
+                    }
+                });
+                return;
+            }
+            let Some(attempt) = completion.attempt.next_checked() else {
+                if let Some(key) = &active.memo_key {
+                    memo_inflight.remove(key);
+                }
+                *terminal_error = Some(RunError::InvalidPlan(
+                    "retry attempt identity overflowed".into(),
+                ));
+                return;
+            };
+            let tie_break = *next_retry_tie;
+            let Some(next_tie) = tie_break.checked_add(1) else {
+                if let Some(key) = &active.memo_key {
+                    memo_inflight.remove(key);
+                }
+                *terminal_error = Some(RunError::InvalidPlan(
+                    "delayed retry tie-break identity overflowed".into(),
+                ));
+                return;
+            };
+            *next_retry_tie = next_tie;
+            #[cfg(test)]
+            self.run_test_checkpoint(
+                SchedulerCheckpoint::RetryBackoff {
+                    operation: completion.operation,
+                    activation: completion.activation,
+                    attempt: completion.attempt,
+                },
+                cancellation,
+            );
+            delayed_operations.insert(completion.operation);
+            delayed_retries.push(Reverse(DelayedRetry {
+                eligible_at,
+                tie_break,
+                operation: completion.operation,
+                owner_activation: active.owner_activation,
+                attempt,
+                inputs: active.inputs,
+                memo_key: active.memo_key,
+                class: active.class,
+            }));
+            return;
+        }
+
+        if let Some(key) = &active.memo_key {
+            memo_inflight.remove(key);
+        }
+        match completion.outputs {
+            Ok(outputs) => {
+                if cancellation.is_cancelled() {
+                    *terminal_error = Some(RunError::Cancelled);
+                    return;
+                }
+                let activation_key = MemoKey {
+                    frame: frame.id,
+                    activation: active.owner_activation,
+                    operation: completion.operation,
+                };
+                if frame.attempted.get(&activation_key) != Some(&completion.attempt)
+                    || frame.completed.contains(&activation_key)
+                {
+                    return;
+                }
+                if let Some(key) = active.memo_key {
+                    memoization.commit_completed(key, &outputs);
+                }
+                let operation = &plan.operations[completion.operation.index()];
+                for (output, value) in operation.outputs.iter().zip(outputs) {
+                    if let Err(error) = frame.set(output.value, value) {
+                        *terminal_error = Some(error);
+                        cancellation.cancel();
+                        return;
+                    }
+                }
+                frame.completed.insert(activation_key);
+                *frame
+                    .completion_counts
+                    .entry(completion.operation)
+                    .or_default() += 1;
+                pending.remove(&completion.operation);
+                if let Err(error) = self.propagate_value_dependencies(plan, frame) {
+                    *terminal_error = Some(error);
+                    cancellation.cancel();
+                    return;
+                }
+                self.record_event(
+                    plan,
+                    correlation,
+                    RunEventKind::OperationCompleted {
+                        operation_index: completion.operation.index() as u32,
+                        activation_id: completion.activation.get(),
+                        attempt_id: completion.attempt.get(),
+                    },
+                );
+            }
+            Err(error) => {
+                self.record_event(
+                    plan,
+                    correlation,
+                    RunEventKind::OperationErrored {
+                        operation_index: completion.operation.index() as u32,
+                        activation_id: completion.activation.get(),
+                        attempt_id: completion.attempt.get(),
+                        outcome: RunErrorOutcome::from(&error),
+                    },
+                );
+                *terminal_error = Some(error);
+                cancellation.cancel();
+            }
+        }
+    }
+
+    fn record_operation_started(
+        &self,
+        plan: &ExecutionPlan,
+        correlation: CorrelationContext,
+        operation: OperationIndex,
+        activation: ActivationId,
+        attempt: AttemptId,
+    ) {
+        self.record_event(
+            plan,
+            correlation.clone(),
+            RunEventKind::OperationStarted {
+                operation_index: operation.index() as u32,
+                activation_id: activation.get(),
+                attempt_id: attempt.get(),
+            },
+        );
+    }
+
+    fn record_operation_terminal_event(
+        &self,
+        plan: &ExecutionPlan,
+        correlation: CorrelationContext,
+        completion: &OperationCompletion,
+    ) {
+        let kind = match &completion.outputs {
+            Ok(_) => RunEventKind::OperationCompleted {
+                operation_index: completion.operation.index() as u32,
+                activation_id: completion.activation.get(),
+                attempt_id: completion.attempt.get(),
+            },
+            Err(error) => RunEventKind::OperationErrored {
+                operation_index: completion.operation.index() as u32,
+                activation_id: completion.activation.get(),
+                attempt_id: completion.attempt.get(),
+                outcome: RunErrorOutcome::from(error),
+            },
+        };
+        self.record_event(plan, correlation, kind);
+    }
+
+    fn record_event(
+        &self,
+        plan: &ExecutionPlan,
+        correlation: CorrelationContext,
+        kind: RunEventKind,
+    ) {
+        self.events.record(RunEvent {
+            correlation,
+            basis: plan.provenance.basis.clone(),
+            kind,
+        });
+    }
+}
+
+fn ordinary_precedes_cancellation(
+    produced_ordinary_error: bool,
+    completed_at: Instant,
+    cancellation: &CancellationToken,
+) -> bool {
+    ordinary_error_precedes_cancellation_at(
+        produced_ordinary_error,
+        completed_at,
+        cancellation.cancelled_at(),
+    )
+}
+
+pub(crate) fn ordinary_error_precedes_cancellation_at(
+    produced_ordinary_error: bool,
+    completed_at: Instant,
+    cancelled_at: Option<Instant>,
+) -> bool {
+    produced_ordinary_error && cancelled_at.is_none_or(|cancelled_at| completed_at < cancelled_at)
+}
+
+pub(crate) fn retry_backoff(policy: RetryPolicy, failed_attempt: AttemptId) -> Duration {
+    if policy.initial_backoff >= policy.max_backoff {
+        return policy.max_backoff;
+    }
+    let exponent = failed_attempt.get().saturating_sub(1);
+    let multiplier = u32::try_from(exponent)
+        .ok()
+        .and_then(|exponent| 1_u32.checked_shl(exponent))
+        .unwrap_or(u32::MAX);
+    policy
+        .initial_backoff
+        .checked_mul(multiplier)
+        .unwrap_or(policy.max_backoff)
+        .min(policy.max_backoff)
+}
+
+fn operation_correlation(
+    plan: &ExecutionPlan,
+    run_id: RunId,
+    parent_call: Option<ParentCallId>,
+    operation: OperationIndex,
+) -> CorrelationContext {
+    let planned = &plan.operations[operation.index()];
+    CorrelationContext::compile(&plan.provenance)
+        .for_run(run_id, parent_call)
+        .for_node(planned.source_node_id, planned.source_node_type_id.clone())
+}
+
+fn execute_operation_worker(
+    context: &OperationWorkerContext<'_>,
+    job: PreparedOperation,
+    trace: &dyn TraceSink,
+) -> Result<Box<[RuntimeValue]>, RunError> {
+    let operation = job.operation;
+    let activation = job.activation;
+    let attempt = job.attempt;
+    let correlation =
+        operation_correlation(context.plan, context.run_id, context.parent_call, operation);
+    let planned = &context.plan.operations[operation.index()];
+    let mut span = start_span_safely(
+        trace,
+        SpanSpec {
+            parent_span_id: Some(context.run_parent_span_id),
+            run_id: Some(context.run_id),
+            operation_id: Some(planned.stable_id.clone()),
+            activation_id: Some(activation),
+            attempt_id: Some(attempt),
+            kind: SpanKind::OperationAttempt,
+            correlation,
+        },
+    );
+    let operation_span_id = span.span_id();
+    let result = execute_operation_worker_inner(context, job, trace, operation_span_id);
+    span.finish(operation_span_outcome(
+        context.plan,
+        operation,
+        attempt,
+        &result,
+    ));
+    result
+}
+
+fn execute_operation_worker_inner(
+    context: &OperationWorkerContext<'_>,
+    job: PreparedOperation,
+    trace: &dyn TraceSink,
+    operation_span_id: SpanId,
+) -> Result<Box<[RuntimeValue]>, RunError> {
+    check_terminal(context.cancellation, context.deadline, RunPhase::Kernel)?;
+    let operation = &context.plan.operations[job.operation.index()];
+    let inputs = job.inputs;
+    let outputs = match &operation.kernel {
+        PlannedKernel::Native(handle) => {
+            let kernel = context
+                .kernels
+                .get(handle)
+                .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
+            let kernel_context = KernelContext {
+                run_id: context.run_id,
+                frame_id: context.frame_id,
+                activation_id: job.activation,
+                params: &operation.params,
+                compiled_parameters: context.compiled_parameters,
+                resources: context.resources,
+                resource_owner: context.resource_owner,
+                cancellation: context.cancellation,
+                deadline: context.deadline,
+            };
+            match kernel.execute(&kernel_context, &inputs) {
+                Ok(outputs) => outputs,
+                Err(error) if error.kind() == KernelErrorKind::Cancelled => {
+                    return Err(RunError::Cancelled);
+                }
+                Err(error) if error.kind() == KernelErrorKind::DeadlineExceeded => {
+                    return Err(RunError::DeadlineExceeded {
+                        phase: RunPhase::Kernel,
+                    });
+                }
+                Err(error) => {
+                    return Err(RunError::KernelFailed {
+                        operation: job.operation,
+                        kind: error.kind(),
+                        message: error.message().into(),
+                    });
+                }
+            }
+        }
+        PlannedKernel::Adapter(adapter) => {
+            let input =
+                inputs.into_vec().into_iter().next().ok_or_else(|| {
+                    RunError::InvalidPlan("adapter operation has no input".into())
+                })?;
+            let correlation = operation_correlation(
+                context.plan,
+                context.run_id,
+                context.parent_call,
+                job.operation,
+            );
+            let mut adapter_span = start_span_safely(
+                trace,
+                SpanSpec {
+                    parent_span_id: Some(operation_span_id),
+                    run_id: Some(context.run_id),
+                    operation_id: Some(operation.stable_id.clone()),
+                    activation_id: Some(job.activation),
+                    attempt_id: Some(job.attempt),
+                    kind: SpanKind::AdapterIo,
+                    correlation,
+                },
+            );
+            let result = execute_planned_adapter(
+                adapter,
+                input,
+                context.resource_owner,
+                context.cancellation,
+            );
+            adapter_span.finish(span_outcome(&result));
+            vec![result?]
+        }
+        PlannedKernel::Relational(index) => {
+            let subplan = &context.plan.relational_subplans[index.index()];
+            let backend = context
+                .relational_backends
+                .get(&subplan.backend)
+                .ok_or_else(|| RunError::RelationalBackendNotFound(subplan.backend.clone()))?;
+            let relational_context = RelationalContext {
+                run_id: context.run_id,
+                resources: context.resources,
+                resource_owner: context.resource_owner,
+                cancellation: context.cancellation,
+                deadline: context.deadline,
+            };
+            let correlation = operation_correlation(
+                context.plan,
+                context.run_id,
+                context.parent_call,
+                job.operation,
+            );
+            let mut adapter_span = start_span_safely(
+                trace,
+                SpanSpec {
+                    parent_span_id: Some(operation_span_id),
+                    run_id: Some(context.run_id),
+                    operation_id: Some(operation.stable_id.clone()),
+                    activation_id: Some(job.activation),
+                    attempt_id: Some(job.attempt),
+                    kind: SpanKind::AdapterIo,
+                    correlation,
+                },
+            );
+            let backend_result =
+                backend.execute(&relational_context, &subplan.compiled_plan, &inputs);
+            let backend_outcome = match &backend_result {
+                Err(error) if error.code() == super::RelationalErrorCode::Cancelled => {
+                    SpanOutcome::Cancellation
+                }
+                Err(_) => SpanOutcome::Error,
+                Ok(_) if context.cancellation.is_cancelled() => SpanOutcome::Cancellation,
+                Ok(_) => SpanOutcome::Success,
+            };
+            adapter_span.finish(backend_outcome);
+            match backend_result {
+                Ok(execution) => execution.outputs,
+                Err(error) => return Err(RunError::from_relational(job.operation, error)),
+            }
+        }
+    };
+    check_terminal(context.cancellation, context.deadline, RunPhase::Kernel)?;
+    if outputs.len() != operation.outputs.len() {
+        return Err(RunError::OutputCount {
+            operation: job.operation,
+            expected: operation.outputs.len(),
+            actual: outputs.len(),
+        });
+    }
+    Ok(outputs.into_boxed_slice())
 }
 
 pub(super) fn operation_resource_versions(
@@ -1276,32 +2832,51 @@ pub(super) fn operation_memoization_safe(plan: &ExecutionPlan, operation: Operat
     }
 }
 
-fn relational_backend_event(
-    status: SpanStatus,
-    correlation: CorrelationContext,
-    backend_id: &str,
-    subplan_index: RelationalSubplanIndex,
-) -> SpanEvent {
-    SpanEvent::new(SpanKind::RelationalBackend, status, correlation)
-        .with_field(
-            "backendId",
-            TraceValue::Text(backend_id.into()),
-            TraceFieldSensitivity::Public,
-            RedactionPolicy::strict(),
-        )
-        .with_field(
-            "subplanIndex",
-            TraceValue::Integer(subplan_index.index() as i64),
-            TraceFieldSensitivity::Public,
-            RedactionPolicy::strict(),
-        )
+fn promote_run_result(
+    run_result: &RunResult,
+    cancellation: &CancellationToken,
+    deadline: Option<RunDeadline>,
+) -> Result<(), RunError> {
+    for value in run_result.values.values() {
+        if let RuntimeValue::Artifact(artifact) = value {
+            artifact.promote(cancellation, deadline)?;
+        }
+    }
+    Ok(())
 }
 
-fn run_status<T>(result: &Result<T, RunError>) -> SpanStatus {
+fn span_outcome<T>(result: &Result<T, RunError>) -> SpanOutcome {
     match result {
-        Ok(_) => SpanStatus::Succeeded,
-        Err(RunError::Cancelled) => SpanStatus::Cancelled,
-        Err(_) => SpanStatus::Failed,
+        Ok(_) => SpanOutcome::Success,
+        Err(RunError::Cancelled) => SpanOutcome::Cancellation,
+        Err(RunError::DeadlineExceeded { .. }) => SpanOutcome::Timeout,
+        Err(_) => SpanOutcome::Error,
+    }
+}
+
+fn operation_span_outcome<T>(
+    plan: &ExecutionPlan,
+    operation: OperationIndex,
+    attempt: AttemptId,
+    result: &Result<T, RunError>,
+) -> SpanOutcome {
+    let retryable = result.as_ref().is_err_and(|error| {
+        matches!(
+            error,
+            RunError::KernelFailed {
+                kind: KernelErrorKind::Transient,
+                ..
+            }
+        )
+    });
+    let has_retry = plan.operations[operation.index()]
+        .retry
+        .policy
+        .is_some_and(|policy| attempt.get() < u64::from(policy.max_attempts.get()));
+    if retryable && has_retry {
+        SpanOutcome::Retry
+    } else {
+        span_outcome(result)
     }
 }
 
@@ -1316,7 +2891,7 @@ struct Frame {
     id: FrameId,
     values: Vec<Option<RuntimeValue>>,
 
-    attempted: BTreeSet<MemoKey>,
+    attempted: BTreeMap<MemoKey, AttemptId>,
     completed: BTreeSet<MemoKey>,
     completion_counts: BTreeMap<OperationIndex, usize>,
 }
@@ -1327,7 +2902,7 @@ impl Frame {
             id: FrameId::next(),
             values: vec![None; value_count as usize],
 
-            attempted: BTreeSet::new(),
+            attempted: BTreeMap::new(),
             completed: BTreeSet::new(),
             completion_counts: BTreeMap::new(),
         }

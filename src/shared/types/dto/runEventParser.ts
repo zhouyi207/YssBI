@@ -11,12 +11,14 @@ import {
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
+  RUN_PHASES,
   type CompilationBasisDto,
   type ExecuteGraphResultDto,
   type RunCorrelationDto,
   type RunErrorCode,
   type RunEvent,
   type RunEventKind,
+  type RunPhase,
 } from './runEvent';
 
 type UnknownRecord = Record<string, unknown>;
@@ -121,6 +123,8 @@ function parseRunErrorCode(value: unknown): RunErrorCode {
   switch (code) {
     case 'invalidPlan':
     case 'cancelled':
+    case 'activationIdExhausted':
+    case 'deadlineExceeded':
     case 'kernelNotFound':
     case 'kernelFailed':
     case 'relationalBackendNotFound':
@@ -148,6 +152,22 @@ function parseRunErrorCode(value: unknown): RunErrorCode {
     default:
       return assertNever(code);
   }
+}
+
+function parseRunPhase(value: unknown): RunPhase {
+  return parseDiscriminant(value, RUN_PHASES, 'run phase');
+}
+
+function parseErrorOutcome(
+  value: UnknownRecord,
+): { code: 'deadlineExceeded'; phase: RunPhase }
+  | { code: Exclude<RunErrorCode, 'deadlineExceeded'>; phase: null } {
+  const code = parseRunErrorCode(value.code);
+  if (code === 'deadlineExceeded') {
+    return { code, phase: parseRunPhase(value.phase) };
+  }
+  if (value.phase !== null) return fail('run error phase');
+  return { code, phase: null };
 }
 
 function parseCompilationBasisDto(value: unknown): CompilationBasisDto {
@@ -203,10 +223,16 @@ function parseOperationEvent(
   value: UnknownRecord,
   type: 'operationStarted' | 'operationCompleted',
 ): RunEventKind {
-  if (!hasExactKeys(value, ['type', 'operationIndex', 'activationId'])
+  if (!hasExactKeys(value, ['type', 'operationIndex', 'activationId', 'attemptId'])
     || !isU32(value.operationIndex)
-    || !isDecimalId(value.activationId)) return fail(type);
-  return { type, operationIndex: value.operationIndex, activationId: value.activationId };
+    || !isDecimalId(value.activationId)
+    || !isDecimalId(value.attemptId)) return fail(type);
+  return {
+    type,
+    operationIndex: value.operationIndex,
+    activationId: value.activationId,
+    attemptId: value.attemptId,
+  };
 }
 
 function parseRunEventKind(value: unknown): RunEventKind {
@@ -220,8 +246,8 @@ function parseRunEventKind(value: unknown): RunEventKind {
       if (!hasExactKeys(value, ['type'])) return fail('runCompleted');
       return { type: 'runCompleted' };
     case 'runErrored':
-      if (!hasExactKeys(value, ['type', 'code'])) return fail('runErrored');
-      return { type: 'runErrored', code: parseRunErrorCode(value.code) };
+      if (!hasExactKeys(value, ['type', 'code', 'phase'])) return fail('runErrored');
+      return { type: 'runErrored', ...parseErrorOutcome(value) };
     case 'runCancelled':
       if (!hasExactKeys(value, ['type'])) return fail('runCancelled');
       return { type: 'runCancelled' };
@@ -230,14 +256,19 @@ function parseRunEventKind(value: unknown): RunEventKind {
     case 'operationCompleted':
       return parseOperationEvent(value, 'operationCompleted');
     case 'operationErrored':
-      if (!hasExactKeys(value, ['type', 'operationIndex', 'activationId', 'code'])
+      if (!hasExactKeys(
+        value,
+        ['type', 'operationIndex', 'activationId', 'attemptId', 'code', 'phase'],
+      )
         || !isU32(value.operationIndex)
-        || !isDecimalId(value.activationId)) return fail('operationErrored');
+        || !isDecimalId(value.activationId)
+        || !isDecimalId(value.attemptId)) return fail('operationErrored');
       return {
         type: 'operationErrored',
         operationIndex: value.operationIndex,
         activationId: value.activationId,
-        code: parseRunErrorCode(value.code),
+        attemptId: value.attemptId,
+        ...parseErrorOutcome(value),
       };
     case 'resultReady':
       if (!hasExactKeys(value, ['type', 'name', 'sourceId'])

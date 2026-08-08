@@ -41,9 +41,10 @@ vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
       items: [{
         nodeTypeId: 'functions.call', title: 'Helper', description: null, documentation: null,
         categoryId: 'functions', iconId: 'function', styleId: 'call', aliases: [],
-        technicalTerms: [], ports: [], parameters: [],
+        technicalTerms: [], backendSearchText: ['helper'], resourceNames: ['Helper'],
+        ports: [], parameters: [],
         resourcePath: 'functions/helper.yssbi-function', resourceRevision: 3,
-        creation: resourceDescriptor, searchText: 'helper',
+        creation: resourceDescriptor,
       }],
     },
     searchIndex: null,

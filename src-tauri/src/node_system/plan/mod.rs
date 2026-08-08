@@ -113,6 +113,7 @@ mod tests {
                         results: Box::new([CallResultBinding {
                             callee_source: ValueRef::new(0),
                             caller_destination: ValueRef::new(7),
+                            production: Some(OutputProduction::FullyMaterialized),
                         }]),
                         mandatory: true,
                     }),
@@ -120,6 +121,7 @@ mod tests {
                         destination: ValueRef::new(2),
                         then_source: ValueRef::new(3),
                         else_source: ValueRef::new(4),
+                        production: Some(OutputProduction::FullyMaterialized),
                     }]),
                 })),
                 ControlStep::Region(Box::new(StructuredControlRegion::Loop {
@@ -131,6 +133,7 @@ mod tests {
                         initial_source: ValueRef::new(0),
                         next_source: ValueRef::new(1),
                         result: ValueRef::new(6),
+                        production: Some(OutputProduction::FullyMaterialized),
                     }]),
                     continue_condition: ValueRef::new(0),
                     max_iterations: 10,
@@ -697,6 +700,7 @@ mod tests {
                     destination: ValueRef::new(2),
                     then_source: ValueRef::new(3),
                     else_source: ValueRef::new(4),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
             })),
         ]));
@@ -857,6 +861,135 @@ mod tests {
             &unsourced_branch_source,
             "MissingStructuredBindingSource"
         ));
+    }
+
+    #[test]
+    fn rejects_stale_structured_production_facts() {
+        let mut branch = valid_plan();
+        let StructuredControlRegion::Sequence(steps) = &mut branch.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(region) = &mut steps[1] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::If { results, .. } = region.as_mut() else {
+            unreachable!()
+        };
+        results[0].production = Some(OutputProduction::Streaming);
+        assert!(
+            branch
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::StructuredProductionMismatch {
+                        producer: "branch result",
+                        value,
+                        ..
+                    } if *value == ValueRef::new(2)
+                ))
+        );
+
+        let mut missing_branch = valid_plan();
+        let StructuredControlRegion::Sequence(steps) = &mut missing_branch.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(region) = &mut steps[1] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::If { results, .. } = region.as_mut() else {
+            unreachable!()
+        };
+        results[0].production = None;
+        assert!(
+            missing_branch
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::MissingStructuredProductionFact {
+                        producer: "branch result",
+                        value,
+                    } if *value == ValueRef::new(2)
+                ))
+        );
+
+        let mut conflicting_branch = valid_plan();
+        for source in &mut conflicting_branch.value_sources {
+            if source.value() == ValueRef::new(3) {
+                *source =
+                    PlanValueSource::ExternalInput(ValueRef::new(3), OutputProduction::Streaming);
+            }
+        }
+        assert!(
+            conflicting_branch
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::ConflictingStructuredProductions {
+                        producer: "branch result",
+                        value,
+                        ..
+                    } if *value == ValueRef::new(2)
+                ))
+        );
+
+        let mut loop_plan = valid_plan();
+        let StructuredControlRegion::Sequence(steps) = &mut loop_plan.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(region) = &mut steps[2] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::Loop { carried, .. } = region.as_mut() else {
+            unreachable!()
+        };
+        carried[0].production = Some(OutputProduction::Streaming);
+        assert!(
+            loop_plan
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::StructuredProductionMismatch {
+                        producer: "loop result",
+                        value,
+                        ..
+                    } if *value == ValueRef::new(6)
+                ))
+        );
+
+        let mut call = valid_plan();
+        let StructuredControlRegion::Sequence(steps) = &mut call.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(branch) = &mut steps[1] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::If { else_region, .. } = branch.as_mut() else {
+            unreachable!()
+        };
+        let StructuredControlRegion::Call { results, .. } = else_region.as_mut() else {
+            unreachable!()
+        };
+        results[0].production = Some(OutputProduction::Streaming);
+        assert!(call.validate().unwrap_err().0.iter().any(|error| matches!(
+            error,
+            PlanValidationError::StructuredProductionMismatch {
+                producer: "call result",
+                value,
+                ..
+            } if *value == ValueRef::new(7)
+        )));
     }
 
     #[test]
@@ -1347,6 +1480,112 @@ mod tests {
         };
 
         assert_eq!(plan.validate(), Ok(()));
+    }
+
+    #[test]
+    fn conflicting_alias_productions_are_typed_and_permutation_stable() {
+        let build = |reverse: bool| {
+            let mut plan = valid_plan();
+            plan.value_count = 9;
+            for source in &mut plan.value_sources {
+                if source.value() == ValueRef::new(3) {
+                    *source = PlanValueSource::ExternalInput(
+                        ValueRef::new(3),
+                        OutputProduction::Streaming,
+                    );
+                }
+            }
+            let mut aliases = vec![
+                ValueDependency {
+                    source: ValueRef::new(0),
+                    destination: ValueRef::new(8),
+                },
+                ValueDependency {
+                    source: ValueRef::new(3),
+                    destination: ValueRef::new(8),
+                },
+            ];
+            if reverse {
+                aliases.reverse();
+            }
+            plan.value_dependencies = aliases.into_boxed_slice();
+            plan
+        };
+
+        let errors = [build(false), build(true)].map(|plan| {
+            plan.validate()
+                .expect_err("multiple conflicting aliases must be rejected")
+                .0
+                .into_vec()
+                .into_iter()
+                .filter(|error| {
+                    matches!(
+                        error,
+                        PlanValidationError::DuplicateValueDependencyAlias { destination, .. }
+                            | PlanValidationError::ConflictingAliasProductions {
+                                destination,
+                                ..
+                            } if *destination == ValueRef::new(8)
+                    )
+                })
+                .collect::<Vec<_>>()
+        });
+
+        assert_eq!(errors[0], errors[1]);
+        assert!(errors[0].iter().any(|error| matches!(
+            error,
+            PlanValidationError::DuplicateValueDependencyAlias { sources, .. }
+                if sources.as_ref() == [ValueRef::new(0), ValueRef::new(3)]
+        )));
+        assert!(errors[0].iter().any(|error| matches!(
+            error,
+            PlanValidationError::ConflictingAliasProductions { productions, .. }
+                if productions.as_ref()
+                    == [OutputProduction::Streaming, OutputProduction::FullyMaterialized]
+        )));
+    }
+
+    #[test]
+    fn duplicate_aliases_propagate_matching_production_but_still_fail_typed_validation() {
+        let mut plan = valid_plan();
+        plan.value_count = 9;
+        plan.value_dependencies = Box::new([
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(8),
+            },
+            ValueDependency {
+                source: ValueRef::new(3),
+                destination: ValueRef::new(8),
+            },
+        ]);
+        let StructuredControlRegion::Sequence(steps) = &mut plan.root_region else {
+            unreachable!()
+        };
+        let ControlStep::Region(branch) = &mut steps[1] else {
+            unreachable!()
+        };
+        let StructuredControlRegion::If { results, .. } = branch.as_mut() else {
+            unreachable!()
+        };
+        results[0].then_source = ValueRef::new(8);
+
+        let errors = plan
+            .validate()
+            .expect_err("duplicate aliases must be rejected even when contracts agree");
+        assert!(errors.0.iter().any(|error| matches!(
+            error,
+            PlanValidationError::DuplicateValueDependencyAlias { destination, sources }
+                if *destination == ValueRef::new(8)
+                    && sources.as_ref() == [ValueRef::new(0), ValueRef::new(3)]
+        )));
+        assert!(!errors.0.iter().any(|error| matches!(
+            error,
+            PlanValidationError::MissingStructuredProductionFact {
+                producer: "branch result",
+                ..
+            }
+        )));
     }
 
     #[test]

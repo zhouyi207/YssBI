@@ -14,6 +14,12 @@
           "projection",
           "dataframe"
         ],
+        "backendSearchText": [
+          "project dataframe",
+          "select columns",
+          "projection",
+          "dataframe"
+        ],
         "categoryId": "dataframe",
         "creation": {
           "kind": "parameterizedStatic",
@@ -47,7 +53,7 @@
             "label": "Result"
           }
         ],
-        "searchText": "project dataframe select columns projection dataframe",
+        "resourceNames": [],
         "styleId": "builtin.dataframe",
         "technicalTerms": [
           "select columns",
@@ -59,7 +65,7 @@
     ],
     "locale": "en-US",
     "projectInstanceId": "fixture-project",
-    "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+    "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
     "resourcePublicationRevision": 0
   },
   "connect": {
@@ -124,7 +130,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 3,
-            "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -945,6 +951,9 @@
               "sourceRevision": 3
             }
           ],
+          "outcome": {
+            "type": "analysisBlocked"
+          },
           "sourceRevision": 3
         }
       }
@@ -1009,7 +1018,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 2,
-            "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -1817,6 +1826,9 @@
               "sourceRevision": 2
             }
           ],
+          "outcome": {
+            "type": "analysisBlocked"
+          },
           "sourceRevision": 2
         }
       }
@@ -1827,7 +1839,7 @@
     "basis": {
       "graphPath": "events/ProductionChain.yssbi-event",
       "graphRevision": 1,
-      "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+      "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
       "resourceVersions": {
         "databases/main": "revision:0"
       }
@@ -2468,6 +2480,9 @@
         "sourceRevision": 1
       }
     ],
+    "outcome": {
+      "type": "analysisBlocked"
+    },
     "sourceRevision": 1
   },
   "projectInput": {
@@ -2550,7 +2565,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 4,
-            "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -3364,6 +3379,9 @@
               "sourceRevision": 4
             }
           ],
+          "outcome": {
+            "type": "analysisBlocked"
+          },
           "sourceRevision": 4
         }
       }

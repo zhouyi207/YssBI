@@ -43,10 +43,11 @@ function catalog(projectInstanceId: string, locale: string): LocalizedCatalogDto
       styleId: 'default',
       aliases: [],
       technicalTerms: [],
+      backendSearchText: [nodeTypeId],
+      resourceNames: [],
       ports: [],
       parameters: [],
       creation: { kind: 'static', nodeTypeId },
-      searchText: nodeTypeId,
     }],
   };
 }

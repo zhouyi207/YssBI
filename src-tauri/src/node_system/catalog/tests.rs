@@ -2,7 +2,7 @@ use super::localization::{Aliases, Text};
 use super::*;
 use crate::node_system::analysis::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
-    EditorGraphProjectionDto, LocalizationBundle, NodeDiagnostic,
+    EditorGraphProjectionDto, LocalizationBundle, NodeDiagnostic, ResourceKey, ResourceVersion,
 };
 use crate::node_system::compiler::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompileCancellationToken, CompilerDiagnosticDefinitionError,
@@ -134,14 +134,22 @@ fn locale_fallback_uses_language_then_english_then_stable_key() {
 }
 
 #[test]
-fn search_uses_only_current_locale_titles_and_aliases() {
+fn catalog_projects_distinct_backend_search_and_resource_name_arrays() {
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;
     let catalog = builtin.catalog;
     let en = catalog.localize(&registry, "en-US");
     let en_add = item(&en, "yssbi.numeric.add.int64");
-    assert!(!en_add.search_text.contains("yssbi numeric add int64"));
-    assert!(en_add.search_text.contains("plus"));
+    assert_eq!(
+        en_add.backend_search_text,
+        vec![
+            Box::<str>::from("Add"),
+            "plus".into(),
+            "sum".into(),
+            "+".into(),
+        ]
+    );
+    assert!(en_add.resource_names.is_empty());
     assert_eq!(
         en_add.aliases,
         vec![Box::<str>::from("plus"), "sum".into(), "+".into()]
@@ -150,8 +158,16 @@ fn search_uses_only_current_locale_titles_and_aliases() {
     let zh = catalog.localize(&registry, "zh-CN");
     let zh_add = item(&zh, "yssbi.numeric.add.int64");
     assert_eq!(zh_add.title.as_ref(), "加法");
-    assert!(zh_add.search_text.contains("求和"));
-    assert!(!zh_add.search_text.contains("plus"));
+    assert_eq!(
+        zh_add.backend_search_text,
+        vec![
+            Box::<str>::from("加法"),
+            "相加".into(),
+            "求和".into(),
+            "+".into(),
+        ]
+    );
+    assert!(zh_add.resource_names.is_empty());
 }
 
 #[test]
@@ -365,7 +381,6 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
         resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: vec!["call".into(), "function".into()],
-        pinyin: Some("calculate sales".into()),
     };
 
     let en = catalog.localize_with_resources(&registry, "en-US", &[resource.clone()]);
@@ -384,8 +399,11 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
     assert_eq!(en_resource.title, zh_resource.title);
     assert_ne!(en_resource.description, zh_resource.description);
     assert_ne!(en_resource.documentation, zh_resource.documentation);
-    assert_eq!(en_resource.pinyin, None);
-    assert_eq!(zh_resource.pinyin.as_deref(), Some("calculate sales"));
+    assert_eq!(
+        en_resource.resource_names,
+        vec![Box::<str>::from("Calculate Sales")]
+    );
+    assert_eq!(zh_resource.resource_names, en_resource.resource_names);
     assert_eq!(zh_resource.icon_id.as_ref(), "builtin.project");
     assert_eq!(zh_resource.style_id.as_ref(), "builtin.default");
     assert_eq!(
@@ -454,18 +472,17 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
 }
 
 #[test]
-fn resource_catalog_search_uses_only_current_locale_title_and_aliases() {
+fn resource_catalog_projects_raw_backend_text_and_authoritative_resource_names_separately() {
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;
     let catalog = builtin.catalog;
     let resource = CatalogResourceEntry {
-        name: "Calculate Sales".into(),
+        name: "Straße_Sales Cafe\u{301} 数据".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
         resource_path: CatalogResourcePath::new("functions/opaque-sales"),
         resource_revision: crate::node_system::document::ResourceRevision::new(9),
         create_args: ResourceBoundCreateArgsDto::Function,
-        technical_terms: vec!["english-technical-only".into()],
-        pinyin: Some("pinyin-only-token".into()),
+        technical_terms: vec!["Maße_Value\u{301}".into()],
     };
 
     let localized = catalog.localize_with_resources(&registry, "zh-CN", &[resource]);
@@ -475,14 +492,31 @@ fn resource_catalog_search_uses_only_current_locale_title_and_aliases() {
         .find(|item| item.resource_path.is_some())
         .unwrap();
 
-    assert!(resource.search_text.contains("calculate sales"));
-    assert!(resource.search_text.contains("调用"));
-    assert!(!resource.search_text.contains("invoke"));
-    assert!(!resource.search_text.contains("english technical only"));
-    assert!(!resource.search_text.contains("pinyin only token"));
-    assert!(!resource.search_text.contains("yssbi"));
-    assert!(!resource.search_text.contains("项目资源接入图执行"));
-    assert!(!resource.search_text.contains("资源身份"));
+    assert_eq!(
+        resource.resource_names,
+        vec![Box::<str>::from("Straße_Sales Cafe\u{301} 数据")]
+    );
+    assert_eq!(
+        resource.backend_search_text,
+        vec![Box::<str>::from("调用"), "执行".into(), "函数".into()]
+    );
+    assert!(
+        resource
+            .technical_terms
+            .contains(&Box::<str>::from("Maße_Value\u{301}"))
+    );
+    assert!(
+        !resource
+            .backend_search_text
+            .iter()
+            .any(|term| term.contains("invoke"))
+    );
+    assert!(
+        !resource
+            .resource_names
+            .iter()
+            .any(|name| name.contains("opaque-sales"))
+    );
 }
 
 #[test]
@@ -497,7 +531,6 @@ fn resource_catalog_localization_falls_back_without_changing_identity() {
         resource_revision: crate::node_system::document::ResourceRevision::new(13),
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: Vec::new(),
-        pinyin: None,
     };
 
     let en = catalog.localize_with_resources(&registry, "en-US", &[resource.clone()]);
@@ -534,7 +567,6 @@ fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
         resource_revision: crate::node_system::document::ResourceRevision::new(2),
         create_args: ResourceBoundCreateArgsDto::Variable,
         technical_terms: Vec::new(),
-        pinyin: None,
     };
     let second = CatalogResourceEntry {
         name: "Second".into(),
@@ -543,7 +575,6 @@ fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
         resource_revision: crate::node_system::document::ResourceRevision::new(3),
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: Vec::new(),
-        pinyin: None,
     };
 
     let forward =
@@ -645,7 +676,10 @@ fn builtin_factory_hides_raw_assembly_and_registry_shortcuts() {
         .nth(1)
         .and_then(|tail| tail.split("#[cfg(test)]").next())
         .expect("nominal installer source section");
-    assert!(nominal_installer.contains("Result<(), BuiltinAssemblyError>"));
+    assert!(
+        nominal_installer
+            .contains("Result<super::dataframe::DataframeNominalHandles, BuiltinAssemblyError>")
+    );
     assert!(!nominal_installer.contains(".expect("));
     assert!(!nominal_installer.contains(".unwrap("));
     assert!(!nominal_installer.contains("panic!("));
@@ -1337,14 +1371,12 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
                     .as_ref()
                     .is_some_and(|value| !value.is_empty())
             );
-            assert!(
-                item.search_text
-                    .contains(normalize_search_text(&item.title).as_ref())
-            );
+            assert!(item.backend_search_text.contains(&item.title));
             assert!(
                 !item
-                    .search_text
-                    .contains(normalize_search_text(id).as_ref())
+                    .backend_search_text
+                    .iter()
+                    .any(|term| term.as_ref() == id)
             );
         }
     }
@@ -1357,7 +1389,6 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
             resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
             create_args: ResourceBoundCreateArgsDto::Function,
             technical_terms: vec!["call".into()],
-            pinyin: None,
         },
         CatalogResourceEntry {
             name: "Tax Rate".into(),
@@ -1366,7 +1397,6 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
             resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
             create_args: ResourceBoundCreateArgsDto::Variable,
             technical_terms: vec!["variable".into()],
-            pinyin: None,
         },
     ];
     let localized = catalog.localize_with_resources(&registry, "en-US", &resources);
@@ -1391,14 +1421,22 @@ fn builtin_function_resolver_projects_function_document_members() {
     struct FunctionResources {
         path: GraphResourcePath,
         document: FunctionDocument,
+        graph: GraphDocument,
     }
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
-            BTreeMap::new()
+            BTreeMap::from([(
+                ResourceKey::new(self.path.0.clone()),
+                ResourceVersion::new("function-v1"),
+            )])
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.document)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.path).then_some(&self.graph)
         }
     }
 
@@ -1414,6 +1452,7 @@ fn builtin_function_resolver_projects_function_document_members() {
             }],
             return_type: Some("float64".into()),
         }),
+        graph: GraphDocument::default(),
     };
     let node_id = NodeId::from_uuid(Uuid::from_u128(42));
     let mut document = GraphDocument::default();

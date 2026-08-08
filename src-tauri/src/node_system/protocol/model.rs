@@ -169,12 +169,15 @@ pub enum PortEditorSpec {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutionSemantics {
     pub determinism: Determinism,
     pub purity: Purity,
     pub evaluation: EvaluationPolicy,
     pub cache: CachePolicy,
     pub effects: EffectSemantics,
+    pub idempotent: bool,
+    pub retry: Option<RetryPolicy>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,6 +213,7 @@ pub enum CachePolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RetryPolicy {
     pub max_attempts: NonZeroU32,
     pub initial_backoff: Duration,
@@ -436,8 +440,28 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
+    if execution.idempotent != execution.retry.is_some() {
+        return Err(ProtocolError::InvalidExecutionSemantics(
+            "retry policy and idempotence must be declared together",
+        ));
+    }
+    if let Some(policy) = execution.retry {
+        if policy.validate().is_err() {
+            return Err(ProtocolError::InvalidExecutionSemantics(
+                "retry policy has invalid backoff bounds",
+            ));
+        }
+        if !execution.idempotent
+            || execution.determinism != Determinism::Deterministic
+            || execution.purity != Purity::Pure
+            || execution.effects != EffectSemantics::None
+        {
+            return Err(ProtocolError::InvalidExecutionSemantics(
+                "retry requires deterministic, pure, effect-free idempotent execution",
+            ));
+        }
+    }
     match (execution.purity, execution.effects) {
         (Purity::Pure, EffectSemantics::None)
         | (Purity::Effectful, EffectSemantics::Ordered | EffectSemantics::Exclusive) => Ok(()),
@@ -564,6 +588,25 @@ mod tests {
     }
 
     #[test]
+    fn retry_metadata_serde_rejects_unknown_legacy_fields() {
+        let execution = ExecutionSemantics {
+            determinism: Determinism::Deterministic,
+            purity: Purity::Pure,
+            evaluation: EvaluationPolicy::DemandDriven,
+            cache: CachePolicy::PerRun,
+            effects: EffectSemantics::None,
+            idempotent: true,
+            retry: Some(
+                RetryPolicy::new(NonZeroU32::new(2).unwrap(), Duration::ZERO, Duration::ZERO)
+                    .unwrap(),
+            ),
+        };
+        let mut value = serde_json::to_value(execution).unwrap();
+        value["legacy_retry"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<ExecutionSemantics>(value).is_err());
+    }
+
+    #[test]
     fn rejects_purity_effect_mismatches() {
         let pure_effect = ExecutionSemantics {
             determinism: Determinism::Deterministic,
@@ -571,6 +614,8 @@ mod tests {
             evaluation: EvaluationPolicy::DemandDriven,
             cache: CachePolicy::PerRun,
             effects: EffectSemantics::Ordered,
+            idempotent: false,
+            retry: None,
         };
         assert!(validate_execution(pure_effect).is_err());
     }

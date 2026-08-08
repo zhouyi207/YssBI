@@ -1,22 +1,25 @@
+use super::scheduler::SchedulerCheckpoint;
 use super::*;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
-    ResourceKey, ResourceVersion, SpanEvent, SpanKind, SpanStatus, TraceSink, TraceValue,
+    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec,
+    TraceSink, TraceSpan,
 };
 use crate::node_system::document::{
     FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
 };
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
-    CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+    CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier, Mutex, mpsc};
+use std::sync::{Arc, Barrier, Condvar, Mutex, mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
     constructor(value.into()).unwrap()
@@ -60,6 +63,37 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
         cache_policy: CachePolicy::Disabled,
         semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
         workload: WorkloadClass::Cpu,
+        retry: PlannedRetry::default(),
+    }
+}
+
+fn adapter_operation(
+    stable: &str,
+    input: u32,
+    output: u32,
+    production: OutputProduction,
+    consumption: InputConsumption,
+) -> PlannedOperation {
+    let contract = MaterializationAdapterPlan::for_contract(production, consumption);
+    PlannedOperation {
+        stable_id: OperationStableId::new(stable).unwrap(),
+        source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+        source_node_type_id: NodeTypeId::new("yssbi.test.materialization_adapter").unwrap(),
+        kernel: PlannedKernel::Adapter(contract.adapter),
+        inputs: Box::new([PlannedInput {
+            value: ValueRef::new(input),
+            consumption: contract.input_consumption,
+            bound_value: None,
+        }]),
+        outputs: Box::new([PlannedOutput {
+            value: ValueRef::new(output),
+            production: contract.output_production,
+        }]),
+        params: id("adapter.test", CompiledParameterHandle::new),
+        resource_dependencies: Box::new([]),
+        cache_policy: CachePolicy::Disabled,
+        semantics_version: ExecutionSemanticsVersion::from_bytes([6; 32]),
+        workload: WorkloadClass::AdapterIo,
         retry: PlannedRetry::default(),
     }
 }
@@ -109,6 +143,28 @@ fn plan(
 
 struct FnKernel<F>(F);
 
+struct OwnedStreamKernel {
+    values: Box<[Value]>,
+    executions: Option<Arc<AtomicUsize>>,
+}
+
+impl Kernel for OwnedStreamKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        if let Some(executions) = &self.executions {
+            executions.fetch_add(1, Ordering::SeqCst);
+        }
+        let stream = context
+            .resource_owner
+            .stream_from_values(self.values.to_vec())
+            .map_err(|error| KernelError::new(error.to_string()))?;
+        Ok(vec![RuntimeValue::Stream(stream)])
+    }
+}
+
 struct ErrorKernel {
     cancel_token: bool,
     cancelled_error: bool,
@@ -145,11 +201,15 @@ where
 }
 
 #[derive(Default)]
-struct RecordingTrace(Mutex<Vec<SpanEvent>>);
+struct RecordingTrace(Mutex<Vec<TraceSpan>>);
 
 impl TraceSink for RecordingTrace {
-    fn record(&self, event: SpanEvent) {
-        self.0.lock().unwrap().push(event);
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, span: TraceSpan) {
+        self.0.lock().unwrap().push(span);
     }
 }
 
@@ -296,6 +356,31 @@ fn no_resources() -> TrackingResources {
     }
 }
 
+fn materialization_test_root(label: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("yssbi-task-13-{label}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}
+
+fn materialization_test_budgets(stream_capacity: usize, memory_bytes: u64) -> RunResourceBudgets {
+    RunResourceBudgets {
+        stream_capacity: std::num::NonZeroUsize::new(stream_capacity).unwrap(),
+        materialization_memory_bytes: memory_bytes,
+        spill_directory_bytes: 1024 * 1024,
+    }
+}
+
+fn materialization_test_owner() -> Arc<RunResourceOwner> {
+    Arc::new(
+        RunResourceOwner::new(
+            RunId::new(99),
+            RunResourceBudgets::default(),
+            CancellationToken::new(),
+        )
+        .unwrap(),
+    )
+}
+
 fn requirement(name: &str) -> CompiledResourceRequirement {
     CompiledResourceRequirement {
         resource: id(name, ResourceId::new),
@@ -303,6 +388,1489 @@ fn requirement(name: &str) -> CompiledResourceRequirement {
         access: ResourceAccess::Exclusive,
         optional: false,
     }
+}
+
+#[test]
+fn bounded_materialization_capacity_one_applies_backpressure() {
+    let root = materialization_test_root("backpressure");
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(1),
+        materialization_test_budgets(1, 1024),
+        CancellationToken::new(),
+        root.clone(),
+    )
+    .unwrap();
+    let (observed_tx, observed_rx) = mpsc::channel();
+    let values = (0..3).map(move |value| {
+        observed_tx.send(value).unwrap();
+        Value::Integer(value)
+    });
+
+    let stream = owner.stream_from_values(values).unwrap();
+
+    assert_eq!(observed_rx.recv_timeout(Duration::from_secs(1)).unwrap(), 0);
+    assert_eq!(observed_rx.recv_timeout(Duration::from_secs(1)).unwrap(), 1);
+    assert!(observed_rx.recv_timeout(Duration::from_millis(50)).is_err());
+    assert_eq!(stream.recv().unwrap(), Value::Integer(0));
+    assert_eq!(observed_rx.recv_timeout(Duration::from_secs(1)).unwrap(), 2);
+    assert_eq!(stream.recv().unwrap(), Value::Integer(1));
+    assert_eq!(stream.recv().unwrap(), Value::Integer(2));
+    assert_eq!(stream.recv(), Err(StreamReceiveError::Closed));
+
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_producer_panic_is_not_partial_success() {
+    let root = materialization_test_root("producer-panic");
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(5),
+        materialization_test_budgets(1, 1024),
+        CancellationToken::new(),
+        root.clone(),
+    )
+    .unwrap();
+    let stream = owner
+        .stream_from_values((0..2).map(|value| {
+            if value == 1 {
+                panic!("producer iterator panic sentinel");
+            }
+            Value::Integer(value)
+        }))
+        .unwrap();
+
+    assert_eq!(stream.recv().unwrap(), Value::Integer(0));
+    assert!(matches!(
+        stream.recv(),
+        Err(StreamReceiveError::Failed(message))
+            if message.as_ref() == "stream producer panicked"
+    ));
+
+    drop(stream);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_memory_threshold_preserves_stable_disk_order() {
+    let root = materialization_test_root("spill-order");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(2),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let input = RuntimeValue::Artifact(Artifact::new(
+        ArtifactKind::Collected,
+        [
+            Value::Integer(3),
+            Value::String("two".into()),
+            Value::Bool(true),
+        ],
+    ));
+
+    let output = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 10,
+                max_bytes: 1024,
+            },
+        },
+        input,
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+
+    let RuntimeValue::Artifact(artifact) = output else {
+        panic!("collect must produce an artifact");
+    };
+    assert!(matches!(
+        artifact.materialized(),
+        MaterializedArtifact::Spilled(_)
+    ));
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [
+            Value::Integer(3),
+            Value::String("two".into()),
+            Value::Bool(true)
+        ]
+    );
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+
+    drop(artifact);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spilled_artifact_exposes_only_explicit_non_panicking_consumption() {
+    let root = materialization_test_root("explicit-artifact-consumption");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(13),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::Integer(7)),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = spilled else {
+        panic!("spill adapter must return an artifact");
+    };
+
+    assert_eq!(artifact.in_memory_values(), None);
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [Value::Integer(7)]
+    );
+
+    drop(artifact);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_replay_supports_two_independent_passes() {
+    let root = materialization_test_root("replay");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(3),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Buffered,
+            [Value::Integer(1), Value::Integer(2), Value::Integer(3)],
+        )),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let replayable =
+        execute_planned_adapter(&PlannedAdapter::Replay, spilled, &owner, &cancellation).unwrap();
+    let RuntimeValue::Artifact(artifact) = replayable else {
+        panic!("replay must produce an artifact");
+    };
+    let MaterializedArtifact::Replayable(replay) = artifact.materialized() else {
+        panic!("replay adapter must produce replayable storage");
+    };
+
+    let first = replay.cursor().unwrap();
+    let second = replay.cursor().unwrap();
+    assert_eq!(
+        first.collect::<Result<Vec<_>, _>>().unwrap(),
+        [Value::Integer(1), Value::Integer(2), Value::Integer(3),]
+    );
+    assert_eq!(
+        second.collect::<Result<Vec<_>, _>>().unwrap(),
+        [Value::Integer(1), Value::Integer(2), Value::Integer(3),]
+    );
+
+    drop(artifact);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+fn disk_backed_result_plan(terminal_kernel: &str) -> ExecutionPlan {
+    let mut source = operation("disk_result_source", &[], &[0]);
+    source.outputs[0].production = OutputProduction::Streaming;
+    let collect = adapter_operation(
+        "disk.result.collect",
+        1,
+        2,
+        OutputProduction::Streaming,
+        InputConsumption::FullyMaterialized,
+    );
+    let terminal = operation(terminal_kernel, &[3], &[4]);
+    let mut execution_plan = plan(
+        vec![source, collect, terminal],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
+    );
+    execution_plan.value_dependencies = Box::new([
+        ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        },
+        ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(3),
+        },
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(4),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    execution_plan
+}
+
+#[test]
+fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
+    let root = materialization_test_root("durable-result");
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("disk_result_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::String("durable".into()).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("disk_result_passthrough", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| Ok(vec![inputs[0].clone()])),
+        )
+        .unwrap();
+    let results = ResultStore::new();
+    let events = RecordingRunEvents::default();
+    let resources = no_resources();
+    let functions = NoFunctions;
+
+    let run_result = RunExecutor::new(&kernels, &resources, &functions)
+        .with_result_store(&results)
+        .with_event_sink(&events)
+        .with_resource_budgets(materialization_test_budgets(1, 1))
+        .with_test_spill_root(root.clone())
+        .run(
+            &disk_backed_result_plan("disk_result_passthrough"),
+            CancellationToken::new(),
+        )
+        .unwrap();
+
+    let RuntimeValue::Artifact(artifact) = &run_result.values["result"] else {
+        panic!("collected result must be an artifact");
+    };
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [Value::String("durable".into())]
+    );
+    let source_id = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|event| match event.kind {
+            RunEventKind::ResultReady { source_id, .. } => Some(source_id),
+            _ => None,
+        })
+        .expect("published result source");
+    assert_eq!(
+        results
+            .page(source_id, 0, 10)
+            .unwrap()
+            .unwrap()
+            .values
+            .as_ref(),
+        &[Value::String("durable".into())]
+    );
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn result_store_paging_propagates_spill_read_failures() {
+    let root = materialization_test_root("result-page-error");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(14),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::Integer(9)),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let execution_plan = plan(
+        Vec::new(),
+        0,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
+    let run_id = RunId::new(14);
+    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
+    let results = ResultStore::new();
+    let descriptor = results
+        .publish_runtime_value(
+            run_id,
+            correlation,
+            execution_plan.provenance.basis.clone(),
+            "spilled",
+            &spilled,
+        )
+        .unwrap();
+    assert!(owner.cleanup().is_empty());
+
+    assert!(matches!(
+        results.page(descriptor.source_id, 0, 1),
+        Err(RunError::Stream(message)) if message.contains("spill I/O failed")
+    ));
+
+    drop(spilled);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_debug_view_consumes_spilled_collect() {
+    let root = materialization_test_root("debug-consumer");
+    let mut kernels = build_builtin_kernel_registry();
+    kernels
+        .register(
+            id("disk_result_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(41).into()])),
+        )
+        .unwrap();
+    let execution_plan = disk_backed_result_plan("yssbi.debug.view");
+
+    let run_result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_resource_budgets(materialization_test_budgets(1, 1))
+        .with_test_spill_root(root.clone())
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    let RuntimeValue::Artifact(artifact) = &run_result.values["result"] else {
+        panic!("view result must be an artifact");
+    };
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [Value::Integer(41)]
+    );
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_relational_ingress_consumes_spilled_single_value() {
+    let root = materialization_test_root("relational-consumer");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(6),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let dataframe = Value::Object(BTreeMap::from([(
+        Box::<str>::from("value"),
+        Value::List(vec![Value::Integer(1), Value::Integer(2)]),
+    )]));
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 10,
+                max_bytes: 1024 * 1024,
+            },
+        },
+        RuntimeValue::Artifact(Artifact::new(ArtifactKind::Buffered, [dataframe])),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+
+    let converted = super::relational_dataframe::tabular_runtime_to_dataframe(spilled).unwrap();
+
+    assert_eq!(converted.height(), 2);
+    assert_eq!(converted.width(), 1);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_memory_exact_boundary_and_drop_release() {
+    let value = Value::String("exact".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-exact");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(7),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    let artifact = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: bytes,
+            },
+        },
+        RuntimeValue::Scalar(value),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+
+    assert!(matches!(
+        artifact,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::InMemory(_))
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+    drop(artifact);
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_clone_shares_values_and_one_live_reservation() {
+    let value = Value::String("shared-clone".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-clone-sharing");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(16),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: bytes,
+            },
+        },
+        RuntimeValue::Scalar(value),
+        &owner,
+        &cancellation,
+    )
+    .unwrap() else {
+        panic!("collect must return an artifact");
+    };
+
+    let cloned = artifact.clone();
+    assert!(std::ptr::eq(
+        artifact.in_memory_values().unwrap().as_ptr(),
+        cloned.in_memory_values().unwrap().as_ptr(),
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+    drop(artifact);
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+    drop(cloned);
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_result_store_retains_shared_artifact_storage() {
+    let value = Value::String("shared-result".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-result-sharing");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(20),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: bytes,
+            },
+        },
+        RuntimeValue::Scalar(value),
+        &owner,
+        &cancellation,
+    )
+    .unwrap() else {
+        panic!("collect must return an artifact");
+    };
+    let run_id = RunId::new(20);
+    let execution_plan = plan(
+        Vec::new(),
+        0,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
+    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
+    let results = ResultStore::new();
+    let descriptor = results
+        .publish_runtime_value(
+            run_id,
+            correlation,
+            execution_plan.provenance.basis.clone(),
+            "shared",
+            &RuntimeValue::Artifact(artifact.clone()),
+        )
+        .unwrap();
+    let snapshot = results.value(descriptor.source_id).unwrap();
+    let ArtifactSnapshot::RuntimeArtifact(stored) = snapshot.as_ref() else {
+        panic!("runtime artifact snapshots must retain shared storage");
+    };
+
+    assert!(std::ptr::eq(
+        artifact.in_memory_values().unwrap().as_ptr(),
+        stored.in_memory_values().unwrap().as_ptr(),
+    ));
+    drop(artifact);
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+    drop(snapshot);
+    results.cleanup_run(run_id);
+    assert!(results.release(descriptor.source_id));
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_adapter_consumption_retains_source_reservation() {
+    let value = Value::String("adapter-handoff".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-adapter-handoff");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(17),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let collect = PlannedAdapter::Collect {
+        limits: MaterializationLimits {
+            max_values: 1,
+            max_bytes: bytes,
+        },
+    };
+    let first =
+        execute_planned_adapter(&collect, RuntimeValue::Scalar(value), &owner, &cancellation)
+            .unwrap();
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+
+    let second = execute_planned_adapter(&collect, first, &owner, &cancellation).unwrap();
+
+    assert!(matches!(
+        second,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::Spilled(_))
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+    drop(second);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_aggregate_memory_spills_then_reuses_released_capacity() {
+    let value = Value::String("aggregate".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-aggregate");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(8),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let collect = |value| {
+        execute_planned_adapter(
+            &PlannedAdapter::Collect {
+                limits: MaterializationLimits {
+                    max_values: 1,
+                    max_bytes: bytes,
+                },
+            },
+            RuntimeValue::Scalar(value),
+            &owner,
+            &cancellation,
+        )
+        .unwrap()
+    };
+
+    let first = collect(value.clone());
+    let second = collect(value.clone());
+    assert!(matches!(
+        second,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::Spilled(_))
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), bytes);
+    drop(first);
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+    let third = collect(value);
+    assert!(matches!(
+        third,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::InMemory(_))
+    ));
+    drop(second);
+    drop(third);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_single_oversized_value_spills_without_reserving_memory() {
+    let oversized = Value::Bytes(vec![7; 4096]);
+    let small = Value::Bool(true);
+    let small_bytes = serde_json::to_vec(&small).unwrap().len() as u64;
+    let root = materialization_test_root("memory-oversized");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(15),
+        materialization_test_budgets(1, small_bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    let oversized = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: 64 * 1024,
+            },
+        },
+        RuntimeValue::Scalar(oversized),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(matches!(
+        oversized,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::Spilled(_))
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+
+    let subsequent = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: small_bytes,
+            },
+        },
+        RuntimeValue::Scalar(small),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(matches!(
+        subsequent,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::InMemory(_))
+    ));
+    assert_eq!(owner.memory_bytes_for_test(), small_bytes);
+
+    drop(oversized);
+    drop(subsequent);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_limit_failure_rolls_back_memory_for_next_allocation() {
+    let value = Value::String("rollback".into());
+    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
+    let root = materialization_test_root("memory-rollback");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(9),
+        materialization_test_budgets(1, bytes),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    let failed = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 0,
+                max_bytes: bytes,
+            },
+        },
+        RuntimeValue::Scalar(value.clone()),
+        &owner,
+        &cancellation,
+    );
+    assert!(failed.is_err());
+    assert_eq!(owner.memory_bytes_for_test(), 0);
+
+    let next = execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1,
+                max_bytes: bytes,
+            },
+        },
+        RuntimeValue::Scalar(value),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(matches!(
+        next,
+        RuntimeValue::Artifact(ref artifact)
+            if matches!(artifact.materialized(), MaterializedArtifact::InMemory(_))
+    ));
+    drop(next);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_typed_fidelity_covers_all_value_variants_and_nested_data() {
+    use crate::node_system::protocol::CanonicalDecimal;
+
+    let values = vec![
+        Value::Null,
+        Value::Bool(true),
+        Value::Integer(-7),
+        Value::Unsigned(9),
+        Value::Decimal(CanonicalDecimal::new("12.34").unwrap()),
+        Value::String("text".into()),
+        Value::Bytes(vec![0, 1, 255]),
+        Value::List(vec![Value::Integer(1), Value::String("nested".into())]),
+        Value::Object(BTreeMap::from([(
+            Box::<str>::from("nested"),
+            Value::List(vec![Value::Bool(false), Value::Null]),
+        )])),
+    ];
+    let root = materialization_test_root("typed-fidelity");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(10),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(Artifact::new(ArtifactKind::Buffered, values.clone())),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = spilled else {
+        panic!("spill adapter must return an artifact");
+    };
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        values
+    );
+    drop(artifact);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_cursor_keeps_promoted_file_alive_until_cursor_drop() {
+    let root = materialization_test_root("spill-cursor-lifetime");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(18),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::Integer(1)),
+        &owner,
+        &cancellation,
+    )
+    .unwrap() else {
+        panic!("spill adapter must return an artifact");
+    };
+    artifact.promote(&cancellation, None).unwrap();
+    let MaterializedArtifact::Spilled(spill) = artifact.materialized() else {
+        panic!("spill adapter must use spill storage");
+    };
+    let path = spill.path_for_test();
+    let ArtifactCursor::Spilled(cursor) = artifact.cursor().unwrap() else {
+        panic!("spill artifact must return a spill cursor");
+    };
+
+    drop(artifact);
+    assert!(path.exists());
+    drop(cursor);
+    assert!(!path.exists());
+
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn deadline_during_spill_promotion_publishes_no_durable_artifact() {
+    let root = materialization_test_root("spill-promotion-deadline");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(20),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::Integer(1)),
+        &owner,
+        &cancellation,
+    )
+    .unwrap() else {
+        panic!("spill adapter must return an artifact");
+    };
+    let MaterializedArtifact::Spilled(spill) = artifact.materialized() else {
+        panic!("spill adapter must use spill storage");
+    };
+    let staged_path = spill.path_for_test();
+    spill.set_promotion_checkpoint_for_test(Arc::new(|| {
+        thread::sleep(Duration::from_millis(20));
+    }));
+
+    assert_eq!(
+        artifact.promote(
+            &cancellation,
+            Some(RunDeadline::after(Duration::from_millis(5))),
+        ),
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::ResultPublication,
+        })
+    );
+    assert_eq!(spill.path_for_test(), staged_path);
+    assert!(!staged_path.exists());
+
+    drop(artifact);
+    drop(owner);
+    let _ = std::fs::remove_dir(root);
+}
+
+#[test]
+fn spill_cursor_close_surfaces_and_retries_transient_delete_failure() {
+    let root = materialization_test_root("spill-cursor-delete-retry");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(19),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::Integer(2)),
+        &owner,
+        &cancellation,
+    )
+    .unwrap() else {
+        panic!("spill adapter must return an artifact");
+    };
+    artifact.promote(&cancellation, None).unwrap();
+    let MaterializedArtifact::Spilled(spill) = artifact.materialized() else {
+        panic!("spill adapter must use spill storage");
+    };
+    spill.fail_next_deletions_for_test(1);
+    let path = spill.path_for_test();
+    let ArtifactCursor::Spilled(mut cursor) = artifact.cursor().unwrap() else {
+        panic!("spill artifact must return a spill cursor");
+    };
+    drop(artifact);
+
+    let error = cursor.close().unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("injected spill deletion failure")
+    );
+    assert!(path.exists());
+    cursor.close().unwrap();
+    assert!(!path.exists());
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_quota_exact_boundary_and_failure_rollback_allow_subsequent_write() {
+    let first = Value::String("first".into());
+    let second = Value::String("second".into());
+    let first_bytes = 8 + serde_json::to_vec(&first).unwrap().len() as u64;
+    let second_bytes = 8 + serde_json::to_vec(&second).unwrap().len() as u64;
+    let root = materialization_test_root("spill-quota");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(11),
+        RunResourceBudgets {
+            stream_capacity: std::num::NonZeroUsize::new(1).unwrap(),
+            materialization_memory_bytes: 1,
+            spill_directory_bytes: first_bytes,
+        },
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    let failed = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Buffered,
+            [first.clone(), second],
+        )),
+        &owner,
+        &cancellation,
+    );
+    assert!(failed.is_err());
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+
+    let exact = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(first),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(matches!(exact, RuntimeValue::Artifact(_)));
+    assert_eq!(owner.spill_bytes_for_test(), first_bytes);
+    assert!(second_bytes > 0);
+    drop(exact);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_producer_registration_is_linearized_with_cleanup() {
+    let root = materialization_test_root("producer-race");
+    let owner = Arc::new(
+        RunResourceOwner::with_spill_root(
+            RunId::new(12),
+            materialization_test_budgets(1, 1024),
+            CancellationToken::new(),
+            root.clone(),
+        )
+        .unwrap(),
+    );
+    let registration_reached = Arc::new(Barrier::new(2));
+    let release_registration = Arc::new(Barrier::new(2));
+    let producer = {
+        let owner = Arc::clone(&owner);
+        let registration_reached = Arc::clone(&registration_reached);
+        let release_registration = Arc::clone(&release_registration);
+        thread::spawn(move || {
+            owner.stream_from_values_with_registration_checkpoint([Value::Integer(1)], move || {
+                registration_reached.wait();
+                release_registration.wait();
+            })
+        })
+    };
+    registration_reached.wait();
+    let (cleanup_done_tx, cleanup_done_rx) = mpsc::channel();
+    let cleanup = {
+        let owner = Arc::clone(&owner);
+        thread::spawn(move || {
+            let errors = owner.cleanup();
+            cleanup_done_tx.send(errors).unwrap();
+        })
+    };
+    assert!(
+        cleanup_done_rx
+            .recv_timeout(Duration::from_millis(50))
+            .is_err()
+    );
+    release_registration.wait();
+    let stream = producer.join().unwrap().unwrap();
+    drop(stream);
+    assert!(
+        cleanup_done_rx
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .is_empty()
+    );
+    cleanup.join().unwrap();
+    assert!(owner.stream_from_values([Value::Integer(2)]).is_err());
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+struct KernelOwnedStreamSource;
+
+impl Kernel for KernelOwnedStreamSource {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        Ok(vec![RuntimeValue::Stream(
+            context
+                .resource_owner
+                .stream_from_values([Value::Integer(1), Value::Integer(2)])
+                .map_err(|error| KernelError::new(error.to_string()))?,
+        )])
+    }
+}
+
+#[test]
+fn bounded_materialization_kernel_streams_use_the_scheduler_owner() {
+    let root = materialization_test_root("kernel-owner");
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("kernel_owned_stream_source", KernelHandle::new),
+            KernelOwnedStreamSource,
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("kernel_owned_stream_sink", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Artifact(artifact) = &inputs[0] else {
+                    return Err(KernelError::new("expected collected stream"));
+                };
+                Ok(vec![
+                    Value::Integer(artifact.cursor().unwrap().count() as i64).into(),
+                ])
+            }),
+        )
+        .unwrap();
+    let mut source = operation("kernel_owned_stream_source", &[], &[0]);
+    source.outputs[0].production = OutputProduction::Streaming;
+    let collect = adapter_operation(
+        "kernel.owner.collect",
+        1,
+        2,
+        OutputProduction::Streaming,
+        InputConsumption::FullyMaterialized,
+    );
+    let sink = operation("kernel_owned_stream_sink", &[3], &[4]);
+    let mut execution_plan = plan(
+        vec![source, collect, sink],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
+    );
+    execution_plan.value_dependencies = Box::new([
+        ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        },
+        ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(3),
+        },
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "count".into(),
+        output: stable_output("count"),
+        value: ValueRef::new(4),
+    }]);
+    publish_graph_results(&mut execution_plan);
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_resource_budgets(materialization_test_budgets(1, 1024))
+        .with_test_spill_root(root.clone())
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(result.values["count"], Value::Integer(2).into());
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn bounded_materialization_unowned_stream_constructor_is_not_public() {
+    let source = include_str!("run.rs");
+    assert!(!source.contains("pub fn from_receiver("));
+}
+
+#[test]
+fn bounded_materialization_has_no_unbounded_read_all_api() {
+    assert!(!include_str!("run.rs").contains("pub fn read_all("));
+    assert!(!include_str!("spill.rs").contains("pub fn read_all("));
+}
+
+struct PanicWithCleanupFailureKernel;
+
+impl Kernel for PanicWithCleanupFailureKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        context
+            .resource_owner
+            .register_panicking_cleanup_task_for_test();
+        panic!("primary kernel panic sentinel")
+    }
+}
+
+#[test]
+fn bounded_materialization_panic_cleanup_errors_are_traced_without_replacing_panic() {
+    let root = materialization_test_root("panic-trace");
+    let trace = RecordingTrace::default();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("panic_with_cleanup_failure", KernelHandle::new),
+            PanicWithCleanupFailureKernel,
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("panic_with_cleanup_failure", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let resources = no_resources();
+    let functions = NoFunctions;
+    let executor = RunExecutor::new(&kernels, &resources, &functions)
+        .with_trace_sink(&trace)
+        .with_test_spill_root(root.clone());
+
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = executor.run(&execution_plan, CancellationToken::new());
+    }));
+
+    assert!(panic.is_err());
+    let cleanup = trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|span| span.kind == SpanKind::Cleanup)
+        .cloned()
+        .expect("panic cleanup trace");
+    assert_eq!(
+        cleanup.outcome,
+        SpanOutcome::Cleanup {
+            error_count: 1,
+            panicking: true,
+        }
+    );
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spill_artifacts_never_enter_per_run_memoization() {
+    let root = materialization_test_root("spill-memo");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(4),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Buffered,
+            [Value::Integer(1), Value::Integer(2)],
+        )),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(
+        OperationMemoKey::from_inputs(
+            OperationStableId::new("events/test::spilled-input").unwrap(),
+            std::slice::from_ref(&spilled),
+            BTreeMap::new(),
+            ExecutionSemanticsVersion::from_bytes([7; 32]),
+            DemandFingerprint::from_bytes([9; 32]),
+        )
+        .is_none()
+    );
+
+    let memo = RunMemoization::new();
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let calls = AtomicUsize::new(0);
+    for _ in 0..2 {
+        let output = spilled.clone();
+        memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![output].into_boxed_slice())
+        })
+        .unwrap();
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+    drop(memo);
+    drop(spilled);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+fn spilling_terminal_plan(terminal: PlannedOperation) -> ExecutionPlan {
+    let mut source = operation("spill_terminal_source", &[], &[0]);
+    source.outputs[0].production = OutputProduction::Streaming;
+    let collect = adapter_operation(
+        "spill.terminal.collect",
+        1,
+        2,
+        OutputProduction::Streaming,
+        InputConsumption::FullyMaterialized,
+    );
+    let mut execution_plan = plan(
+        vec![source, collect, terminal],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
+    );
+    execution_plan.value_dependencies = Box::new([
+        ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        },
+        ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(3),
+        },
+    ]);
+    execution_plan
+}
+
+fn spilling_terminal_kernels(terminal: impl Kernel + 'static) -> KernelRegistry {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("spill_terminal_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::String("spill me".into()).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(id("spill_terminal", KernelHandle::new), terminal)
+        .unwrap();
+    kernels
+}
+
+fn spilling_terminal_operation() -> PlannedOperation {
+    operation("spill_terminal", &[3], &[4])
+}
+
+#[test]
+fn bounded_materialization_cleanup_covers_success_error_cancel_and_deadline() {
+    enum Terminal {
+        Success,
+        Error,
+        Cancel,
+        Deadline,
+    }
+
+    for terminal in [
+        Terminal::Success,
+        Terminal::Error,
+        Terminal::Cancel,
+        Terminal::Deadline,
+    ] {
+        let root = materialization_test_root("terminal");
+        let (kernels, expected, deadline) = match terminal {
+            Terminal::Success => (
+                spilling_terminal_kernels(FnKernel(|_: &[RuntimeValue]| {
+                    Ok(vec![Value::Integer(1).into()])
+                })),
+                None,
+                false,
+            ),
+            Terminal::Deadline => (
+                spilling_terminal_kernels(FnKernel(|_: &[RuntimeValue]| {
+                    Ok(vec![Value::Integer(1).into()])
+                })),
+                Some(RunErrorCode::Cancelled),
+                true,
+            ),
+            Terminal::Error => (
+                spilling_terminal_kernels(ErrorKernel {
+                    cancel_token: false,
+                    cancelled_error: false,
+                }),
+                Some(RunErrorCode::KernelFailed),
+                false,
+            ),
+            Terminal::Cancel => (
+                spilling_terminal_kernels(ErrorKernel {
+                    cancel_token: true,
+                    cancelled_error: true,
+                }),
+                Some(RunErrorCode::Cancelled),
+                false,
+            ),
+        };
+        let resources = no_resources();
+        let functions = NoFunctions;
+        let mut executor = RunExecutor::new(&kernels, &resources, &functions)
+            .with_resource_budgets(materialization_test_budgets(1, 1))
+            .with_test_spill_root(root.clone());
+        if deadline {
+            executor = executor.with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
+                if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+                    cancellation.cancel();
+                }
+            }));
+        }
+        let execution_plan = spilling_terminal_plan(spilling_terminal_operation());
+        assert!(
+            execution_plan.validate().is_ok(),
+            "{:?}",
+            execution_plan.validate()
+        );
+        let result = executor.run(&execution_plan, CancellationToken::new());
+        match expected {
+            None => assert!(result.is_ok(), "{result:?}"),
+            Some(code) => assert_eq!(RunErrorCode::from(&result.unwrap_err()), code),
+        }
+        assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+        std::fs::remove_dir(root).unwrap();
+    }
+}
+
+#[test]
+fn bounded_materialization_cleanup_runs_during_panic_unwind() {
+    let root = materialization_test_root("panic");
+    let kernels = spilling_terminal_kernels(FnKernel(|_: &[RuntimeValue]| {
+        panic!("spill terminal panic sentinel")
+    }));
+    let resources = no_resources();
+    let functions = NoFunctions;
+    let executor = RunExecutor::new(&kernels, &resources, &functions)
+        .with_resource_budgets(materialization_test_budgets(1, 1))
+        .with_test_spill_root(root.clone());
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = executor.run(
+            &spilling_terminal_plan(spilling_terminal_operation()),
+            CancellationToken::new(),
+        );
+    }));
+
+    assert!(result.is_err());
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+struct ProjectReplacementKernel {
+    started: mpsc::Sender<()>,
+}
+
+impl Kernel for ProjectReplacementKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.started.send(()).unwrap();
+        while !context.cancellation.is_cancelled() {
+            thread::yield_now();
+        }
+        Err(KernelError::cancelled("project replacement cancelled run"))
+    }
+}
+
+#[test]
+fn bounded_materialization_cleanup_precedes_project_replacement_drain_completion() {
+    let root = materialization_test_root("replacement");
+    let registry = Arc::new(ProjectRunRegistry::new());
+    let (started_tx, started_rx) = mpsc::channel();
+    let kernels = spilling_terminal_kernels(ProjectReplacementKernel {
+        started: started_tx,
+    });
+    let execution_plan = spilling_terminal_plan(spilling_terminal_operation());
+    let project = execution_plan.provenance.project_session_id.clone();
+    let run_registry = Arc::clone(&registry);
+    let run_root = root.clone();
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_run_registry(&run_registry)
+            .with_resource_budgets(materialization_test_budgets(1, 1))
+            .with_test_spill_root(run_root)
+            .run(&execution_plan, CancellationToken::new())
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+
+    registry.cancel_and_drain(&project);
+
+    assert_eq!(run.join().unwrap(), Err(RunError::Cancelled));
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
 }
 
 #[test]
@@ -782,6 +2350,7 @@ fn if_executes_only_selected_branch() {
                     destination: ValueRef::new(3),
                     then_source: ValueRef::new(1),
                     else_source: ValueRef::new(2),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
             })),
         ])),
@@ -841,6 +2410,7 @@ fn execute_nested_branch_sequence_switch(
             destination: ValueRef::new(5),
             then_source: ValueRef::new(3),
             else_source: ValueRef::new(4),
+            production: Some(OutputProduction::FullyMaterialized),
         }]),
     };
     let outer_switch = StructuredControlRegion::If {
@@ -856,6 +2426,7 @@ fn execute_nested_branch_sequence_switch(
             destination: ValueRef::new(6),
             then_source: ValueRef::new(1),
             else_source: ValueRef::new(5),
+            production: Some(OutputProduction::FullyMaterialized),
         }]),
     };
     let mut execution_plan = plan(
@@ -888,6 +2459,14 @@ fn execute_nested_branch_sequence_switch(
         .unwrap();
     let observed = observed.lock().unwrap().clone();
     (result, observed)
+}
+
+#[test]
+fn nested_sibling_regions_produce_complete_data_exactly_once() {
+    let (result, observed) = execute_nested_branch_sequence_switch(true, true);
+
+    assert_eq!(observed, vec!["first_case"]);
+    assert_eq!(result.values["selected"], Value::Integer(10).into());
 }
 
 #[test]
@@ -967,7 +2546,7 @@ fn cancelled_kernel_error_maps_to_run_cancelled() {
 }
 
 #[test]
-fn ordinary_kernel_error_is_not_hidden_by_simultaneous_token_cancellation() {
+fn cancellation_before_ordinary_outcome_wins() {
     let mut kernels = KernelRegistry::new();
     kernels
         .register(
@@ -990,9 +2569,61 @@ fn ordinary_kernel_error_is_not_hidden_by_simultaneous_token_cancellation() {
         .run(&execution_plan, CancellationToken::new())
         .unwrap_err();
 
+    assert_eq!(error, RunError::Cancelled);
+}
+
+#[test]
+fn simultaneous_or_later_ordinary_outcome_cannot_replace_cancellation() {
+    let cancellation = Instant::now();
+    let before = cancellation.checked_sub(Duration::from_nanos(1)).unwrap();
+    let after = cancellation.checked_add(Duration::from_nanos(1)).unwrap();
+
+    assert!(super::scheduler::ordinary_error_precedes_cancellation_at(
+        true,
+        before,
+        Some(cancellation),
+    ));
+    assert!(!super::scheduler::ordinary_error_precedes_cancellation_at(
+        true,
+        cancellation,
+        Some(cancellation),
+    ));
+    assert!(!super::scheduler::ordinary_error_precedes_cancellation_at(
+        true,
+        after,
+        Some(cancellation),
+    ));
+}
+
+#[test]
+fn ordinary_outcome_produced_before_cancellation_is_preserved() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("ordinary_before_cancel", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Err(KernelError::new("ordinary first"))),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("ordinary_before_cancel", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
+            if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                cancellation.cancel();
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
     assert!(matches!(
         error,
-        RunError::KernelFailed { message, .. } if message.as_ref() == "ordinary failure"
+        RunError::KernelFailed { message, .. } if message.as_ref() == "ordinary first"
     ));
 }
 
@@ -1080,17 +2711,17 @@ fn cleanup_spans_cover_success_failure_and_cancellation() {
         .lock()
         .unwrap()
         .iter()
-        .filter(|event| event.kind == SpanKind::Cleanup && event.correlation.parent_call.is_none())
-        .map(|event| event.status)
+        .filter(|span| span.kind == SpanKind::Cleanup && span.correlation.parent_call.is_none())
+        .map(|span| span.outcome.clone())
         .collect::<Vec<_>>();
-    assert_eq!(
-        cleanup,
-        vec![
-            SpanStatus::Succeeded,
-            SpanStatus::Failed,
-            SpanStatus::Cancelled
-        ]
-    );
+    assert_eq!(cleanup.len(), 3);
+    assert!(cleanup.iter().all(|outcome| matches!(
+        outcome,
+        SpanOutcome::Cleanup {
+            error_count: 0,
+            panicking: false,
+        }
+    )));
 }
 
 #[test]
@@ -1123,10 +2754,10 @@ fn nested_call_spans_record_the_parent_call_and_callee_compile() {
     let events = trace.0.lock().unwrap();
     let child = events
         .iter()
-        .find(|event| {
-            event.kind == SpanKind::Run
-                && event.status == SpanStatus::Started
-                && event.correlation.compile_id == CompileId::new(22)
+        .find(|span| {
+            span.kind == SpanKind::Run
+                && span.outcome == SpanOutcome::Success
+                && span.correlation.compile_id == CompileId::new(22)
         })
         .expect("callee run span");
     assert!(child.correlation.parent_call.is_some());
@@ -1165,12 +2796,24 @@ fn loop_carries_values_through_fresh_activations() {
     kernels
         .register(id("loop", KernelHandle::new), LoopKernel(seen))
         .unwrap();
+    kernels
+        .register(
+            id("loop_continuation", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Scalar(Value::Integer(value)) = &inputs[0] else {
+                    return Err(KernelError::new("expected loop result"));
+                };
+                Ok(vec![Value::Integer(value + 10).into()])
+            }),
+        )
+        .unwrap();
     let mut execution_plan = plan(
         vec![
             operation("initial", &[], &[0]),
             operation("loop", &[1], &[2, 3]),
+            operation("loop_continuation", &[4], &[5]),
         ],
-        5,
+        6,
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Region(Box::new(StructuredControlRegion::Loop {
@@ -1182,10 +2825,12 @@ fn loop_carries_values_through_fresh_activations() {
                     initial_source: ValueRef::new(0),
                     next_source: ValueRef::new(2),
                     result: ValueRef::new(4),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
                 continue_condition: ValueRef::new(3),
                 max_iterations: 4,
             })),
+            ControlStep::Operation(OperationIndex::new(2)),
         ])),
     );
     execution_plan.value_sources = Box::new([
@@ -1195,7 +2840,7 @@ fn loop_carries_values_through_fresh_activations() {
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
         output: stable_output("result"),
-        value: ValueRef::new(4),
+        value: ValueRef::new(5),
     }]);
     publish_graph_results(&mut execution_plan);
 
@@ -1205,7 +2850,7 @@ fn loop_carries_values_through_fresh_activations() {
 
     assert_eq!(
         result.values["result"],
-        RuntimeValue::from(Value::Integer(3))
+        RuntimeValue::from(Value::Integer(13))
     );
     let activations = activations.lock().unwrap();
     assert_eq!(activations.len(), 3);
@@ -1278,6 +2923,7 @@ fn loop_does_not_reuse_an_unselected_branch_value_from_a_prior_iteration() {
                     initial_source: ValueRef::new(1),
                     next_source: ValueRef::new(2),
                     result: ValueRef::new(7),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
                 continue_condition: ValueRef::new(4),
                 max_iterations: 3,
@@ -1379,6 +3025,7 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
                 results: Box::new([CallResultBinding {
                     callee_source: ValueRef::new(3),
                     caller_destination: ValueRef::new(0),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
                 mandatory: true,
             })),
@@ -1469,6 +3116,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
         DuplicateCallerResult,
         OutOfBoundsParameter,
         UnsourcedResult,
+        StaleResultProduction,
     }
 
     for case in [
@@ -1479,6 +3127,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
         InvalidCall::DuplicateCallerResult,
         InvalidCall::OutOfBoundsParameter,
         InvalidCall::UnsourcedResult,
+        InvalidCall::StaleResultProduction,
     ] {
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&calls);
@@ -1516,6 +3165,9 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             access: ResourceAccess::Shared,
             optional: false,
         }]);
+        if matches!(case, InvalidCall::StaleResultProduction) {
+            callee.operations[0].outputs[0].production = OutputProduction::Streaming;
+        }
         let mut published = published_function(callee, "functions/callee", &[0], &[2]);
 
         let standard_argument = CallArgumentBinding {
@@ -1525,6 +3177,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
         let standard_result = CallResultBinding {
             callee_source: ValueRef::new(2),
             caller_destination: ValueRef::new(1),
+            production: Some(OutputProduction::FullyMaterialized),
         };
         let (arguments, results) = match case {
             InvalidCall::MissingArgument => (vec![], vec![standard_result]),
@@ -1540,6 +3193,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
                     CallResultBinding {
                         callee_source: ValueRef::new(2),
                         caller_destination: ValueRef::new(3),
+                        production: Some(OutputProduction::FullyMaterialized),
                     },
                 ],
             ),
@@ -1568,8 +3222,17 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
                     vec![CallResultBinding {
                         callee_source: ValueRef::new(3),
                         caller_destination: ValueRef::new(1),
+                        production: Some(OutputProduction::FullyMaterialized),
                     }],
                 )
+            }
+            InvalidCall::StaleResultProduction => {
+                let published_mut = Arc::make_mut(&mut published);
+                Arc::make_mut(&mut published_mut.abi).result_productions = BTreeMap::from([(
+                    FunctionParameterId("result-0".into()),
+                    OutputProduction::Streaming,
+                )]);
+                (vec![standard_argument], vec![standard_result])
             }
         };
         let mut caller = plan(
@@ -1785,6 +3448,562 @@ fn effect_dependencies_determine_ready_queue_order() {
     assert_eq!(*events.lock().unwrap(), vec!["before", "after"]);
 }
 
+struct ParallelGate {
+    open: Mutex<bool>,
+    ready: Condvar,
+}
+
+impl ParallelGate {
+    fn closed() -> Arc<Self> {
+        Arc::new(Self {
+            open: Mutex::new(false),
+            ready: Condvar::new(),
+        })
+    }
+
+    fn wait(&self) {
+        let open = self.open.lock().unwrap();
+        drop(self.ready.wait_while(open, |open| !*open).unwrap());
+    }
+
+    fn release(&self) {
+        *self.open.lock().unwrap() = true;
+        self.ready.notify_all();
+    }
+}
+
+struct GatedKernel {
+    name: &'static str,
+    started: mpsc::Sender<&'static str>,
+    finished: Option<mpsc::Sender<&'static str>>,
+    gate: Arc<ParallelGate>,
+    active: Arc<AtomicUsize>,
+    maximum: Arc<AtomicUsize>,
+    output: Value,
+}
+
+impl Kernel for GatedKernel {
+    fn execute(
+        &self,
+        _: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.maximum.fetch_max(active, Ordering::SeqCst);
+        self.started.send(self.name).unwrap();
+        self.gate.wait();
+        self.active.fetch_sub(1, Ordering::SeqCst);
+        if let Some(finished) = &self.finished {
+            finished.send(self.name).unwrap();
+        }
+        Ok(vec![self.output.clone().into()])
+    }
+}
+
+fn parallel_policy(cpu: usize, io: usize, adapter: usize) -> SchedulingPolicy {
+    SchedulingPolicy {
+        cpu_parallelism: NonZeroUsize::new(cpu).unwrap(),
+        io_parallelism: NonZeroUsize::new(io).unwrap(),
+        adapter_parallelism: NonZeroUsize::new(adapter).unwrap(),
+    }
+}
+
+fn independent_parallel_plan(classes: &[WorkloadClass]) -> ExecutionPlan {
+    let mut operations = Vec::new();
+    let mut steps = Vec::new();
+    for (index, workload) in classes.iter().copied().enumerate() {
+        let kernel = format!("parallel{index}");
+        let mut planned = operation(&kernel, &[], &[index as u32]);
+        planned.workload = workload;
+        operations.push(planned);
+        steps.push(ControlStep::Operation(OperationIndex::new(index as u32)));
+    }
+    plan(
+        operations,
+        classes.len() as u32,
+        StructuredControlRegion::Sequence(steps.into_boxed_slice()),
+    )
+}
+
+fn register_gated_kernels(
+    kernels: &mut KernelRegistry,
+    gates: &[Arc<ParallelGate>],
+    started: &mpsc::Sender<&'static str>,
+    finished: Option<&mpsc::Sender<&'static str>>,
+    active: &Arc<AtomicUsize>,
+    maximum: &Arc<AtomicUsize>,
+) {
+    const NAMES: [&str; 8] = [
+        "parallel0",
+        "parallel1",
+        "parallel2",
+        "parallel3",
+        "parallel4",
+        "parallel5",
+        "parallel6",
+        "parallel7",
+    ];
+    for (index, gate) in gates.iter().enumerate() {
+        kernels
+            .register(
+                id(NAMES[index], KernelHandle::new),
+                GatedKernel {
+                    name: NAMES[index],
+                    started: started.clone(),
+                    finished: finished.cloned(),
+                    gate: Arc::clone(gate),
+                    active: Arc::clone(active),
+                    maximum: Arc::clone(maximum),
+                    output: Value::Integer(index as i64),
+                },
+            )
+            .unwrap();
+    }
+}
+
+fn release_all(gates: &[Arc<ParallelGate>]) {
+    for gate in gates {
+        gate.release();
+    }
+}
+
+#[test]
+fn parallel_scheduler_independent_cpu_operations_overlap() {
+    let gates = [ParallelGate::closed(), ParallelGate::closed()];
+    let (started_tx, started_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(&mut kernels, &gates, &started_tx, None, &active, &maximum);
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    let first = started_rx.recv_timeout(Duration::from_secs(2));
+    let second = started_rx.recv_timeout(Duration::from_secs(2));
+    release_all(&gates);
+    let result = run.join().unwrap();
+
+    assert!(first.is_ok(), "first CPU operation did not start");
+    assert!(second.is_ok(), "independent CPU operations did not overlap");
+    result.unwrap();
+    assert_eq!(maximum.load(Ordering::SeqCst), 2);
+}
+
+fn assert_parallel_class_limit(class: WorkloadClass, policy: SchedulingPolicy) {
+    let gates = [
+        ParallelGate::closed(),
+        ParallelGate::closed(),
+        ParallelGate::closed(),
+    ];
+    let (started_tx, started_rx) = mpsc::channel();
+    let (blocked_tx, blocked_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(&mut kernels, &gates, &started_tx, None, &active, &maximum);
+    let execution_plan = independent_parallel_plan(&[class, class, class]);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(policy)
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::AdmissionBlocked(class) {
+                    let _ = blocked_tx.send(());
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    blocked_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(
+        started_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+    release_all(&gates);
+    let result = run.join().unwrap();
+
+    result.unwrap();
+    assert_eq!(maximum.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn parallel_scheduler_enforces_hard_cpu_limit_after_blocked_admission() {
+    assert_parallel_class_limit(WorkloadClass::Cpu, parallel_policy(2, 1, 1));
+}
+
+#[test]
+fn parallel_scheduler_enforces_hard_io_limit_after_blocked_admission() {
+    assert_parallel_class_limit(WorkloadClass::Io, parallel_policy(1, 2, 1));
+}
+
+#[test]
+fn parallel_scheduler_enforces_hard_adapter_limit_after_blocked_admission() {
+    assert_parallel_class_limit(WorkloadClass::AdapterIo, parallel_policy(1, 1, 2));
+}
+
+#[test]
+fn parallel_scheduler_io_has_a_separate_budget() {
+    let gates = [ParallelGate::closed(), ParallelGate::closed()];
+    let (started_tx, started_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(&mut kernels, &gates, &started_tx, None, &active, &maximum);
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Io]);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(1, 1, 1))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    let first = started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let second = started_rx.recv_timeout(Duration::from_secs(2));
+    release_all(&gates);
+    run.join().unwrap().unwrap();
+
+    assert_eq!(first, "parallel0");
+    assert_eq!(second.unwrap(), "parallel1");
+    assert_eq!(maximum.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn parallel_scheduler_exclusive_work_never_overlaps_other_work() {
+    let gates = [ParallelGate::closed(), ParallelGate::closed()];
+    let (started_tx, started_rx) = mpsc::channel();
+    let (blocked_tx, blocked_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(&mut kernels, &gates, &started_tx, None, &active, &maximum);
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Exclusive]);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Exclusive) {
+                    let _ = blocked_tx.send(());
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    assert_eq!(
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        "parallel0"
+    );
+    blocked_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(
+        started_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+    gates[0].release();
+    let exclusive = started_rx.recv_timeout(Duration::from_secs(2));
+    gates[1].release();
+    run.join().unwrap().unwrap();
+
+    assert_eq!(exclusive.unwrap(), "parallel1");
+    assert_eq!(maximum.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn parallel_scheduler_io_is_not_starved_by_sustained_cpu_load() {
+    let gates = [
+        ParallelGate::closed(),
+        ParallelGate::closed(),
+        ParallelGate::closed(),
+        ParallelGate::closed(),
+    ];
+    let (started_tx, started_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(&mut kernels, &gates, &started_tx, None, &active, &maximum);
+    let execution_plan = independent_parallel_plan(&[
+        WorkloadClass::Cpu,
+        WorkloadClass::Cpu,
+        WorkloadClass::Cpu,
+        WorkloadClass::Io,
+    ]);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(1, 1, 1))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    let first = started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let second = started_rx.recv_timeout(Duration::from_secs(2));
+    release_all(&gates);
+    run.join().unwrap().unwrap();
+
+    assert_eq!(first, "parallel0");
+    assert_eq!(second.unwrap(), "parallel3");
+}
+
+struct ThreadIdentityKernel(Arc<Mutex<HashSet<thread::ThreadId>>>);
+
+impl Kernel for ThreadIdentityKernel {
+    fn execute(
+        &self,
+        _: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.0.lock().unwrap().insert(thread::current().id());
+        Ok(vec![Value::Null.into()])
+    }
+}
+
+#[test]
+fn parallel_scheduler_reuses_a_policy_bounded_worker_pool() {
+    let worker_threads = Arc::new(Mutex::new(HashSet::new()));
+    let mut kernels = KernelRegistry::new();
+    for index in 0..8 {
+        kernels
+            .register(
+                id(&format!("parallel{index}"), KernelHandle::new),
+                ThreadIdentityKernel(Arc::clone(&worker_threads)),
+            )
+            .unwrap();
+    }
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu; 8]);
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert!(worker_threads.lock().unwrap().len() <= 4);
+}
+
+#[test]
+fn parallel_scheduler_completion_order_does_not_change_value_mapping() {
+    let gates = [ParallelGate::closed(), ParallelGate::closed()];
+    let (started_tx, started_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let active = Arc::new(AtomicUsize::new(0));
+    let maximum = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    register_gated_kernels(
+        &mut kernels,
+        &gates,
+        &started_tx,
+        Some(&finished_tx),
+        &active,
+        &maximum,
+    );
+    let mut execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]);
+    execution_plan.results = Box::new([
+        PlanResult {
+            name: "first".into(),
+            value: ValueRef::new(0),
+            output: stable_output("first"),
+        },
+        PlanResult {
+            name: "second".into(),
+            value: ValueRef::new(1),
+            output: stable_output("second"),
+        },
+    ]);
+    publish_graph_results(&mut execution_plan);
+
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    gates[1].release();
+    assert_eq!(
+        finished_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        "parallel1"
+    );
+    gates[0].release();
+    let result = run.join().unwrap().unwrap();
+
+    assert_eq!(result.values["first"], Value::Integer(0).into());
+    assert_eq!(result.values["second"], Value::Integer(1).into());
+}
+
+struct CancellationDrainKernel {
+    started: mpsc::Sender<()>,
+    exited: mpsc::Sender<()>,
+}
+
+impl Kernel for CancellationDrainKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        let waiter = Arc::new(Condvar::new());
+        context.cancellation.register_waiter(&waiter);
+        self.started.send(()).unwrap();
+        let lock = Mutex::new(());
+        let guard = lock.lock().unwrap();
+        drop(
+            waiter
+                .wait_while(guard, |_| !context.cancellation.is_cancelled())
+                .unwrap(),
+        );
+        self.exited.send(()).unwrap();
+        Err(KernelError::cancelled("cancelled for drain"))
+    }
+}
+
+enum MultiWorkerTerminalKind {
+    Error,
+    Panic,
+    WaitForCancellation,
+}
+
+struct MultiWorkerTerminalKernel {
+    kind: MultiWorkerTerminalKind,
+    entered: Arc<Barrier>,
+    exited: mpsc::Sender<()>,
+}
+
+impl Kernel for MultiWorkerTerminalKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        let waiter = Arc::new(Condvar::new());
+        context.cancellation.register_waiter(&waiter);
+        self.entered.wait();
+        match self.kind {
+            MultiWorkerTerminalKind::Error => Err(KernelError::new("multi-worker failure")),
+            MultiWorkerTerminalKind::Panic => panic!("multi-worker panic"),
+            MultiWorkerTerminalKind::WaitForCancellation => {
+                let lock = Mutex::new(());
+                let guard = lock.lock().unwrap();
+                drop(
+                    waiter
+                        .wait_while(guard, |_| !context.cancellation.is_cancelled())
+                        .unwrap(),
+                );
+                self.exited.send(()).unwrap();
+                Err(KernelError::cancelled("peer drained"))
+            }
+        }
+    }
+}
+
+fn multi_worker_terminal_fixture(
+    terminal: MultiWorkerTerminalKind,
+) -> (
+    KernelRegistry,
+    ExecutionPlan,
+    Arc<Barrier>,
+    mpsc::Receiver<()>,
+) {
+    let entered = Arc::new(Barrier::new(3));
+    let (exited_tx, exited_rx) = mpsc::channel();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("parallel0", KernelHandle::new),
+            MultiWorkerTerminalKernel {
+                kind: terminal,
+                entered: Arc::clone(&entered),
+                exited: exited_tx.clone(),
+            },
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("parallel1", KernelHandle::new),
+            MultiWorkerTerminalKernel {
+                kind: MultiWorkerTerminalKind::WaitForCancellation,
+                entered: Arc::clone(&entered),
+                exited: exited_tx,
+            },
+        )
+        .unwrap();
+    (
+        kernels,
+        independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
+        entered,
+        exited_rx,
+    )
+}
+
+#[test]
+fn parallel_scheduler_ordinary_error_drains_and_joins_peer_worker() {
+    let (kernels, execution_plan, entered, exited) =
+        multi_worker_terminal_fixture(MultiWorkerTerminalKind::Error);
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .run(&execution_plan, CancellationToken::new())
+    });
+    entered.wait();
+
+    exited.recv_timeout(Duration::from_secs(2)).unwrap();
+    let error = run.join().unwrap().unwrap_err();
+
+    assert!(
+        matches!(error, RunError::KernelFailed { message, .. } if message.as_ref() == "multi-worker failure")
+    );
+}
+
+#[test]
+fn parallel_scheduler_panic_drains_and_joins_peer_worker_before_unwind() {
+    let (kernels, execution_plan, entered, exited) =
+        multi_worker_terminal_fixture(MultiWorkerTerminalKind::Panic);
+    let run = thread::spawn(move || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_scheduling_policy(parallel_policy(2, 1, 1))
+                .run(&execution_plan, CancellationToken::new());
+        }))
+    });
+    entered.wait();
+
+    exited.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(run.join().unwrap().is_err());
+}
+
+#[test]
+fn parallel_scheduler_cancellation_drains_all_workers() {
+    let (started_tx, started_rx) = mpsc::channel();
+    let (exited_tx, exited_rx) = mpsc::channel();
+    let mut kernels = KernelRegistry::new();
+    for index in 0..2 {
+        kernels
+            .register(
+                id(&format!("parallel{index}"), KernelHandle::new),
+                CancellationDrainKernel {
+                    started: started_tx.clone(),
+                    exited: exited_tx.clone(),
+                },
+            )
+            .unwrap();
+    }
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]);
+    let cancellation = CancellationToken::new();
+    let run_cancellation = cancellation.clone();
+    let run = thread::spawn(move || {
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .run(&execution_plan, run_cancellation)
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+
+    cancellation.cancel();
+    exited_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    exited_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let result = run.join().unwrap();
+
+    assert_eq!(result.unwrap_err(), RunError::Cancelled);
+}
+
 #[test]
 fn duplicate_operation_in_one_activation_is_rejected() {
     let calls = Arc::new(AtomicUsize::new(0));
@@ -1986,6 +4205,796 @@ fn kernel_failure_releases_resources_without_retry() {
     assert_eq!(released.load(Ordering::SeqCst), 1);
 }
 
+fn retry_policy(max_attempts: u32, backoff: Duration) -> RetryPolicy {
+    RetryPolicy::new(NonZeroU32::new(max_attempts).unwrap(), backoff, backoff).unwrap()
+}
+
+fn retry_plan(kernel: &str, max_attempts: u32, backoff: Duration) -> ExecutionPlan {
+    let mut planned = operation(kernel, &[], &[0]);
+    planned.cache_policy = CachePolicy::PerRun;
+    planned.retry = PlannedRetry {
+        idempotent: true,
+        policy: Some(retry_policy(max_attempts, backoff)),
+    };
+    let mut execution_plan = plan(
+        vec![planned],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("retry_result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    execution_plan
+}
+
+struct RetryProgressGate {
+    release: Mutex<mpsc::Receiver<()>>,
+    completed: mpsc::Sender<()>,
+}
+
+impl Kernel for RetryProgressGate {
+    fn execute(
+        &self,
+        _: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.release.lock().unwrap().recv().unwrap();
+        self.completed.send(()).unwrap();
+        Ok(vec![Value::Integer(1).into()])
+    }
+}
+
+fn retry_progress_plan(gates: usize, exclusive_tail: bool) -> ExecutionPlan {
+    let mut retry = operation("retry_progress", &[], &[0]);
+    retry.cache_policy = CachePolicy::PerRun;
+    retry.retry = PlannedRetry {
+        idempotent: true,
+        policy: Some(retry_policy(2, Duration::from_secs(5))),
+    };
+    let mut operations = vec![retry];
+    for index in 0..gates {
+        let mut gate = operation("retry_progress_gate", &[], &[(index + 1) as u32]);
+        gate.stable_id =
+            OperationStableId::new(format!("test.retry.progress.gate.{index}")).unwrap();
+        if exclusive_tail && index + 1 == gates {
+            gate.workload = WorkloadClass::Exclusive;
+        }
+        operations.push(gate);
+    }
+    let mut execution_plan = plan(
+        operations,
+        (gates + 1) as u32,
+        StructuredControlRegion::Sequence(
+            (0..=gates)
+                .map(|index| ControlStep::Operation(OperationIndex::new(index as u32)))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        ),
+    );
+    if exclusive_tail && gates >= 2 {
+        execution_plan.effect_dependencies = Box::new([EffectDependency {
+            before: OperationIndex::new((gates - 1) as u32),
+            after: OperationIndex::new(gates as u32),
+        }]);
+    }
+    execution_plan
+}
+
+#[test]
+fn retry_delayed_queue_drains_bounded_completions_during_long_backoff() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let (release_tx, release_rx) = mpsc::channel();
+    let (completed_tx, completed_rx) = mpsc::channel();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_progress", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(KernelError::transient("delay"))
+                } else {
+                    Ok(vec![Value::Integer(0).into()])
+                }
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("retry_progress_gate", KernelHandle::new),
+            RetryProgressGate {
+                release: Mutex::new(release_rx),
+                completed: completed_tx,
+            },
+        )
+        .unwrap();
+    let cancellation = CancellationToken::new();
+    let cancel_run = cancellation.clone();
+    let release = Arc::new(Mutex::new(Some(release_tx)));
+    let release_at_backoff = Arc::clone(&release);
+    let execution_plan = retry_progress_plan(6, false);
+
+    thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_scheduling_policy(parallel_policy(2, 1, 1))
+                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                    if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
+                        && let Some(release) = release_at_backoff.lock().unwrap().take()
+                    {
+                        for _ in 0..6 {
+                            release.send(()).unwrap();
+                        }
+                    }
+                }))
+                .run(&execution_plan, cancellation)
+        });
+        for _ in 0..6 {
+            completed_rx
+                .recv_timeout(Duration::from_millis(500))
+                .unwrap();
+        }
+        cancel_run.cancel();
+        assert_eq!(run.join().unwrap(), Err(RunError::Cancelled));
+    });
+}
+
+#[test]
+fn retry_delayed_queue_allows_exclusive_effect_progress() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let (release_tx, release_rx) = mpsc::channel();
+    let (completed_tx, completed_rx) = mpsc::channel();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_progress", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(KernelError::transient("delay"))
+                } else {
+                    Ok(vec![Value::Integer(0).into()])
+                }
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("retry_progress_gate", KernelHandle::new),
+            RetryProgressGate {
+                release: Mutex::new(release_rx),
+                completed: completed_tx,
+            },
+        )
+        .unwrap();
+    let cancellation = CancellationToken::new();
+    let cancel_run = cancellation.clone();
+    let release = Arc::new(Mutex::new(Some(release_tx)));
+    let release_at_backoff = Arc::clone(&release);
+    let execution_plan = retry_progress_plan(2, true);
+
+    thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_scheduling_policy(parallel_policy(2, 1, 1))
+                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                    if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
+                        && let Some(release) = release_at_backoff.lock().unwrap().take()
+                    {
+                        release.send(()).unwrap();
+                        release.send(()).unwrap();
+                    }
+                }))
+                .run(&execution_plan, cancellation)
+        });
+        completed_rx
+            .recv_timeout(Duration::from_millis(500))
+            .unwrap();
+        completed_rx
+            .recv_timeout(Duration::from_millis(500))
+            .unwrap();
+        cancel_run.cancel();
+        assert_eq!(run.join().unwrap(), Err(RunError::Cancelled));
+    });
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AdmissionRejection {
+    Cancellation,
+    Deadline,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AdmissionRollbackObservation {
+    operation: OperationIndex,
+    attempt: AttemptId,
+    running_count: usize,
+    tracked_running: usize,
+    memo_owned: bool,
+    frame_attempt: Option<AttemptId>,
+}
+
+struct CooperativeAdmissionPeer {
+    calls: Arc<AtomicUsize>,
+}
+
+impl Kernel for CooperativeAdmissionPeer {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        context.wait_for(Duration::from_millis(100))?;
+        Ok(vec![Value::Integer(1).into()])
+    }
+}
+
+fn admission_rejection_deadline(rejection: AdmissionRejection) -> RunDeadline {
+    match rejection {
+        AdmissionRejection::Cancellation => RunDeadline::after(Duration::from_secs(5)),
+        AdmissionRejection::Deadline => RunDeadline::after(Duration::from_millis(10)),
+    }
+}
+
+fn reject_admission(rejection: AdmissionRejection, cancellation: &CancellationToken) {
+    match rejection {
+        AdmissionRejection::Cancellation => cancellation.cancel(),
+        AdmissionRejection::Deadline => thread::sleep(Duration::from_millis(30)),
+    }
+}
+
+fn assert_rejected_attempt_not_started(events: &RecordingRunEvents, operation: u32, attempt: u64) {
+    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::OperationStarted {
+            operation_index,
+            attempt_id,
+            ..
+        } if operation_index == operation && attempt_id == attempt
+    )));
+}
+
+fn run_initial_admission_rejection(rejection: AdmissionRejection) {
+    let peer_calls = Arc::new(AtomicUsize::new(0));
+    let rejected_calls = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("admission_peer", KernelHandle::new),
+            CooperativeAdmissionPeer {
+                calls: Arc::clone(&peer_calls),
+            },
+        )
+        .unwrap();
+    let observed_rejected = Arc::clone(&rejected_calls);
+    kernels
+        .register(
+            id("admission_rejected", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed_rejected.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(2).into()])
+            }),
+        )
+        .unwrap();
+    let mut rejected = operation("admission_rejected", &[], &[1]);
+    rejected.cache_policy = CachePolicy::PerRun;
+    let execution_plan = plan(
+        vec![operation("admission_peer", &[], &[0]), rejected],
+        2,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let rollback = Arc::new(Mutex::new(None));
+    let observed_rollback = Arc::clone(&rollback);
+    let events = RecordingRunEvents::default();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .with_deadline(admission_rejection_deadline(rejection))
+        .with_event_sink(&events)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
+            SchedulerCheckpoint::AdmissionBookkept {
+                operation, attempt, ..
+            } if operation == OperationIndex::new(1) && attempt == AttemptId::initial() => {
+                reject_admission(rejection, cancellation);
+            }
+            SchedulerCheckpoint::AdmissionRolledBack {
+                operation,
+                attempt,
+                running_count,
+                tracked_running,
+                memo_owned,
+                frame_attempt,
+            } if operation == OperationIndex::new(1) => {
+                *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
+                    operation,
+                    attempt,
+                    running_count,
+                    tracked_running,
+                    memo_owned,
+                    frame_attempt,
+                });
+            }
+            _ => {}
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(
+        (rejection, error),
+        (AdmissionRejection::Cancellation, RunError::Cancelled)
+            | (
+                AdmissionRejection::Deadline,
+                RunError::DeadlineExceeded {
+                    phase: RunPhase::QueueWait
+                }
+            )
+    ));
+    assert_eq!(peer_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(rejected_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        rollback.lock().unwrap().clone(),
+        Some(AdmissionRollbackObservation {
+            operation: OperationIndex::new(1),
+            attempt: AttemptId::initial(),
+            running_count: 1,
+            tracked_running: 1,
+            memo_owned: false,
+            frame_attempt: None,
+        })
+    );
+    assert_rejected_attempt_not_started(&events, 1, 1);
+}
+
+fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
+    let retry_calls = Arc::new(AtomicUsize::new(0));
+    let peer_calls = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    let observed_retry = Arc::clone(&retry_calls);
+    kernels
+        .register(
+            id("retry_admission_rejected", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                if observed_retry.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(KernelError::transient("promote retry"))
+                } else {
+                    Ok(vec![Value::Integer(2).into()])
+                }
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("retry_admission_peer", KernelHandle::new),
+            CooperativeAdmissionPeer {
+                calls: Arc::clone(&peer_calls),
+            },
+        )
+        .unwrap();
+    let mut retry = operation("retry_admission_rejected", &[], &[0]);
+    retry.cache_policy = CachePolicy::PerRun;
+    retry.retry = PlannedRetry {
+        idempotent: true,
+        policy: Some(retry_policy(2, Duration::ZERO)),
+    };
+    let execution_plan = plan(
+        vec![retry, operation("retry_admission_peer", &[], &[1])],
+        2,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let rollback = Arc::new(Mutex::new(None));
+    let observed_rollback = Arc::clone(&rollback);
+    let events = RecordingRunEvents::default();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .with_deadline(admission_rejection_deadline(rejection))
+        .with_event_sink(&events)
+        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
+            SchedulerCheckpoint::AdmissionBookkept {
+                operation, attempt, ..
+            } if operation == OperationIndex::new(0) && attempt == AttemptId::new(2) => {
+                reject_admission(rejection, cancellation);
+            }
+            SchedulerCheckpoint::AdmissionRolledBack {
+                operation,
+                attempt,
+                running_count,
+                tracked_running,
+                memo_owned,
+                frame_attempt,
+            } if operation == OperationIndex::new(0) => {
+                *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
+                    operation,
+                    attempt,
+                    running_count,
+                    tracked_running,
+                    memo_owned,
+                    frame_attempt,
+                });
+            }
+            _ => {}
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(
+        (rejection, error),
+        (AdmissionRejection::Cancellation, RunError::Cancelled)
+            | (
+                AdmissionRejection::Deadline,
+                RunError::DeadlineExceeded {
+                    phase: RunPhase::QueueWait
+                }
+            )
+    ));
+    assert_eq!(retry_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(peer_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        rollback.lock().unwrap().clone(),
+        Some(AdmissionRollbackObservation {
+            operation: OperationIndex::new(0),
+            attempt: AttemptId::new(2),
+            running_count: 1,
+            tracked_running: 1,
+            memo_owned: false,
+            frame_attempt: Some(AttemptId::initial()),
+        })
+    );
+    assert_rejected_attempt_not_started(&events, 0, 2);
+}
+
+#[test]
+fn initial_admission_cancellation_rolls_back_before_queue_submission() {
+    run_initial_admission_rejection(AdmissionRejection::Cancellation);
+}
+
+#[test]
+fn initial_admission_deadline_rolls_back_before_queue_submission() {
+    run_initial_admission_rejection(AdmissionRejection::Deadline);
+}
+
+#[test]
+fn promoted_retry_admission_cancellation_rolls_back_before_queue_submission() {
+    run_promoted_retry_admission_rejection(AdmissionRejection::Cancellation);
+}
+
+#[test]
+fn promoted_retry_admission_deadline_rolls_back_before_queue_submission() {
+    run_promoted_retry_admission_rejection(AdmissionRejection::Deadline);
+}
+
+#[test]
+fn activation_allocator_exhaustion_is_typed_without_global_contamination() {
+    let allocator = ActivationIdAllocator::for_test(NonZeroU64::new(u64::MAX).unwrap());
+    let execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
+    let kernels = KernelRegistry::new();
+    let resources = no_resources();
+    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
+        .with_activation_allocator_for_test(&allocator);
+
+    executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    assert_eq!(
+        executor.run(&execution_plan, CancellationToken::new()),
+        Err(RunError::ActivationIdExhausted)
+    );
+}
+
+#[test]
+fn retry_backoff_is_exponential_capped_and_overflow_safe() {
+    let policy = RetryPolicy::new(
+        NonZeroU32::new(10).unwrap(),
+        Duration::from_millis(3),
+        Duration::from_millis(10),
+    )
+    .unwrap();
+
+    assert_eq!(
+        super::scheduler::retry_backoff(policy, AttemptId::new(1)),
+        Duration::from_millis(3)
+    );
+    assert_eq!(
+        super::scheduler::retry_backoff(policy, AttemptId::new(2)),
+        Duration::from_millis(6)
+    );
+    assert_eq!(
+        super::scheduler::retry_backoff(policy, AttemptId::new(3)),
+        Duration::from_millis(10)
+    );
+    assert_eq!(
+        super::scheduler::retry_backoff(policy, AttemptId::new(u64::MAX)),
+        Duration::from_millis(10)
+    );
+}
+
+#[test]
+fn retry_transient_failure_then_success_publishes_only_final_output() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_transient_success", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(KernelError::transient("try again"))
+                } else {
+                    Ok(vec![Value::Integer(42).into()])
+                }
+            }),
+        )
+        .unwrap();
+    let events = RecordingRunEvents::default();
+
+    let execution_plan = retry_plan("retry_transient_success", 3, Duration::ZERO);
+    execution_plan.validate().unwrap();
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(result.values["result"], Value::Integer(42).into());
+    let events = events.0.lock().unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn retry_permanent_error_never_retries() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_permanent", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Err(KernelError::new("permanent"))
+            }),
+        )
+        .unwrap();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(
+            &retry_plan("retry_permanent", 3, Duration::ZERO),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::KernelFailed { .. }));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn retry_max_attempts_includes_initial_attempt() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_exact_max", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Err(KernelError::transient("still transient"))
+            }),
+        )
+        .unwrap();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(
+            &retry_plan("retry_exact_max", 3, Duration::ZERO),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::KernelFailed { .. }));
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_deadline", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Err(KernelError::transient("retry later"))
+            }),
+        )
+        .unwrap();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+        .run(
+            &retry_plan("retry_deadline", 3, Duration::from_millis(100)),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::QueueWait,
+        }
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn retry_cancellation_during_backoff_wakes_promptly() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_cancel_backoff", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Err(KernelError::transient("retry later"))),
+        )
+        .unwrap();
+    let cancellation = CancellationToken::new();
+    let started = Instant::now();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
+            if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. }) {
+                cancellation.cancel();
+            }
+        }))
+        .run(
+            &retry_plan("retry_cancel_backoff", 3, Duration::from_secs(5)),
+            cancellation,
+        )
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+    assert!(started.elapsed() < Duration::from_millis(200));
+}
+
+struct RetryIdentityKernel {
+    calls: AtomicUsize,
+    activations: Arc<Mutex<Vec<ActivationId>>>,
+}
+
+impl Kernel for RetryIdentityKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.activations.lock().unwrap().push(context.activation_id);
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            Err(KernelError::transient("retry with fresh identity"))
+        } else {
+            Ok(vec![Value::Integer(7).into()])
+        }
+    }
+}
+
+#[test]
+fn retry_attempts_use_distinct_attempt_and_activation_with_stable_operation() {
+    let activations = Arc::new(Mutex::new(Vec::new()));
+    let attempts = Arc::new(Mutex::new(Vec::new()));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_identity", KernelHandle::new),
+            RetryIdentityKernel {
+                calls: AtomicUsize::new(0),
+                activations: Arc::clone(&activations),
+            },
+        )
+        .unwrap();
+    let observed_attempts = Arc::clone(&attempts);
+    let events = RecordingRunEvents::default();
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+            if let SchedulerCheckpoint::AttemptPrepared {
+                operation,
+                activation,
+                attempt,
+            } = checkpoint
+            {
+                observed_attempts
+                    .lock()
+                    .unwrap()
+                    .push((operation, activation, attempt));
+            }
+        }))
+        .run(
+            &retry_plan("retry_identity", 2, Duration::ZERO),
+            CancellationToken::new(),
+        )
+        .unwrap();
+
+    let activations = activations.lock().unwrap();
+    assert_eq!(activations.len(), 2);
+    assert_ne!(activations[0], activations[1]);
+    let attempts = attempts.lock().unwrap();
+    assert_eq!(attempts.len(), 2);
+    assert_eq!(attempts[0].0, OperationIndex::new(0));
+    assert_eq!(attempts[1].0, OperationIndex::new(0));
+    assert_eq!(attempts[0].2, AttemptId::new(1));
+    assert_eq!(attempts[1].2, AttemptId::new(2));
+    assert_eq!(attempts[0].1, activations[0]);
+    assert_eq!(attempts[1].1, activations[1]);
+    let event_attempts = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event.kind {
+            RunEventKind::OperationStarted { attempt_id, .. } => Some(attempt_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(event_attempts, vec![1, 2]);
+}
+
+#[test]
+fn retry_runtime_defense_rejects_malformed_side_effect_plan() {
+    let mut unsafe_operation = adapter_operation(
+        "test.unsafe.retry",
+        0,
+        1,
+        OutputProduction::Streaming,
+        InputConsumption::FullyMaterialized,
+    );
+    unsafe_operation.retry = PlannedRetry {
+        idempotent: true,
+        policy: Some(retry_policy(2, Duration::ZERO)),
+    };
+    let mut execution_plan = plan(
+        vec![unsafe_operation],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::Streaming,
+    )]);
+
+    assert!(
+        execution_plan
+            .validate()
+            .unwrap_err()
+            .0
+            .iter()
+            .any(|error| {
+                matches!(error, PlanValidationError::InvalidRetryPolicy { operation }
+            if *operation == OperationIndex::new(0))
+            })
+    );
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+}
+
 #[test]
 fn call_failure_releases_caller_and_callee_resources() {
     let mut callee = plan(
@@ -2097,6 +5106,22 @@ enum TraceRelationalOutcome {
 
 struct TraceRelationalBackend(TraceRelationalOutcome);
 
+struct OrdinaryErrorAfterCancellationBackend;
+
+impl RelationalBackend for OrdinaryErrorAfterCancellationBackend {
+    fn execute(
+        &self,
+        context: &RelationalContext<'_>,
+        _: &CompiledRelationalPlan,
+        _: &[RuntimeValue],
+    ) -> Result<RelationalExecution, RelationalError> {
+        context.cancellation.cancel();
+        Err(RelationalError::operator_invalid(
+            "ordinary backend failure won the boundary",
+        ))
+    }
+}
+
 impl RelationalBackend for TraceRelationalBackend {
     fn execute(
         &self,
@@ -2159,19 +5184,118 @@ fn run_relational_backend_trace(
     (result, execution_plan, events)
 }
 
+struct OwnerThreadTrace {
+    owner: thread::ThreadId,
+    off_owner_calls: AtomicUsize,
+    events: Mutex<Vec<TraceSpan>>,
+}
+
+impl OwnerThreadTrace {
+    fn current() -> Self {
+        Self {
+            owner: thread::current().id(),
+            off_owner_calls: AtomicUsize::new(0),
+            events: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl TraceSink for OwnerThreadTrace {
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, span: TraceSpan) {
+        if thread::current().id() != self.owner {
+            self.off_owner_calls.fetch_add(1, Ordering::SeqCst);
+        }
+        self.events.lock().unwrap().push(span);
+    }
+}
+
+#[test]
+fn relational_cancellation_installed_before_ordinary_error_wins() {
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("ordinary-after-cancel", RelationalBackendId::new),
+            OrdinaryErrorAfterCancellationBackend,
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        "ordinary-after-cancel",
+        "ordinary-fragment",
+        Box::new([]),
+    )]);
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(error, RunError::Cancelled);
+}
+
+#[test]
+fn parallel_scheduler_workers_return_relational_trace_to_owner_thread() {
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("trace-owner", RelationalBackendId::new),
+            TraceRelationalBackend(TraceRelationalOutcome::Succeed),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        "trace-owner",
+        "private-fragment",
+        Box::new([]),
+    )]);
+    let trace = OwnerThreadTrace::current();
+
+    RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_trace_sink(&trace)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(trace.off_owner_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        trace
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|span| span.kind == SpanKind::AdapterIo)
+            .count(),
+        1
+    );
+}
+
 fn assert_relational_backend_trace(
     execution_plan: &ExecutionPlan,
-    events: &[SpanEvent],
-    terminal_status: SpanStatus,
+    spans: &[TraceSpan],
+    terminal_outcome: SpanOutcome,
 ) {
-    let spans = events
+    let spans = spans
         .iter()
-        .filter(|event| event.kind == SpanKind::RelationalBackend)
+        .filter(|span| span.kind == SpanKind::AdapterIo)
         .collect::<Vec<_>>();
-    assert_eq!(spans.len(), 2);
-    assert_eq!(spans[0].status, SpanStatus::Started);
-    assert_eq!(spans[1].status, terminal_status);
-    assert_eq!(spans[0].correlation, spans[1].correlation);
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].outcome, terminal_outcome);
 
     let correlation = &spans[0].correlation;
     assert_eq!(
@@ -2202,16 +5326,12 @@ fn assert_relational_backend_trace(
         Some(execution_plan.operations[0].source_node_type_id.clone())
     );
     assert_eq!(correlation.parent_call, None);
-
-    let expected_fields = BTreeMap::from([
-        (
-            Box::<str>::from("backendId"),
-            TraceValue::Text("trace-backend".into()),
-        ),
-        (Box::<str>::from("subplanIndex"), TraceValue::Integer(0)),
-    ]);
-    assert_eq!(spans[0].fields, expected_fields);
-    assert_eq!(spans[1].fields, expected_fields);
+    assert_eq!(
+        spans[0].operation_id.as_ref(),
+        Some(&execution_plan.operations[0].stable_id)
+    );
+    assert!(spans[0].activation_id.is_some());
+    assert_eq!(spans[0].attempt_id, Some(AttemptId::initial()));
 }
 
 #[test]
@@ -2220,7 +5340,7 @@ fn relational_backend_trace_records_success_with_full_operation_correlation() {
         run_relational_backend_trace(TraceRelationalOutcome::Succeed);
 
     result.unwrap();
-    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Succeeded);
+    assert_relational_backend_trace(&execution_plan, &events, SpanOutcome::Success);
 }
 
 #[test]
@@ -2229,7 +5349,7 @@ fn relational_backend_trace_records_failure_with_full_operation_correlation() {
         run_relational_backend_trace(TraceRelationalOutcome::Fail);
 
     assert!(matches!(result, Err(RunError::RelationalFailed { .. })));
-    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Failed);
+    assert_relational_backend_trace(&execution_plan, &events, SpanOutcome::Error);
 }
 
 #[test]
@@ -2238,7 +5358,7 @@ fn relational_backend_trace_records_cancellation_with_full_operation_correlation
         run_relational_backend_trace(TraceRelationalOutcome::Cancel);
 
     assert_eq!(result, Err(RunError::Cancelled));
-    assert_relational_backend_trace(&execution_plan, &events, SpanStatus::Cancelled);
+    assert_relational_backend_trace(&execution_plan, &events, SpanOutcome::Cancellation);
 }
 
 fn assert_production_source_cancellation(
@@ -2504,7 +5624,7 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
     publish_graph_results(&mut execution_plan);
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
-    let finalizer = |_: &mut RunResult, _: &CancellationToken| {
+    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| {
         Err(RunError::ResourceSnapshotMismatch(
             "authoritative commit failed".into(),
         ))
@@ -2522,7 +5642,9 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
     assert!(recorded.iter().any(|event| matches!(
         event.kind,
         RunEventKind::RunErrored {
-            code: RunErrorCode::ResourceSnapshotMismatch
+            outcome: RunErrorOutcome::Ordinary {
+                code: OrdinaryRunErrorCode::ResourceSnapshotMismatch,
+            },
         }
     )));
     assert!(
@@ -2535,6 +5657,155 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
         RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
     )));
     assert_eq!(results.source_count(), 0);
+}
+
+fn publication_transaction_fixture() -> (KernelRegistry, ExecutionPlan) {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("transactional_value", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("transactional_value", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "value".into(),
+        output: stable_output("transactional_value"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    (kernels, execution_plan)
+}
+
+fn seed_result_source(
+    kernels: &KernelRegistry,
+    execution_plan: &ExecutionPlan,
+    results: &ResultStore,
+) -> ResultSourceId {
+    let events = RecordingRunEvents::default();
+    RunExecutor::new(kernels, &no_resources(), &NoFunctions)
+        .with_result_store(results)
+        .with_event_sink(&events)
+        .run(execution_plan, CancellationToken::new())
+        .unwrap();
+    events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|event| match event.kind {
+            RunEventKind::ResultReady { source_id, .. } => Some(source_id),
+            _ => None,
+        })
+        .expect("seed run publishes one result source")
+}
+
+#[test]
+fn result_publication_error_preserves_capacity_eviction_candidate() {
+    let (kernels, execution_plan) = publication_transaction_fixture();
+    let results = ResultStore::with_capacity(1);
+    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
+    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| {
+        Err(RunError::ResourceSnapshotMismatch(
+            "finalizer failed".into(),
+        ))
+    };
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_result_store(&results)
+        .with_atomic_success_finalizer(&finalizer)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(results.artifact_count_for_test(), 1);
+    assert!(results.descriptor(prior_source).is_some());
+}
+
+#[test]
+fn successful_atomic_result_publication_is_invisible_and_non_evicting_until_final_gate() {
+    let (kernels, execution_plan) = publication_transaction_fixture();
+    let results = ResultStore::with_capacity(1);
+    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
+    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| Ok(());
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_result_store(&results)
+        .with_atomic_success_finalizer(&finalizer)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(results.artifact_count_for_test(), 1);
+    assert!(results.descriptor(prior_source).is_none());
+}
+
+#[test]
+fn result_publication_deadline_preserves_capacity_eviction_candidate() {
+    let (kernels, execution_plan) = publication_transaction_fixture();
+    let results = ResultStore::with_capacity(1);
+    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
+    let finalizer =
+        |_: &mut RunResult, cancellation: &CancellationToken, deadline: Option<RunDeadline>| {
+            thread::sleep(Duration::from_millis(20));
+            deadline
+                .expect("deadline configured")
+                .check(cancellation, RunPhase::ResultPublication)
+        };
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_result_store(&results)
+        .with_atomic_success_finalizer(&finalizer)
+        .with_deadline(RunDeadline::after(Duration::from_millis(5)))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::ResultPublication,
+        }
+    );
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(results.artifact_count_for_test(), 1);
+    assert!(results.descriptor(prior_source).is_some());
+}
+
+#[test]
+fn result_publication_finalizer_panic_preserves_prior_source_and_leaks_no_handle() {
+    let (kernels, execution_plan) = publication_transaction_fixture();
+    let results = ResultStore::with_capacity(1);
+    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
+    let events = RecordingRunEvents::default();
+    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| {
+        panic!("finalizer panic sentinel")
+    };
+
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_result_store(&results)
+            .with_event_sink(&events)
+            .with_atomic_success_finalizer(&finalizer)
+            .run(&execution_plan, CancellationToken::new());
+    }));
+
+    assert!(panic.is_err());
+    assert_eq!(results.source_count(), 1);
+    assert_eq!(results.artifact_count_for_test(), 1);
+    assert!(results.descriptor(prior_source).is_some());
+    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
+        event.kind,
+        RunEventKind::ResultReady { .. }
+            | RunEventKind::OutputReady { .. }
+            | RunEventKind::RunCompleted
+    )));
 }
 
 #[test]
@@ -2743,15 +6014,10 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
     kernels
         .register(
             id("adapter_source", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| {
-                Ok(vec![RuntimeValue::Stream(
-                    StreamValue::from_values(
-                        [Value::Integer(7), Value::Integer(8)],
-                        CancellationToken::new(),
-                    )
-                    .unwrap(),
-                )])
-            }),
+            OwnedStreamKernel {
+                values: vec![Value::Integer(7), Value::Integer(8)].into_boxed_slice(),
+                executions: None,
+            },
         )
         .unwrap();
     kernels
@@ -2762,7 +6028,8 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
                     inputs,
                     [RuntimeValue::Artifact(artifact)]
                         if artifact.kind() == ArtifactKind::Collected
-                            && artifact.values() == [Value::Integer(7), Value::Integer(8)]
+                            && artifact.cursor().unwrap().collect::<Result<Vec<_>, _>>().unwrap()
+                                == [Value::Integer(7), Value::Integer(8)]
                 ));
                 Ok(vec![Value::Integer(2).into()])
             }),
@@ -2836,6 +6103,171 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
 }
 
 #[test]
+fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data() {
+    for selected in [true, false] {
+        let source_executions = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&source_executions);
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("external_stream_source", KernelHandle::new),
+                OwnedStreamKernel {
+                    values: vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)]
+                        .into_boxed_slice(),
+                    executions: Some(observed),
+                },
+            )
+            .unwrap();
+        kernels
+            .register(
+                id("branch_condition", KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| Ok(vec![Value::Bool(selected).into()])),
+            )
+            .unwrap();
+        for name in ["then_stream_sink", "else_stream_sink"] {
+            kernels
+                .register(
+                    id(name, KernelHandle::new),
+                    FnKernel(|inputs: &[RuntimeValue]| {
+                        let RuntimeValue::Artifact(artifact) = &inputs[0] else {
+                            return Err(KernelError::new("expected materialized artifact"));
+                        };
+                        Ok(vec![
+                            Value::Integer(artifact.cursor().unwrap().count() as i64).into(),
+                        ])
+                    }),
+                )
+                .unwrap();
+        }
+
+        let condition = operation("branch_condition", &[], &[1]);
+        let shared = adapter_operation(
+            "external.shared.collect",
+            2,
+            3,
+            OutputProduction::Streaming,
+            InputConsumption::FullyMaterialized,
+        );
+        let then_adapter = adapter_operation(
+            "external.then.identity",
+            4,
+            5,
+            OutputProduction::FullyMaterialized,
+            InputConsumption::FullyMaterialized,
+        );
+        let else_adapter = adapter_operation(
+            "external.else.identity",
+            6,
+            7,
+            OutputProduction::FullyMaterialized,
+            InputConsumption::FullyMaterialized,
+        );
+        let mut callee = plan(
+            vec![
+                condition,
+                shared,
+                then_adapter,
+                else_adapter,
+                operation("then_stream_sink", &[8], &[9]),
+                operation("else_stream_sink", &[10], &[11]),
+            ],
+            13,
+            StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(1)),
+                ControlStep::Operation(OperationIndex::new(2)),
+                ControlStep::Operation(OperationIndex::new(3)),
+                ControlStep::Operation(OperationIndex::new(0)),
+                ControlStep::Region(Box::new(StructuredControlRegion::If {
+                    condition: ValueRef::new(1),
+                    then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                        ControlStep::Operation(OperationIndex::new(4)),
+                    ]))),
+                    else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                        ControlStep::Operation(OperationIndex::new(5)),
+                    ]))),
+                    results: Box::new([BranchResultBinding {
+                        destination: ValueRef::new(12),
+                        then_source: ValueRef::new(9),
+                        else_source: ValueRef::new(11),
+                        production: Some(OutputProduction::FullyMaterialized),
+                    }]),
+                })),
+            ])),
+        );
+        callee.value_sources = Box::new([
+            PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::Streaming),
+            PlanValueSource::ControlProduced(
+                ValueRef::new(12),
+                OutputProduction::FullyMaterialized,
+            ),
+        ]);
+        callee.value_dependencies = Box::new([
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(2),
+            },
+            ValueDependency {
+                source: ValueRef::new(3),
+                destination: ValueRef::new(4),
+            },
+            ValueDependency {
+                source: ValueRef::new(3),
+                destination: ValueRef::new(6),
+            },
+            ValueDependency {
+                source: ValueRef::new(5),
+                destination: ValueRef::new(8),
+            },
+            ValueDependency {
+                source: ValueRef::new(7),
+                destination: ValueRef::new(10),
+            },
+        ]);
+
+        let mut source = operation("external_stream_source", &[], &[0]);
+        source.outputs[0].production = OutputProduction::Streaming;
+        let mut caller = plan(
+            vec![source],
+            2,
+            StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(0)),
+                ControlStep::Region(Box::new(StructuredControlRegion::Call {
+                    target: id("functions/external-branch", FunctionPlanHandle::new),
+                    arguments: Box::new([CallArgumentBinding {
+                        caller_source: ValueRef::new(0),
+                        callee_destination: ValueRef::new(0),
+                    }]),
+                    results: Box::new([CallResultBinding {
+                        callee_source: ValueRef::new(12),
+                        caller_destination: ValueRef::new(1),
+                        production: Some(OutputProduction::FullyMaterialized),
+                    }]),
+                    mandatory: true,
+                })),
+            ])),
+        );
+        caller.value_sources = Box::new([PlanValueSource::ControlProduced(
+            ValueRef::new(1),
+            OutputProduction::FullyMaterialized,
+        )]);
+        caller.results = Box::new([PlanResult {
+            name: "count".into(),
+            output: stable_output("count"),
+            value: ValueRef::new(1),
+        }]);
+        publish_graph_results(&mut caller);
+
+        let function = published_function(callee, "functions/external-branch", &[0], &[12]);
+        let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
+            .run(&caller, CancellationToken::new())
+            .unwrap();
+
+        assert_eq!(result.values["count"], Value::Integer(3).into());
+        assert_eq!(source_executions.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
 fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consumers() {
     for different_contracts in [false, true] {
         let observed = Arc::new(Mutex::new(Vec::new()));
@@ -2843,15 +6275,11 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
         kernels
             .register(
                 id("fanout_source", KernelHandle::new),
-                FnKernel(|_: &[RuntimeValue]| {
-                    Ok(vec![RuntimeValue::Stream(
-                        StreamValue::from_values(
-                            [Value::Integer(1), Value::Integer(2), Value::Integer(3)],
-                            CancellationToken::new(),
-                        )
-                        .unwrap(),
-                    )])
-                }),
+                OwnedStreamKernel {
+                    values: vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)]
+                        .into_boxed_slice(),
+                    executions: None,
+                },
             )
             .unwrap();
         for name in ["fanout_a", "fanout_b"] {
@@ -2861,7 +6289,7 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
                     id(name, KernelHandle::new),
                     FnKernel(move |inputs: &[RuntimeValue]| {
                         let count = match &inputs[0] {
-                            RuntimeValue::Artifact(artifact) => artifact.values().len(),
+                            RuntimeValue::Artifact(artifact) => artifact.cursor().unwrap().count(),
                             RuntimeValue::Stream(stream) => {
                                 let mut count = 0;
                                 while stream.recv().is_ok() {
@@ -3011,6 +6439,7 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
 
 #[test]
 fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts() {
+    let stream_owner = materialization_test_owner();
     #[derive(Clone, Copy)]
     enum Shape {
         Stream,
@@ -3166,7 +6595,9 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         assert_eq!(planned.output_production, adapter_production);
         let input = match production {
             OutputProduction::Streaming => RuntimeValue::Stream(
-                StreamValue::from_values([Value::Integer(7)], CancellationToken::new()).unwrap(),
+                stream_owner
+                    .stream_from_values([Value::Integer(7)])
+                    .unwrap(),
             ),
             OutputProduction::Batches => RuntimeValue::Artifact(Artifact::new(
                 ArtifactKind::Buffered,
@@ -3177,13 +6608,26 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
                 vec![Value::Integer(7)],
             )),
         };
-        let output =
-            execute_planned_adapter(&planned.adapter, input, &CancellationToken::new()).unwrap();
+        let cancellation = CancellationToken::new();
+        let output = execute_planned_adapter(
+            &planned.adapter,
+            input,
+            stream_owner.as_ref(),
+            &cancellation,
+        )
+        .unwrap();
         match (shape, output) {
             (Shape::Stream, RuntimeValue::Stream(_)) => {}
             (Shape::Artifact(expected), RuntimeValue::Artifact(actual)) => {
                 assert_eq!(actual.kind(), expected);
-                assert_eq!(actual.values(), &[Value::Integer(7)]);
+                assert_eq!(
+                    actual
+                        .cursor()
+                        .unwrap()
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap(),
+                    [Value::Integer(7)]
+                );
             }
             _ => panic!("adapter runtime result does not match its declared production"),
         }
@@ -3248,6 +6692,7 @@ fn per_run_memoization_demand_fingerprints_are_frame_specific_without_sentinels(
     let results = Box::new([CallResultBinding {
         callee_source: ValueRef::new(3),
         caller_destination: ValueRef::new(4),
+        production: Some(OutputProduction::FullyMaterialized),
     }]);
     assert_ne!(
         DemandFingerprint::for_callee(&root, &target, &first_arguments[..], &results[..]),
@@ -3629,9 +7074,11 @@ fn per_run_memoization_cancellation_after_commit_keeps_cache() {
 #[test]
 fn per_run_memoization_partial_stream_is_not_cacheable() {
     let memo = RunMemoization::new();
-    let stream_token = CancellationToken::new();
+    let stream_owner = materialization_test_owner();
     let stream = RuntimeValue::Stream(
-        StreamValue::from_values([Value::Integer(1)], stream_token.clone()).unwrap(),
+        stream_owner
+            .stream_from_values([Value::Integer(1)])
+            .unwrap(),
     );
     assert!(
         OperationMemoKey::from_inputs(
@@ -3650,7 +7097,9 @@ fn per_run_memoization_partial_stream_is_not_cacheable() {
         let result = memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
             calls.fetch_add(1, Ordering::SeqCst);
             Ok(vec![RuntimeValue::Stream(
-                StreamValue::from_values([Value::Integer(2)], stream_token.clone()).unwrap(),
+                stream_owner
+                    .stream_from_values([Value::Integer(2)])
+                    .unwrap(),
             )]
             .into_boxed_slice())
         });
@@ -4004,6 +7453,7 @@ fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
                     initial_source: ValueRef::new(0),
                     next_source: ValueRef::new(3),
                     result: ValueRef::new(5),
+                    production: Some(OutputProduction::FullyMaterialized),
                 }]),
                 continue_condition: ValueRef::new(4),
                 max_iterations: 4,
@@ -4035,6 +7485,717 @@ fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
         assert_eq!(memoized_calls.load(Ordering::SeqCst), expected_run_count);
         assert_eq!(loop_calls.load(Ordering::SeqCst), expected_run_count * 3);
     }
+}
+
+#[test]
+fn deadline_phase_codes_are_stable_and_cancellation_has_priority() {
+    let phases = [
+        (RunPhase::QueueWait, "\"queueWait\""),
+        (RunPhase::Kernel, "\"kernel\""),
+        (RunPhase::StreamSend, "\"streamSend\""),
+        (RunPhase::StreamReceive, "\"streamReceive\""),
+        (RunPhase::AdapterIo, "\"adapterIo\""),
+        (RunPhase::ResultPublication, "\"resultPublication\""),
+        (RunPhase::Cleanup, "\"cleanup\""),
+    ];
+    for (phase, wire) in phases {
+        assert_eq!(serde_json::to_string(&phase).unwrap(), wire);
+        assert_eq!(
+            RunDeadline::after(Duration::ZERO).check(&CancellationToken::new(), phase),
+            Err(RunError::DeadlineExceeded { phase })
+        );
+    }
+
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    assert_eq!(
+        RunDeadline::after(Duration::ZERO).check(&cancellation, RunPhase::Kernel),
+        Err(RunError::Cancelled)
+    );
+}
+
+#[test]
+fn deadline_wakes_blocked_stream_send_and_receive_with_typed_phases() {
+    let cancellation = CancellationToken::new();
+    let deadline = RunDeadline::after(Duration::from_millis(20));
+    let (sender, _receiver) =
+        bounded_stream_channel_with_deadline(1, cancellation.clone(), Some(deadline)).unwrap();
+    sender.send(1).unwrap();
+    assert_eq!(sender.send(2), Err(StreamSendError::DeadlineExceeded(2)));
+
+    let deadline = RunDeadline::after(Duration::from_millis(20));
+    let (_sender, receiver) =
+        bounded_stream_channel_with_deadline::<i32>(1, cancellation, Some(deadline)).unwrap();
+    assert_eq!(receiver.recv(), Err(StreamReceiveError::DeadlineExceeded));
+}
+
+#[test]
+fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event() {
+    let events = RecordingRunEvents::default();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("deadline_late_kernel", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                thread::sleep(Duration::from_millis(40));
+                Ok(vec![Value::Integer(7).into()])
+            }),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("deadline_late_kernel", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "late".into(),
+        output: stable_output("late"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+        .run(&execution_plan, CancellationToken::new());
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel,
+        })
+    );
+    let events = events.0.lock().unwrap();
+    assert!(!events.iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::OperationCompleted { .. } | RunEventKind::ResultReady { .. }
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::Kernel,
+            },
+        }
+    )));
+}
+
+#[test]
+fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
+    let events = RecordingRunEvents::default();
+    let mut kernels = KernelRegistry::new();
+    for name in ["parallel0", "parallel1"] {
+        kernels
+            .register(
+                id(name, KernelHandle::new),
+                FnKernel(|_: &[RuntimeValue]| {
+                    thread::sleep(Duration::from_millis(30));
+                    Ok(vec![Value::Integer(1).into()])
+                }),
+            )
+            .unwrap();
+    }
+    let deadline = RunDeadline::after(Duration::from_millis(10));
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_scheduling_policy(parallel_policy(1, 1, 1))
+        .with_deadline(deadline)
+        .run(
+            &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
+            CancellationToken::new(),
+        );
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::QueueWait,
+        })
+    );
+    assert!(
+        !events
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+    );
+}
+
+#[test]
+fn deadline_adapter_io_uses_the_owner_deadline_without_a_local_timer() {
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::new_with_deadline(
+        RunId::new(99),
+        RunResourceBudgets::default(),
+        cancellation.clone(),
+        Some(RunDeadline::after(Duration::ZERO)),
+    )
+    .unwrap();
+
+    assert_eq!(
+        execute_planned_adapter(
+            &PlannedAdapter::Identity,
+            Value::Integer(1).into(),
+            &owner,
+            &cancellation,
+        ),
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::AdapterIo,
+        })
+    );
+    let _ = owner.cleanup();
+}
+
+#[test]
+fn deadline_publication_suppresses_terminal_result_events() {
+    let events = RecordingRunEvents::default();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("deadline_publication", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("deadline_publication", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "publication".into(),
+        output: stable_output("publication"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+        .with_test_checkpoint(Arc::new(|checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+                thread::sleep(Duration::from_millis(30));
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new());
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::ResultPublication,
+        })
+    );
+    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::RunCompleted
+            | RunEventKind::ResultReady { .. }
+            | RunEventKind::OutputReady { .. }
+    )));
+}
+
+struct CleanupDeadlineKernel;
+
+impl Kernel for CleanupDeadlineKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        context
+            .resource_owner
+            .register_cleanup_delay_for_test(Duration::from_millis(30));
+        Ok(Vec::new())
+    }
+}
+
+#[test]
+fn deadline_cleanup_runs_to_completion_without_replacing_an_earlier_error() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("deadline_cleanup", KernelHandle::new),
+            CleanupDeadlineKernel,
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("deadline_cleanup", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    assert_eq!(
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+            .run(&execution_plan, CancellationToken::new()),
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::Cleanup,
+        })
+    );
+}
+
+struct CooperativeDeadlineKernel;
+
+struct PromptCancellationKernel {
+    started: mpsc::SyncSender<()>,
+}
+
+impl Kernel for PromptCancellationKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        self.started.send(()).unwrap();
+        context.wait_for(Duration::from_secs(5))?;
+        Ok(Vec::new())
+    }
+}
+
+impl Kernel for CooperativeDeadlineKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        assert_eq!(context.deadline, context.resource_owner.deadline());
+        context.wait_for(Duration::from_secs(1))?;
+        Ok(Vec::new())
+    }
+}
+
+#[test]
+fn cooperative_context_waits_use_cancellation_wake_primitive() {
+    let kernel_source = include_str!("kernel.rs");
+    let relational_source = include_str!("relational.rs");
+
+    assert!(!kernel_source.contains("std::thread::sleep"));
+    assert!(!relational_source.contains("std::thread::sleep"));
+    assert!(kernel_source.contains("wait_timeout"));
+    assert!(relational_source.contains("wait_timeout"));
+}
+
+#[test]
+fn kernel_context_wait_wakes_promptly_on_cancellation() {
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("prompt_cancellation", KernelHandle::new),
+            PromptCancellationKernel {
+                started: started_tx,
+            },
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("prompt_cancellation", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let cancellation = CancellationToken::new();
+
+    thread::scope(|scope| {
+        let run_cancellation = cancellation.clone();
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .run(&execution_plan, run_cancellation)
+        });
+        started_rx.recv().unwrap();
+        let cancelled_at = std::time::Instant::now();
+        cancellation.cancel();
+        assert_eq!(run.join().unwrap(), Err(RunError::Cancelled));
+        assert!(cancelled_at.elapsed() < Duration::from_millis(100));
+    });
+}
+
+#[test]
+fn deadline_is_propagated_into_cooperative_kernel_context() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("cooperative_deadline", KernelHandle::new),
+            CooperativeDeadlineKernel,
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("cooperative_deadline", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let started = std::time::Instant::now();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel
+        }
+    );
+    assert!(started.elapsed() < Duration::from_millis(200));
+}
+
+struct CooperativeDeadlineBackend;
+
+impl RelationalBackend for CooperativeDeadlineBackend {
+    fn execute(
+        &self,
+        context: &RelationalContext<'_>,
+        _: &CompiledRelationalPlan,
+        _: &[RuntimeValue],
+    ) -> Result<RelationalExecution, RelationalError> {
+        assert_eq!(context.deadline, context.resource_owner.deadline());
+        context.wait_for(Duration::from_secs(1))?;
+        Ok(RelationalExecution {
+            outputs: Vec::new(),
+        })
+    }
+}
+
+#[test]
+fn deadline_is_propagated_into_cooperative_relational_context() {
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("deadline-backend", RelationalBackendId::new),
+            CooperativeDeadlineBackend,
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        "deadline-backend",
+        "deadline-fragment",
+        Box::new([]),
+    )]);
+    let started = std::time::Instant::now();
+
+    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_relational_backends(&relational)
+        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel
+        }
+    );
+    assert!(started.elapsed() < Duration::from_millis(200));
+}
+
+#[test]
+fn deadline_stream_fast_paths_never_mutate_after_expiry() {
+    let cancellation = CancellationToken::new();
+    let (sender, receiver) = bounded_stream_channel_with_deadline(
+        2,
+        cancellation.clone(),
+        Some(RunDeadline::after(Duration::ZERO)),
+    )
+    .unwrap();
+    assert_eq!(sender.send(1), Err(StreamSendError::DeadlineExceeded(1)));
+    assert_eq!(
+        sender.try_send(2),
+        Err(StreamSendError::DeadlineExceeded(2))
+    );
+    assert_eq!(
+        receiver.try_recv(),
+        Err(StreamReceiveError::DeadlineExceeded)
+    );
+
+    let deadline = RunDeadline::after(Duration::from_millis(20));
+    let (sender, receiver) =
+        bounded_stream_channel_with_deadline(1, cancellation.clone(), Some(deadline)).unwrap();
+    sender.send(3).unwrap();
+    thread::sleep(Duration::from_millis(25));
+    assert_eq!(receiver.recv(), Err(StreamReceiveError::DeadlineExceeded));
+    cancellation.cancel();
+    assert_eq!(receiver.try_recv(), Err(StreamReceiveError::Cancelled));
+    assert_eq!(sender.try_send(4), Err(StreamSendError::Cancelled(4)));
+}
+
+#[test]
+fn worker_outcome_timestamp_precedes_envelope_preparation_delay() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("timestamp_boundary", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Err(KernelError::new("boundary ordinary error"))),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("timestamp_boundary", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+        .with_test_checkpoint(Arc::new(|checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                thread::sleep(Duration::from_millis(40));
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        RunError::KernelFailed { message, .. }
+            if message.as_ref() == "boundary ordinary error"
+    ));
+}
+
+#[test]
+fn worker_panic_timestamp_is_captured_at_unwind_boundary() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("panic_timestamp_boundary", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| panic!("worker panic timestamp sentinel")),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("panic_timestamp_boundary", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+            .with_test_checkpoint(Arc::new(|checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                    thread::sleep(Duration::from_millis(40));
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new());
+    }));
+
+    assert!(panic.is_err());
+}
+
+#[test]
+fn deadline_drain_preserves_ordinary_error_completed_before_expiry() {
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    let completed_rx = Arc::new(Mutex::new(completed_rx));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("parallel0", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                completed_tx.send(()).unwrap();
+                Err(KernelError::new("completed before deadline"))
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("parallel1", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let observed_completion = Arc::clone(&completed_rx);
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_scheduling_policy(parallel_policy(1, 1, 1))
+        .with_deadline(RunDeadline::after(Duration::from_millis(100)))
+        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Cpu) {
+                observed_completion.lock().unwrap().recv().unwrap();
+                thread::sleep(Duration::from_millis(120));
+            }
+        }))
+        .run(
+            &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+
+    assert!(
+        matches!(error, RunError::KernelFailed { message, .. } if message.as_ref() == "completed before deadline")
+    );
+}
+
+struct CancelAfterDeadlineKernel;
+
+impl Kernel for CancelAfterDeadlineKernel {
+    fn execute(
+        &self,
+        context: &KernelContext<'_>,
+        _: &[RuntimeValue],
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        thread::sleep(Duration::from_millis(25));
+        context.cancellation.cancel();
+        Err(KernelError::cancelled("cancel after scheduler deadline"))
+    }
+}
+
+#[test]
+fn cancellation_observed_while_draining_upgrades_deadline() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("cancel_after_deadline", KernelHandle::new),
+            CancelAfterDeadlineKernel,
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("cancel_after_deadline", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    assert_eq!(
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .with_deadline(RunDeadline::after(Duration::from_millis(5)))
+            .run(&execution_plan, CancellationToken::new()),
+        Err(RunError::Cancelled),
+    );
+}
+
+#[test]
+fn deadline_result_store_commit_gate_publishes_nothing() {
+    let results = ResultStore::new();
+    let events = RecordingRunEvents::default();
+    results.set_commit_checkpoint_for_test(Arc::new(|| {
+        thread::sleep(Duration::from_millis(25));
+    }));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("deadline_commit", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("deadline_commit", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "commit".into(),
+        output: stable_output("commit"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_result_store(&results)
+        .with_event_sink(&events)
+        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::ResultPublication
+        }
+    );
+    assert_eq!(results.source_count(), 0);
+    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
+        event.kind,
+        RunEventKind::ResultReady { .. }
+            | RunEventKind::OutputReady { .. }
+            | RunEventKind::RunCompleted
+    )));
+}
+
+#[test]
+fn deadline_cleanup_drains_an_uncooperative_task_after_recording_timeout() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("deadline_cleanup_long", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(Vec::new())),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("deadline_cleanup_long", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let started = std::time::Instant::now();
+    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| Ok(());
+    let root = materialization_test_root("cleanup-deadline-uncooperative");
+    let checkpoint = Arc::new(|checkpoint, _: &CancellationToken| {
+        if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+            // The synchronized cleanup task is installed by the owner test API.
+        }
+    });
+    let owner_delay = Duration::from_millis(250);
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+        .with_success_finalizer(&finalizer)
+        .with_test_spill_root(root.clone())
+        .with_test_checkpoint(checkpoint)
+        .with_cleanup_delay_for_test(owner_delay)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        RunError::DeadlineExceeded {
+            phase: RunPhase::Cleanup
+        }
+    );
+    assert!(started.elapsed() >= owner_delay);
+    assert!(
+        !root.exists()
+            || std::fs::read_dir(&root)
+                .expect("cleanup spill root remains readable")
+                .next()
+                .is_none()
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn rust_error_outcomes_are_strict_by_construction() {
+    assert_eq!(
+        RunErrorOutcome::from(&RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel
+        }),
+        RunErrorOutcome::DeadlineExceeded {
+            phase: RunPhase::Kernel
+        },
+    );
+    assert_eq!(
+        RunErrorOutcome::from(&RunError::KernelFailed {
+            operation: OperationIndex::new(0),
+            kind: KernelErrorKind::Permanent,
+            message: "failed".into(),
+        }),
+        RunErrorOutcome::Ordinary {
+            code: OrdinaryRunErrorCode::KernelFailed
+        },
+    );
 }
 
 #[test]

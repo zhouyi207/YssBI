@@ -67,12 +67,13 @@ function item(title: string, descriptor: NodeCreationDescriptor) {
     styleId: 'default',
     aliases: [],
     technicalTerms: [],
+    backendSearchText: [title],
+    resourceNames: [title],
     ports: [],
     parameters: [],
     resourcePath: descriptor.kind === 'resourceBound' ? descriptor.resourcePath : undefined,
     resourceRevision: descriptor.kind === 'resourceBound' ? descriptor.resourceRevision : undefined,
     creation: descriptor,
-    searchText: title.toLowerCase(),
   };
 }
 

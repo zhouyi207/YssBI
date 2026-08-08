@@ -246,7 +246,11 @@ fn project_and_filter_rows_are_parameterized_catalog_nodes() {
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
         );
-        assert!(item.search_text.contains(search_term));
+        assert!(
+            item.backend_search_text
+                .iter()
+                .any(|part| part.contains(search_term))
+        );
         assert_eq!(
             item.creation,
             crate::node_system::catalog::NodeCreationDescriptor::ParameterizedStatic {

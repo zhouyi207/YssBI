@@ -1,7 +1,9 @@
 use super::support::{KernelFragment, expect_arity, expect_min_arity};
 use super::value::canonical_float;
 use crate::node_system::protocol::{CanonicalDecimal, Value};
-use crate::node_system::runtime::{Artifact, Kernel, KernelContext, KernelError, RuntimeValue};
+use crate::node_system::runtime::{
+    ArtifactCursor, Kernel, KernelContext, KernelError, RunError, RuntimeValue,
+};
 
 #[derive(Clone, Copy)]
 enum BinaryOperation {
@@ -49,7 +51,7 @@ struct SeriesMathKernel {
 impl Kernel for SeriesMathKernel {
     fn execute(
         &self,
-        _context: &KernelContext<'_>,
+        context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         if matches!(self.operation, BinaryOperation::Add) {
@@ -66,43 +68,39 @@ impl Kernel for SeriesMathKernel {
             .ok_or_else(|| {
                 KernelError::new("DataSeries arithmetic requires at least one artifact operand")
             })?;
-        let length = artifact.values().len();
-        for input in inputs {
-            match input {
-                RuntimeValue::Artifact(candidate) if candidate.values().len() != length => {
-                    return Err(KernelError::new(
-                        "DataSeries operands must have equal lengths",
-                    ));
+        let length = artifact.materialized().len();
+        let mut cursors = inputs
+            .iter()
+            .map(|input| match input {
+                RuntimeValue::Scalar(value) => Ok(SeriesInput::Scalar(value)),
+                RuntimeValue::Artifact(candidate) if candidate.materialized().len() == length => {
+                    candidate
+                        .cursor()
+                        .map(SeriesInput::Artifact)
+                        .map_err(kernel_error)
                 }
-                RuntimeValue::Artifact(_) | RuntimeValue::Scalar(_) => {}
-                RuntimeValue::Stream(_) => {
-                    return Err(KernelError::new(
-                        "DataSeries arithmetic requires fully materialized inputs",
-                    ));
-                }
+                RuntimeValue::Artifact(_) => Err(KernelError::new(
+                    "DataSeries operands must have equal lengths",
+                )),
+                RuntimeValue::Stream(_) => Err(KernelError::new(
+                    "DataSeries arithmetic requires fully materialized inputs",
+                )),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let operation = self.operation;
+        let mut index = 0_usize;
+        let output = std::iter::from_fn(move || {
+            if index == length {
+                return None;
             }
-        }
-
-        let mut output = Vec::with_capacity(length);
-        for index in 0..length {
-            let mut values = inputs
-                .iter()
-                .map(|input| value_at(input, index))
-                .collect::<Result<Vec<_>, _>>()?;
-            if values.iter().any(|value| value.is_none()) {
-                output.push(Value::Null);
-                continue;
-            }
-            let first = values.remove(0).expect("nulls returned above");
-            let result = values.into_iter().try_fold(first, |left, right| {
-                apply_binary(self.operation, left, right.expect("nulls returned above"))
-            })?;
-            output.push(Value::Decimal(canonical_float(result)?));
-        }
-        Ok(vec![RuntimeValue::Artifact(Artifact::new(
-            artifact.kind(),
-            output,
-        ))])
+            index += 1;
+            Some(series_binary_value(operation, &mut cursors).map_err(run_error))
+        });
+        let output = context
+            .resource_owner
+            .materialize_artifact(artifact.kind(), output)
+            .map_err(kernel_error)?;
+        Ok(vec![RuntimeValue::Artifact(output)])
     }
 }
 
@@ -113,7 +111,7 @@ struct UnaryMathKernel {
 impl Kernel for UnaryMathKernel {
     fn execute(
         &self,
-        _context: &KernelContext<'_>,
+        context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 1)?;
@@ -123,25 +121,27 @@ impl Kernel for UnaryMathKernel {
                 Value::Decimal(apply_unary(self.operation, numeric(value)?)?).into(),
             ]),
             RuntimeValue::Artifact(artifact) => {
-                let values = artifact
-                    .values()
-                    .iter()
-                    .enumerate()
-                    .map(|(index, value)| {
-                        if matches!(value, Value::Null) {
+                let operation = self.operation;
+                let values = artifact.cursor().map_err(kernel_error)?.enumerate().map(
+                    move |(index, value)| {
+                        let value = value?;
+                        let converted = if matches!(value, Value::Null) {
                             Ok(Value::Null)
                         } else {
-                            apply_unary(self.operation, numeric(value)?).map(Value::Decimal)
-                        }
-                        .map_err(|error| {
-                            KernelError::new(format!("DataSeries element {index}: {error}"))
+                            numeric(&value)
+                                .and_then(|value| apply_unary(operation, value))
+                                .map(Value::Decimal)
+                        };
+                        converted.map_err(|error| {
+                            RunError::Stream(format!("DataSeries element {index}: {error}").into())
                         })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(vec![RuntimeValue::Artifact(Artifact::new(
-                    artifact.kind(),
-                    values,
-                ))])
+                    },
+                );
+                let output = context
+                    .resource_owner
+                    .materialize_artifact(artifact.kind(), values)
+                    .map_err(kernel_error)?;
+                Ok(vec![RuntimeValue::Artifact(output)])
             }
             RuntimeValue::Stream(_) => Err(KernelError::new(
                 "unary math requires a scalar or fully materialized DataSeries",
@@ -150,17 +150,48 @@ impl Kernel for UnaryMathKernel {
     }
 }
 
-fn value_at(input: &RuntimeValue, index: usize) -> Result<Option<f64>, KernelError> {
-    let value = match input {
-        RuntimeValue::Scalar(value) => value,
-        RuntimeValue::Artifact(artifact) => &artifact.values()[index],
-        RuntimeValue::Stream(_) => unreachable!("streams rejected before evaluation"),
-    };
-    if matches!(value, Value::Null) {
-        Ok(None)
-    } else {
-        numeric(value).map(Some)
+enum SeriesInput<'a> {
+    Scalar(&'a Value),
+    Artifact(ArtifactCursor),
+}
+
+impl SeriesInput<'_> {
+    fn next_value(&mut self) -> Result<Value, KernelError> {
+        match self {
+            Self::Scalar(value) => Ok((*value).clone()),
+            Self::Artifact(values) => values
+                .next()
+                .ok_or_else(|| KernelError::new("DataSeries ended before its declared length"))?
+                .map_err(kernel_error),
+        }
     }
+}
+
+fn series_binary_value(
+    operation: BinaryOperation,
+    inputs: &mut [SeriesInput<'_>],
+) -> Result<Value, KernelError> {
+    let values = inputs
+        .iter_mut()
+        .map(SeriesInput::next_value)
+        .collect::<Result<Vec<_>, _>>()?;
+    if values.iter().any(|value| matches!(value, Value::Null)) {
+        return Ok(Value::Null);
+    }
+    let mut values = values.iter().map(numeric);
+    let first = values
+        .next()
+        .expect("series arithmetic has at least two inputs")?;
+    let result = values.try_fold(first, |left, right| apply_binary(operation, left, right?))?;
+    Ok(Value::Decimal(canonical_float(result)?))
+}
+
+fn kernel_error(error: RunError) -> KernelError {
+    KernelError::new(error.to_string())
+}
+
+fn run_error(error: KernelError) -> RunError {
+    RunError::Stream(error.to_string().into())
 }
 
 fn numeric(value: &Value) -> Result<f64, KernelError> {

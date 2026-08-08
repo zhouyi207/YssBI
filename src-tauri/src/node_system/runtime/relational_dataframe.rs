@@ -43,12 +43,29 @@ pub(super) fn tabular_runtime_to_dataframe(
 }
 
 fn single_artifact_value(artifact: Artifact) -> Result<Value, RelationalError> {
-    let [value] = artifact.values() else {
+    let mut values = artifact
+        .cursor()
+        .map_err(|error| input_shape(error.to_string()))?;
+    let Some(value) = values
+        .next()
+        .transpose()
+        .map_err(|error| input_shape(error.to_string()))?
+    else {
         return Err(input_shape(
             "relational dataframe artifact must contain exactly one value",
         ));
     };
-    Ok(value.clone())
+    if values
+        .next()
+        .transpose()
+        .map_err(|error| input_shape(error.to_string()))?
+        .is_some()
+    {
+        return Err(input_shape(
+            "relational dataframe artifact must contain exactly one value",
+        ));
+    }
+    Ok(value)
 }
 
 fn protocol_column(name: &str, values: &[Value]) -> Result<Column, RelationalError> {
@@ -578,11 +595,15 @@ mod tests {
     #[test]
     fn ingress_rejects_stream_without_collecting_it() {
         let cancellation = crate::node_system::runtime::CancellationToken::new();
-        let stream = crate::node_system::runtime::StreamValue::from_values(
-            [Value::Object(BTreeMap::new())],
+        let owner = crate::node_system::runtime::RunResourceOwner::new(
+            crate::node_system::runtime::RunId::new(1),
+            crate::node_system::runtime::RunResourceBudgets::default(),
             cancellation,
         )
         .unwrap();
+        let stream = owner
+            .stream_from_values([Value::Object(BTreeMap::new())])
+            .unwrap();
 
         let error = tabular_runtime_to_dataframe(RuntimeValue::Stream(stream)).unwrap_err();
 

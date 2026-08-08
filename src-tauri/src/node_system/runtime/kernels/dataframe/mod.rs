@@ -525,7 +525,7 @@ mod tests {
     use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
     use crate::node_system::runtime::{
         ActivationId, CancellationToken, FrameId, KernelErrorKind, ResourceError, ResourceLease,
-        ResourceProvider, RunResourceSet,
+        ResourceProvider, RunResourceBudgets, RunResourceOwner, RunResourceSet,
     };
 
     struct NoResources;
@@ -545,14 +545,22 @@ mod tests {
         cancellation.cancel();
         let resources = RunResourceSet::acquire(&[], &NoResources).unwrap();
         let params = CompiledParameterHandle::new("cancelled.dataframe").unwrap();
+        let resource_owner = RunResourceOwner::new(
+            RunId::new(1),
+            RunResourceBudgets::default(),
+            cancellation.clone(),
+        )
+        .unwrap();
         let context = KernelContext {
             run_id: RunId::new(1),
             frame_id: FrameId::next(),
-            activation_id: ActivationId::next(),
+            activation_id: ActivationId::next().unwrap(),
             params: &params,
             compiled_parameters: None,
             resources: &resources,
+            resource_owner: &resource_owner,
             cancellation: &cancellation,
+            deadline: None,
         };
         let kernel = DataframeKernel {
             operation: DataframeOperation::IntegerRange,

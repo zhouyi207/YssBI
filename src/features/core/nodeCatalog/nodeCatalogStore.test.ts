@@ -48,6 +48,24 @@ describe('useNodeCatalogStore', () => {
     expect(Object.keys(responses)).toHaveLength(2);
   });
 
+  it('replaces equal-metadata cached response provenance with the latest DTO object', () => {
+    const first = catalog();
+    const second = catalog();
+    first.items = [];
+    second.items = [{
+      nodeTypeId: 'second', title: 'Second', description: null, documentation: null,
+      categoryId: 'tests', iconId: 'tests', styleId: 'default', aliases: [],
+      technicalTerms: [], backendSearchText: [], resourceNames: [], ports: [], parameters: [],
+      creation: { kind: 'static', nodeTypeId: 'second' },
+    }];
+    const store = useNodeCatalogStore.getState();
+
+    expect(store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, first)).toBe(true);
+    expect(store.storeResponse(store.beginRequest('project-1', 'zh-CN')!, second)).toBe(true);
+
+    expect(useNodeCatalogStore.getState().responses[catalogResponseKey(second)]).toBe(second);
+  });
+
   it('deduplicates an exact project and locale while its owner is loading', () => {
     const response = catalog();
     const store = useNodeCatalogStore.getState();

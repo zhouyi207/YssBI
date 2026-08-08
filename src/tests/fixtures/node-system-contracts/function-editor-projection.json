@@ -77,7 +77,7 @@
       "basis": {
         "graphPath": "functions/forecast.yssbi-function",
         "graphRevision": 1,
-        "registryFingerprint": "3fdcb6c6f2c42b68b937c045c32ab76741054356ff84f5d7e27dbccb17880476",
+        "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
         "resourceVersions": {
           "functions/forecast.yssbi-function": "revision:1"
         }

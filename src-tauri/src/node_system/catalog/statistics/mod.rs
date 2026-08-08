@@ -245,6 +245,8 @@ fn execution(stage: Stage) -> ExecutionSemantics {
         } else {
             EffectSemantics::None
         },
+        idempotent: false,
+        retry: None,
     }
 }
 

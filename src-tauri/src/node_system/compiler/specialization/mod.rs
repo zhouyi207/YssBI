@@ -7,8 +7,8 @@ use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
     EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency, ExecutionDemand, ExecutionPlan,
     ExecutionSemanticsVersion, GraphOutputRef, KernelHandle, OperationIndex, OperationStableId,
-    PlanResult, PlanValueSource, PlannedAdapter, PlannedInput, PlannedKernel, PlannedOperation,
-    PlannedOutput, PlannedPublication, PlannedRetry, RelationalBackendId, RelationalFragmentId,
+    PlanResult, PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation, PlannedOutput,
+    PlannedPublication, PlannedRetry, RelationalBackendId, RelationalFragmentId,
     RelationalOperatorIndex, RelationalSubplanIndex, ResourceId, StructuredControlRegion,
     ValueDependency, ValueRef, WorkloadClass,
 };

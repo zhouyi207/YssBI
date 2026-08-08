@@ -1,4 +1,4 @@
-use super::CancellationToken;
+use super::{CancellationToken, RunDeadline, RunPhase};
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::{Arc, Condvar, Mutex};
@@ -18,14 +18,17 @@ impl std::error::Error for InvalidStreamCapacity {}
 pub enum StreamSendError<T> {
     Full(T),
     Cancelled(T),
+    DeadlineExceeded(T),
     Closed(T),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamReceiveError {
     Empty,
     Cancelled,
+    DeadlineExceeded,
     Closed,
+    Failed(Box<str>),
 }
 
 struct ChannelState<T> {
@@ -41,6 +44,7 @@ struct Channel<T> {
     not_empty: Arc<Condvar>,
     not_full: Arc<Condvar>,
     cancellation: CancellationToken,
+    deadline: Option<RunDeadline>,
 }
 
 impl<T> Channel<T> {
@@ -103,6 +107,16 @@ impl<T> BoundedStreamSender<T> {
             if self.channel.cancellation.is_cancelled() {
                 return Err(StreamSendError::Cancelled(value.take().unwrap()));
             }
+            if let Some(deadline) = self.channel.deadline
+                && deadline
+                    .check(&self.channel.cancellation, RunPhase::StreamSend)
+                    .is_err()
+            {
+                if self.channel.cancellation.is_cancelled() {
+                    return Err(StreamSendError::Cancelled(value.take().unwrap()));
+                }
+                return Err(StreamSendError::DeadlineExceeded(value.take().unwrap()));
+            }
             if state.closed || state.receiver_count == 0 {
                 return Err(StreamSendError::Closed(value.take().unwrap()));
             }
@@ -111,11 +125,39 @@ impl<T> BoundedStreamSender<T> {
                 self.channel.not_empty.notify_one();
                 return Ok(());
             }
-            state = self
-                .channel
-                .not_full
-                .wait(state)
-                .unwrap_or_else(|error| error.into_inner());
+            state = match self.channel.deadline {
+                Some(deadline) => {
+                    let remaining = match deadline
+                        .remaining(&self.channel.cancellation, RunPhase::StreamSend)
+                    {
+                        Ok(remaining) => remaining,
+                        Err(super::RunError::Cancelled) => {
+                            return Err(StreamSendError::Cancelled(value.take().unwrap()));
+                        }
+                        Err(super::RunError::DeadlineExceeded { .. }) => {
+                            return Err(StreamSendError::DeadlineExceeded(value.take().unwrap()));
+                        }
+                        Err(_) => unreachable!("deadline check has only terminal outcomes"),
+                    };
+                    let (state, timeout) = self
+                        .channel
+                        .not_full
+                        .wait_timeout(state, remaining)
+                        .unwrap_or_else(|error| error.into_inner());
+                    if timeout.timed_out() {
+                        if self.channel.cancellation.is_cancelled() {
+                            return Err(StreamSendError::Cancelled(value.take().unwrap()));
+                        }
+                        return Err(StreamSendError::DeadlineExceeded(value.take().unwrap()));
+                    }
+                    state
+                }
+                None => self
+                    .channel
+                    .not_full
+                    .wait(state)
+                    .unwrap_or_else(|error| error.into_inner()),
+            };
         }
     }
 
@@ -127,6 +169,16 @@ impl<T> BoundedStreamSender<T> {
             .unwrap_or_else(|error| error.into_inner());
         if self.channel.cancellation.is_cancelled() {
             return Err(StreamSendError::Cancelled(value));
+        }
+        if self.channel.deadline.is_some_and(|deadline| {
+            deadline
+                .check(&self.channel.cancellation, RunPhase::StreamSend)
+                .is_err()
+        }) {
+            if self.channel.cancellation.is_cancelled() {
+                return Err(StreamSendError::Cancelled(value));
+            }
+            return Err(StreamSendError::DeadlineExceeded(value));
         }
         if state.closed || state.receiver_count == 0 {
             return Err(StreamSendError::Closed(value));
@@ -188,6 +240,19 @@ impl<T> BoundedStreamReceiver<T> {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         loop {
+            if self.channel.cancellation.is_cancelled() {
+                return Err(StreamReceiveError::Cancelled);
+            }
+            if let Some(deadline) = self.channel.deadline
+                && deadline
+                    .check(&self.channel.cancellation, RunPhase::StreamReceive)
+                    .is_err()
+            {
+                if self.channel.cancellation.is_cancelled() {
+                    return Err(StreamReceiveError::Cancelled);
+                }
+                return Err(StreamReceiveError::DeadlineExceeded);
+            }
             if let Some(value) = state.queue.pop_front() {
                 self.channel.not_full.notify_one();
                 return Ok(value);
@@ -198,11 +263,39 @@ impl<T> BoundedStreamReceiver<T> {
             if state.closed || state.sender_count == 0 {
                 return Err(StreamReceiveError::Closed);
             }
-            state = self
-                .channel
-                .not_empty
-                .wait(state)
-                .unwrap_or_else(|error| error.into_inner());
+            state = match self.channel.deadline {
+                Some(deadline) => {
+                    let remaining = match deadline
+                        .remaining(&self.channel.cancellation, RunPhase::StreamReceive)
+                    {
+                        Ok(remaining) => remaining,
+                        Err(super::RunError::Cancelled) => {
+                            return Err(StreamReceiveError::Cancelled);
+                        }
+                        Err(super::RunError::DeadlineExceeded { .. }) => {
+                            return Err(StreamReceiveError::DeadlineExceeded);
+                        }
+                        Err(_) => unreachable!("deadline check has only terminal outcomes"),
+                    };
+                    let (state, timeout) = self
+                        .channel
+                        .not_empty
+                        .wait_timeout(state, remaining)
+                        .unwrap_or_else(|error| error.into_inner());
+                    if timeout.timed_out() {
+                        if self.channel.cancellation.is_cancelled() {
+                            return Err(StreamReceiveError::Cancelled);
+                        }
+                        return Err(StreamReceiveError::DeadlineExceeded);
+                    }
+                    state
+                }
+                None => self
+                    .channel
+                    .not_empty
+                    .wait(state)
+                    .unwrap_or_else(|error| error.into_inner()),
+            };
         }
     }
 
@@ -212,12 +305,22 @@ impl<T> BoundedStreamReceiver<T> {
             .state
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        if self.channel.cancellation.is_cancelled() {
+            return Err(StreamReceiveError::Cancelled);
+        }
+        if self.channel.deadline.is_some_and(|deadline| {
+            deadline
+                .check(&self.channel.cancellation, RunPhase::StreamReceive)
+                .is_err()
+        }) {
+            if self.channel.cancellation.is_cancelled() {
+                return Err(StreamReceiveError::Cancelled);
+            }
+            return Err(StreamReceiveError::DeadlineExceeded);
+        }
         if let Some(value) = state.queue.pop_front() {
             self.channel.not_full.notify_one();
             return Ok(value);
-        }
-        if self.channel.cancellation.is_cancelled() {
-            return Err(StreamReceiveError::Cancelled);
         }
         if state.closed || state.sender_count == 0 {
             return Err(StreamReceiveError::Closed);
@@ -242,6 +345,14 @@ pub fn bounded_stream_channel<T>(
     capacity: usize,
     cancellation: CancellationToken,
 ) -> Result<(BoundedStreamSender<T>, BoundedStreamReceiver<T>), InvalidStreamCapacity> {
+    bounded_stream_channel_with_deadline(capacity, cancellation, None)
+}
+
+pub fn bounded_stream_channel_with_deadline<T>(
+    capacity: usize,
+    cancellation: CancellationToken,
+    deadline: Option<RunDeadline>,
+) -> Result<(BoundedStreamSender<T>, BoundedStreamReceiver<T>), InvalidStreamCapacity> {
     if capacity == 0 {
         return Err(InvalidStreamCapacity);
     }
@@ -260,6 +371,7 @@ pub fn bounded_stream_channel<T>(
         not_empty,
         not_full,
         cancellation,
+        deadline,
     });
     Ok((
         BoundedStreamSender {
