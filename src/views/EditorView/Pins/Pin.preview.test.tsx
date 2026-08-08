@@ -11,6 +11,7 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { markResourceLoaded, useDocumentStateStore } from '@/features/core/resource';
 import { useExecutionStore } from '@/features/core/execution';
+import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import { ProjectService } from '@/services/project/projectService';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
@@ -53,11 +54,11 @@ describe('Pin preview production path', () => {
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
-      previewGeneration: 0,
       graphs: {},
       playbackGraphPath: null,
       isPlaying: false,
     });
+    vi.spyOn(PinPreviewGenerationService, 'allocate').mockResolvedValue(1);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -114,9 +115,9 @@ describe('Pin preview production path', () => {
       'project-session-1',
       graphPath,
       {
-        type: 'outputs',
-        outputs: [{ graphPath, port: fixture.outputAddress }],
-        includeDefaultResults: false,
+        type: 'pinPreview',
+        output: { graphPath, port: fixture.outputAddress },
+        generation: 1,
       },
       expect.any(Function),
     );

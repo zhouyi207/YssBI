@@ -1015,8 +1015,12 @@ fn validate_literal_target(
         ));
     }
     if let Some(literal) = literal {
-        crate::node_system::protocol::validate_typed_literal(literal, &port.spec.value_type)
-            .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
+        crate::node_system::protocol::validate_typed_literal(
+            literal,
+            &port.spec.value_type,
+            registry,
+        )
+        .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
 }

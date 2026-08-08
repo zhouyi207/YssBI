@@ -14,6 +14,7 @@ import {
 import { pinPreviewCacheKey, useExecutionStore } from '@/features/core/execution';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectService } from '@/services/project/projectService';
+import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { ExecutionDemandDto } from '@/shared/types/dto/executionDemand';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
@@ -81,17 +82,20 @@ function emitSuccessfulPreview(
   onEvent?: (event: RunEvent) => void,
   sourceId = 'source-1',
 ): void {
-  if (demand.type !== 'outputs') throw new Error('expected output demand');
+  if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
   onEvent?.(runEvent({ type: 'runStarted' }));
   onEvent?.(runEvent({
     type: 'outputReady',
-    output: demand.outputs[0],
+    output: demand.output,
+    generation: demand.generation,
     sourceId,
   }));
   onEvent?.(runEvent({ type: 'runCompleted' }));
 }
 
 describe('requestPinPreview', () => {
+  let nextGeneration = 0;
+
   beforeEach(() => {
     vi.restoreAllMocks();
     clearProjectLifecycle();
@@ -100,12 +104,14 @@ describe('requestPinPreview', () => {
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
-      previewGeneration: 0,
       graphs: {},
       playbackGraphPath: null,
       isPlaying: false,
     });
     vi.spyOn(uiStore, 'showToast').mockImplementation(() => undefined);
+    nextGeneration = 0;
+    vi.spyOn(PinPreviewGenerationService, 'allocate')
+      .mockImplementation(async () => ++nextGeneration);
   });
 
   it.each([
@@ -143,9 +149,9 @@ describe('requestPinPreview', () => {
       frontendProjectInstanceId,
       eventGraphPath,
       {
-        type: 'outputs',
-        outputs: [{ graphPath: eventGraphPath, port: address }],
-        includeDefaultResults: false,
+        type: 'pinPreview',
+        output: { graphPath: eventGraphPath, port: address },
+        generation: 1,
       },
       expect.any(Function),
     );
@@ -189,6 +195,27 @@ describe('requestPinPreview', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(uiStore.showToast).not.toHaveBeenCalled();
     expect(getExecutionState).not.toHaveBeenCalled();
+  });
+
+  it('rejects exhausted generation before any store write or IPC', async () => {
+    const { outputKey } = installGraph();
+    const before = useExecutionStore.getState();
+    const beginPinPreview = vi.spyOn(before, 'beginPinPreview');
+    vi.mocked(PinPreviewGenerationService.allocate).mockRejectedValue(
+      new Error('generation exhausted'),
+    );
+    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
+
+    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'generation-exhausted',
+    });
+
+    const after = useExecutionStore.getState();
+    expect(after.graphs).toBe(before.graphs);
+    expect(beginPinPreview).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -310,18 +337,23 @@ describe('requestPinPreview', () => {
         current.sourceRevision += 1;
       },
     },
-  ])('suppresses pending OutputReady after $name', async ({ replace }) => {
-    const { outputKey, outputAddress } = installGraph();
+  ])('settles stale completion after $name as a pure no-op', async ({ replace }) => {
+    const { outputKey } = installGraph();
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
+    const store = useExecutionStore.getState();
+    const completePinPreview = vi.spyOn(store, 'completePinPreview');
+    const failPinPreview = vi.spyOn(store, 'failPinPreview');
+    const removePinPreview = vi.spyOn(store, 'removePinPreview');
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
       async (_projectInstanceId, _graphPath, demand, onEvent) => {
-        if (demand.type !== 'outputs') throw new Error('expected output demand');
+        if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
         onEvent?.(runEvent({ type: 'runStarted' }));
         replace();
         onEvent?.(runEvent({
           type: 'outputReady',
-          output: demand.outputs[0],
+          output: demand.output,
+          generation: demand.generation,
           sourceId: 'source-stale-projection',
         }));
         onEvent?.(runEvent({ type: 'runCompleted' }));
@@ -329,20 +361,22 @@ describe('requestPinPreview', () => {
       },
     );
 
-    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toMatchObject({
+    const request = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
+    const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
+    await expect(request).resolves.toEqual({
       status: 'rejected',
+      reason: 'stale-project-lifecycle',
     });
-    expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
-      pinPreviewCacheKey(eventGraphPath, outputAddress),
-    )).toBeUndefined();
-    expect(useExecutionStore.getState().getGraph(eventGraphPath)).toMatchObject({
-      status: 'running',
-      runId: 'ordinary-run',
-    });
+    expect(store.getGraph(eventGraphPath)).toEqual(previewSnapshot);
+    expect(completePinPreview).not.toHaveBeenCalled();
+    expect(failPinPreview).not.toHaveBeenCalled();
+    expect(removePinPreview).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it.each(['resolution', 'rejection'] as const)(
-    'leaves a same-generation replacement preview untouched after stale %s',
+    'leaves a newer-generation replacement preview untouched after stale %s',
     async (settlement) => {
       const { outputKey, outputAddress } = installGraph();
       const originalStore = useExecutionStore.getState();
@@ -362,27 +396,32 @@ describe('requestPinPreview', () => {
       );
 
       const preview = requestPinPreview(eventGraphPath, outputKey);
+      await Promise.resolve();
       const cacheKey = pinPreviewCacheKey(eventGraphPath, outputAddress);
       const originalGeneration = originalStore.getGraph(eventGraphPath).pinPreviews.get(cacheKey)?.generation;
       expect(execute).toHaveBeenCalledWith(
         frontendProjectInstanceId,
         eventGraphPath,
-        expect.objectContaining({ type: 'outputs' }),
+        expect.objectContaining({ type: 'pinPreview' }),
         expect.any(Function),
       );
 
       startProjectLifecycle('project-session-2');
       useExecutionStore.setState({
         graphs: {},
-        previewGeneration: 0,
         playbackGraphPath: null,
         isPlaying: false,
       });
       const replacementStore = useExecutionStore.getState();
       replacementStore.startExecution(eventGraphPath);
       replacementStore.setActiveRunId(eventGraphPath, 'replacement-run');
-      const replacementGeneration = replacementStore.beginPinPreview(eventGraphPath, outputAddress);
-      expect(replacementGeneration).toBe(originalGeneration);
+      const replacementLease = replacementStore.beginPinPreview(
+        eventGraphPath,
+        outputAddress,
+        (originalGeneration ?? 0) + 1,
+      );
+      const replacementGeneration = replacementLease.generation;
+      expect(replacementGeneration).not.toBe(originalGeneration);
       const replacementGraphSnapshot = structuredClone(replacementStore.getGraph(eventGraphPath));
       completePinPreview.mockClear();
       failPinPreview.mockClear();
@@ -396,6 +435,7 @@ describe('requestPinPreview', () => {
         emit(runEvent({
           type: 'outputReady',
           output: { graphPath: eventGraphPath, port: outputAddress },
+          generation: originalGeneration ?? 0,
           sourceId: 'source-stale-project',
         }));
         emit(runEvent({ type: 'runCompleted' }));
@@ -418,11 +458,14 @@ describe('requestPinPreview', () => {
     },
   );
 
-  it('cleans its pending generation when command rejection follows projection replacement', async () => {
-    const { outputKey, outputAddress } = installGraph();
+  it('settles rejection after projection replacement as a pure no-op', async () => {
+    const { outputKey } = installGraph();
     useExecutionStore.getState().startExecution(eventGraphPath);
     useExecutionStore.getState().setActiveRunId(eventGraphPath, 'ordinary-run');
     const commandError = { code: 'test_stop', message: 'stale after invoke' };
+    const store = useExecutionStore.getState();
+    const failPinPreview = vi.spyOn(store, 'failPinPreview');
+    const removePinPreview = vi.spyOn(store, 'removePinPreview');
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(async () => {
       const current = useGraphDataStore.getState().graphEntities[eventGraphPath];
       useGraphDataStore.setState({
@@ -434,16 +477,17 @@ describe('requestPinPreview', () => {
       throw commandError;
     });
 
-    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toMatchObject({
+    const request = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
+    const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
+    await expect(request).resolves.toEqual({
       status: 'rejected',
+      reason: 'stale-project-lifecycle',
     });
-    expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
-      pinPreviewCacheKey(eventGraphPath, outputAddress),
-    )).toBeUndefined();
-    expect(useExecutionStore.getState().getGraph(eventGraphPath)).toMatchObject({
-      status: 'running',
-      runId: 'ordinary-run',
-    });
+    expect(store.getGraph(eventGraphPath)).toEqual(previewSnapshot);
+    expect(failPinPreview).not.toHaveBeenCalled();
+    expect(removePinPreview).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it('does not let stale cleanup remove a newer preview generation for the same pin', async () => {
@@ -456,6 +500,7 @@ describe('requestPinPreview', () => {
     );
 
     const staleRequest = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
     const previous = useGraphDataStore.getState().graphEntities[eventGraphPath];
     useGraphDataStore.setState({
       graphEntities: {
@@ -464,6 +509,7 @@ describe('requestPinPreview', () => {
       },
     });
     const currentRequest = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
     const currentBeforeCleanup = useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
       pinPreviewCacheKey(eventGraphPath, outputAddress),
     );
@@ -496,26 +542,86 @@ describe('requestPinPreview', () => {
 
     const first = requestPinPreview(eventGraphPath, outputKey);
     const second = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
+    const store = useExecutionStore.getState();
+    const completePinPreview = vi.spyOn(store, 'completePinPreview');
+    const failPinPreview = vi.spyOn(store, 'failPinPreview');
+    const removePinPreview = vi.spyOn(store, 'removePinPreview');
+    const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
+    completePinPreview.mockClear();
+    failPinPreview.mockClear();
+    removePinPreview.mockClear();
+    vi.mocked(uiStore.showToast).mockClear();
+
     callbacks[0](runEvent({ type: 'runStarted' }, 'run-old'));
+    callbacks[0](runEvent({
+      type: 'outputReady',
+      output: { graphPath: eventGraphPath, port: outputAddress },
+      generation: 1,
+      sourceId: 'source-old',
+    }, 'run-old'));
+    callbacks[0](runEvent({ type: 'runCompleted' }, 'run-old'));
+    resolvers[0]({ runId: 'run-old' });
+    await expect(first).resolves.toEqual({
+      status: 'rejected',
+      reason: 'stale-project-lifecycle',
+    });
+
+    expect(getExecutionState).not.toHaveBeenCalled();
+    expect(completePinPreview).not.toHaveBeenCalled();
+    expect(failPinPreview).not.toHaveBeenCalled();
+    expect(removePinPreview).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
+
     callbacks[1](runEvent({ type: 'runStarted' }, 'run-new'));
     callbacks[1](runEvent({
       type: 'outputReady',
       output: { graphPath: eventGraphPath, port: outputAddress },
+      generation: 2,
       sourceId: 'source-new',
     }, 'run-new'));
-    callbacks[0](runEvent({
-      type: 'outputReady',
-      output: { graphPath: eventGraphPath, port: outputAddress },
-      sourceId: 'source-old',
-    }, 'run-old'));
-    callbacks[0](runEvent({ type: 'runCompleted' }, 'run-old'));
     callbacks[1](runEvent({ type: 'runCompleted' }, 'run-new'));
-    resolvers[0]({ runId: 'run-old' });
     resolvers[1]({ runId: 'run-new' });
-    await Promise.all([first, second]);
+    await second;
 
     expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
       pinPreviewCacheKey(eventGraphPath, outputAddress),
     )).toMatchObject({ status: 'ready', sourceId: 'source-new' });
+  });
+
+  it('settles a stale wire generation as a pure no-op', async () => {
+    const { outputKey } = installGraph();
+    vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
+      async (_projectInstanceId, _graphPath, demand, onEvent) => {
+        if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
+        onEvent?.(runEvent({ type: 'runStarted' }));
+        onEvent?.(runEvent({
+          type: 'outputReady',
+          output: demand.output,
+          generation: demand.generation + 1,
+          sourceId: 'source-stale-generation',
+        }));
+        onEvent?.(runEvent({ type: 'runCompleted' }));
+        return { runId: 'run-1' };
+      },
+    );
+
+    const store = useExecutionStore.getState();
+    const failPinPreview = vi.spyOn(store, 'failPinPreview');
+    const removePinPreview = vi.spyOn(store, 'removePinPreview');
+    failPinPreview.mockClear();
+    removePinPreview.mockClear();
+    const request = requestPinPreview(eventGraphPath, outputKey);
+    await Promise.resolve();
+    const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
+
+    await expect(request).resolves.toEqual({
+      status: 'rejected',
+      reason: 'stale-project-lifecycle',
+    });
+    expect(store.getGraph(eventGraphPath)).toEqual(previewSnapshot);
+    expect(failPinPreview).not.toHaveBeenCalled();
+    expect(removePinPreview).not.toHaveBeenCalled();
+    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 });

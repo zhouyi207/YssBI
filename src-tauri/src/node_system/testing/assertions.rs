@@ -16,7 +16,8 @@ impl CompileAssertions {
     pub fn has_plan(self) -> Self {
         assert!(
             self.result.plan.is_some(),
-            "expected a plan, diagnostics were: {:#?}",
+            "expected a plan, outcome was {:?}, diagnostics were: {:#?}",
+            self.result.outcome,
             self.result.analysis.diagnostics
         );
         self
@@ -26,7 +27,8 @@ impl CompileAssertions {
     pub fn has_no_plan(self) -> Self {
         assert!(
             self.result.plan.is_none(),
-            "expected compilation to be blocked, plan was: {:#?}",
+            "expected compilation without a plan, outcome was {:?}, plan was: {:#?}",
+            self.result.outcome,
             self.result.plan
         );
         self
@@ -64,8 +66,8 @@ impl CompileAssertions {
     pub fn into_plan(self) -> ExecutionPlan {
         self.result.plan.unwrap_or_else(|| {
             panic!(
-                "expected a plan, diagnostics were: {:#?}",
-                self.result.analysis.diagnostics
+                "expected a plan, outcome was {:?}, diagnostics were: {:#?}",
+                self.result.outcome, self.result.analysis.diagnostics
             )
         })
     }

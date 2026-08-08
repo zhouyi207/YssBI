@@ -69,6 +69,46 @@ describe('ProjectService execution contract', () => {
     expect(isExecutionCancelledError('EXECUTION_CANCELLED')).toBe(false);
   });
 
+  it('preserves a typed internal compilation failure from command IPC', async () => {
+    const commandError = {
+      code: 'internal_compilation_failure',
+      message: 'internal compilation failure',
+      details: {
+        internalCompilationFailure: {
+          stage: 'lowering',
+          code: 'compiler.lowering.internal_invariant',
+          nodeId: '00000000-0000-0000-0000-00000000002a',
+        },
+      },
+    };
+    vi.mocked(invoke).mockRejectedValue(commandError);
+
+    await expect(ProjectService.executeGraphDocument(
+      projectInstanceId,
+      'events/Main.yssbi-event',
+      { type: 'default' },
+    )).rejects.toEqual(commandError);
+  });
+
+  it('rejects malformed internal compilation failure details at the service boundary', async () => {
+    vi.mocked(invoke).mockRejectedValue({
+      code: 'internal_compilation_failure',
+      message: 'internal compilation failure',
+      details: {
+        internalCompilationFailure: {
+          stage: 'lowering',
+          code: 'compiler.lowering.internal_invariant',
+        },
+      },
+    });
+
+    await expect(ProjectService.executeGraphDocument(
+      projectInstanceId,
+      'events/Main.yssbi-event',
+      { type: 'default' },
+    )).rejects.toThrow('Invalid internal compilation failure response');
+  });
+
   it.each([
     {
       name: 'declared output',

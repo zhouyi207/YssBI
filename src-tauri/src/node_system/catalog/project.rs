@@ -326,7 +326,7 @@ fn structural() -> ExecutionSemantics {
         determinism: Determinism::EnvironmentDependent,
         purity: Purity::Effectful,
         evaluation: EvaluationPolicy::EagerWhenRegionEntered,
-        cache: CachePolicy::None,
+        cache: CachePolicy::Disabled,
         effects: EffectSemantics::Ordered,
     }
 }

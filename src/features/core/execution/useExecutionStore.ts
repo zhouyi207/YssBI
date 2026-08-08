@@ -54,6 +54,36 @@ function stopPlaybackIfGraph(
   };
 }
 
+export interface PinPreviewLease {
+  readonly generation: number;
+  isCurrent: () => boolean;
+  complete: (sourceId: string) => boolean;
+  fail: (error: string) => boolean;
+  revoke: () => void;
+}
+
+type LeaseRecord = {
+  graphPath: string;
+  port: PortAddressDto;
+  revoked: boolean;
+  lease: PinPreviewLease;
+};
+
+const activePreviewLeases = new Map<string, LeaseRecord>();
+
+function revokeGraphPreviewLeases(graphPath: string): void {
+  for (const [key, record] of activePreviewLeases) {
+    if (record.graphPath !== graphPath) continue;
+    record.revoked = true;
+    activePreviewLeases.delete(key);
+  }
+}
+
+export function revokeAllPinPreviewLeases(): void {
+  for (const record of activePreviewLeases.values()) record.revoked = true;
+  activePreviewLeases.clear();
+}
+
 interface ExecutionStore extends ExecutionState {
   getGraph: (graphPath: string) => GraphExecutionState;
 
@@ -69,7 +99,11 @@ interface ExecutionStore extends ExecutionState {
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
   recordPinResult: (graphPath: string, result: PinResultWirePayload | PinResultState) => void;
-  beginPinPreview: (graphPath: string, port: PortAddressDto) => number;
+  beginPinPreview: (
+    graphPath: string,
+    port: PortAddressDto,
+    generation: number,
+  ) => PinPreviewLease;
   completePinPreview: (
     graphPath: string,
     port: PortAddressDto,
@@ -128,7 +162,6 @@ function commitVisualSnapshot(
 }
 
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
-  previewGeneration: 0,
   graphs: {},
   playbackGraphPath: null,
   isPlaying: false,
@@ -195,13 +228,31 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return updateGraph(state, graphPath, { pinResults: next });
   }),
 
-  beginPinPreview: (graphPath, port) => {
-    let generation = 0;
+  beginPinPreview: (graphPath, port, generation) => {
+    const key = pinPreviewCacheKey(graphPath, port);
+    const previous = activePreviewLeases.get(key);
+    if (previous) previous.revoked = true;
+
+    let record!: LeaseRecord;
+    const lease: PinPreviewLease = {
+      generation,
+      isCurrent: () => !record.revoked && activePreviewLeases.get(key) === record,
+      complete: (sourceId) => lease.isCurrent()
+        && useExecutionStore.getState().completePinPreview(graphPath, port, generation, sourceId),
+      fail: (error) => lease.isCurrent()
+        && useExecutionStore.getState().failPinPreview(graphPath, port, generation, error),
+      revoke: () => {
+        record.revoked = true;
+        if (activePreviewLeases.get(key) === record) activePreviewLeases.delete(key);
+      },
+    };
+    record = { graphPath, port, revoked: false, lease };
+    activePreviewLeases.set(key, record);
+
     set((state) => {
-      generation = state.previewGeneration + 1;
       const graph = state.graphs[graphPath] ?? emptyGraphState();
       const pinPreviews = new Map(graph.pinPreviews);
-      pinPreviews.set(pinPreviewCacheKey(graphPath, port), {
+      pinPreviews.set(key, {
         graphPath,
         port,
         generation,
@@ -209,12 +260,9 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         sourceId: null,
         error: null,
       });
-      return {
-        ...updateGraph(state, graphPath, { pinPreviews }),
-        previewGeneration: generation,
-      };
+      return updateGraph(state, graphPath, { pinPreviews });
     });
-    return generation;
+    return lease;
   },
 
   completePinPreview: (graphPath, port, generation, sourceId) => {
@@ -322,16 +370,19 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return changed ? { ...state, graphs } : state;
   }),
 
-  releaseGraphExecutionState: (graphPath) => set((state) => {
-    if (!state.graphs[graphPath]) return state;
-    const graphs = { ...state.graphs };
-    delete graphs[graphPath];
-    clearExecutionVisual();
-    return {
-      graphs,
-      ...stopPlaybackIfGraph(state, graphPath),
-    };
-  }),
+  releaseGraphExecutionState: (graphPath) => {
+    revokeGraphPreviewLeases(graphPath);
+    set((state) => {
+      if (!state.graphs[graphPath]) return state;
+      const graphs = { ...state.graphs };
+      delete graphs[graphPath];
+      clearExecutionVisual();
+      return {
+        graphs,
+        ...stopPlaybackIfGraph(state, graphPath),
+      };
+    });
+  },
 
   resetGraphVisuals: (graphPath) => set((state) => {
     clearExecutionVisual();

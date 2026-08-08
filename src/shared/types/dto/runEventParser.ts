@@ -56,6 +56,10 @@ function isU32(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_U32;
 }
 
+function isGeneration(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
 function isDecimalId(value: unknown): value is string {
   return typeof value === 'string' && DECIMAL_ID_PATTERN.test(value);
 }
@@ -98,6 +102,14 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
         type: 'outputs',
         outputs: value.outputs.map(parseGraphOutputRefDto),
         includeDefaultResults: value.includeDefaultResults,
+      };
+    case 'pinPreview':
+      if (!hasExactKeys(value, ['type', 'output', 'generation'])
+        || !isGeneration(value.generation)) return fail('pin preview execution demand');
+      return {
+        type: 'pinPreview',
+        output: parseGraphOutputRefDto(value.output),
+        generation: value.generation,
       };
     default:
       return assertNever(type);
@@ -227,22 +239,19 @@ function parseRunEventKind(value: unknown): RunEventKind {
         activationId: value.activationId,
         code: parseRunErrorCode(value.code),
       };
-    case 'valueReady':
-      if (!hasExactKeys(value, ['type', 'valueIndex', 'sourceId'])
-        || !isU32(value.valueIndex)
-        || !isDecimalId(value.sourceId)) return fail('valueReady');
-      return { type: 'valueReady', valueIndex: value.valueIndex, sourceId: value.sourceId };
     case 'resultReady':
       if (!hasExactKeys(value, ['type', 'name', 'sourceId'])
         || typeof value.name !== 'string'
         || !isDecimalId(value.sourceId)) return fail('resultReady');
       return { type: 'resultReady', name: value.name, sourceId: value.sourceId };
     case 'outputReady':
-      if (!hasExactKeys(value, ['type', 'output', 'sourceId'])
+      if (!hasExactKeys(value, ['type', 'output', 'generation', 'sourceId'])
+        || !(value.generation === null || isGeneration(value.generation))
         || !isDecimalId(value.sourceId)) return fail('outputReady');
       return {
         type: 'outputReady',
         output: parseGraphOutputRefDto(value.output),
+        generation: value.generation,
         sourceId: value.sourceId,
       };
     default:

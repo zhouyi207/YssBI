@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PinResultState } from '@/shared/types/ui';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { pinPreviewCacheKey } from './pinResultIndex';
-import { useExecutionStore } from './useExecutionStore';
+import {
+  revokeAllPinPreviewLeases,
+  useExecutionStore,
+  type PinPreviewLease,
+} from './useExecutionStore';
 
 function samplePinResult(pinId: string, graphPath = 'events/Main.yssbi-event'): PinResultState {
   return {
@@ -32,8 +36,17 @@ const instanceOutput: PortAddressDto = {
   instanceId: 'instance-7',
 };
 
+function beginPreview(
+  graphPath: string,
+  port: PortAddressDto,
+  generation: number,
+): PinPreviewLease {
+  return useExecutionStore.getState().beginPinPreview(graphPath, port, generation);
+}
+
 describe('useExecutionStore pin result lifecycle', () => {
   beforeEach(() => {
+    revokeAllPinPreviewLeases();
     useExecutionStore.setState({
       graphs: {},
       playbackGraphPath: null,
@@ -41,21 +54,39 @@ describe('useExecutionStore pin result lifecycle', () => {
     });
   });
 
+  it('synchronously revokes the prior same-pin lease without store access on settlement', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+    const first = store.beginPinPreview(graphPath, declaredOutput, 1);
+    const second = store.beginPinPreview(graphPath, declaredOutput, 2);
+    const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
+    const completePinPreview = vi.spyOn(store, 'completePinPreview');
+    const failPinPreview = vi.spyOn(store, 'failPinPreview');
+
+    expect(first.isCurrent()).toBe(false);
+    expect(first.complete('source-stale')).toBe(false);
+    expect(first.fail('stale failure')).toBe(false);
+    expect(getExecutionState).not.toHaveBeenCalled();
+    expect(completePinPreview).not.toHaveBeenCalled();
+    expect(failPinPreview).not.toHaveBeenCalled();
+    expect(second.isCurrent()).toBe(true);
+  });
+
   it('accepts only the newest preview generation for an exact stable address', () => {
     const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();
-    const first = store.beginPinPreview(graphPath, declaredOutput);
-    const second = store.beginPinPreview(graphPath, declaredOutput);
+    const first = beginPreview(graphPath, declaredOutput, 1);
+    const second = beginPreview(graphPath, declaredOutput, 2);
 
-    expect(store.completePinPreview(graphPath, declaredOutput, first, 'source-stale')).toBe(false);
-    expect(store.completePinPreview(graphPath, instanceOutput, second, 'source-wrong-port')).toBe(false);
-    expect(store.completePinPreview(graphPath, declaredOutput, second, 'source-current')).toBe(true);
+    expect(store.completePinPreview(graphPath, declaredOutput, first.generation, 'source-stale')).toBe(false);
+    expect(store.completePinPreview(graphPath, instanceOutput, second.generation, 'source-wrong-port')).toBe(false);
+    expect(second.complete('source-current')).toBe(true);
 
     const preview = useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(
       pinPreviewCacheKey(graphPath, declaredOutput),
     );
     expect(preview).toMatchObject({
-      generation: second,
+      generation: second.generation,
       status: 'ready',
       sourceId: 'source-current',
       port: declaredOutput,
@@ -65,14 +96,14 @@ describe('useExecutionStore pin result lifecycle', () => {
   it('removes only the matching preview generation', () => {
     const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();
-    const staleGeneration = store.beginPinPreview(graphPath, declaredOutput);
-    const currentGeneration = store.beginPinPreview(graphPath, declaredOutput);
+    const staleLease = beginPreview(graphPath, declaredOutput, 1);
+    const currentLease = beginPreview(graphPath, declaredOutput, 2);
 
-    expect(store.removePinPreview(graphPath, declaredOutput, staleGeneration)).toBe(false);
+    expect(store.removePinPreview(graphPath, declaredOutput, staleLease.generation)).toBe(false);
     expect(useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(
       pinPreviewCacheKey(graphPath, declaredOutput),
-    )).toMatchObject({ generation: currentGeneration, status: 'pending' });
-    expect(store.removePinPreview(graphPath, declaredOutput, currentGeneration)).toBe(true);
+    )).toMatchObject({ generation: currentLease.generation, status: 'pending' });
+    expect(store.removePinPreview(graphPath, declaredOutput, currentLease.generation)).toBe(true);
     expect(useExecutionStore.getState().getGraph(graphPath).pinPreviews.has(
       pinPreviewCacheKey(graphPath, declaredOutput),
     )).toBe(false);
@@ -81,16 +112,12 @@ describe('useExecutionStore pin result lifecycle', () => {
   it('does not let a completion revive preview state after graph release', () => {
     const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();
-    const generation = store.beginPinPreview(graphPath, instanceOutput);
+    const lease = beginPreview(graphPath, instanceOutput, 1);
 
     store.releaseGraphExecutionState(graphPath);
 
-    expect(store.completePinPreview(
-      graphPath,
-      instanceOutput,
-      generation,
-      'source-stale',
-    )).toBe(false);
+    expect(lease.isCurrent()).toBe(false);
+    expect(lease.complete('source-stale')).toBe(false);
     expect(useExecutionStore.getState().graphs[graphPath]).toBeUndefined();
   });
 

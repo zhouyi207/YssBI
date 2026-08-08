@@ -4,14 +4,17 @@ use super::relational::{RelationalConnection, RelationalFragment, RelationalPlan
 use crate::node_system::analysis::CompileProvenance;
 use crate::node_system::document::{NodeId, PortAddress};
 use crate::node_system::plan::{
-    CompiledParameterHandle, CompiledResourceRequirement, ControlStep, EffectDependency,
-    ExecutionDemand, ExecutionPlan, GraphOutputRef, KernelHandle, OperationIndex, PlanResult,
-    PlanValueSource, PlannedInput, PlannedKernel, PlannedOperation, PlannedOutput,
-    RelationalBackendId, RelationalFragmentId, RelationalOperatorIndex, RelationalSubplanIndex,
-    ResourceId, StructuredControlRegion, ValueDependency, ValueRef,
+    CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
+    EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency, ExecutionDemand, ExecutionPlan,
+    ExecutionSemanticsVersion, GraphOutputRef, KernelHandle, OperationIndex, OperationStableId,
+    PlanResult, PlanValueSource, PlannedAdapter, PlannedInput, PlannedKernel, PlannedOperation,
+    PlannedOutput, PlannedPublication, PlannedRetry, RelationalBackendId, RelationalFragmentId,
+    RelationalOperatorIndex, RelationalSubplanIndex, ResourceId, StructuredControlRegion,
+    ValueDependency, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{
-    EffectSemantics, EvaluationPolicy, PortDirection, PortKind, Purity,
+    CachePolicy, EffectSemantics, EvaluationPolicy, InputConsumption, OutputProduction,
+    PortDirection, PortKind, Purity,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -24,11 +27,22 @@ pub enum NormalizedExecutionDemand {
         outputs: Box<[GraphOutputRef]>,
         include_default_results: bool,
     },
+    PinPreview {
+        output: GraphOutputRef,
+        generation: u64,
+    },
 }
 
 impl NormalizedExecutionDemand {
     pub fn digest(&self) -> Result<[u8; 32], crate::node_system::registry::CanonicalEncodingError> {
         crate::node_system::registry::hash_canonical("yssbi.execution-demand.v1", self)
+    }
+}
+
+fn preview_generation(demand: &NormalizedExecutionDemand) -> Option<u64> {
+    match demand {
+        NormalizedExecutionDemand::PinPreview { generation, .. } => Some(*generation),
+        NormalizedExecutionDemand::Default | NormalizedExecutionDemand::Outputs { .. } => None,
     }
 }
 
@@ -118,6 +132,7 @@ pub(crate) enum IntermediateKernel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct IntermediateOperation {
+    pub stable_id: OperationStableId,
     pub source_node_id: NodeId,
     pub source_node_type_id: crate::node_system::protocol::NodeTypeId,
     pub has_control_or_effect_ports: bool,
@@ -127,6 +142,11 @@ pub(crate) struct IntermediateOperation {
     pub output_ports: Box<[PortAddress]>,
     pub outputs: Box<[PlannedOutput]>,
     pub params: CompiledParameterHandle,
+    pub resource_dependencies: Box<[crate::node_system::analysis::ResourceKey]>,
+    pub cache_policy: CachePolicy,
+    pub semantics_version: ExecutionSemanticsVersion,
+    pub workload: WorkloadClass,
+    pub retry: PlannedRetry,
     pub evaluation: EvaluationPolicy,
     pub purity: Purity,
     pub effects: EffectSemantics,
@@ -169,6 +189,13 @@ impl ExecutionPlanBasis {
                     include_default_results: *include_default_results,
                 })
             }
+            ExecutionDemand::PinPreview { output, generation } => {
+                self.validate_output(output)?;
+                Ok(NormalizedExecutionDemand::PinPreview {
+                    output: output.clone(),
+                    generation: *generation,
+                })
+            }
         }
     }
 
@@ -179,6 +206,7 @@ impl ExecutionPlanBasis {
         self.finalize(
             &retained.operations,
             &selected_outputs,
+            preview_generation(&normalized),
             &retained.root_region,
             Some(&retained.required_values),
         )
@@ -186,7 +214,13 @@ impl ExecutionPlanBasis {
 
     pub(crate) fn derive_full_plan(&self) -> Result<ExecutionPlan, DemandPlanError> {
         let retained = (0..self.operations.len()).collect::<BTreeSet<_>>();
-        self.finalize(&retained, &self.default_outputs, &self.root_region, None)
+        self.finalize(
+            &retained,
+            &self.default_outputs,
+            None,
+            &self.root_region,
+            None,
+        )
     }
 
     fn selected_outputs(&self, demand: &NormalizedExecutionDemand) -> BTreeSet<GraphOutputRef> {
@@ -201,6 +235,9 @@ impl ExecutionPlanBasis {
                     selected.extend(self.default_outputs.iter().cloned());
                 }
                 selected
+            }
+            NormalizedExecutionDemand::PinPreview { output, .. } => {
+                [output.clone()].into_iter().collect()
             }
         }
     }

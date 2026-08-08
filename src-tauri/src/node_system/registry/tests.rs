@@ -1,5 +1,10 @@
 use super::*;
-use crate::node_system::compiler::{LoweredNode, LoweringContext, LoweringError, NodeLowerer};
+use crate::node_system::compiler::{
+    CompilationOutcome, GraphCompiler, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
+    NodeLowerer, ResourceSnapshot,
+};
+use crate::node_system::document::{DocumentNode, GraphDocument, NodeId, NodePosition};
+use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
 use crate::node_system::testing::TestProtocolBuilder;
 use std::any::Any;
@@ -238,6 +243,28 @@ fn nominal_validators_are_registered_and_looked_up_generically() {
 }
 
 #[test]
+fn nominal_registration_allocator_rejects_overflow_without_reuse() {
+    let allocator = std::sync::atomic::AtomicU64::new(u64::MAX - 1);
+
+    assert_eq!(
+        super::allocate_nominal_registration_id(&allocator),
+        Ok(u64::MAX - 1)
+    );
+    for _ in 0..2 {
+        assert!(matches!(
+            super::allocate_nominal_registration_id(&allocator),
+            Err(NodeRegistrationError::InvalidRegistry(
+                RegistryValidationError::NominalRegistrationIdExhausted
+            ))
+        ));
+    }
+    assert_eq!(
+        allocator.load(std::sync::atomic::Ordering::Relaxed),
+        u64::MAX
+    );
+}
+
+#[test]
 fn nominal_codec_prepares_a_typed_value_without_exposing_raw_json() {
     #[derive(Debug, PartialEq, Eq)]
     struct PreparedCount(u64);
@@ -246,7 +273,7 @@ fn nominal_codec_prepares_a_typed_value_without_exposing_raw_json() {
     builder
         .register_provider(provider_with_nominal_type("acme.nominal"))
         .unwrap();
-    builder
+    let handle = builder
         .register_nominal_codec(id("acme.nominal"), id("acme.nominal.count"), 1, |value| {
             value
                 .as_u64()
@@ -261,10 +288,139 @@ fn nominal_codec_prepares_a_typed_value_without_exposing_raw_json() {
         .expect("registered codec")
         .expect("valid nominal value");
 
-    assert_eq!(
-        prepared.downcast_ref::<PreparedCount>(),
-        Some(&PreparedCount(7))
+    assert_eq!(handle.get(&prepared), Some(&PreparedCount(7)));
+
+    let mut other_builder = NodeRegistryBuilder::new();
+    other_builder
+        .register_provider(provider_with_nominal_type("acme.nominal"))
+        .unwrap();
+    let other_handle = other_builder
+        .register_nominal_codec(id("acme.nominal"), id("acme.nominal.count"), 1, |value| {
+            value
+                .as_u64()
+                .map(PreparedCount)
+                .ok_or_else(|| "count must be unsigned".to_owned())
+        })
+        .unwrap();
+    assert_eq!(other_handle.get(&prepared), None);
+}
+
+#[test]
+fn nominal_codec_rejects_raw_json_payloads() {
+    let mut builder = NodeRegistryBuilder::new();
+
+    let error = builder
+        .register_nominal_codec::<serde_json::Value>(
+            id("acme.nominal"),
+            id("acme.nominal.raw_json"),
+            1,
+            |value| Ok(value.clone()),
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        NodeRegistrationError::InvalidRegistry(
+            RegistryValidationError::RawJsonNominalPayload(ref type_id)
+        ) if type_id.as_str() == "acme.nominal"
+    ));
+}
+
+#[test]
+fn custom_nominal_provider_prepares_typed_value_for_compiler_lowering() {
+    #[derive(Debug, PartialEq, Eq)]
+    struct PreparedCount(u64);
+
+    struct PreparedCountLowerer(
+        Arc<std::sync::atomic::AtomicBool>,
+        NominalValueHandle<PreparedCount>,
     );
+
+    impl NodeLowerer for PreparedCountLowerer {
+        fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
+            assert_eq!(
+                context.parameters.nominal(&id("count"), &self.1),
+                Some(&PreparedCount(7))
+            );
+            self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(LoweredNode {
+                kernel: LoweredKernel::Native(KernelHandle::new("acme.count").unwrap()),
+                parameters: CompiledParameterHandle::new("acme.count.parameters").unwrap(),
+            })
+        }
+    }
+
+    struct EmptyResources;
+
+    impl ResourceSnapshot for EmptyResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            BTreeMap::new()
+        }
+    }
+
+    let lowered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let codec_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut builder = NodeRegistryBuilder::new();
+    let calls = codec_calls.clone();
+    let handle = builder
+        .register_nominal_codec(
+            id("acme.nominal"),
+            id("acme.nominal.count"),
+            1,
+            move |value| {
+                let input = value
+                    .as_u64()
+                    .ok_or_else(|| "count must be unsigned".to_owned())?;
+                let invocation = calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(PreparedCount(input + invocation as u64))
+            },
+        )
+        .unwrap();
+    let mut provider = provider_with_nominal_type("acme.nominal");
+    let protocol = Arc::make_mut(&mut provider.nodes[0].protocol);
+    protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: id("count"),
+        title_key: id("nodes.test.empty.count"),
+        description_key: None,
+        value_type: TypeExpr::Concrete(id("acme.nominal")),
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Auto,
+    }])
+    .unwrap();
+    provider.i18n.keys.insert(id("nodes.test.empty.count"));
+    provider.nodes[0] = RegisteredNode::leaf(
+        provider.nodes[0].protocol.clone(),
+        crate::node_system::compiler::NodeImplementation::new(PreparedCountLowerer(
+            lowered.clone(),
+            handle,
+        )),
+    );
+
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
+    let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(1));
+    let mut graph = GraphDocument::default();
+    graph
+        .create_node(DocumentNode {
+            id: node_id,
+            node_type: id("yssbi.test.empty"),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::from([(id("count"), serde_json::json!(7))]),
+            user_label: None,
+        })
+        .unwrap();
+
+    let result = GraphCompiler::new(&registry, &EmptyResources).compile(&graph);
+
+    assert!(matches!(result.outcome, CompilationOutcome::Succeeded));
+    assert!(
+        result.plan.is_some(),
+        "diagnostics: {:?}",
+        result.analysis.diagnostics
+    );
+    assert!(lowered.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(codec_calls.load(std::sync::atomic::Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -756,7 +912,7 @@ fn fingerprints_are_canonical_and_protocol_sensitive() {
     let mut changed = valid_provider();
     Arc::make_mut(&mut changed.nodes[0].protocol)
         .execution
-        .cache = CachePolicy::None;
+        .cache = CachePolicy::Disabled;
     let changed = frozen(vec![changed]);
     assert_ne!(first.fingerprint(), changed.fingerprint());
     assert_ne!(
@@ -1133,9 +1289,10 @@ fn canonical_for_fingerprint(
         .map(|validator| {
             BTreeMap::from([(
                 id("acme.nominal"),
-                NominalParameterValidator::new(
+                super::NominalParameterValidator::new(
                     id(validator.identity),
                     validator.version,
+                    1,
                     |value| {
                         accepts_any_json(value)?;
                         Ok(std::sync::Arc::new(())

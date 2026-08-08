@@ -1,7 +1,8 @@
-use crate::node_system::analysis::CompileProvenance;
+use crate::node_system::analysis::{CompileProvenance, ResourceKey};
 use crate::node_system::document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use crate::node_system::protocol::{
-    CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, Value,
+    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
+    Value,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,6 +39,9 @@ index_type!(ValueRef);
 index_type!(RelationalSubplanIndex);
 index_type!(RelationalOperatorIndex);
 
+pub const MAX_SAFE_PREVIEW_GENERATION: u64 = 9_007_199_254_740_991;
+pub const EXECUTION_SEMANTICS_SCHEMA_VERSION: u32 = 1;
+
 macro_rules! opaque_id {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -60,6 +64,7 @@ macro_rules! opaque_id {
     };
 }
 
+opaque_id!(OperationStableId);
 opaque_id!(KernelHandle);
 opaque_id!(CompiledParameterHandle);
 opaque_id!(FunctionPlanHandle);
@@ -103,6 +108,10 @@ define_execution_demand! {
         outputs: Box<[GraphOutputRef]>,
         include_default_results: bool,
     },
+    PinPreview {
+        output: GraphOutputRef,
+        generation: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,20 +128,27 @@ pub struct ExecutionPlan {
     pub relational_subplans: Box<[RelationalSubplan]>,
     pub resources: Box<[CompiledResourceRequirement]>,
     pub results: Box<[PlanResult]>,
+    pub publications: Box<[PlannedPublication]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PlanValueSource {
     /// A value supplied by the event or function activation that enters this plan.
-    ExternalInput(ValueRef),
+    ExternalInput(ValueRef, OutputProduction),
     /// A value produced by structured control, such as a branch, loop, or call result.
-    ControlProduced(ValueRef),
+    ControlProduced(ValueRef, OutputProduction),
 }
 
 impl PlanValueSource {
     pub const fn value(self) -> ValueRef {
         match self {
-            Self::ExternalInput(value) | Self::ControlProduced(value) => value,
+            Self::ExternalInput(value, _) | Self::ControlProduced(value, _) => value,
+        }
+    }
+
+    pub const fn production(self) -> OutputProduction {
+        match self {
+            Self::ExternalInput(_, production) | Self::ControlProduced(_, production) => production,
         }
     }
 }
@@ -142,16 +158,88 @@ pub struct FunctionPlanAbi {
     pub provenance: CompileProvenance,
     pub parameters: BTreeMap<FunctionParameterId, ValueRef>,
     pub results: BTreeMap<FunctionParameterId, ValueRef>,
+    pub result_productions: BTreeMap<FunctionParameterId, OutputProduction>,
+}
+
+impl OperationStableId {
+    pub(crate) fn from_digest(digest: [u8; 32]) -> Self {
+        Self(hex_digest(&digest).into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ExecutionSemanticsVersion([u8; 32]);
+
+impl ExecutionSemanticsVersion {
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    pub fn to_hex(self) -> String {
+        hex_digest(&self.0)
+    }
+}
+
+fn hex_digest(digest: &[u8; 32]) -> String {
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AttemptId(u64);
+
+impl AttemptId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorkloadClass {
+    Cpu,
+    Io,
+    AdapterIo,
+    Exclusive,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlannedRetry {
+    pub idempotent: bool,
+    pub policy: Option<RetryPolicy>,
+}
+
+impl Default for PlannedRetry {
+    fn default() -> Self {
+        Self {
+            idempotent: false,
+            policy: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedOperation {
+    pub stable_id: OperationStableId,
     pub source_node_id: NodeId,
     pub source_node_type_id: NodeTypeId,
     pub kernel: PlannedKernel,
     pub inputs: Box<[PlannedInput]>,
     pub outputs: Box<[PlannedOutput]>,
     pub params: CompiledParameterHandle,
+    pub resource_dependencies: Box<[ResourceKey]>,
+    pub cache_policy: CachePolicy,
+    pub semantics_version: ExecutionSemanticsVersion,
+    pub workload: WorkloadClass,
+    pub retry: PlannedRetry,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,10 +256,120 @@ pub struct PlannedOutput {
     pub production: OutputProduction,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterializationLimits {
+    pub max_values: u64,
+    pub max_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StreamFormat {
+    Native,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlannedAdapter {
+    Identity,
+    Collect { limits: MaterializationLimits },
+    Buffer { capacity: usize },
+    Spill { memory_limit_bytes: u64 },
+    Replay,
+    StreamBridge { format: StreamFormat },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterializationAdapterPlan {
+    pub adapter: PlannedAdapter,
+    pub input_consumption: InputConsumption,
+    pub output_production: OutputProduction,
+}
+
+impl MaterializationAdapterPlan {
+    pub const fn for_contract(production: OutputProduction, consumption: InputConsumption) -> Self {
+        const MAX_BYTES: u64 = 64 * 1024 * 1024;
+        let input_consumption = match production {
+            OutputProduction::Streaming => InputConsumption::Streaming,
+            OutputProduction::Batches => InputConsumption::SinglePassBatches,
+            OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
+        };
+        let (adapter, output_production) = match (production, consumption) {
+            (OutputProduction::Streaming, InputConsumption::Streaming) => {
+                (PlannedAdapter::Identity, OutputProduction::Streaming)
+            }
+            (OutputProduction::Streaming, InputConsumption::SinglePassBatches) => (
+                PlannedAdapter::Buffer { capacity: 64 },
+                OutputProduction::Batches,
+            ),
+            (OutputProduction::Streaming, InputConsumption::RewindableBatches) => {
+                (PlannedAdapter::Replay, OutputProduction::Batches)
+            }
+            (OutputProduction::Streaming, InputConsumption::RandomAccess) => (
+                PlannedAdapter::Spill {
+                    memory_limit_bytes: MAX_BYTES,
+                },
+                OutputProduction::FullyMaterialized,
+            ),
+            (OutputProduction::Streaming, InputConsumption::FullyMaterialized) => (
+                PlannedAdapter::Collect {
+                    limits: MaterializationLimits {
+                        max_values: 1_000_000,
+                        max_bytes: MAX_BYTES,
+                    },
+                },
+                OutputProduction::FullyMaterialized,
+            ),
+            (OutputProduction::Batches, InputConsumption::Streaming)
+            | (OutputProduction::FullyMaterialized, InputConsumption::Streaming) => (
+                PlannedAdapter::StreamBridge {
+                    format: StreamFormat::Native,
+                },
+                OutputProduction::Streaming,
+            ),
+            (OutputProduction::Batches, InputConsumption::SinglePassBatches) => {
+                (PlannedAdapter::Identity, OutputProduction::Batches)
+            }
+            (OutputProduction::Batches, InputConsumption::RewindableBatches) => {
+                (PlannedAdapter::Replay, OutputProduction::Batches)
+            }
+            (OutputProduction::Batches, InputConsumption::RandomAccess) => (
+                PlannedAdapter::Spill {
+                    memory_limit_bytes: MAX_BYTES,
+                },
+                OutputProduction::FullyMaterialized,
+            ),
+            (OutputProduction::Batches, InputConsumption::FullyMaterialized) => (
+                PlannedAdapter::Collect {
+                    limits: MaterializationLimits {
+                        max_values: 1_000_000,
+                        max_bytes: MAX_BYTES,
+                    },
+                },
+                OutputProduction::FullyMaterialized,
+            ),
+            (OutputProduction::FullyMaterialized, _) => (
+                PlannedAdapter::Identity,
+                OutputProduction::FullyMaterialized,
+            ),
+        };
+        Self {
+            adapter,
+            input_consumption,
+            output_production,
+        }
+    }
+}
+
+impl PlannedAdapter {
+    pub const fn for_contract(production: OutputProduction, consumption: InputConsumption) -> Self {
+        MaterializationAdapterPlan::for_contract(production, consumption).adapter
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlannedKernel {
     Native(KernelHandle),
     Relational(RelationalSubplanIndex),
+    Adapter(PlannedAdapter),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,17 +444,6 @@ pub struct LoopCarriedBinding {
 pub struct RelationalSubplan {
     pub backend: RelationalBackendId,
     pub compiled_plan: CompiledRelationalPlan,
-    /// Bridges required to materialize inputs consumed by this subplan.
-    pub materialization_bridges: Box<[PlannedMaterializationBridge]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlannedMaterializationBridge {
-    pub producer_fragment: RelationalFragmentId,
-    pub consumer_fragment: RelationalFragmentId,
-    pub producer_subplan: RelationalSubplanIndex,
-    pub consumer_subplan: RelationalSubplanIndex,
-    pub bridge: MaterializationBridge,
 }
 
 /// Backend-independent relational data consumed by a single relational runtime.
@@ -267,10 +454,6 @@ pub struct CompiledRelationalPlan {
     pub operators: Box<[RelationalOperator]>,
     /// Every fragment's compiled root, used to bind graph outputs explicitly.
     pub fragment_roots: Box<[RelationalFragmentRoot]>,
-    /// Exact materialization bridge bound to each boundary input operator.
-    pub bridge_inputs: Box<[RelationalBridgeInput]>,
-    /// Fragment values required by cross-island materialization bridges.
-    pub requested_fragment_outputs: Box<[RelationalFragmentId]>,
     /// Backend outputs in the exact order of the owning `PlannedOperation::outputs`.
     pub roots: Box<[RelationalOperatorIndex]>,
     pub pushdown_hints: Box<[RelationalPushdownHint]>,
@@ -280,12 +463,6 @@ pub struct CompiledRelationalPlan {
 pub struct RelationalFragmentRoot {
     pub fragment: RelationalFragmentId,
     pub operator: RelationalOperatorIndex,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RelationalBridgeInput {
-    pub operator: RelationalOperatorIndex,
-    pub bridge: PlannedMaterializationBridge,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -661,15 +838,6 @@ fn rewrite_expression_columns(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MaterializationBridge {
-    Stream,
-    Buffer,
-    Collect,
-    Spill,
-    Replay,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledResourceRequirement {
     pub resource: ResourceId,
@@ -698,6 +866,28 @@ pub struct PlanResult {
     pub name: Box<str>,
     pub output: GraphOutputRef,
     pub value: ValueRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlannedPublication {
+    GraphResult {
+        name: Box<str>,
+        output: GraphOutputRef,
+        value: ValueRef,
+    },
+    PinPreview {
+        output: GraphOutputRef,
+        generation: u64,
+        value: ValueRef,
+    },
+}
+
+impl PlannedPublication {
+    pub const fn value(&self) -> ValueRef {
+        match self {
+            Self::GraphResult { value, .. } | Self::PinPreview { value, .. } => *value,
+        }
+    }
 }
 
 #[cfg(test)]

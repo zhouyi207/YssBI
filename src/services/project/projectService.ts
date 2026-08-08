@@ -3,6 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type { ExecuteGraphResultDto, RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
+import { parseInternalCompilationAppError } from "@/shared/types/dto/executionError";
 import {
     parseExecuteGraphResultDto,
     parseExecutionDemandDto,
@@ -509,6 +510,8 @@ export class ProjectService {
                 );
                 result = parseExecuteGraphResultDto(rawResult);
             } catch (error) {
+                const internalCompilationError = parseInternalCompilationAppError(error);
+                if (internalCompilationError) throw internalCompilationError;
                 if (commandSentTerminalRunEvent(error)) {
                     try {
                         await waitForStreamEnd();

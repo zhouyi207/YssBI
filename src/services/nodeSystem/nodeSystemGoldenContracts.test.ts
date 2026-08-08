@@ -129,8 +129,29 @@ describe('Rust-generated node-system golden contracts', () => {
   );
 
   it('accepts the authoritative editor projection through the real strict parser', () => {
+    expect(editorProjection).toHaveProperty('outcome', { type: 'success' });
     expect(isEditorGraphProjectionDto(editorProjection)).toBe(true);
     expect(parseEditorGraphProjectionDto(editorProjection)).toEqual(editorProjection);
+  });
+
+  it('strictly parses typed projection compilation outcomes', () => {
+    const internal = clone(editorProjection) as unknown as Record<string, unknown>;
+    internal.outcome = {
+      type: 'internalFailure',
+      stage: 'lowering',
+      code: 'compiler.lowering.internal_invariant',
+      nodeId: editorProjection.nodes[0].nodeId,
+    };
+    internal.hasBlockingDiagnostics = true;
+    expect(isEditorGraphProjectionDto(internal)).toBe(true);
+    expect(parseEditorGraphProjectionDto(internal).outcome).toEqual(internal.outcome);
+
+    internal.hasBlockingDiagnostics = false;
+    expect(isEditorGraphProjectionDto(internal)).toBe(false);
+
+    const missing = clone(editorProjection) as unknown as Record<string, unknown>;
+    deleteKey(missing, 'outcome');
+    expect(isEditorGraphProjectionDto(missing)).toBe(false);
   });
 
   it('strictly accepts and rejects every projection address variant', () => {

@@ -81,7 +81,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorGraphProjectionDto {
     pub basis: ProjectionBasis,
     pub graph_path: Box<str>,
@@ -89,7 +89,45 @@ pub struct EditorGraphProjectionDto {
     pub nodes: Vec<EditorNodeProjectionDto>,
     pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,
+    pub outcome: CompilationOutcomeDto,
     pub has_blocking_diagnostics: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
+pub enum CompilationOutcomeDto {
+    Success,
+    AnalysisBlocked,
+    InternalFailure {
+        stage: CompilationStageDto,
+        code: Box<str>,
+        node_id: Option<Box<str>>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CompilationStageDto {
+    Analysis,
+    Lowering,
+}
+
+impl From<&crate::node_system::compiler::CompilationOutcome> for CompilationOutcomeDto {
+    fn from(outcome: &crate::node_system::compiler::CompilationOutcome) -> Self {
+        use crate::node_system::compiler::{CompilationOutcome, CompilationStage};
+        match outcome {
+            CompilationOutcome::Succeeded => Self::Success,
+            CompilationOutcome::AnalysisBlocked => Self::AnalysisBlocked,
+            CompilationOutcome::InternalFailure(failure) => Self::InternalFailure {
+                stage: match failure.stage {
+                    CompilationStage::Analysis => CompilationStageDto::Analysis,
+                    CompilationStage::Lowering => CompilationStageDto::Lowering,
+                },
+                code: failure.code.clone(),
+                node_id: failure.node_id.map(|node_id| node_id.to_string().into()),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -475,6 +513,7 @@ pub struct GraphProjectionDelta {
     pub node_replacements: Vec<EditorNodeProjectionDto>,
     pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,
+    pub outcome: CompilationOutcomeDto,
     pub has_blocking_diagnostics: bool,
 }
 
@@ -531,19 +570,51 @@ type EditorAnalysis = AnalysisSnapshot<
 type EditorDiagnostic = NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>;
 
 pub fn build_editor_graph_projection(
-    graph_path: impl Into<Box<str>>,
+    graph_path: &str,
     document: &GraphDocument,
     analysis: &EditorAnalysis,
+    outcome: &crate::node_system::compiler::CompilationOutcome,
     registry: &NodeRegistry,
     localization: &impl LocalizationLookup,
 ) -> Result<EditorGraphProjectionDto, ProjectionError> {
-    EditorGraphProjectionDto::from_sources(graph_path, analysis, document, registry, localization)
+    EditorGraphProjectionDto::from_compilation_sources(
+        graph_path,
+        analysis,
+        outcome,
+        document,
+        registry,
+        localization,
+    )
 }
 
 impl EditorGraphProjectionDto {
+    #[cfg(test)]
     pub fn from_sources(
         graph_path: impl Into<Box<str>>,
         analysis: &EditorAnalysis,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        localization: &impl LocalizationLookup,
+    ) -> Result<Self, ProjectionError> {
+        let outcome = if analysis.has_blocking_errors() {
+            crate::node_system::compiler::CompilationOutcome::AnalysisBlocked
+        } else {
+            crate::node_system::compiler::CompilationOutcome::Succeeded
+        };
+        Self::from_compilation_sources(
+            graph_path,
+            analysis,
+            &outcome,
+            document,
+            registry,
+            localization,
+        )
+    }
+
+    pub fn from_compilation_sources(
+        graph_path: impl Into<Box<str>>,
+        analysis: &EditorAnalysis,
+        outcome: &crate::node_system::compiler::CompilationOutcome,
         document: &GraphDocument,
         registry: &NodeRegistry,
         localization: &impl LocalizationLookup,
@@ -810,14 +881,18 @@ impl EditorGraphProjectionDto {
             })
             .collect();
 
+        let outcome = CompilationOutcomeDto::from(outcome);
+        let has_blocking_diagnostics = !matches!(outcome, CompilationOutcomeDto::Success)
+            || diagnostics.iter().any(|diagnostic| diagnostic.blocking);
         Ok(Self {
             basis,
             graph_path,
             source_revision,
             nodes,
             connections,
-            has_blocking_diagnostics: diagnostics.iter().any(|diagnostic| diagnostic.blocking),
             diagnostics,
+            outcome,
+            has_blocking_diagnostics,
         })
     }
 
@@ -851,6 +926,7 @@ impl EditorGraphProjectionDto {
         self.nodes = next_nodes;
         self.connections = delta.connections;
         self.diagnostics = delta.diagnostics;
+        self.outcome = delta.outcome;
         self.has_blocking_diagnostics = delta.has_blocking_diagnostics;
         Ok(())
     }
@@ -893,6 +969,7 @@ impl GraphProjectionDelta {
             node_replacements,
             connections: next.connections.clone(),
             diagnostics: next.diagnostics.clone(),
+            outcome: next.outcome.clone(),
             has_blocking_diagnostics: next.has_blocking_diagnostics,
         })
     }
@@ -927,6 +1004,7 @@ fn validate_sources(
 fn validate_delta(delta: &GraphProjectionDelta) -> Result<(), ProjectionError> {
     if delta.from_basis.graph_path != delta.to_basis.graph_path
         || delta.to_basis.graph_revision < delta.from_basis.graph_revision
+        || matches!(delta.outcome, CompilationOutcomeDto::Success) == delta.has_blocking_diagnostics
         || delta.node_replacements.iter().any(|node| {
             node.graph_path != delta.to_basis.graph_path
                 || node.source_revision != delta.to_basis.graph_revision
@@ -1433,6 +1511,7 @@ mod tests {
             nodes: vec![node(revision, ports)],
             connections: Vec::new(),
             diagnostics: Vec::new(),
+            outcome: CompilationOutcomeDto::Success,
             has_blocking_diagnostics: false,
         }
     }

@@ -86,8 +86,6 @@ export interface GraphExecutionState {
 
 /** 全局执行状态 */
 export interface ExecutionState {
-  /** Monotonic authority for preview completions across graph release/reopen. */
-  previewGeneration: number;
   /** 按 graphPath 存储的执行状态 */
   graphs: Record<string, GraphExecutionState>;
   /** 当前正在回放的 graphPath */

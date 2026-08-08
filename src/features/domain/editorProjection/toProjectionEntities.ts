@@ -47,6 +47,7 @@ export function toProjectionEntities(
     portKeysByNodeId,
     connectionIdsByPortKey,
     diagnostics: projection.diagnostics,
+    outcome: projection.outcome,
     hasBlockingDiagnostics: projection.hasBlockingDiagnostics,
   };
 }

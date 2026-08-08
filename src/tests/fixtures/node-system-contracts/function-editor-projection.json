@@ -77,9 +77,9 @@
       "basis": {
         "graphPath": "functions/forecast.yssbi-function",
         "graphRevision": 1,
-        "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
+        "registryFingerprint": "3fdcb6c6f2c42b68b937c045c32ab76741054356ff84f5d7e27dbccb17880476",
         "resourceVersions": {
-          "functions/forecast.yssbi-function": "[{\"revision\":1,\"signature\":{\"parameters\":[{\"id\":\"sales\",\"name\":\"Observed sales\",\"type_name\":\"DataSeries<Float64>\"}],\"return_type\":\"Array<String>\"}},{\"nodes\":{},\"port_bindings\":[],\"connections\":{},\"input_states\":[]}]"
+          "functions/forecast.yssbi-function": "revision:1"
         }
       },
       "connections": [],
@@ -108,6 +108,9 @@
       "graphPath": "functions/forecast.yssbi-function",
       "hasBlockingDiagnostics": true,
       "nodes": [],
+      "outcome": {
+        "type": "analysisBlocked"
+      },
       "sourceRevision": 1
     }
   }

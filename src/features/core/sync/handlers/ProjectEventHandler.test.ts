@@ -23,7 +23,6 @@ describe('Project event handlers', () => {
     });
     useExecutionStore.setState({
       graphs: {},
-      previewGeneration: 0,
       playbackGraphPath: null,
       isPlaying: false,
     });
@@ -33,7 +32,7 @@ describe('Project event handlers', () => {
     const execution = useExecutionStore.getState();
     execution.startExecution(graphPath);
     execution.setActiveRunId(graphPath, 'old-run');
-    execution.beginPinPreview(graphPath, output);
+    const lease = execution.beginPinPreview(graphPath, output, 1);
     useExecutionStore.setState({
       playbackGraphPath: graphPath,
       isPlaying: true,
@@ -43,7 +42,6 @@ describe('Project event handlers', () => {
     const onProjectCleared = vi.fn(() => {
       expect(useExecutionStore.getState()).toMatchObject({
         graphs: {},
-        previewGeneration: 0,
         playbackGraphPath: null,
         isPlaying: false,
       });
@@ -52,6 +50,7 @@ describe('Project event handlers', () => {
 
     new ProjectClearedHandler().handle(undefined, { onProjectCleared });
 
+    expect(lease.isCurrent()).toBe(false);
     expect(cancelProject).toHaveBeenCalledOnce();
     expect(clearProjectData).toHaveBeenCalledOnce();
     expect(onProjectCleared).toHaveBeenCalledOnce();

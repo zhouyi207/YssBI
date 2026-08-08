@@ -5,6 +5,8 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+use std::num::NonZeroU32;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeProtocol {
@@ -151,7 +153,7 @@ pub enum InputConsumption {
     FullyMaterialized,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum OutputProduction {
     Streaming,
     Batches,
@@ -203,9 +205,56 @@ pub enum EvaluationPolicy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CachePolicy {
-    None,
+    Disabled,
     PerRun,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    pub max_attempts: NonZeroU32,
+    pub initial_backoff: Duration,
+    pub max_backoff: Duration,
+}
+
+impl RetryPolicy {
+    pub fn new(
+        max_attempts: NonZeroU32,
+        initial_backoff: Duration,
+        max_backoff: Duration,
+    ) -> Result<Self, RetryPolicyError> {
+        let policy = Self {
+            max_attempts,
+            initial_backoff,
+            max_backoff,
+        };
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    pub fn validate(&self) -> Result<(), RetryPolicyError> {
+        if self.initial_backoff > self.max_backoff {
+            return Err(RetryPolicyError::InitialBackoffExceedsMaximum);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetryPolicyError {
+    InitialBackoffExceedsMaximum,
+}
+
+impl std::fmt::Display for RetryPolicyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InitialBackoffExceedsMaximum => {
+                formatter.write_str("retry initial backoff cannot exceed maximum backoff")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RetryPolicyError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeScope {
@@ -486,6 +535,32 @@ mod tests {
             ordered: true,
         };
         assert!(NodeInterfaceProtocol::new(vec![port], vec![], vec![]).is_err());
+    }
+
+    #[test]
+    fn retry_policy_constructor_rejects_inverted_backoff_bounds() {
+        let attempts = NonZeroU32::new(2).unwrap();
+        assert!(matches!(
+            RetryPolicy::new(
+                attempts,
+                Duration::from_millis(20),
+                Duration::from_millis(10),
+            ),
+            Err(RetryPolicyError::InitialBackoffExceedsMaximum)
+        ));
+        assert!(serde_json::from_str::<RetryPolicy>(
+            r#"{"max_attempts":0,"initial_backoff":{"secs":0,"nanos":0},"max_backoff":{"secs":0,"nanos":0}}"#,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn effective_cache_policy_serde_rejects_legacy_none_spelling() {
+        assert_eq!(
+            serde_json::to_string(&CachePolicy::Disabled).unwrap(),
+            "\"Disabled\""
+        );
+        assert!(serde_json::from_str::<CachePolicy>("\"None\"").is_err());
     }
 
     #[test]

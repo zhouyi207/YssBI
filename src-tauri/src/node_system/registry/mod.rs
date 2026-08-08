@@ -17,13 +17,26 @@ pub use validation::RegistryValidationError;
 use crate::node_system::protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeId};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_NOMINAL_REGISTRATION_ID: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_nominal_registration_id(allocator: &AtomicU64) -> Result<u64, NodeRegistrationError> {
+    allocator
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+            next.checked_add(1)
+        })
+        .map_err(|_| RegistryValidationError::NominalRegistrationIdExhausted.into())
+}
 
 #[derive(Clone)]
 pub struct PreparedNominalValue {
     type_id: TypeId,
     codec_identity: TypeId,
     codec_version: u32,
+    registration_id: u64,
     value: Arc<dyn Any + Send + Sync>,
 }
 
@@ -39,9 +52,36 @@ impl PreparedNominalValue {
     pub const fn codec_version(&self) -> u32 {
         self.codec_version
     }
+}
 
-    pub fn downcast_ref<T: Any + Send + Sync>(&self) -> Option<&T> {
-        self.value.downcast_ref()
+pub struct NominalValueHandle<T> {
+    registration_id: u64,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> std::fmt::Debug for NominalValueHandle<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("NominalValueHandle")
+            .field("registration_id", &self.registration_id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> Clone for NominalValueHandle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            registration_id: self.registration_id,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T: Any + Send + Sync> NominalValueHandle<T> {
+    pub fn get<'a>(&self, value: &'a PreparedNominalValue) -> Option<&'a T> {
+        (self.registration_id == value.registration_id)
+            .then(|| value.value.downcast_ref())
+            .flatten()
     }
 }
 
@@ -60,6 +100,7 @@ impl std::fmt::Debug for PreparedNominalValue {
 pub struct NominalParameterValidator {
     identity: TypeId,
     version: u32,
+    registration_id: u64,
     prepare:
         Arc<dyn Fn(&serde_json::Value) -> Result<Arc<dyn Any + Send + Sync>, String> + Send + Sync>,
 }
@@ -68,6 +109,7 @@ impl NominalParameterValidator {
     fn new(
         identity: TypeId,
         version: u32,
+        registration_id: u64,
         prepare: impl Fn(&serde_json::Value) -> Result<Arc<dyn Any + Send + Sync>, String>
         + Send
         + Sync
@@ -76,6 +118,7 @@ impl NominalParameterValidator {
         Self {
             identity,
             version,
+            registration_id,
             prepare: Arc::new(prepare),
         }
     }
@@ -89,6 +132,7 @@ impl NominalParameterValidator {
             type_id: type_id.clone(),
             codec_identity: self.identity.clone(),
             codec_version: self.version,
+            registration_id: self.registration_id,
             value: (self.prepare)(value)?,
         })
     }
@@ -101,6 +145,16 @@ impl std::fmt::Debug for NominalParameterValidator {
             .field("identity", &self.identity)
             .field("version", &self.version)
             .finish_non_exhaustive()
+    }
+}
+
+impl crate::node_system::protocol::NominalParameterValidator for NodeRegistry {
+    fn validate_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        NodeRegistry::validate_nominal_parameter(self, type_id, value)
     }
 }
 
@@ -166,9 +220,10 @@ impl NodeRegistryBuilder {
         if self.nominal_validators.contains_key(&id) {
             return Err(RegistryValidationError::DuplicateNominalValidator(id).into());
         }
+        let registration_id = allocate_nominal_registration_id(&NEXT_NOMINAL_REGISTRATION_ID)?;
         self.nominal_validators.insert(
             id,
-            NominalParameterValidator::new(identity, version, move |value| {
+            NominalParameterValidator::new(identity, version, registration_id, move |value| {
                 validator(value)?;
                 Ok(Arc::new(()))
             }),
@@ -182,20 +237,27 @@ impl NodeRegistryBuilder {
         identity: TypeId,
         version: u32,
         prepare: impl Fn(&serde_json::Value) -> Result<T, String> + Send + Sync + 'static,
-    ) -> Result<(), NodeRegistrationError>
+    ) -> Result<NominalValueHandle<T>, NodeRegistrationError>
     where
         T: Any + Send + Sync + 'static,
     {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<serde_json::Value>() {
+            return Err(RegistryValidationError::RawJsonNominalPayload(id).into());
+        }
         if self.nominal_validators.contains_key(&id) {
             return Err(RegistryValidationError::DuplicateNominalValidator(id).into());
         }
+        let registration_id = allocate_nominal_registration_id(&NEXT_NOMINAL_REGISTRATION_ID)?;
         self.nominal_validators.insert(
             id,
-            NominalParameterValidator::new(identity, version, move |value| {
+            NominalParameterValidator::new(identity, version, registration_id, move |value| {
                 prepare(value).map(|value| Arc::new(value) as Arc<dyn Any + Send + Sync>)
             }),
         );
-        Ok(())
+        Ok(NominalValueHandle {
+            registration_id,
+            marker: PhantomData,
+        })
     }
 
     pub fn freeze(self) -> Result<NodeRegistry, NodeRegistrationError> {

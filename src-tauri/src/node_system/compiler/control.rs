@@ -354,8 +354,8 @@ impl<'a> RegionBuilder<'a> {
                     .ok_or_else(|| {
                         issue(
                             node_id,
-                            CompilerDiagnostic::ControlLoopMaxIterationsRequired {
-                                parameter_key: "max_iterations".into(),
+                            CompilerDiagnostic::LoweringInternalInvariant {
+                                node_type: self.nodes[&node_id].protocol.type_id.to_string().into(),
                             },
                         )
                     })?;
@@ -373,8 +373,12 @@ impl<'a> RegionBuilder<'a> {
                         .ok_or_else(|| {
                             issue(
                                 node_id,
-                                CompilerDiagnostic::ControlCallResourceParameterMissing {
-                                    parameter_key: "target".into(),
+                                CompilerDiagnostic::LoweringInternalInvariant {
+                                    node_type: self.nodes[&node_id]
+                                        .protocol
+                                        .type_id
+                                        .to_string()
+                                        .into(),
                                 },
                             )
                         })?
@@ -1183,7 +1187,7 @@ fn prepared_call_target(parameters: &ValidatedNodeConfig) -> Option<Box<str>> {
         .into_iter()
         .find_map(|name| {
             let key = ParameterKey::new(name).ok()?;
-            parameters.string(&key)
+            parameters.resource(&key).map(|resource| resource.as_str())
         })
         .map(Into::into)
 }
@@ -1210,8 +1214,43 @@ fn issue(node_id: NodeId, diagnostic: CompilerDiagnostic) -> ControlIssue {
 mod tests {
     use super::*;
     use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::protocol::{NodeInterfaceProtocol, NodeTypeId, PortKey};
+    use crate::node_system::protocol::{
+        I18nKey, NodeInterfaceProtocol, NodeTypeId, ParameterEditorSpec, ParameterSpec, PortKey,
+        TypeExpr, TypeId,
+    };
+    use crate::node_system::testing::TestProtocolBuilder;
     use uuid::Uuid;
+
+    #[test]
+    fn prepared_call_target_rejects_string_fallback() {
+        let protocol = TestProtocolBuilder::new("yssbi.test.call_config", "test")
+            .style("test")
+            .parameters(vec![ParameterSpec {
+                key: ParameterKey::new("target").unwrap(),
+                title_key: I18nKey::new("nodes.test.call_config.target").unwrap(),
+                description_key: None,
+                value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+                default_value: None,
+                constraints: Vec::new(),
+                editor: ParameterEditorSpec::Text { multiline: false },
+            }])
+            .build();
+        let parameters = ValidatedNodeConfig::from_analysis(
+            &protocol,
+            BTreeMap::from([(
+                ParameterKey::new("target").unwrap(),
+                serde_json::json!("functions/raw-string"),
+            )]),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            parameters.string(&ParameterKey::new("target").unwrap()),
+            Some("functions/raw-string")
+        );
+        assert_eq!(prepared_call_target(&parameters), None);
+    }
 
     fn node_id(value: u128) -> NodeId {
         NodeId::from_uuid(Uuid::from_u128(value))

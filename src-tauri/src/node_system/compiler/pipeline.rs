@@ -16,9 +16,9 @@ use super::specialization::{
 };
 use super::type_analysis::{TypeConstraintGraph, TypeEnvironment};
 use super::{
-    CompilerDiagnostic, CompilerDiagnosticLocation, CompilerNodeDiagnostic, LoweredKernel,
-    LoweringContext, LoweringError, NodeImplementation, ValidatedNodeConfig, compare_diagnostics,
-    managed_node_role_name, node_scope_name, port_kind_name,
+    CompilerDiagnostic, CompilerDiagnosticLocation, CompilerNodeDiagnostic, FragmentMetadata,
+    LoweredKernel, LoweringContext, LoweringError, NodeImplementation, ValidatedNodeConfig,
+    compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
 };
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
@@ -36,19 +36,22 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
-    EffectDependency as PlannedEffectDependency, ExecutionPlan, FunctionPlanAbi, GraphOutputRef,
-    KernelHandle, OperationIndex, PlanResult, PlanValueSource, PlannedInput, PlannedOutput,
+    EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency as PlannedEffectDependency, ExecutionPlan,
+    ExecutionSemanticsVersion, FunctionPlanAbi, GraphOutputRef, KernelHandle, OperationIndex,
+    OperationStableId, PlanResult, PlanValueSource, PlannedInput, PlannedOutput, PlannedRetry,
     RelationalBackendId, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
-    ValueDependency, ValueRef,
+    ValueDependency, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, EffectSemantics, EvaluationPolicy, InputConsumption, LiteralPolicy,
-    NodeProtocol, NodeTypeId, OutputProduction, ParameterEditorSpec, ParameterIssueKind,
-    PortDirection, PortInstances, PortKind, PortSpec, Purity, TypeClassId, TypeConstructorId,
-    TypeExpr, TypeId, validate_parameter_values,
+    CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
+    InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction,
+    ParameterEditorSpec, ParameterIssueKind, PortDirection, PortInstances, PortKind, PortSpec,
+    Purity, TypeClassId, TypeConstructorId, TypeExpr, TypeId, Value,
+    validate_and_prepare_parameter_values,
 };
 use crate::node_system::registry::{
-    NodeRegistry, ProtocolFingerprint, RegistryFingerprint, StructuralNodeRole,
+    NodeRegistry, PreparedNominalValue, ProtocolFingerprint, RegistryFingerprint,
+    StructuralNodeRole, hash_canonical,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -104,6 +107,20 @@ impl RegistryNode<'_> {
 }
 
 /// The compiler registry resolves nodes and supplies the type facts required by analysis.
+struct CompilerNominalValidator<'a, R>(&'a R);
+
+impl<R: CompilerRegistry> crate::node_system::protocol::NominalParameterValidator
+    for CompilerNominalValidator<'_, R>
+{
+    fn validate_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        self.0.validate_nominal_parameter(type_id, value)
+    }
+}
+
 pub trait CompilerRegistry: TypeEnvironment {
     fn fingerprint(&self) -> &RegistryFingerprint;
     fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>>;
@@ -349,10 +366,31 @@ pub struct CompilationSnapshot {
     pub document: GraphDocument,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompilationStage {
+    Analysis,
+    Lowering,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InternalCompilationFailure {
+    pub stage: CompilationStage,
+    pub code: Box<str>,
+    pub node_id: Option<NodeId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompilationOutcome {
+    Succeeded,
+    AnalysisBlocked,
+    InternalFailure(InternalCompilationFailure),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishedCompileAnalysis {
     pub analysis: CompilerAnalysis,
     pub semantic: Option<CompilerSemanticGraph>,
+    pub outcome: CompilationOutcome,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -363,6 +401,7 @@ pub struct CompileResult {
     pub execution_basis: Option<ExecutionPlanBasis>,
     pub plan: Option<ExecutionPlan>,
     pub function_abi: Option<FunctionPlanAbi>,
+    pub outcome: CompilationOutcome,
 }
 
 fn finalize_resource_basis(
@@ -565,6 +604,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             ));
             return Err(error);
         }
+        let prepared_configs = state.prepared_configs();
         let provisional_semantic = state.semantic_graph();
         let interface_projection = state.interface_projection();
         let mut function_abi = match derive_function_abi(
@@ -596,7 +636,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let mut function_abis = closure.abis;
         state.basis.resource_versions = resources.reads().clone();
         state.basis.resource_observations = resources.observations().clone();
-        let prepared_configs = state.prepared_configs(self.registry);
         let decoded_literals = state.decoded_literals.clone();
         let mut analysis = state.snapshot();
         if let Err(error) = cancellation.checkpoint() {
@@ -621,6 +660,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     execution_basis: None,
                     plan: None,
                     function_abi: None,
+                    outcome: CompilationOutcome::AnalysisBlocked,
                 },
                 &resources,
             ));
@@ -647,6 +687,11 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         execution_basis: None,
                         plan: None,
                         function_abi: None,
+                        outcome: CompilationOutcome::InternalFailure(InternalCompilationFailure {
+                            stage: CompilationStage::Analysis,
+                            code: "compiler.semantic.invalid".into(),
+                            node_id: None,
+                        }),
                     },
                     &resources,
                 ));
@@ -681,7 +726,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             abi.provenance.basis.resource_observations =
                 final_provenance.basis.resource_observations.clone();
         }
-        let (semantic, execution_basis, plan) = match lower_graph(
+        let (semantic, execution_basis, plan, outcome) = match lower_graph(
             self.registry,
             &snapshot.document,
             &semantic,
@@ -698,7 +743,12 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     SpanStatus::Succeeded,
                     correlation.clone(),
                 ));
-                (Some(semantic), Some(basis), Some(plan))
+                (
+                    Some(semantic),
+                    Some(basis),
+                    Some(plan),
+                    CompilationOutcome::Succeeded,
+                )
             }
             Err(LowerGraphFailure::Cancelled(error)) => {
                 self.trace.record(SpanEvent::new(
@@ -708,14 +758,18 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 ));
                 return Err(error);
             }
-            Err(LowerGraphFailure::Diagnostic(diagnostic)) => {
-                analysis.diagnostics = append_diagnostic(analysis.diagnostics, diagnostic);
+            Err(LowerGraphFailure::Internal(failure)) => {
                 self.trace.record(SpanEvent::new(
                     SpanKind::Lowering,
                     SpanStatus::Failed,
                     correlation.clone(),
                 ));
-                (Some(semantic), None, None)
+                (
+                    Some(semantic),
+                    None,
+                    None,
+                    CompilationOutcome::InternalFailure(failure),
+                )
             }
         };
         Ok(finalize_resource_basis(
@@ -726,6 +780,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 execution_basis,
                 plan,
                 function_abi,
+                outcome,
             },
             &resources,
         ))
@@ -736,10 +791,159 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         graph: &CompilerSemanticGraph,
         resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
-    ) -> Result<BTreeMap<GraphResourcePath, FunctionPlanAbi>, LowerGraphFailure> {
-        let mut targets = BTreeMap::new();
+    ) -> Result<CallClosureAnalysis, CompileCancelled> {
+        let mut closure = CallClosureAnalysis::default();
+        let root_targets = self.call_targets(graph, &mut closure.diagnostics);
+        let mut pending = root_targets.keys().cloned().collect::<Vec<_>>();
+        let mut dependencies = BTreeMap::new();
+        let mut direct_resolution_failures = BTreeSet::new();
+
+        while let Some(target) = pending.pop() {
+            cancellation.checkpoint()?;
+            if dependencies.contains_key(&target) {
+                continue;
+            }
+            let root_sites = root_targets.get(&target).map(Vec::as_slice);
+            let (node, resolution_failed) = self.analyze_call_dependency(
+                &target,
+                root_sites,
+                resources,
+                cancellation,
+                &mut closure.diagnostics,
+            )?;
+            if resolution_failed {
+                direct_resolution_failures.insert(target.clone());
+            }
+            pending.extend(node.dependencies.iter().cloned());
+            dependencies.insert(target, node);
+        }
+
+        let invalid = invalid_call_targets(&dependencies);
+        for (target, node) in dependencies {
+            if !invalid.contains(&target)
+                && let Some(abi) = node.abi
+            {
+                closure.abis.insert(target, abi);
+            }
+        }
+        for (target, sites) in root_targets {
+            if invalid.contains(&target) && !direct_resolution_failures.contains(&target) {
+                self.push_call_abi_invalid(&target, &sites, &mut closure.diagnostics);
+            }
+        }
+        Ok(closure)
+    }
+
+    fn analyze_call_dependency(
+        &self,
+        target: &GraphResourcePath,
+        root_sites: Option<&[NodeId]>,
+        resources: &mut dyn AnalysisResourceResolver,
+        cancellation: &CompileCancellationToken,
+        diagnostics: &mut Vec<CompilerNodeDiagnostic>,
+    ) -> Result<(CallDependencyNode, bool), CompileCancelled> {
+        cancellation.checkpoint()?;
+        let resolved = match resources.resolve_function(target) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                if let Some(sites) = root_sites {
+                    for &node_id in sites {
+                        diagnostics.push(
+                            CompilerDiagnostic::ResourceResolutionFailed {
+                                resource_key: error.key().as_str().into(),
+                                reason: error.reason().into(),
+                            }
+                            .into_node(DiagnosticLocation::Node(node_id)),
+                        );
+                    }
+                }
+                return Ok((CallDependencyNode::invalid(), true));
+            }
+        };
+        let document = resolved.value.graph.clone();
+        let provenance = CompileProvenance {
+            project_session_id: self.project_session_id.clone(),
+            graph_path: target.clone(),
+            basis: CompilationBasis {
+                graph_revision: document.revision,
+                registry_fingerprint: self.registry.fingerprint().clone(),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: ResourceObservationSet::new(),
+            },
+            compile_id: CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed)),
+        };
+        let mut state = AnalysisState::new(&document, target.clone(), provenance.basis.clone());
+        state.analyze(
+            self.registry,
+            &self.schema_resolvers,
+            &self.interface_resolvers,
+            resources,
+            cancellation,
+        )?;
+        let _prepared_configs = state.prepared_configs();
+        state.basis.resource_versions = resources.reads().clone();
+        state.basis.resource_observations = resources.observations().clone();
+        let provisional_semantic = state.semantic_graph();
+        let mut nested_diagnostics = Vec::new();
+        let dependencies = self
+            .call_targets(&provisional_semantic, &mut nested_diagnostics)
+            .into_keys()
+            .collect();
+        let analysis = state.snapshot();
+        if analysis.has_blocking_errors() {
+            return Ok((
+                CallDependencyNode {
+                    abi: None,
+                    dependencies,
+                    locally_valid: false,
+                },
+                false,
+            ));
+        }
+        let interface_projection = state.interface_projection();
+        let semantic = match analysis.validated(provisional_semantic) {
+            Ok(semantic) => semantic,
+            Err(_) => {
+                return Ok((
+                    CallDependencyNode {
+                        abi: None,
+                        dependencies,
+                        locally_valid: false,
+                    },
+                    false,
+                ));
+            }
+        };
+        let abi =
+            match derive_function_abi(self.registry, &semantic, &interface_projection, &provenance)
+            {
+                Ok(Some(abi)) => abi,
+                Ok(None) | Err(_) => return Ok((CallDependencyNode::invalid(), false)),
+            };
+        Ok((
+            CallDependencyNode {
+                abi: Some(abi),
+                dependencies,
+                locally_valid: nested_diagnostics.is_empty(),
+            },
+            false,
+        ))
+    }
+
+    fn call_targets(
+        &self,
+        graph: &CompilerSemanticGraph,
+        diagnostics: &mut Vec<CompilerNodeDiagnostic>,
+    ) -> BTreeMap<GraphResourcePath, Vec<NodeId>> {
+        let mut targets = BTreeMap::<GraphResourcePath, Vec<NodeId>>::new();
         for node in graph.nodes.iter() {
-            let resolved = resolve_for_lowering(self.registry, node)?;
+            let resolved = match resolve_for_lowering(self.registry, node) {
+                Ok(resolved) => resolved,
+                Err(diagnostic) => {
+                    diagnostics.push(diagnostic);
+                    continue;
+                }
+            };
             if resolved.structural_role() != Some(StructuralNodeRole::Call) {
                 continue;
             }
@@ -748,67 +952,24 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             };
             targets
                 .entry(GraphResourcePath(target.into()))
-                .or_insert(node.node_id);
+                .or_default()
+                .push(node.node_id);
         }
+        targets
+    }
 
-        let mut abis = BTreeMap::new();
-        for (target, call_node_id) in targets {
-            cancellation.checkpoint()?;
-            let resolved = resources.resolve_function(&target).map_err(|error| {
-                CompilerDiagnostic::ResourceResolutionFailed {
-                    resource_key: error.key().as_str().into(),
-                    reason: error.reason().into(),
-                }
-                .into_node(DiagnosticLocation::Node(call_node_id))
-            })?;
-            let document = resolved.value.graph.clone();
-            let provenance = CompileProvenance {
-                project_session_id: self.project_session_id.clone(),
-                graph_path: target.clone(),
-                basis: CompilationBasis {
-                    graph_revision: document.revision,
-                    registry_fingerprint: self.registry.fingerprint().clone(),
-                    resource_versions: ResourceVersionSet::new(),
-                    resource_observations: ResourceObservationSet::new(),
-                },
-                compile_id: CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed)),
-            };
-            let mut state = AnalysisState::new(&document, target.clone(), provenance.basis.clone());
-            state.analyze(
-                self.registry,
-                &self.schema_resolvers,
-                &self.interface_resolvers,
-                resources,
-                cancellation,
-            )?;
-            state.basis.resource_versions = resources.reads().clone();
-            state.basis.resource_observations = resources.observations().clone();
-            let analysis = state.snapshot();
-            if analysis.has_blocking_errors() {
-                return Err(CompilerDiagnostic::ControlCallAbiInvalid {
-                    function_path: target.0.clone(),
-                }
-                .into_node(DiagnosticLocation::Node(call_node_id))
-                .into());
+    fn push_call_abi_invalid(
+        &self,
+        target: &GraphResourcePath,
+        sites: &[NodeId],
+        diagnostics: &mut Vec<CompilerNodeDiagnostic>,
+    ) {
+        diagnostics.extend(sites.iter().map(|&node_id| {
+            CompilerDiagnostic::ControlCallAbiInvalid {
+                function_path: target.0.clone(),
             }
-            let interface_projection = state.interface_projection();
-            let semantic = analysis.validated(state.semantic_graph()).map_err(|_| {
-                CompilerDiagnostic::ControlCallAbiInvalid {
-                    function_path: target.0.clone(),
-                }
-                .into_node(DiagnosticLocation::Node(call_node_id))
-            })?;
-            let abi =
-                derive_function_abi(self.registry, &semantic, &interface_projection, &provenance)?
-                    .ok_or_else(|| {
-                        CompilerDiagnostic::ControlCallAbiInvalid {
-                            function_path: target.0.clone(),
-                        }
-                        .into_node(DiagnosticLocation::Node(call_node_id))
-                    })?;
-            abis.insert(target, abi);
-        }
-        Ok(abis)
+            .into_node(DiagnosticLocation::Node(node_id))
+        }));
     }
 
     pub fn compile(&self, document: &GraphDocument) -> CompileResult {
@@ -818,9 +979,151 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
     }
 }
 
+#[derive(Default)]
+struct CallClosureAnalysis {
+    abis: BTreeMap<GraphResourcePath, FunctionPlanAbi>,
+    diagnostics: Vec<CompilerNodeDiagnostic>,
+}
+
+struct CallDependencyNode {
+    abi: Option<FunctionPlanAbi>,
+    dependencies: BTreeSet<GraphResourcePath>,
+    locally_valid: bool,
+}
+
+impl CallDependencyNode {
+    fn invalid() -> Self {
+        Self {
+            abi: None,
+            dependencies: BTreeSet::new(),
+            locally_valid: false,
+        }
+    }
+}
+
+fn invalid_call_targets(
+    graph: &BTreeMap<GraphResourcePath, CallDependencyNode>,
+) -> BTreeSet<GraphResourcePath> {
+    let components = strongly_connected_call_components(graph);
+    let component_by_target = components
+        .iter()
+        .enumerate()
+        .flat_map(|(index, component)| component.iter().cloned().map(move |target| (target, index)))
+        .collect::<BTreeMap<_, _>>();
+    let mut invalid_components = components
+        .iter()
+        .map(|component| {
+            component.iter().any(|target| {
+                graph
+                    .get(target)
+                    .is_none_or(|node| !node.locally_valid || node.abi.is_none())
+            })
+        })
+        .collect::<Vec<_>>();
+
+    loop {
+        let newly_invalid = graph
+            .iter()
+            .filter_map(|(target, node)| {
+                let component = component_by_target[target];
+                (!invalid_components[component]
+                    && node.dependencies.iter().any(|dependency| {
+                        component_by_target
+                            .get(dependency)
+                            .is_none_or(|dependency| invalid_components[*dependency])
+                    }))
+                .then_some(component)
+            })
+            .collect::<BTreeSet<_>>();
+        if newly_invalid.is_empty() {
+            break;
+        }
+        for component in newly_invalid {
+            invalid_components[component] = true;
+        }
+    }
+
+    components
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| invalid_components[*index])
+        .flat_map(|(_, component)| component)
+        .collect()
+}
+
+fn strongly_connected_call_components(
+    graph: &BTreeMap<GraphResourcePath, CallDependencyNode>,
+) -> Vec<Vec<GraphResourcePath>> {
+    fn visit(
+        target: &GraphResourcePath,
+        graph: &BTreeMap<GraphResourcePath, CallDependencyNode>,
+        visited: &mut BTreeSet<GraphResourcePath>,
+        order: &mut Vec<GraphResourcePath>,
+    ) {
+        if !visited.insert(target.clone()) {
+            return;
+        }
+        if let Some(node) = graph.get(target) {
+            for dependency in &node.dependencies {
+                if graph.contains_key(dependency) {
+                    visit(dependency, graph, visited, order);
+                }
+            }
+        }
+        order.push(target.clone());
+    }
+
+    fn visit_reverse(
+        target: &GraphResourcePath,
+        reverse: &BTreeMap<GraphResourcePath, BTreeSet<GraphResourcePath>>,
+        visited: &mut BTreeSet<GraphResourcePath>,
+        component: &mut Vec<GraphResourcePath>,
+    ) {
+        if !visited.insert(target.clone()) {
+            return;
+        }
+        component.push(target.clone());
+        if let Some(dependents) = reverse.get(target) {
+            for dependent in dependents {
+                visit_reverse(dependent, reverse, visited, component);
+            }
+        }
+    }
+
+    let mut order = Vec::with_capacity(graph.len());
+    let mut visited = BTreeSet::new();
+    for target in graph.keys() {
+        visit(target, graph, &mut visited, &mut order);
+    }
+    let mut reverse = graph
+        .keys()
+        .cloned()
+        .map(|target| (target, BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    for (target, node) in graph {
+        for dependency in &node.dependencies {
+            if let Some(dependents) = reverse.get_mut(dependency) {
+                dependents.insert(target.clone());
+            }
+        }
+    }
+    visited.clear();
+    let mut components = Vec::new();
+    while let Some(target) = order.pop() {
+        if visited.contains(&target) {
+            continue;
+        }
+        let mut component = Vec::new();
+        visit_reverse(&target, &reverse, &mut visited, &mut component);
+        components.push(component);
+    }
+    components
+}
+
 struct ResolvedNode<'a> {
     registry: RegistryNode<'a>,
     parameters: BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+    prepared_nominal: BTreeMap<crate::node_system::protocol::ParameterKey, PreparedNominalValue>,
     ports: BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
 }
 
@@ -916,7 +1219,8 @@ impl<'a> AnalysisState<'a> {
                 );
                 continue;
             }
-            let parameters = self.normalize_parameters(node_id, resolved.protocol, registry);
+            let (parameters, prepared_nominal) =
+                self.normalize_parameters(node_id, resolved.protocol, registry);
             if let Some(error) = track_variable_resource(&node.node_type, &parameters, resources) {
                 self.push(
                     CompilerDiagnostic::ResourceResolutionFailed {
@@ -933,6 +1237,7 @@ impl<'a> AnalysisState<'a> {
                 ResolvedNode {
                     registry: resolved,
                     parameters,
+                    prepared_nominal,
                     ports,
                 },
             );
@@ -944,7 +1249,7 @@ impl<'a> AnalysisState<'a> {
         cancellation.checkpoint()?;
         self.validate_connections();
         cancellation.checkpoint()?;
-        self.validate_input_bindings();
+        self.validate_input_bindings(registry);
         cancellation.checkpoint()?;
         self.validate_value_cycles();
         cancellation.checkpoint()?;
@@ -1337,12 +1642,24 @@ impl<'a> AnalysisState<'a> {
         node_id: NodeId,
         protocol: &NodeProtocol,
         registry: &R,
-    ) -> BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value> {
+    ) -> (
+        BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+        BTreeMap<crate::node_system::protocol::ParameterKey, PreparedNominalValue>,
+    ) {
         let supplied = &self.document.nodes[&node_id].parameters;
-        let nominal = |type_id: &TypeId, value: &serde_json::Value| {
-            registry.validate_nominal_parameter(type_id, value)
-        };
-        for issue in validate_parameter_values(protocol, supplied, &nominal) {
+        let mut values = supplied.clone();
+        for spec in protocol.parameters.parameters.iter() {
+            if !values.contains_key(&spec.key)
+                && let Some(default) = &spec.default_value
+            {
+                values.insert(spec.key.clone(), protocol_value_to_json(&default.value));
+            }
+        }
+        let validation =
+            validate_and_prepare_parameter_values(protocol, &values, |type_id, value| {
+                registry.prepare_nominal_parameter(type_id, value)
+            });
+        for issue in validation.issues {
             let diagnostic = match issue.kind {
                 ParameterIssueKind::Unknown => CompilerDiagnostic::ParameterUnknown {
                     parameter_key: issue.key.to_string().into(),
@@ -1369,22 +1686,13 @@ impl<'a> AnalysisState<'a> {
             .parameters
             .parameters
             .iter()
-            .map(|spec| (&spec.key, spec))
-            .collect::<BTreeMap<_, _>>();
-        let mut normalized = supplied
-            .iter()
-            .filter(|(key, _)| known.contains_key(key))
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect::<BTreeMap<_, _>>();
-        for spec in protocol.parameters.parameters.iter() {
-            if !normalized.contains_key(&spec.key)
-                && let Some(default) = &spec.default_value
-                && let Ok(value) = serde_json::to_value(default)
-            {
-                normalized.insert(spec.key.clone(), value);
-            }
-        }
-        normalized
+            .map(|spec| &spec.key)
+            .collect::<BTreeSet<_>>();
+        let normalized = values
+            .into_iter()
+            .filter(|(key, _)| known.contains(key))
+            .collect();
+        (normalized, validation.prepared_nominal)
     }
 
     fn resolve_ports(
@@ -1583,7 +1891,7 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn validate_input_bindings(&mut self) {
+    fn validate_input_bindings<R: CompilerRegistry>(&mut self, registry: &R) {
         let addresses: Vec<_> = self
             .nodes
             .values()
@@ -1626,6 +1934,7 @@ impl<'a> AnalysisState<'a> {
                 match crate::node_system::protocol::validate_typed_literal(
                     literal,
                     &spec.value_type,
+                    &CompilerNominalValidator(registry),
                 ) {
                     Ok(decoded) => {
                         self.decoded_literals.insert(address.clone(), decoded);
@@ -1822,11 +2131,9 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn prepared_configs<R: CompilerRegistry>(
-        &self,
-        registry: &R,
-    ) -> BTreeMap<NodeId, ValidatedNodeConfig> {
-        self.nodes
+    fn prepared_configs(&mut self) -> BTreeMap<NodeId, ValidatedNodeConfig> {
+        let attempts = self
+            .nodes
             .iter()
             .map(|(&node_id, node)| {
                 (
@@ -1834,11 +2141,31 @@ impl<'a> AnalysisState<'a> {
                     ValidatedNodeConfig::from_analysis(
                         node.registry.protocol,
                         node.parameters.clone(),
-                        |type_id, value| registry.prepare_nominal_parameter(type_id, value),
+                        &node.prepared_nominal,
                     ),
                 )
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let mut prepared = BTreeMap::new();
+        for (node_id, attempt) in attempts {
+            match attempt {
+                Ok(config) => {
+                    prepared.insert(node_id, config);
+                }
+                Err(keys) => {
+                    for key in keys {
+                        self.push(
+                            CompilerDiagnostic::ParameterInvalid {
+                                parameter_key: key.to_string().into(),
+                            },
+                            DiagnosticLocation::Parameter { node_id, key },
+                        );
+                    }
+                }
+            }
+        }
+        self.diagnostics.sort_by(compare_diagnostics);
+        prepared
     }
 
     fn snapshot(&self) -> CompilerAnalysis {
@@ -1945,7 +2272,7 @@ impl<'a> AnalysisState<'a> {
 
 enum LowerGraphFailure {
     Cancelled(CompileCancelled),
-    Diagnostic(CompilerNodeDiagnostic),
+    Internal(InternalCompilationFailure),
 }
 
 impl From<CompileCancelled> for LowerGraphFailure {
@@ -1956,12 +2283,25 @@ impl From<CompileCancelled> for LowerGraphFailure {
 
 impl From<CompilerNodeDiagnostic> for LowerGraphFailure {
     fn from(diagnostic: CompilerNodeDiagnostic) -> Self {
-        Self::Diagnostic(diagnostic)
+        let node_id = match &diagnostic.primary {
+            DiagnosticLocation::Node(node_id) => Some(*node_id),
+            DiagnosticLocation::Port(port) => Some(port.node_id),
+            DiagnosticLocation::Parameter { node_id, .. } => Some(*node_id),
+            DiagnosticLocation::Graph
+            | DiagnosticLocation::Connection(_)
+            | DiagnosticLocation::Resource(_) => None,
+        };
+        Self::Internal(InternalCompilationFailure {
+            stage: CompilationStage::Lowering,
+            code: diagnostic.code.as_str().into(),
+            node_id,
+        })
     }
 }
 
 #[derive(Clone)]
 struct PendingOperation {
+    stable_id: OperationStableId,
     node_id: NodeId,
     node_type_id: NodeTypeId,
     has_control_or_effect_ports: bool,
@@ -1971,6 +2311,11 @@ struct PendingOperation {
     output_ports: Box<[PortAddress]>,
     outputs: Box<[PlannedOutput]>,
     parameters: CompiledParameterHandle,
+    resource_dependencies: Box<[ResourceKey]>,
+    cache_policy: CachePolicy,
+    semantics_version: ExecutionSemanticsVersion,
+    workload: WorkloadClass,
+    retry: PlannedRetry,
     evaluation: EvaluationPolicy,
     purity: Purity,
     effects: EffectSemantics,
@@ -1988,6 +2333,94 @@ struct PendingRelationalFragment {
     backend: RelationalBackendId,
     fragment: RelationalFragment,
     inputs: BTreeMap<PortAddress, crate::node_system::plan::RelationalOperatorIndex>,
+}
+
+pub(crate) fn effective_cache_policy(
+    requested: CachePolicy,
+    determinism: Determinism,
+    purity: Purity,
+    effects: EffectSemantics,
+) -> CachePolicy {
+    if determinism == Determinism::Deterministic
+        && purity == Purity::Pure
+        && effects == EffectSemantics::None
+    {
+        requested
+    } else {
+        CachePolicy::Disabled
+    }
+}
+
+fn fragment_metadata_identity(metadata: &FragmentMetadata) -> serde_json::Value {
+    serde_json::json!({
+        "effect": &metadata.effect,
+        "resources": &metadata.resources,
+        "results": &metadata.results.iter().map(|result| serde_json::json!({
+            "name": &result.name,
+            "output": &result.output,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn lowered_kernel_identity(kernel: &LoweredKernel) -> serde_json::Value {
+    match kernel {
+        LoweredKernel::Native(handle) => serde_json::json!({
+            "kind": "native",
+            "handle": handle,
+        }),
+        LoweredKernel::Scalar(fragment) => serde_json::json!({
+            "kind": "scalar",
+            "handle": &fragment.kernel,
+            "metadata": fragment_metadata_identity(&fragment.metadata),
+        }),
+        LoweredKernel::Kernel(fragment) => serde_json::json!({
+            "kind": "kernel",
+            "handle": &fragment.kernel,
+            "metadata": fragment_metadata_identity(&fragment.metadata),
+        }),
+        LoweredKernel::Relational(fragment) => serde_json::json!({
+            "kind": "relational",
+            "backend": &fragment.backend,
+            "fragment": {
+                "id": &fragment.fragment.id,
+                "operators": &fragment.fragment.operators,
+                "root": fragment.fragment.root,
+            },
+            "inputs": fragment.inputs.iter().map(|input| serde_json::json!({
+                "port": &input.port,
+                "operator": input.operator,
+            })).collect::<Vec<_>>(),
+            "metadata": fragment_metadata_identity(&fragment.metadata),
+        }),
+    }
+}
+
+fn lowering_identity_failure(node_id: NodeId) -> LowerGraphFailure {
+    LowerGraphFailure::Internal(InternalCompilationFailure {
+        stage: CompilationStage::Lowering,
+        code: "compiler.lowering.execution_identity".into(),
+        node_id: Some(node_id),
+    })
+}
+
+fn effective_workload_class(
+    kernel: &PendingKernel,
+    purity: Purity,
+    effects: EffectSemantics,
+    resources: &BTreeMap<ResourceId, CompiledResourceRequirement>,
+) -> WorkloadClass {
+    if purity == Purity::Effectful
+        || effects != EffectSemantics::None
+        || resources
+            .values()
+            .any(|requirement| requirement.access == ResourceAccess::Exclusive)
+    {
+        WorkloadClass::Exclusive
+    } else if matches!(kernel, PendingKernel::Relational) || !resources.is_empty() {
+        WorkloadClass::Io
+    } else {
+        WorkloadClass::Cpu
+    }
 }
 
 fn structural_role_name(role: StructuralNodeRole) -> &'static str {
@@ -2039,6 +2472,32 @@ fn track_variable_resource(
         .err()
 }
 
+fn protocol_value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(value) => serde_json::Value::Bool(*value),
+        Value::Integer(value) => serde_json::Value::Number((*value).into()),
+        Value::Unsigned(value) => serde_json::Value::Number((*value).into()),
+        Value::Decimal(value) => serde_json::Value::String(value.as_str().to_owned()),
+        Value::String(value) => serde_json::Value::String(value.as_ref().to_owned()),
+        Value::Bytes(value) => serde_json::Value::Array(
+            value
+                .iter()
+                .map(|value| serde_json::Value::Number(u64::from(*value).into()))
+                .collect(),
+        ),
+        Value::List(values) => {
+            serde_json::Value::Array(values.iter().map(protocol_value_to_json).collect())
+        }
+        Value::Object(values) => serde_json::Value::Object(
+            values
+                .iter()
+                .map(|(key, value)| (key.to_string(), protocol_value_to_json(value)))
+                .collect(),
+        ),
+    }
+}
+
 fn function_target(
     parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
 ) -> Option<&str> {
@@ -2083,6 +2542,7 @@ fn derive_function_abi<R: CompilerRegistry>(
     let (_, values) = allocate_port_values(registry, graph)?;
     let mut parameters = BTreeMap::new();
     let mut results = BTreeMap::new();
+    let mut result_productions = BTreeMap::new();
     for node in graph.nodes.iter() {
         let resolved = resolve_for_lowering(registry, node)?;
         let destination = match resolved.structural_role() {
@@ -2113,6 +2573,28 @@ fn derive_function_abi<R: CompilerRegistry>(
                 .into_node(DiagnosticLocation::Port(port.address.clone())));
             }
             let value = values[&port.address];
+            if resolved.structural_role() == Some(StructuralNodeRole::FunctionReturn) {
+                let production = graph
+                    .dependencies
+                    .iter()
+                    .find_map(|dependency| match dependency {
+                        SemanticDependency::Value(edge) if edge.target == port.address => {
+                            let source_node = graph
+                                .nodes
+                                .iter()
+                                .find(|candidate| candidate.node_id == edge.source.node_id)?;
+                            let source = resolve_for_lowering(registry, source_node).ok()?;
+                            Some(
+                                protocol_port(source.protocol, &edge.source)
+                                    .production
+                                    .unwrap_or(OutputProduction::FullyMaterialized),
+                            )
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                result_productions.insert(parameter.clone(), production);
+            }
             if destination.insert(parameter.clone(), value).is_some() {
                 return Err(CompilerDiagnostic::FunctionAbiMemberDuplicate {
                     field_name: parameter.0.clone(),
@@ -2125,6 +2607,7 @@ fn derive_function_abi<R: CompilerRegistry>(
         provenance: provenance.clone(),
         parameters,
         results,
+        result_productions,
     }))
 }
 
@@ -2165,7 +2648,11 @@ fn lower_graph<R: CompilerRegistry>(
                                 role,
                                 StructuralNodeRole::EventBegin | StructuralNodeRole::FunctionEntry
                             ) {
-                                value_sources.insert(PlanValueSource::ExternalInput(value));
+                                value_sources.insert(PlanValueSource::ExternalInput(
+                                    value,
+                                    spec.production
+                                        .unwrap_or(OutputProduction::FullyMaterialized),
+                                ));
                             }
                         }
                     }
@@ -2205,6 +2692,12 @@ fn lower_graph<R: CompilerRegistry>(
         }
         let implementation = resolved.implementation().ok_or_else(|| {
             CompilerDiagnostic::LoweringImplementationMissing {
+                node_type: node.node_type_id.to_string().into(),
+            }
+            .into_node(DiagnosticLocation::Node(node.node_id))
+        })?;
+        let prepared_config = prepared_configs.get(&node.node_id).ok_or_else(|| {
+            CompilerDiagnostic::LoweringInternalInvariant {
                 node_type: node.node_type_id.to_string().into(),
             }
             .into_node(DiagnosticLocation::Node(node.node_id))
@@ -2259,7 +2752,7 @@ fn lower_graph<R: CompilerRegistry>(
             cancellation,
             node_id: node.node_id,
             protocol: resolved.protocol,
-            parameters: &prepared_configs[&node.node_id],
+            parameters: prepared_config,
             inputs: &inputs,
             outputs: &outputs,
         };
@@ -2350,10 +2843,14 @@ fn lower_graph<R: CompilerRegistry>(
             if parameter.editor != ParameterEditorSpec::Resource {
                 continue;
             }
-            let Some(resource) = prepared_configs[&node.node_id]
-                .resource(&parameter.key)
-                .cloned()
-            else {
+            let Some(resource) = prepared_config.resource(&parameter.key).cloned() else {
+                if node.normalized_parameters.contains_key(&parameter.key) {
+                    return Err(CompilerDiagnostic::LoweringInternalInvariant {
+                        node_type: node.node_type_id.to_string().into(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id))
+                    .into());
+                }
                 continue;
             };
             let kind = match parameter.key.as_str() {
@@ -2393,6 +2890,36 @@ fn lower_graph<R: CompilerRegistry>(
         for (address, _) in &outputs {
             operation_outputs.insert(address.clone(), operation);
         }
+        let stable_id = OperationStableId::from_digest(
+            hash_canonical(
+                "yssbi.operation-stable-id.node.v2",
+                &serde_json::json!({
+                    "graphPath": &provenance.graph_path,
+                    "nodeId": node.node_id,
+                }),
+            )
+            .map_err(|_| lowering_identity_failure(node.node_id))?,
+        );
+        let semantics_version = ExecutionSemanticsVersion::from_bytes(
+            hash_canonical(
+                "yssbi.execution-semantics.native.v2",
+                &serde_json::json!({
+                    "schemaVersion": EXECUTION_SEMANTICS_SCHEMA_VERSION,
+                    "registryFingerprint": &provenance.basis.registry_fingerprint,
+                    "protocolFingerprint": &node.protocol_fingerprint,
+                    "nodeTypeId": &node.node_type_id,
+                    "execution": &resolved.protocol.execution,
+                    "kernel": lowered_kernel_identity(&lowered.kernel),
+                    "compiledParameters": &lowered.parameters,
+                    "normalizedParameters": &node.normalized_parameters,
+                    "inputPorts": &inputs,
+                    "inputs": &planned_inputs,
+                    "outputPorts": &outputs,
+                    "outputs": &planned_outputs,
+                }),
+            )
+            .map_err(|_| lowering_identity_failure(node.node_id))?,
+        );
         let kernel = match lowered.kernel {
             LoweredKernel::Native(handle) => PendingKernel::Native(handle),
             LoweredKernel::Scalar(fragment) => PendingKernel::Native(fragment.kernel),
@@ -2419,7 +2946,26 @@ fn lower_graph<R: CompilerRegistry>(
                 PendingKernel::Relational
             }
         };
+        let execution = resolved.protocol.execution;
+        let cache_policy = effective_cache_policy(
+            execution.cache,
+            execution.determinism,
+            execution.purity,
+            execution.effects,
+        );
+        let workload = effective_workload_class(
+            &kernel,
+            execution.purity,
+            execution.effects,
+            &owned_resources,
+        );
+        let resource_dependencies = owned_resources
+            .keys()
+            .map(|resource| ResourceKey::new(resource.as_str()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         pending_operations.push(PendingOperation {
+            stable_id,
             node_id: node.node_id,
             node_type_id: node.node_type_id.clone(),
             has_control_or_effect_ports: resolved
@@ -2442,9 +2988,14 @@ fn lower_graph<R: CompilerRegistry>(
                 .into_boxed_slice(),
             outputs: planned_outputs.into_boxed_slice(),
             parameters: lowered.parameters,
-            evaluation: resolved.protocol.execution.evaluation,
-            purity: resolved.protocol.execution.purity,
-            effects: resolved.protocol.execution.effects,
+            resource_dependencies,
+            cache_policy,
+            semantics_version,
+            workload,
+            retry: PlannedRetry::default(),
+            evaluation: execution.evaluation,
+            purity: execution.purity,
+            effects: execution.effects,
             resources: owned_resources
                 .into_values()
                 .collect::<Vec<_>>()
@@ -2591,7 +3142,12 @@ fn lower_graph<R: CompilerRegistry>(
                     node_id: node.node_id,
                     role: resolved.structural_role(),
                     protocol: resolved.protocol,
-                    parameters: &prepared_configs[&node.node_id],
+                    parameters: prepared_configs.get(&node.node_id).ok_or_else(|| {
+                        CompilerDiagnostic::LoweringInternalInvariant {
+                            node_type: node.node_type_id.to_string().into(),
+                        }
+                        .into_node(DiagnosticLocation::Node(node.node_id))
+                    })?,
                     ports: node
                         .ports
                         .iter()
@@ -2647,7 +3203,21 @@ fn lower_graph<R: CompilerRegistry>(
             )
         })?;
     deduplicate_region_operations(&mut root_region);
-    collect_control_value_sources(&root_region, &mut value_sources);
+    let mut production_by_value = production_by_port
+        .iter()
+        .map(|(port, production)| (port_values[port], *production))
+        .collect::<BTreeMap<_, _>>();
+    for dependency in &value_dependencies {
+        if let Some(production) = production_by_value.get(&dependency.source).copied() {
+            production_by_value.insert(dependency.destination, production);
+        }
+    }
+    collect_control_value_sources(
+        &root_region,
+        &mut value_sources,
+        &mut production_by_value,
+        function_abis,
+    )?;
     debug_assert_eq!(provenance.basis, graph.basis);
     let operations = pending_operations
         .into_iter()
@@ -2666,6 +3236,7 @@ fn lower_graph<R: CompilerRegistry>(
                 }
             };
             IntermediateOperation {
+                stable_id: pending.stable_id,
                 source_node_id: pending.node_id,
                 source_node_type_id: pending.node_type_id,
                 has_control_or_effect_ports: pending.has_control_or_effect_ports,
@@ -2675,6 +3246,11 @@ fn lower_graph<R: CompilerRegistry>(
                 output_ports: pending.output_ports,
                 outputs: pending.outputs,
                 params: pending.parameters,
+                resource_dependencies: pending.resource_dependencies,
+                cache_policy: pending.cache_policy,
+                semantics_version: pending.semantics_version,
+                workload: pending.workload,
+                retry: pending.retry,
                 evaluation: pending.evaluation,
                 purity: pending.purity,
                 effects: pending.effects,
@@ -2742,12 +3318,14 @@ fn deduplicate_region_operations(region: &mut StructuredControlRegion) {
 fn collect_control_value_sources(
     region: &StructuredControlRegion,
     sources: &mut BTreeSet<PlanValueSource>,
-) {
+    productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
+) -> Result<(), LowerGraphFailure> {
     match region {
         StructuredControlRegion::Sequence(steps) => {
             for step in steps {
                 if let crate::node_system::plan::ControlStep::Region(region) = step {
-                    collect_control_value_sources(region, sources);
+                    collect_control_value_sources(region, sources, productions, function_abis)?;
                 }
             }
         }
@@ -2757,29 +3335,80 @@ fn collect_control_value_sources(
             results,
             ..
         } => {
-            sources.extend(
-                results
-                    .iter()
-                    .map(|binding| PlanValueSource::ControlProduced(binding.destination)),
-            );
-            collect_control_value_sources(then_region, sources);
-            collect_control_value_sources(else_region, sources);
+            collect_control_value_sources(then_region, sources, productions, function_abis)?;
+            collect_control_value_sources(else_region, sources, productions, function_abis)?;
+            for binding in results {
+                let then_production = productions
+                    .get(&binding.then_source)
+                    .copied()
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                let else_production = productions
+                    .get(&binding.else_source)
+                    .copied()
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                if then_production != else_production {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
+                productions.insert(binding.destination, then_production);
+                sources.insert(PlanValueSource::ControlProduced(
+                    binding.destination,
+                    then_production,
+                ));
+            }
         }
         StructuredControlRegion::Loop { body, carried, .. } => {
+            collect_control_value_sources(body, sources, productions, function_abis)?;
             for binding in carried {
-                sources.insert(PlanValueSource::ControlProduced(binding.body_input));
-                sources.insert(PlanValueSource::ControlProduced(binding.result));
+                let initial = productions
+                    .get(&binding.initial_source)
+                    .copied()
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                let next = productions
+                    .get(&binding.next_source)
+                    .copied()
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                if initial != next {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
+                productions.insert(binding.body_input, initial);
+                productions.insert(binding.result, initial);
+                sources.insert(PlanValueSource::ControlProduced(
+                    binding.body_input,
+                    initial,
+                ));
+                sources.insert(PlanValueSource::ControlProduced(binding.result, initial));
             }
-            collect_control_value_sources(body, sources);
         }
-        StructuredControlRegion::Call { results, .. } => {
-            sources.extend(
-                results
+        StructuredControlRegion::Call {
+            target, results, ..
+        } => {
+            let path = GraphResourcePath(target.as_str().into());
+            let abi = function_abis.get(&path).ok_or_else(|| {
+                CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+            })?;
+            for binding in results {
+                let production = abi
+                    .results
                     .iter()
-                    .map(|binding| PlanValueSource::ControlProduced(binding.caller_destination)),
-            );
+                    .find_map(|(parameter, value)| {
+                        (*value == binding.callee_source)
+                            .then(|| abi.result_productions.get(parameter).copied())
+                            .flatten()
+                    })
+                    .unwrap_or(OutputProduction::FullyMaterialized);
+                productions.insert(binding.caller_destination, production);
+                sources.insert(PlanValueSource::ControlProduced(
+                    binding.caller_destination,
+                    production,
+                ));
+            }
         }
     }
+    Ok(())
 }
 
 fn resolve_for_lowering<'a, R: CompilerRegistry>(

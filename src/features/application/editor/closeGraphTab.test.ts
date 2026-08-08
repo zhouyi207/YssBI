@@ -36,6 +36,7 @@ function installGraphRevision(graphPath: string, graphRevision: number): void {
         sourceRevision: graphRevision,
         requestGeneration: 1,
         diagnostics: [],
+        outcome: { type: 'success' },
         hasBlockingDiagnostics: false,
         nodes: {},
         pins: {},

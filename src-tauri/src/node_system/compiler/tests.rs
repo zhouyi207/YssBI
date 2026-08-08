@@ -10,11 +10,13 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::{
     BranchResultBinding, CallArgumentBinding, CallResultBinding, CompiledParameterHandle,
-    CompiledResourceRequirement, ControlStep, ExecutionDemand, FunctionPlanHandle, GraphOutputRef,
-    KernelHandle, LoopCarriedBinding, MaterializationBridge, PlanResult, PlanValueSource,
-    RelationalBackendId, RelationalBridgeInput, RelationalExpression, RelationalFragmentId,
-    RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint,
-    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueRef,
+    CompiledResourceRequirement, ControlStep, ExecutionDemand, ExecutionPlan,
+    ExecutionSemanticsVersion, FunctionPlanHandle, GraphOutputRef, KernelHandle,
+    LoopCarriedBinding, OperationIndex, PlanResult, PlanValidationError, PlanValueSource,
+    PlannedAdapter, PlannedKernel, PlannedOperation, PlannedPublication, PlannedRetry,
+    RelationalBackendId, RelationalExpression, RelationalFragmentId, RelationalLiteral,
+    RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint, ResourceAccess,
+    ResourceId, ResourceKind, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -299,11 +301,16 @@ fn corrupt_registry_snapshot_produces_missing_lowering_blocking_diagnostic() {
     let result = GraphCompiler::new(&registry, &Resources)
         .compile(&document(NodeTypeId::new("yssbi.test.constant").unwrap()));
 
+    assert!(result.semantic.is_some());
     assert!(result.plan.is_none());
-    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code.as_str() == "compiler.lowering.implementation_missing"
-            && diagnostic.severity.is_blocking()
-    }));
+    assert!(result.analysis.diagnostics.is_empty());
+    assert!(matches!(
+        result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.lowering.implementation_missing"
+                && failure.node_id == Some(node_id(1))
+    ));
 }
 
 #[test]
@@ -467,6 +474,98 @@ fn lowerability_malformed_persisted_literal_blocks_at_port_in_analysis() {
 }
 
 #[test]
+fn lowerability_legal_literal_wire_with_wrong_port_type_blocks_at_exact_port() {
+    let protocol = test_protocol(
+        "literal_type_mismatch",
+        vec![data_port(
+            "value",
+            PortDirection::Input,
+            TypeExpr::Concrete(type_id("core.int64")),
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let node_type = protocol.type_id.clone();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let registry =
+        TestRegistry::new(vec![protocol]).with_lowerer(&node_type, CountingLowerer(calls.clone()));
+    let address = PortAddress::declared(node_id(1), key("value"));
+    let mut graph = graph_with_nodes(&[(1, "literal_type_mismatch")]);
+    graph.input_states.insert(
+        address.clone(),
+        InputState {
+            literal_override: Some(
+                serde_json::to_value(crate::node_system::protocol::TypedValue {
+                    value_type: TypeExpr::Concrete(type_id("core.string")),
+                    value: Value::String("legal-string-wire".into()),
+                })
+                .unwrap(),
+            ),
+        },
+    );
+    let trace = RecordingTrace::default();
+
+    let result = GraphCompiler::new(&registry, &Resources)
+        .with_observability(ProjectSessionId::new("literal-mismatch"), &trace)
+        .compile(&graph);
+
+    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.input.literal_invalid"
+            && diagnostic.primary == DiagnosticLocation::Port(address.clone())
+    }));
+}
+
+#[test]
+fn lowerability_nested_literal_mismatch_blocks_at_exact_port_before_lowering() {
+    let series = TypeExpr::Applied {
+        constructor: TypeConstructorId::new("core.data_series").unwrap(),
+        arguments: vec![TypeExpr::Concrete(type_id("core.int64"))],
+    };
+    let protocol = test_protocol(
+        "nested_literal_mismatch",
+        vec![data_port(
+            "value",
+            PortDirection::Input,
+            series.clone(),
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    let node_type = protocol.type_id.clone();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let registry =
+        TestRegistry::new(vec![protocol]).with_lowerer(&node_type, CountingLowerer(calls.clone()));
+    let address = PortAddress::declared(node_id(1), key("value"));
+    let mut graph = graph_with_nodes(&[(1, "nested_literal_mismatch")]);
+    graph.input_states.insert(
+        address.clone(),
+        InputState {
+            literal_override: Some(
+                serde_json::to_value(crate::node_system::protocol::TypedValue {
+                    value_type: series,
+                    value: Value::List(vec![Value::Integer(1), Value::String("wrong".into())]),
+                })
+                .unwrap(),
+            ),
+        },
+    );
+    let trace = RecordingTrace::default();
+
+    let result = GraphCompiler::new(&registry, &Resources)
+        .with_observability(ProjectSessionId::new("nested-literal-mismatch"), &trace)
+        .compile(&graph);
+
+    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.input.literal_invalid"
+            && diagnostic.primary == DiagnosticLocation::Port(address.clone())
+    }));
+}
+
+#[test]
 fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
     struct FunctionResources {
         path: GraphResourcePath,
@@ -566,6 +665,417 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
 }
 
 #[test]
+fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
+    struct FunctionResources {
+        functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+        graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+        versions: crate::node_system::analysis::ResourceVersionSet,
+    }
+
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            self.versions.clone()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            self.functions.get(path)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            self.graphs.get(path)
+        }
+    }
+
+    let registry = std::sync::Arc::unwrap_or_clone(
+        crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry,
+    );
+    let outer_path = GraphResourcePath("functions/outer".into());
+    let inner_path = GraphResourcePath("functions/inner".into());
+    let signature = FunctionDocument::new(FunctionSignature {
+        parameters: Vec::new(),
+        return_type: None,
+    });
+    let mut outer = builtin_graph_with_nodes(&[
+        (20, "yssbi.project.function.entry"),
+        (21, "yssbi.project.function.call"),
+        (22, "yssbi.project.function.return"),
+    ]);
+    set_parameters(
+        &mut outer,
+        20,
+        &[("function", serde_json::json!(outer_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut outer,
+        21,
+        &[("target", serde_json::json!(inner_path.0.as_ref()))],
+    );
+    set_parameters(
+        &mut outer,
+        22,
+        &[("function", serde_json::json!(outer_path.0.as_ref()))],
+    );
+    connect(&mut outer, 100, 20, "then", 21, "enter");
+    connect(&mut outer, 101, 21, "then", 22, "enter");
+
+    let versions = BTreeMap::from([
+        (
+            ResourceKey::new(outer_path.0.as_ref()),
+            ResourceVersion::new("outer-v1"),
+        ),
+        (
+            ResourceKey::new(inner_path.0.as_ref()),
+            ResourceVersion::new("inner-v1"),
+        ),
+    ]);
+    let resources = FunctionResources {
+        functions: BTreeMap::from([
+            (outer_path.clone(), signature.clone()),
+            (inner_path.clone(), signature),
+        ]),
+        graphs: BTreeMap::from([
+            (outer_path.clone(), outer),
+            (
+                inner_path.clone(),
+                builtin_graph_with_nodes(&[(30, "yssbi.test.missing")]),
+            ),
+        ]),
+        versions: versions.clone(),
+    };
+    let mut caller = builtin_graph_with_nodes(&[(1, "yssbi.project.function.call")]);
+    set_parameters(
+        &mut caller,
+        1,
+        &[("target", serde_json::json!(outer_path.0.as_ref()))],
+    );
+    let trace = RecordingTrace::default();
+    let calls = AtomicUsize::new(0);
+
+    let result = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .with_observability(ProjectSessionId::new("nested-call"), &trace)
+    .compile(&caller);
+
+    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert_eq!(result.analysis.basis.resource_versions, versions);
+    assert!(result.analysis.basis.resource_observations.is_empty());
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.control.call.abi_invalid"
+            && diagnostic.primary == DiagnosticLocation::Node(node_id(1))
+    }));
+    assert!(result.analysis.diagnostics.iter().all(|diagnostic| {
+        matches!(diagnostic.primary, DiagnosticLocation::Node(id) if id == node_id(1))
+    }));
+}
+
+#[test]
+fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
+    struct FunctionResources {
+        functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+        graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+        versions: crate::node_system::analysis::ResourceVersionSet,
+    }
+
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            self.versions.clone()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            self.functions.get(path)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            self.graphs.get(path)
+        }
+    }
+
+    fn function_graph(
+        own_path: &GraphResourcePath,
+        calls: &[(u128, &GraphResourcePath)],
+        locally_invalid: bool,
+    ) -> GraphDocument {
+        let mut nodes = vec![(20, "yssbi.project.function.entry")];
+        nodes.extend(
+            calls
+                .iter()
+                .map(|(id, _)| (*id, "yssbi.project.function.call")),
+        );
+        nodes.push((30, "yssbi.project.function.return"));
+        if locally_invalid {
+            nodes.push((40, "yssbi.test.missing"));
+        }
+        let mut graph = builtin_graph_with_nodes(&nodes);
+        set_parameters(
+            &mut graph,
+            20,
+            &[("function", serde_json::json!(own_path.0.as_ref()))],
+        );
+        set_parameters(
+            &mut graph,
+            30,
+            &[("function", serde_json::json!(own_path.0.as_ref()))],
+        );
+        let mut previous = 20;
+        for (index, (id, target)) in calls.iter().enumerate() {
+            set_parameters(
+                &mut graph,
+                *id,
+                &[("target", serde_json::json!(target.0.as_ref()))],
+            );
+            connect(
+                &mut graph,
+                100 + index as u128,
+                previous,
+                "then",
+                *id,
+                "enter",
+            );
+            previous = *id;
+        }
+        connect(&mut graph, 199, previous, "then", 30, "enter");
+        graph
+    }
+
+    let registry = std::sync::Arc::unwrap_or_clone(
+        crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry,
+    );
+    let path_a = GraphResourcePath("functions/local-invalid-a".into());
+    let path_b = GraphResourcePath("functions/present-b".into());
+    let path_c = GraphResourcePath("functions/missing-c".into());
+    let path_d = GraphResourcePath("functions/transitive-d".into());
+    let signature = FunctionDocument::new(FunctionSignature {
+        parameters: Vec::new(),
+        return_type: None,
+    });
+    let versions = BTreeMap::from([
+        (
+            ResourceKey::new(path_a.0.as_ref()),
+            ResourceVersion::new("a-v1"),
+        ),
+        (
+            ResourceKey::new(path_b.0.as_ref()),
+            ResourceVersion::new("b-v1"),
+        ),
+        (
+            ResourceKey::new(path_d.0.as_ref()),
+            ResourceVersion::new("d-v1"),
+        ),
+    ]);
+    let resources = FunctionResources {
+        functions: BTreeMap::from([
+            (path_a.clone(), signature.clone()),
+            (path_b.clone(), signature.clone()),
+            (path_d.clone(), signature),
+        ]),
+        graphs: BTreeMap::from([
+            (
+                path_a.clone(),
+                function_graph(&path_a, &[(21, &path_b), (22, &path_c)], true),
+            ),
+            (
+                path_b.clone(),
+                function_graph(&path_b, &[(23, &path_d)], false),
+            ),
+            (path_d.clone(), function_graph(&path_d, &[], false)),
+        ]),
+        versions: versions.clone(),
+    };
+    let mut caller = builtin_graph_with_nodes(&[(1, "yssbi.project.function.call")]);
+    set_parameters(
+        &mut caller,
+        1,
+        &[("target", serde_json::json!(path_a.0.as_ref()))],
+    );
+
+    let result = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(&caller);
+
+    assert_eq!(result.analysis.basis.resource_versions, versions);
+    assert_eq!(
+        result
+            .analysis
+            .basis
+            .resource_observations
+            .keys()
+            .map(ResourceKey::as_str)
+            .collect::<Vec<_>>(),
+        vec![path_c.0.as_ref()],
+    );
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.control.call.abi_invalid"
+            && diagnostic.primary == DiagnosticLocation::Node(node_id(1))
+    }));
+    assert!(result.analysis.diagnostics.iter().all(|diagnostic| {
+        matches!(diagnostic.primary, DiagnosticLocation::Node(id) if id == node_id(1))
+    }));
+}
+
+#[test]
+fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
+    struct FunctionResources {
+        functions: BTreeMap<GraphResourcePath, FunctionDocument>,
+        graphs: BTreeMap<GraphResourcePath, GraphDocument>,
+        versions: crate::node_system::analysis::ResourceVersionSet,
+    }
+
+    impl ResourceSnapshot for FunctionResources {
+        fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+            self.versions.clone()
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            self.functions.get(path)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            self.graphs.get(path)
+        }
+    }
+
+    fn function_with_calls(
+        own_path: &GraphResourcePath,
+        calls: &[(u128, &GraphResourcePath)],
+    ) -> GraphDocument {
+        let mut nodes = vec![(20, "yssbi.project.function.entry")];
+        nodes.extend(
+            calls
+                .iter()
+                .map(|(id, _)| (*id, "yssbi.project.function.call")),
+        );
+        nodes.push((30, "yssbi.project.function.return"));
+        let mut graph = builtin_graph_with_nodes(&nodes);
+        set_parameters(
+            &mut graph,
+            20,
+            &[("function", serde_json::json!(own_path.0.as_ref()))],
+        );
+        set_parameters(
+            &mut graph,
+            30,
+            &[("function", serde_json::json!(own_path.0.as_ref()))],
+        );
+        let mut previous = 20;
+        for (index, (id, target)) in calls.iter().enumerate() {
+            set_parameters(
+                &mut graph,
+                *id,
+                &[("target", serde_json::json!(target.0.as_ref()))],
+            );
+            connect(
+                &mut graph,
+                100 + index as u128,
+                previous,
+                "then",
+                *id,
+                "enter",
+            );
+            previous = *id;
+        }
+        connect(&mut graph, 199, previous, "then", 30, "enter");
+        graph
+    }
+
+    let registry = std::sync::Arc::unwrap_or_clone(
+        crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry,
+    );
+    let path_a = GraphResourcePath("functions/cycle-a".into());
+    let path_b = GraphResourcePath("functions/cycle-b".into());
+    let blocking_path = GraphResourcePath("functions/cycle-z-blocking".into());
+    let signature = FunctionDocument::new(FunctionSignature {
+        parameters: Vec::new(),
+        return_type: None,
+    });
+    let versions = [
+        (&path_a, "a-v1"),
+        (&path_b, "b-v1"),
+        (&blocking_path, "c-v1"),
+    ]
+    .into_iter()
+    .map(|(path, version)| {
+        (
+            ResourceKey::new(path.0.as_ref()),
+            ResourceVersion::new(version),
+        )
+    })
+    .collect();
+    let resources = FunctionResources {
+        functions: BTreeMap::from([
+            (path_a.clone(), signature.clone()),
+            (path_b.clone(), signature.clone()),
+            (blocking_path.clone(), signature),
+        ]),
+        graphs: BTreeMap::from([
+            (
+                path_a.clone(),
+                function_with_calls(&path_a, &[(21, &path_b), (22, &blocking_path)]),
+            ),
+            (
+                path_b.clone(),
+                function_with_calls(&path_b, &[(23, &path_a)]),
+            ),
+            (
+                blocking_path.clone(),
+                builtin_graph_with_nodes(&[(40, "yssbi.test.missing")]),
+            ),
+        ]),
+        versions,
+    };
+    let mut caller = builtin_graph_with_nodes(&[
+        (1, "yssbi.project.function.call"),
+        (2, "yssbi.project.function.call"),
+        (3, "yssbi.project.function.call"),
+        (4, "yssbi.project.function.call"),
+    ]);
+    for (id, target) in [(1, &path_a), (2, &path_a), (3, &path_b), (4, &path_b)] {
+        set_parameters(
+            &mut caller,
+            id,
+            &[("target", serde_json::json!(target.0.as_ref()))],
+        );
+    }
+
+    let result = GraphCompiler::with_interface_resolvers(
+        &registry,
+        &resources,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(&caller);
+
+    let invalid_sites = result
+        .analysis
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == "compiler.control.call.abi_invalid")
+        .filter_map(|diagnostic| match diagnostic.primary {
+            DiagnosticLocation::Node(id) => Some(id),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        invalid_sites,
+        BTreeSet::from([node_id(1), node_id(2), node_id(3), node_id(4)])
+    );
+    assert_eq!(result.analysis.basis.resource_versions, resources.versions);
+    assert!(result.analysis.basis.resource_observations.is_empty());
+    assert!(result.semantic.is_none());
+    assert!(result.plan.is_none());
+}
+
+#[test]
 fn unknown_node_returns_analysis_without_plan() {
     let registry = registry();
     let result = GraphCompiler::new(&registry, &Resources)
@@ -633,6 +1143,7 @@ struct TestRegistry {
     type_classes: BTreeMap<TypeId, BTreeSet<TypeClassId>>,
     constructor_arities: BTreeMap<TypeConstructorId, usize>,
     constructor_classes: BTreeMap<TypeConstructorId, BTreeSet<TypeClassId>>,
+    nominal_registry: Option<Arc<NodeRegistry>>,
 }
 
 impl TestRegistry {
@@ -654,6 +1165,7 @@ impl TestRegistry {
             type_classes: BTreeMap::new(),
             constructor_arities: BTreeMap::new(),
             constructor_classes: BTreeMap::new(),
+            nominal_registry: None,
         }
     }
 
@@ -685,6 +1197,11 @@ impl TestRegistry {
     fn with_lowerer(mut self, node_type: &NodeTypeId, lowerer: impl NodeLowerer + 'static) -> Self {
         self.nodes.get_mut(node_type).expect("test node protocol").1 =
             NodeImplementation::new(lowerer);
+        self
+    }
+
+    fn with_nominal_registry(mut self, registry: Arc<NodeRegistry>) -> Self {
+        self.nominal_registry = Some(registry);
         self
     }
 }
@@ -735,6 +1252,26 @@ impl CompilerRegistry for TestRegistry {
             ),
             behavior,
         })
+    }
+
+    fn validate_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<(), String>> {
+        self.nominal_registry
+            .as_ref()?
+            .validate_nominal_parameter(type_id, value)
+    }
+
+    fn prepare_nominal_parameter(
+        &self,
+        type_id: &TypeId,
+        value: &serde_json::Value,
+    ) -> Option<Result<crate::node_system::registry::PreparedNominalValue, String>> {
+        self.nominal_registry
+            .as_ref()?
+            .prepare_nominal_parameter(type_id, value)
     }
 }
 
@@ -839,6 +1376,170 @@ fn test_protocol(
         },
         scope: NodeScope::Any,
         managed_role: None,
+    }
+}
+
+#[test]
+fn effective_cache_policy_disables_every_effect_semantics_independently() {
+    for effects in [EffectSemantics::Ordered, EffectSemantics::Exclusive] {
+        assert_eq!(
+            super::pipeline::effective_cache_policy(
+                CachePolicy::PerRun,
+                Determinism::Deterministic,
+                Purity::Pure,
+                effects,
+            ),
+            CachePolicy::Disabled
+        );
+    }
+}
+
+#[test]
+fn operation_stable_ids_include_canonical_graph_identity() {
+    let protocol = test_protocol("stable_graph_identity", vec![], vec![], vec![]);
+    let registry = TestRegistry::new(vec![protocol]);
+    let graph = graph_with_nodes(&[(7, "stable_graph_identity")]);
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let compile = |path: &str| {
+        compiler
+            .compile_snapshot(
+                &compiler.snapshot(GraphResourcePath(path.into()), &graph),
+                &CompileCancellationToken::new(),
+            )
+            .unwrap()
+            .plan
+            .unwrap()
+            .operations[0]
+            .stable_id
+            .clone()
+    };
+
+    assert_ne!(compile("events/first"), compile("events/second"));
+}
+
+#[test]
+fn execution_semantics_version_is_sensitive_to_registry_and_parameters() {
+    let mut protocol = test_protocol("semantics_identity", vec![], vec![], vec![]);
+    protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: ParameterKey::new("value").unwrap(),
+        title_key: I18nKey::new("parameters.value.title").unwrap(),
+        description_key: None,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Auto,
+    }])
+    .unwrap();
+    let mut first_registry = TestRegistry::new(vec![protocol.clone()]);
+    first_registry.fingerprint = RegistryFingerprint::from_bytes([1; 32]);
+    let mut second_registry = TestRegistry::new(vec![protocol]);
+    second_registry.fingerprint = RegistryFingerprint::from_bytes([2; 32]);
+    let graph = |value| {
+        let mut graph = graph_with_nodes(&[(7, "semantics_identity")]);
+        graph.nodes.get_mut(&node_id(7)).unwrap().parameters = BTreeMap::from([(
+            ParameterKey::new("value").unwrap(),
+            serde_json::json!(value),
+        )]);
+        graph
+    };
+    let compile = |registry: &TestRegistry, graph: &GraphDocument| {
+        GraphCompiler::new(registry, &Resources)
+            .compile(graph)
+            .plan
+            .unwrap()
+            .operations[0]
+            .semantics_version
+    };
+
+    let baseline = compile(&first_registry, &graph(1));
+    assert_ne!(baseline, compile(&second_registry, &graph(1)));
+    assert_ne!(baseline, compile(&first_registry, &graph(2)));
+    assert_ne!(baseline.as_bytes(), &[0; 32]);
+}
+
+#[test]
+fn effective_cache_policy_matrix_is_carried_into_plans() {
+    let deterministic = test_protocol("cache_deterministic", vec![], vec![], vec![]);
+    let mut nondeterministic = test_protocol("cache_nondeterministic", vec![], vec![], vec![]);
+    nondeterministic.execution.determinism = Determinism::NonDeterministic;
+    let mut effectful = test_protocol("cache_effectful", vec![], vec![], vec![]);
+    effectful.execution.purity = Purity::Effectful;
+    effectful.execution.effects = EffectSemantics::Ordered;
+    let registry = TestRegistry::new(vec![deterministic, nondeterministic, effectful]);
+
+    let plan = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph_with_nodes(&[
+            (1, "cache_deterministic"),
+            (2, "cache_nondeterministic"),
+            (3, "cache_effectful"),
+        ]))
+        .plan
+        .expect("cache-policy matrix should compile");
+    let operations = plan
+        .operations
+        .iter()
+        .map(|operation| (operation.source_node_id, operation))
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(operations[&node_id(1)].cache_policy, CachePolicy::PerRun);
+    assert_eq!(operations[&node_id(2)].cache_policy, CachePolicy::Disabled);
+    assert_eq!(operations[&node_id(3)].cache_policy, CachePolicy::Disabled);
+    assert_eq!(operations[&node_id(1)].workload, WorkloadClass::Cpu);
+    assert_eq!(operations[&node_id(3)].workload, WorkloadClass::Exclusive);
+    assert_ne!(
+        operations[&node_id(1)].semantics_version.as_bytes(),
+        &[0; 32]
+    );
+    assert_eq!(operations[&node_id(1)].retry, PlannedRetry::default());
+    assert!(
+        operations
+            .values()
+            .all(|operation| operation.resource_dependencies.is_empty())
+    );
+}
+
+#[test]
+fn effective_cache_policy_metadata_survives_demand_specialization() {
+    let basis = compiled_demand_basis();
+    let expected = basis
+        .operations
+        .iter()
+        .map(|operation| {
+            (
+                operation.source_node_id,
+                (
+                    operation.stable_id.clone(),
+                    operation.cache_policy,
+                    operation.semantics_version,
+                    operation.workload,
+                    operation.retry.clone(),
+                    operation.resource_dependencies.clone(),
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let plan = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/main", 4, "out")]),
+            include_default_results: false,
+        })
+        .expect("selected chain should specialize");
+
+    assert!(!plan.operations.is_empty());
+    for operation in &plan.operations {
+        if matches!(operation.kernel, PlannedKernel::Adapter(_)) {
+            assert_eq!(operation.cache_policy, CachePolicy::Disabled);
+            assert_eq!(operation.workload, WorkloadClass::AdapterIo);
+            continue;
+        }
+        let metadata = &expected[&operation.source_node_id];
+        assert_eq!(&operation.stable_id, &metadata.0);
+        assert_eq!(operation.cache_policy, metadata.1);
+        assert_eq!(operation.semantics_version, metadata.2);
+        assert_eq!(operation.workload, metadata.3);
+        assert_eq!(&operation.retry, &metadata.4);
+        assert_eq!(&operation.resource_dependencies, &metadata.5);
     }
 }
 
@@ -978,6 +1679,63 @@ impl NodeLowerer for FailingLowerer {
 }
 
 #[test]
+fn non_concrete_parameter_shapes_block_when_they_cannot_be_prepared() {
+    let shapes = [
+        (
+            "union",
+            TypeExpr::Union(vec![TypeExpr::Concrete(type_id("core.int64"))]),
+        ),
+        (
+            "applied",
+            TypeExpr::Applied {
+                constructor: TypeConstructorId::new("core.list").unwrap(),
+                arguments: vec![TypeExpr::Concrete(type_id("core.int64"))],
+            },
+        ),
+        (
+            "generic",
+            TypeExpr::Generic(TypeParameterId::new("t").unwrap()),
+        ),
+        ("unknown", TypeExpr::Unknown),
+    ];
+
+    for (name, value_type) in shapes {
+        let mut protocol = test_protocol(name, vec![], vec![], vec![]);
+        protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+            key: ParameterKey::new("value").unwrap(),
+            title_key: I18nKey::new("parameters.value.title").unwrap(),
+            description_key: None,
+            value_type,
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::Auto,
+        }])
+        .unwrap();
+        let node_type = protocol.type_id.clone();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let registry = TestRegistry::new(vec![protocol])
+            .with_lowerer(&node_type, CountingLowerer(calls.clone()));
+        let mut graph = graph_with_nodes(&[(1, name)]);
+        set_parameters(&mut graph, 1, &[("value", serde_json::json!(7))]);
+        let trace = RecordingTrace::default();
+
+        let result = GraphCompiler::new(&registry, &Resources)
+            .with_observability(ProjectSessionId::new("unpreparable"), &trace)
+            .compile(&graph);
+
+        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code.as_str() == "compiler.parameter.invalid"
+                && matches!(
+                    &diagnostic.primary,
+                    DiagnosticLocation::Parameter { node_id: actual, key }
+                        if *actual == node_id(1) && key.as_str() == "value"
+                )
+        }));
+    }
+}
+
+#[test]
 fn typed_lowering_cancellation_cancels_compilation() {
     let protocol = test_protocol("lowering_cancelled", vec![], vec![], vec![]);
     let node_type = protocol.type_id.clone();
@@ -1002,19 +1760,18 @@ fn internal_lowering_failure_preserves_semantic_without_plan() {
 
     assert!(result.semantic.is_some());
     assert!(result.plan.is_none());
-    let diagnostic = result
-        .analysis
-        .diagnostics
-        .iter()
-        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.internal_invariant")
-        .expect("lowering diagnostic");
-    assert_eq!(
-        diagnostic.arguments,
-        BTreeMap::from([(
-            Box::from("node_type"),
-            Box::from("yssbi.test.lowering_failure"),
-        )])
+    assert!(
+        result.analysis.diagnostics.iter().all(|diagnostic| {
+            diagnostic.code.as_str() != "compiler.lowering.internal_invariant"
+        })
     );
+    assert!(matches!(
+        result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.lowering.internal_invariant"
+                && failure.node_id == Some(node_id(1))
+    ));
 }
 
 #[test]
@@ -1102,19 +1859,275 @@ fn compiler_maps_data_edges_into_plan_dependencies() {
         .plan
         .expect("data graph should lower");
 
-    assert_eq!(plan.value_dependencies.len(), 1);
+    assert_eq!(plan.value_dependencies.len(), 2);
+    let adapter = plan
+        .operations
+        .iter()
+        .find(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+        .expect("data edge has an explicit adapter");
+    assert!(
+        plan.value_dependencies
+            .contains(&crate::node_system::plan::ValueDependency {
+                source: plan.operations[0].outputs[0].value,
+                destination: adapter.inputs[0].value,
+            })
+    );
+    assert!(
+        plan.value_dependencies
+            .contains(&crate::node_system::plan::ValueDependency {
+                source: adapter.outputs[0].value,
+                destination: plan.operations[1].inputs[0].value,
+            })
+    );
+}
+
+#[test]
+fn compiler_materializes_stream_once_before_same_contract_fanout() {
+    let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    source_output.production = Some(OutputProduction::Streaming);
+    let source = test_protocol("fanout_source", vec![source_output], vec![], vec![]);
+    let mut sink_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
+    sink_input.consumption = Some(InputConsumption::FullyMaterialized);
+    let sink = test_protocol("fanout_sink", vec![sink_input], vec![], vec![]);
+    let registry = TestRegistry::new(vec![source, sink]);
+    let mut graph =
+        graph_with_nodes(&[(1, "fanout_source"), (2, "fanout_sink"), (3, "fanout_sink")]);
+    connect(&mut graph, 10, 1, "out", 2, "in");
+    connect(&mut graph, 11, 1, "out", 3, "in");
+
+    let plan = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph)
+        .plan
+        .expect("fanout graph should lower");
+    let adapters = plan
+        .operations
+        .iter()
+        .filter_map(|operation| match &operation.kernel {
+            PlannedKernel::Adapter(adapter) => Some((operation, adapter)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        adapters
+            .iter()
+            .filter(|(_, adapter)| matches!(adapter, PlannedAdapter::Collect { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        adapters
+            .iter()
+            .filter(|(_, adapter)| matches!(adapter, PlannedAdapter::Identity))
+            .count(),
+        2
+    );
+    let shared = adapters
+        .iter()
+        .find(|(_, adapter)| matches!(adapter, PlannedAdapter::Collect { .. }))
+        .unwrap()
+        .0;
+    assert_eq!(
+        plan.value_dependencies
+            .iter()
+            .filter(|dependency| dependency.source == shared.outputs[0].value)
+            .count(),
+        2,
+        "the stable collected artifact is the single fanout owner"
+    );
+}
+
+#[test]
+fn compiler_streaming_fanout_with_different_contracts_is_permutation_stable() {
+    let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    source_output.production = Some(OutputProduction::Streaming);
+    let source = test_protocol("fanout_source_mixed", vec![source_output], vec![], vec![]);
+
+    let sink = |name: &str, consumption| {
+        let mut input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
+        input.consumption = Some(consumption);
+        let output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+        test_protocol(name, vec![input, output], vec![], vec![])
+    };
+    let registry = TestRegistry::new(vec![
+        source,
+        sink("fanout_sink_stream", InputConsumption::Streaming),
+        sink(
+            "fanout_sink_materialized",
+            InputConsumption::FullyMaterialized,
+        ),
+    ]);
+
+    let compile = |nodes: &[(u128, &str)], source: u128, streaming: u128, materialized: u128| {
+        let mut graph = graph_with_nodes(nodes);
+        connect(&mut graph, 10, source, "out", streaming, "in");
+        connect(&mut graph, 11, source, "out", materialized, "in");
+        GraphCompiler::new(&registry, &Resources)
+            .compile(&graph)
+            .plan
+            .expect("mixed fanout graph should lower")
+    };
+    let forward = compile(
+        &[
+            (1, "fanout_source_mixed"),
+            (2, "fanout_sink_stream"),
+            (3, "fanout_sink_materialized"),
+        ],
+        1,
+        2,
+        3,
+    );
+    let permuted = compile(
+        &[
+            (103, "fanout_sink_materialized"),
+            (101, "fanout_source_mixed"),
+            (102, "fanout_sink_stream"),
+        ],
+        101,
+        102,
+        103,
+    );
+
+    let normalize = |plan: &ExecutionPlan| {
+        let kind = |operation: &PlannedOperation| match &operation.kernel {
+            PlannedKernel::Native(_) => format!("native:{}", operation.source_node_type_id),
+            PlannedKernel::Relational(_) => "relational".to_owned(),
+            PlannedKernel::Adapter(adapter) => format!("adapter:{adapter:?}"),
+        };
+        let owners = plan
+            .operations
+            .iter()
+            .enumerate()
+            .flat_map(|(index, operation)| {
+                operation
+                    .outputs
+                    .iter()
+                    .map(move |output| (output.value, index))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let consumers = plan
+            .operations
+            .iter()
+            .enumerate()
+            .flat_map(|(index, operation)| {
+                operation
+                    .inputs
+                    .iter()
+                    .map(move |input| (input.value, index))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut operations = plan
+            .operations
+            .iter()
+            .map(|operation| {
+                (
+                    kind(operation),
+                    operation
+                        .inputs
+                        .iter()
+                        .map(|input| input.consumption)
+                        .collect::<Vec<_>>(),
+                    operation
+                        .outputs
+                        .iter()
+                        .map(|output| output.production)
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        operations.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
+        let mut topology = plan
+            .value_dependencies
+            .iter()
+            .filter_map(|dependency| {
+                Some((
+                    kind(&plan.operations[*owners.get(&dependency.source)?]),
+                    kind(&plan.operations[*consumers.get(&dependency.destination)?]),
+                ))
+            })
+            .collect::<Vec<_>>();
+        topology.sort();
+        (operations, topology)
+    };
+
+    assert_eq!(normalize(&forward), normalize(&permuted));
     assert_ne!(
-        plan.value_dependencies[0].source,
-        plan.value_dependencies[0].destination
+        forward
+            .operations
+            .iter()
+            .map(|operation| &operation.stable_id)
+            .collect::<Vec<_>>(),
+        permuted
+            .operations
+            .iter()
+            .map(|operation| &operation.stable_id)
+            .collect::<Vec<_>>(),
+        "Task 10 permits stable IDs to follow real node UUIDs"
     );
+    for plan in [&forward, &permuted] {
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(
+                    operation.kernel,
+                    PlannedKernel::Adapter(PlannedAdapter::Collect { .. })
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(
+                    operation.kernel,
+                    PlannedKernel::Adapter(PlannedAdapter::StreamBridge { .. })
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            plan.operations
+                .iter()
+                .filter(|operation| matches!(
+                    operation.kernel,
+                    PlannedKernel::Adapter(PlannedAdapter::Identity)
+                ))
+                .count(),
+            1
+        );
+    }
+
+    let mut demand_graph = graph_with_nodes(&[
+        (1, "fanout_source_mixed"),
+        (2, "fanout_sink_stream"),
+        (3, "fanout_sink_materialized"),
+    ]);
+    connect(&mut demand_graph, 10, 1, "out", 2, "in");
+    connect(&mut demand_graph, 11, 1, "out", 3, "in");
+    let compiled = GraphCompiler::new(&registry, &Resources).compile(&demand_graph);
+    let basis = compiled
+        .execution_basis
+        .expect("mixed fanout graph keeps a demand basis");
+    let graph_path = basis.provenance.graph_path.0.clone();
+    let specialized = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output(&graph_path, 3, "out")]),
+            include_default_results: false,
+        })
+        .expect("materialized fanout consumer specializes");
     assert_eq!(
-        plan.value_dependencies[0].source,
-        plan.operations[0].outputs[0].value
+        specialized
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+            .count(),
+        1,
+        "demand specialization replans one retained boundary without duplicating shared fanout"
     );
-    assert_eq!(
-        plan.value_dependencies[0].destination,
-        plan.operations[1].inputs[0].value
-    );
+    assert!(specialized.operations.iter().any(|operation| matches!(
+        operation.kernel,
+        PlannedKernel::Adapter(PlannedAdapter::Collect { .. })
+    )));
 }
 
 #[test]
@@ -1243,7 +2256,6 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     let subplan = &plan.relational_subplans[0];
     assert_eq!(subplan.compiled_plan.fragment_order.len(), 2);
     assert_eq!(subplan.compiled_plan.roots.len(), 1);
-    assert!(subplan.materialization_bridges.is_empty());
 
     assert_eq!(
         plan.operations.len(),
@@ -1292,6 +2304,32 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
         .expect("same-island intermediate output must be derivable");
     assert_eq!(requested_source.operations.len(), 1);
     assert_eq!(requested_source.operations[0].outputs.len(), 1);
+    assert_ne!(
+        requested_source.operations[0].stable_id, plan.operations[0].stable_id,
+        "different demand/member combinations need different composite IDs"
+    );
+    assert_ne!(
+        requested_source.operations[0].semantics_version, plan.operations[0].semantics_version,
+        "different fused relational semantics need different versions"
+    );
+    assert!(basis.operations.iter().all(|member| {
+        member.stable_id != plan.operations[0].stable_id
+            && member.semantics_version != plan.operations[0].semantics_version
+    }));
+    let requested_source_again = basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/relational", 1, "out")]),
+            include_default_results: false,
+        })
+        .unwrap();
+    assert_eq!(
+        requested_source.operations[0].stable_id,
+        requested_source_again.operations[0].stable_id
+    );
+    assert_eq!(
+        requested_source.operations[0].semantics_version,
+        requested_source_again.operations[0].semantics_version
+    );
     assert_eq!(requested_source.relational_subplans.len(), 1);
     assert_eq!(
         requested_source.relational_subplans[0]
@@ -1311,13 +2349,56 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
         .validate()
         .expect("requested relational output plan validates");
 
+    let mut retry_basis = basis.clone();
+    let retry = PlannedRetry {
+        idempotent: true,
+        policy: Some(
+            RetryPolicy::new(
+                std::num::NonZeroU32::new(2).unwrap(),
+                std::time::Duration::from_millis(1),
+                std::time::Duration::from_millis(2),
+            )
+            .unwrap(),
+        ),
+    };
+    retry_basis.operations[0].retry = retry.clone();
+    retry_basis.operations[1].retry = retry.clone();
+    retry_basis.operations[0].semantics_version = ExecutionSemanticsVersion::from_bytes([1; 32]);
+    retry_basis.operations[1].semantics_version = ExecutionSemanticsVersion::from_bytes([2; 32]);
+    let matching_retry = retry_basis.derive_full_plan().unwrap();
+    assert_eq!(matching_retry.operations[0].retry, retry);
+    assert_ne!(
+        matching_retry.operations[0].semantics_version,
+        retry_basis.operations[0].semantics_version
+    );
+    assert_ne!(
+        matching_retry.operations[0].semantics_version,
+        retry_basis.operations[1].semantics_version
+    );
+
+    retry_basis.operations[1].retry = PlannedRetry::default();
+    let conservative_retry = retry_basis.derive_full_plan().unwrap();
+    assert_eq!(
+        conservative_retry.operations[0].retry,
+        PlannedRetry::default()
+    );
+
     let mut reversed = graph_with_nodes(&[(2, "plan_relation_sink"), (1, "plan_relation_source")]);
     connect(&mut reversed, 10, 1, "out", 2, "in");
-    let reversed_plan = GraphCompiler::new(&registry, &Resources)
-        .compile(&reversed)
+    let reversed_compiler = GraphCompiler::new(&registry, &Resources);
+    let reversed_plan = reversed_compiler
+        .compile_snapshot(
+            &reversed_compiler.snapshot(GraphResourcePath("events/relational".into()), &reversed),
+            &CompileCancellationToken::new(),
+        )
+        .unwrap()
         .plan
         .expect("reordered relational graph should lower");
     assert_eq!(reversed_plan.operations, plan.operations);
+    assert_eq!(
+        reversed_plan.operations[0].stable_id, plan.operations[0].stable_id,
+        "composite identity is insertion-order independent"
+    );
     assert_eq!(reversed_plan.value_dependencies, plan.value_dependencies);
     assert_eq!(reversed_plan.root_region, plan.root_region);
     assert_eq!(reversed_plan.relational_subplans, plan.relational_subplans);
@@ -1366,6 +2447,12 @@ fn compiler_aggregates_fragment_resources_and_results() {
         .expect("metadata graph should lower");
 
     assert_eq!(plan.resources.as_ref(), &[resource]);
+    assert_eq!(
+        plan.operations[0].resource_dependencies.as_ref(),
+        &[crate::node_system::analysis::ResourceKey::new(
+            "database.main"
+        )]
+    );
     assert_eq!(
         plan.results.as_ref(),
         &[PlanResult {
@@ -1444,16 +2531,16 @@ fn duplicate_lowering_result_emits_the_result_name() {
         (2, "duplicate_result_second"),
     ]));
 
-    let diagnostic = result
-        .analysis
-        .diagnostics
-        .iter()
-        .find(|diagnostic| diagnostic.code.as_str() == "compiler.lowering.result_duplicate")
-        .expect("duplicate result diagnostic");
-    assert_eq!(
-        diagnostic.arguments,
-        BTreeMap::from([(Box::from("result_name"), Box::from("answer"))])
-    );
+    assert!(result.semantic.is_some());
+    assert!(result.plan.is_none());
+    assert!(result.analysis.diagnostics.is_empty());
+    assert!(matches!(
+        result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.lowering.result_duplicate"
+                && failure.node_id == Some(node_id(2))
+    ));
 }
 
 fn demand_output(graph_path: &str, node: u128, port: &str) -> GraphOutputRef {
@@ -1590,7 +2677,10 @@ fn declare_control_value(basis: &mut ExecutionPlanBasis) -> ValueRef {
     let value = ValueRef::new(basis.value_count);
     basis.value_count += 1;
     let mut sources = basis.value_sources.to_vec();
-    sources.push(PlanValueSource::ControlProduced(value));
+    sources.push(PlanValueSource::ControlProduced(
+        value,
+        OutputProduction::FullyMaterialized,
+    ));
     sources.sort();
     basis.value_sources = sources.into_boxed_slice();
     value
@@ -1631,7 +2721,10 @@ fn demand_specialization_deletes_disconnected_if_control_sources() {
     assert!(
         !plan
             .value_sources
-            .contains(&PlanValueSource::ControlProduced(destination))
+            .contains(&PlanValueSource::ControlProduced(
+                destination,
+                OutputProduction::FullyMaterialized,
+            ))
     );
     plan.validate().unwrap();
 }
@@ -1716,12 +2809,18 @@ fn demand_specialization_keeps_only_requested_if_result_declaration() {
     assert_eq!(retained_results[0].destination, retained_destination);
     assert!(
         plan.value_sources
-            .contains(&PlanValueSource::ControlProduced(retained_destination))
+            .contains(&PlanValueSource::ControlProduced(
+                retained_destination,
+                OutputProduction::FullyMaterialized,
+            ))
     );
     assert!(
         !plan
             .value_sources
-            .contains(&PlanValueSource::ControlProduced(deleted_destination))
+            .contains(&PlanValueSource::ControlProduced(
+                deleted_destination,
+                OutputProduction::FullyMaterialized,
+            ))
     );
     plan.validate().unwrap();
 }
@@ -1764,7 +2863,10 @@ fn demand_specialization_deletes_disconnected_loop_control_sources() {
         assert!(
             !plan
                 .value_sources
-                .contains(&PlanValueSource::ControlProduced(value))
+                .contains(&PlanValueSource::ControlProduced(
+                    value,
+                    OutputProduction::FullyMaterialized,
+                ))
         );
     }
     plan.validate().unwrap();
@@ -1792,6 +2894,7 @@ fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
     assert_eq!(
         plan.operations
             .iter()
+            .filter(|operation| !matches!(operation.kernel, PlannedKernel::Adapter(_)))
             .map(|operation| operation.source_node_id)
             .collect::<Vec<_>>(),
         vec![node_id(1), node_id(2)]
@@ -1890,6 +2993,55 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
         })
         .unwrap();
     assert_eq!(a_with_defaults.results.len(), 2);
+}
+
+#[test]
+fn demand_driven_publication_preview_has_independent_normalized_identity_and_generation() {
+    let (registry, graph) = demand_fixture();
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+    let basis = result
+        .execution_basis
+        .expect("valid graph has lowering basis");
+    let output = demand_output("events/main", 2, "out");
+    let ordinary = ExecutionDemand::Outputs {
+        outputs: Box::new([output.clone()]),
+        include_default_results: false,
+    };
+    let preview: ExecutionDemand = serde_json::from_value(serde_json::json!({
+        "PinPreview": {
+            "output": serde_json::to_value(&output).unwrap(),
+            "generation": 17
+        }
+    }))
+    .expect("pin preview demand must have a dedicated wire variant");
+
+    let ordinary_plan = basis.derive_plan(&ordinary).unwrap();
+    let preview_plan = basis.derive_plan(&preview).unwrap();
+    let ordinary = basis.normalize_demand(&ordinary).unwrap();
+    let preview = basis.normalize_demand(&preview).unwrap();
+
+    assert!(matches!(
+        ordinary_plan.publications.as_ref(),
+        [PlannedPublication::GraphResult { output: published, .. }] if published == &output
+    ));
+    assert!(matches!(
+        preview_plan.publications.as_ref(),
+        [PlannedPublication::PinPreview {
+            output: published,
+            generation: 17,
+            ..
+        }] if published == &output
+    ));
+    assert_ne!(ordinary, preview);
+    assert_ne!(ordinary.digest().unwrap(), preview.digest().unwrap());
+    assert_eq!(
+        serde_json::to_value(preview).unwrap()["PinPreview"]["generation"],
+        17
+    );
 }
 
 #[test]
@@ -2021,10 +3173,17 @@ fn retained_operation_keeps_external_value_dependency_and_source() {
         })
         .expect("external source dependency remains valid");
 
-    assert_eq!(plan.operations.len(), 1);
-    assert_eq!(plan.value_dependencies.len(), 1);
+    assert_eq!(plan.operations.len(), 2);
+    assert_eq!(plan.value_dependencies.len(), 2);
+    assert_eq!(
+        plan.operations
+            .iter()
+            .filter(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+            .count(),
+        1
+    );
     assert!(plan.value_sources.iter().any(|source| {
-        matches!(source, PlanValueSource::ExternalInput(value) if *value == plan.value_dependencies[0].source)
+        matches!(source, PlanValueSource::ExternalInput(value, _) if plan.value_dependencies.iter().any(|dependency| dependency.source == *value))
     }));
     assert!(!matches!(
         plan.validate(),
@@ -2168,7 +3327,7 @@ fn evaluation_policy_and_effect_predecessors_are_authoritative_roots() {
 }
 
 #[test]
-fn compiler_derives_materialization_bridge_from_consumer_contract() {
+fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
     let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
     source_output.production = Some(OutputProduction::Streaming);
     let source = test_protocol("plan_bridge_source", vec![source_output], vec![], vec![]);
@@ -2281,34 +3440,38 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
     let specialized = result
         .execution_basis
         .as_ref()
-        .unwrap_or_else(|| panic!("bridge diagnostics: {:?}", result.analysis.diagnostics))
+        .unwrap_or_else(|| panic!("adapter diagnostics: {:?}", result.analysis.diagnostics))
         .derive_plan(&ExecutionDemand::Outputs {
             outputs: Box::new([demand_output("events/bridge-demand", 2, "out")]),
             include_default_results: false,
         })
-        .expect("retained relational bridge specializes after structured pruning");
-    assert_eq!(
-        specialized
-            .operations
-            .iter()
-            .map(|operation| operation.source_node_id)
-            .collect::<Vec<_>>(),
-        vec![node_id(1), node_id(2)],
-        "the unrelated empty Branch and its pure condition are pruned before grouping"
-    );
+        .expect("retained relational adapter boundary specializes after structured pruning");
+    assert_eq!(specialized.operations.len(), 3);
     assert_eq!(specialized.relational_subplans.len(), 2);
-    let specialized_bridges = specialized
-        .relational_subplans
+
+    let adapters = specialized
+        .operations
         .iter()
-        .flat_map(|subplan| subplan.materialization_bridges.iter())
+        .filter_map(|operation| match &operation.kernel {
+            PlannedKernel::Adapter(adapter) => Some((operation, adapter)),
+            _ => None,
+        })
         .collect::<Vec<_>>();
-    assert_eq!(specialized_bridges.len(), 1);
-    let producer =
-        &specialized.relational_subplans[specialized_bridges[0].producer_subplan.index()];
+    assert_eq!(adapters.len(), 1);
+    assert!(matches!(adapters[0].1, PlannedAdapter::Collect { .. }));
+    assert_eq!(adapters[0].0.workload, WorkloadClass::AdapterIo);
+    assert_eq!(adapters[0].0.cache_policy, CachePolicy::Disabled);
+    assert_eq!(adapters[0].0.inputs.len(), 1);
     assert_eq!(
-        producer.compiled_plan.requested_fragment_outputs.as_ref(),
-        &[specialized_bridges[0].producer_fragment.clone()]
+        adapters[0].0.inputs[0].consumption,
+        InputConsumption::Streaming
     );
+    assert_eq!(adapters[0].0.outputs.len(), 1);
+    assert_eq!(
+        adapters[0].0.outputs[0].production,
+        OutputProduction::FullyMaterialized
+    );
+    assert_eq!(specialized.value_dependencies.len(), 2);
     for operation in &specialized.operations {
         if let crate::node_system::plan::PlannedKernel::Relational(subplan) = operation.kernel {
             assert_eq!(
@@ -2354,26 +3517,101 @@ fn compiler_derives_materialization_bridge_from_consumer_contract() {
     let plan = result.plan.expect("bridge graph should lower");
 
     assert_eq!(plan.relational_subplans.len(), 2);
-    let bridges = plan
-        .relational_subplans
-        .iter()
-        .flat_map(|subplan| subplan.materialization_bridges.iter())
-        .collect::<Vec<_>>();
-    assert_eq!(bridges.len(), 1);
-    assert_eq!(bridges[0].bridge, MaterializationBridge::Collect);
-    let bridge = bridges[0].clone();
-    let producer = &plan.relational_subplans[bridge.producer_subplan.index()];
     assert_eq!(
-        producer.compiled_plan.requested_fragment_outputs.as_ref(),
-        &[bridge.producer_fragment.clone()]
+        plan.operations
+            .iter()
+            .filter(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+            .count(),
+        1
     );
-    let consumer = &plan.relational_subplans[bridge.consumer_subplan.index()];
-    assert_eq!(
-        consumer.compiled_plan.bridge_inputs.as_ref(),
-        &[RelationalBridgeInput {
-            operator: RelationalOperatorIndex::new(0),
-            bridge,
-        }]
+
+    let adapter_index = plan
+        .operations
+        .iter()
+        .position(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+        .unwrap();
+    let adapter = &plan.operations[adapter_index];
+    let incoming = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.destination == adapter.inputs[0].value)
+        .copied()
+        .unwrap();
+    let outgoing = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.source == adapter.outputs[0].value)
+        .copied()
+        .unwrap();
+
+    let mut missing = plan.clone();
+    missing.operations = missing
+        .operations
+        .into_vec()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, operation)| (index != adapter_index).then_some(operation))
+        .collect();
+    missing.value_dependencies = Box::new([crate::node_system::plan::ValueDependency {
+        source: incoming.source,
+        destination: outgoing.destination,
+    }]);
+    let relational_operations = missing
+        .operations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, operation)| {
+            matches!(operation.kernel, PlannedKernel::Relational(_)).then_some(
+                ControlStep::Operation(crate::node_system::plan::OperationIndex::new(index as u32)),
+            )
+        })
+        .collect::<Vec<_>>();
+    missing.root_region =
+        StructuredControlRegion::Sequence(relational_operations.into_boxed_slice());
+    assert!(
+        missing
+            .validate()
+            .unwrap_err()
+            .0
+            .iter()
+            .any(|error| matches!(
+                error,
+                PlanValidationError::MissingMaterializationAdapter { .. }
+            ))
+    );
+
+    let mut extra = plan.clone();
+    let mut extra_adapter = extra.operations[adapter_index].clone();
+    extra_adapter.stable_id =
+        crate::node_system::plan::OperationStableId::new("test.extra.materialization.adapter")
+            .unwrap();
+    extra_adapter.inputs[0].value = ValueRef::new(extra.value_count);
+    extra.value_count += 1;
+    extra_adapter.outputs[0].value = ValueRef::new(extra.value_count);
+    extra.value_count += 1;
+    extra.operations = extra
+        .operations
+        .into_vec()
+        .into_iter()
+        .chain([extra_adapter])
+        .collect();
+    assert!(extra.validate().unwrap_err().0.iter().any(|error| matches!(
+        error,
+        PlanValidationError::ExtraMaterializationAdapter { .. }
+    )));
+
+    let mut incompatible = plan.clone();
+    incompatible.operations[adapter_index].kernel = PlannedKernel::Adapter(PlannedAdapter::Replay);
+    assert!(
+        incompatible
+            .validate()
+            .unwrap_err()
+            .0
+            .iter()
+            .any(|error| matches!(
+                error,
+                PlanValidationError::IncompatibleMaterializationAdapter { .. }
+            ))
     );
 }
 
@@ -2456,7 +3694,7 @@ fn determinism_protocols() -> Vec<NodeProtocol> {
             key: ParameterKey::new("alpha").unwrap(),
             title_key: I18nKey::new("parameters.alpha.title").unwrap(),
             description_key: None,
-            value_type: TypeExpr::Unknown,
+            value_type: TypeExpr::Concrete(type_id("core.int64")),
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
@@ -2465,7 +3703,7 @@ fn determinism_protocols() -> Vec<NodeProtocol> {
             key: ParameterKey::new("beta").unwrap(),
             title_key: I18nKey::new("parameters.beta.title").unwrap(),
             description_key: None,
-            value_type: TypeExpr::Unknown,
+            value_type: TypeExpr::Concrete(type_id("core.int64")),
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
@@ -3448,7 +4686,15 @@ fn semantically_identical_documents_serialize_identically() {
     let reverse_plan = reverse_result
         .plan
         .expect("reverse fixture should produce an execution plan");
-    assert_eq!(forward_plan.operations.len(), 3);
+    assert_eq!(forward_plan.operations.len(), 7);
+    assert_eq!(
+        forward_plan
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+            .count(),
+        4
+    );
     assert_eq!(
         forward_plan.operations.as_ref(),
         reverse_plan.operations.as_ref()
@@ -3470,24 +4716,7 @@ fn semantically_identical_documents_serialize_identically() {
             .iter()
             .all(|subplan| !subplan.compiled_plan.fragment_roots.is_empty())
     );
-    assert!(
-        forward_plan
-            .relational_subplans
-            .iter()
-            .any(|subplan| !subplan.compiled_plan.bridge_inputs.is_empty())
-    );
-    assert!(
-        forward_plan
-            .relational_subplans
-            .iter()
-            .any(|subplan| !subplan.materialization_bridges.is_empty())
-    );
-    assert!(
-        forward_plan
-            .relational_subplans
-            .iter()
-            .any(|subplan| { !subplan.compiled_plan.requested_fragment_outputs.is_empty() })
-    );
+
     for (forward_subplan, reverse_subplan) in forward_plan
         .relational_subplans
         .iter()
@@ -3504,18 +4733,6 @@ fn semantically_identical_documents_serialize_identically() {
         assert_eq!(
             forward_subplan.compiled_plan.roots,
             reverse_subplan.compiled_plan.roots
-        );
-        assert_eq!(
-            forward_subplan.compiled_plan.bridge_inputs,
-            reverse_subplan.compiled_plan.bridge_inputs
-        );
-        assert_eq!(
-            forward_subplan.materialization_bridges,
-            reverse_subplan.materialization_bridges
-        );
-        assert_eq!(
-            forward_subplan.compiled_plan.requested_fragment_outputs,
-            reverse_subplan.compiled_plan.requested_fragment_outputs
         );
     }
     assert_eq!(
@@ -3913,11 +5130,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
         .unwrap();
     assert_eq!(final_plan.operations.len(), 1);
     assert_eq!(final_plan.relational_subplans.len(), 1);
-    assert!(
-        final_plan.relational_subplans[0]
-            .materialization_bridges
-            .is_empty()
-    );
+
     let final_relational = &final_plan.relational_subplans[0].compiled_plan;
     assert_eq!(final_relational.operators.len(), 5);
     assert_eq!(
@@ -4107,7 +5320,9 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         key: ParameterKey::new("predicate").unwrap(),
         title_key: I18nKey::new("parameters.predicate.title").unwrap(),
         description_key: None,
-        value_type: TypeExpr::Unknown,
+        value_type: TypeExpr::Concrete(type_id(
+            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+        )),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
@@ -4150,7 +5365,11 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         vec![],
         vec![],
     );
-    let registry = TestRegistry::new(vec![source, filter, project, rename]);
+    let registry = TestRegistry::new(vec![source, filter, project, rename]).with_nominal_registry(
+        crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry,
+    );
     let mut resolvers = SchemaResolverSet::new();
     resolvers.insert(resolver_id, SourceSchemaResolver);
     let mut graph = graph_with_nodes(&[
@@ -4685,7 +5904,10 @@ fn branch_builds_exclusive_true_and_false_regions() {
     bindings.push(deleted_binding);
     *results = bindings.into_boxed_slice();
     let mut value_sources = basis.value_sources.to_vec();
-    value_sources.push(PlanValueSource::ControlProduced(deleted_result_value));
+    value_sources.push(PlanValueSource::ControlProduced(
+        deleted_result_value,
+        OutputProduction::FullyMaterialized,
+    ));
     basis.value_sources = value_sources.into_boxed_slice();
 
     let mut disconnected_basis = basis.clone();
@@ -4710,7 +5932,7 @@ fn branch_builds_exclusive_true_and_false_regions() {
         disconnected
             .value_sources
             .iter()
-            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
+            .all(|source| !matches!(source, PlanValueSource::ControlProduced(..)))
     );
     disconnected.validate().unwrap();
 
@@ -4771,12 +5993,18 @@ fn branch_builds_exclusive_true_and_false_regions() {
     assert!(
         specialized
             .value_sources
-            .contains(&PlanValueSource::ControlProduced(retained_result_value))
+            .contains(&PlanValueSource::ControlProduced(
+                retained_result_value,
+                OutputProduction::FullyMaterialized,
+            ))
     );
     assert!(
         !specialized
             .value_sources
-            .contains(&PlanValueSource::ControlProduced(deleted_result_value))
+            .contains(&PlanValueSource::ControlProduced(
+                deleted_result_value,
+                OutputProduction::FullyMaterialized,
+            ))
     );
 
     let plan = result
@@ -4800,11 +6028,27 @@ fn branch_builds_exclusive_true_and_false_regions() {
         .find(|dependency| dependency.source == else_output)
         .expect("else constant must feed its exact member")
         .destination;
-    let branch_destination = plan
+    let continuation_source = plan
         .value_dependencies
         .iter()
         .find(|dependency| dependency.destination == continuation_input)
-        .expect("branch result must feed the continuation")
+        .expect("adapter output must feed the continuation")
+        .source;
+    let (adapter, adapter_operation) = plan
+        .operations
+        .iter()
+        .enumerate()
+        .find(|(_, operation)| {
+            matches!(operation.kernel, PlannedKernel::Adapter(_))
+                && operation.outputs[0].value == continuation_source
+        })
+        .map(|(index, operation)| (operation, OperationIndex::new(index as u32)))
+        .expect("branch result boundary has an explicit adapter");
+    let branch_destination = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.destination == adapter.inputs[0].value)
+        .expect("branch result must feed the explicit adapter")
         .source;
 
     let root_steps = match &plan.root_region {
@@ -4842,9 +6086,19 @@ fn branch_builds_exclusive_true_and_false_regions() {
     assert!(!region_contains_operation(else_region, then_operation));
     assert!(!region_contains_operation(then_region, continuation));
     assert!(!region_contains_operation(else_region, continuation));
-    assert!(root_steps[branch_index + 1..].iter().any(
-        |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation)
-    ));
+    let adapter_index = root_steps
+        .iter()
+        .position(|step| {
+            matches!(step, ControlStep::Operation(operation) if *operation == adapter_operation)
+        })
+        .expect("branch adapter is scheduled in the root continuation");
+    let continuation_index = root_steps
+        .iter()
+        .position(
+            |step| matches!(step, ControlStep::Operation(operation) if *operation == continuation),
+        )
+        .expect("continuation is scheduled");
+    assert!(branch_index < adapter_index && adapter_index < continuation_index);
 }
 
 #[test]
@@ -4885,12 +6139,15 @@ fn nested_branch_with_one_terminating_arm_blocks_unstructured_continuation() {
         result.plan.is_none(),
         "must not unconditionally execute node A"
     );
-    assert!(result.analysis.has_blocking_errors());
-    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code.as_str() == "compiler.control.unstructured_continuation"
-            && diagnostic.primary
-                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(3))
-    }));
+    assert!(result.semantic.is_some());
+    assert!(!result.analysis.has_blocking_errors());
+    assert!(matches!(
+        result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.control.unstructured_continuation"
+                && failure.node_id == Some(node_id(3))
+    ));
 }
 
 #[test]
@@ -5256,14 +6513,15 @@ fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
 
     let branch_result = GraphCompiler::new(&registry, &Resources).compile(&branch);
     assert!(branch_result.plan.is_none());
-    assert!(branch_result.semantic.is_none());
-    assert!(branch_result.analysis.has_blocking_errors());
-    assert!(branch_result.analysis.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code.as_str() == "compiler.control.member_group_identity_ambiguous"
-            && diagnostic.severity == crate::node_system::analysis::DiagnosticSeverity::Error
-            && diagnostic.primary
-                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(4))
-    }));
+    assert!(branch_result.semantic.is_some());
+    assert!(!branch_result.analysis.has_blocking_errors());
+    assert!(matches!(
+        branch_result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.control.member_group_identity_ambiguous"
+                && failure.node_id == Some(node_id(4))
+    ));
 
     let mut incomplete_branch = branch.clone();
     incomplete_branch.port_bindings.retain(|address, _| {
@@ -5278,17 +6536,15 @@ fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(102)));
     let incomplete_result = GraphCompiler::new(&registry, &Resources).compile(&incomplete_branch);
     assert!(incomplete_result.plan.is_none());
-    assert!(
-        incomplete_result
-            .analysis
-            .diagnostics
-            .iter()
-            .any(|diagnostic| {
-                diagnostic.code.as_str() == "compiler.control.member_group_incomplete"
-                    && diagnostic.primary
-                        == crate::node_system::analysis::DiagnosticLocation::Node(node_id(4))
-            })
-    );
+    assert!(incomplete_result.semantic.is_some());
+    assert!(!incomplete_result.analysis.has_blocking_errors());
+    assert!(matches!(
+        incomplete_result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.control.member_group_incomplete"
+                && failure.node_id == Some(node_id(4))
+    ));
 
     let mut loop_graph =
         builtin_graph_with_nodes(&[(5, "yssbi.constant.bool"), (6, "yssbi.control.loop")]);
@@ -5301,12 +6557,15 @@ fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
 
     let loop_result = GraphCompiler::new(&registry, &Resources).compile(&loop_graph);
     assert!(loop_result.plan.is_none());
-    assert!(loop_result.analysis.has_blocking_errors());
-    assert!(loop_result.analysis.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code.as_str() == "compiler.control.member_group_count_invalid"
-            && diagnostic.primary
-                == crate::node_system::analysis::DiagnosticLocation::Node(node_id(6))
-    }));
+    assert!(loop_result.semantic.is_some());
+    assert!(!loop_result.analysis.has_blocking_errors());
+    assert!(matches!(
+        loop_result.outcome,
+        CompilationOutcome::InternalFailure(ref failure)
+            if failure.stage == CompilationStage::Lowering
+                && failure.code.as_ref() == "compiler.control.member_group_count_invalid"
+                && failure.node_id == Some(node_id(6))
+    ));
 }
 
 #[test]
@@ -5453,7 +6712,7 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
         disconnected
             .value_sources
             .iter()
-            .all(|source| !matches!(source, PlanValueSource::ControlProduced(_)))
+            .all(|source| !matches!(source, PlanValueSource::ControlProduced(..)))
     );
     disconnected.validate().unwrap();
 
@@ -5556,7 +6815,7 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
 
     let mut callee = builtin_graph_with_nodes(&[
         (20, "yssbi.project.function.entry"),
-        (21, "yssbi.constant.int64"),
+        (2, "yssbi.constant.int64"),
         (30, "yssbi.project.function.return"),
     ]);
     set_parameters(
@@ -5611,17 +6870,19 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             &CompileCancellationToken::new(),
         )
         .unwrap();
-    let callee_plan = callee_products
-        .plan
-        .clone()
-        .expect("function compilation publishes a complete plan");
+    let callee_plan = callee_products.plan.clone().unwrap_or_else(|| {
+        panic!(
+            "function compilation publishes a complete plan: outcome={:?}, diagnostics={:?}",
+            callee_products.outcome, callee_products.analysis.diagnostics
+        )
+    });
     assert_eq!(
         callee_plan
             .operations
             .iter()
             .map(|operation| operation.source_node_id)
             .collect::<Vec<_>>(),
-        vec![node_id(21)],
+        vec![node_id(2)],
         "the full callee keeps unrequested pure body work"
     );
     let callee_abi = callee_products
@@ -5667,6 +6928,18 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
     let eager_caller_products = compiler
         .compile_snapshot(&caller_snapshot, &CompileCancellationToken::new())
         .unwrap();
+    let caller_reused_uuid = eager_caller_products
+        .plan
+        .as_ref()
+        .unwrap()
+        .operations
+        .iter()
+        .find(|operation| operation.source_node_id == node_id(2))
+        .unwrap();
+    assert_ne!(
+        caller_reused_uuid.stable_id, callee_plan.operations[0].stable_id,
+        "caller and callee graph identities prevent reused UUID collisions"
+    );
     let eager_caller_basis = eager_caller_products
         .execution_basis
         .as_ref()
@@ -5742,7 +7015,7 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             pruned
                 .value_sources
                 .iter()
-                .all(|source| !matches!(source, PlanValueSource::ControlProduced(_))),
+                .all(|source| !matches!(source, PlanValueSource::ControlProduced(..))),
             "{name} must remove pruned Call result declarations"
         );
         pruned.validate().unwrap();
@@ -5895,7 +7168,8 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         specialized
             .value_sources
             .contains(&PlanValueSource::ControlProduced(
-                specialized_result.caller_destination
+                specialized_result.caller_destination,
+                callee_abi.result_productions[&return_id],
             ))
     );
 

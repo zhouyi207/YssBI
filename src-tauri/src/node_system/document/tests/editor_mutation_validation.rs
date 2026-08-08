@@ -39,7 +39,7 @@ fn port(
 
 fn validation_registry() -> NodeRegistry {
     let derived_resolver = InterfaceResolverId::new("test.derived").unwrap();
-    let ports = vec![
+    let mut ports = vec![
         port(
             "data_out",
             PortDirection::Output,
@@ -108,6 +108,11 @@ fn validation_registry() -> NodeRegistry {
             Some(LiteralPolicy::Allowed),
         ),
     ];
+    ports
+        .iter_mut()
+        .find(|port| port.key.as_str() == "data_in")
+        .unwrap()
+        .value_type = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
     let parameters = vec![
         ParameterSpec {
             key: ParameterKey::new("count").unwrap(),
@@ -899,12 +904,17 @@ fn editor_mutation_enforces_literal_policy() {
     let registry = validation_registry();
     let owner = node_id(1_031);
     let document = validation_document(&[owner]);
+    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        value: Value::Integer(1),
+    })
+    .unwrap();
 
     assert!(
         plan(
             EditorGraphMutationDto::SetLiteral {
                 address: declared(owner, "data_in").into(),
-                literal: Some(json!(1)),
+                literal: Some(literal.clone()),
             },
             &document,
             &registry,
@@ -915,7 +925,7 @@ fn editor_mutation_enforces_literal_policy() {
         plan(
             EditorGraphMutationDto::SetLiteral {
                 address: declared(owner, "forbidden_in").into(),
-                literal: Some(json!(1)),
+                literal: Some(literal.clone()),
             },
             &document,
             &registry,
@@ -928,7 +938,7 @@ fn editor_mutation_enforces_literal_policy() {
         plan(
             EditorGraphMutationDto::SetLiteral {
                 address: declared(owner, "data_out").into(),
-                literal: Some(json!(1)),
+                literal: Some(literal),
             },
             &document,
             &registry,
@@ -937,6 +947,77 @@ fn editor_mutation_enforces_literal_policy() {
         .to_string()
         .contains("data input")
     );
+}
+
+#[test]
+fn editor_mutation_rejects_legal_typed_literal_for_the_wrong_port_type() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let owner = node_id(1_035);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: owner,
+            node_type: NodeTypeId::new("yssbi.control.branch").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
+        value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+        value: Value::String("not-a-bool".into()),
+    })
+    .unwrap();
+
+    let error = plan(
+        EditorGraphMutationDto::SetLiteral {
+            address: declared(owner, "condition").into(),
+            literal: Some(literal),
+        },
+        &document,
+        &registry,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("literal does not match"));
+}
+
+#[test]
+fn editor_mutation_rejects_nested_literal_element_mismatch() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let owner = node_id(1_036);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: owner,
+            node_type: NodeTypeId::new("yssbi.data_series.convert.int64_to_string").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let series = TypeExpr::Applied {
+        constructor: crate::node_system::protocol::TypeConstructorId::new("core.data_series")
+            .unwrap(),
+        arguments: vec![TypeExpr::Concrete(TypeId::new("core.int64").unwrap())],
+    };
+    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
+        value_type: series,
+        value: Value::List(vec![Value::Integer(1), Value::String("wrong".into())]),
+    })
+    .unwrap();
+
+    let error = plan(
+        EditorGraphMutationDto::SetLiteral {
+            address: declared(owner, "input").into(),
+            literal: Some(literal),
+        },
+        &document,
+        &registry,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("literal does not match"));
 }
 
 #[test]

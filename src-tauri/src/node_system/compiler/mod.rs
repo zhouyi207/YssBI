@@ -13,6 +13,7 @@ mod schema_analysis;
 mod specialization;
 mod type_analysis;
 
+pub use crate::node_system::registry::NominalValueHandle;
 pub use coordinator::{
     CompilationSlot, CompilationTask, CompileCancellationToken, CompileCancelled,
     CompileCoordinator, CompileProducts, PublishOutcome, PublishReport, PublishedExecutionPlan,
@@ -37,8 +38,9 @@ pub use lowering::{
 #[cfg(test)]
 pub(crate) use pipeline::compile_snapshot_invocations;
 pub use pipeline::{
-    CompilationSnapshot, CompileResult, CompilerAnalysis, CompilerRegistry, CompilerSemanticGraph,
-    GraphCompiler, PublishedCompileAnalysis, RegistryNode, RegistryNodeBehavior, ResourceSnapshot,
+    CompilationOutcome, CompilationSnapshot, CompilationStage, CompileResult, CompilerAnalysis,
+    CompilerRegistry, CompilerSemanticGraph, GraphCompiler, InternalCompilationFailure,
+    PublishedCompileAnalysis, RegistryNode, RegistryNodeBehavior, ResourceSnapshot,
 };
 
 pub type ProjectCompileCoordinator =

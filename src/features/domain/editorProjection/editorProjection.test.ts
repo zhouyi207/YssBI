@@ -150,6 +150,7 @@ function validProjection(): EditorGraphProjectionDto {
         related: [{ kind: 'resource', identity: 'functions/helper' }],
       },
     ],
+    outcome: { type: 'success' },
     hasBlockingDiagnostics: false,
   };
 }
@@ -766,6 +767,7 @@ describe('toProjectionEntities', () => {
     expect(entities.connectionIdsByPortKey[outputKey]).toEqual(['connection-1']);
     expect(entities.connectionIdsByPortKey[inputKey]).toEqual(['connection-1']);
     expect(entities.diagnostics).toEqual(projection.diagnostics);
+    expect(entities.outcome).toEqual({ type: 'success' });
     expect(entities.hasBlockingDiagnostics).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import {
 } from '@/features/core/execution';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectService } from '@/services/project/projectService';
+import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
 import { windowSourceRef } from '@/features/core/resultSource';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
@@ -37,6 +38,7 @@ export type PinPreviewRejectionReason =
   | 'input-pin'
   | 'non-data-output'
   | 'orphan-pin'
+  | 'generation-exhausted'
   | 'stale-project-lifecycle';
 
 export type PinPreviewRequestResult =
@@ -149,11 +151,22 @@ export async function requestPinPreview(
     return staleSettlement();
   }
   if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
-    return reject('missing-resource');
+    return staleSettlement();
   }
 
+  let generation: number;
+  try {
+    generation = await PinPreviewGenerationService.allocate();
+  } catch {
+    return { status: 'rejected', reason: 'generation-exhausted' };
+  }
+  if (
+    !isCurrentProjectIdentity(captured.authority.project)
+    || !isPreviewAuthorityCurrent(graphPath, captured.authority)
+  ) return staleSettlement();
+
   const store = useExecutionStore.getState();
-  const generation = store.beginPinPreview(graphPath, captured.output.port);
+  const lease = store.beginPinPreview(graphPath, captured.output.port, generation);
   const outcome: GraphRunOutcomeState = { outcome: 'success' };
   const observation: PinPreviewObservation = {
     projectSessionId: null,
@@ -161,6 +174,8 @@ export async function requestPinPreview(
     generation,
     runId: null,
     terminal: 'pending',
+    stale: false,
+    lease,
   };
 
   try {
@@ -168,34 +183,42 @@ export async function requestPinPreview(
       captured.authority.project.projectInstanceId,
       graphPath,
       {
-        type: 'outputs',
-        outputs: [captured.output],
-        includeDefaultResults: false,
+        type: 'pinPreview',
+        output: captured.output,
+        generation,
       },
       (event) => {
+        if (!lease.isCurrent()) return;
         if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) return;
         observeGraphRunEvent(graphPath, event, outcome, observation);
       },
     );
   } catch (error) {
-    if (!isCurrentProjectIdentity(captured.authority.project)) {
+    if (!lease.isCurrent()) return staleSettlement();
+    if (
+      !isCurrentProjectIdentity(captured.authority.project)
+      || !isPreviewAuthorityCurrent(graphPath, captured.authority)
+      || observation.stale
+    ) {
       return staleSettlement();
     }
-    if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
-      store.removePinPreview(graphPath, captured.output.port, generation);
-      return staleSettlement();
-    }
+    const current = lookupPinPreview(
+      useExecutionStore.getState().getGraph(graphPath).pinPreviews,
+      graphPath,
+      captured.output.port,
+    );
+    if (current?.generation !== generation) return staleSettlement();
     const message = formatErrorMessage(error);
-    store.failPinPreview(graphPath, captured.output.port, generation, message);
+    lease.fail(message);
     uiStore.showToast(`预览失败：${message}`, 'error', 4000);
     return { status: 'failed', generation, error: message };
   }
 
+  if (!lease.isCurrent()) return staleSettlement();
   if (!isCurrentProjectIdentity(captured.authority.project)) {
     return staleSettlement();
   }
-  if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) {
-    store.removePinPreview(graphPath, captured.output.port, generation);
+  if (!isPreviewAuthorityCurrent(graphPath, captured.authority) || observation.stale) {
     return staleSettlement();
   }
   const preview = lookupPinPreview(
@@ -203,24 +226,27 @@ export async function requestPinPreview(
     graphPath,
     captured.output.port,
   );
+  if (preview?.generation !== generation) return staleSettlement();
   if (
-    observation.terminal !== 'completed'
-    || preview?.generation !== generation
-    || preview.status !== 'ready'
-    || !preview.sourceId
+    observation.terminal === 'completed'
+    && preview.status === 'ready'
+    && preview.sourceId
   ) {
-    const message = observation.terminal === 'cancelled'
-      ? 'preview run was cancelled'
-      : 'preview output was not published';
-    store.failPinPreview(graphPath, captured.output.port, generation, message);
-    return { status: 'failed', generation, error: message };
+    return {
+      status: 'completed',
+      generation,
+      sourceId: preview.sourceId,
+    };
   }
+  if (observation.terminal === 'pending' || observation.terminal === 'completed') {
+    return staleSettlement();
+  }
+  const message = observation.terminal === 'cancelled'
+    ? 'preview run was cancelled'
+    : 'preview run failed';
+  lease.fail(message);
+  return { status: 'failed', generation, error: message };
 
-  return {
-    status: 'completed',
-    generation,
-    sourceId: preview.sourceId,
-  };
 }
 
 export async function requestAndOpenPinPreview(

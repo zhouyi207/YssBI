@@ -393,15 +393,16 @@ pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializ
 }
 
 fn validate_builtin_bundle(
-    provider: ProviderRegistration,
+    mut provider: ProviderRegistration,
     catalog: BuiltinCatalog,
     alias_keys: BTreeSet<I18nKey>,
 ) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
     let mut builder = NodeRegistryBuilder::new();
+    let handles = register_builtin_nominal_validators(&mut builder)?;
+    super::dataframe::bind_nominal_handles(&mut provider, handles);
     builder
         .register_provider(provider)
         .map_err(BuiltinAssemblyError::Registration)?;
-    register_builtin_nominal_validators(&mut builder)?;
     let registry = Arc::new(
         builder
             .freeze()
@@ -507,9 +508,9 @@ pub(crate) fn validate_builtin_bundle_for_test(
 
 fn register_builtin_nominal_validators(
     builder: &mut NodeRegistryBuilder,
-) -> Result<(), BuiltinAssemblyError> {
+) -> Result<super::dataframe::DataframeNominalHandles, BuiltinAssemblyError> {
     let parse_type_id = |value| sid(value, TypeId::new);
-    builder
+    let project_columns = builder
         .register_nominal_codec(
             parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
             parse_type_id(
@@ -519,7 +520,7 @@ fn register_builtin_nominal_validators(
             crate::node_system::parameter_types::dataframe::prepare_project_columns_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
-    builder
+    let filter_predicate = builder
         .register_nominal_codec(
             parse_type_id(
                 crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
@@ -531,14 +532,19 @@ fn register_builtin_nominal_validators(
             crate::node_system::parameter_types::dataframe::prepare_filter_predicate_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
-    Ok(())
+    Ok(super::dataframe::DataframeNominalHandles {
+        project_columns,
+        filter_predicate,
+    })
 }
 
 #[cfg(test)]
 pub(crate) fn register_builtin_nominal_validators_for_test(
     builder: &mut NodeRegistryBuilder,
 ) -> Result<(), BuiltinInitializationError> {
-    register_builtin_nominal_validators(builder).map_err(Into::into)
+    register_builtin_nominal_validators(builder)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 fn assemble_builtin_parts()

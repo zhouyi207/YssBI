@@ -6,9 +6,11 @@ use crate::node_system::plan::{
     RelationalOperatorIndex, ResourceId, ValueRef,
 };
 use crate::node_system::protocol::{
-    EffectSemantics, NodeProtocol, ParameterEditorSpec, ParameterKey, TypeExpr, TypeId,
+    EffectSemantics, NodeProtocol, ParameterEditorSpec, ParameterKey, TypeExpr,
 };
-use crate::node_system::registry::{ImplementationKind, LeafImplementation, PreparedNominalValue};
+use crate::node_system::registry::{
+    ImplementationKind, LeafImplementation, NominalValueHandle, PreparedNominalValue,
+};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -74,6 +76,7 @@ pub struct ValidatedNodeConfig {
 }
 
 impl ValidatedNodeConfig {
+    #[cfg(test)]
     pub(crate) fn empty() -> Self {
         Self {
             prepared: BTreeMap::new(),
@@ -83,12 +86,10 @@ impl ValidatedNodeConfig {
     pub(crate) fn from_analysis(
         protocol: &NodeProtocol,
         parameters: BTreeMap<ParameterKey, serde_json::Value>,
-        prepare_nominal: impl Fn(
-            &TypeId,
-            &serde_json::Value,
-        ) -> Option<Result<PreparedNominalValue, String>>,
-    ) -> Self {
+        prepared_nominal: &BTreeMap<ParameterKey, PreparedNominalValue>,
+    ) -> Result<Self, Box<[ParameterKey]>> {
         let mut prepared = BTreeMap::new();
+        let mut invalid = Vec::new();
         for spec in protocol.parameters.parameters.iter() {
             let Some(value) = parameters.get(&spec.key) else {
                 continue;
@@ -106,19 +107,25 @@ impl ValidatedNodeConfig {
                     "core.string" => value
                         .as_str()
                         .map(|value| PreparedParameterValue::String(value.into())),
-                    _ => prepare_nominal(type_id, value)
-                        .and_then(Result::ok)
-                        .map(PreparedParameterValue::Nominal)
-                        .or_else(|| prepare_json_value(value)),
+                    _ => prepared_nominal
+                        .get(&spec.key)
+                        .cloned()
+                        .map(PreparedParameterValue::Nominal),
                 }
             } else {
-                prepare_json_value(value)
+                None
             };
             if let Some(value) = value {
                 prepared.insert(spec.key.clone(), value);
+            } else {
+                invalid.push(spec.key.clone());
             }
         }
-        Self { prepared }
+        if invalid.is_empty() {
+            Ok(Self { prepared })
+        } else {
+            Err(invalid.into_boxed_slice())
+        }
     }
 
     pub fn value(&self, key: &ParameterKey) -> Option<&PreparedParameterValue> {
@@ -146,9 +153,13 @@ impl ValidatedNodeConfig {
         }
     }
 
-    pub fn nominal<T: Any + Send + Sync>(&self, key: &ParameterKey) -> Option<&T> {
+    pub fn nominal<'a, T: Any + Send + Sync>(
+        &'a self,
+        key: &ParameterKey,
+        handle: &NominalValueHandle<T>,
+    ) -> Option<&'a T> {
         match self.value(key)? {
-            PreparedParameterValue::Nominal(value) => value.downcast_ref(),
+            PreparedParameterValue::Nominal(value) => handle.get(value),
             _ => None,
         }
     }
@@ -159,34 +170,6 @@ impl ValidatedNodeConfig {
             _ => None,
         }
     }
-}
-
-fn prepare_json_value(value: &serde_json::Value) -> Option<PreparedParameterValue> {
-    Some(match value {
-        serde_json::Value::Null => PreparedParameterValue::Null,
-        serde_json::Value::Bool(value) => PreparedParameterValue::Bool(*value),
-        serde_json::Value::Number(value) if value.is_i64() => {
-            PreparedParameterValue::Int64(value.as_i64()?)
-        }
-        serde_json::Value::Number(value) if value.is_u64() => {
-            PreparedParameterValue::UInt64(value.as_u64()?)
-        }
-        serde_json::Value::Number(value) => PreparedParameterValue::Float64(value.as_f64()?),
-        serde_json::Value::String(value) => PreparedParameterValue::String(value.as_str().into()),
-        serde_json::Value::Array(values) => PreparedParameterValue::Collection(
-            values
-                .iter()
-                .map(prepare_json_value)
-                .collect::<Option<Vec<_>>>()?
-                .into_boxed_slice(),
-        ),
-        serde_json::Value::Object(values) => PreparedParameterValue::Object(
-            values
-                .iter()
-                .map(|(key, value)| Some((key.as_str().into(), prepare_json_value(value)?)))
-                .collect::<Option<BTreeMap<_, _>>>()?,
-        ),
-    })
 }
 
 /// Immutable information supplied to a leaf node lowerer after Analysis has

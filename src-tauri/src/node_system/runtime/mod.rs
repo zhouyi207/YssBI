@@ -10,6 +10,8 @@ mod execution_event;
 mod function_plan;
 mod kernel;
 mod kernels;
+mod materialization;
+mod memoization;
 mod parameters;
 mod production_relational;
 mod project_resource;
@@ -46,6 +48,10 @@ pub use kernels::{
     ConvertParameters, ConvertTarget, DataframeKernelParameters, PlotKind, PlotPublishError,
     PlotSink, PlotSinkResource, StatisticsKernelParameters, dataframe_to_protocol_value,
 };
+pub use materialization::execute_planned_adapter;
+#[cfg(test)]
+pub(crate) use memoization::MemoCommitCheckpoint;
+pub use memoization::{DemandFingerprint, OperationMemoKey, RunMemoization, ValueFingerprint};
 pub use parameters::{
     CompiledParameterRegistrationError, CompiledParameterStore, CompiledParameterTypeError,
 };
@@ -68,7 +74,7 @@ pub use project_run::{
 pub use relational::{
     RelationalBackend, RelationalBackendLease, RelationalBackendProvider,
     RelationalBackendRegistrationError, RelationalBackendRegistry, RelationalContext,
-    RelationalError, RelationalErrorCode, RelationalExecution, RelationalInput, materialize_bridge,
+    RelationalError, RelationalErrorCode, RelationalExecution,
 };
 pub use resource::{
     ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,

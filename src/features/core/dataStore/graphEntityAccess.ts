@@ -8,6 +8,7 @@ import type {
   PinId,
 } from '@/shared/types';
 import type {
+  CompilationOutcomeDto,
   DiagnosticDto,
   ProjectionBasisDto,
 } from '@/shared/types/dto/editorProjection';
@@ -24,6 +25,7 @@ export interface GraphEntityBucket {
   sourceRevision: number;
   requestGeneration: number;
   diagnostics: DiagnosticDto[];
+  outcome: CompilationOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
 

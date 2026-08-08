@@ -8,13 +8,13 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
-    InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+    CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Barrier, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -34,6 +34,7 @@ fn stable_output(port_key: &str) -> GraphOutputRef {
 
 fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation {
     PlannedOperation {
+        stable_id: OperationStableId::new(format!("test.operation.{kernel}")).unwrap(),
         source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
         source_node_type_id: NodeTypeId::new(format!("yssbi.test.{kernel}")).unwrap(),
         kernel: PlannedKernel::Native(id(kernel, KernelHandle::new)),
@@ -55,7 +56,25 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .collect::<Vec<_>>()
             .into_boxed_slice(),
         params: id("params", CompiledParameterHandle::new),
+        resource_dependencies: Box::new([]),
+        cache_policy: CachePolicy::Disabled,
+        semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+        workload: WorkloadClass::Cpu,
+        retry: PlannedRetry::default(),
     }
+}
+
+fn publish_graph_results(plan: &mut ExecutionPlan) {
+    plan.publications = plan
+        .results
+        .iter()
+        .map(|result| PlannedPublication::GraphResult {
+            name: result.name.clone(),
+            output: result.output.clone(),
+            value: result.value,
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
 }
 
 fn plan(
@@ -84,6 +103,7 @@ fn plan(
         relational_subplans: Box::new([]),
         resources: Box::new([]),
         results: Box::new([]),
+        publications: Box::new([]),
     }
 }
 
@@ -200,7 +220,7 @@ fn published_function(
             )
         })
         .collect();
-    let results = results
+    let results: BTreeMap<FunctionParameterId, ValueRef> = results
         .iter()
         .enumerate()
         .map(|(index, value)| {
@@ -215,6 +235,11 @@ fn published_function(
         abi: Arc::new(FunctionPlanAbi {
             provenance,
             parameters,
+            result_productions: results
+                .keys()
+                .cloned()
+                .map(|parameter| (parameter, OutputProduction::FullyMaterialized))
+                .collect(),
             results,
         }),
     })
@@ -315,6 +340,7 @@ fn bound_input_operation_executes_downstream_and_publishes_result_without_fallba
         output: stable_output("result"),
         value: ValueRef::new(2),
     }]);
+    publish_graph_results(&mut execution_plan);
 
     let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -363,7 +389,10 @@ fn bound_input_blocked_by_value_dependency_reports_dependency_source() {
             0,
         ))])),
     );
-    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(2))]);
+    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(2),
+        OutputProduction::FullyMaterialized,
+    )]);
     execution_plan.value_dependencies = Box::new([ValueDependency {
         source: ValueRef::new(2),
         destination: ValueRef::new(1),
@@ -385,7 +414,10 @@ fn truly_missing_operation_input_still_reports_missing_value() {
             0,
         ))])),
     );
-    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+    execution_plan.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::FullyMaterialized,
+    )]);
 
     let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -430,6 +462,7 @@ fn executes_sequence_deterministically() {
         output: stable_output("result"),
         value: ValueRef::new(1),
     }]);
+    publish_graph_results(&mut execution_plan);
 
     let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -440,6 +473,214 @@ fn executes_sequence_deterministically() {
         result.values["result"],
         RuntimeValue::from(Value::Integer(2))
     );
+}
+
+#[test]
+fn demand_driven_publication_exposes_only_the_requested_final_output() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(3).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("target", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                let RuntimeValue::Scalar(Value::Integer(value)) = &inputs[0] else {
+                    panic!("expected integer input")
+                };
+                Ok(vec![Value::Integer(value + 4).into()])
+            }),
+        )
+        .unwrap();
+    let output = stable_output("final");
+    let mut execution_plan = plan(
+        vec![
+            operation("source", &[], &[0]),
+            operation("target", &[0], &[2]),
+        ],
+        3,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "final".into(),
+        output: output.clone(),
+        value: ValueRef::new(2),
+    }]);
+    execution_plan.publications = Box::new([PlannedPublication::GraphResult {
+        name: "final".into(),
+        output: output.clone(),
+        value: ValueRef::new(2),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    let run = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(run.values["final"], RuntimeValue::from(Value::Integer(7)));
+    assert_eq!(
+        results.source_count(),
+        1,
+        "intermediate values must not be readable sources"
+    );
+    let recorded = events.0.lock().unwrap();
+    assert!(
+        recorded
+            .iter()
+            .all(|event| { serde_json::to_value(&event.kind).unwrap()["type"] != "valueReady" })
+    );
+    assert_eq!(
+        recorded
+            .iter()
+            .filter(|event| matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(recorded.iter().filter(|event| matches!(&event.kind, RunEventKind::OutputReady { output: emitted, .. } if emitted == &output)).count(), 1);
+}
+
+#[test]
+fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("preview", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+        )
+        .unwrap();
+    let output = stable_output("preview");
+    let mut execution_plan = plan(
+        vec![operation("preview", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "requested.preview".into(),
+        output: output.clone(),
+        value: ValueRef::new(0),
+    }]);
+    execution_plan.publications = Box::new([PlannedPublication::PinPreview {
+        output: output.clone(),
+        generation: 17,
+        value: ValueRef::new(0),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(results.source_count(), 1);
+    let recorded = events.0.lock().unwrap();
+    assert!(
+        recorded
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+    );
+    assert_eq!(
+        recorded
+            .iter()
+            .filter(|event| matches!(
+                &event.kind,
+                RunEventKind::OutputReady {
+                    output: emitted,
+                    generation: Some(17),
+                    ..
+                } if emitted == &output
+            ))
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn invalid_publication_returns_typed_invalid_plan_without_panicking() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("invalid_publication", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+        )
+        .unwrap();
+    let output = stable_output("result");
+    let mut execution_plan = plan(
+        vec![operation("invalid_publication", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: output.clone(),
+        value: ValueRef::new(0),
+    }]);
+    execution_plan.publications = Box::new([PlannedPublication::GraphResult {
+        name: "missing-result".into(),
+        output,
+        value: ValueRef::new(0),
+    }]);
+    let results = ResultStore::new();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .expect_err("invalid publication must be rejected before execution");
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+    assert_eq!(results.source_count(), 0);
+}
+
+#[test]
+fn missing_publications_return_typed_invalid_plan_before_execution() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("missing_publication", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("missing_publication", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(0),
+    }]);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_event_sink(&events)
+        .with_result_store(&results)
+        .run(&execution_plan, CancellationToken::new())
+        .expect_err("results without publications must be rejected before execution");
+
+    assert!(matches!(error, RunError::InvalidPlan(_)));
+    assert_eq!(results.source_count(), 0);
+    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
+        event.kind,
+        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
+    )));
 }
 
 #[test]
@@ -460,6 +701,11 @@ fn stable_output_ready_is_published_before_completion() {
         ))])),
     );
     execution_plan.results = Box::new([PlanResult {
+        name: "value".into(),
+        output: output.clone(),
+        value: ValueRef::new(0),
+    }]);
+    execution_plan.publications = Box::new([PlannedPublication::GraphResult {
         name: "value".into(),
         output: output.clone(),
         value: ValueRef::new(0),
@@ -540,7 +786,10 @@ fn if_executes_only_selected_branch() {
             })),
         ])),
     );
-    execution_plan.value_sources = Box::new([PlanValueSource::ControlProduced(ValueRef::new(3))]);
+    execution_plan.value_sources = Box::new([PlanValueSource::ControlProduced(
+        ValueRef::new(3),
+        OutputProduction::FullyMaterialized,
+    )]);
 
     RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -624,14 +873,15 @@ fn execute_nested_branch_sequence_switch(
         ])),
     );
     execution_plan.value_sources = Box::new([
-        PlanValueSource::ControlProduced(ValueRef::new(5)),
-        PlanValueSource::ControlProduced(ValueRef::new(6)),
+        PlanValueSource::ControlProduced(ValueRef::new(5), OutputProduction::FullyMaterialized),
+        PlanValueSource::ControlProduced(ValueRef::new(6), OutputProduction::FullyMaterialized),
     ]);
     execution_plan.results = Box::new([PlanResult {
         name: "selected".into(),
         output: stable_output("selected"),
         value: ValueRef::new(6),
     }]);
+    publish_graph_results(&mut execution_plan);
 
     let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -939,14 +1189,15 @@ fn loop_carries_values_through_fresh_activations() {
         ])),
     );
     execution_plan.value_sources = Box::new([
-        PlanValueSource::ControlProduced(ValueRef::new(1)),
-        PlanValueSource::ControlProduced(ValueRef::new(4)),
+        PlanValueSource::ControlProduced(ValueRef::new(1), OutputProduction::FullyMaterialized),
+        PlanValueSource::ControlProduced(ValueRef::new(4), OutputProduction::FullyMaterialized),
     ]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
         output: stable_output("result"),
         value: ValueRef::new(4),
     }]);
+    publish_graph_results(&mut execution_plan);
 
     let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .run(&execution_plan, CancellationToken::new())
@@ -1034,8 +1285,8 @@ fn loop_does_not_reuse_an_unselected_branch_value_from_a_prior_iteration() {
         ])),
     );
     execution_plan.value_sources = Box::new([
-        PlanValueSource::ControlProduced(ValueRef::new(0)),
-        PlanValueSource::ControlProduced(ValueRef::new(7)),
+        PlanValueSource::ControlProduced(ValueRef::new(0), OutputProduction::FullyMaterialized),
+        PlanValueSource::ControlProduced(ValueRef::new(7), OutputProduction::FullyMaterialized),
     ]);
 
     let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
@@ -1048,7 +1299,10 @@ fn loop_does_not_reuse_an_unselected_branch_value_from_a_prior_iteration() {
 #[test]
 fn call_missing_caller_value_does_not_acquire_callee_resources() {
     let mut callee = plan(vec![], 1, StructuredControlRegion::Sequence(Box::new([])));
-    callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+    callee.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::FullyMaterialized,
+    )]);
     callee.resources = Box::new([CompiledResourceRequirement {
         resource: id("external/callee", ResourceId::new),
         kind: ResourceKind::ExternalArtifact,
@@ -1107,7 +1361,10 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
             0,
         ))])),
     );
-    callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(1))]);
+    callee.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(1),
+        OutputProduction::FullyMaterialized,
+    )]);
     let mut caller = plan(
         vec![operation("source", &[], &[4])],
         5,
@@ -1127,12 +1384,16 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
             })),
         ])),
     );
-    caller.value_sources = Box::new([PlanValueSource::ControlProduced(ValueRef::new(0))]);
+    caller.value_sources = Box::new([PlanValueSource::ControlProduced(
+        ValueRef::new(0),
+        OutputProduction::FullyMaterialized,
+    )]);
     caller.results = Box::new([PlanResult {
         name: "answer".into(),
         output: stable_output("answer"),
         value: ValueRef::new(0),
     }]);
+    publish_graph_results(&mut caller);
 
     let function = published_function(callee, "functions/callee", &[1], &[3]);
     let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
@@ -1175,6 +1436,7 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
             provenance: stale_provenance,
             parameters: BTreeMap::new(),
             results: BTreeMap::new(),
+            result_productions: BTreeMap::new(),
         }),
     });
     let caller = plan(
@@ -1244,7 +1506,10 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
                 OperationIndex::new(0),
             )])),
         );
-        callee.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+        callee.value_sources = Box::new([PlanValueSource::ExternalInput(
+            ValueRef::new(0),
+            OutputProduction::FullyMaterialized,
+        )]);
         callee.resources = Box::new([CompiledResourceRequirement {
             resource: id("external/callee", ResourceId::new),
             kind: ResourceKind::ExternalArtifact,
@@ -1324,13 +1589,19 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
         if !matches!(case, InvalidCall::MissingResult) {
             destinations.insert(
                 ValueRef::new(1),
-                PlanValueSource::ControlProduced(ValueRef::new(1)),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(1),
+                    OutputProduction::FullyMaterialized,
+                ),
             );
         }
         if matches!(case, InvalidCall::DuplicateCalleeResult) {
             destinations.insert(
                 ValueRef::new(3),
-                PlanValueSource::ControlProduced(ValueRef::new(3)),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(3),
+                    OutputProduction::FullyMaterialized,
+                ),
             );
         }
         caller.value_sources = destinations
@@ -1380,8 +1651,8 @@ fn call_preflight_allows_reusing_one_caller_source_for_distinct_parameters() {
         ))])),
     );
     callee.value_sources = Box::new([
-        PlanValueSource::ExternalInput(ValueRef::new(0)),
-        PlanValueSource::ExternalInput(ValueRef::new(1)),
+        PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::FullyMaterialized),
+        PlanValueSource::ExternalInput(ValueRef::new(1), OutputProduction::FullyMaterialized),
     ]);
     let published = published_function(callee, "functions/callee", &[0, 1], &[]);
     let caller = plan(
@@ -1578,6 +1849,7 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
             provenance: function.provenance.clone(),
             parameters: BTreeMap::new(),
             results: BTreeMap::new(),
+            result_productions: BTreeMap::new(),
         };
         (Arc::new(function), Arc::new(abi))
     };
@@ -1766,15 +2038,13 @@ fn bounded_channel_applies_backpressure() {
 
 fn relational_operation(subplan: u32, outputs: &[u32]) -> PlannedOperation {
     let mut operation = operation("relational", &[], outputs);
+    operation.stable_id =
+        OperationStableId::new(format!("test.operation.relational.{subplan}")).unwrap();
     operation.kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(subplan));
     operation
 }
 
-fn relational_subplan(
-    backend: &str,
-    fragment: &str,
-    bridges: Box<[PlannedMaterializationBridge]>,
-) -> RelationalSubplan {
+fn relational_subplan(backend: &str, fragment: &str, _: Box<[()]>) -> RelationalSubplan {
     RelationalSubplan {
         backend: id(backend, RelationalBackendId::new),
         compiled_plan: CompiledRelationalPlan {
@@ -1786,12 +2056,9 @@ fn relational_subplan(
                 fragment: id(fragment, RelationalFragmentId::new),
                 operator: RelationalOperatorIndex::new(0),
             }]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(0)]),
             pushdown_hints: Box::new([]),
         },
-        materialization_bridges: bridges,
     }
 }
 
@@ -1805,24 +2072,18 @@ impl RelationalBackend for RecordingRelationalBackend {
         context: &RelationalContext<'_>,
         plan: &CompiledRelationalPlan,
         operation_inputs: &[RuntimeValue],
-        bridge_inputs: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
         context
             .cancellation
             .check()
             .map_err(RelationalError::from)?;
         assert!(operation_inputs.is_empty());
-        assert!(bridge_inputs.is_empty());
         self.executions
             .lock()
             .unwrap()
             .push(plan.fragment_order[0].as_str().into());
         Ok(RelationalExecution {
             outputs: vec![Value::Integer(41).into()],
-            fragment_outputs: BTreeMap::from([(
-                plan.fragment_order[0].clone(),
-                Value::Integer(41).into(),
-            )]),
         })
     }
 }
@@ -1842,12 +2103,10 @@ impl RelationalBackend for TraceRelationalBackend {
         context: &RelationalContext<'_>,
         _: &CompiledRelationalPlan,
         _: &[RuntimeValue],
-        _: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
         match self.0 {
             TraceRelationalOutcome::Succeed => Ok(RelationalExecution {
                 outputs: vec![Value::Integer(41).into()],
-                fragment_outputs: BTreeMap::new(),
             }),
             TraceRelationalOutcome::Fail => {
                 Err(RelationalError::operator_invalid("backend failed"))
@@ -1889,6 +2148,7 @@ fn run_relational_backend_trace(
         output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
+    publish_graph_results(&mut execution_plan);
     let trace = RecordingTrace::default();
 
     let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
@@ -2046,18 +2306,16 @@ fn assert_production_source_cancellation(
                 fragment: source_fragment,
                 operator: RelationalOperatorIndex::new(0),
             }]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(0)]),
             pushdown_hints: Box::new([]),
         },
-        materialization_bridges: Box::new([]),
     }]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
         output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
+    publish_graph_results(&mut execution_plan);
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
@@ -2208,6 +2466,7 @@ fn relational_operation_executes_compiled_subplan_by_index() {
         output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
+    publish_graph_results(&mut execution_plan);
 
     let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
         .with_relational_backends(&relational)
@@ -2219,315 +2478,6 @@ fn relational_operation_executes_compiled_subplan_by_index() {
         result.values["result"],
         RuntimeValue::from(Value::Integer(41))
     );
-}
-
-fn exact_bridge_scheduler_fixture() -> (KernelRegistry, RelationalBackendRegistry, ExecutionPlan) {
-    let backend = id("production", RelationalBackendId::new);
-    let producer_decoy = id("producer-decoy", RelationalFragmentId::new);
-    let producer_exact = id("producer-exact", RelationalFragmentId::new);
-    let consumer = id("consumer", RelationalFragmentId::new);
-    let decoy_bridge = PlannedMaterializationBridge {
-        producer_fragment: producer_decoy.clone(),
-        consumer_fragment: consumer.clone(),
-        producer_subplan: RelationalSubplanIndex::new(0),
-        consumer_subplan: RelationalSubplanIndex::new(1),
-        bridge: MaterializationBridge::Collect,
-    };
-    let exact_bridge = PlannedMaterializationBridge {
-        producer_fragment: producer_exact.clone(),
-        consumer_fragment: consumer.clone(),
-        producer_subplan: RelationalSubplanIndex::new(0),
-        consumer_subplan: RelationalSubplanIndex::new(1),
-        bridge: MaterializationBridge::Collect,
-    };
-
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("bridge_values", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| {
-                Ok(vec![
-                    RuntimeValue::Scalar(Value::Object(
-                        [("value".into(), Value::List(vec![Value::Integer(13)]))]
-                            .into_iter()
-                            .collect(),
-                    )),
-                    RuntimeValue::Scalar(Value::Object(
-                        [("value".into(), Value::List(vec![Value::Integer(41)]))]
-                            .into_iter()
-                            .collect(),
-                    )),
-                ])
-            }),
-        )
-        .unwrap();
-    let mut relational = RelationalBackendRegistry::new();
-    relational
-        .register(backend.clone(), ProductionRelationalBackend::default())
-        .unwrap();
-
-    let source = operation("bridge_values", &[], &[0, 1]);
-    let mut producer_operation = relational_operation(0, &[2, 3]);
-    producer_operation.inputs = Box::new([
-        PlannedInput {
-            value: ValueRef::new(0),
-            consumption: InputConsumption::FullyMaterialized,
-            bound_value: None,
-        },
-        PlannedInput {
-            value: ValueRef::new(1),
-            consumption: InputConsumption::FullyMaterialized,
-            bound_value: None,
-        },
-    ]);
-    let consumer_operation = relational_operation(1, &[4]);
-    let mut execution_plan = plan(
-        vec![source, producer_operation, consumer_operation],
-        5,
-        StructuredControlRegion::Sequence(Box::new([
-            ControlStep::Operation(OperationIndex::new(0)),
-            ControlStep::Operation(OperationIndex::new(1)),
-            ControlStep::Operation(OperationIndex::new(2)),
-        ])),
-    );
-    execution_plan.relational_subplans = Box::new([
-        RelationalSubplan {
-            backend: backend.clone(),
-            compiled_plan: CompiledRelationalPlan {
-                fragment_order: Box::new([producer_decoy.clone(), producer_exact.clone()]),
-                operators: Box::new([
-                    RelationalOperator::Input {
-                        name: "same-name".into(),
-                    },
-                    RelationalOperator::Input {
-                        name: "same-name".into(),
-                    },
-                ]),
-                fragment_roots: Box::new([
-                    RelationalFragmentRoot {
-                        fragment: producer_decoy.clone(),
-                        operator: RelationalOperatorIndex::new(0),
-                    },
-                    RelationalFragmentRoot {
-                        fragment: producer_exact.clone(),
-                        operator: RelationalOperatorIndex::new(1),
-                    },
-                ]),
-                bridge_inputs: Box::new([]),
-                requested_fragment_outputs: Box::new([producer_decoy, producer_exact]),
-                roots: Box::new([
-                    RelationalOperatorIndex::new(0),
-                    RelationalOperatorIndex::new(1),
-                ]),
-                pushdown_hints: Box::new([]),
-            },
-            materialization_bridges: Box::new([]),
-        },
-        RelationalSubplan {
-            backend,
-            compiled_plan: CompiledRelationalPlan {
-                fragment_order: Box::new([consumer.clone()]),
-                operators: Box::new([
-                    RelationalOperator::Input {
-                        name: "same-name".into(),
-                    },
-                    RelationalOperator::Input {
-                        name: "same-name".into(),
-                    },
-                ]),
-                fragment_roots: Box::new([RelationalFragmentRoot {
-                    fragment: consumer,
-                    operator: RelationalOperatorIndex::new(0),
-                }]),
-                bridge_inputs: Box::new([
-                    RelationalBridgeInput {
-                        operator: RelationalOperatorIndex::new(0),
-                        bridge: exact_bridge.clone(),
-                    },
-                    RelationalBridgeInput {
-                        operator: RelationalOperatorIndex::new(1),
-                        bridge: decoy_bridge.clone(),
-                    },
-                ]),
-                requested_fragment_outputs: Box::new([]),
-                roots: Box::new([RelationalOperatorIndex::new(0)]),
-                pushdown_hints: Box::new([]),
-            },
-            materialization_bridges: Box::new([decoy_bridge, exact_bridge]),
-        },
-    ]);
-    execution_plan.results = Box::new([PlanResult {
-        name: "result".into(),
-        output: stable_output("result"),
-        value: ValueRef::new(4),
-    }]);
-    (kernels, relational, execution_plan)
-}
-
-#[test]
-fn scheduler_publishes_and_consumes_exact_relational_fragment_bridges() {
-    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
-
-    assert_eq!(
-        result.values["result"],
-        RuntimeValue::Scalar(Value::Object(
-            [("value".into(), Value::List(vec![Value::Integer(41)]))]
-                .into_iter()
-                .collect(),
-        ))
-    );
-}
-
-#[test]
-fn cancellation_at_exact_bridge_materialization_cleans_results_without_completion() {
-    use super::scheduler::SchedulerCheckpoint;
-
-    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::new();
-    let observed = Arc::new(Mutex::new(Vec::new()));
-    let observed_for_hook = Arc::clone(&observed);
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
-            observed_for_hook.lock().unwrap().push(checkpoint);
-            if checkpoint == SchedulerCheckpoint::BridgeMaterialization {
-                cancellation.cancel();
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
-
-    assert_eq!(error, RunError::Cancelled);
-    assert_eq!(
-        observed.lock().unwrap().as_slice(),
-        &[SchedulerCheckpoint::BridgeMaterialization]
-    );
-    assert_cancelled_without_completion(&events);
-    assert_eq!(results.source_count(), 0);
-}
-
-#[test]
-fn cancellation_during_exact_bridge_stream_collection_is_cancelled() {
-    use super::scheduler::SchedulerCheckpoint;
-
-    let cancellation = CancellationToken::new();
-    let stream = StreamValue::from_values(
-        [Value::Object(
-            [("value".into(), Value::List(vec![Value::Integer(41)]))]
-                .into_iter()
-                .collect(),
-        )],
-        cancellation.clone(),
-    )
-    .unwrap();
-    let (mut kernels, _, mut execution_plan) = exact_bridge_scheduler_fixture();
-    kernels
-        .register(
-            id("bridge_stream", KernelHandle::new),
-            FnKernel(move |_: &[RuntimeValue]| {
-                Ok(vec![
-                    RuntimeValue::Scalar(Value::Object(
-                        [("value".into(), Value::List(vec![Value::Integer(13)]))]
-                            .into_iter()
-                            .collect(),
-                    )),
-                    RuntimeValue::Scalar(Value::Object(
-                        [("value".into(), Value::List(vec![Value::Integer(41)]))]
-                            .into_iter()
-                            .collect(),
-                    )),
-                ])
-            }),
-        )
-        .unwrap();
-    execution_plan.operations[0].kernel =
-        PlannedKernel::Native(id("bridge_stream", KernelHandle::new));
-
-    struct StreamFragmentBackend {
-        stream: StreamValue,
-    }
-
-    impl RelationalBackend for StreamFragmentBackend {
-        fn execute(
-            &self,
-            context: &RelationalContext<'_>,
-            plan: &CompiledRelationalPlan,
-            operation_inputs: &[RuntimeValue],
-            bridge_inputs: &[RelationalInput],
-        ) -> Result<RelationalExecution, RelationalError> {
-            if !plan.bridge_inputs.is_empty() {
-                return ProductionRelationalBackend::default().execute(
-                    context,
-                    plan,
-                    operation_inputs,
-                    bridge_inputs,
-                );
-            }
-            let object = || {
-                RuntimeValue::Scalar(Value::Object(
-                    [("value".into(), Value::List(vec![Value::Integer(13)]))]
-                        .into_iter()
-                        .collect(),
-                ))
-            };
-            let fragment_outputs = plan
-                .requested_fragment_outputs
-                .iter()
-                .map(|fragment| {
-                    let value = if fragment.as_str() == "producer-exact" {
-                        RuntimeValue::Stream(self.stream.clone())
-                    } else {
-                        object()
-                    };
-                    (fragment.clone(), value)
-                })
-                .collect();
-            Ok(RelationalExecution {
-                outputs: vec![object(), object()],
-                fragment_outputs,
-            })
-        }
-    }
-
-    let mut relational = RelationalBackendRegistry::new();
-    relational
-        .register(
-            execution_plan.relational_subplans[0].backend.clone(),
-            StreamFragmentBackend {
-                stream: stream.clone(),
-            },
-        )
-        .unwrap();
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::new();
-    let collected = Arc::new(AtomicUsize::new(0));
-    let observed = Arc::clone(&collected);
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
-            if checkpoint == SchedulerCheckpoint::BridgeCollectionStarted {
-                observed.fetch_add(1, Ordering::SeqCst);
-                cancellation.cancel();
-            }
-        }))
-        .run(&execution_plan, cancellation)
-        .unwrap_err();
-
-    assert_eq!(error, RunError::Cancelled);
-    assert_eq!(collected.load(Ordering::SeqCst), 1);
-    assert_cancelled_without_completion(&events);
-    assert_eq!(results.source_count(), 0);
 }
 
 #[test]
@@ -2551,6 +2501,7 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
         output: stable_output("value"),
         value: ValueRef::new(0),
     }]);
+    publish_graph_results(&mut execution_plan);
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
     let finalizer = |_: &mut RunResult, _: &CancellationToken| {
@@ -2621,6 +2572,18 @@ fn cancellation_after_first_multi_result_source_is_staged_publishes_nothing() {
             value: ValueRef::new(1),
         },
     ]);
+    execution_plan.publications = Box::new([
+        PlannedPublication::GraphResult {
+            name: "first".into(),
+            output: stable_output("first"),
+            value: ValueRef::new(0),
+        },
+        PlannedPublication::GraphResult {
+            name: "second".into(),
+            output: stable_output("second"),
+            value: ValueRef::new(1),
+        },
+    ]);
     let events = RecordingRunEvents::default();
     let results = ResultStore::with_capacity(1);
     let old_run_id = RunId::new(90_001);
@@ -2662,7 +2625,7 @@ fn cancellation_after_first_multi_result_source_is_staged_publishes_nothing() {
 }
 
 #[test]
-fn cancellation_after_value_ready_preserves_an_older_committed_source() {
+fn cancellation_after_operation_output_preserves_an_older_committed_source() {
     let cancellation = CancellationToken::new();
     let kernel_cancellation = cancellation.clone();
     let mut kernels = KernelRegistry::new();
@@ -2717,7 +2680,7 @@ fn cancellation_after_value_ready_preserves_an_older_committed_source() {
             .lock()
             .unwrap()
             .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ValueReady { .. }))
+            .all(|event| { serde_json::to_value(&event.kind).unwrap()["type"] != "valueReady" })
     );
     assert_eq!(results.source_count(), 1);
     assert_eq!(
@@ -2731,14 +2694,32 @@ fn cancellation_after_value_ready_preserves_an_older_committed_source() {
 fn cancellation_before_final_result_publication_cleans_results_without_completion() {
     use super::scheduler::SchedulerCheckpoint;
 
-    let (kernels, relational, execution_plan) = exact_bridge_scheduler_fixture();
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("final_publication", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("final_publication", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
     let final_checkpoints = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&final_checkpoints);
 
     let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
         .with_event_sink(&events)
         .with_result_store(&results)
         .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
@@ -2757,96 +2738,1303 @@ fn cancellation_before_final_result_publication_cleans_results_without_completio
 }
 
 #[test]
-fn materialization_bridges_preserve_their_explicit_semantics() {
-    let token = CancellationToken::new();
-    let values = || RuntimeValue::from(Value::Integer(7));
-
-    let stream = materialize_bridge(MaterializationBridge::Stream, values(), &token).unwrap();
-    assert!(matches!(stream, RuntimeValue::Stream(_)));
-
-    for (bridge, expected) in [
-        (MaterializationBridge::Buffer, ArtifactKind::Buffered),
-        (MaterializationBridge::Collect, ArtifactKind::Collected),
-        (MaterializationBridge::Spill, ArtifactKind::Spilled),
-        (MaterializationBridge::Replay, ArtifactKind::Replayable),
-    ] {
-        let RuntimeValue::Artifact(artifact) =
-            materialize_bridge(bridge, values(), &token).unwrap()
-        else {
-            panic!("bridge must produce an artifact");
-        };
-        assert_eq!(artifact.kind(), expected);
-        assert_eq!(artifact.values(), &[Value::Integer(7)]);
-    }
-
-    let producer = id("producer", RelationalFragmentId::new);
-    let decoy_producer = id("decoy-producer", RelationalFragmentId::new);
-    let consumer = id("consumer", RelationalFragmentId::new);
-    let expected_bridge = PlannedMaterializationBridge {
-        producer_fragment: producer,
-        consumer_fragment: consumer.clone(),
-        producer_subplan: RelationalSubplanIndex::new(0),
-        consumer_subplan: RelationalSubplanIndex::new(1),
-        bridge: MaterializationBridge::Collect,
-    };
-    let decoy_bridge = PlannedMaterializationBridge {
-        producer_fragment: decoy_producer,
-        consumer_fragment: consumer.clone(),
-        producer_subplan: RelationalSubplanIndex::new(2),
-        consumer_subplan: RelationalSubplanIndex::new(1),
-        bridge: MaterializationBridge::Collect,
-    };
-    let plan = CompiledRelationalPlan {
-        fragment_order: Box::new([consumer.clone()]),
-        operators: Box::new([RelationalOperator::Input {
-            name: "ambiguous-display-name".into(),
-        }]),
-        fragment_roots: Box::new([RelationalFragmentRoot {
-            fragment: consumer,
-            operator: RelationalOperatorIndex::new(0),
-        }]),
-        bridge_inputs: Box::new([RelationalBridgeInput {
-            operator: RelationalOperatorIndex::new(0),
-            bridge: expected_bridge.clone(),
-        }]),
-        requested_fragment_outputs: Box::new([]),
-        roots: Box::new([RelationalOperatorIndex::new(0)]),
-        pushdown_hints: Box::new([]),
-    };
-    let tabular = |value| {
-        RuntimeValue::from(Value::Object(
-            [("value".into(), Value::List(vec![Value::Integer(value)]))]
-                .into_iter()
-                .collect(),
-        ))
-    };
-    let resources = RunResourceSet::acquire(&[], &no_resources()).unwrap();
-    let context = RelationalContext {
-        run_id: RunId::new(1),
-        resources: &resources,
-        cancellation: &token,
-    };
-    let execution = ProductionRelationalBackend::default()
-        .execute(
-            &context,
-            &plan,
-            &[tabular(99)],
-            &[
-                RelationalInput {
-                    bridge: decoy_bridge,
-                    value: materialize_bridge(MaterializationBridge::Collect, tabular(13), &token)
-                        .unwrap(),
-                },
-                RelationalInput {
-                    bridge: expected_bridge,
-                    value: materialize_bridge(MaterializationBridge::Collect, tabular(41), &token)
-                        .unwrap(),
-                },
-            ],
+fn scheduler_executes_only_the_planned_materialization_adapter() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("adapter_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![RuntimeValue::Stream(
+                    StreamValue::from_values(
+                        [Value::Integer(7), Value::Integer(8)],
+                        CancellationToken::new(),
+                    )
+                    .unwrap(),
+                )])
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("adapter_sink", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| {
+                assert!(matches!(
+                    inputs,
+                    [RuntimeValue::Artifact(artifact)]
+                        if artifact.kind() == ArtifactKind::Collected
+                            && artifact.values() == [Value::Integer(7), Value::Integer(8)]
+                ));
+                Ok(vec![Value::Integer(2).into()])
+            }),
         )
         .unwrap();
 
-    assert_eq!(execution.outputs, vec![tabular(41)]);
+    let mut source = operation("adapter_source", &[], &[0]);
+    source.outputs[0].production = OutputProduction::Streaming;
+    let mut sink = operation("adapter_sink", &[3], &[4]);
+    sink.inputs[0].consumption = InputConsumption::FullyMaterialized;
+    let adapter = PlannedOperation {
+        stable_id: OperationStableId::new("test.operation.adapter.collect").unwrap(),
+        source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+        source_node_type_id: NodeTypeId::new("yssbi.test.adapter.collect").unwrap(),
+        kernel: PlannedKernel::Adapter(PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1_000_000,
+                max_bytes: 64 * 1024 * 1024,
+            },
+        }),
+        inputs: Box::new([PlannedInput {
+            value: ValueRef::new(1),
+            consumption: InputConsumption::Streaming,
+            bound_value: None,
+        }]),
+        outputs: Box::new([PlannedOutput {
+            value: ValueRef::new(2),
+            production: OutputProduction::FullyMaterialized,
+        }]),
+        params: id("adapter.none", CompiledParameterHandle::new),
+        resource_dependencies: Box::new([]),
+        cache_policy: CachePolicy::Disabled,
+        semantics_version: ExecutionSemanticsVersion::from_bytes([9; 32]),
+        workload: WorkloadClass::AdapterIo,
+        retry: PlannedRetry::default(),
+    };
+    let mut execution_plan = plan(
+        vec![source, sink, adapter],
+        5,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(2)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    execution_plan.value_dependencies = Box::new([
+        ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        },
+        ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(3),
+        },
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(4),
+    }]);
+    publish_graph_results(&mut execution_plan);
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(
+        result.values["result"],
+        RuntimeValue::from(Value::Integer(2))
+    );
+}
+
+#[test]
+fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consumers() {
+    for different_contracts in [false, true] {
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("fanout_source", KernelHandle::new),
+                FnKernel(|_: &[RuntimeValue]| {
+                    Ok(vec![RuntimeValue::Stream(
+                        StreamValue::from_values(
+                            [Value::Integer(1), Value::Integer(2), Value::Integer(3)],
+                            CancellationToken::new(),
+                        )
+                        .unwrap(),
+                    )])
+                }),
+            )
+            .unwrap();
+        for name in ["fanout_a", "fanout_b"] {
+            let observed = Arc::clone(&observed);
+            kernels
+                .register(
+                    id(name, KernelHandle::new),
+                    FnKernel(move |inputs: &[RuntimeValue]| {
+                        let count = match &inputs[0] {
+                            RuntimeValue::Artifact(artifact) => artifact.values().len(),
+                            RuntimeValue::Stream(stream) => {
+                                let mut count = 0;
+                                while stream.recv().is_ok() {
+                                    count += 1;
+                                }
+                                count
+                            }
+                            RuntimeValue::Scalar(_) => 1,
+                        };
+                        observed.lock().unwrap().push(count);
+                        Ok(vec![Value::Integer(count as i64).into()])
+                    }),
+                )
+                .unwrap();
+        }
+        let mut source = operation("fanout_source", &[], &[0]);
+        source.outputs[0].production = OutputProduction::Streaming;
+        let mut sink_a = operation("fanout_a", &[7], &[8]);
+        sink_a.inputs[0].consumption = if different_contracts {
+            InputConsumption::Streaming
+        } else {
+            InputConsumption::FullyMaterialized
+        };
+        let sink_b = operation("fanout_b", &[9], &[10]);
+        let adapter_operation =
+            |stable: &str,
+             adapter: PlannedAdapter,
+             input: u32,
+             output: u32,
+             consumption: InputConsumption,
+             production: OutputProduction| PlannedOperation {
+                stable_id: OperationStableId::new(stable).unwrap(),
+                source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+                source_node_type_id: NodeTypeId::new("yssbi.test.fanout_adapter").unwrap(),
+                kernel: PlannedKernel::Adapter(adapter),
+                inputs: Box::new([PlannedInput {
+                    value: ValueRef::new(input),
+                    consumption,
+                    bound_value: None,
+                }]),
+                outputs: Box::new([PlannedOutput {
+                    value: ValueRef::new(output),
+                    production,
+                }]),
+                params: id("adapter.fanout", CompiledParameterHandle::new),
+                resource_dependencies: Box::new([]),
+                cache_policy: CachePolicy::Disabled,
+                semantics_version: ExecutionSemanticsVersion::from_bytes([7; 32]),
+                workload: WorkloadClass::AdapterIo,
+                retry: PlannedRetry::default(),
+            };
+        let shared = adapter_operation(
+            "fanout.shared",
+            PlannedAdapter::Collect {
+                limits: MaterializationLimits {
+                    max_values: 1_000_000,
+                    max_bytes: 64 * 1024 * 1024,
+                },
+            },
+            1,
+            2,
+            InputConsumption::Streaming,
+            OutputProduction::FullyMaterialized,
+        );
+        let adapter_a = adapter_operation(
+            "fanout.adapter.a",
+            if different_contracts {
+                PlannedAdapter::StreamBridge {
+                    format: StreamFormat::Native,
+                }
+            } else {
+                PlannedAdapter::Identity
+            },
+            3,
+            4,
+            InputConsumption::FullyMaterialized,
+            if different_contracts {
+                OutputProduction::Streaming
+            } else {
+                OutputProduction::FullyMaterialized
+            },
+        );
+        let adapter_b = adapter_operation(
+            "fanout.adapter.b",
+            PlannedAdapter::Identity,
+            5,
+            6,
+            InputConsumption::FullyMaterialized,
+            OutputProduction::FullyMaterialized,
+        );
+        let mut execution_plan = plan(
+            vec![source, sink_a, sink_b, shared, adapter_a, adapter_b],
+            11,
+            StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(0)),
+                ControlStep::Operation(OperationIndex::new(3)),
+                ControlStep::Operation(OperationIndex::new(4)),
+                ControlStep::Operation(OperationIndex::new(1)),
+                ControlStep::Operation(OperationIndex::new(5)),
+                ControlStep::Operation(OperationIndex::new(2)),
+            ])),
+        );
+        execution_plan.value_dependencies = Box::new([
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(1),
+            },
+            ValueDependency {
+                source: ValueRef::new(2),
+                destination: ValueRef::new(3),
+            },
+            ValueDependency {
+                source: ValueRef::new(2),
+                destination: ValueRef::new(5),
+            },
+            ValueDependency {
+                source: ValueRef::new(4),
+                destination: ValueRef::new(7),
+            },
+            ValueDependency {
+                source: ValueRef::new(6),
+                destination: ValueRef::new(9),
+            },
+        ]);
+        execution_plan.results = Box::new([
+            PlanResult {
+                name: "a".into(),
+                output: stable_output("a"),
+                value: ValueRef::new(8),
+            },
+            PlanResult {
+                name: "b".into(),
+                output: stable_output("b"),
+                value: ValueRef::new(10),
+            },
+        ]);
+        publish_graph_results(&mut execution_plan);
+
+        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+            .run(&execution_plan, CancellationToken::new())
+            .unwrap();
+        let mut counts = observed.lock().unwrap().clone();
+        counts.sort();
+        assert_eq!(counts, vec![3, 3]);
+    }
+}
+
+#[test]
+fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts() {
+    #[derive(Clone, Copy)]
+    enum Shape {
+        Stream,
+        Artifact(ArtifactKind),
+    }
+
+    let identity = PlannedAdapter::Identity;
+    let stream_bridge = PlannedAdapter::StreamBridge {
+        format: StreamFormat::Native,
+    };
+    let cases = [
+        (
+            OutputProduction::Streaming,
+            InputConsumption::Streaming,
+            identity.clone(),
+            InputConsumption::Streaming,
+            OutputProduction::Streaming,
+            Shape::Stream,
+        ),
+        (
+            OutputProduction::Streaming,
+            InputConsumption::SinglePassBatches,
+            PlannedAdapter::Buffer { capacity: 64 },
+            InputConsumption::Streaming,
+            OutputProduction::Batches,
+            Shape::Artifact(ArtifactKind::Buffered),
+        ),
+        (
+            OutputProduction::Streaming,
+            InputConsumption::RewindableBatches,
+            PlannedAdapter::Replay,
+            InputConsumption::Streaming,
+            OutputProduction::Batches,
+            Shape::Artifact(ArtifactKind::Replayable),
+        ),
+        (
+            OutputProduction::Streaming,
+            InputConsumption::RandomAccess,
+            PlannedAdapter::Spill {
+                memory_limit_bytes: 64 * 1024 * 1024,
+            },
+            InputConsumption::Streaming,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Spilled),
+        ),
+        (
+            OutputProduction::Streaming,
+            InputConsumption::FullyMaterialized,
+            PlannedAdapter::Collect {
+                limits: MaterializationLimits {
+                    max_values: 1_000_000,
+                    max_bytes: 64 * 1024 * 1024,
+                },
+            },
+            InputConsumption::Streaming,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+        (
+            OutputProduction::Batches,
+            InputConsumption::Streaming,
+            stream_bridge.clone(),
+            InputConsumption::SinglePassBatches,
+            OutputProduction::Streaming,
+            Shape::Stream,
+        ),
+        (
+            OutputProduction::Batches,
+            InputConsumption::SinglePassBatches,
+            identity.clone(),
+            InputConsumption::SinglePassBatches,
+            OutputProduction::Batches,
+            Shape::Artifact(ArtifactKind::Buffered),
+        ),
+        (
+            OutputProduction::Batches,
+            InputConsumption::RewindableBatches,
+            PlannedAdapter::Replay,
+            InputConsumption::SinglePassBatches,
+            OutputProduction::Batches,
+            Shape::Artifact(ArtifactKind::Replayable),
+        ),
+        (
+            OutputProduction::Batches,
+            InputConsumption::RandomAccess,
+            PlannedAdapter::Spill {
+                memory_limit_bytes: 64 * 1024 * 1024,
+            },
+            InputConsumption::SinglePassBatches,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Spilled),
+        ),
+        (
+            OutputProduction::Batches,
+            InputConsumption::FullyMaterialized,
+            PlannedAdapter::Collect {
+                limits: MaterializationLimits {
+                    max_values: 1_000_000,
+                    max_bytes: 64 * 1024 * 1024,
+                },
+            },
+            InputConsumption::SinglePassBatches,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+        (
+            OutputProduction::FullyMaterialized,
+            InputConsumption::Streaming,
+            stream_bridge,
+            InputConsumption::FullyMaterialized,
+            OutputProduction::Streaming,
+            Shape::Stream,
+        ),
+        (
+            OutputProduction::FullyMaterialized,
+            InputConsumption::SinglePassBatches,
+            identity.clone(),
+            InputConsumption::FullyMaterialized,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+        (
+            OutputProduction::FullyMaterialized,
+            InputConsumption::RewindableBatches,
+            identity.clone(),
+            InputConsumption::FullyMaterialized,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+        (
+            OutputProduction::FullyMaterialized,
+            InputConsumption::RandomAccess,
+            identity.clone(),
+            InputConsumption::FullyMaterialized,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+        (
+            OutputProduction::FullyMaterialized,
+            InputConsumption::FullyMaterialized,
+            identity,
+            InputConsumption::FullyMaterialized,
+            OutputProduction::FullyMaterialized,
+            Shape::Artifact(ArtifactKind::Collected),
+        ),
+    ];
+
+    for (production, consumption, adapter, adapter_consumption, adapter_production, shape) in cases
+    {
+        let planned = MaterializationAdapterPlan::for_contract(production, consumption);
+        assert_eq!(planned.adapter, adapter);
+        assert_eq!(planned.input_consumption, adapter_consumption);
+        assert_eq!(planned.output_production, adapter_production);
+        let input = match production {
+            OutputProduction::Streaming => RuntimeValue::Stream(
+                StreamValue::from_values([Value::Integer(7)], CancellationToken::new()).unwrap(),
+            ),
+            OutputProduction::Batches => RuntimeValue::Artifact(Artifact::new(
+                ArtifactKind::Buffered,
+                vec![Value::Integer(7)],
+            )),
+            OutputProduction::FullyMaterialized => RuntimeValue::Artifact(Artifact::new(
+                ArtifactKind::Collected,
+                vec![Value::Integer(7)],
+            )),
+        };
+        let output =
+            execute_planned_adapter(&planned.adapter, input, &CancellationToken::new()).unwrap();
+        match (shape, output) {
+            (Shape::Stream, RuntimeValue::Stream(_)) => {}
+            (Shape::Artifact(expected), RuntimeValue::Artifact(actual)) => {
+                assert_eq!(actual.kind(), expected);
+                assert_eq!(actual.values(), &[Value::Integer(7)]);
+            }
+            _ => panic!("adapter runtime result does not match its declared production"),
+        }
+    }
+}
+
+fn per_run_memo_key(inputs: &[RuntimeValue], resource_revision: &str) -> OperationMemoKey {
+    OperationMemoKey::from_inputs(
+        OperationStableId::new("events/test::memoized-operation").unwrap(),
+        inputs,
+        BTreeMap::from([(
+            ResourceKey::new("variables/relevant"),
+            ResourceVersion::new(resource_revision),
+        )]),
+        ExecutionSemanticsVersion::from_bytes([7; 32]),
+        DemandFingerprint::from_bytes([9; 32]),
+    )
+    .expect("materialized inputs are cacheable")
+}
+
+#[test]
+fn per_run_memoization_demand_fingerprints_are_frame_specific_without_sentinels() {
+    let mut root = plan(
+        vec![operation("demand", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    root.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut root);
+
+    assert_ne!(
+        DemandFingerprint::for_root(&root, None),
+        DemandFingerprint::for_root(&root, Some([0; 32]))
+    );
+    let mut different_publication = root.clone();
+    different_publication.results[0].name = "other".into();
+    different_publication.publications = Box::new([PlannedPublication::GraphResult {
+        name: "other".into(),
+        output: different_publication.results[0].output.clone(),
+        value: ValueRef::new(0),
+    }]);
+    assert_ne!(
+        DemandFingerprint::for_root(&root, None),
+        DemandFingerprint::for_root(&different_publication, None)
+    );
+
+    let target = id("functions/callee", FunctionPlanHandle::new);
+    let first_arguments = Box::new([CallArgumentBinding {
+        caller_source: ValueRef::new(0),
+        callee_destination: ValueRef::new(1),
+    }]);
+    let second_arguments = Box::new([CallArgumentBinding {
+        caller_source: ValueRef::new(0),
+        callee_destination: ValueRef::new(2),
+    }]);
+    let results = Box::new([CallResultBinding {
+        callee_source: ValueRef::new(3),
+        caller_destination: ValueRef::new(4),
+    }]);
+    assert_ne!(
+        DemandFingerprint::for_callee(&root, &target, &first_arguments[..], &results[..]),
+        DemandFingerprint::for_callee(&root, &target, &second_arguments[..], &results[..])
+    );
+}
+
+#[test]
+fn per_run_memoization_same_key_produces_once() {
+    let memo = RunMemoization::new();
+    let key = per_run_memo_key(&[Value::Integer(7).into()], "1");
+    let calls = AtomicUsize::new(0);
+
+    for _ in 0..2 {
+        let outputs = memo
+            .get_or_produce(key.clone(), &CancellationToken::new(), || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(8).into()].into_boxed_slice())
+            })
+            .unwrap();
+        assert_eq!(outputs.as_ref(), &[RuntimeValue::from(Value::Integer(8))]);
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn per_run_memoization_different_typed_inputs_produce_separately() {
+    let memo = RunMemoization::new();
+    let calls = AtomicUsize::new(0);
+
+    for input in [
+        RuntimeValue::from(Value::Integer(7)),
+        RuntimeValue::from(Value::String("7".into())),
+        RuntimeValue::Artifact(Artifact::new(ArtifactKind::Buffered, [Value::Integer(7)])),
+        RuntimeValue::Artifact(Artifact::new(ArtifactKind::Buffered, [Value::Integer(7)])),
+        RuntimeValue::Artifact(Artifact::new(ArtifactKind::Collected, [Value::Integer(7)])),
+    ] {
+        let key = per_run_memo_key(&[input], "1");
+        memo.get_or_produce(key, &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new([]))
+        })
+        .unwrap();
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
+}
+
+#[test]
+fn per_run_memoization_relevant_resource_revision_is_part_of_the_key() {
+    let memo = RunMemoization::new();
+    let calls = AtomicUsize::new(0);
+
+    for revision in ["41", "42"] {
+        memo.get_or_produce(
+            per_run_memo_key(&[Value::Null.into()], revision),
+            &CancellationToken::new(),
+            || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(Box::new([]))
+            },
+        )
+        .unwrap();
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_uses_only_operation_resource_versions() {
+    let mut memoized = operation("memo_resource", &[], &[]);
+    memoized.cache_policy = CachePolicy::PerRun;
+    memoized.resource_dependencies = Box::new([ResourceKey::new("variables/relevant")]);
+    let mut execution_plan = plan(
+        vec![memoized],
+        0,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
+    execution_plan.provenance.basis.resource_versions = BTreeMap::from([
+        (
+            ResourceKey::new("variables/relevant"),
+            ResourceVersion::new("1"),
+        ),
+        (
+            ResourceKey::new("variables/unrelated"),
+            ResourceVersion::new("1"),
+        ),
+    ]);
+    let memo = RunMemoization::new();
+    let calls = AtomicUsize::new(0);
+
+    for (unrelated, relevant) in [("1", "1"), ("2", "1"), ("2", "2")] {
+        execution_plan.provenance.basis.resource_versions.insert(
+            ResourceKey::new("variables/unrelated"),
+            ResourceVersion::new(unrelated),
+        );
+        execution_plan.provenance.basis.resource_versions.insert(
+            ResourceKey::new("variables/relevant"),
+            ResourceVersion::new(relevant),
+        );
+        let versions =
+            super::scheduler::operation_resource_versions(&execution_plan, OperationIndex::new(0))
+                .expect("declared relevant version exists");
+        let key = OperationMemoKey::from_inputs(
+            execution_plan.operations[0].stable_id.clone(),
+            &[],
+            versions,
+            execution_plan.operations[0].semantics_version,
+            DemandFingerprint::from_bytes([9; 32]),
+        )
+        .unwrap();
+        memo.get_or_produce(key, &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new([]))
+        })
+        .unwrap();
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    execution_plan
+        .provenance
+        .basis
+        .resource_versions
+        .remove(&ResourceKey::new("variables/relevant"));
+    assert!(
+        super::scheduler::operation_resource_versions(&execution_plan, OperationIndex::new(0))
+            .is_none()
+    );
+}
+
+#[test]
+fn per_run_memoization_concurrent_same_key_has_one_producer_and_waiter_cancel_isolated() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let producer_started = Arc::new(Barrier::new(2));
+    let release_producer = Arc::new(Barrier::new(2));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let producer_started = Arc::clone(&producer_started);
+        let release_producer = Arc::clone(&release_producer);
+        let calls = Arc::clone(&calls);
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                producer_started.wait();
+                release_producer.wait();
+                Ok(vec![Value::Integer(2).into()].into_boxed_slice())
+            })
+        })
+    };
+    producer_started.wait();
+
+    let cancelled = CancellationToken::new();
+    let cancelled_waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let cancelled = cancelled.clone();
+        thread::spawn(move || memo.get_or_produce(key, &cancelled, || panic!("waiter produced")))
+    };
+    cancelled.cancel();
+
+    let successful_waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || panic!("waiter produced"))
+        })
+    };
+    release_producer.wait();
+
+    assert_eq!(cancelled_waiter.join().unwrap(), Err(RunError::Cancelled));
+    assert_eq!(
+        producer.join().unwrap().unwrap().as_ref(),
+        &[RuntimeValue::from(Value::Integer(2))]
+    );
+    assert_eq!(
+        successful_waiter.join().unwrap().unwrap().as_ref(),
+        &[RuntimeValue::from(Value::Integer(2))]
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn per_run_memoization_producer_panic_removes_flight_and_wakes_waiter() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let producer_started = Arc::new(Barrier::new(2));
+    let waiter_registered = Arc::new(Barrier::new(2));
+    let release_producer = Arc::new(Barrier::new(2));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let producer_started = Arc::clone(&producer_started);
+        let release_producer = Arc::clone(&release_producer);
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || {
+                producer_started.wait();
+                release_producer.wait();
+                panic!("producer panic sentinel")
+            })
+        })
+    };
+    producer_started.wait();
+
+    let waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let waiter_registered = Arc::clone(&waiter_registered);
+        thread::spawn(move || {
+            memo.get_or_produce_with_commit_checkpoint(
+                key,
+                &CancellationToken::new(),
+                || panic!("waiter produced"),
+                |checkpoint| {
+                    if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                        waiter_registered.wait();
+                    }
+                },
+            )
+        })
+    };
+    waiter_registered.wait();
+    release_producer.wait();
+
+    let expected = Err(RunError::InvalidPlan(
+        "memoization producer panicked".into(),
+    ));
+    assert!(producer.join().is_err(), "producer panic must unwind");
+    assert_eq!(waiter.join().unwrap(), expected);
+
+    assert_eq!(
+        memo.get_or_produce(key, &CancellationToken::new(), || Ok(Box::new([])))
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+#[test]
+fn per_run_memoization_producer_error_is_removed() {
+    let memo = RunMemoization::new();
+    let key = per_run_memo_key(&[Value::Null.into()], "1");
+    let calls = AtomicUsize::new(0);
+
+    let first = memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Err(RunError::InvalidPlan("failed".into()))
+    });
+    let second = memo.get_or_produce(key, &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    });
+
+    assert_eq!(first, Err(RunError::InvalidPlan("failed".into())));
+    assert_eq!(second.unwrap().len(), 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_producer_cancellation_is_not_cached() {
+    let memo = RunMemoization::new();
+    let key = per_run_memo_key(&[Value::Null.into()], "1");
+    let calls = AtomicUsize::new(0);
+
+    let cancelled = CancellationToken::new();
+    let producer_token = cancelled.clone();
+    let first = memo.get_or_produce(key.clone(), &cancelled, || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        producer_token.cancel();
+        Ok(Box::new([]))
+    });
+    let second = memo.get_or_produce(key, &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    });
+
+    assert_eq!(first, Err(RunError::Cancelled));
+    assert_eq!(second.unwrap().len(), 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_cancellation_before_commit_does_not_cache() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let cancellation = CancellationToken::new();
+    let at_commit = Arc::new(Barrier::new(2));
+    let release_commit = Arc::new(Barrier::new(2));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let cancellation = cancellation.clone();
+        let at_commit = Arc::clone(&at_commit);
+        let release_commit = Arc::clone(&release_commit);
+        let calls = Arc::clone(&calls);
+        thread::spawn(move || {
+            memo.get_or_produce_with_commit_checkpoint(
+                key,
+                &cancellation,
+                || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(Box::new([]))
+                },
+                |checkpoint| {
+                    if checkpoint == MemoCommitCheckpoint::BeforeCommit {
+                        at_commit.wait();
+                        release_commit.wait();
+                    }
+                },
+            )
+        })
+    };
+    at_commit.wait();
+    cancellation.cancel();
+    release_commit.wait();
+
+    assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
+    memo.get_or_produce(key, &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    })
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_cancellation_after_commit_keeps_cache() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let cancellation = CancellationToken::new();
+    let committed = Arc::new(Barrier::new(2));
+    let release_producer = Arc::new(Barrier::new(2));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let cancellation = cancellation.clone();
+        let committed = Arc::clone(&committed);
+        let release_producer = Arc::clone(&release_producer);
+        let calls = Arc::clone(&calls);
+        thread::spawn(move || {
+            memo.get_or_produce_with_commit_checkpoint(
+                key,
+                &cancellation,
+                || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(Box::new([]))
+                },
+                |checkpoint| {
+                    if checkpoint == MemoCommitCheckpoint::Committed {
+                        committed.wait();
+                        release_producer.wait();
+                    }
+                },
+            )
+        })
+    };
+    committed.wait();
+    cancellation.cancel();
+    release_producer.wait();
+
+    assert_eq!(producer.join().unwrap().unwrap().len(), 0);
+    memo.get_or_produce(key, &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    })
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn per_run_memoization_partial_stream_is_not_cacheable() {
+    let memo = RunMemoization::new();
+    let stream_token = CancellationToken::new();
+    let stream = RuntimeValue::Stream(
+        StreamValue::from_values([Value::Integer(1)], stream_token.clone()).unwrap(),
+    );
+    assert!(
+        OperationMemoKey::from_inputs(
+            OperationStableId::new("events/test::stream-operation").unwrap(),
+            &[stream],
+            BTreeMap::new(),
+            ExecutionSemanticsVersion::from_bytes([7; 32]),
+            DemandFingerprint::from_bytes([9; 32]),
+        )
+        .is_none()
+    );
+
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let calls = AtomicUsize::new(0);
+    for _ in 0..2 {
+        let result = memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![RuntimeValue::Stream(
+                StreamValue::from_values([Value::Integer(2)], stream_token.clone()).unwrap(),
+            )]
+            .into_boxed_slice())
+        });
+        assert!(matches!(
+            result.unwrap().as_ref(),
+            [RuntimeValue::Stream(_)]
+        ));
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_run_finalization_releases_entries() {
+    let memo = RunMemoization::new();
+    let key = per_run_memo_key(&[Value::Null.into()], "1");
+    let calls = AtomicUsize::new(0);
+    memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    })
+    .unwrap();
+    memo.finalize();
+    assert_eq!(
+        memo.get_or_produce(key, &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new([]))
+        }),
+        Err(RunError::Cancelled)
+    );
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn per_run_memoization_finalize_wakes_waiter_and_prevents_late_commit() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let producer_started = Arc::new(Barrier::new(2));
+    let waiter_registered = Arc::new(Barrier::new(2));
+    let release_producer = Arc::new(Barrier::new(2));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let producer_started = Arc::clone(&producer_started);
+        let release_producer = Arc::clone(&release_producer);
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || {
+                producer_started.wait();
+                release_producer.wait();
+                Ok(Box::new([]))
+            })
+        })
+    };
+    producer_started.wait();
+
+    let (settled_tx, settled_rx) = mpsc::channel();
+    let waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let waiter_registered = Arc::clone(&waiter_registered);
+        thread::spawn(move || {
+            settled_tx
+                .send(memo.get_or_produce_with_commit_checkpoint(
+                    key,
+                    &CancellationToken::new(),
+                    || panic!("waiter produced"),
+                    |checkpoint| {
+                        if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                            waiter_registered.wait();
+                        }
+                    },
+                ))
+                .unwrap();
+        })
+    };
+    waiter_registered.wait();
+    memo.finalize();
+
+    assert_eq!(
+        settled_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        Err(RunError::Cancelled)
+    );
+    release_producer.wait();
+    assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
+    waiter.join().unwrap();
+
+    let late_calls = AtomicUsize::new(0);
+    let late = memo.get_or_produce(key, &CancellationToken::new(), || {
+        late_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new([]))
+    });
+    assert_eq!(late, Err(RunError::Cancelled));
+    assert_eq!(late_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn per_run_memoization_finalize_terminal_wins_over_late_producer_error() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let producer_started = Arc::new(Barrier::new(2));
+    let release_error = Arc::new(Barrier::new(2));
+    let waiter_registered = Arc::new(Barrier::new(2));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let producer_started = Arc::clone(&producer_started);
+        let release_error = Arc::clone(&release_error);
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || {
+                producer_started.wait();
+                release_error.wait();
+                Err(RunError::InvalidPlan("late error".into()))
+            })
+        })
+    };
+    producer_started.wait();
+    let (waiter_tx, waiter_rx) = mpsc::channel();
+    let waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let waiter_registered = Arc::clone(&waiter_registered);
+        thread::spawn(move || {
+            let result = memo.get_or_produce_with_commit_checkpoint(
+                key,
+                &CancellationToken::new(),
+                || panic!("waiter produced"),
+                |checkpoint| {
+                    if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                        waiter_registered.wait();
+                    }
+                },
+            );
+            waiter_tx.send(result).unwrap();
+        })
+    };
+    waiter_registered.wait();
+
+    let terminal_set = Arc::new(Barrier::new(2));
+    let release_finalize = Arc::new(Barrier::new(2));
+    let finalizer = {
+        let memo = Arc::clone(&memo);
+        let terminal_set = Arc::clone(&terminal_set);
+        let release_finalize = Arc::clone(&release_finalize);
+        thread::spawn(move || {
+            memo.finalize_with_checkpoint(|| {
+                terminal_set.wait();
+                release_finalize.wait();
+            });
+        })
+    };
+    terminal_set.wait();
+    release_error.wait();
+    assert!(waiter_rx.recv_timeout(Duration::from_millis(100)).is_err());
+    release_finalize.wait();
+
+    assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
+    assert_eq!(
+        waiter_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        Err(RunError::Cancelled)
+    );
+    waiter.join().unwrap();
+    finalizer.join().unwrap();
+}
+
+#[test]
+fn per_run_memoization_finalize_terminal_wins_over_late_producer_panic() {
+    let memo = Arc::new(RunMemoization::new());
+    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
+    let producer_started = Arc::new(Barrier::new(2));
+    let release_panic = Arc::new(Barrier::new(2));
+    let waiter_registered = Arc::new(Barrier::new(2));
+
+    let producer = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let producer_started = Arc::clone(&producer_started);
+        let release_panic = Arc::clone(&release_panic);
+        thread::spawn(move || {
+            memo.get_or_produce(key, &CancellationToken::new(), || {
+                producer_started.wait();
+                release_panic.wait();
+                panic!("late panic")
+            })
+        })
+    };
+    producer_started.wait();
+    let (waiter_tx, waiter_rx) = mpsc::channel();
+    let waiter = {
+        let memo = Arc::clone(&memo);
+        let key = key.clone();
+        let waiter_registered = Arc::clone(&waiter_registered);
+        thread::spawn(move || {
+            let result = memo.get_or_produce_with_commit_checkpoint(
+                key,
+                &CancellationToken::new(),
+                || panic!("waiter produced"),
+                |checkpoint| {
+                    if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                        waiter_registered.wait();
+                    }
+                },
+            );
+            waiter_tx.send(result).unwrap();
+        })
+    };
+    waiter_registered.wait();
+
+    let terminal_set = Arc::new(Barrier::new(2));
+    let release_finalize = Arc::new(Barrier::new(2));
+    let finalizer = {
+        let memo = Arc::clone(&memo);
+        let terminal_set = Arc::clone(&terminal_set);
+        let release_finalize = Arc::clone(&release_finalize);
+        thread::spawn(move || {
+            memo.finalize_with_checkpoint(|| {
+                terminal_set.wait();
+                release_finalize.wait();
+            });
+        })
+    };
+    terminal_set.wait();
+    release_panic.wait();
+    assert!(waiter_rx.recv_timeout(Duration::from_millis(100)).is_err());
+    release_finalize.wait();
+
+    assert!(producer.join().is_err());
+    assert_eq!(
+        waiter_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        Err(RunError::Cancelled)
+    );
+    waiter.join().unwrap();
+    finalizer.join().unwrap();
+}
+
+#[test]
+fn per_run_memoization_finalize_owner_lock_rejects_late_lookup() {
+    let memo = Arc::new(RunMemoization::new());
+    let terminal_set = Arc::new(Barrier::new(2));
+    let release_finalize = Arc::new(Barrier::new(2));
+    let finalizer = {
+        let memo = Arc::clone(&memo);
+        let terminal_set = Arc::clone(&terminal_set);
+        let release_finalize = Arc::clone(&release_finalize);
+        thread::spawn(move || {
+            memo.finalize_with_checkpoint(|| {
+                terminal_set.wait();
+                release_finalize.wait();
+            });
+        })
+    };
+    terminal_set.wait();
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let late = {
+        let memo = Arc::clone(&memo);
+        let calls = Arc::clone(&calls);
+        thread::spawn(move || {
+            memo.get_or_produce(
+                per_run_memo_key(&[Value::Null.into()], "1"),
+                &CancellationToken::new(),
+                || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(Box::new([]))
+                },
+            )
+        })
+    };
+    release_finalize.wait();
+
+    finalizer.join().unwrap();
+    assert_eq!(late.join().unwrap(), Err(RunError::Cancelled));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn per_run_memoization_new_run_is_isolated() {
+    let key = per_run_memo_key(&[Value::Null.into()], "1");
+    let calls = AtomicUsize::new(0);
+
+    for _ in 0..2 {
+        let memo = RunMemoization::new();
+        memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new([]))
+        })
+        .unwrap();
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
+    let memoized_calls = Arc::new(AtomicUsize::new(0));
+    let loop_calls = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("memo_initial", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(0).into()])),
+        )
+        .unwrap();
+    let observed_memoized = Arc::clone(&memoized_calls);
+    kernels
+        .register(
+            id("memo_value", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed_memoized.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(41).into()])
+            }),
+        )
+        .unwrap();
+    let observed_loop = Arc::clone(&loop_calls);
+    kernels
+        .register(
+            id("memo_loop", KernelHandle::new),
+            FnKernel(move |inputs: &[RuntimeValue]| {
+                observed_loop.fetch_add(1, Ordering::SeqCst);
+                let RuntimeValue::Scalar(Value::Integer(value)) = &inputs[0] else {
+                    return Err(KernelError::new("expected loop integer"));
+                };
+                let next = value + 1;
+                Ok(vec![
+                    Value::Integer(next).into(),
+                    Value::Bool(next < 3).into(),
+                ])
+            }),
+        )
+        .unwrap();
+
+    let mut memoized = operation("memo_value", &[], &[1]);
+    memoized.cache_policy = CachePolicy::PerRun;
+    let mut execution_plan = plan(
+        vec![
+            operation("memo_initial", &[], &[0]),
+            memoized,
+            operation("memo_loop", &[2], &[3, 4]),
+        ],
+        6,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Loop {
+                body: Box::new(StructuredControlRegion::Sequence(Box::new([
+                    ControlStep::Operation(OperationIndex::new(1)),
+                    ControlStep::Operation(OperationIndex::new(2)),
+                ]))),
+                carried: Box::new([LoopCarriedBinding {
+                    body_input: ValueRef::new(2),
+                    initial_source: ValueRef::new(0),
+                    next_source: ValueRef::new(3),
+                    result: ValueRef::new(5),
+                }]),
+                continue_condition: ValueRef::new(4),
+                max_iterations: 4,
+            })),
+        ])),
+    );
+    execution_plan.value_sources = Box::new([
+        PlanValueSource::ControlProduced(ValueRef::new(2), OutputProduction::FullyMaterialized),
+        PlanValueSource::ControlProduced(ValueRef::new(5), OutputProduction::FullyMaterialized),
+    ]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "count".into(),
+        output: stable_output("count"),
+        value: ValueRef::new(5),
+    }]);
+    publish_graph_results(&mut execution_plan);
+
+    execution_plan.validate().unwrap();
+    let resources = no_resources();
+    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions);
+    for expected_run_count in 1..=2 {
+        let result = executor
+            .run(&execution_plan, CancellationToken::new())
+            .unwrap();
+        assert_eq!(
+            result.values["count"],
+            RuntimeValue::from(Value::Integer(3))
+        );
+        assert_eq!(memoized_calls.load(Ordering::SeqCst), expected_run_count);
+        assert_eq!(loop_calls.load(Ordering::SeqCst), expected_run_count * 3);
+    }
 }
 
 #[test]
@@ -2877,9 +4065,8 @@ impl RelationalBackend for StreamingRelationalBackend {
     fn execute(
         &self,
         context: &RelationalContext<'_>,
-        plan: &CompiledRelationalPlan,
+        _: &CompiledRelationalPlan,
         _: &[RuntimeValue],
-        _: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
         let (sender, receiver) = bounded_stream_channel(1, context.cancellation.clone())
             .map_err(|_| RelationalError::operator_invalid("stream setup failed"))?;
@@ -2887,11 +4074,7 @@ impl RelationalBackend for StreamingRelationalBackend {
         *self.sender.lock().unwrap() = Some(sender);
         *self.observed.lock().unwrap() = Some(stream.clone());
         Ok(RelationalExecution {
-            outputs: vec![RuntimeValue::Stream(stream.clone())],
-            fragment_outputs: BTreeMap::from([(
-                plan.fragment_order[0].clone(),
-                RuntimeValue::Stream(stream),
-            )]),
+            outputs: vec![RuntimeValue::Stream(stream)],
         })
     }
 }
@@ -2935,7 +4118,6 @@ impl RelationalBackend for FailingRelationalBackend {
         _: &RelationalContext<'_>,
         _: &CompiledRelationalPlan,
         _: &[RuntimeValue],
-        _: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
         Err(RelationalError::operator_invalid(
             "relational execution failed",

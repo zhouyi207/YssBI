@@ -610,6 +610,23 @@ fn execution_app_error(
     terminal: Option<TerminalRunEvent>,
 ) -> AppError {
     let message = error.to_string();
+    if let Some(failure) = error.internal_compilation_failure() {
+        let stage = match failure.stage {
+            crate::node_system::compiler::CompilationStage::Analysis => "analysis",
+            crate::node_system::compiler::CompilationStage::Lowering => "lowering",
+        };
+        return AppError {
+            code: "internal_compilation_failure".into(),
+            message,
+            details: Some(serde_json::json!({
+                "internalCompilationFailure": {
+                    "stage": stage,
+                    "code": failure.code,
+                    "nodeId": failure.node_id.map(|node_id| node_id.to_string()),
+                }
+            })),
+        };
+    }
     if message.starts_with("stale_project_lifecycle:") {
         return AppError::new("stale_project_lifecycle", message);
     }
@@ -650,7 +667,6 @@ fn relational_run_app_error_code(
         RunErrorCode::RelationalTypeMismatch => Some("relational_type_mismatch"),
         RunErrorCode::RelationalInputShapeInvalid => Some("relational_input_shape_invalid"),
         RunErrorCode::RelationalHintInvalid => Some("relational_hint_invalid"),
-        RunErrorCode::MissingRelationalFragment => Some("missing_relational_fragment"),
         _ => None,
     }
 }
@@ -659,6 +675,23 @@ fn relational_run_app_error_code(
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteGraphResultDto {
     pub run_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinPreviewGenerationDto {
+    pub generation: u64,
+}
+
+#[tauri::command]
+pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, AppError> {
+    crate::application::pin_preview_generation::allocate_pin_preview_generation()
+        .map(|generation| PinPreviewGenerationDto { generation })
+        .map_err(|_| AppError {
+            code: "pin_preview_generation_exhausted".into(),
+            message: "pin preview generation allocator is exhausted".into(),
+            details: None,
+        })
 }
 
 fn get_result_source_descriptor_from_state(
@@ -835,6 +868,17 @@ mod tests {
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
     };
+
+    #[test]
+    fn pin_preview_generation_dto_serializes_as_a_safe_number() {
+        assert_eq!(
+            serde_json::to_value(PinPreviewGenerationDto {
+                generation: crate::node_system::plan::MAX_SAFE_PREVIEW_GENERATION,
+            })
+            .unwrap(),
+            serde_json::json!({ "generation": 9_007_199_254_740_991_u64 }),
+        );
+    }
 
     fn graph_mutation_request(graph_path: &GraphResourcePath) -> serde_json::Value {
         serde_json::json!({
@@ -1389,11 +1433,34 @@ mod tests {
             ),
             None,
         );
+        let internal_failure = execution_app_error(
+            crate::project::ProjectExecutionError::internal_compilation(
+                crate::node_system::compiler::InternalCompilationFailure {
+                    stage: crate::node_system::compiler::CompilationStage::Lowering,
+                    code: "compiler.lowering.internal_invariant".into(),
+                    node_id: Some(crate::node_system::document::NodeId::from_uuid(
+                        uuid::Uuid::from_u128(42),
+                    )),
+                },
+            ),
+            None,
+        );
 
         assert_eq!(cancelled.code, "run_cancelled");
         assert_eq!(failed.code, "run_failed");
         assert_eq!(pre_run.code, "internal_error");
         assert_eq!(invalid_demand.code, "invalid_execution_demand");
+        assert_eq!(internal_failure.code, "internal_compilation_failure");
+        assert_eq!(
+            internal_failure.details,
+            Some(serde_json::json!({
+                "internalCompilationFailure": {
+                    "stage": "lowering",
+                    "code": "compiler.lowering.internal_invariant",
+                    "nodeId": "00000000-0000-0000-0000-00000000002a"
+                }
+            })),
+        );
         assert_eq!(
             cancelled.details,
             Some(serde_json::json!({ "terminalRunEventSent": true })),

@@ -19,7 +19,7 @@ mod tests {
     };
     use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::protocol::{
-        InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy, Value,
     };
     use crate::node_system::registry::RegistryFingerprint;
 
@@ -29,6 +29,7 @@ mod tests {
 
     fn operation(output: u32) -> PlannedOperation {
         PlannedOperation {
+            stable_id: OperationStableId::new(format!("test.operation.{output}")).unwrap(),
             source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
             source_node_type_id: NodeTypeId::new("yssbi.test.node").unwrap(),
             kernel: PlannedKernel::Native(id("kernel.test", KernelHandle::new)),
@@ -38,10 +39,22 @@ mod tests {
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: id("params-1", CompiledParameterHandle::new),
+            resource_dependencies: Box::new([]),
+            cache_policy: CachePolicy::Disabled,
+            semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            workload: WorkloadClass::Cpu,
+            retry: PlannedRetry::default(),
         }
     }
 
     fn valid_plan() -> ExecutionPlan {
+        let result_output = GraphOutputRef {
+            graph_path: GraphResourcePath("events/test".into()),
+            port: PortAddress::declared(
+                NodeId::from_uuid(uuid::Uuid::nil()),
+                PortKey::new("result").unwrap(),
+            ),
+        };
         ExecutionPlan {
             provenance: CompileProvenance {
                 project_session_id: ProjectSessionId::new("test-session"),
@@ -57,12 +70,30 @@ mod tests {
             value_count: 8,
             operations: Box::new([operation(0), operation(1)]),
             value_sources: Box::new([
-                PlanValueSource::ExternalInput(ValueRef::new(3)),
-                PlanValueSource::ExternalInput(ValueRef::new(4)),
-                PlanValueSource::ControlProduced(ValueRef::new(2)),
-                PlanValueSource::ControlProduced(ValueRef::new(5)),
-                PlanValueSource::ControlProduced(ValueRef::new(6)),
-                PlanValueSource::ControlProduced(ValueRef::new(7)),
+                PlanValueSource::ExternalInput(
+                    ValueRef::new(3),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ExternalInput(
+                    ValueRef::new(4),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(2),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(5),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(6),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ControlProduced(
+                    ValueRef::new(7),
+                    OutputProduction::FullyMaterialized,
+                ),
             ]),
             value_dependencies: Box::new([ValueDependency {
                 source: ValueRef::new(0),
@@ -118,16 +149,55 @@ mod tests {
             }]),
             results: Box::new([PlanResult {
                 name: "result".into(),
-                output: GraphOutputRef {
-                    graph_path: GraphResourcePath("events/test".into()),
-                    port: PortAddress::declared(
-                        NodeId::from_uuid(uuid::Uuid::nil()),
-                        PortKey::new("result").unwrap(),
-                    ),
-                },
+                output: result_output.clone(),
+                value: ValueRef::new(6),
+            }]),
+            publications: Box::new([PlannedPublication::GraphResult {
+                name: "result".into(),
+                output: result_output,
                 value: ValueRef::new(6),
             }]),
         }
+    }
+
+    #[test]
+    fn effective_cache_policy_validation_rejects_duplicate_operation_stable_ids() {
+        let mut plan = valid_plan();
+        plan.operations[1].stable_id = plan.operations[0].stable_id.clone();
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| {
+            matches!(
+                error,
+                PlanValidationError::DuplicateOperationStableId {
+                    stable_id,
+                    first,
+                    duplicate,
+                } if stable_id == &plan.operations[0].stable_id
+                    && first.index() == 0
+                    && duplicate.index() == 1
+            )
+        }));
+    }
+
+    #[test]
+    fn rejects_invalid_planned_retry_policy() {
+        let mut plan = valid_plan();
+        plan.operations[0].retry = PlannedRetry {
+            idempotent: true,
+            policy: Some(RetryPolicy {
+                max_attempts: std::num::NonZeroU32::new(2).unwrap(),
+                initial_backoff: std::time::Duration::from_millis(20),
+                max_backoff: std::time::Duration::from_millis(10),
+            }),
+        };
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| {
+            matches!(
+                error,
+                PlanValidationError::InvalidRetryPolicy { operation }
+                    if operation.index() == 0
+            )
+        }));
     }
 
     #[test]
@@ -141,10 +211,14 @@ mod tests {
                 value: ValueRef::new(6),
             },
         ]);
-        assert!(matches!(
-            duplicate_output.validate().unwrap_err().0.as_ref(),
-            [PlanValidationError::DuplicateResultOutput(_)]
-        ));
+        assert!(
+            duplicate_output
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(error, PlanValidationError::DuplicateResultOutput(_)))
+        );
 
         let mut duplicate_name = valid_plan();
         duplicate_name.results = Box::new([
@@ -178,17 +252,140 @@ mod tests {
         }));
     }
 
-    fn valid_bridged_plan() -> (ExecutionPlan, PlannedMaterializationBridge) {
+    #[test]
+    fn publications_require_exact_available_results_and_one_non_mixed_mode() {
+        let result = valid_plan().results[0].clone();
+
+        let mut missing = valid_plan();
+        missing.publications = Box::new([]);
+        assert!(
+            missing
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::GraphPublicationCountMismatch {
+                        publications: 0,
+                        results: 1,
+                    }
+                ))
+        );
+
+        let mut unexpected = valid_plan();
+        unexpected.results = Box::new([]);
+        assert!(
+            unexpected
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::GraphPublicationCountMismatch {
+                        publications: 1,
+                        results: 0,
+                    }
+                ))
+        );
+
+        let mut graph = valid_plan();
+        graph.publications = Box::new([PlannedPublication::GraphResult {
+            name: result.name.clone(),
+            output: result.output.clone(),
+            value: result.value,
+        }]);
+        graph
+            .validate()
+            .expect("exact graph result publication is valid");
+
+        let mut preview = valid_plan();
+        preview.publications = Box::new([PlannedPublication::PinPreview {
+            output: result.output.clone(),
+            generation: 17,
+            value: result.value,
+        }]);
+        preview
+            .validate()
+            .expect("exact preview publication is valid");
+
+        let mut mismatched = valid_plan();
+        mismatched.publications = Box::new([PlannedPublication::GraphResult {
+            name: "wrong".into(),
+            output: result.output.clone(),
+            value: result.value,
+        }]);
+        assert!(mismatched.validate().is_err());
+
+        let mut out_of_range = valid_plan();
+        out_of_range.publications = Box::new([PlannedPublication::PinPreview {
+            output: result.output.clone(),
+            generation: 17,
+            value: ValueRef::new(out_of_range.value_count),
+        }]);
+        assert!(out_of_range.validate().is_err());
+
+        let mut unavailable = valid_plan();
+        unavailable.results[0].value = ValueRef::new(1);
+        unavailable.publications = Box::new([PlannedPublication::GraphResult {
+            name: unavailable.results[0].name.clone(),
+            output: unavailable.results[0].output.clone(),
+            value: ValueRef::new(1),
+        }]);
+        assert!(
+            unavailable
+                .validate()
+                .unwrap_err()
+                .0
+                .iter()
+                .any(|error| matches!(
+                    error,
+                    PlanValidationError::MissingPublicationSource(value)
+                        if *value == ValueRef::new(1)
+                ))
+        );
+
+        let mut duplicate = graph.clone();
+        duplicate.publications = vec![
+            duplicate.publications[0].clone(),
+            duplicate.publications[0].clone(),
+        ]
+        .into_boxed_slice();
+        assert!(duplicate.validate().is_err());
+
+        let mut mixed = graph.clone();
+        mixed.publications = Box::new([
+            mixed.publications[0].clone(),
+            PlannedPublication::PinPreview {
+                output: result.output.clone(),
+                generation: 17,
+                value: result.value,
+            },
+        ]);
+        assert!(mixed.validate().is_err());
+
+        let mut multiple_previews = preview.clone();
+        multiple_previews.publications = vec![
+            multiple_previews.publications[0].clone(),
+            multiple_previews.publications[0].clone(),
+        ]
+        .into_boxed_slice();
+        assert!(multiple_previews.validate().is_err());
+
+        let mut unsafe_generation = valid_plan();
+        unsafe_generation.publications = Box::new([PlannedPublication::PinPreview {
+            output: result.output,
+            generation: 9_007_199_254_740_992,
+            value: result.value,
+        }]);
+        assert!(unsafe_generation.validate().is_err());
+    }
+
+    fn valid_bridged_plan() -> (ExecutionPlan, ()) {
         let mut plan = valid_plan();
         let producer = id("fragment.producer", RelationalFragmentId::new);
         let consumer = id("fragment.consumer", RelationalFragmentId::new);
-        let bridge = PlannedMaterializationBridge {
-            producer_fragment: producer.clone(),
-            consumer_fragment: consumer.clone(),
-            producer_subplan: RelationalSubplanIndex::new(0),
-            consumer_subplan: RelationalSubplanIndex::new(1),
-            bridge: MaterializationBridge::Collect,
-        };
         plan.relational_subplans = Box::new([
             RelationalSubplan {
                 backend: id("relational.test", RelationalBackendId::new),
@@ -199,15 +396,12 @@ mod tests {
                         relation: "items".into(),
                     }]),
                     fragment_roots: Box::new([RelationalFragmentRoot {
-                        fragment: producer.clone(),
+                        fragment: producer,
                         operator: RelationalOperatorIndex::new(0),
                     }]),
-                    bridge_inputs: Box::new([]),
-                    requested_fragment_outputs: Box::new([producer]),
                     roots: Box::new([RelationalOperatorIndex::new(0)]),
                     pushdown_hints: Box::new([]),
                 },
-                materialization_bridges: Box::new([]),
             },
             RelationalSubplan {
                 backend: id("relational.test", RelationalBackendId::new),
@@ -220,20 +414,14 @@ mod tests {
                         fragment: consumer,
                         operator: RelationalOperatorIndex::new(0),
                     }]),
-                    bridge_inputs: Box::new([RelationalBridgeInput {
-                        operator: RelationalOperatorIndex::new(0),
-                        bridge: bridge.clone(),
-                    }]),
-                    requested_fragment_outputs: Box::new([]),
                     roots: Box::new([RelationalOperatorIndex::new(0)]),
                     pushdown_hints: Box::new([]),
                 },
-                materialization_bridges: Box::new([bridge.clone()]),
             },
         ]);
         plan.operations[0].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
         plan.operations[1].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(1));
-        (plan, bridge)
+        (plan, ())
     }
 
     #[test]
@@ -433,7 +621,13 @@ mod tests {
             .value_sources
             .into_vec()
             .into_iter()
-            .filter(|source| *source != PlanValueSource::ControlProduced(ValueRef::new(7)))
+            .filter(|source| {
+                *source
+                    != PlanValueSource::ControlProduced(
+                        ValueRef::new(7),
+                        OutputProduction::FullyMaterialized,
+                    )
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice();
         assert!(
@@ -533,7 +727,10 @@ mod tests {
             .value_sources
             .into_vec()
             .into_iter()
-            .chain([PlanValueSource::ControlProduced(ValueRef::new(8))])
+            .chain([PlanValueSource::ControlProduced(
+                ValueRef::new(8),
+                OutputProduction::FullyMaterialized,
+            )])
             .collect::<Vec<_>>()
             .into_boxed_slice();
         assert!(has_error(&orphan_declaration, "OrphanControlProduced"));
@@ -550,8 +747,16 @@ mod tests {
         };
         results[0].destination = ValueRef::new(1);
         for source in &mut operation_conflict.value_sources {
-            if *source == PlanValueSource::ControlProduced(ValueRef::new(2)) {
-                *source = PlanValueSource::ControlProduced(ValueRef::new(1));
+            if *source
+                == PlanValueSource::ControlProduced(
+                    ValueRef::new(2),
+                    OutputProduction::FullyMaterialized,
+                )
+            {
+                *source = PlanValueSource::ControlProduced(
+                    ValueRef::new(1),
+                    OutputProduction::FullyMaterialized,
+                );
             }
         }
         assert!(has_error(
@@ -565,7 +770,10 @@ mod tests {
             .value_sources
             .into_vec()
             .into_iter()
-            .chain([PlanValueSource::ExternalInput(ValueRef::new(8))])
+            .chain([PlanValueSource::ExternalInput(
+                ValueRef::new(8),
+                OutputProduction::FullyMaterialized,
+            )])
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let StructuredControlRegion::Sequence(steps) = &mut external_conflict.root_region else {
@@ -579,8 +787,16 @@ mod tests {
         };
         results[0].destination = ValueRef::new(8);
         for source in &mut external_conflict.value_sources {
-            if *source == PlanValueSource::ControlProduced(ValueRef::new(2)) {
-                *source = PlanValueSource::ControlProduced(ValueRef::new(8));
+            if *source
+                == PlanValueSource::ControlProduced(
+                    ValueRef::new(2),
+                    OutputProduction::FullyMaterialized,
+                )
+            {
+                *source = PlanValueSource::ControlProduced(
+                    ValueRef::new(8),
+                    OutputProduction::FullyMaterialized,
+                );
             }
         }
         assert!(has_error(
@@ -593,7 +809,13 @@ mod tests {
             .value_sources
             .into_vec()
             .into_iter()
-            .filter(|source| *source != PlanValueSource::ControlProduced(ValueRef::new(2)))
+            .filter(|source| {
+                *source
+                    != PlanValueSource::ControlProduced(
+                        ValueRef::new(2),
+                        OutputProduction::FullyMaterialized,
+                    )
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice();
         assert!(has_error(
@@ -796,12 +1018,9 @@ mod tests {
                     fragment: id("fragment.test", RelationalFragmentId::new),
                     operator: RelationalOperatorIndex::new(0),
                 }]),
-                bridge_inputs: Box::new([]),
-                requested_fragment_outputs: Box::new([]),
                 roots: Box::new([RelationalOperatorIndex::new(0)]),
                 pushdown_hints: Box::new([]),
             },
-            materialization_bridges: Box::new([]),
         }]);
         plan.operations[0].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
         plan.operations[1].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
@@ -974,6 +1193,7 @@ mod tests {
     #[test]
     fn rejects_forged_or_stale_predicate_lineage_hints_purely() {
         let (mut plan, _) = valid_bridged_plan();
+
         let predicate = RelationalExpression::Equal(
             Box::new(RelationalExpression::Column("status".into())),
             Box::new(RelationalExpression::Literal(RelationalLiteral::String(
@@ -1063,262 +1283,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_requested_relational_fragment_outputs() {
-        let mut plan = valid_plan();
-        let fragment = id("fragment.test", RelationalFragmentId::new);
-        let missing = id("fragment.missing", RelationalFragmentId::new);
-        plan.relational_subplans = Box::new([RelationalSubplan {
-            backend: id("relational.test", RelationalBackendId::new),
-            compiled_plan: CompiledRelationalPlan {
-                fragment_order: Box::new([fragment.clone()]),
-                operators: Box::new([RelationalOperator::Source {
-                    resource: id("database.main", ResourceId::new),
-                    relation: "items".into(),
-                }]),
-                fragment_roots: Box::new([RelationalFragmentRoot {
-                    fragment: fragment.clone(),
-                    operator: RelationalOperatorIndex::new(0),
-                }]),
-                bridge_inputs: Box::new([]),
-                requested_fragment_outputs: Box::new([
-                    fragment.clone(),
-                    fragment.clone(),
-                    missing.clone(),
-                ]),
-                roots: Box::new([RelationalOperatorIndex::new(0)]),
-                pushdown_hints: Box::new([]),
-            },
-            materialization_bridges: Box::new([]),
-        }]);
-        plan.operations[0].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
-
-        let errors = plan.validate().unwrap_err();
-
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::RelationalFragmentOutputDuplicate(id) if id == &fragment
-        )));
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::RelationalFragmentOutputUnexpected(id) if id == &missing
-        )));
-    }
-
-    #[test]
-    fn rejects_bridge_whose_producer_output_is_not_requested() {
-        let mut plan = valid_plan();
-        let producer = id("fragment.producer", RelationalFragmentId::new);
-        let consumer = id("fragment.consumer", RelationalFragmentId::new);
-        plan.relational_subplans = Box::new([
-            RelationalSubplan {
-                backend: id("relational.test", RelationalBackendId::new),
-                compiled_plan: CompiledRelationalPlan {
-                    fragment_order: Box::new([producer.clone()]),
-                    operators: Box::new([RelationalOperator::Source {
-                        resource: id("database.main", ResourceId::new),
-                        relation: "items".into(),
-                    }]),
-                    fragment_roots: Box::new([RelationalFragmentRoot {
-                        fragment: producer.clone(),
-                        operator: RelationalOperatorIndex::new(0),
-                    }]),
-                    bridge_inputs: Box::new([]),
-                    requested_fragment_outputs: Box::new([]),
-                    roots: Box::new([RelationalOperatorIndex::new(0)]),
-                    pushdown_hints: Box::new([]),
-                },
-                materialization_bridges: Box::new([]),
-            },
-            RelationalSubplan {
-                backend: id("relational.test", RelationalBackendId::new),
-                compiled_plan: CompiledRelationalPlan {
-                    fragment_order: Box::new([consumer.clone()]),
-                    operators: Box::new([RelationalOperator::Input {
-                        name: "input".into(),
-                    }]),
-                    fragment_roots: Box::new([RelationalFragmentRoot {
-                        fragment: consumer.clone(),
-                        operator: RelationalOperatorIndex::new(0),
-                    }]),
-                    bridge_inputs: Box::new([]),
-                    requested_fragment_outputs: Box::new([]),
-                    roots: Box::new([RelationalOperatorIndex::new(0)]),
-                    pushdown_hints: Box::new([]),
-                },
-                materialization_bridges: Box::new([PlannedMaterializationBridge {
-                    producer_fragment: producer.clone(),
-                    consumer_fragment: consumer,
-                    producer_subplan: RelationalSubplanIndex::new(0),
-                    consumer_subplan: RelationalSubplanIndex::new(1),
-                    bridge: MaterializationBridge::Collect,
-                }]),
-            },
-        ]);
-        plan.operations[0].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(0));
-        plan.operations[1].kernel = PlannedKernel::Relational(RelationalSubplanIndex::new(1));
-
-        let errors = plan.validate().unwrap_err();
-
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::BridgeProducerOutputNotRequested {
-                producer_subplan,
-                fragment,
-            } if *producer_subplan == RelationalSubplanIndex::new(0) && fragment == &producer
-        )));
-    }
-
-    #[test]
-    fn rejects_invalid_relational_bridge_input_operators() {
-        let (mut out_of_bounds, _) = valid_bridged_plan();
-        out_of_bounds.relational_subplans[1]
-            .compiled_plan
-            .bridge_inputs[0]
-            .operator = RelationalOperatorIndex::new(1);
-        assert!(out_of_bounds.validate().unwrap_err().0.iter().any(|error| {
-            matches!(
-                error,
-                PlanValidationError::RelationalBridgeInputOperatorOutOfBounds {
-                    subplan,
-                    operator,
-                    operator_count: 1,
-                } if *subplan == RelationalSubplanIndex::new(1)
-                    && *operator == RelationalOperatorIndex::new(1)
-            )
-        }));
-
-        let (mut not_input, _) = valid_bridged_plan();
-        not_input.relational_subplans[1].compiled_plan.operators[0] = RelationalOperator::Source {
-            resource: id("database.main", ResourceId::new),
-            relation: "items".into(),
-        };
-        assert!(not_input.validate().unwrap_err().0.iter().any(|error| {
-            matches!(
-                error,
-                PlanValidationError::RelationalBridgeInputOperatorNotInput {
-                    subplan,
-                    operator,
-                } if *subplan == RelationalSubplanIndex::new(1)
-                    && *operator == RelationalOperatorIndex::new(0)
-            )
-        }));
-    }
-
-    #[test]
-    fn rejects_duplicate_relational_bridge_input_bindings() {
-        let (mut plan, bridge) = valid_bridged_plan();
-        plan.relational_subplans[1].compiled_plan.operators = Box::new([
-            RelationalOperator::Input { name: "a".into() },
-            RelationalOperator::Input { name: "b".into() },
-        ]);
-        plan.relational_subplans[1].compiled_plan.bridge_inputs = Box::new([
-            RelationalBridgeInput {
-                operator: RelationalOperatorIndex::new(0),
-                bridge: bridge.clone(),
-            },
-            RelationalBridgeInput {
-                operator: RelationalOperatorIndex::new(0),
-                bridge: bridge.clone(),
-            },
-            RelationalBridgeInput {
-                operator: RelationalOperatorIndex::new(1),
-                bridge,
-            },
-        ]);
-
-        let errors = plan.validate().unwrap_err();
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::DuplicateRelationalBridgeInputOperator {
-                subplan,
-                operator,
-            } if *subplan == RelationalSubplanIndex::new(1)
-                && *operator == RelationalOperatorIndex::new(0)
-        )));
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::DuplicateRelationalBridgeInputBridge {
-                subplan,
-                bridge: duplicate,
-            } if *subplan == RelationalSubplanIndex::new(1) && duplicate == &plan.relational_subplans[1].materialization_bridges[0]
-        )));
-    }
-
-    #[test]
-    fn rejects_inconsistent_relational_bridge_subplan_and_fragment_identities() {
-        let (mut wrong_producer, _) = valid_bridged_plan();
-        let missing_producer = id("fragment.missing-producer", RelationalFragmentId::new);
-        wrong_producer.relational_subplans[1].materialization_bridges[0].producer_fragment =
-            missing_producer.clone();
-        wrong_producer.relational_subplans[1]
-            .compiled_plan
-            .bridge_inputs[0]
-            .bridge
-            .producer_fragment = missing_producer.clone();
-        assert!(wrong_producer.validate().unwrap_err().0.iter().any(|error| {
-            matches!(error, PlanValidationError::BridgeFragmentMissing(fragment) if fragment == &missing_producer)
-        }));
-
-        let (mut wrong_consumer, _) = valid_bridged_plan();
-        let missing_consumer = id("fragment.missing-consumer", RelationalFragmentId::new);
-        wrong_consumer.relational_subplans[1].materialization_bridges[0].consumer_fragment =
-            missing_consumer.clone();
-        wrong_consumer.relational_subplans[1]
-            .compiled_plan
-            .bridge_inputs[0]
-            .bridge
-            .consumer_fragment = missing_consumer.clone();
-        assert!(wrong_consumer.validate().unwrap_err().0.iter().any(|error| {
-            matches!(error, PlanValidationError::BridgeFragmentMissing(fragment) if fragment == &missing_consumer)
-        }));
-
-        let (mut wrong_subplan, _) = valid_bridged_plan();
-        wrong_subplan.relational_subplans[1].materialization_bridges[0].consumer_subplan =
-            RelationalSubplanIndex::new(0);
-        wrong_subplan.relational_subplans[1]
-            .compiled_plan
-            .bridge_inputs[0]
-            .bridge
-            .consumer_subplan = RelationalSubplanIndex::new(0);
-        assert!(wrong_subplan.validate().unwrap_err().0.iter().any(|error| {
-            matches!(
-                error,
-                PlanValidationError::BridgeStoredOnWrongConsumer {
-                    stored_on,
-                    consumer,
-                } if *stored_on == RelationalSubplanIndex::new(1)
-                    && *consumer == RelationalSubplanIndex::new(0)
-            )
-        }));
-    }
-
-    #[test]
-    fn rejects_missing_or_inconsistent_relational_bridge_input_identity() {
-        let (mut plan, declared) = valid_bridged_plan();
-        plan.relational_subplans[1].compiled_plan.bridge_inputs[0]
-            .bridge
-            .producer_fragment = id("fragment.other", RelationalFragmentId::new);
-
-        let errors = plan.validate().unwrap_err();
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::RelationalBridgeInputBridgeUndeclared {
-                subplan,
-                operator,
-                ..
-            } if *subplan == RelationalSubplanIndex::new(1)
-                && *operator == RelationalOperatorIndex::new(0)
-        )));
-        assert!(errors.0.iter().any(|error| matches!(
-            error,
-            PlanValidationError::RelationalBridgeInputMissing {
-                subplan,
-                bridge,
-            } if *subplan == RelationalSubplanIndex::new(1) && bridge == &declared
-        )));
-    }
-
-    #[test]
     fn accepts_declared_external_and_control_produced_input_sources() {
         let mut external = valid_plan();
         external.value_count = 9;
@@ -1326,7 +1290,10 @@ mod tests {
             .value_sources
             .into_vec()
             .into_iter()
-            .chain([PlanValueSource::ExternalInput(ValueRef::new(8))])
+            .chain([PlanValueSource::ExternalInput(
+                ValueRef::new(8),
+                OutputProduction::FullyMaterialized,
+            )])
             .collect::<Vec<_>>()
             .into_boxed_slice();
         external.operations[1].inputs = Box::new([PlannedInput {
@@ -1373,6 +1340,11 @@ mod tests {
         plan.effect_dependencies = Box::new([]);
         plan.resources = Box::new([]);
         plan.results[0].value = ValueRef::new(2);
+        plan.publications[0] = PlannedPublication::GraphResult {
+            name: plan.results[0].name.clone(),
+            output: plan.results[0].output.clone(),
+            value: ValueRef::new(2),
+        };
 
         assert_eq!(plan.validate(), Ok(()));
     }

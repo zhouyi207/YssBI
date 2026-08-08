@@ -3,12 +3,12 @@ use super::relational_dataframe::{
 };
 use super::{
     CancellationToken, KernelError, ProjectResourceLease, RelationalBackend, RelationalContext,
-    RelationalError, RelationalErrorCode, RelationalExecution, RelationalInput, RuntimeValue,
+    RelationalError, RelationalErrorCode, RelationalExecution, RuntimeValue,
     dataframe_to_protocol_value_with_checkpoint,
 };
 use crate::node_system::plan::{
-    CompiledRelationalPlan, PlannedMaterializationBridge, RelationalOperator,
-    RelationalOperatorIndex, infer_relational_pushdown_hints,
+    CompiledRelationalPlan, RelationalOperator, RelationalOperatorIndex,
+    infer_relational_pushdown_hints,
 };
 use polars::prelude::DataFrame;
 use std::collections::BTreeMap;
@@ -28,9 +28,7 @@ pub(crate) enum ProductionRelationalCheckpoint {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ProductionRelationalObservation {
     pub relational_islands: Option<usize>,
-    pub materialization_bridges: Option<usize>,
     pub backend_invocations: usize,
-    pub bridge_inputs: Vec<usize>,
     pub scan_limits: Vec<Option<usize>>,
     pub relational_subplans: Vec<crate::node_system::plan::RelationalSubplan>,
     pub relational_result_bindings:
@@ -51,12 +49,6 @@ impl ProductionRelationalObserver {
         *self.execution_plan.lock().unwrap() = Some(plan.clone());
         let mut observation = self.observation.lock().unwrap();
         observation.relational_islands = Some(plan.relational_subplans.len());
-        observation.materialization_bridges = Some(
-            plan.relational_subplans
-                .iter()
-                .map(|subplan| subplan.materialization_bridges.len())
-                .sum(),
-        );
         observation.relational_subplans = plan.relational_subplans.to_vec();
         observation.relational_result_bindings.clear();
         for operation in &plan.operations {
@@ -82,10 +74,8 @@ impl ProductionRelationalObserver {
         }
     }
 
-    fn observe_invocation(&self, bridge_inputs: usize) {
-        let mut observation = self.observation.lock().unwrap();
-        observation.backend_invocations += 1;
-        observation.bridge_inputs.push(bridge_inputs);
+    fn observe_invocation(&self) {
+        self.observation.lock().unwrap().backend_invocations += 1;
     }
 
     fn observe_scan(&self, limit: Option<usize>) {
@@ -195,8 +185,6 @@ struct Evaluator<'a> {
     context: &'a RelationalContext<'a>,
     plan: &'a CompiledRelationalPlan,
     operation_inputs: &'a [RuntimeValue],
-    bridge_inputs: &'a [RelationalInput],
-    bridges_by_operator: BTreeMap<RelationalOperatorIndex, &'a PlannedMaterializationBridge>,
     input_positions: BTreeMap<RelationalOperatorIndex, usize>,
     source_limits: BTreeMap<RelationalOperatorIndex, usize>,
     values: Vec<Option<EvaluatedValue>>,
@@ -208,22 +196,14 @@ impl<'a> Evaluator<'a> {
         context: &'a RelationalContext<'a>,
         plan: &'a CompiledRelationalPlan,
         operation_inputs: &'a [RuntimeValue],
-        bridge_inputs: &'a [RelationalInput],
     ) -> Self {
-        let bridges_by_operator = plan
-            .bridge_inputs
-            .iter()
-            .map(|binding| (binding.operator, &binding.bridge))
-            .collect::<BTreeMap<_, _>>();
         let input_positions = plan
             .operators
             .iter()
             .enumerate()
             .filter_map(|(index, operator)| {
-                let index = RelationalOperatorIndex::new(index as u32);
-                (matches!(operator, RelationalOperator::Input { .. })
-                    && !bridges_by_operator.contains_key(&index))
-                .then_some(index)
+                matches!(operator, RelationalOperator::Input { .. })
+                    .then_some(RelationalOperatorIndex::new(index as u32))
             })
             .enumerate()
             .map(|(position, index)| (index, position))
@@ -233,8 +213,6 @@ impl<'a> Evaluator<'a> {
             context,
             plan,
             operation_inputs,
-            bridge_inputs,
-            bridges_by_operator,
             input_positions,
             source_limits: source_limits(plan),
             values: vec![None; plan.operators.len()],
@@ -270,23 +248,17 @@ impl<'a> Evaluator<'a> {
             .clone();
         let value = match operator {
             RelationalOperator::Input { .. } => {
-                let value = if let Some(bridge) = self.bridges_by_operator.get(&index) {
-                    self.bridge_inputs
-                        .iter()
-                        .find(|input| &input.bridge == *bridge)
-                        .map(|input| input.value.clone())
-                } else {
-                    self.input_positions
-                        .get(&index)
-                        .and_then(|position| self.operation_inputs.get(*position))
-                        .cloned()
-                }
-                .ok_or_else(|| {
-                    RelationalError::new(
-                        RelationalErrorCode::InputShapeInvalid,
-                        "relational input is missing",
-                    )
-                })?;
+                let value = self
+                    .input_positions
+                    .get(&index)
+                    .and_then(|position| self.operation_inputs.get(*position))
+                    .cloned()
+                    .ok_or_else(|| {
+                        RelationalError::new(
+                            RelationalErrorCode::InputShapeInvalid,
+                            "relational input is missing",
+                        )
+                    })?;
                 Arc::new(tabular_runtime_to_dataframe(value)?)
             }
             RelationalOperator::Source { resource, .. } => {
@@ -435,21 +407,8 @@ impl RelationalBackend for ProductionRelationalBackend {
         context: &RelationalContext<'_>,
         plan: &CompiledRelationalPlan,
         operation_inputs: &[RuntimeValue],
-        bridge_inputs: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError> {
-        let mut lineage_roots = plan.roots.to_vec();
-        lineage_roots.extend(
-            plan.requested_fragment_outputs
-                .iter()
-                .filter_map(|fragment| {
-                    plan.fragment_roots
-                        .iter()
-                        .find(|root| &root.fragment == fragment)
-                        .map(|root| root.operator)
-                }),
-        );
-        let inferred_pushdown_hints =
-            infer_relational_pushdown_hints(&plan.operators, &lineage_roots);
+        let inferred_pushdown_hints = infer_relational_pushdown_hints(&plan.operators, &plan.roots);
         if plan.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
             return Err(RelationalError::new(
                 RelationalErrorCode::HintInvalid,
@@ -458,42 +417,14 @@ impl RelationalBackend for ProductionRelationalBackend {
         }
         #[cfg(test)]
         if let Some(observer) = &self.observer {
-            observer.observe_invocation(bridge_inputs.len());
+            observer.observe_invocation();
         }
-        let requested_fragment_roots = plan
-            .requested_fragment_outputs
-            .iter()
-            .map(|fragment| {
-                let root = plan
-                    .fragment_roots
-                    .iter()
-                    .find(|root| &root.fragment == fragment)
-                    .map(|root| root.operator)
-                    .ok_or_else(|| {
-                        RelationalError::new(
-                            RelationalErrorCode::OperatorInvalid,
-                            format!(
-                                "requested relational fragment '{}' has no compiled root",
-                                fragment.as_str()
-                            ),
-                        )
-                    })?;
-                Ok((fragment.clone(), root))
-            })
-            .collect::<Result<Vec<_>, RelationalError>>()?;
-        let mut evaluator = Evaluator::new(self, context, plan, operation_inputs, bridge_inputs);
+        let mut evaluator = Evaluator::new(self, context, plan, operation_inputs);
         let mut outputs = Vec::with_capacity(plan.roots.len());
         for root in &plan.roots {
             outputs.push(evaluator.materialize_index(*root)?);
         }
-        let mut fragment_outputs = BTreeMap::new();
-        for (fragment, root) in requested_fragment_roots {
-            fragment_outputs.insert(fragment, evaluator.materialize_index(root)?);
-        }
-        Ok(RelationalExecution {
-            outputs,
-            fragment_outputs,
-        })
+        Ok(RelationalExecution { outputs })
     }
 }
 
@@ -502,15 +433,7 @@ fn source_limits(plan: &CompiledRelationalPlan) -> BTreeMap<RelationalOperatorIn
     for root in &plan.roots {
         collect_source_requirements(plan, *root, None, &mut requirements);
     }
-    for fragment in &plan.requested_fragment_outputs {
-        if let Some(root) = plan
-            .fragment_roots
-            .iter()
-            .find(|root| &root.fragment == fragment)
-        {
-            collect_source_requirements(plan, root.operator, None, &mut requirements);
-        }
-    }
+
     requirements
         .into_iter()
         .filter_map(|(source, rows)| rows.map(|rows| (source, rows)))
@@ -578,7 +501,7 @@ mod tests {
         CompiledRelationalPlan, CompiledResourceRequirement, RelationalExpression,
         RelationalFragmentId, RelationalFragmentRoot, RelationalLiteral, RelationalOperator,
         RelationalOperatorIndex, RelationalProjection, RelationalPushdownHint, RelationalRename,
-        ResourceAccess, ResourceId, ResourceKind,
+        ResourceAccess, ResourceId, ResourceKind, infer_relational_pushdown_hints,
     };
     use crate::node_system::protocol::Value;
     use crate::node_system::runtime::{
@@ -622,8 +545,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(2)]),
             pushdown_hints: Box::new([RelationalPushdownHint::Limit {
                 source: RelationalOperatorIndex::new(0),
@@ -639,7 +560,7 @@ mod tests {
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
 
-        let error = backend.execute(&context, &plan, &[], &[]).unwrap_err();
+        let error = backend.execute(&context, &plan, &[]).unwrap_err();
 
         assert_eq!(
             error.code(),
@@ -666,7 +587,7 @@ mod tests {
         };
         let resources = RunResourceSet::acquire(&[requirement], &provider).unwrap();
         let source = RelationalFragmentId::new("source").unwrap();
-        let plan = CompiledRelationalPlan {
+        let mut plan = CompiledRelationalPlan {
             fragment_order: Box::new([source.clone()]),
             operators: Box::new([
                 RelationalOperator::Source {
@@ -679,17 +600,17 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([RelationalFragmentRoot {
-                fragment: source.clone(),
+                fragment: source,
                 operator: RelationalOperatorIndex::new(0),
             }]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([source.clone()]),
-            roots: Box::new([RelationalOperatorIndex::new(1)]),
-            pushdown_hints: Box::new([RelationalPushdownHint::Limit {
-                source: RelationalOperatorIndex::new(0),
-                rows: 2,
-            }]),
+            roots: Box::new([
+                RelationalOperatorIndex::new(1),
+                RelationalOperatorIndex::new(0),
+            ]),
+            pushdown_hints: Box::new([]),
         };
+        plan.pushdown_hints =
+            infer_relational_pushdown_hints(&plan.operators, &plan.roots).into_boxed_slice();
         let cancellation = CancellationToken::new();
         let context = RelationalContext {
             run_id: RunId::new(1),
@@ -699,11 +620,11 @@ mod tests {
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
 
-        let execution = backend.execute(&context, &plan, &[], &[]).unwrap();
+        let execution = backend.execute(&context, &plan, &[]).unwrap();
 
         assert_eq!(observed.lock().unwrap().as_slice(), &[None]);
         assert_eq!(output_len(&execution.outputs[0]), 2);
-        assert_eq!(output_len(&execution.fragment_outputs[&source]), 4);
+        assert_eq!(output_len(&execution.outputs[1]), 4);
     }
 
     #[test]
@@ -745,8 +666,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([
                 RelationalOperatorIndex::new(1),
                 RelationalOperatorIndex::new(2),
@@ -771,7 +690,7 @@ mod tests {
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
 
-        let execution = backend.execute(&context, &plan, &[], &[]).unwrap();
+        let execution = backend.execute(&context, &plan, &[]).unwrap();
 
         assert_eq!(observed.lock().unwrap().as_slice(), &[Some(10)]);
         assert_eq!(output_len(&execution.outputs[0]), 2);
@@ -805,8 +724,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(2)]),
             pushdown_hints: Box::new([
                 RelationalPushdownHint::Projection {
@@ -853,21 +770,12 @@ mod tests {
         };
         let backend = ProductionRelationalBackend::default();
         let operation_inputs = [input];
-        let mut evaluator = Evaluator::new(&backend, &context, plan, &operation_inputs, &[]);
+        let mut evaluator = Evaluator::new(&backend, &context, plan, &operation_inputs);
         evaluator.materialize_index(plan.roots[0])
     }
 
     #[test]
-    fn bridge_ingress_stays_dataframe_native_through_filter_project_and_rename() {
-        let producer_fragment = RelationalFragmentId::new("producer").unwrap();
-        let consumer_fragment = RelationalFragmentId::new("consumer").unwrap();
-        let bridge = crate::node_system::plan::PlannedMaterializationBridge {
-            producer_fragment,
-            consumer_fragment,
-            producer_subplan: crate::node_system::plan::RelationalSubplanIndex::new(0),
-            consumer_subplan: crate::node_system::plan::RelationalSubplanIndex::new(1),
-            bridge: crate::node_system::plan::MaterializationBridge::Collect,
-        };
+    fn explicit_adapter_artifact_ingress_stays_dataframe_native_through_relational_operators() {
         let predicate = RelationalExpression::GreaterThan(
             Box::new(RelationalExpression::Column("amount".into())),
             Box::new(RelationalExpression::Literal(RelationalLiteral::Integer(1))),
@@ -901,11 +809,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([crate::node_system::plan::RelationalBridgeInput {
-                operator: RelationalOperatorIndex::new(0),
-                bridge: bridge.clone(),
-            }]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(3)]),
             pushdown_hints: Box::new([]),
         };
@@ -924,15 +827,8 @@ mod tests {
             [value],
         ));
 
-        let output = execute_bridge_plan(
-            &plan,
-            crate::node_system::runtime::RelationalInput {
-                bridge,
-                value: artifact,
-            },
-            ProductionRelationalBackend::default(),
-        )
-        .unwrap();
+        let output =
+            execute_input_plan(&plan, artifact, ProductionRelationalBackend::default()).unwrap();
 
         assert_eq!(
             output,
@@ -966,8 +862,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(1)]),
             pushdown_hints: Box::new([]),
         };
@@ -1009,27 +903,6 @@ mod tests {
         );
     }
 
-    fn execute_bridge_plan(
-        plan: &CompiledRelationalPlan,
-        input: crate::node_system::runtime::RelationalInput,
-        backend: ProductionRelationalBackend,
-    ) -> Result<RuntimeValue, RelationalError> {
-        let provider = ProjectResourceProvider::new(ProjectResourceSnapshot::new(
-            ProjectSessionId::new("dataframe-bridge-test"),
-            Default::default(),
-        ));
-        let resources = RunResourceSet::acquire(&[], &provider).unwrap();
-        let cancellation = CancellationToken::new();
-        let context = RelationalContext {
-            run_id: RunId::new(1),
-            resources: &resources,
-            cancellation: &cancellation,
-        };
-        backend
-            .execute(&context, plan, &[], &[input])
-            .map(|mut execution| execution.outputs.remove(0))
-    }
-
     fn execute_input_plan(
         plan: &CompiledRelationalPlan,
         input: RuntimeValue,
@@ -1047,7 +920,7 @@ mod tests {
             cancellation: &cancellation,
         };
         backend
-            .execute(&context, plan, &[input], &[])
+            .execute(&context, plan, &[input])
             .map(|mut execution| execution.outputs.remove(0))
     }
 
@@ -1247,8 +1120,6 @@ mod tests {
             ]
             .into_boxed_slice(),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(1)]),
             pushdown_hints: Box::new([]),
         };
@@ -1260,7 +1131,7 @@ mod tests {
         };
 
         ProductionRelationalBackend::default()
-            .execute(&context, &plan, &[input], &[])
+            .execute(&context, &plan, &[input])
             .map(|mut execution| execution.outputs.remove(0))
     }
 
@@ -1324,8 +1195,6 @@ mod tests {
                 },
             ]),
             fragment_roots: Box::new([]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(0)]),
             pushdown_hints: Box::new([]),
         };
@@ -1338,78 +1207,10 @@ mod tests {
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
 
-        let execution = backend.execute(&context, &plan, &[], &[]).unwrap();
+        let execution = backend.execute(&context, &plan, &[]).unwrap();
 
         assert_eq!(observed.lock().unwrap().as_slice(), &[None]);
         assert_eq!(output_len(&execution.outputs[0]), 4);
-    }
-
-    #[test]
-    fn evaluates_only_requested_fragment_outputs() {
-        let resource = ResourceId::new("databases/main").unwrap();
-        let dataframe =
-            DataFrame::new(4, vec![Column::new("value".into(), &[1_i64, 2, 3, 4])]).unwrap();
-        let provider = ProjectResourceProvider::new(
-            ProjectResourceSnapshot::new(ProjectSessionId::new("test"), Default::default())
-                .with_database(resource.clone(), Arc::new(dataframe)),
-        );
-        let requirement = CompiledResourceRequirement {
-            resource: resource.clone(),
-            kind: ResourceKind::DatabaseConnection,
-            access: ResourceAccess::Shared,
-            optional: false,
-        };
-        let resources = RunResourceSet::acquire(&[requirement], &provider).unwrap();
-        let source = RelationalFragmentId::new("source").unwrap();
-        let limit = RelationalFragmentId::new("limit").unwrap();
-        let plan = CompiledRelationalPlan {
-            fragment_order: Box::new([source.clone(), limit.clone()]),
-            operators: Box::new([
-                RelationalOperator::Source {
-                    resource,
-                    relation: "main".into(),
-                },
-                RelationalOperator::Limit {
-                    input: RelationalOperatorIndex::new(0),
-                    rows: 2,
-                },
-            ]),
-            fragment_roots: Box::new([
-                RelationalFragmentRoot {
-                    fragment: source,
-                    operator: RelationalOperatorIndex::new(0),
-                },
-                RelationalFragmentRoot {
-                    fragment: limit.clone(),
-                    operator: RelationalOperatorIndex::new(1),
-                },
-            ]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([limit.clone()]),
-            roots: Box::new([]),
-            pushdown_hints: Box::new([RelationalPushdownHint::Limit {
-                source: RelationalOperatorIndex::new(0),
-                rows: 2,
-            }]),
-        };
-        let cancellation = CancellationToken::new();
-        let context = RelationalContext {
-            run_id: RunId::new(1),
-            resources: &resources,
-            cancellation: &cancellation,
-        };
-        let observed = Arc::new(Mutex::new(Vec::new()));
-        let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
-
-        let execution = backend.execute(&context, &plan, &[], &[]).unwrap();
-
-        assert!(execution.outputs.is_empty());
-        assert_eq!(
-            execution.fragment_outputs.keys().collect::<Vec<_>>(),
-            vec![&limit]
-        );
-        assert_eq!(output_len(&execution.fragment_outputs[&limit]), 2);
-        assert_eq!(observed.lock().unwrap().as_slice(), &[Some(2)]);
     }
 
     #[test]
@@ -1429,8 +1230,6 @@ mod tests {
                 fragment,
                 operator: RelationalOperatorIndex::new(0),
             }]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(0)]),
             pushdown_hints: Box::new([]),
         };
@@ -1455,7 +1254,6 @@ mod tests {
             &context,
             &plan,
             &[RuntimeValue::Scalar(Value::Object(BTreeMap::new()))],
-            &[],
         );
 
         assert_eq!(
@@ -1511,8 +1309,6 @@ mod tests {
                     operator: RelationalOperatorIndex::new(1),
                 },
             ]),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: Box::new([RelationalOperatorIndex::new(1)]),
             pushdown_hints: Box::new([RelationalPushdownHint::Limit {
                 source: RelationalOperatorIndex::new(0),
@@ -1528,7 +1324,7 @@ mod tests {
         let observed = Arc::new(Mutex::new(Vec::new()));
         let backend = ProductionRelationalBackend::recording_scan_limits(Arc::clone(&observed));
 
-        let execution = backend.execute(&context, &plan, &[], &[]).unwrap();
+        let execution = backend.execute(&context, &plan, &[]).unwrap();
 
         assert_eq!(observed.lock().unwrap().as_slice(), &[Some(2)]);
         let RuntimeValue::Scalar(Value::Object(columns)) = &execution.outputs[0] else {

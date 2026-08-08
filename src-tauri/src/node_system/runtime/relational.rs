@@ -1,11 +1,5 @@
-use super::{
-    Artifact, ArtifactKind, CancellationToken, RunError, RunId, RunResourceSet, RuntimeValue,
-    StreamReceiveError, StreamValue,
-};
-use crate::node_system::plan::{
-    CompiledRelationalPlan, MaterializationBridge, PlannedMaterializationBridge,
-    RelationalBackendId, RelationalFragmentId, RelationalSubplan,
-};
+use super::{CancellationToken, RunError, RunId, RunResourceSet, RuntimeValue};
+use crate::node_system::plan::{CompiledRelationalPlan, RelationalBackendId, RelationalSubplan};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -18,15 +12,8 @@ pub struct RelationalContext<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RelationalInput {
-    pub bridge: PlannedMaterializationBridge,
-    pub value: RuntimeValue,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelationalExecution {
     pub outputs: Vec<RuntimeValue>,
-    pub fragment_outputs: BTreeMap<RelationalFragmentId, RuntimeValue>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,7 +81,6 @@ pub trait RelationalBackend: Send + Sync {
         context: &RelationalContext<'_>,
         plan: &CompiledRelationalPlan,
         operation_inputs: &[RuntimeValue],
-        bridge_inputs: &[RelationalInput],
     ) -> Result<RelationalExecution, RelationalError>;
 }
 
@@ -249,101 +235,6 @@ impl RunRelationalBackends {
     }
 }
 
-pub fn materialize_bridge(
-    bridge: MaterializationBridge,
-    value: RuntimeValue,
-    cancellation: &CancellationToken,
-) -> Result<RuntimeValue, RelationalError> {
-    materialize_bridge_inner(
-        bridge,
-        value,
-        cancellation,
-        #[cfg(test)]
-        None,
-    )
-}
-
-#[cfg(test)]
-pub(crate) fn materialize_bridge_with_checkpoint(
-    bridge: MaterializationBridge,
-    value: RuntimeValue,
-    cancellation: &CancellationToken,
-    checkpoint: &dyn Fn(&CancellationToken),
-) -> Result<RuntimeValue, RelationalError> {
-    materialize_bridge_inner(bridge, value, cancellation, Some(checkpoint))
-}
-
-fn materialize_bridge_inner(
-    bridge: MaterializationBridge,
-    value: RuntimeValue,
-    cancellation: &CancellationToken,
-    #[cfg(test)] checkpoint: Option<&dyn Fn(&CancellationToken)>,
-) -> Result<RuntimeValue, RelationalError> {
-    cancellation.check().map_err(RelationalError::from)?;
-    if bridge == MaterializationBridge::Stream {
-        return match value {
-            RuntimeValue::Stream(stream) => Ok(RuntimeValue::Stream(stream)),
-            value => Ok(RuntimeValue::Stream(StreamValue::from_values(
-                into_values(
-                    value,
-                    cancellation,
-                    #[cfg(test)]
-                    checkpoint,
-                )?,
-                cancellation.clone(),
-            )?)),
-        };
-    }
-
-    let values = into_values(
-        value,
-        cancellation,
-        #[cfg(test)]
-        checkpoint,
-    )?;
-    let kind = match bridge {
-        MaterializationBridge::Stream => unreachable!(),
-        MaterializationBridge::Buffer => ArtifactKind::Buffered,
-        MaterializationBridge::Collect => ArtifactKind::Collected,
-        MaterializationBridge::Spill => ArtifactKind::Spilled,
-        MaterializationBridge::Replay => ArtifactKind::Replayable,
-    };
-    Ok(RuntimeValue::Artifact(Artifact::new(kind, values)))
-}
-
-fn into_values(
-    value: RuntimeValue,
-    cancellation: &CancellationToken,
-    #[cfg(test)] checkpoint: Option<&dyn Fn(&CancellationToken)>,
-) -> Result<Vec<crate::node_system::protocol::Value>, RelationalError> {
-    match value {
-        RuntimeValue::Scalar(value) => Ok(vec![value]),
-        RuntimeValue::Artifact(artifact) => Ok(artifact.values().to_vec()),
-        RuntimeValue::Stream(stream) => {
-            let mut values = Vec::new();
-            loop {
-                cancellation.check().map_err(RelationalError::from)?;
-                match stream.recv() {
-                    Ok(value) => {
-                        values.push(value);
-                        #[cfg(test)]
-                        if let Some(checkpoint) = checkpoint {
-                            checkpoint(cancellation);
-                        }
-                    }
-                    Err(StreamReceiveError::Closed) => return Ok(values),
-                    Err(StreamReceiveError::Cancelled) => {
-                        return Err(RelationalError::cancelled(
-                            "bridge materialization was cancelled",
-                        ));
-                    }
-                    Err(StreamReceiveError::Empty) => unreachable!("blocking receive is not empty"),
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod error_tests {
     use super::{RelationalError, RelationalErrorCode};
@@ -436,12 +327,9 @@ mod error_tests {
                 fragment_order: Box::new([]),
                 operators: Box::new([]),
                 fragment_roots: Box::new([]),
-                bridge_inputs: Box::new([]),
-                requested_fragment_outputs: Box::new([]),
                 roots: Box::new([]),
                 pushdown_hints: Box::new([]),
             },
-            materialization_bridges: Box::new([]),
         };
         let result = super::RunRelationalBackends::acquire(
             &[subplan],

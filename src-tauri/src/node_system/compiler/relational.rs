@@ -1,8 +1,8 @@
 use crate::node_system::plan::{
-    CompiledRelationalPlan, MaterializationBridge, PlannedMaterializationBridge,
-    RelationalBackendId, RelationalBridgeInput, RelationalFragmentId, RelationalFragmentRoot,
-    RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint, RelationalSubplan,
-    RelationalSubplanIndex, infer_relational_pushdown_hints,
+    CompiledRelationalPlan, MaterializationAdapterPlan, PlannedAdapter, RelationalBackendId,
+    RelationalFragmentId, RelationalFragmentRoot, RelationalOperator, RelationalOperatorIndex,
+    RelationalPushdownHint, RelationalSubplan, RelationalSubplanIndex,
+    infer_relational_pushdown_hints,
 };
 use crate::node_system::protocol::{InputConsumption, OutputProduction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,7 +30,6 @@ pub struct RelationalConnection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelationalPlanningResult {
     pub subplans: Box<[RelationalSubplan]>,
-    pub bridges: Box<[PlannedMaterializationBridge]>,
 }
 
 /// Plans relational islands for one configured backend without selecting among backends.
@@ -81,105 +80,15 @@ impl RelationalPlanner {
             subplans.push(RelationalSubplan {
                 backend: self.backend.clone(),
                 compiled_plan,
-                materialization_bridges: Box::new([]),
             });
             boundary_inputs_by_subplan.push(boundary_inputs);
         }
 
-        let mut ordered_connections = connections.iter().collect::<Vec<_>>();
-        ordered_connections.sort_by(|left, right| {
-            (&left.producer, &left.consumer, left.consumer_input).cmp(&(
-                &right.producer,
-                &right.consumer,
-                right.consumer_input,
-            ))
-        });
-        let planned_bridges = ordered_connections
-            .into_iter()
-            .filter_map(|connection| {
-                let producer_component = &component_by_fragment[&connection.producer];
-                let consumer_component = &component_by_fragment[&connection.consumer];
-                (producer_component != consumer_component).then(|| {
-                    (
-                        connection,
-                        PlannedMaterializationBridge {
-                            producer_fragment: connection.producer.clone(),
-                            consumer_fragment: connection.consumer.clone(),
-                            producer_subplan: subplan_by_component[producer_component],
-                            consumer_subplan: subplan_by_component[consumer_component],
-                            bridge: materialization_bridge(
-                                connection.production,
-                                connection.consumption,
-                            ),
-                        },
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-        let bridges = planned_bridges
-            .iter()
-            .map(|(_, bridge)| bridge.clone())
-            .collect::<Vec<_>>();
-
-        let mut requested_outputs_by_producer = vec![BTreeSet::new(); subplans.len()];
-        let mut bridges_by_consumer = vec![Vec::new(); subplans.len()];
-        let mut input_bridges_by_consumer = vec![Vec::new(); subplans.len()];
-        for (connection, bridge) in &planned_bridges {
-            requested_outputs_by_producer[bridge.producer_subplan.index()]
-                .insert(bridge.producer_fragment.clone());
-            bridges_by_consumer[bridge.consumer_subplan.index()].push(bridge.clone());
-            let operator = boundary_inputs_by_subplan[bridge.consumer_subplan.index()]
-                [&(connection.consumer.clone(), connection.consumer_input)];
-            input_bridges_by_consumer[bridge.consumer_subplan.index()].push(
-                RelationalBridgeInput {
-                    operator,
-                    bridge: bridge.clone(),
-                },
-            );
-        }
-        for (subplan, requested_outputs) in subplans.iter_mut().zip(requested_outputs_by_producer) {
-            subplan.compiled_plan.requested_fragment_outputs =
-                requested_outputs.into_iter().collect();
-        }
-        for ((subplan, bridges), input_bridges) in subplans
-            .iter_mut()
-            .zip(bridges_by_consumer)
-            .zip(input_bridges_by_consumer)
-        {
-            subplan.materialization_bridges = bridges.into_boxed_slice();
-            subplan.compiled_plan.bridge_inputs = input_bridges.into_boxed_slice();
-        }
-
+        let _ = subplan_by_component;
+        let _ = boundary_inputs_by_subplan;
         Ok(RelationalPlanningResult {
             subplans: subplans.into_boxed_slice(),
-            bridges: bridges.into_boxed_slice(),
         })
-    }
-}
-
-/// Derives the minimum adapter required to satisfy a consumer contract.
-pub const fn materialization_bridge(
-    production: OutputProduction,
-    consumption: InputConsumption,
-) -> MaterializationBridge {
-    match (production, consumption) {
-        (_, InputConsumption::Streaming) => MaterializationBridge::Stream,
-        (OutputProduction::Streaming, InputConsumption::SinglePassBatches) => {
-            MaterializationBridge::Buffer
-        }
-        (_, InputConsumption::SinglePassBatches) => MaterializationBridge::Stream,
-        (OutputProduction::FullyMaterialized, InputConsumption::RewindableBatches) => {
-            MaterializationBridge::Stream
-        }
-        (_, InputConsumption::RewindableBatches) => MaterializationBridge::Replay,
-        (OutputProduction::FullyMaterialized, InputConsumption::RandomAccess) => {
-            MaterializationBridge::Stream
-        }
-        (_, InputConsumption::RandomAccess) => MaterializationBridge::Spill,
-        (OutputProduction::FullyMaterialized, InputConsumption::FullyMaterialized) => {
-            MaterializationBridge::Stream
-        }
-        (_, InputConsumption::FullyMaterialized) => MaterializationBridge::Collect,
     }
 }
 
@@ -317,8 +226,9 @@ fn connected_components(
         .collect::<BTreeMap<_, _>>();
     let mut sets = DisjointSets::new(ids.len());
     for connection in connections {
-        if materialization_bridge(connection.production, connection.consumption)
-            == MaterializationBridge::Stream
+        if MaterializationAdapterPlan::for_contract(connection.production, connection.consumption)
+            .adapter
+            == PlannedAdapter::Identity
         {
             sets.union(
                 index_by_id[&connection.producer],
@@ -427,8 +337,6 @@ fn compile_component(
             fragment_order: fragment_ids.to_vec().into_boxed_slice(),
             operators: operators.into_boxed_slice(),
             fragment_roots: fragment_roots.into_boxed_slice(),
-            bridge_inputs: Box::new([]),
-            requested_fragment_outputs: Box::new([]),
             roots: exposed_roots.into_boxed_slice(),
             pushdown_hints: pushdown_hints.into_boxed_slice(),
         },
@@ -567,7 +475,8 @@ impl DisjointSets {
 mod tests {
     use super::*;
     use crate::node_system::plan::{
-        RelationalExpression, RelationalLiteral, RelationalProjection, ResourceId,
+        MaterializationLimits, PlannedAdapter, RelationalExpression, RelationalLiteral,
+        RelationalProjection, ResourceId, StreamFormat,
     };
 
     fn fragment_id(value: &str) -> RelationalFragmentId {
@@ -630,7 +539,6 @@ mod tests {
             &[fragment_id("a"), fragment_id("b"), fragment_id("c")]
         );
         assert_eq!(result.subplans[0].compiled_plan.operators.len(), 3);
-        assert!(result.bridges.is_empty());
     }
 
     #[test]
@@ -660,8 +568,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.subplans.len(), 2);
-        assert_eq!(result.bridges.len(), 1);
-        assert_eq!(result.bridges[0].bridge, MaterializationBridge::Collect);
         assert!(matches!(
             result.subplans[1].compiled_plan.operators[0],
             RelationalOperator::Input { .. }
@@ -669,80 +575,111 @@ mod tests {
     }
 
     #[test]
-    fn requests_cross_island_producer_fragment_outputs_once() {
-        let fragments = [
-            source("producer"),
-            input_limit("consumer-a"),
-            input_limit("consumer-b"),
-        ];
-        let mut first = connection("producer", "consumer-a");
-        first.consumption = InputConsumption::FullyMaterialized;
-        let mut second = connection("producer", "consumer-b");
-        second.consumption = InputConsumption::FullyMaterialized;
-
-        let result = RelationalPlanner::new(backend())
-            .plan(&fragments, &[second, first])
-            .unwrap();
-
-        assert_eq!(
-            result.subplans[0]
-                .compiled_plan
-                .requested_fragment_outputs
-                .as_ref(),
-            &[fragment_id("producer")]
-        );
-        assert!(
-            result.subplans[1]
-                .compiled_plan
-                .requested_fragment_outputs
-                .is_empty()
-        );
-        assert!(
-            result.subplans[2]
-                .compiled_plan
-                .requested_fragment_outputs
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn derives_bridges_from_consumer_contracts() {
-        assert_eq!(
-            materialization_bridge(OutputProduction::Streaming, InputConsumption::Streaming),
-            MaterializationBridge::Stream
-        );
-        assert_eq!(
-            materialization_bridge(
+    fn materialization_adapter_matrix_covers_every_contract_pair() {
+        let stream = PlannedAdapter::StreamBridge {
+            format: StreamFormat::Native,
+        };
+        let buffer = PlannedAdapter::Buffer { capacity: 64 };
+        let replay = PlannedAdapter::Replay;
+        let spill = PlannedAdapter::Spill {
+            memory_limit_bytes: 64 * 1024 * 1024,
+        };
+        let collect = PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 1_000_000,
+                max_bytes: 64 * 1024 * 1024,
+            },
+        };
+        let cases = [
+            (
                 OutputProduction::Streaming,
-                InputConsumption::SinglePassBatches
+                InputConsumption::Streaming,
+                PlannedAdapter::Identity,
             ),
-            MaterializationBridge::Buffer
-        );
-        assert_eq!(
-            materialization_bridge(
+            (
+                OutputProduction::Streaming,
+                InputConsumption::SinglePassBatches,
+                buffer,
+            ),
+            (
+                OutputProduction::Streaming,
+                InputConsumption::RewindableBatches,
+                replay.clone(),
+            ),
+            (
+                OutputProduction::Streaming,
+                InputConsumption::RandomAccess,
+                spill.clone(),
+            ),
+            (
+                OutputProduction::Streaming,
+                InputConsumption::FullyMaterialized,
+                collect.clone(),
+            ),
+            (
                 OutputProduction::Batches,
-                InputConsumption::RewindableBatches
+                InputConsumption::Streaming,
+                stream.clone(),
             ),
-            MaterializationBridge::Replay
-        );
-        assert_eq!(
-            materialization_bridge(OutputProduction::Batches, InputConsumption::RandomAccess),
-            MaterializationBridge::Spill
-        );
-        assert_eq!(
-            materialization_bridge(
-                OutputProduction::Streaming,
-                InputConsumption::FullyMaterialized
+            (
+                OutputProduction::Batches,
+                InputConsumption::SinglePassBatches,
+                PlannedAdapter::Identity,
             ),
-            MaterializationBridge::Collect
-        );
-        assert_eq!(
-            materialization_bridge(
+            (
+                OutputProduction::Batches,
+                InputConsumption::RewindableBatches,
+                replay,
+            ),
+            (
+                OutputProduction::Batches,
+                InputConsumption::RandomAccess,
+                spill,
+            ),
+            (
+                OutputProduction::Batches,
+                InputConsumption::FullyMaterialized,
+                collect,
+            ),
+            (
                 OutputProduction::FullyMaterialized,
-                InputConsumption::RandomAccess
+                InputConsumption::Streaming,
+                stream,
             ),
-            MaterializationBridge::Stream
-        );
+            (
+                OutputProduction::FullyMaterialized,
+                InputConsumption::SinglePassBatches,
+                PlannedAdapter::Identity,
+            ),
+            (
+                OutputProduction::FullyMaterialized,
+                InputConsumption::RewindableBatches,
+                PlannedAdapter::Identity,
+            ),
+            (
+                OutputProduction::FullyMaterialized,
+                InputConsumption::RandomAccess,
+                PlannedAdapter::Identity,
+            ),
+            (
+                OutputProduction::FullyMaterialized,
+                InputConsumption::FullyMaterialized,
+                PlannedAdapter::Identity,
+            ),
+        ];
+
+        for (production, consumption, expected) in cases {
+            let plan = MaterializationAdapterPlan::for_contract(production, consumption);
+            assert_eq!(plan.adapter, expected);
+            assert_eq!(
+                plan.input_consumption,
+                match production {
+                    OutputProduction::Streaming => InputConsumption::Streaming,
+                    OutputProduction::Batches => InputConsumption::SinglePassBatches,
+                    OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
+                }
+            );
+        }
     }
 
     #[test]
@@ -855,7 +792,7 @@ mod tests {
 
         assert_eq!(first, reversed);
         assert_eq!(first.subplans.len(), 1);
-        assert!(first.bridges.is_empty());
+
         let plan = &first.subplans[0].compiled_plan;
         assert_eq!(plan.operators.len(), 5);
         assert_eq!(

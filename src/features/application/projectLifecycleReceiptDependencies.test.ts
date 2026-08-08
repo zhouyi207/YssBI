@@ -98,7 +98,6 @@ describe('production project lifecycle hydration dependency', () => {
     projectPublicationCoordinator.startProject(projectA, 4);
     useExecutionStore.setState({
       graphs: {},
-      previewGeneration: 0,
       playbackGraphPath: null,
       isPlaying: false,
     });
@@ -177,7 +176,7 @@ describe('production project lifecycle hydration dependency', () => {
       portKey: 'result',
     };
     const execution = useExecutionStore.getState();
-    execution.beginPinPreview(graphPath, port);
+    const lease = execution.beginPinPreview(graphPath, port, 1);
     execution.startExecution(graphPath);
     useExecutionStore.setState({
       playbackGraphPath: graphPath,
@@ -186,7 +185,6 @@ describe('production project lifecycle hydration dependency', () => {
     const onProjectCleared = vi.fn(() => {
       expect(useExecutionStore.getState()).toMatchObject({
         graphs: {},
-        previewGeneration: 0,
         playbackGraphPath: null,
         isPlaying: false,
       });
@@ -194,6 +192,7 @@ describe('production project lifecycle hydration dependency', () => {
 
     createProjectLifecycleReceiptDependencies(onProjectCleared).clearProject();
 
+    expect(lease.isCurrent()).toBe(false);
     expect(onProjectCleared).toHaveBeenCalledOnce();
   });
 

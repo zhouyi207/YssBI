@@ -40,6 +40,7 @@ describe('callFunctionDiagnostics', () => {
       sourceRevision: 1,
       requestGeneration: 1,
       diagnostics: [],
+      outcome: { type: 'success' },
       hasBlockingDiagnostics: false,
       nodes: {
         'call-empty': {

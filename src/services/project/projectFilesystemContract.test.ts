@@ -201,6 +201,11 @@ const globalCommandExemptions = [
   'get_log_count',
 ] as const;
 
+const processGlobalAllocatorCommandExemptions = [
+  // Task 9 preview generations are process-global, checked, and non-reusable.
+  'allocate_pin_preview_generation',
+] as const;
+
 const capabilityCommandExemptions = [
   'cancel_graph_run',
   'list_graph_traces',
@@ -227,6 +232,7 @@ const capabilityCommandExemptions = [
 const identityExemptCommands = [
   ...bootstrapCommandExemptions,
   ...globalCommandExemptions,
+  ...processGlobalAllocatorCommandExemptions,
   ...capabilityCommandExemptions,
 ] as const;
 
@@ -604,7 +610,7 @@ describe('projectFilesystemContract', () => {
   it('keeps production services independent from features and views', () => {
     const serviceSources = productionSources(resolve('src/services'));
 
-    expect(serviceSources).toHaveLength(34);
+    expect(serviceSources).toHaveLength(35);
     expect(serviceBoundaryViolations(serviceSources)).toEqual([]);
   });
 

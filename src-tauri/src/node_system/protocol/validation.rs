@@ -29,41 +29,118 @@ pub enum LiteralValidationIssue {
 pub fn validate_typed_literal(
     wire: &serde_json::Value,
     declared_type: &TypeExpr,
+    nominal: &impl NominalParameterValidator,
 ) -> Result<TypedValue, LiteralValidationIssue> {
     let decoded = serde_json::from_value::<TypedValue>(wire.clone())
         .map_err(|_| LiteralValidationIssue::MalformedWire)?;
     if !type_expr_accepts(declared_type, &decoded.value_type) {
         return Err(LiteralValidationIssue::DeclaredTypeMismatch);
     }
-    if !protocol_value_matches_type(&decoded.value, &decoded.value_type) {
+    if !protocol_value_matches_type(&decoded.value, &decoded.value_type, nominal) {
         return Err(LiteralValidationIssue::ValueTypeMismatch);
     }
     Ok(decoded)
 }
 
 fn type_expr_accepts(declared: &TypeExpr, actual: &TypeExpr) -> bool {
-    match declared {
-        TypeExpr::Unknown | TypeExpr::Generic(_) => true,
-        TypeExpr::Union(options) => options
+    match (declared, actual) {
+        (TypeExpr::Concrete(expected), TypeExpr::Concrete(actual)) => expected == actual,
+        (
+            TypeExpr::Applied {
+                constructor: expected,
+                arguments: expected_arguments,
+            },
+            TypeExpr::Applied {
+                constructor: actual,
+                arguments: actual_arguments,
+            },
+        ) => {
+            expected == actual
+                && expected_arguments.len() == actual_arguments.len()
+                && expected_arguments
+                    .iter()
+                    .zip(actual_arguments)
+                    .all(|(expected, actual)| type_expr_accepts(expected, actual))
+        }
+        (TypeExpr::Union(options), TypeExpr::Union(actual_options)) => {
+            !actual_options.is_empty()
+                && actual_options.iter().all(|actual| {
+                    options
+                        .iter()
+                        .any(|option| type_expr_accepts(option, actual))
+                })
+        }
+        (TypeExpr::Union(options), actual) => options
             .iter()
             .any(|option| type_expr_accepts(option, actual)),
-        _ => declared == actual,
+        (TypeExpr::Generic(_) | TypeExpr::Unknown, _)
+        | (_, TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_))
+        | (TypeExpr::Concrete(_), TypeExpr::Applied { .. })
+        | (TypeExpr::Applied { .. }, TypeExpr::Concrete(_)) => false,
     }
 }
 
-fn protocol_value_matches_type(value: &Value, value_type: &TypeExpr) -> bool {
+fn protocol_value_matches_type(
+    value: &Value,
+    value_type: &TypeExpr,
+    nominal: &impl NominalParameterValidator,
+) -> bool {
     match value_type {
         TypeExpr::Concrete(type_id) => match type_id.as_str() {
             "core.bool" => matches!(value, Value::Bool(_)),
             "core.int64" => matches!(value, Value::Integer(_)),
             "core.float64" => matches!(value, Value::Integer(_) | Value::Decimal(_)),
             "core.string" => matches!(value, Value::String(_)),
-            _ => true,
+            "core.bytes" => matches!(value, Value::Bytes(_)),
+            "core.object" => matches!(value, Value::Object(_)),
+            _ => nominal
+                .validate_nominal_parameter(type_id, &protocol_value_to_json(value))
+                .is_some_and(|result| result.is_ok()),
+        },
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => match (constructor.as_str(), arguments.as_slice(), value) {
+            (
+                "core.list" | "core.array" | "core.data_series",
+                [element_type],
+                Value::List(values),
+            ) => values
+                .iter()
+                .all(|value| protocol_value_matches_type(value, element_type, nominal)),
+            ("core.map" | "core.struct" | "core.object", [value_type], Value::Object(values)) => {
+                values
+                    .values()
+                    .all(|value| protocol_value_matches_type(value, value_type, nominal))
+            }
+            _ => false,
         },
         TypeExpr::Union(options) => options
             .iter()
-            .any(|option| protocol_value_matches_type(value, option)),
-        TypeExpr::Unknown | TypeExpr::Generic(_) | TypeExpr::Applied { .. } => true,
+            .any(|option| protocol_value_matches_type(value, option, nominal)),
+        TypeExpr::Unknown | TypeExpr::Generic(_) => false,
+    }
+}
+
+fn protocol_value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(value) => (*value).into(),
+        Value::Integer(value) => (*value).into(),
+        Value::Unsigned(value) => (*value).into(),
+        Value::Decimal(value) => value.as_str().into(),
+        Value::String(value) => value.as_ref().into(),
+        Value::Bytes(values) => serde_json::Value::Array(
+            values
+                .iter()
+                .map(|value| serde_json::Value::from(*value))
+                .collect(),
+        ),
+        Value::List(values) => values.iter().map(protocol_value_to_json).collect(),
+        Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| (key.to_string(), protocol_value_to_json(value)))
+            .collect(),
     }
 }
 
@@ -77,7 +154,7 @@ pub trait NominalParameterValidator {
 
 impl<F> NominalParameterValidator for F
 where
-    F: Fn(&TypeId, &serde_json::Value) -> Option<Result<(), String>>,
+    F: for<'a, 'b> Fn(&'a TypeId, &'b serde_json::Value) -> Option<Result<(), String>>,
 {
     fn validate_nominal_parameter(
         &self,
@@ -88,12 +165,30 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct ParameterValidation<T> {
+    pub issues: Vec<LocatedParameterIssue>,
+    pub prepared_nominal: std::collections::BTreeMap<ParameterKey, T>,
+}
+
 pub fn validate_parameter_values(
     protocol: &NodeProtocol,
     values: &ParameterValues,
     nominal: &impl NominalParameterValidator,
 ) -> Vec<LocatedParameterIssue> {
+    validate_and_prepare_parameter_values(protocol, values, |type_id, value| {
+        nominal.validate_nominal_parameter(type_id, value)
+    })
+    .issues
+}
+
+pub fn validate_and_prepare_parameter_values<T>(
+    protocol: &NodeProtocol,
+    values: &ParameterValues,
+    prepare_nominal: impl Fn(&TypeId, &serde_json::Value) -> Option<Result<T, String>>,
+) -> ParameterValidation<T> {
     let mut issues = Vec::new();
+    let mut prepared_nominal = std::collections::BTreeMap::new();
     for key in values.keys() {
         if !protocol
             .parameters
@@ -135,16 +230,23 @@ pub fn validate_parameter_values(
             issues.push(issue(&spec.key, ParameterIssueKind::InvalidResourceId));
             continue;
         }
-        if let TypeExpr::Concrete(type_id) = &spec.value_type
-            && let Some(Err(detail)) = nominal.validate_nominal_parameter(type_id, value)
-        {
-            issues.push(issue(
-                &spec.key,
-                ParameterIssueKind::InvalidNominal(detail.into()),
-            ));
+        if let TypeExpr::Concrete(type_id) = &spec.value_type {
+            match prepare_nominal(type_id, value) {
+                Some(Ok(prepared)) => {
+                    prepared_nominal.insert(spec.key.clone(), prepared);
+                }
+                Some(Err(detail)) => issues.push(issue(
+                    &spec.key,
+                    ParameterIssueKind::InvalidNominal(detail.into()),
+                )),
+                None => {}
+            }
         }
     }
-    issues
+    ParameterValidation {
+        issues,
+        prepared_nominal,
+    }
 }
 
 fn issue(key: &ParameterKey, kind: ParameterIssueKind) -> LocatedParameterIssue {
@@ -238,7 +340,20 @@ fn protocol_value_matches_json(expected: &Value, actual: &serde_json::Value) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::protocol::{TypedValue, Value};
+    use crate::node_system::protocol::{TypeConstructorId, TypeParameterId, TypedValue, Value};
+    use std::collections::BTreeMap;
+
+    struct NoNominalValidator;
+
+    impl NominalParameterValidator for NoNominalValidator {
+        fn validate_nominal_parameter(
+            &self,
+            _: &TypeId,
+            _: &serde_json::Value,
+        ) -> Option<Result<(), String>> {
+            None
+        }
+    }
 
     #[test]
     fn typed_literal_rejects_value_that_disagrees_with_its_declared_type() {
@@ -250,9 +365,152 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            validate_typed_literal(&wire, &declared),
+            validate_typed_literal(&wire, &declared, &NoNominalValidator),
             Err(LiteralValidationIssue::ValueTypeMismatch)
         ));
+    }
+
+    #[test]
+    fn typed_literal_rejects_nested_list_element_mismatch() {
+        let list = TypeExpr::Applied {
+            constructor: crate::node_system::protocol::TypeConstructorId::new("core.list").unwrap(),
+            arguments: vec![TypeExpr::Concrete(TypeId::new("core.int64").unwrap())],
+        };
+        let wire = serde_json::to_value(TypedValue {
+            value_type: list.clone(),
+            value: Value::List(vec![Value::Integer(1), Value::String("wrong".into())]),
+        })
+        .unwrap();
+
+        assert!(matches!(
+            validate_typed_literal(&wire, &list, &NoNominalValidator),
+            Err(LiteralValidationIssue::ValueTypeMismatch)
+        ));
+    }
+
+    #[test]
+    fn typed_literal_rejects_unverifiable_concrete_type() {
+        let nominal = TypeExpr::Concrete(TypeId::new("acme.unknown").unwrap());
+        let wire = serde_json::to_value(TypedValue {
+            value_type: nominal.clone(),
+            value: Value::Object(Default::default()),
+        })
+        .unwrap();
+
+        assert!(matches!(
+            validate_typed_literal(&wire, &nominal, &NoNominalValidator),
+            Err(LiteralValidationIssue::ValueTypeMismatch)
+        ));
+    }
+
+    #[test]
+    fn typed_literal_accepts_bytes_objects_and_recursive_collections() {
+        let int64 = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let cases = [
+            (
+                TypeExpr::Concrete(TypeId::new("core.bytes").unwrap()),
+                Value::Bytes(vec![0, 127, 255]),
+            ),
+            (
+                TypeExpr::Concrete(TypeId::new("core.object").unwrap()),
+                Value::Object(BTreeMap::from([("value".into(), Value::Integer(1))])),
+            ),
+            (
+                TypeExpr::Applied {
+                    constructor: TypeConstructorId::new("core.list").unwrap(),
+                    arguments: vec![int64.clone()],
+                },
+                Value::List(vec![Value::Integer(1), Value::Integer(2)]),
+            ),
+            (
+                TypeExpr::Applied {
+                    constructor: TypeConstructorId::new("core.struct").unwrap(),
+                    arguments: vec![int64],
+                },
+                Value::Object(BTreeMap::from([
+                    ("first".into(), Value::Integer(1)),
+                    ("second".into(), Value::Integer(2)),
+                ])),
+            ),
+        ];
+
+        for (value_type, value) in cases {
+            let wire = serde_json::to_value(TypedValue {
+                value_type: value_type.clone(),
+                value,
+            })
+            .unwrap();
+            assert_eq!(
+                validate_typed_literal(&wire, &value_type, &NoNominalValidator),
+                serde_json::from_value(wire).map_err(|_| LiteralValidationIssue::MalformedWire)
+            );
+        }
+    }
+
+    #[test]
+    fn typed_literal_accepts_union_value_type_when_every_option_fits_the_port_oneof() {
+        let oneof = TypeExpr::Union(vec![
+            TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+        ]);
+        let wire = serde_json::to_value(TypedValue {
+            value_type: oneof.clone(),
+            value: Value::String("selected-option".into()),
+        })
+        .unwrap();
+
+        assert!(validate_typed_literal(&wire, &oneof, &NoNominalValidator).is_ok());
+    }
+
+    #[test]
+    fn typed_literal_accepts_registered_nominal_value() {
+        struct AcceptNominal;
+        impl NominalParameterValidator for AcceptNominal {
+            fn validate_nominal_parameter(
+                &self,
+                type_id: &TypeId,
+                value: &serde_json::Value,
+            ) -> Option<Result<(), String>> {
+                (type_id.as_str() == "acme.count").then(|| {
+                    value
+                        .as_u64()
+                        .filter(|value| *value <= 10)
+                        .map(|_| ())
+                        .ok_or_else(|| "count out of range".to_owned())
+                })
+            }
+        }
+
+        let nominal = TypeExpr::Concrete(TypeId::new("acme.count").unwrap());
+        let wire = serde_json::to_value(TypedValue {
+            value_type: nominal.clone(),
+            value: Value::Unsigned(7),
+        })
+        .unwrap();
+
+        assert!(validate_typed_literal(&wire, &nominal, &AcceptNominal).is_ok());
+    }
+
+    #[test]
+    fn typed_literal_fails_closed_for_unknown_type_shapes() {
+        let int64 = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let cases = [
+            TypeExpr::Applied {
+                constructor: TypeConstructorId::new("acme.unknown").unwrap(),
+                arguments: vec![int64],
+            },
+            TypeExpr::Generic(TypeParameterId::new("item").unwrap()),
+            TypeExpr::Unknown,
+        ];
+
+        for value_type in cases {
+            let wire = serde_json::to_value(TypedValue {
+                value_type: value_type.clone(),
+                value: Value::Integer(1),
+            })
+            .unwrap();
+            assert!(validate_typed_literal(&wire, &value_type, &NoNominalValidator).is_err());
+        }
     }
 
     #[test]
@@ -265,7 +523,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            validate_typed_literal(&wire, &declared),
+            validate_typed_literal(&wire, &declared, &NoNominalValidator),
             Err(LiteralValidationIssue::DeclaredTypeMismatch)
         ));
     }

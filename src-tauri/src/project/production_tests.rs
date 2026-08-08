@@ -8,6 +8,20 @@ use crate::node_system::document::{
 use crate::node_system::protocol::{NodeTypeId, PortKey};
 use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
 
+#[test]
+fn execution_error_retains_typed_internal_compilation_failure() {
+    let failure = crate::node_system::compiler::InternalCompilationFailure {
+        stage: crate::node_system::compiler::CompilationStage::Lowering,
+        code: "compiler.lowering.internal_invariant".into(),
+        node_id: Some(NodeId::from_uuid(uuid::Uuid::from_u128(42))),
+    };
+
+    let error = ProjectExecutionError::internal_compilation(failure.clone());
+
+    assert_eq!(error.internal_compilation_failure(), Some(&failure));
+    assert!(error.run_error().is_none());
+}
+
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Production.yssbi-event").unwrap()
 }
@@ -8055,8 +8069,6 @@ fn production_relational_backend_executes_project_dataframe_source() {
             },
         ]),
         fragment_roots: Box::new([]),
-        bridge_inputs: Box::new([]),
-        requested_fragment_outputs: Box::new([]),
         roots: Box::new([crate::node_system::plan::RelationalOperatorIndex::new(1)]),
         pushdown_hints: Box::new([crate::node_system::plan::RelationalPushdownHint::Limit {
             source: crate::node_system::plan::RelationalOperatorIndex::new(0),
@@ -8065,7 +8077,7 @@ fn production_relational_backend_executes_project_dataframe_source() {
     };
 
     let result = crate::node_system::runtime::ProductionRelationalBackend::default()
-        .execute(&context, &plan, &[], &[])
+        .execute(&context, &plan, &[])
         .unwrap();
     let crate::node_system::runtime::RuntimeValue::Scalar(
         crate::node_system::protocol::Value::Object(columns),
@@ -9372,7 +9384,7 @@ fn projection_and_execution_reuse_one_compile_product() {
 }
 
 #[test]
-fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_digests() {
+fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests() {
     let (state, root) = active_state_with_valid_constant_graph("demand-variant-reuse");
     let first_node = state.get_data().unwrap().graphs[&graph_path()]
         .document
@@ -9434,6 +9446,17 @@ fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_diges
             &NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
+    let preview_events = DemandRunEvents::default();
+    let preview_run = state
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::PinPreview {
+                output: first_output.clone(),
+                generation: 17,
+            },
+            &preview_events,
+        )
+        .unwrap();
     state.graph_projection(&graph_path(), "en-US").unwrap();
 
     assert_eq!(
@@ -9447,6 +9470,10 @@ fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_diges
     assert_eq!(
         first_run.provenance.compile_id,
         second_run.provenance.compile_id
+    );
+    assert_eq!(
+        first_run.provenance.compile_id,
+        preview_run.provenance.compile_id
     );
     assert_eq!(first_run.values.len(), 1);
     assert_eq!(second_run.values.len(), 1);
@@ -9473,6 +9500,29 @@ fn default_and_two_demands_reuse_one_basis_compile_with_distinct_selection_diges
     assert_ne!(
         first_run.correlation.selection_digest,
         second_run.correlation.selection_digest
+    );
+    assert_ne!(
+        first_run.correlation.selection_digest,
+        preview_run.correlation.selection_digest,
+    );
+    let preview_events = preview_events.0.lock().unwrap();
+    assert!(preview_events.iter().all(|event| !matches!(
+        event.kind,
+        crate::node_system::runtime::RunEventKind::ResultReady { .. }
+    )));
+    assert_eq!(
+        preview_events
+            .iter()
+            .filter(|event| matches!(
+                &event.kind,
+                crate::node_system::runtime::RunEventKind::OutputReady {
+                    output,
+                    generation: Some(17),
+                    ..
+                } if output == &first_output
+            ))
+            .count(),
+        1,
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -11131,8 +11181,6 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
     let observation = observer.snapshot();
     assert_eq!(observation.relational_islands, Some(1));
     assert_eq!(observation.backend_invocations, 1);
-    assert_eq!(observation.materialization_bridges, Some(0));
-    assert_eq!(observation.bridge_inputs, vec![0]);
     assert_eq!(observation.relational_subplans.len(), 1);
     let plan = &observation.relational_subplans[0].compiled_plan;
     assert_eq!(
@@ -11439,7 +11487,6 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
             _: &crate::node_system::runtime::RelationalContext<'_>,
             _: &crate::node_system::plan::CompiledRelationalPlan,
             _: &[crate::node_system::runtime::RuntimeValue],
-            _: &[crate::node_system::runtime::RelationalInput],
         ) -> Result<
             crate::node_system::runtime::RelationalExecution,
             crate::node_system::runtime::RelationalError,
@@ -11582,8 +11629,6 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     let observation = observer.snapshot();
     assert_eq!(observation.relational_islands, Some(1));
     assert_eq!(observation.backend_invocations, 1);
-    assert_eq!(observation.materialization_bridges, Some(0));
-    assert_eq!(observation.bridge_inputs, vec![0]);
     assert_eq!(observation.scan_limits, vec![Some(2)]);
     assert_eq!(
         result.values.get(result_name.as_str()),
@@ -11947,7 +11992,11 @@ impl ProductionRelationalChainFixture {
         drop(events);
         let store = self.state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 2);
+        assert_eq!(
+            store.results.source_count(),
+            1,
+            "final-only demand must not expose an intermediate readable source",
+        );
         drop(store);
         assert_eq!(leases.acquired(), 1);
         assert_eq!(leases.dropped(), 1);
@@ -11966,9 +12015,7 @@ impl ProductionRelationalChainFixture {
         self.assert_common_success(ProductionChainOutput::Limit, result, events, leases);
         let observation = observer.snapshot();
         assert_eq!(observation.relational_islands, Some(1));
-        assert_eq!(observation.materialization_bridges, Some(0));
         assert_eq!(observation.backend_invocations, 1);
-        assert_eq!(observation.bridge_inputs, vec![0]);
         assert_eq!(observation.relational_subplans.len(), 1);
         let plan = &observation.relational_subplans[0].compiled_plan;
         assert_eq!(plan.operators.len(), 5);
@@ -11989,8 +12036,6 @@ impl ProductionRelationalChainFixture {
         assert!(
             matches!(plan.operators[4], RelationalOperator::Limit { input, rows: 2 } if input == RelationalOperatorIndex::new(3))
         );
-        assert!(plan.bridge_inputs.is_empty());
-        assert!(plan.requested_fragment_outputs.is_empty());
 
         let dataframes = observer.materialized_dataframes();
         assert_eq!(dataframes.len(), 1);
@@ -12106,8 +12151,6 @@ impl ProductionRelationalChainFixture {
             operator,
             RelationalOperator::Rename { .. } | RelationalOperator::Limit { .. }
         )));
-        assert!(plan.bridge_inputs.is_empty());
-        assert!(plan.requested_fragment_outputs.is_empty());
     }
 
     fn assert_preview(
@@ -12122,7 +12165,6 @@ impl ProductionRelationalChainFixture {
         self.assert_common_success(output, result, events, leases);
         let observation = observer.snapshot();
         assert_eq!(observation.relational_islands, Some(1));
-        assert_eq!(observation.materialization_bridges, Some(0));
         assert_eq!(observation.backend_invocations, 1);
         let plan = &observation.relational_subplans[0].compiled_plan;
         assert_eq!(plan.operators.len(), expected_operators);
@@ -12130,8 +12172,6 @@ impl ProductionRelationalChainFixture {
         assert_eq!(plan.roots[0].index(), expected_operators - 1);
         assert_eq!(plan.fragment_order.len(), expected_operators);
         assert_eq!(plan.fragment_roots.len(), expected_operators);
-        assert!(plan.bridge_inputs.is_empty());
-        assert!(plan.requested_fragment_outputs.is_empty());
         assert_eq!(observer.materialized_dataframes().len(), 1);
         self.assert_exact_preview_plan(output, observer);
     }
@@ -12156,7 +12196,6 @@ impl ProductionRelationalChainFixture {
             "operators": plan.relational_subplans[0].compiled_plan.operators,
             "roots": plan.relational_subplans[0].compiled_plan.roots,
             "hints": plan.relational_subplans[0].compiled_plan.pushdown_hints,
-            "bridges": plan.relational_subplans[0].materialization_bridges,
             "resources": plan.resources,
             "operations": plan.operations.iter().map(|operation| serde_json::json!({
                 "sourceRole": role(operation.source_node_id),
@@ -12271,7 +12310,6 @@ impl ProductionRelationalChainFixture {
                 _: &crate::node_system::runtime::RelationalContext<'_>,
                 _: &crate::node_system::plan::CompiledRelationalPlan,
                 _: &[crate::node_system::runtime::RuntimeValue],
-                _: &[crate::node_system::runtime::RelationalInput],
             ) -> Result<
                 crate::node_system::runtime::RelationalExecution,
                 crate::node_system::runtime::RelationalError,

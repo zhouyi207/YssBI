@@ -19,7 +19,7 @@ pub use model::{
     ExecutionSemantics, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
     NodeCatalogProtocol, NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction,
     PortDirection, PortEditorSpec, PortInstances, PortKind, PortMemberGroupSpec, PortSpec,
-    ProtocolError, Purity,
+    ProtocolError, Purity, RetryPolicy, RetryPolicyError,
 };
 pub use parameter::{
     DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterSchema,
@@ -30,7 +30,8 @@ pub use types::{
     SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, TypeConstraint, TypeExpr, TypeTerm,
 };
 pub use validation::{
-    LiteralValidationIssue, LocatedParameterIssue, ParameterIssueKind, validate_parameter_values,
+    LiteralValidationIssue, LocatedParameterIssue, NominalParameterValidator, ParameterIssueKind,
+    ParameterValidation, validate_and_prepare_parameter_values, validate_parameter_values,
     validate_typed_literal,
 };
 pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};

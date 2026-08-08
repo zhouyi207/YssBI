@@ -13,6 +13,18 @@ export interface ProjectionBasisDto {
   resourceVersions: Record<string, string>;
 }
 
+export type CompilationStageDto = 'analysis' | 'lowering';
+
+export type CompilationOutcomeDto =
+  | { type: 'success' }
+  | { type: 'analysisBlocked' }
+  | {
+      type: 'internalFailure';
+      stage: CompilationStageDto;
+      code: string;
+      nodeId: string | null;
+    };
+
 export interface EditorGraphProjectionDto {
   basis: ProjectionBasisDto;
   graphPath: string;
@@ -20,6 +32,7 @@ export interface EditorGraphProjectionDto {
   nodes: EditorNodeProjectionDto[];
   connections: EditorConnectionProjectionDto[];
   diagnostics: DiagnosticDto[];
+  outcome: CompilationOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
 

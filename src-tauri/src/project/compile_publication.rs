@@ -7,12 +7,26 @@ use crate::node_system::analysis::{
     ResourceVersion, TraceSink,
 };
 use crate::node_system::compiler::{
-    CompilationTask, CompileProducts, GraphCompiler, ProjectCompileCoordinator, PublishOutcome,
-    PublishedCompileAnalysis, PublishedExecutionPlan, ScheduleOutcome, compilation_basis,
+    CompilationOutcome, CompilationTask, CompileProducts, GraphCompiler, ProjectCompileCoordinator,
+    PublishOutcome, PublishedCompileAnalysis, PublishedExecutionPlan, ScheduleOutcome,
+    compilation_basis,
 };
 use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::ExecutionPlan;
 use std::sync::Arc;
+
+fn publication_blocks_plan(
+    outcome: &CompilationOutcome,
+    analysis_has_blocking_diagnostics: bool,
+) -> Result<bool, String> {
+    match outcome {
+        CompilationOutcome::Succeeded if analysis_has_blocking_diagnostics => Err(
+            "internal_compilation_state: successful compilation has blocking diagnostics".into(),
+        ),
+        CompilationOutcome::Succeeded => Ok(false),
+        CompilationOutcome::AnalysisBlocked | CompilationOutcome::InternalFailure(_) => Ok(true),
+    }
+}
 
 type PublishedProducts = (
     CompileProjection<PublishedCompileAnalysis>,
@@ -323,17 +337,24 @@ impl ProjectState {
         let Ok(result) = compiler.compile_snapshot(&snapshot, &task.cancellation) else {
             return Ok(PublishOutcome::Cancelled);
         };
-        let has_blocking_diagnostics = result.analysis.has_blocking_errors();
-        let plan = result
-            .plan
-            .zip(result.execution_basis)
-            .map(|(plan, execution_basis)| {
-                Arc::new(PublishedExecutionPlan::new(plan, execution_basis))
-            });
+        let has_blocking_diagnostics =
+            publication_blocks_plan(&result.outcome, result.analysis.has_blocking_errors())?;
+        let plan = match &result.outcome {
+            CompilationOutcome::Succeeded => {
+                result
+                    .plan
+                    .zip(result.execution_basis)
+                    .map(|(plan, execution_basis)| {
+                        Arc::new(PublishedExecutionPlan::new(plan, execution_basis))
+                    })
+            }
+            CompilationOutcome::AnalysisBlocked | CompilationOutcome::InternalFailure(_) => None,
+        };
         let products = CompileProducts {
             analysis: PublishedCompileAnalysis {
                 analysis: result.analysis,
                 semantic: result.semantic,
+                outcome: result.outcome,
             },
             has_blocking_diagnostics,
             plan,
@@ -604,6 +625,25 @@ fn resource_revision_version(
     revision: crate::node_system::document::ResourceRevision,
 ) -> ResourceVersion {
     ResourceVersion::new(format!("revision:{}", revision.get()))
+}
+
+#[cfg(test)]
+mod outcome_tests {
+    use super::*;
+    use crate::node_system::compiler::{
+        CompilationOutcome, CompilationStage, InternalCompilationFailure,
+    };
+
+    #[test]
+    fn internal_outcome_blocks_plan_publication_without_diagnostics() {
+        let outcome = CompilationOutcome::InternalFailure(InternalCompilationFailure {
+            stage: CompilationStage::Lowering,
+            code: "compiler.lowering.internal_invariant".into(),
+            node_id: None,
+        });
+
+        assert!(publication_blocks_plan(&outcome, false).unwrap());
+    }
 }
 
 impl CompileInput {

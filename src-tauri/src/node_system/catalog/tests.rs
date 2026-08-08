@@ -1735,11 +1735,9 @@ fn every_emitted_native_kernel_has_a_production_implementation() {
             .as_any()
             .downcast_ref::<crate::node_system::compiler::NodeImplementation>()
             .unwrap_or_else(|| panic!("implemented node '{node_id}' has no compiler lowerer"));
-        let parameters = ValidatedNodeConfig::from_analysis(
-            &node.protocol(),
-            BTreeMap::new(),
-            |type_id, value| nodes.prepare_nominal_parameter(type_id, value),
-        );
+        let parameters =
+            ValidatedNodeConfig::from_analysis(&node.protocol(), BTreeMap::new(), &BTreeMap::new())
+                .expect("empty configuration is valid");
         let context = LoweringContext {
             cancellation: &cancellation,
             node_id: NodeId::new(),

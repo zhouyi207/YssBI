@@ -1,6 +1,6 @@
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, ResourceVersionSet};
 use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddressDto};
-use crate::node_system::plan::{ExecutionDemand, GraphOutputRef};
+use crate::node_system::plan::{ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION};
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{
     ArtifactSnapshotKind, ResultSourceDescriptor, ResultSourcePage, RunErrorCode, RunEvent,
@@ -61,6 +61,10 @@ define_execution_demand_dto! {
         outputs: Box<[GraphOutputRefDto]>,
         include_default_results: bool,
     },
+    PinPreview => "pinPreview" {
+        output: GraphOutputRefDto,
+        generation: u64,
+    },
 }
 
 impl TryFrom<ExecutionDemandDto> for ExecutionDemand {
@@ -81,6 +85,17 @@ impl TryFrom<ExecutionDemandDto> for ExecutionDemand {
                     .into_boxed_slice(),
                 include_default_results,
             }),
+            ExecutionDemandDto::PinPreview { output, generation } => {
+                if generation > MAX_SAFE_PREVIEW_GENERATION {
+                    return Err(
+                        "pin preview generation exceeds JavaScript safe integer range".into(),
+                    );
+                }
+                Ok(Self::PinPreview {
+                    output: output.try_into()?,
+                    generation,
+                })
+            }
         }
     }
 }
@@ -100,6 +115,10 @@ impl From<ExecutionDemand> for ExecutionDemandDto {
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
                 include_default_results,
+            },
+            ExecutionDemand::PinPreview { output, generation } => Self::PinPreview {
+                output: output.into(),
+                generation,
             },
         }
     }
@@ -189,9 +208,12 @@ define_run_event_kind_dto! {
         activation_id: String,
         code: RunErrorCode,
     },
-    ValueReady => "valueReady" { value_index: u32, source_id: String },
     ResultReady => "resultReady" { name: Box<str>, source_id: String },
-    OutputReady => "outputReady" { output: GraphOutputRefDto, source_id: String },
+    OutputReady => "outputReady" {
+        output: GraphOutputRefDto,
+        generation: Option<u64>,
+        source_id: String,
+    },
 }
 
 impl From<RunEventKind> for RunEventKindDto {
@@ -224,19 +246,17 @@ impl From<RunEventKind> for RunEventKindDto {
                 activation_id: activation_id.to_string(),
                 code,
             },
-            RunEventKind::ValueReady {
-                value_index,
-                source_id,
-            } => Self::ValueReady {
-                value_index,
-                source_id: source_id.get().to_string(),
-            },
             RunEventKind::ResultReady { name, source_id } => Self::ResultReady {
                 name,
                 source_id: source_id.get().to_string(),
             },
-            RunEventKind::OutputReady { output, source_id } => Self::OutputReady {
+            RunEventKind::OutputReady {
+                output,
+                generation,
+                source_id,
+            } => Self::OutputReady {
                 output: output.into(),
+                generation,
                 source_id: source_id.get().to_string(),
             },
         }
@@ -436,6 +456,29 @@ mod execution_demand_tests {
     }
 
     #[test]
+    fn pin_preview_demand_rejects_generation_above_javascript_safe_integer() {
+        let output = json!({
+            "graphPath": "events/Main.yssbi-event",
+            "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
+        });
+        let maximum = serde_json::from_value::<ExecutionDemandDto>(json!({
+            "type": "pinPreview",
+            "output": output.clone(),
+            "generation": 9_007_199_254_740_991_u64
+        }))
+        .unwrap();
+        assert!(ExecutionDemand::try_from(maximum).is_ok());
+
+        let unsafe_generation = serde_json::from_value::<ExecutionDemandDto>(json!({
+            "type": "pinPreview",
+            "output": output,
+            "generation": 9_007_199_254_740_992_u64
+        }))
+        .unwrap();
+        assert!(ExecutionDemand::try_from(unsafe_generation).is_err());
+    }
+
+    #[test]
     fn output_ready_serializes_only_stable_output_and_source_id() {
         let output = GraphOutputRefDto {
             graph_path: "events/Main.yssbi-event".into(),
@@ -448,6 +491,7 @@ mod execution_demand_tests {
         };
         let wire = serde_json::to_value(RunEventKindDto::OutputReady {
             output,
+            generation: None,
             source_id: "42".into(),
         })
         .unwrap();
@@ -460,6 +504,7 @@ mod execution_demand_tests {
                     "graphPath": "events/Main.yssbi-event",
                     "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
                 },
+                "generation": null,
                 "sourceId": "42"
             })
         );

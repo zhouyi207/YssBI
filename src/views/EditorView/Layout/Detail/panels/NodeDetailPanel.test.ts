@@ -14,6 +14,7 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
     sourceRevision: 1,
     requestGeneration: 1,
     diagnostics: [],
+    outcome: { type: 'success' },
     hasBlockingDiagnostics: false,
     nodes: {
       shared: {

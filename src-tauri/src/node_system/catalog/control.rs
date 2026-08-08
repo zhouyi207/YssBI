@@ -196,7 +196,7 @@ fn protocol(
             determinism: Determinism::Deterministic,
             purity: Purity::Effectful,
             evaluation: EvaluationPolicy::EagerWhenRegionEntered,
-            cache: CachePolicy::None,
+            cache: CachePolicy::Disabled,
             effects: EffectSemantics::Ordered,
         },
         scope: NodeScope::Any,

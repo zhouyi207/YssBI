@@ -236,7 +236,7 @@ fn execution(stage: Stage) -> ExecutionSemantics {
             EvaluationPolicy::DemandDriven
         },
         cache: if effectful {
-            CachePolicy::None
+            CachePolicy::Disabled
         } else {
             CachePolicy::PerRun
         },

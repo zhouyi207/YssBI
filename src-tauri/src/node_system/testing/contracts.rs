@@ -160,10 +160,7 @@ fn editor_projection_contract(
             id: node_id,
             node_type: NodeTypeId::new("yssbi.constant.bool").unwrap(),
             position: NodePosition { x: 120.5, y: -32.0 },
-            parameters: BTreeMap::from([(
-                ParameterKey::new("value").unwrap(),
-                json!({ "Bool": true }),
-            )]),
+            parameters: BTreeMap::from([(ParameterKey::new("value").unwrap(), json!(true))]),
             user_label: Some("Contract Boolean".into()),
         },
     );
@@ -246,16 +243,18 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
             activation_id: UNSAFE_ID,
             code: RunErrorCode::KernelFailed,
         },
-        RunEventKind::ValueReady {
-            value_index: 4,
-            source_id: ResultSourceId::new(UNSAFE_ID),
-        },
         RunEventKind::ResultReady {
             name: "contract-result".into(),
             source_id: ResultSourceId::new(UNSAFE_ID),
         },
         RunEventKind::OutputReady {
             output: declared.clone(),
+            generation: None,
+            source_id: ResultSourceId::new(UNSAFE_ID),
+        },
+        RunEventKind::OutputReady {
+            output: declared.clone(),
+            generation: Some(17),
             source_id: ResultSourceId::new(UNSAFE_ID),
         },
     ];
@@ -273,8 +272,12 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
     let demands = [
         ExecutionDemand::Default,
         ExecutionDemand::Outputs {
-            outputs: vec![declared, instance].into_boxed_slice(),
+            outputs: vec![declared.clone(), instance].into_boxed_slice(),
             include_default_results: false,
+        },
+        ExecutionDemand::PinPreview {
+            output: declared,
+            generation: 17,
         },
     ]
     .into_iter()
@@ -611,8 +614,12 @@ fn execution_and_project_event_contract_inventories_are_complete() {
         .iter()
         .map(|event| event["kind"]["type"].as_str().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(run_events.len(), RUN_EVENT_KIND_VARIANT_COUNT);
-    assert_eq!(event_types, RUN_EVENT_KIND_DTO_WIRE_TYPES);
+    let unique_event_types = event_types.iter().copied().collect::<BTreeSet<_>>();
+    assert_eq!(
+        unique_event_types,
+        RUN_EVENT_KIND_DTO_WIRE_TYPES.into_iter().collect(),
+    );
+    assert_eq!(unique_event_types.len(), RUN_EVENT_KIND_VARIANT_COUNT);
     let demand_types = execution["demands"]
         .as_array()
         .unwrap()

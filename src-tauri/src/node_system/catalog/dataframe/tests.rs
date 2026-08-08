@@ -24,9 +24,13 @@ fn validated_config(
     protocol: &crate::node_system::protocol::NodeProtocol,
     parameters: BTreeMap<ParameterKey, serde_json::Value>,
 ) -> ValidatedNodeConfig {
-    ValidatedNodeConfig::from_analysis(protocol, parameters, |type_id, value| {
-        registry.prepare_nominal_parameter(type_id, value)
-    })
+    let validation = crate::node_system::protocol::validate_and_prepare_parameter_values(
+        protocol,
+        &parameters,
+        |type_id, value| registry.prepare_nominal_parameter(type_id, value),
+    );
+    ValidatedNodeConfig::from_analysis(protocol, parameters, &validation.prepared_nominal)
+        .expect("test configuration is analysis-valid")
 }
 
 #[test]

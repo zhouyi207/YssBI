@@ -1,4 +1,8 @@
-import { pinPreviewCacheKey, useExecutionStore } from '@/features/core/execution';
+import {
+  pinPreviewCacheKey,
+  useExecutionStore,
+  type PinPreviewLease,
+} from '@/features/core/execution';
 import type { GraphOutputRefDto } from '@/shared/types/dto/executionDemand';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
 
@@ -12,6 +16,8 @@ export type PinPreviewObservation = {
   generation: number;
   runId: string | null;
   terminal: 'pending' | 'completed' | 'error' | 'cancelled';
+  stale: boolean;
+  lease: PinPreviewLease;
 };
 
 function observePinPreviewEvent(
@@ -19,10 +25,17 @@ function observePinPreviewEvent(
   event: RunEvent,
   preview: PinPreviewObservation,
 ): void {
-  if (event.correlation.graphPath !== graphPath) return;
+  if (!preview.lease.isCurrent()) return;
+  if (event.correlation.graphPath !== graphPath) {
+    preview.stale = true;
+    return;
+  }
 
   if (event.kind.type === 'runStarted') {
-    if (preview.runId || !event.correlation.runId) return;
+    if (preview.runId || !event.correlation.runId) {
+      preview.stale = true;
+      return;
+    }
     preview.projectSessionId = event.correlation.projectSessionId;
     preview.runId = event.correlation.runId;
     return;
@@ -32,7 +45,10 @@ function observePinPreviewEvent(
     || !preview.runId
     || event.correlation.projectSessionId !== preview.projectSessionId
     || event.correlation.runId !== preview.runId
-  ) return;
+  ) {
+    preview.stale = true;
+    return;
+  }
   if (event.kind.type === 'runCompleted') {
     preview.terminal = 'completed';
     return;
@@ -45,19 +61,18 @@ function observePinPreviewEvent(
     preview.terminal = 'cancelled';
     return;
   }
+  if (event.kind.type !== 'outputReady') return;
   if (
-    event.kind.type !== 'outputReady'
+    event.kind.generation !== preview.generation
     || event.kind.output.graphPath !== preview.output.graphPath
     || pinPreviewCacheKey(graphPath, event.kind.output.port)
       !== pinPreviewCacheKey(graphPath, preview.output.port)
-  ) return;
+  ) {
+    preview.stale = true;
+    return;
+  }
 
-  useExecutionStore.getState().completePinPreview(
-    graphPath,
-    preview.output.port,
-    preview.generation,
-    event.kind.sourceId,
-  );
+  preview.lease.complete(event.kind.sourceId);
 }
 
 export function observeGraphRunEvent(

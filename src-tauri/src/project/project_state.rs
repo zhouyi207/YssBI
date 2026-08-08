@@ -56,6 +56,7 @@ type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 pub struct ProjectExecutionError {
     message: Box<str>,
     run_error: Option<crate::node_system::runtime::RunError>,
+    internal_compilation_failure: Option<crate::node_system::compiler::InternalCompilationFailure>,
 }
 
 impl ProjectExecutionError {
@@ -63,11 +64,32 @@ impl ProjectExecutionError {
         Self {
             message: message.into(),
             run_error: None,
+            internal_compilation_failure: None,
+        }
+    }
+
+    pub fn internal_compilation(
+        failure: crate::node_system::compiler::InternalCompilationFailure,
+    ) -> Self {
+        Self {
+            message: format!(
+                "internal compilation failure at {:?}: {}",
+                failure.stage, failure.code
+            )
+            .into(),
+            run_error: None,
+            internal_compilation_failure: Some(failure),
         }
     }
 
     pub fn run_error(&self) -> Option<&crate::node_system::runtime::RunError> {
         self.run_error.as_ref()
+    }
+
+    pub fn internal_compilation_failure(
+        &self,
+    ) -> Option<&crate::node_system::compiler::InternalCompilationFailure> {
+        self.internal_compilation_failure.as_ref()
     }
 
     pub fn contains(&self, pattern: &str) -> bool {
@@ -91,6 +113,7 @@ impl From<crate::node_system::runtime::RunError> for ProjectExecutionError {
         Self {
             message: message.into(),
             run_error: Some(error),
+            internal_compilation_failure: None,
         }
     }
 }
@@ -956,9 +979,10 @@ impl ProjectionSourceSnapshot {
         let (analysis, _) = self
             .state
             .get_or_compile_current_from_source(graph_path, self)?;
-        EditorGraphProjectionDto::from_sources(
+        EditorGraphProjectionDto::from_compilation_sources(
             graph_path.as_str(),
             &analysis.payload.analysis,
+            &analysis.payload.outcome,
             &document,
             self.environment.registry.as_ref(),
             &self.environment.catalog.localization(locale),
@@ -6192,11 +6216,21 @@ impl ProjectState {
         self.load_function_resources(&cancellation)?;
         let compilation =
             self.get_or_compile_current(graph_path, &session_id, trace_sink.as_ref())?;
-        let product = compilation
-            .plan
-            .as_ref()
-            .map(|projection| Arc::clone(&projection.payload))
-            .ok_or_else(|| {
+        let product = match &compilation.analysis.payload.outcome {
+            crate::node_system::compiler::CompilationOutcome::Succeeded => compilation
+                .plan
+                .as_ref()
+                .map(|projection| Arc::clone(&projection.payload))
+                .ok_or_else(|| {
+                    ProjectExecutionError::internal_compilation(
+                        crate::node_system::compiler::InternalCompilationFailure {
+                            stage: crate::node_system::compiler::CompilationStage::Lowering,
+                            code: "project.execution.compilation_plan_missing".into(),
+                            node_id: None,
+                        },
+                    )
+                })?,
+            crate::node_system::compiler::CompilationOutcome::AnalysisBlocked => {
                 let codes = compilation
                     .analysis
                     .payload
@@ -6206,8 +6240,15 @@ impl ProjectState {
                     .map(|diagnostic| diagnostic.code.as_str())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("execution refused because graph has blocking diagnostics: {codes}")
-            })?;
+                return Err(format!(
+                    "execution refused because graph has blocking diagnostics: {codes}"
+                )
+                .into());
+            }
+            crate::node_system::compiler::CompilationOutcome::InternalFailure(failure) => {
+                return Err(ProjectExecutionError::internal_compilation(failure.clone()));
+            }
+        };
         let selected = product
             .select(demand)
             .map_err(|error| format!("invalid_execution_demand: {error}"))?;
@@ -7754,7 +7795,7 @@ pub(super) fn publish_function_plans(
     trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
-) -> Result<crate::node_system::runtime::FunctionPlanGeneration, String> {
+) -> Result<crate::node_system::runtime::FunctionPlanGeneration, ProjectExecutionError> {
     let compiler = GraphCompiler::with_resolvers(
         registry,
         resources,
@@ -7768,6 +7809,26 @@ pub(super) fn publish_function_plans(
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
             .map_err(|error| error.to_string())?;
+        match &products.outcome {
+            crate::node_system::compiler::CompilationOutcome::Succeeded => {}
+            crate::node_system::compiler::CompilationOutcome::AnalysisBlocked => {
+                let diagnostics = products
+                    .analysis
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!(
+                    "function '{}' has blocking diagnostics and cannot be published: {}",
+                    document_path.0, diagnostics
+                )
+                .into());
+            }
+            crate::node_system::compiler::CompilationOutcome::InternalFailure(failure) => {
+                return Err(ProjectExecutionError::internal_compilation(failure.clone()));
+            }
+        }
         let abi = products.function_abi.clone().ok_or_else(|| {
             format!(
                 "function '{}' did not produce an Entry/Return ABI",
@@ -7775,16 +7836,12 @@ pub(super) fn publish_function_plans(
             )
         })?;
         let plan = products.plan.ok_or_else(|| {
-            let diagnostics = products
-                .analysis
-                .diagnostics
-                .iter()
-                .map(|diagnostic| diagnostic.code.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(
-                "function '{}' has blocking diagnostics and cannot be published: {}",
-                document_path.0, diagnostics
+            ProjectExecutionError::internal_compilation(
+                crate::node_system::compiler::InternalCompilationFailure {
+                    stage: crate::node_system::compiler::CompilationStage::Lowering,
+                    code: "project.execution.function_plan_missing".into(),
+                    node_id: None,
+                },
             )
         })?;
         build_run_parameters(parameters, &document, &plan)?;
@@ -7807,7 +7864,7 @@ pub(super) fn publish_function_plans(
             resources.versions(),
             entries,
         )
-        .map_err(|error| error.to_string())
+        .map_err(|error| ProjectExecutionError::message(error.to_string()))
 }
 
 fn sanitize_graph_name(name: &str) -> String {
@@ -8352,9 +8409,10 @@ mod run_parameter_tests {
         DocumentNode, GraphDocument, NodeId, NodePosition, PortAddress,
     };
     use crate::node_system::plan::{
-        CompiledParameterHandle, ExecutionPlan, GraphOutputRef, PlannedKernel, PlannedOperation,
+        CompiledParameterHandle, ExecutionPlan, ExecutionSemanticsVersion, GraphOutputRef,
+        OperationStableId, PlannedKernel, PlannedOperation, PlannedRetry, WorkloadClass,
     };
-    use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey, Value};
+    use crate::node_system::protocol::{CachePolicy, NodeTypeId, ParameterKey, PortKey, Value};
     use crate::project::GraphDocumentKind;
     use std::collections::BTreeMap;
 
@@ -8404,6 +8462,7 @@ mod run_parameter_tests {
             value_count: 0,
             value_sources: Box::new([]),
             operations: Box::new([PlannedOperation {
+                stable_id: OperationStableId::new(format!("test.operation.{}", node.id)).unwrap(),
                 source_node_id: node.id,
                 source_node_type_id: node.node_type.clone(),
                 kernel: PlannedKernel::Native(
@@ -8412,6 +8471,11 @@ mod run_parameter_tests {
                 inputs: Box::new([]),
                 outputs: Box::new([]),
                 params,
+                resource_dependencies: Box::new([]),
+                cache_policy: CachePolicy::Disabled,
+                semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+                workload: WorkloadClass::Cpu,
+                retry: PlannedRetry::default(),
             }]),
             value_dependencies: Box::new([]),
             root_region: StructuredControlRegion::Sequence(Box::new([])),
@@ -8419,6 +8483,7 @@ mod run_parameter_tests {
             relational_subplans: Box::new([]),
             resources: Box::new([]),
             results: Box::new([]),
+            publications: Box::new([]),
         }
     }
 
@@ -8628,6 +8693,7 @@ mod run_parameter_tests {
         plan.value_count = 2;
         plan.operations = Box::new([
             PlannedOperation {
+                stable_id: OperationStableId::new(format!("test.operation.{source_id}")).unwrap(),
                 source_node_id: source_id,
                 source_node_type_id: source_node.node_type,
                 kernel: PlannedKernel::Native(
@@ -8639,8 +8705,14 @@ mod run_parameter_tests {
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-series").unwrap(),
+                resource_dependencies: Box::new([]),
+                cache_policy: CachePolicy::Disabled,
+                semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+                workload: WorkloadClass::Cpu,
+                retry: PlannedRetry::default(),
             },
             PlannedOperation {
+                stable_id: OperationStableId::new(format!("test.operation.{adf_id}")).unwrap(),
                 source_node_id: adf_id,
                 source_node_type_id: adf_type,
                 kernel: PlannedKernel::Native(
@@ -8657,6 +8729,11 @@ mod run_parameter_tests {
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-production-chain").unwrap(),
+                resource_dependencies: Box::new([]),
+                cache_policy: CachePolicy::Disabled,
+                semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+                workload: WorkloadClass::Cpu,
+                retry: PlannedRetry::default(),
             },
         ]);
         plan.root_region = StructuredControlRegion::Sequence(Box::new([
@@ -8775,6 +8852,8 @@ mod run_parameter_tests {
             CompiledParameterHandle::new("var").unwrap(),
         );
         let constant_operation = |index: usize| PlannedOperation {
+            stable_id: OperationStableId::new(format!("test.operation.{}", constant_ids[index]))
+                .unwrap(),
             source_node_id: constant_ids[index],
             source_node_type_id: NodeTypeId::new(format!("yssbi.test.series.{index}")).unwrap(),
             kernel: PlannedKernel::Native(
@@ -8787,8 +8866,14 @@ mod run_parameter_tests {
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: CompiledParameterHandle::new(format!("series-{index}")).unwrap(),
+            resource_dependencies: Box::new([]),
+            cache_policy: CachePolicy::Disabled,
+            semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            workload: WorkloadClass::Cpu,
+            retry: PlannedRetry::default(),
         };
         let var_operation = PlannedOperation {
+            stable_id: OperationStableId::new(format!("test.operation.{var_id}")).unwrap(),
             source_node_id: var_id,
             source_node_type_id: var_type,
             kernel: PlannedKernel::Native(
@@ -8818,6 +8903,11 @@ mod run_parameter_tests {
                 },
             ]),
             params: CompiledParameterHandle::new("var").unwrap(),
+            resource_dependencies: Box::new([]),
+            cache_policy: CachePolicy::Disabled,
+            semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            workload: WorkloadClass::Cpu,
+            retry: PlannedRetry::default(),
         };
         plan.value_count = 4;
         plan.operations = Box::new([constant_operation(0), constant_operation(1), var_operation]);

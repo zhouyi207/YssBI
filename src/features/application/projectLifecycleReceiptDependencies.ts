@@ -7,7 +7,10 @@ import {
 } from '@/features/core/dataStore/projectIOStore';
 import { ProjectService } from '@/services/project/projectService';
 import { captureProjectIdentity } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { useExecutionStore } from '@/features/core/execution';
+import {
+  revokeAllPinPreviewLeases,
+  useExecutionStore,
+} from '@/features/core/execution';
 
 export function createProjectLifecycleReceiptDependencies(
   onProjectCleared?: () => void,
@@ -25,9 +28,9 @@ export function createProjectLifecycleReceiptDependencies(
     },
     refreshRegistry: () => ProjectService.listRegisteredProjects(),
     clearProject: () => {
+      revokeAllPinPreviewLeases();
       useExecutionStore.setState({
         graphs: {},
-        previewGeneration: 0,
         playbackGraphPath: null,
         isPlaying: false,
       });

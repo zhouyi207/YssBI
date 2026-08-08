@@ -28,14 +28,14 @@ pub use observability::{
     SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
 };
 pub use projection::{
-    DiagnosticDto, DiagnosticLocationDto, DiagnosticSeverityDto, EditorConnectionProjectionDto,
-    EditorGraphProjectionDto, EditorInputBindingDto, EditorNodeProjectionDto,
-    EffectiveInputBindingKindDto, FunctionEditorPinDto, FunctionEditorProjectionDto,
-    GraphProjectionDelta, LocalizationBundle, LocalizationLookup, NodeCapabilitiesDto,
-    NodeDisplayDto, NodePositionDto, ParameterDisplayDto, ParameterEditorDto,
-    ParameterEditorKindDto, PortConnectionCapabilityDto, PortDirectionDto, PortDisplayDto,
-    PortInstanceKindDto, PortKindDto, ProjectionBasis, ProjectionError, ResolvedPortDto,
-    ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
+    CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
+    DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
+    EditorInputBindingDto, EditorNodeProjectionDto, EffectiveInputBindingKindDto,
+    FunctionEditorPinDto, FunctionEditorProjectionDto, GraphProjectionDelta, LocalizationBundle,
+    LocalizationLookup, NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto,
+    ParameterEditorDto, ParameterEditorKindDto, PortConnectionCapabilityDto, PortDirectionDto,
+    PortDisplayDto, PortInstanceKindDto, PortKindDto, ProjectionBasis, ProjectionError,
+    ResolvedPortDto, ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
     build_editor_graph_projection, build_function_editor_projection,
 };
 pub use semantic::{

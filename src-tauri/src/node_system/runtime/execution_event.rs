@@ -38,9 +38,12 @@ define_run_event_kind! {
         activation_id: u64,
         code: RunErrorCode,
     },
-    ValueReady { value_index: u32, source_id: ResultSourceId },
     ResultReady { name: Box<str>, source_id: ResultSourceId },
-    OutputReady { output: GraphOutputRef, source_id: ResultSourceId },
+    OutputReady {
+        output: GraphOutputRef,
+        generation: Option<u64>,
+        source_id: ResultSourceId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,8 +59,6 @@ pub enum RunErrorCode {
     RelationalTypeMismatch,
     RelationalInputShapeInvalid,
     RelationalHintInvalid,
-    MissingRelationalFragment,
-    BridgeFailed,
     Stream,
     MissingValue,
     InvalidCondition,
@@ -86,8 +87,6 @@ impl RunErrorCode {
             Self::RelationalTypeMismatch => "relational types do not match",
             Self::RelationalInputShapeInvalid => "relational input shape is invalid",
             Self::RelationalHintInvalid => "relational pushdown metadata is invalid",
-            Self::MissingRelationalFragment => "relational result is unavailable",
-            Self::BridgeFailed => "relational bridge failed",
             Self::Stream => "runtime stream failed",
             Self::MissingValue => "runtime value is unavailable",
             Self::InvalidCondition => "runtime condition is invalid",
@@ -123,8 +122,6 @@ impl From<&RunError> for RunErrorCode {
                     RelationalErrorCode::Cancelled => Self::Cancelled,
                 }
             }
-            RunError::MissingRelationalFragment(_) => Self::MissingRelationalFragment,
-            RunError::BridgeFailed(_) => Self::BridgeFailed,
             RunError::Stream(_) => Self::Stream,
             RunError::MissingValue(_) => Self::MissingValue,
             RunError::InvalidCondition { .. } => Self::InvalidCondition,

@@ -10,7 +10,7 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
-    CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
+    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::collections::BTreeMap;
@@ -65,8 +65,10 @@ fn assert_decimal_list_approx_eq(actual: &RuntimeValue, expected: &[f64]) {
 }
 
 fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> PlannedOperation {
+    let source_node_id = NodeId::from_uuid(uuid::Uuid::new_v4());
     PlannedOperation {
-        source_node_id: NodeId::from_uuid(uuid::Uuid::new_v4()),
+        stable_id: OperationStableId::new(format!("test.operation.{source_node_id}")).unwrap(),
+        source_node_id,
         source_node_type_id: NodeTypeId::new("yssbi.test.builtin").unwrap(),
         kernel: PlannedKernel::Native(handle(kernel, KernelHandle::new)),
         inputs: inputs
@@ -83,6 +85,11 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             production: OutputProduction::FullyMaterialized,
         }]),
         params: handle(params, CompiledParameterHandle::new),
+        resource_dependencies: Box::new([]),
+        cache_policy: CachePolicy::Disabled,
+        semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+        workload: WorkloadClass::Cpu,
+        retry: PlannedRetry::default(),
     }
 }
 
@@ -117,6 +124,30 @@ fn execute_kernel_direct(
 }
 
 fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) -> ExecutionPlan {
+    let results = results
+        .iter()
+        .map(|value| PlanResult {
+            name: format!("value_{value}").into(),
+            output: GraphOutputRef {
+                graph_path: GraphResourcePath("events/builtin-kernel-test".into()),
+                port: PortAddress::declared(
+                    NodeId::from_uuid(uuid::Uuid::nil()),
+                    PortKey::new(format!("value_{value}")).unwrap(),
+                ),
+            },
+            value: ValueRef::new(*value),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let publications = results
+        .iter()
+        .map(|result| PlannedPublication::GraphResult {
+            name: result.name.clone(),
+            output: result.output.clone(),
+            value: result.value,
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: ProjectSessionId::new("builtin-kernel-test"),
@@ -142,21 +173,8 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
         effect_dependencies: Box::new([]),
         relational_subplans: Box::new([]),
         resources: Box::new([]),
-        results: results
-            .iter()
-            .map(|value| PlanResult {
-                name: format!("value_{value}").into(),
-                output: GraphOutputRef {
-                    graph_path: GraphResourcePath("events/builtin-kernel-test".into()),
-                    port: PortAddress::declared(
-                        NodeId::from_uuid(uuid::Uuid::nil()),
-                        PortKey::new(format!("value_{value}")).unwrap(),
-                    ),
-                },
-                value: ValueRef::new(*value),
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
+        results,
+        publications,
     }
 }
 

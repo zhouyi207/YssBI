@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_EXECUTION_DEMAND, type ExecutionDemandDto } from './executionDemand';
 import type { RunEventKind } from './runEvent';
+import { parseExecutionDemandDto } from './runEventParser';
 
 const declaredOutput = {
   graphPath: 'events/Main.yssbi-event',
@@ -39,14 +40,31 @@ describe('ExecutionDemandDto', () => {
     expect(empty.outputs).toEqual([]);
   });
 
+  it('strictly parses an independent pin preview demand with generation', () => {
+    const preview = {
+      type: 'pinPreview',
+      output: declaredOutput,
+      generation: 17,
+    };
+
+    expect(parseExecutionDemandDto(preview)).toEqual(preview);
+    expect(() => parseExecutionDemandDto({ ...preview, includeDefaultResults: false })).toThrow();
+  });
+
   it('freezes stable outputReady identity without compiler-local fields', () => {
     const event: RunEventKind = {
       type: 'outputReady',
       output: declaredOutput,
+      generation: null,
       sourceId: '42',
     };
 
-    expect(event).toEqual({ type: 'outputReady', output: declaredOutput, sourceId: '42' });
+    expect(event).toEqual({
+      type: 'outputReady',
+      output: declaredOutput,
+      generation: null,
+      sourceId: '42',
+    });
   });
 });
 

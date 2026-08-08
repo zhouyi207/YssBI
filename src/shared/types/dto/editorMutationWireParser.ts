@@ -321,11 +321,24 @@ function isEditorConnection(value: unknown): boolean {
     && isNullableString(value.order);
 }
 
+function isCompilationOutcome(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.type !== 'string') return false;
+  if (value.type === 'success' || value.type === 'analysisBlocked') {
+    return hasExactKeys(value, ['type']);
+  }
+  return value.type === 'internalFailure'
+    && hasExactKeys(value, ['type', 'stage', 'code', 'nodeId'])
+    && (value.stage === 'analysis' || value.stage === 'lowering')
+    && typeof value.code === 'string'
+    && value.code.length > 0
+    && (value.nodeId === null || (typeof value.nodeId === 'string' && isUuid(value.nodeId)));
+}
+
 function isEditorProjection(value: unknown): value is EditorGraphProjectionDto {
   return isRecord(value)
     && hasExactKeys(value, [
       'basis', 'graphPath', 'sourceRevision', 'nodes', 'connections', 'diagnostics',
-      'hasBlockingDiagnostics',
+      'outcome', 'hasBlockingDiagnostics',
     ])
     && isProjectionBasis(value.basis)
     && isGraphResourcePath(value.graphPath)
@@ -336,7 +349,11 @@ function isEditorProjection(value: unknown): value is EditorGraphProjectionDto {
     && value.connections.every(isEditorConnection)
     && Array.isArray(value.diagnostics)
     && value.diagnostics.every(isDiagnostic)
-    && typeof value.hasBlockingDiagnostics === 'boolean';
+    && isCompilationOutcome(value.outcome)
+    && typeof value.hasBlockingDiagnostics === 'boolean'
+    && ((value.outcome as { type: string }).type === 'success'
+      ? value.hasBlockingDiagnostics === false
+      : value.hasBlockingDiagnostics === true);
 }
 
 export function parseGraphProjectionReplacementDto(

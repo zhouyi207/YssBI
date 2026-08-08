@@ -2,11 +2,8 @@
   "basis": {
     "graphPath": "events/contract.yssbi-event",
     "graphRevision": 7,
-    "registryFingerprint": "6c3200d93540b05ed42f684fe78cc67af6bcf141fb05f6ceb02a68ede1c4b1be",
-    "resourceVersions": {
-      "databases/contract-database": "13",
-      "functions/contract-function": "11"
-    }
+    "registryFingerprint": "3fdcb6c6f2c42b68b937c045c32ab76741054356ff84f5d7e27dbccb17880476",
+    "resourceVersions": {}
   },
   "connections": [],
   "diagnostics": [],
@@ -44,9 +41,7 @@
           "editor": "auto",
           "key": "value",
           "multiline": false,
-          "value": {
-            "Bool": true
-          }
+          "value": true
         }
       ],
       "ports": [
@@ -88,5 +83,8 @@
       "sourceRevision": 7
     }
   ],
+  "outcome": {
+    "type": "success"
+  },
   "sourceRevision": 7
 }

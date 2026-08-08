@@ -148,6 +148,7 @@ function projection(
         related: [],
       },
     ],
+    outcome: { type: 'success' },
     hasBlockingDiagnostics: false,
   };
 }
@@ -158,6 +159,9 @@ describe('graphDataStore projection replacement', () => {
     expectTypeOf<GraphEntityBucket>().toHaveProperty('sourceRevision').toEqualTypeOf<number>();
     expectTypeOf<GraphEntityBucket>().toHaveProperty('requestGeneration').toEqualTypeOf<number>();
     expectTypeOf<GraphEntityBucket>().toHaveProperty('diagnostics').toEqualTypeOf<DiagnosticDto[]>();
+    expectTypeOf<GraphEntityBucket>()
+      .toHaveProperty('outcome')
+      .toEqualTypeOf<EditorGraphProjectionDto['outcome']>();
     expectTypeOf<GraphEntityBucket>()
       .toHaveProperty('hasBlockingDiagnostics')
       .toEqualTypeOf<boolean>();

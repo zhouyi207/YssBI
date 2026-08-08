@@ -15,6 +15,8 @@ pub enum RegistryValidationError {
     DuplicateSchemaResolver(SchemaResolverId),
     DuplicateNominalValidator(TypeId),
     MissingNominalValidator(TypeId),
+    RawJsonNominalPayload(TypeId),
+    NominalRegistrationIdExhausted,
     InvalidNominalTypeId {
         value: Box<str>,
         source: InvalidSemanticId,
@@ -65,6 +67,12 @@ impl std::fmt::Display for RegistryValidationError {
             }
             MissingNominalValidator(id) => {
                 write!(f, "built-in nominal type '{id}' has no validator")
+            }
+            RawJsonNominalPayload(id) => {
+                write!(f, "nominal codec '{id}' cannot prepare raw JSON values")
+            }
+            NominalRegistrationIdExhausted => {
+                write!(f, "nominal registration ID space is exhausted")
             }
             InvalidNominalTypeId { value, source } => {
                 write!(f, "invalid built-in nominal type ID '{value}': {source}")

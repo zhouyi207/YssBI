@@ -1,4 +1,5 @@
 use super::model::*;
+use crate::node_system::protocol::{InputConsumption, OutputProduction};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -36,8 +37,26 @@ impl ExecutionPlan {
         let mut produced_values = BTreeSet::new();
         let mut value_producers = vec![BTreeSet::new(); value_count];
         let mut relational_owners = BTreeMap::new();
+        let mut stable_operation_ids = BTreeMap::new();
 
         for (operation, planned) in self.operations.iter().enumerate() {
+            let operation = OperationIndex::new(operation as u32);
+            if let Some(first) = stable_operation_ids.insert(planned.stable_id.clone(), operation) {
+                errors.push(PlanValidationError::DuplicateOperationStableId {
+                    stable_id: planned.stable_id.clone(),
+                    first,
+                    duplicate: operation,
+                });
+            }
+            if planned
+                .retry
+                .policy
+                .as_ref()
+                .is_some_and(|policy| policy.validate().is_err() || !planned.retry.idempotent)
+            {
+                errors.push(PlanValidationError::InvalidRetryPolicy { operation });
+            }
+            let operation = operation.index();
             if let PlannedKernel::Relational(index) = planned.kernel {
                 check_index(
                     &mut errors,
@@ -106,10 +125,10 @@ impl ExecutionPlan {
                 errors.push(PlanValidationError::DuplicateValueSource(value));
             }
             match source {
-                PlanValueSource::ExternalInput(value) => {
+                PlanValueSource::ExternalInput(value, _) => {
                     external_inputs.insert(*value);
                 }
-                PlanValueSource::ControlProduced(value) => {
+                PlanValueSource::ControlProduced(value, _) => {
                     control_value_sources.insert(*value);
                 }
             }
@@ -143,6 +162,7 @@ impl ExecutionPlan {
         ) {
             errors.push(PlanValidationError::ValueDependencyCycle);
         }
+        validate_materialization_adapters(self, &mut errors);
 
         let sourced_values =
             validate_input_sources(self, &value_producers, &declared_sources, &mut errors);
@@ -235,6 +255,13 @@ impl ExecutionPlan {
                 errors.push(PlanValidationError::MissingResultSource(result.value));
             }
         }
+        validate_publications(
+            self,
+            value_count,
+            &sourced_values,
+            &region_available,
+            &mut errors,
+        );
 
         if errors.is_empty() {
             Ok(source_facts)
@@ -245,8 +272,6 @@ impl ExecutionPlan {
 }
 
 fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValidationError>) {
-    let subplan_count = plan.relational_subplans.len();
-    let mut bridges = BTreeSet::new();
     let mut all_fragments = BTreeSet::new();
     for (subplan_index, subplan) in plan.relational_subplans.iter().enumerate() {
         let compiled = &subplan.compiled_plan;
@@ -298,155 +323,15 @@ fn validate_relational_subplans(plan: &ExecutionPlan, errors: &mut Vec<PlanValid
                 fragment.clone(),
             ));
         }
-        let mut requested_fragment_outputs = BTreeSet::new();
-        for fragment in &compiled.requested_fragment_outputs {
-            if !fragments.contains(fragment) {
-                errors.push(PlanValidationError::RelationalFragmentOutputUnexpected(
-                    fragment.clone(),
-                ));
-            }
-            if !requested_fragment_outputs.insert(fragment.clone()) {
-                errors.push(PlanValidationError::RelationalFragmentOutputDuplicate(
-                    fragment.clone(),
-                ));
-            }
-        }
         for root in &compiled.roots {
             check_index(errors, "relational root", root.index(), operator_count);
         }
-        let mut lineage_roots = compiled.roots.to_vec();
-        lineage_roots.extend(
-            compiled
-                .requested_fragment_outputs
-                .iter()
-                .filter_map(|fragment| {
-                    compiled
-                        .fragment_roots
-                        .iter()
-                        .find(|root| &root.fragment == fragment)
-                        .map(|root| root.operator)
-                }),
-        );
         let inferred_pushdown_hints =
-            infer_relational_pushdown_hints(&compiled.operators, &lineage_roots);
+            infer_relational_pushdown_hints(&compiled.operators, &compiled.roots);
         if compiled.pushdown_hints.as_ref() != inferred_pushdown_hints.as_slice() {
             errors.push(PlanValidationError::RelationalPushdownHintsMismatch {
                 subplan: RelationalSubplanIndex::new(subplan_index as u32),
             });
-        }
-        for bridge in &subplan.materialization_bridges {
-            check_index(
-                errors,
-                "bridge producer subplan",
-                bridge.producer_subplan.index(),
-                subplan_count,
-            );
-            check_index(
-                errors,
-                "bridge consumer subplan",
-                bridge.consumer_subplan.index(),
-                subplan_count,
-            );
-            if bridge.consumer_subplan.index() != subplan_index {
-                errors.push(PlanValidationError::BridgeStoredOnWrongConsumer {
-                    stored_on: RelationalSubplanIndex::new(subplan_index as u32),
-                    consumer: bridge.consumer_subplan,
-                });
-            }
-            if bridge.producer_subplan == bridge.consumer_subplan {
-                errors.push(PlanValidationError::BridgeWithinSubplan(
-                    bridge.consumer_subplan,
-                ));
-            }
-            if bridge.producer_subplan.index() < subplan_count {
-                let producer =
-                    &plan.relational_subplans[bridge.producer_subplan.index()].compiled_plan;
-                if !producer.fragment_order.contains(&bridge.producer_fragment) {
-                    errors.push(PlanValidationError::BridgeFragmentMissing(
-                        bridge.producer_fragment.clone(),
-                    ));
-                } else if !producer
-                    .requested_fragment_outputs
-                    .contains(&bridge.producer_fragment)
-                {
-                    errors.push(PlanValidationError::BridgeProducerOutputNotRequested {
-                        producer_subplan: bridge.producer_subplan,
-                        fragment: bridge.producer_fragment.clone(),
-                    });
-                }
-            }
-            if !fragments.contains(&bridge.consumer_fragment) {
-                errors.push(PlanValidationError::BridgeFragmentMissing(
-                    bridge.consumer_fragment.clone(),
-                ));
-            }
-            let key = (
-                bridge.producer_fragment.clone(),
-                bridge.consumer_fragment.clone(),
-                bridge.producer_subplan,
-                bridge.consumer_subplan,
-            );
-            if !bridges.insert(key) {
-                errors.push(PlanValidationError::DuplicateMaterializationBridge);
-            }
-        }
-
-        let subplan_index = RelationalSubplanIndex::new(subplan_index as u32);
-        let mut bound_operators = BTreeSet::new();
-        let mut bound_bridges = Vec::new();
-        for binding in &compiled.bridge_inputs {
-            if binding.operator.index() >= operator_count {
-                errors.push(
-                    PlanValidationError::RelationalBridgeInputOperatorOutOfBounds {
-                        subplan: subplan_index,
-                        operator: binding.operator,
-                        operator_count,
-                    },
-                );
-            } else if !matches!(
-                compiled.operators[binding.operator.index()],
-                RelationalOperator::Input { .. }
-            ) {
-                errors.push(PlanValidationError::RelationalBridgeInputOperatorNotInput {
-                    subplan: subplan_index,
-                    operator: binding.operator,
-                });
-            }
-            if !bound_operators.insert(binding.operator) {
-                errors.push(
-                    PlanValidationError::DuplicateRelationalBridgeInputOperator {
-                        subplan: subplan_index,
-                        operator: binding.operator,
-                    },
-                );
-            }
-            if !subplan.materialization_bridges.contains(&binding.bridge) {
-                errors.push(PlanValidationError::RelationalBridgeInputBridgeUndeclared {
-                    subplan: subplan_index,
-                    operator: binding.operator,
-                    bridge: binding.bridge.clone(),
-                });
-            }
-            if bound_bridges.contains(&&binding.bridge) {
-                errors.push(PlanValidationError::DuplicateRelationalBridgeInputBridge {
-                    subplan: subplan_index,
-                    bridge: binding.bridge.clone(),
-                });
-            } else {
-                bound_bridges.push(&binding.bridge);
-            }
-        }
-        for bridge in &subplan.materialization_bridges {
-            if !compiled
-                .bridge_inputs
-                .iter()
-                .any(|binding| binding.bridge == *bridge)
-            {
-                errors.push(PlanValidationError::RelationalBridgeInputMissing {
-                    subplan: subplan_index,
-                    bridge: bridge.clone(),
-                });
-            }
         }
     }
 }
@@ -459,6 +344,201 @@ fn relational_operator_inputs(operator: &RelationalOperator) -> Vec<RelationalOp
         | RelationalOperator::Rename { input, .. }
         | RelationalOperator::Limit { input, .. } => vec![*input],
         RelationalOperator::Union { inputs, .. } => inputs.to_vec(),
+    }
+}
+
+fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<PlanValidationError>) {
+    let mut output_owners = plan
+        .operations
+        .iter()
+        .enumerate()
+        .flat_map(|(index, operation)| {
+            operation.outputs.iter().map(move |output| {
+                (
+                    output.value,
+                    (Some(OperationIndex::new(index as u32)), output.production),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    for source in &plan.value_sources {
+        output_owners.insert(source.value(), (None, source.production()));
+    }
+    let input_owners = plan
+        .operations
+        .iter()
+        .enumerate()
+        .flat_map(|(index, operation)| {
+            operation.inputs.iter().map(move |input| {
+                (
+                    input.value,
+                    (OperationIndex::new(index as u32), input.consumption),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    for dependency in &plan.value_dependencies {
+        let Some((producer, _)) = output_owners.get(&dependency.source) else {
+            continue;
+        };
+        let Some((consumer, _)) = input_owners.get(&dependency.destination) else {
+            continue;
+        };
+        let producer_is_adapter = producer.is_some_and(|producer| {
+            matches!(
+                plan.operations[producer.index()].kernel,
+                PlannedKernel::Adapter(_)
+            )
+        });
+        if !producer_is_adapter
+            && !matches!(
+                plan.operations[consumer.index()].kernel,
+                PlannedKernel::Adapter(_)
+            )
+        {
+            errors.push(PlanValidationError::MissingMaterializationAdapter {
+                source: dependency.source,
+                destination: dependency.destination,
+            });
+        }
+    }
+
+    for (index, operation) in plan.operations.iter().enumerate() {
+        let PlannedKernel::Adapter(actual) = &operation.kernel else {
+            continue;
+        };
+        let operation_index = OperationIndex::new(index as u32);
+        if operation.inputs.len() != 1 || operation.outputs.len() != 1 {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        }
+        if operation.workload != WorkloadClass::AdapterIo
+            || operation.cache_policy != crate::node_system::protocol::CachePolicy::Disabled
+            || operation.retry != PlannedRetry::default()
+            || !operation.resource_dependencies.is_empty()
+        {
+            errors.push(
+                PlanValidationError::InvalidMaterializationAdapterSemantics {
+                    operation: operation_index,
+                },
+            );
+        }
+        let incoming = plan
+            .value_dependencies
+            .iter()
+            .filter(|dependency| dependency.destination == operation.inputs[0].value)
+            .collect::<Vec<_>>();
+        let outgoing = plan
+            .value_dependencies
+            .iter()
+            .filter(|dependency| dependency.source == operation.outputs[0].value)
+            .collect::<Vec<_>>();
+        if incoming.len() != 1 || outgoing.is_empty() {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        }
+        let Some((producer, production)) = output_owners.get(&incoming[0].source) else {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        };
+        if outgoing.len() > 1 {
+            let stable_fanout = outgoing.iter().all(|dependency| {
+                input_owners
+                    .get(&dependency.destination)
+                    .is_some_and(|(consumer, _)| {
+                        matches!(
+                            plan.operations[consumer.index()].kernel,
+                            PlannedKernel::Adapter(_)
+                        )
+                    })
+            });
+            let (expected_consumption, expected_production) = match actual {
+                PlannedAdapter::Replay => (
+                    match production {
+                        OutputProduction::Streaming => InputConsumption::Streaming,
+                        OutputProduction::Batches => InputConsumption::SinglePassBatches,
+                        OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
+                    },
+                    OutputProduction::Batches,
+                ),
+                PlannedAdapter::Collect { .. } => (
+                    match production {
+                        OutputProduction::Streaming => InputConsumption::Streaming,
+                        OutputProduction::Batches => InputConsumption::SinglePassBatches,
+                        OutputProduction::FullyMaterialized => InputConsumption::FullyMaterialized,
+                    },
+                    OutputProduction::FullyMaterialized,
+                ),
+                _ => {
+                    errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                        operation: operation_index,
+                    });
+                    continue;
+                }
+            };
+            if !stable_fanout
+                || operation.inputs[0].consumption != expected_consumption
+                || operation.outputs[0].production != expected_production
+            {
+                errors.push(
+                    PlanValidationError::InvalidMaterializationAdapterSemantics {
+                        operation: operation_index,
+                    },
+                );
+            }
+            continue;
+        }
+        let Some((consumer, consumption)) = input_owners.get(&outgoing[0].destination) else {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        };
+        if matches!(
+            plan.operations[consumer.index()].kernel,
+            PlannedKernel::Adapter(_)
+        ) {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        }
+        if producer.is_some_and(|producer| {
+            matches!(
+                plan.operations[producer.index()].kernel,
+                PlannedKernel::Adapter(_)
+            )
+        }) {
+            let producer_outgoing = plan
+                .value_dependencies
+                .iter()
+                .filter(|dependency| dependency.source == incoming[0].source)
+                .count();
+            if producer_outgoing < 2 {
+                errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                    operation: operation_index,
+                });
+                continue;
+            }
+        }
+        let expected = MaterializationAdapterPlan::for_contract(*production, *consumption);
+        if *actual != expected.adapter
+            || operation.inputs[0].consumption != expected.input_consumption
+            || operation.outputs[0].production != expected.output_production
+        {
+            errors.push(PlanValidationError::IncompatibleMaterializationAdapter {
+                operation: operation_index,
+                expected: expected.adapter,
+                actual: actual.clone(),
+            });
+        }
     }
 }
 
@@ -1059,6 +1139,97 @@ fn check_value(
     }
 }
 
+fn validate_publications(
+    plan: &ExecutionPlan,
+    value_count: usize,
+    sourced_values: &[bool],
+    region_available: &BTreeSet<ValueRef>,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    if plan.publications.is_empty() {
+        if !plan.results.is_empty() {
+            errors.push(PlanValidationError::GraphPublicationCountMismatch {
+                publications: 0,
+                results: plan.results.len(),
+            });
+        }
+        return;
+    }
+
+    let mut graph_results = 0;
+    let mut previews = 0;
+    let mut published_outputs = BTreeSet::new();
+    let mut published_results = BTreeSet::new();
+
+    for publication in &plan.publications {
+        let value = publication.value();
+        check_value(errors, "plan publication", value, value_count);
+        if value.index() < value_count
+            && (!sourced_values[value.index()] || !region_available.contains(&value))
+        {
+            errors.push(PlanValidationError::MissingPublicationSource(value));
+        }
+
+        let (output, matching_result) = match publication {
+            PlannedPublication::GraphResult {
+                name,
+                output,
+                value,
+            } => {
+                graph_results += 1;
+                let matching = plan.results.iter().position(|result| {
+                    result.name == *name && result.output == *output && result.value == *value
+                });
+                (output, matching)
+            }
+            PlannedPublication::PinPreview {
+                output,
+                generation,
+                value,
+            } => {
+                previews += 1;
+                if *generation > MAX_SAFE_PREVIEW_GENERATION {
+                    errors.push(PlanValidationError::PreviewGenerationOutOfRange(
+                        *generation,
+                    ));
+                }
+                let matching = plan
+                    .results
+                    .iter()
+                    .position(|result| result.output == *output && result.value == *value);
+                (output, matching)
+            }
+        };
+
+        if !published_outputs.insert(output.clone()) {
+            errors.push(PlanValidationError::DuplicatePublicationOutput(
+                output.clone(),
+            ));
+        }
+        match matching_result {
+            Some(index) if published_results.insert(index) => {}
+            Some(index) => errors.push(PlanValidationError::DuplicatePublicationResult(index)),
+            None => errors.push(PlanValidationError::PublicationResultMismatch),
+        }
+    }
+
+    if graph_results > 0 && previews > 0 {
+        errors.push(PlanValidationError::MixedPublicationModes);
+    }
+    if graph_results > 0 && graph_results != plan.results.len() {
+        errors.push(PlanValidationError::GraphPublicationCountMismatch {
+            publications: graph_results,
+            results: plan.results.len(),
+        });
+    }
+    if previews > 0 && (previews != 1 || plan.results.len() != 1) {
+        errors.push(PlanValidationError::InvalidPreviewPublicationMode {
+            publications: previews,
+            results: plan.results.len(),
+        });
+    }
+}
+
 fn check_index(
     errors: &mut Vec<PlanValidationError>,
     context: &'static str,
@@ -1101,8 +1272,31 @@ pub enum PlanValidationError {
         value: ValueRef,
         value_count: usize,
     },
+    DuplicateOperationStableId {
+        stable_id: OperationStableId,
+        first: OperationIndex,
+        duplicate: OperationIndex,
+    },
+    InvalidRetryPolicy {
+        operation: OperationIndex,
+    },
     ValueDependencySelfLoop(ValueRef),
     ValueDependencyCycle,
+    MissingMaterializationAdapter {
+        source: ValueRef,
+        destination: ValueRef,
+    },
+    ExtraMaterializationAdapter {
+        operation: OperationIndex,
+    },
+    IncompatibleMaterializationAdapter {
+        operation: OperationIndex,
+        expected: PlannedAdapter,
+        actual: PlannedAdapter,
+    },
+    InvalidMaterializationAdapterSemantics {
+        operation: OperationIndex,
+    },
     DuplicateValueSource(ValueRef),
     EffectDependencySelfLoop(OperationIndex),
     EffectDependencyCycle,
@@ -1141,6 +1335,20 @@ pub enum PlanValidationError {
     DuplicateResultName(Box<str>),
     DuplicateResultOutput(GraphOutputRef),
     MissingResultSource(ValueRef),
+    MissingPublicationSource(ValueRef),
+    PublicationResultMismatch,
+    DuplicatePublicationOutput(GraphOutputRef),
+    DuplicatePublicationResult(usize),
+    MixedPublicationModes,
+    GraphPublicationCountMismatch {
+        publications: usize,
+        results: usize,
+    },
+    InvalidPreviewPublicationMode {
+        publications: usize,
+        results: usize,
+    },
+    PreviewGenerationOutOfRange(u64),
     DuplicateResourceRequirement(ResourceId),
     ConflictingResourceRequirement(ResourceId),
     EmptyRelationalSubplan(RelationalSubplanIndex),
@@ -1148,8 +1356,6 @@ pub enum PlanValidationError {
     RelationalFragmentRootMissing(RelationalFragmentId),
     RelationalFragmentRootUnexpected(RelationalFragmentId),
     RelationalFragmentRootDuplicate(RelationalFragmentId),
-    RelationalFragmentOutputUnexpected(RelationalFragmentId),
-    RelationalFragmentOutputDuplicate(RelationalFragmentId),
     DuplicateRelationalSubplanOwner {
         subplan: RelationalSubplanIndex,
         first: OperationIndex,
@@ -1170,41 +1376,4 @@ pub enum PlanValidationError {
         operator: RelationalOperatorIndex,
         input: RelationalOperatorIndex,
     },
-    BridgeStoredOnWrongConsumer {
-        stored_on: RelationalSubplanIndex,
-        consumer: RelationalSubplanIndex,
-    },
-    BridgeWithinSubplan(RelationalSubplanIndex),
-    BridgeFragmentMissing(RelationalFragmentId),
-    BridgeProducerOutputNotRequested {
-        producer_subplan: RelationalSubplanIndex,
-        fragment: RelationalFragmentId,
-    },
-    RelationalBridgeInputOperatorOutOfBounds {
-        subplan: RelationalSubplanIndex,
-        operator: RelationalOperatorIndex,
-        operator_count: usize,
-    },
-    RelationalBridgeInputOperatorNotInput {
-        subplan: RelationalSubplanIndex,
-        operator: RelationalOperatorIndex,
-    },
-    DuplicateRelationalBridgeInputOperator {
-        subplan: RelationalSubplanIndex,
-        operator: RelationalOperatorIndex,
-    },
-    RelationalBridgeInputBridgeUndeclared {
-        subplan: RelationalSubplanIndex,
-        operator: RelationalOperatorIndex,
-        bridge: PlannedMaterializationBridge,
-    },
-    DuplicateRelationalBridgeInputBridge {
-        subplan: RelationalSubplanIndex,
-        bridge: PlannedMaterializationBridge,
-    },
-    RelationalBridgeInputMissing {
-        subplan: RelationalSubplanIndex,
-        bridge: PlannedMaterializationBridge,
-    },
-    DuplicateMaterializationBridge,
 }

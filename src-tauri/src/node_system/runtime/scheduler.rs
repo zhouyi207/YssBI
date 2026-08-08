@@ -1,25 +1,22 @@
-#[cfg(not(test))]
-use super::materialize_bridge;
 use super::relational::RunRelationalBackends;
-#[cfg(test)]
-use super::relational::materialize_bridge_with_checkpoint;
 use super::{
-    ActivationId, CancellationToken, CompiledParameterStore, FrameId, KernelContext,
-    KernelErrorKind, KernelRegistry, NOOP_RUN_EVENT_SINK, PendingResultSource, ProjectRunRegistry,
-    PublishedFunctionPlan, RelationalBackendProvider, RelationalContext, RelationalInput,
-    ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore, RunError,
-    RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunResourceSet, RunResult, RuntimeValue,
+    ActivationId, CancellationToken, CompiledParameterStore, DemandFingerprint, FrameId,
+    KernelContext, KernelErrorKind, KernelRegistry, NOOP_RUN_EVENT_SINK, OperationMemoKey,
+    PendingResultSource, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
+    RelationalContext, ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore,
+    RunError, RunErrorCode, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunResourceSet,
+    RunResult, RuntimeValue, execute_planned_adapter,
 };
 use crate::node_system::analysis::{
-    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RedactionPolicy, RunId, SpanEvent, SpanKind,
-    SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
+    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, RedactionPolicy, ResourceVersionSet, RunId,
+    SpanEvent, SpanKind, SpanStatus, TraceFieldSensitivity, TraceSink, TraceValue,
 };
 use crate::node_system::plan::{
     CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan, FunctionPlanHandle,
-    GraphOutputRef, OperationIndex, PlannedKernel, RelationalFragmentId, RelationalSubplanIndex,
+    GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication, RelationalSubplanIndex,
     StructuredControlRegion, ValueRef,
 };
-use crate::node_system::protocol::Value;
+use crate::node_system::protocol::{CachePolicy, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,15 +28,18 @@ static NEXT_PARENT_CALL_ID: AtomicU64 = AtomicU64::new(1);
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SchedulerCheckpoint {
-    BridgeMaterialization,
-    BridgeCollectionStarted,
     ResultSourceStaged,
     FinalResultPublication,
 }
 
 enum PendingSourceEvent {
-    ValueReady { value_index: u32 },
-    ResultReady { output: GraphOutputRef },
+    GraphResult {
+        output: GraphOutputRef,
+    },
+    PinPreview {
+        output: GraphOutputRef,
+        generation: u64,
+    },
 }
 
 struct PendingSourcePublication {
@@ -303,11 +303,8 @@ impl<'a> RunExecutor<'a> {
             SpanStatus::Started,
             correlation.clone(),
         ));
-        let execution = self.run_root(plan, cancellation.clone(), run_id, correlation.clone());
-        let (mut result, mut pending_sources) = match execution {
-            Ok((run_result, pending_sources)) => (Ok(run_result), pending_sources),
-            Err(error) => (Err(error), Vec::new()),
-        };
+        let mut result = self.run_root(plan, cancellation.clone(), run_id, correlation.clone());
+        let mut pending_sources = Vec::new();
         if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
             && let Err(error) = self.stage_result_sources(
                 results,
@@ -376,27 +373,58 @@ impl<'a> RunExecutor<'a> {
         cancellation: &CancellationToken,
         pending_sources: &mut Vec<PendingSourcePublication>,
     ) -> Result<(), RunError> {
-        let outputs_by_name = plan
-            .results
-            .iter()
-            .map(|result| (result.name.as_ref(), &result.output))
-            .collect::<BTreeMap<_, _>>();
-        for (name, value) in &run_result.values {
-            let output = outputs_by_name
-                .get(name.as_ref())
-                .expect("validated plan result must retain stable output identity");
+        for publication in &plan.publications {
+            let (name, value, event) = match publication {
+                PlannedPublication::GraphResult { name, output, .. } => {
+                    let value = run_result.values.get(name).ok_or_else(|| {
+                        RunError::InvalidPlan(
+                            "graph publication does not match a retained result value".into(),
+                        )
+                    })?;
+                    (
+                        name.clone(),
+                        value,
+                        PendingSourceEvent::GraphResult {
+                            output: output.clone(),
+                        },
+                    )
+                }
+                PlannedPublication::PinPreview {
+                    output,
+                    generation,
+                    value,
+                } => {
+                    let result = plan
+                        .results
+                        .iter()
+                        .find(|result| result.output == *output && result.value == *value)
+                        .ok_or_else(|| {
+                            RunError::InvalidPlan(
+                                "preview publication does not match its selected result".into(),
+                            )
+                        })?;
+                    let value = run_result.values.get(&result.name).ok_or_else(|| {
+                        RunError::InvalidPlan(
+                            "preview publication result value is unavailable".into(),
+                        )
+                    })?;
+                    (
+                        format!("preview:{}", output.port).into(),
+                        value,
+                        PendingSourceEvent::PinPreview {
+                            output: output.clone(),
+                            generation: *generation,
+                        },
+                    )
+                }
+            };
             if let Some(source) = results.prepare_runtime_value(
                 correlation.clone(),
                 plan.provenance.basis.clone(),
-                name.clone(),
+                name,
                 value,
             ) {
-                pending_sources.push(PendingSourcePublication {
-                    source,
-                    event: PendingSourceEvent::ResultReady {
-                        output: (*output).clone(),
-                    },
-                });
+                pending_sources.push(PendingSourcePublication { source, event });
                 #[cfg(test)]
                 self.run_test_checkpoint(SchedulerCheckpoint::ResultSourceStaged, cancellation);
             }
@@ -433,18 +461,23 @@ impl<'a> RunExecutor<'a> {
             ..
         } = descriptor;
         let kind = match event {
-            PendingSourceEvent::ValueReady { value_index } => RunEventKind::ValueReady {
-                value_index,
-                source_id,
-            },
-            PendingSourceEvent::ResultReady { output } => {
+            PendingSourceEvent::GraphResult { output } => {
                 self.events.record(RunEvent {
                     correlation: correlation.clone(),
                     basis: basis.clone(),
                     kind: RunEventKind::ResultReady { name, source_id },
                 });
-                RunEventKind::OutputReady { output, source_id }
+                RunEventKind::OutputReady {
+                    output,
+                    generation: None,
+                    source_id,
+                }
             }
+            PendingSourceEvent::PinPreview { output, generation } => RunEventKind::OutputReady {
+                output,
+                generation: Some(generation),
+                source_id,
+            },
         };
         self.events.record(RunEvent {
             correlation,
@@ -459,7 +492,7 @@ impl<'a> RunExecutor<'a> {
         cancellation: CancellationToken,
         run_id: RunId,
         correlation: CorrelationContext,
-    ) -> Result<(RunResult, Vec<PendingSourcePublication>), RunError> {
+    ) -> Result<RunResult, RunError> {
         plan.validate()
             .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
         cancellation.check()?;
@@ -471,6 +504,8 @@ impl<'a> RunExecutor<'a> {
             &cancellation,
         )?;
         let mut frame = Frame::new(plan.value_count);
+        let memoization = RunMemoization::new();
+        let root_demand = DemandFingerprint::for_root(plan, self.selection_digest);
         let result = (|| {
             self.execute_region(
                 run_id,
@@ -479,6 +514,8 @@ impl<'a> RunExecutor<'a> {
                 &mut frame,
                 &resource_set,
                 &relational_backends,
+                &memoization,
+                &root_demand,
                 &cancellation,
                 1,
                 None,
@@ -489,20 +526,17 @@ impl<'a> RunExecutor<'a> {
             for result in &plan.results {
                 values.insert(result.name.clone(), frame.value(result.value)?.clone());
             }
-            let pending_sources = std::mem::take(&mut frame.pending_sources);
-            Ok((
-                RunResult {
-                    run_id,
-                    provenance: plan.provenance.clone(),
-                    correlation,
-                    values,
-                    committed_variable_ids: Box::new([]),
-                    resource_mutation: None,
-                },
-                pending_sources,
-            ))
+            Ok(RunResult {
+                run_id,
+                provenance: plan.provenance.clone(),
+                correlation,
+                values,
+                committed_variable_ids: Box::new([]),
+                resource_mutation: None,
+            })
         })();
         frame.close_streams();
+        memoization.finalize();
         result
     }
 
@@ -544,6 +578,8 @@ impl<'a> RunExecutor<'a> {
         frame: &mut Frame,
         resources: &RunResourceSet,
         relational_backends: &RunRelationalBackends,
+        memoization: &RunMemoization,
+        demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
         parent_call: Option<ParentCallId>,
@@ -559,6 +595,8 @@ impl<'a> RunExecutor<'a> {
                 frame,
                 resources,
                 relational_backends,
+                memoization,
+                demand,
                 cancellation,
                 frame_depth,
                 parent_call,
@@ -582,6 +620,8 @@ impl<'a> RunExecutor<'a> {
                     frame,
                     resources,
                     relational_backends,
+                    memoization,
+                    demand,
                     cancellation,
                     frame_depth,
                     parent_call,
@@ -614,6 +654,8 @@ impl<'a> RunExecutor<'a> {
                         frame,
                         resources,
                         relational_backends,
+                        memoization,
+                        demand,
                         cancellation,
                         frame_depth,
                         parent_call,
@@ -683,6 +725,8 @@ impl<'a> RunExecutor<'a> {
                         cancellation,
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count);
+                    let callee_demand =
+                        DemandFingerprint::for_callee(&callee, target, arguments, results);
                     let result = (|| {
                         for (destination, value) in argument_values {
                             callee_frame.set(destination, value)?;
@@ -694,6 +738,8 @@ impl<'a> RunExecutor<'a> {
                             &mut callee_frame,
                             &callee_resources,
                             &callee_backends,
+                            memoization,
+                            &callee_demand,
                             cancellation,
                             frame_depth + 1,
                             Some(call_id),
@@ -704,9 +750,6 @@ impl<'a> RunExecutor<'a> {
                                 callee_frame.value(binding.callee_source)?.clone(),
                             )?;
                         }
-                        frame
-                            .pending_sources
-                            .append(&mut callee_frame.pending_sources);
                         Ok(())
                     })();
                     if result.is_err() {
@@ -737,6 +780,8 @@ impl<'a> RunExecutor<'a> {
         frame: &mut Frame,
         resources: &RunResourceSet,
         relational_backends: &RunRelationalBackends,
+        memoization: &RunMemoization,
+        demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
         parent_call: Option<ParentCallId>,
@@ -759,6 +804,8 @@ impl<'a> RunExecutor<'a> {
                         frame,
                         resources,
                         relational_backends,
+                        memoization,
+                        demand,
                         cancellation,
                         parent_call,
                     )?;
@@ -770,6 +817,8 @@ impl<'a> RunExecutor<'a> {
                         frame,
                         resources,
                         relational_backends,
+                        memoization,
+                        demand,
                         cancellation,
                         frame_depth,
                         parent_call,
@@ -786,6 +835,8 @@ impl<'a> RunExecutor<'a> {
             frame,
             resources,
             relational_backends,
+            memoization,
+            demand,
             cancellation,
             parent_call,
         )
@@ -802,6 +853,8 @@ impl<'a> RunExecutor<'a> {
         frame: &mut Frame,
         resources: &RunResourceSet,
         relational_backends: &RunRelationalBackends,
+        memoization: &RunMemoization,
+        demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
@@ -838,6 +891,8 @@ impl<'a> RunExecutor<'a> {
                 frame,
                 resources,
                 relational_backends,
+                memoization,
+                demand,
                 cancellation,
                 parent_call,
             )?;
@@ -888,19 +943,7 @@ impl<'a> RunExecutor<'a> {
                 .filter(|edge| edge.destination == output.value)
                 .all(|edge| frame.has(edge.source))
         });
-        let relational_ready = match &operation.kernel {
-            PlannedKernel::Relational(index) => plan.relational_subplans[index.index()]
-                .materialization_bridges
-                .iter()
-                .all(|bridge| {
-                    frame.has_relational_fragment(
-                        activation_id,
-                        bridge.producer_subplan,
-                        &bridge.producer_fragment,
-                    )
-                }),
-            PlannedKernel::Native(_) => true,
-        };
+        let relational_ready = true;
         let effects_ready = plan
             .effect_dependencies
             .iter()
@@ -939,21 +982,7 @@ impl<'a> RunExecutor<'a> {
         }) {
             return RunError::MissingValue(source);
         }
-        if let PlannedKernel::Relational(index) = &operation.kernel {
-            if let Some(bridge) = plan.relational_subplans[index.index()]
-                .materialization_bridges
-                .iter()
-                .find(|bridge| {
-                    !frame.has_relational_fragment(
-                        activation_id,
-                        bridge.producer_subplan,
-                        &bridge.producer_fragment,
-                    )
-                })
-            {
-                return RunError::MissingRelationalFragment(bridge.producer_fragment.clone());
-            }
-        }
+
         if let Some(edge) = plan
             .effect_dependencies
             .iter()
@@ -984,6 +1013,8 @@ impl<'a> RunExecutor<'a> {
         frame: &mut Frame,
         resources: &RunResourceSet,
         relational_backends: &RunRelationalBackends,
+        memoization: &RunMemoization,
+        demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
@@ -1016,6 +1047,8 @@ impl<'a> RunExecutor<'a> {
             frame,
             resources,
             relational_backends,
+            memoization,
+            demand,
             cancellation,
         );
         self.trace.record(SpanEvent::new(
@@ -1025,24 +1058,6 @@ impl<'a> RunExecutor<'a> {
         ));
         match &result {
             Ok(()) => {
-                if let Some(results) = self.results {
-                    for output in &operation.outputs {
-                        let value = frame.value(output.value)?;
-                        if let Some(source) = results.prepare_runtime_value(
-                            correlation.clone(),
-                            plan.provenance.basis.clone(),
-                            format!("value:{}", output.value.index()),
-                            value,
-                        ) {
-                            frame.pending_sources.push(PendingSourcePublication {
-                                source,
-                                event: PendingSourceEvent::ValueReady {
-                                    value_index: output.value.index() as u32,
-                                },
-                            });
-                        }
-                    }
-                }
                 self.record_event(
                     plan,
                     correlation,
@@ -1089,15 +1104,17 @@ impl<'a> RunExecutor<'a> {
         frame: &mut Frame,
         resources: &RunResourceSet,
         relational_backends: &RunRelationalBackends,
+        memoization: &RunMemoization,
+        demand: &DemandFingerprint,
         cancellation: &CancellationToken,
     ) -> Result<(), RunError> {
         cancellation.check()?;
-        let memo_key = MemoKey {
+        let activation_key = MemoKey {
             frame: frame.id,
             activation: activation_id,
             operation: operation_index,
         };
-        if !frame.attempted.insert(memo_key) {
+        if !frame.attempted.insert(activation_key) {
             return Err(RunError::OperationAlreadyExecuted {
                 operation: operation_index,
                 activation: activation_id,
@@ -1118,136 +1135,144 @@ impl<'a> RunExecutor<'a> {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let outputs = match &operation.kernel {
-            PlannedKernel::Native(handle) => {
-                let kernel = self
-                    .kernels
-                    .get(handle)
-                    .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
-                let context = KernelContext {
-                    run_id,
-                    frame_id: frame.id,
-                    activation_id,
-                    params: &operation.params,
-                    compiled_parameters: self.compiled_parameters,
-                    resources,
-                    cancellation,
-                };
-                match kernel.execute(&context, &inputs) {
-                    Ok(outputs) => outputs,
-                    Err(error) if error.kind() == KernelErrorKind::Cancelled => {
-                        return Err(RunError::Cancelled);
-                    }
-                    Err(error) => {
-                        return Err(RunError::KernelFailed {
-                            operation: operation_index,
-                            message: error.message().into(),
-                        });
+        let operation_memo_key = if operation.cache_policy == CachePolicy::PerRun
+            && operation_memoization_safe(plan, operation_index)
+        {
+            operation_resource_versions(plan, operation_index).and_then(|resource_versions| {
+                OperationMemoKey::from_inputs(
+                    operation.stable_id.clone(),
+                    &inputs,
+                    resource_versions,
+                    operation.semantics_version,
+                    demand.clone(),
+                )
+            })
+        } else {
+            None
+        };
+        let produce = || -> Result<Box<[RuntimeValue]>, RunError> {
+            let outputs = match &operation.kernel {
+                PlannedKernel::Native(handle) => {
+                    let kernel = self
+                        .kernels
+                        .get(handle)
+                        .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
+                    let context = KernelContext {
+                        run_id,
+                        frame_id: frame.id,
+                        activation_id,
+                        params: &operation.params,
+                        compiled_parameters: self.compiled_parameters,
+                        resources,
+                        cancellation,
+                    };
+                    match kernel.execute(&context, &inputs) {
+                        Ok(outputs) => outputs,
+                        Err(error) if error.kind() == KernelErrorKind::Cancelled => {
+                            return Err(RunError::Cancelled);
+                        }
+                        Err(error) => {
+                            return Err(RunError::KernelFailed {
+                                operation: operation_index,
+                                message: error.message().into(),
+                            });
+                        }
                     }
                 }
-            }
-            PlannedKernel::Relational(index) => {
-                let subplan = &plan.relational_subplans[index.index()];
-                let mut bridge_inputs = Vec::with_capacity(subplan.materialization_bridges.len());
-                for bridge in &subplan.materialization_bridges {
-                    #[cfg(test)]
-                    self.run_test_checkpoint(
-                        SchedulerCheckpoint::BridgeMaterialization,
+                PlannedKernel::Adapter(adapter) => {
+                    let input = inputs.into_iter().next().ok_or_else(|| {
+                        RunError::InvalidPlan("adapter operation has no input".into())
+                    })?;
+                    let output = execute_planned_adapter(adapter, input, cancellation)?;
+                    vec![output]
+                }
+                PlannedKernel::Relational(index) => {
+                    let subplan = &plan.relational_subplans[index.index()];
+                    let backend = relational_backends.get(&subplan.backend).ok_or_else(|| {
+                        RunError::RelationalBackendNotFound(subplan.backend.clone())
+                    })?;
+                    let context = RelationalContext {
+                        run_id,
+                        resources,
                         cancellation,
-                    );
-                    cancellation.check()?;
-                    let value = frame
-                        .relational_fragment(
-                            activation_id,
-                            bridge.producer_subplan,
-                            &bridge.producer_fragment,
-                        )?
-                        .clone();
-                    #[cfg(test)]
-                    let value = materialize_bridge_with_checkpoint(
-                        bridge.bridge,
-                        value,
-                        cancellation,
-                        &|cancellation| {
-                            self.run_test_checkpoint(
-                                SchedulerCheckpoint::BridgeCollectionStarted,
-                                cancellation,
-                            );
-                        },
-                    );
-                    #[cfg(not(test))]
-                    let value = materialize_bridge(bridge.bridge, value, cancellation);
-                    let value = match value {
-                        Ok(value) => value,
+                    };
+                    self.trace.record(relational_backend_event(
+                        SpanStatus::Started,
+                        correlation.clone(),
+                        subplan.backend.as_str(),
+                        *index,
+                    ));
+                    let backend_result = backend.execute(&context, &subplan.compiled_plan, &inputs);
+                    let backend_status = if cancellation.check().is_err() {
+                        SpanStatus::Cancelled
+                    } else if backend_result.is_ok() {
+                        SpanStatus::Succeeded
+                    } else {
+                        SpanStatus::Failed
+                    };
+                    self.trace.record(relational_backend_event(
+                        backend_status,
+                        correlation.clone(),
+                        subplan.backend.as_str(),
+                        *index,
+                    ));
+                    let execution = match backend_result {
+                        Ok(execution) => execution,
                         Err(error) => {
                             cancellation.check()?;
-                            if error.code() == super::RelationalErrorCode::Cancelled {
-                                return Err(RunError::Cancelled);
-                            }
-                            return Err(RunError::BridgeFailed(error.message().into()));
+                            return Err(RunError::from_relational(operation_index, error));
                         }
                     };
-                    bridge_inputs.push(RelationalInput {
-                        bridge: bridge.clone(),
-                        value,
-                    });
+                    execution.outputs
                 }
-                let backend = relational_backends
-                    .get(&subplan.backend)
-                    .ok_or_else(|| RunError::RelationalBackendNotFound(subplan.backend.clone()))?;
-                let context = RelationalContext {
-                    run_id,
-                    resources,
-                    cancellation,
-                };
-                self.trace.record(relational_backend_event(
-                    SpanStatus::Started,
-                    correlation.clone(),
-                    subplan.backend.as_str(),
-                    *index,
-                ));
-                let backend_result =
-                    backend.execute(&context, &subplan.compiled_plan, &inputs, &bridge_inputs);
-                let backend_status = if cancellation.check().is_err() {
-                    SpanStatus::Cancelled
-                } else if backend_result.is_ok() {
-                    SpanStatus::Succeeded
-                } else {
-                    SpanStatus::Failed
-                };
-                self.trace.record(relational_backend_event(
-                    backend_status,
-                    correlation.clone(),
-                    subplan.backend.as_str(),
-                    *index,
-                ));
-                let execution = match backend_result {
-                    Ok(execution) => execution,
-                    Err(error) => {
-                        cancellation.check()?;
-                        return Err(RunError::from_relational(operation_index, error));
-                    }
-                };
-                for (fragment, value) in execution.fragment_outputs {
-                    frame.set_relational_fragment(activation_id, *index, fragment, value);
-                }
-                execution.outputs
+            };
+            cancellation.check()?;
+            if outputs.len() != operation.outputs.len() {
+                return Err(RunError::OutputCount {
+                    operation: operation_index,
+                    expected: operation.outputs.len(),
+                    actual: outputs.len(),
+                });
             }
+            Ok(outputs.into_boxed_slice())
         };
-        cancellation.check()?;
-        if outputs.len() != operation.outputs.len() {
-            return Err(RunError::OutputCount {
-                operation: operation_index,
-                expected: operation.outputs.len(),
-                actual: outputs.len(),
-            });
-        }
+        let outputs = if let Some(key) = operation_memo_key {
+            memoization.get_or_produce(key, cancellation, produce)?
+        } else {
+            produce()?
+        };
         for (output, value) in operation.outputs.iter().zip(outputs) {
             frame.set(output.value, value)?;
         }
-        frame.completed.insert(memo_key);
+        frame.completed.insert(activation_key);
         *frame.completion_counts.entry(operation_index).or_default() += 1;
         Ok(())
+    }
+}
+
+pub(super) fn operation_resource_versions(
+    plan: &ExecutionPlan,
+    operation: OperationIndex,
+) -> Option<ResourceVersionSet> {
+    plan.operations[operation.index()]
+        .resource_dependencies
+        .iter()
+        .map(|key| {
+            plan.provenance
+                .basis
+                .resource_versions
+                .get(key)
+                .cloned()
+                .map(|version| (key.clone(), version))
+        })
+        .collect()
+}
+
+pub(super) fn operation_memoization_safe(plan: &ExecutionPlan, operation: OperationIndex) -> bool {
+    match plan.operations[operation.index()].kernel {
+        PlannedKernel::Native(_) => true,
+        PlannedKernel::Adapter(_) => false,
+        PlannedKernel::Relational(_) => true,
     }
 }
 
@@ -1290,12 +1315,10 @@ struct MemoKey {
 struct Frame {
     id: FrameId,
     values: Vec<Option<RuntimeValue>>,
-    relational_fragments:
-        BTreeMap<(ActivationId, RelationalSubplanIndex, RelationalFragmentId), RuntimeValue>,
+
     attempted: BTreeSet<MemoKey>,
     completed: BTreeSet<MemoKey>,
     completion_counts: BTreeMap<OperationIndex, usize>,
-    pending_sources: Vec<PendingSourcePublication>,
 }
 
 impl Frame {
@@ -1303,11 +1326,10 @@ impl Frame {
         Self {
             id: FrameId::next(),
             values: vec![None; value_count as usize],
-            relational_fragments: BTreeMap::new(),
+
             attempted: BTreeSet::new(),
             completed: BTreeSet::new(),
             completion_counts: BTreeMap::new(),
-            pending_sources: Vec::new(),
         }
     }
 
@@ -1372,43 +1394,8 @@ impl Frame {
         self.set(destination, value)
     }
 
-    fn has_relational_fragment(
-        &self,
-        activation: ActivationId,
-        subplan: RelationalSubplanIndex,
-        fragment: &RelationalFragmentId,
-    ) -> bool {
-        self.relational_fragments
-            .contains_key(&(activation, subplan, fragment.clone()))
-    }
-
-    fn relational_fragment(
-        &self,
-        activation: ActivationId,
-        subplan: RelationalSubplanIndex,
-        fragment: &RelationalFragmentId,
-    ) -> Result<&RuntimeValue, RunError> {
-        self.relational_fragments
-            .get(&(activation, subplan, fragment.clone()))
-            .ok_or_else(|| RunError::MissingRelationalFragment(fragment.clone()))
-    }
-
-    fn set_relational_fragment(
-        &mut self,
-        activation: ActivationId,
-        subplan: RelationalSubplanIndex,
-        fragment: RelationalFragmentId,
-        value: RuntimeValue,
-    ) {
-        self.relational_fragments
-            .insert((activation, subplan, fragment), value);
-    }
-
     fn close_streams(&self) {
         for value in self.values.iter().flatten() {
-            value.close_stream();
-        }
-        for value in self.relational_fragments.values() {
             value.close_stream();
         }
     }

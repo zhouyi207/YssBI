@@ -3,9 +3,7 @@ use super::{
     bounded_stream_channel,
 };
 use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
-use crate::node_system::plan::{
-    OperationIndex, RelationalBackendId, RelationalFragmentId, ResourceId, ValueRef,
-};
+use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
 use crate::node_system::protocol::Value;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -258,8 +256,6 @@ pub enum RunError {
         code: RelationalErrorCode,
         message: Box<str>,
     },
-    MissingRelationalFragment(RelationalFragmentId),
-    BridgeFailed(Box<str>),
     Stream(Box<str>),
     MissingValue(ValueRef),
     InvalidCondition {
@@ -352,14 +348,7 @@ impl fmt::Display for RunError {
                 "relational operation {} failed: {message}",
                 operation.index()
             ),
-            Self::MissingRelationalFragment(fragment) => write!(
-                formatter,
-                "relational fragment '{}' has no runtime output",
-                fragment.as_str()
-            ),
-            Self::BridgeFailed(message) => {
-                write!(formatter, "materialization bridge failed: {message}")
-            }
+
             Self::Stream(message) => write!(formatter, "stream failed: {message}"),
             Self::MissingValue(value) => {
                 write!(formatter, "runtime value {} is unavailable", value.index())

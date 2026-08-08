@@ -150,6 +150,7 @@ pub fn run() {
             get_project_history_status,
             undo_graph_document,
             redo_graph_document,
+            allocate_pin_preview_generation,
             execute_graph_document,
             cancel_graph_run,
             list_graph_traces,

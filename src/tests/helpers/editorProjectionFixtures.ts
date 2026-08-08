@@ -137,6 +137,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
         },
       ],
       diagnostics: [],
+      outcome: { type: 'success' },
       hasBlockingDiagnostics: false,
     },
   };

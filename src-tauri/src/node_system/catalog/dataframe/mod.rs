@@ -25,7 +25,10 @@ use crate::node_system::plan::{
     RelationalRename,
 };
 use crate::node_system::protocol::*;
-use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
+use crate::node_system::registry::{
+    CategoryRegistration, NominalValueHandle, ProviderRegistration, RegisteredNode,
+    TypeRegistration,
+};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -78,11 +81,11 @@ fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyErr
         ),
         InterfaceKind::Project => RegisteredNode::leaf(
             Arc::new(protocol),
-            Arc::new(NodeImplementation::new(ProjectLowerer)),
+            Arc::new(NodeImplementation::new(ProjectLowerer(None))),
         ),
         InterfaceKind::FilterRows => RegisteredNode::leaf(
             Arc::new(protocol),
-            Arc::new(NodeImplementation::new(FilterRowsLowerer)),
+            Arc::new(NodeImplementation::new(FilterRowsLowerer(None))),
         ),
         _ => leaf(protocol, spec.kernel),
     })
@@ -647,11 +650,39 @@ impl NodeLowerer for SourceLowerer {
     }
 }
 
-struct ProjectLowerer;
+pub(crate) struct DataframeNominalHandles {
+    pub project_columns: NominalValueHandle<ProjectColumns>,
+    pub filter_predicate: NominalValueHandle<FilterPredicate>,
+}
+
+pub(crate) fn bind_nominal_handles(
+    provider: &mut ProviderRegistration,
+    handles: DataframeNominalHandles,
+) {
+    for node in &mut provider.nodes {
+        let lowerer: Option<NodeImplementation> = match node.protocol().type_id.as_str() {
+            "yssbi.dataframe.project" => Some(NodeImplementation::new(ProjectLowerer(Some(
+                handles.project_columns.clone(),
+            )))),
+            "yssbi.dataframe.filter.rows" => Some(NodeImplementation::new(FilterRowsLowerer(
+                Some(handles.filter_predicate.clone()),
+            ))),
+            _ => None,
+        };
+        if let Some(lowerer) = lowerer {
+            *node = RegisteredNode::leaf(Arc::new(node.protocol().clone()), Arc::new(lowerer));
+        }
+    }
+}
+
+struct ProjectLowerer(Option<NominalValueHandle<ProjectColumns>>);
 
 impl NodeLowerer for ProjectLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        let columns = prepared_nominal_parameter::<ProjectColumns>(context, "columns")?;
+        let handle = self.0.as_ref().ok_or_else(|| {
+            LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
+        })?;
+        let columns = prepared_nominal_parameter(context, "columns", handle)?;
         let columns = columns
             .as_slice()
             .iter()
@@ -671,11 +702,14 @@ impl NodeLowerer for ProjectLowerer {
     }
 }
 
-struct FilterRowsLowerer;
+struct FilterRowsLowerer(Option<NominalValueHandle<FilterPredicate>>);
 
 impl NodeLowerer for FilterRowsLowerer {
     fn lower(&self, context: &LoweringContext<'_>) -> Result<LoweredNode, LoweringError> {
-        let predicate = prepared_nominal_parameter::<FilterPredicate>(context, "predicate")?;
+        let handle = self.0.as_ref().ok_or_else(|| {
+            LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration)
+        })?;
+        let predicate = prepared_nominal_parameter(context, "predicate", handle)?;
         relational_transform_node(
             context,
             RelationalOperator::Filter {
@@ -689,11 +723,12 @@ impl NodeLowerer for FilterRowsLowerer {
 fn prepared_nominal_parameter<T: Clone + Send + Sync + 'static>(
     context: &LoweringContext<'_>,
     key: &'static str,
+    handle: &NominalValueHandle<T>,
 ) -> Result<T, LoweringError> {
     let parameter_key = lowering_parameter_key(key)?;
     context
         .parameters
-        .nominal::<T>(&parameter_key)
+        .nominal(&parameter_key, handle)
         .cloned()
         .ok_or_else(|| LoweringError::internal(LoweringInvariant::InvalidPreparedConfiguration))
 }

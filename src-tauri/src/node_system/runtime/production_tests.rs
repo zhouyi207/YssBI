@@ -7,6 +7,7 @@ use crate::node_system::plan::{
     CompiledResourceRequirement, ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle,
     ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueRef,
 };
+use crate::node_system::protocol::OutputProduction;
 use crate::node_system::registry::RegistryFingerprint;
 use polars::prelude::{Column, DataFrame};
 use std::collections::BTreeMap;
@@ -56,6 +57,7 @@ fn empty_plan(
         relational_subplans: Box::new([]),
         resources: Box::new([]),
         results: Box::new([]),
+        publications: Box::new([]),
     }
 }
 
@@ -366,6 +368,7 @@ fn function_plan_generation_rejects_stale_abi_provenance() {
         provenance: stale_provenance,
         parameters: BTreeMap::new(),
         results: BTreeMap::new(),
+        result_productions: BTreeMap::new(),
     });
 
     let error = match FunctionPlanStore::new(session, 64).generation(
@@ -408,6 +411,7 @@ fn function_plan_generation_rejects_aliased_abi_members() {
             (FunctionParameterId("right".into()), ValueRef::new(0)),
         ]),
         results: BTreeMap::new(),
+        result_productions: BTreeMap::new(),
     });
 
     let result = FunctionPlanStore::new(session, 64).generation(
@@ -459,6 +463,7 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         provenance: unsourced_parameter.provenance.clone(),
         parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
         results: BTreeMap::new(),
+        result_productions: BTreeMap::new(),
     };
     assert!(matches!(
         generate(unsourced_parameter, parameter_abi),
@@ -476,6 +481,10 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         provenance: unsourced_result.provenance.clone(),
         parameters: BTreeMap::new(),
         results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+        result_productions: BTreeMap::from([(
+            FunctionParameterId("return".into()),
+            OutputProduction::FullyMaterialized,
+        )]),
     };
     assert!(matches!(
         generate(unsourced_result, result_abi),
@@ -489,11 +498,18 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         resource_versions.clone(),
     );
     sourced.value_count = 1;
-    sourced.value_sources = Box::new([PlanValueSource::ExternalInput(ValueRef::new(0))]);
+    sourced.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(0),
+        OutputProduction::FullyMaterialized,
+    )]);
     let sourced_abi = FunctionPlanAbi {
         provenance: sourced.provenance.clone(),
         parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
         results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+        result_productions: BTreeMap::from([(
+            FunctionParameterId("return".into()),
+            OutputProduction::FullyMaterialized,
+        )]),
     };
     assert!(generate(sourced, sourced_abi).is_ok());
 }
@@ -523,6 +539,7 @@ fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
                 provenance: plan.provenance.clone(),
                 parameters: BTreeMap::new(),
                 results: BTreeMap::new(),
+                result_productions: BTreeMap::new(),
             });
             let generation = store
                 .generation(

@@ -90,9 +90,13 @@ export type RunEventKind =
       activationId: string;
       code: RunErrorCode;
     }
-  | { type: 'valueReady'; valueIndex: number; sourceId: string }
   | { type: 'resultReady'; name: string; sourceId: string }
-  | { type: 'outputReady'; output: GraphOutputRefDto; sourceId: string };
+  | {
+      type: 'outputReady';
+      output: GraphOutputRefDto;
+      generation: number | null;
+      sourceId: string;
+    };
 
 export const RUN_EVENT_KIND_TYPES = {
   runStarted: true,
@@ -102,7 +106,6 @@ export const RUN_EVENT_KIND_TYPES = {
   operationStarted: true,
   operationCompleted: true,
   operationErrored: true,
-  valueReady: true,
   resultReady: true,
   outputReady: true,
 } as const satisfies Record<RunEventKind['type'], true>;

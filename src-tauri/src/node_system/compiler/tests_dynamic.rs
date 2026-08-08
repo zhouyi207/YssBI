@@ -66,7 +66,7 @@ fn protocol() -> NodeProtocol {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
             evaluation: EvaluationPolicy::DemandDriven,
-            cache: CachePolicy::None,
+            cache: CachePolicy::Disabled,
             effects: EffectSemantics::None,
         })
         .build()

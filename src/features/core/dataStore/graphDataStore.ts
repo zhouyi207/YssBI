@@ -73,6 +73,7 @@ function buildProjectionBucket(
     sourceRevision: entities.sourceRevision,
     requestGeneration,
     diagnostics: entities.diagnostics,
+    outcome: entities.outcome,
     hasBlockingDiagnostics: entities.hasBlockingDiagnostics,
     nodes: {},
     pins: {},

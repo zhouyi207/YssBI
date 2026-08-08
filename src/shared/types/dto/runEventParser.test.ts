@@ -103,13 +103,35 @@ describe('execution wire parsers', () => {
 
   it('parses every Rust-generated RunEventKindDto variant', () => {
     expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
-    expect(executionWire.runEvents.map((event) => event.kind.type))
+    expect([...new Set(executionWire.runEvents.map((event) => event.kind.type))])
       .toEqual(Object.keys(RUN_EVENT_KIND_TYPES));
   });
 
   it.each(executionWire.runEvents)('rejects extra keys on RunEvent $kind.type', (valid) => {
     expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
+  });
+
+  it('freezes ordinary null and preview numeric output generations', () => {
+    expect(executionWire.runEvents
+      .filter((event) => event.kind.type === 'outputReady')
+      .map((event) => event.kind.generation))
+      .toEqual([null, 17]);
+  });
+
+  it('rejects removed valueReady and requires exact preview generation wire', () => {
+    const valid = executionWire.runEvents[0];
+    const outputReady = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
+    if (!outputReady) throw new Error('missing output publication fixture');
+
+    expect(() => parseRunEvent({
+      ...valid,
+      kind: { type: 'valueReady', valueIndex: 4, sourceId: '17' },
+    })).toThrow();
+    const missingGeneration = clone(outputReady);
+    delete record(record(missingGeneration).kind).generation;
+    expect(() => parseRunEvent(missingGeneration)).toThrow();
+    expect(parseRunEvent(outputReady)).toEqual(outputReady);
   });
 
   it('rejects unknown and malformed run event variants', () => {
@@ -170,12 +192,12 @@ describe('execution wire parsers', () => {
     expect(() => parseRunEvent(malformedPort)).toThrow('graph output reference');
   });
 
-  it('bounds u32 event indexes while accepting the exact maximum', () => {
+  it('bounds u32 operation indexes and safe integer preview generations', () => {
     const operation = executionWire.runEvents.find(
       (event) => event.kind.type === 'operationStarted',
     );
-    const value = executionWire.runEvents.find((event) => event.kind.type === 'valueReady');
-    if (!operation || !value) throw new Error('missing indexed event fixtures');
+    const output = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
+    if (!operation || !output) throw new Error('missing indexed event fixtures');
 
     expect(() => parseRunEvent({
       ...operation,
@@ -186,12 +208,12 @@ describe('execution wire parsers', () => {
       kind: { ...operation.kind, operationIndex: 4_294_967_296 },
     })).toThrow();
     expect(() => parseRunEvent({
-      ...value,
-      kind: { ...value.kind, valueIndex: 4_294_967_295 },
+      ...output,
+      kind: { ...output.kind, generation: Number.MAX_SAFE_INTEGER },
     })).not.toThrow();
     expect(() => parseRunEvent({
-      ...value,
-      kind: { ...value.kind, valueIndex: 4_294_967_296 },
+      ...output,
+      kind: { ...output.kind, generation: Number.MAX_SAFE_INTEGER + 1 },
     })).toThrow();
   });
 
