@@ -283,7 +283,7 @@ describe('executeFunctionSignatureMutation', () => {
     vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
       projectInstanceId,
       projectName: 'Recovery fixture',
-      appVersion: '0.1.0',
+
       exportTime: '2026-08-07T00:00:00.000Z',
       publicationRevision: 1,
       history: { canUndo: true, canRedo: false },

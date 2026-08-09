@@ -29,7 +29,6 @@ pub const FUNCTION_EXTENSION: &str = "yssbi-function";
 pub struct ProjectManifest {
     pub schema_version: u32,
     pub project_name: String,
-    pub app_version: String,
     pub export_time: String,
 }
 
@@ -138,7 +137,6 @@ pub struct ProjectIndex {
     #[serde(default)]
     pub history: crate::node_system::document::HistoryStatusDto,
     pub project_name: String,
-    pub app_version: String,
     pub export_time: String,
     pub graphs: Vec<ProjectGraphIndexEntry>,
     #[serde(default)]
@@ -153,7 +151,6 @@ pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, Project
     serde_json::to_vec_pretty(&ProjectManifest {
         schema_version: SCHEMA_VERSION,
         project_name: data.metadata.project_name.clone(),
-        app_version: data.metadata.app_version.clone(),
         export_time: data.metadata.export_time.clone(),
     })
     .map_err(ProjectError::Serialize)
@@ -305,7 +302,6 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
 
     let mut manifest = read_project_manifest_from_root(root)?;
     manifest.project_name = project_data.metadata.project_name.clone();
-    manifest.app_version = project_data.metadata.app_version.clone();
     manifest.export_time = project_data.metadata.export_time.clone();
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
@@ -317,7 +313,6 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     let manifest = read_project_manifest_from_root(root.as_path())?;
     let mut project_data = ProjectData::new();
     project_data.metadata.project_name = manifest.project_name;
-    project_data.metadata.app_version = manifest.app_version;
     project_data.metadata.export_time = manifest.export_time;
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.worksheets = load_worksheets_from_root(root.as_path())?;
@@ -363,7 +358,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         publication_revision: 0,
         history: Default::default(),
         project_name: manifest.project_name,
-        app_version: manifest.app_version,
         export_time: manifest.export_time,
         graphs,
         worksheets,
@@ -462,7 +456,6 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
         return Ok(ProjectManifest {
             schema_version: SCHEMA_VERSION,
             project_name: default_name,
-            app_version: String::new(),
             export_time: String::new(),
         });
     }
@@ -1109,6 +1102,50 @@ mod tests {
         let path = std::env::temp_dir().join(format!("yssbi-production-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    fn top_level_keys(value: &serde_json::Value) -> std::collections::BTreeSet<&str> {
+        value
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
+    #[test]
+    fn project_manifest_omits_application_version() {
+        let manifest = serialize_project_manifest(&ProjectData::new()).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
+
+        assert_eq!(
+            top_level_keys(&value),
+            std::collections::BTreeSet::from(["schemaVersion", "projectName", "exportTime"])
+        );
+    }
+
+    #[test]
+    fn project_index_omits_application_version() {
+        let root = temp_project_dir();
+        initialize_project_directory(&ProjectData::new(), root.as_path()).unwrap();
+        let index = read_project_index(root.to_string_lossy().as_ref()).unwrap();
+        let value = serde_json::to_value(index).unwrap();
+
+        assert_eq!(
+            top_level_keys(&value),
+            std::collections::BTreeSet::from([
+                "projectInstanceId",
+                "publicationRevision",
+                "history",
+                "projectName",
+                "exportTime",
+                "graphs",
+                "worksheets",
+                "variables",
+                "databases",
+            ])
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn normalized_graph() -> GraphResourceDocument {

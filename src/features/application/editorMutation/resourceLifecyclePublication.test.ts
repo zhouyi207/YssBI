@@ -151,7 +151,7 @@ describe('graph resource lifecycle publication', () => {
       {
         projectInstanceId,
         projectName: 'Current',
-        appVersion: '0.2.7',
+
         exportTime: '',
         publicationRevision: 2,
         history: { canUndo: false, canRedo: false },

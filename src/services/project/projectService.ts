@@ -115,7 +115,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => key in value);
+  return Object.keys(value).length === keys.length
+    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
 
 function isSafeRevision(value: unknown): value is number {
@@ -169,13 +170,39 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
 }
 
 function parseProjectIndexRow(value: unknown): ProjectIndexRow {
-  if (!isRecord(value) || !Array.isArray(value.graphs)) {
+  if (!isRecord(value)
+    || Array.isArray(value)
+    || !hasExactKeys(value, [
+      'projectInstanceId', 'publicationRevision', 'history', 'projectName',
+      'exportTime', 'graphs', 'worksheets', 'variables', 'databases',
+    ])
+    || typeof value.projectInstanceId !== 'string'
+    || !isSafeRevision(value.publicationRevision)
+    || !isRecord(value.history)
+    || Array.isArray(value.history)
+    || !hasExactKeys(value.history, ['canUndo', 'canRedo'])
+    || typeof value.history.canUndo !== 'boolean'
+    || typeof value.history.canRedo !== 'boolean'
+    || typeof value.projectName !== 'string'
+    || typeof value.exportTime !== 'string'
+    || !Array.isArray(value.graphs)
+    || !Array.isArray(value.worksheets)
+    || !Array.isArray(value.variables)
+    || !Array.isArray(value.databases)
+    || !value.databases.every(isProjectDatabaseIndexRow)) {
     throw new Error('Invalid project index response');
   }
   try {
     return {
-      ...(value as unknown as ProjectIndexRow),
+      projectInstanceId: value.projectInstanceId,
+      publicationRevision: value.publicationRevision,
+      history: value.history as unknown as HistoryStatusDto,
+      projectName: value.projectName,
+      exportTime: value.exportTime,
       graphs: value.graphs.map(parseProjectGraphIndexRow),
+      worksheets: value.worksheets as ProjectWorksheetIndexRow[],
+      variables: value.variables as ProjectVariableIndexRow[],
+      databases: value.databases,
     };
   } catch {
     throw new Error('Invalid project index response');
@@ -262,13 +289,12 @@ export interface ProjectActivationResult {
 export interface ProjectIndexRow {
   projectInstanceId: string;
   projectName: string;
-  appVersion: string;
   exportTime: string;
   publicationRevision: number;
   history: HistoryStatusDto;
   graphs: ProjectGraphIndexRow[];
-  worksheets?: ProjectWorksheetIndexRow[];
-  variables?: ProjectVariableIndexRow[];
+  worksheets: ProjectWorksheetIndexRow[];
+  variables: ProjectVariableIndexRow[];
   databases: ProjectDatabaseIndexRow[];
 }
 

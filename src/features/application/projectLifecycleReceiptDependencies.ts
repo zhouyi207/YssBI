@@ -39,7 +39,7 @@ export function createProjectLifecycleReceiptDependencies(
           variables: {},
           graphs: {},
           databases: {},
-          metadata: { exportTime: '', appVersion: '' },
+          metadata: { exportTime: '' },
         },
         null,
       );

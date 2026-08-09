@@ -179,7 +179,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       variableRevisionsFromIndex(index.variables),
     );
 
-    const databaseRows = index.databases ?? [];
+    const databaseRows = index.databases;
     const databasePaths = Object.fromEntries(
       databaseRows.map((row) => [row.id, row.resourcePath]),
     );
@@ -193,7 +193,7 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
 
     const graphOrder = index.graphs.map((graph) => graph.path);
 
-    const worksheetIndex = (index.worksheets ?? []).map((ws) => ({
+    const worksheetIndex = index.worksheets.map((ws) => ({
       id: ws.id,
       name: ws.name,
       databaseId: ws.databaseId,
@@ -479,7 +479,6 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     graphs: graphDataRecordToDomainGraphs(buildGraphSnapshotFromStores()),
     metadata: {
       exportTime: new Date().toISOString(),
-      appVersion: '1.0.0',
     },
   }),
 }));

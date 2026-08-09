@@ -246,7 +246,7 @@ export function buildAuthoritativeProjectLoadPlan(
   dependencies: AuthoritativeProjectLoadPlanDependencies,
 ): PreparedAuthoritativeProjectLoad {
   const normalizedDatabases = dependencies.normalizeDatabases(source.databases, context.databases);
-  const databaseRows = source.index.databases ?? [];
+  const databaseRows = source.index.databases;
   const databaseResourcePaths = Object.fromEntries(
     databaseRows.map((row) => [row.id, row.resourcePath]),
   );
@@ -258,7 +258,7 @@ export function buildAuthoritativeProjectLoadPlan(
     { ...database, resourcePath: databaseResourcePaths[id] },
   ]));
   const variableState = dependencies.normalizeVariables(source.index);
-  const worksheetIndex = (source.index.worksheets ?? []).map((worksheet) => ({
+  const worksheetIndex = source.index.worksheets.map((worksheet) => ({
     id: worksheet.id,
     name: worksheet.name,
     databaseId: worksheet.databaseId,
@@ -282,7 +282,6 @@ export function buildAuthoritativeProjectLoadPlan(
     graphs: {},
     metadata: {
       exportTime: source.index.exportTime,
-      appVersion: source.index.appVersion,
     },
   } as ProjectData;
   return {

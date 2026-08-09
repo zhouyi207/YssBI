@@ -131,7 +131,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: {
         'evt-1': graphDataToDomainGraph(makeEventGraphData('evt-1', 'Main Event')),
       },
-      metadata: { exportTime: '2026-07-08T00:00:00.000Z', appVersion: '1.0.0' },
+      metadata: { exportTime: '2026-07-08T00:00:00.000Z' },
     };
 
     useProjectIOStore.getState().loadProjectFromData(project, '/tmp/demo.yssbi');
@@ -153,12 +153,13 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: {
         'evt-1': graphDataToDomainGraph(makeEventGraphData('evt-1', 'Main Event')),
       },
-      metadata: { exportTime: '2026-07-08T00:00:00.000Z', appVersion: '1.0.0' },
+      metadata: { exportTime: '2026-07-08T00:00:00.000Z' },
     };
 
     useProjectIOStore.getState().loadProjectFromData(project, null);
     const snapshot = useProjectIOStore.getState().exportSnapshot();
 
+    expect(Object.keys(snapshot.metadata)).toEqual(['exportTime']);
     expect(snapshot.graphs['evt-1']).toMatchObject({
       path: 'evt-1',
       name: 'Main Event',
@@ -202,7 +203,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
     useDatabaseStore.setState({ databases: { old: { id: 'old', name: 'Old' } } });
     useVariableStore.setState({ variables: {}, revisions: {} });
@@ -273,7 +273,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     const plan = await prepareAuthoritativeProjectLoad(captureProjectIdentity());
@@ -343,7 +342,6 @@ describe('useProjectIOStore snapshot paths', () => {
       }],
       worksheets: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     await expect(useProjectIOStore.getState().refreshResourceIndex()).resolves.toBe(true);
@@ -381,7 +379,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     await expect(refresh).resolves.toBe(false);
@@ -405,7 +402,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     const preparation = prepareAuthoritativeProjectLoad(captureProjectIdentity());
@@ -444,7 +440,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     await expect(initProjectSync()).resolves.toEqual(expect.any(Object));
@@ -472,7 +467,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
 
     const activation = {
@@ -515,7 +509,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     }));
 
     const oldLoad = useProjectIOStore.getState().loadProject();
@@ -565,7 +558,6 @@ describe('useProjectIOStore snapshot paths', () => {
       worksheets: [],
       databases: [],
       exportTime: '2026-07-08T00:00:00.000Z',
-      appVersion: '1.0.0',
     });
 
     const result = await useProjectIOStore.getState().loadProject();
@@ -615,7 +607,6 @@ describe('useProjectIOStore snapshot paths', () => {
         worksheets: [],
         databases: [],
         exportTime: '',
-        appVersion: '0.2.7',
       });
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/replacement.yssbi');
     vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({
@@ -764,7 +755,7 @@ describe('useProjectIOStore snapshot paths', () => {
       graphs: {
         [graphPath]: graphDataToDomainGraph(makeEventGraphData(graphPath, 'Main')),
       },
-      metadata: { exportTime: '2026-07-25T00:00:00.000Z', appVersion: '1.0.0' },
+      metadata: { exportTime: '2026-07-25T00:00:00.000Z' },
     }, null);
     projectPublicationCoordinator.startProject('project-instance-2', 0);
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-2' });

@@ -13,7 +13,6 @@ import type { DatabaseDecl } from "./database";
  */
 export interface ProjectMetadata {
     exportTime: string;   // 导出时间
-    appVersion: string;   // 应用版本
 }
 
 /**

@@ -209,7 +209,7 @@ function recoveryResources(
 ): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = index.graphs.map((graph) =>
     buildGraphResourceMeta(graph.type, graph.path, graph.name));
-  resources.push(...(index.worksheets ?? []).map((worksheet) => ({
+  resources.push(...index.worksheets.map((worksheet) => ({
     id: worksheet.id,
     kind: 'worksheet' as const,
     name: worksheet.name,
@@ -404,7 +404,7 @@ export function prepareProjectRecoveryCommit(
     databaseRows.map((row) => [row.id, row.revision]),
   );
   const worksheetState = useWorksheetStore.getState();
-  const worksheetIndex = (plan.index.worksheets ?? []).map((worksheet) => ({
+  const worksheetIndex = plan.index.worksheets.map((worksheet) => ({
     id: worksheet.id,
     name: worksheet.name,
     databaseId: worksheet.databaseId,

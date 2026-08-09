@@ -131,7 +131,7 @@ function recoveryIndex(graphPaths: string[]): ProjectIndexRow {
   return {
     projectInstanceId,
     projectName: 'History recovery',
-    appVersion: '0.2.7',
+
     exportTime: '',
     publicationRevision: 1,
     history: { canUndo: false, canRedo: true },

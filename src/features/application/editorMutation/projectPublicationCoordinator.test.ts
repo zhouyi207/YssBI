@@ -127,7 +127,7 @@ function index(
   return {
     projectInstanceId,
     projectName: 'Current',
-    appVersion: '0.2.7',
+
     exportTime: '',
     publicationRevision,
     history: { canUndo: false, canRedo: true },

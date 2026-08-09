@@ -159,7 +159,6 @@ EditorViewport          →    （无 IPC / 无 DTO）   →    EditorViewport�
 | 字段 | 后端 (ProjectMetadata) | DTO (ProjectMetadataDTO) | 前端 (ProjectMetadata) | 说明 |
 |------|------------------------|--------------------------|------------------------|------|
 | exportTime | export_time | exportTime (camelCase) | exportTime | 导出时间 (RFC3339) |
-| appVersion | app_version | appVersion (camelCase) | appVersion | 应用版本号 |
 
 ### 7.2 ProjectData
 

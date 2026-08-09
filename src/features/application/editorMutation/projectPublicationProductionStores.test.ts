@@ -62,7 +62,6 @@ function recoveryIndex(databases: ProjectDatabaseIndexRow[] = []): ProjectIndexR
   return {
     projectInstanceId,
     projectName: 'Current',
-    appVersion: '0.2.7',
     exportTime: '',
     publicationRevision: 2,
     history: { canUndo: false, canRedo: false },
@@ -478,7 +477,6 @@ describe('project publication production stores', () => {
     const index = {
       projectInstanceId,
       projectName: 'Current',
-      appVersion: '0.2.7',
       exportTime: '',
       publicationRevision: 2,
       history: { canUndo: true, canRedo: true },
@@ -755,7 +753,6 @@ describe('project publication production stores', () => {
       index: {
         projectInstanceId,
         projectName: 'Current',
-        appVersion: '0.2.7',
         exportTime: '',
         publicationRevision: 2,
         history: { canUndo: false, canRedo: false },
@@ -836,7 +833,6 @@ describe('project publication production stores', () => {
       index: {
         projectInstanceId,
         projectName: 'Current',
-        appVersion: '0.2.7',
         exportTime: '',
         publicationRevision: 2,
         history: { canUndo: false, canRedo: false },

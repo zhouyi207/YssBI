@@ -8,7 +8,7 @@ it('prepares recovery with authoritative function editor projection pins', () =>
   const index: ProjectIndexRow = {
     projectInstanceId,
     projectName: 'Recovered',
-    appVersion: '0.2.7',
+
     exportTime: '',
     publicationRevision: 4,
     history: { canUndo: true, canRedo: false },

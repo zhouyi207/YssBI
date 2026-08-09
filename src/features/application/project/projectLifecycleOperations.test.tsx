@@ -208,7 +208,6 @@ describe('project lifecycle initiating operations', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
     const toast = vi.spyOn(uiStore, 'showToast');
 
@@ -249,7 +248,6 @@ describe('project lifecycle initiating operations', () => {
       worksheets: [],
       databases: [],
       exportTime: '',
-      appVersion: '0.2.7',
     });
     const toast = vi.spyOn(uiStore, 'showToast');
 
@@ -294,7 +292,6 @@ describe('project lifecycle initiating operations', () => {
         worksheets: [],
         databases: [],
         exportTime: '',
-        appVersion: '0.2.7',
       });
       const toast = vi.spyOn(uiStore, 'showToast');
 

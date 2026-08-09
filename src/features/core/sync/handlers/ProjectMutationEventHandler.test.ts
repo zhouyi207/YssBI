@@ -179,7 +179,7 @@ function recoveryIndex(publicationRevision: number) {
     worksheets: [],
     databases: [],
     exportTime: '',
-    appVersion: '0.2.7',
+
   };
 }
 

@@ -18,7 +18,6 @@ function projectIndex(): Record<string, unknown> {
     publicationRevision: 4,
     history: { canUndo: false, canRedo: false },
     projectName: 'Projection contract',
-    appVersion: '0.2.7',
     exportTime: '2026-08-07T00:00:00Z',
     graphs: [{
       path: 'functions/forecast.yssbi-function',
@@ -153,6 +152,91 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
         'Invalid project index response',
       );
     }
+  });
+
+  it('rejects a legacy project index containing the removed application version key', async () => {
+    const index = projectIndex();
+    index[['app', 'Version'].join('')] = '0.2.7';
+    ipc.response = index;
+
+    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
+      'Invalid project index response',
+    );
+  });
+
+  it('requires every exact project-index key to be an own property', async () => {
+    const index = projectIndex();
+    const projectName = index.projectName;
+    delete index.projectName;
+    index.unknownProjectName = 'substitution';
+    ipc.response = Object.assign(Object.create({ projectName }), index);
+
+    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
+      'Invalid project index response',
+    );
+  });
+
+  it('rejects unknown keys before evaluating graph and database values', async () => {
+    const index = projectIndex();
+    let graphsEvaluated = false;
+    let databasesEvaluated = false;
+    index.unknownLegacyKey = true;
+    Object.defineProperties(index, {
+      graphs: {
+        enumerable: true,
+        get: () => {
+          graphsEvaluated = true;
+          throw new Error('graphs evaluated');
+        },
+      },
+      databases: {
+        enumerable: true,
+        get: () => {
+          databasesEvaluated = true;
+          throw new Error('databases evaluated');
+        },
+      },
+    });
+    ipc.response = index;
+
+    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
+      'Invalid project index response',
+    );
+    expect(graphsEvaluated).toBe(false);
+    expect(databasesEvaluated).toBe(false);
+  });
+
+  it('rejects inherited required keys before evaluating invalid rows', async () => {
+    const index = projectIndex();
+    const projectName = index.projectName;
+    let graphsEvaluated = false;
+    let databasesEvaluated = false;
+    delete index.projectName;
+    index.unknownProjectName = 'substitution';
+    Object.defineProperties(index, {
+      graphs: {
+        enumerable: true,
+        get: () => {
+          graphsEvaluated = true;
+          return [null];
+        },
+      },
+      databases: {
+        enumerable: true,
+        get: () => {
+          databasesEvaluated = true;
+          return [null];
+        },
+      },
+    });
+    Object.setPrototypeOf(index, { projectName });
+    ipc.response = index;
+
+    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
+      'Invalid project index response',
+    );
+    expect(graphsEvaluated).toBe(false);
+    expect(databasesEvaluated).toBe(false);
   });
 
   it('rejects a legacy function row containing only raw functionSignature', async () => {

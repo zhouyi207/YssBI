@@ -287,9 +287,6 @@ src/app/appConfig/appLinks.ts
 - [x] 修复后创建独立 WebView 的项目 lifecycle 初始化：新增只读 `get_current_project_activation` bootstrap command，返回当前 `projectInstanceId`、`activationRevision` 与项目路径；`initProjectSync` 在本地 identity 为空时先接受真实 activation receipt，再加载权威项目快照。
 - [x] 统一子窗口项目同步入口：`useProjectSync` 不再于 lifecycle 建立前直接执行 `reconcileProjectPath`，数据库编辑器与 Bayes 等晚创建窗口可正常建立 publication baseline，避免 `ProjectLifecycleError: project lifecycle changed before publication settlement`。
 - [x] 补充 late-created WebView 与 Rust activation receipt 回归测试；`typecheck`、IPC/初始化审计、focused database/activation tests、`rust:check`、`rust:fmt:check` 与 `git diff --check` 通过。完整前端套件唯一超时项单独重跑通过；Rust 串行 lib 测试 1080/1083，通过项外的 3 项因 Windows 当前用户缺少 reparse point 权限（错误 1314）失败。
-
-### node_architecture 遗漏审计
-
 - [x] **Phase 1–3：修复 `GraphDelta` project-event wire 身份断裂。** Rust `EventProject::GraphDelta` 只发送 `{ delta }`，前端 `GraphDeltaHandler` 却强制读取 `payload.projectInstanceId`，导致真实跨窗口图 delta 被静默忽略；统一 envelope，并增加 Rust→TS project-event golden contract，禁止测试继续构造后端不会发送的字段。
 - [x] **Phase 2–3：为全部 active-project 节点命令补齐后端可验证的 lifecycle identity。** `mutate_graph_document`、`update_function_signature`、`hydrate_editor_graph`、History 和 `execute_graph_document` 等命令必须显式接收并校验调用方 `projectInstanceId`；当前部分 TS 已发送但 Rust 未消费，另一些调用两侧都缺失，旧 WebView 请求可能落到替换后的新项目。
 - [x] **Phase 3：删除前端函数签名到 Pin 的业务投影。** `functionSignaturePins` 仍在 React 侧执行 `type_name → DataType`、参数/返回值到 Pin、未知类型回退 `Any` 和固定 `Result` 命名；改为直接消费 Rust 权威 function/editor projection，项目加载、publication 与 recovery 不再重建 resolved interface。
@@ -308,24 +305,6 @@ src/app/appConfig/appLinks.ts
 - [x] **横切清理：删除 localization compatibility 双接口。** 合并 `LocalizationLookup`/`LocalizationBundle`，移除标注为 `Compatibility boundary` 的 blanket bridge，保持 0.x 项目单一路径。
 - [x] **Phase 4/横切清理：删除 History legacy 默认解码。** `ProjectHistoryTransaction.persistence` 等字段仍通过 `#[serde(default)]` 接受旧 wire，且存在专门的 `legacy_history_transaction_defaults_to_in_memory_until_save` 测试；项目未发布，不保留迁移 shim。
 - [x] **协议契约：补齐 execution 与 project-event 的 Rust↔TS golden coverage。** 冻结全部 `ExecutionDemandDto`、`RunEventKindDto`、`ExecuteGraphResultDto`、`GraphDelta`/resource mutation event envelope，并在前端增加严格 wire parser，避免手写 TS union 与 Rust enum 漂移。
-
-Superseded initial Tasks 8–12 evidence (2026-08-07; retained for history): Task 12 policy RED failed as intended with all exact 20 project database commands plus `get_plot_column_pair` reported as duplicate capability classifications; GREEN passed 1 file / 52 tests, including removed/renamed TypeScript identity fields, removed Rust `ProjectInstanceId` parameters, and the `get_database_meta` capability mutation. `pnpm typecheck` exited 0; the exact seven-file Task 12 frontend matrix passed 169/169 tests; the four exact focused Rust filters passed 2/2, 2/2, 2/2, and 1/1 tests; `pnpm rust:fmt:check` and `pnpm rust:check` exited 0 with the existing 7 check warnings. Whole-plan review corrections were verified by 47/47 focused frontend tests, the project filesystem ownership audit, and all 3 database export lifecycle/error tests. The fresh full `pnpm test` passed 247 files / 1403 tests, and the fresh serial `pnpm rust:test --lib -- --test-threads=1` passed 1114/1114 tests. That historical `pnpm verify` run timed out during non-serial Rust testing and reported 7 resource-mutation failures; Fix round 1 superseded this result.
-
-Historical broad Task 12 and final-review evidence (2026-08-07): the binding-aware TypeScript and attributed-command Rust policy audit passed 57/57 tests after RED fixtures proved alias/namespace blindness, local-decoy false positives, mixed-call underchecking, non-command masking, and duplicate-command ambiguity. Resource mutation hooks are now scoped per `ProjectState`, while filesystem fault/rollback/remove controls are scoped per `ProjectFilesystemCoordinator`; the two owner-isolation tests passed, three default-thread resource-mutation runs and the serial control each passed 19/19, and filesystem tests passed 22/22. The exact seven-file matrix passed 174/174, the final fresh full frontend rerun passed 247 files / 1409 tests, serial full Rust lib passed 1116/1116, typecheck/fmt/check passed with the existing 7 check warnings, and focused Rust identity filters passed 2/2, 2/2, 2/2, and 1/1. The latest full `pnpm verify` did not pass: frontend verification completed, then four Rust integration binaries failed to link with Windows `LINK : fatal error LNK1102: 内存不足`; no test failure was reported.
-
-Historical focused Task 12 evidence — Fix round 2 (2026-08-07): TypeScript invoke policy now resolves actual import symbols through `Program`/`TypeChecker`, and named, namespace, and mixed lexical-shadowing fixtures pass. Rust command identity policy now uses `syn` syntax plus parsed `generate_handler!` registration tokens rather than raw-source regex; block-comment, raw-string, commented-parameter, non-command-decoy, duplicate-command, and production inventory tests pass. Policy passed 54/54, the Rust source-audit module passed 8/8, the exact seven-file frontend matrix passed 171/171, and typecheck/fmt/check passed with the existing 7 check warnings. Fix round 2 itself did not rerun full suites; the subsequent final-review verification produced the then-current 1409-test frontend baseline above, while `pnpm verify` was non-passing at that historical checkpoint because of the same four Windows `LNK1102` integration-link failures.
-
-Final Node Architecture closure evidence (2026-08-09): all items above are implemented and covered by focused authority, source-audit, strict-wire, compiler, runtime, scheduler, Catalog, trace, projection, and frontend parser tests. A fresh controller rerun of the exact sequence passed `pnpm typecheck`; `pnpm test` at 250/250 files and 1568/1568 tests; `pnpm rust:fmt:check`; `pnpm rust:check` with 9 existing warnings; serial `pnpm rust:test --lib -- --test-threads=1` at 1340/1340; and canonical `pnpm verify` with exit 0 and no `LNK1102`. Supplemental canonical matrices passed 1375 `yssbi` tests and 43 `yss-sci` tests (1 ignored diagnostic dump). `git diff --check` exited 0, the Git index was empty, and the final status contained only intended unstaged/untracked Task 18/user and Task 19 work.
-
-- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；
-
-```
-"/*#__PURE__*/"
-
-in "node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-editor-container/data-grid-container.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
-node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-grid-overlay-editor/private/markdown-overlay-editor-style.js (2:13): A comment
-```
-
 - [ ] 工作表中的 worksheet 的存储形式是使用目前这种形式好还是使用 event, function 形式要好，请分析：在这里我可以要求 name 禁止使用特殊符号
 - [ ] 测试中我认为不应该有软件的版本号信息，因为软件版本号会更新，请分析
 - [ ] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
@@ -345,6 +324,15 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 ## v1.0 待办
 
 ### 窗口跨窗同步
+
+- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；
+
+```
+"/*#__PURE__*/"
+
+in "node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-editor-container/data-grid-container.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-grid-overlay-editor/private/markdown-overlay-editor-style.js (2:13): A comment
+```
 
 > **8.6 多 Editor 窗口跨窗同步（v1.0 设计 / 待办）**：**基线（已实现）**：副窗口 `#/editor`、per-label `workbenchLayoutMemento`（`setWorkbenchLayoutWindowScope`）、`useEditorWindowGeometryPersistence`（main → backend / secondary → localStorage）、各窗独立 `layoutStore` + editor grid。主题/设置跨窗；项目/图事件经 Tauri + `ProjectListener` 共享。**layout / open-tabs 跨窗不同步**为当前有意 defer。详见 [`docs/features/WORKBENCH_SATELLITE_WINDOWS.md`](./docs/features/WORKBENCH_SATELLITE_WINDOWS.md) § Secondary Editor Windows / Multi-window sync。
 

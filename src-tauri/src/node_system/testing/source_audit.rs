@@ -37,6 +37,139 @@ fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
+struct ProjectApplicationVersionVisitor<'a> {
+    relative: &'a str,
+    offenders: Vec<String>,
+}
+
+impl ProjectApplicationVersionVisitor<'_> {
+    fn report(&mut self, label: &str, token: &str) {
+        self.offenders
+            .push(format!("{}:{label}:{token}", self.relative));
+    }
+}
+
+fn skip_nested_meta_value(meta: syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
+    if meta.input.peek(Token![=]) {
+        let value = meta.value()?;
+        let _: Expr = value.parse()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        meta.parse_nested_meta(skip_nested_meta_value)?;
+    }
+    Ok(())
+}
+
+fn serde_renames_project_application_version(attribute: &syn::Attribute) -> bool {
+    if !attribute.path().is_ident("serde") {
+        return false;
+    }
+    let mut forbidden = false;
+    let _ = attribute.parse_nested_meta(|meta| {
+        if meta.path.is_ident("rename") && meta.input.peek(Token![=]) {
+            let value = meta.value()?;
+            let rename: syn::LitStr = value.parse()?;
+            forbidden |= rename.value() == "appVersion";
+        } else if meta.path.is_ident("rename") {
+            meta.parse_nested_meta(|direction| {
+                if direction.path.is_ident("serialize") || direction.path.is_ident("deserialize") {
+                    let value = direction.value()?;
+                    let rename: syn::LitStr = value.parse()?;
+                    forbidden |= rename.value() == "appVersion";
+                    Ok(())
+                } else {
+                    skip_nested_meta_value(direction)
+                }
+            })?;
+        } else if meta.path.is_ident("alias") {
+            let value = meta.value()?;
+            let alias: syn::LitStr = value.parse()?;
+            forbidden |= alias.value() == "appVersion";
+        } else {
+            skip_nested_meta_value(meta)?;
+        }
+        Ok(())
+    });
+    forbidden
+}
+
+fn macro_tokens_contain_project_application_version(tokens: TokenStream) -> bool {
+    tokens.into_iter().any(|token| match token {
+        TokenTree::Group(group) => macro_tokens_contain_project_application_version(group.stream()),
+        TokenTree::Ident(ident) => ident == "app_version",
+        TokenTree::Punct(_) | TokenTree::Literal(_) => false,
+    })
+}
+
+impl<'ast> Visit<'ast> for ProjectApplicationVersionVisitor<'_> {
+    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        if ident == "app_version" {
+            self.report("reserved application version identifier", "app_version");
+        }
+        visit::visit_ident(self, ident);
+    }
+
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        if serde_renames_project_application_version(attribute) {
+            self.report("project application version serde rename", "appVersion");
+        } else if !attribute.path().is_ident("serde")
+            && let Meta::List(list) = &attribute.meta
+            && macro_tokens_contain_project_application_version(list.tokens.clone())
+        {
+            self.report("reserved application version identifier", "app_version");
+        }
+        visit::visit_attribute(self, attribute);
+    }
+
+    fn visit_macro(&mut self, mac: &'ast Macro) {
+        if macro_tokens_contain_project_application_version(mac.tokens.clone()) {
+            self.report("reserved application version identifier", "app_version");
+        }
+        visit::visit_macro(self, mac);
+    }
+}
+
+fn inspect_project_application_version_source(relative: &str, source: &str) -> Vec<String> {
+    let syntax = syn::parse_file(source)
+        .unwrap_or_else(|error| panic!("failed to parse {relative}: {error}"));
+    let mut visitor = ProjectApplicationVersionVisitor {
+        relative,
+        offenders: Vec::new(),
+    };
+    visitor.visit_file(&syntax);
+    visitor.offenders.sort();
+    visitor.offenders.dedup();
+    visitor.offenders
+}
+
+fn audit_project_application_version_tree(crate_root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    for root in [crate_root.join("src"), crate_root.join("tests")] {
+        if root.exists() {
+            rust_sources(&root, &mut files);
+        }
+    }
+    files.sort();
+
+    let mut offenders = Vec::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(crate_root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative == format!("src/{AUDIT_SOURCE}") {
+            continue;
+        }
+        offenders.extend(inspect_project_application_version_source(
+            &relative,
+            &std::fs::read_to_string(path).unwrap(),
+        ));
+    }
+    offenders.sort();
+    offenders.dedup();
+    offenders
+}
+
 fn record(offenders: &mut Vec<String>, relative: &str, line: usize, label: &str, token: &str) {
     offenders.push(format!("{relative}:{line}:{label}:{token}"));
 }
@@ -5357,6 +5490,389 @@ include!("current/generated_values.rs");"#,
         offenders.join("\n")
     );
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_application_version_audit_rejects_a_struct_field() {
+    let source = "struct ProjectManifest { app_version: String }";
+    let offenders = inspect_project_application_version_source("fixture.rs", source);
+    assert_offender(
+        &offenders,
+        "fixture.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_global_type_paths() {
+    let source = "type RuntimeRelease = crate::app_version::Manifest;";
+    let offenders = inspect_project_application_version_source("src/runtime/types.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/types.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_member_access() {
+    let source = r#"
+struct ProjectManifest;
+fn read(value: ProjectManifest) { let _ = value.app_version; }
+"#;
+    let offenders = inspect_project_application_version_source("src/project/reader.rs", source);
+    assert_offender(
+        &offenders,
+        "src/project/reader.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_an_explicit_path() {
+    let source = "use crate::project::app_version;";
+    let offenders = inspect_project_application_version_source("src/project/imports.rs", source);
+    assert_offender(
+        &offenders,
+        "src/project/imports.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_item_declarations_exposed_by_glob() {
+    let source = r#"
+mod release { pub fn app_version() {} }
+pub use release::*;
+"#;
+    let offenders = inspect_project_application_version_source("src/project/mod.rs", source);
+    assert_offender(
+        &offenders,
+        "src/project/mod.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_tracks_cross_file_wildcard_exposure() {
+    let root = audit_fixture("project-application-version-wildcard");
+    write_fixture(
+        &root,
+        "src/project/mod.rs",
+        "mod release; pub use release::*;",
+    );
+    write_fixture(&root, "src/project/release.rs", "pub fn app_version() {}");
+
+    let offenders = audit_project_application_version_tree(&root);
+    assert_offender(
+        &offenders,
+        "src/project/release.rs",
+        "reserved application version identifier",
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_application_version_audit_rejects_project_field_serde_rename() {
+    let source = r#"
+struct Manifest {
+    #[serde(rename = "appVersion")]
+    release: String,
+}
+"#;
+    let offenders = inspect_project_application_version_source("src/project/manifest.rs", source);
+    assert_offender(
+        &offenders,
+        "src/project/manifest.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_cross_file_wildcard_declarations() {
+    let root = audit_fixture("global-wildcard-reserved-declaration");
+    write_fixture(&root, "src/export.rs", "pub fn app_version() {}");
+    write_fixture(&root, "src/runtime/mod.rs", "pub use crate::export::*;");
+
+    let offenders = audit_project_application_version_tree(&root);
+    assert_offender(
+        &offenders,
+        "src/export.rs",
+        "reserved application version identifier",
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_application_version_audit_rejects_global_import_and_call_paths() {
+    let source = r#"
+use external_runtime::app_version;
+fn read() { app_version(); }
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/consumer.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/consumer.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_global_items() {
+    for source in ["fn app_version() {}", "pub fn app_version() {}"] {
+        let offenders =
+            inspect_project_application_version_source("src/runtime/version.rs", source);
+        assert_offender(
+            &offenders,
+            "src/runtime/version.rs",
+            "reserved application version identifier",
+        );
+    }
+}
+
+#[test]
+fn project_application_version_audit_rejects_global_locals() {
+    let source = "fn read() { let app_version = 1; let _ = app_version; }";
+    let offenders = inspect_project_application_version_source("src/runtime/consumer.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/consumer.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_global_serde_rename() {
+    let source = r#"
+struct ExternalRuntimeDto {
+    #[serde(rename = "appVersion")]
+    release: String,
+}
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/dto.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/dto.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_identifiers_in_nested_macro_tokens() {
+    let source = "fn register() { generate!(outer(inner(app_version))); }";
+    let offenders = inspect_project_application_version_source("src/runtime/macros.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/macros.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_identifiers_in_attribute_macro_tokens() {
+    let source = r#"
+#[runtime_resource(scope(app_version), nested(deeper(app_version)))]
+fn register() {}
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/attributes.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/attributes.rs",
+        "reserved application version identifier",
+    );
+}
+
+#[test]
+fn project_application_version_audit_allows_attribute_macro_decoys() {
+    let source = r#"
+#[runtime_resource(scope(runtime_version), label = "app_version")]
+fn register() {}
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/attributes.rs", source);
+    assert!(
+        offenders.is_empty(),
+        "attribute macro decoys must be allowed:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_container_serde_rename() {
+    let source = r#"
+#[serde(rename = "appVersion")]
+struct RuntimeInfo { release: String }
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/container.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/container.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_variant_serde_rename() {
+    let source = r#"
+enum RuntimeEvent {
+    #[serde(rename = "appVersion")]
+    Release,
+}
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/variant.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/variant.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_directional_field_serde_rename() {
+    let source = r#"
+struct RuntimeInfo {
+    #[serde(rename(serialize = "appVersion", deserialize = "runtimeVersion"))]
+    release: String,
+}
+"#;
+    let offenders =
+        inspect_project_application_version_source("src/runtime/directional.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/directional.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_rejects_serde_alias() {
+    let source = r#"
+struct RuntimeInfo {
+    #[serde(alias = "appVersion")]
+    release: String,
+}
+"#;
+    let offenders = inspect_project_application_version_source("src/runtime/alias.rs", source);
+    assert_offender(
+        &offenders,
+        "src/runtime/alias.rs",
+        "project application version serde rename",
+    );
+}
+
+#[test]
+fn project_application_version_audit_finds_serde_names_after_unrelated_metadata() {
+    for source in [
+        r#"struct RuntimeInfo {
+            #[serde(skip_serializing_if = "Option::is_none", rename = "appVersion")]
+            release: Option<String>,
+        }"#,
+        r#"struct RuntimeInfo<T> {
+            #[serde(bound(serialize = "T: serde::Serialize"), alias = "appVersion")]
+            release: T,
+        }"#,
+        r#"struct RuntimeInfo {
+            #[serde(other, rename(deserialize = "appVersion", serialize = "runtimeVersion"))]
+            release: String,
+        }"#,
+    ] {
+        let offenders =
+            inspect_project_application_version_source("src/runtime/serde_order.rs", source);
+        assert_offender(
+            &offenders,
+            "src/runtime/serde_order.rs",
+            "project application version serde rename",
+        );
+    }
+}
+
+#[test]
+fn project_application_version_audit_allows_unrelated_serde_metadata() {
+    let source = r#"
+struct RuntimeInfo<T> {
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        bound(serialize = "T: serde::Serialize"),
+        rename = "runtimeVersion",
+        alias = "version"
+    )]
+    release: Option<T>,
+}
+"#;
+    let offenders =
+        inspect_project_application_version_source("src/runtime/serde_decoys.rs", source);
+    assert!(
+        offenders.is_empty(),
+        "unrelated serde metadata must be allowed:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn project_application_version_audit_reports_file_and_symbol_without_a_guessed_line() {
+    let source =
+        "// app_version in a comment is inert\n\nstruct RuntimeInfo { app_version: String }";
+    let offenders = inspect_project_application_version_source("fixture.rs", source);
+    assert_eq!(
+        offenders,
+        ["fixture.rs:reserved application version identifier:app_version"]
+    );
+}
+
+#[test]
+fn project_application_version_audit_allows_semantic_version_decoys() {
+    let source = r#"
+struct ProjectManifest { schema_version: u32 }
+struct ExternalRuntimeInfo { runtime_version: String, version: String }
+struct ExchangeManifest { version: u32 }
+const APP_VERSION: &str = "0.2.7";
+fn inspect(project: ProjectManifest, runtime: ExternalRuntimeInfo, exchange: ExchangeManifest) {
+    let _ = (
+        project.schema_version,
+        runtime.runtime_version,
+        runtime.version,
+        exchange.version,
+        APP_VERSION,
+    );
+}
+"#;
+    let offenders = inspect_project_application_version_source("fixture.rs", source);
+    assert!(
+        offenders.is_empty(),
+        "semantic version decoys must be allowed:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn project_application_version_audit_allows_macro_and_serde_decoys() {
+    let source = r#"
+#[serde(rename_all = "camelCase")]
+struct RuntimeInfo {
+    #[serde(
+        rename(serialize = "runtimeVersion", deserialize = "version"),
+        alias = "runtimeVersion"
+    )]
+    runtime_version: String,
+}
+fn register() { generate!(outer(inner(runtime_version)), "app_version"); }
+"#;
+    let offenders = inspect_project_application_version_source("fixture.rs", source);
+    assert!(
+        offenders.is_empty(),
+        "macro and serde decoys must be allowed:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn project_application_version_audit_keeps_project_rust_sources_clean() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let offenders = audit_project_application_version_tree(crate_root);
+    assert!(
+        offenders.is_empty(),
+        "project application-version metadata violations:\n{}",
+        offenders.join("\n")
+    );
 }
 
 fn audit_fixture(name: &str) -> PathBuf {
