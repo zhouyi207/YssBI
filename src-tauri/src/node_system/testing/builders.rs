@@ -10,6 +10,7 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, ExecutionPlan, GraphOutputRef, KernelHandle, PlanResult,
+    PlannedPublication,
 };
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
@@ -226,12 +227,20 @@ impl TestProvider {
             .outputs
             .get(output_index)
             .unwrap_or_else(|| panic!("lowered output order did not match protocol"));
+        let name = name.into();
+        let graph_output = GraphOutputRef {
+            graph_path: plan.provenance.graph_path.clone(),
+            port: PortAddress::declared(node.id, port.clone()),
+        };
         plan.results = vec![PlanResult {
-            name: name.into(),
-            output: GraphOutputRef {
-                graph_path: plan.provenance.graph_path.clone(),
-                port: PortAddress::declared(node.id, port.clone()),
-            },
+            name: name.clone(),
+            output: graph_output.clone(),
+            value: output.value,
+        }]
+        .into_boxed_slice();
+        plan.publications = vec![PlannedPublication::GraphResult {
+            name,
+            output: graph_output,
             value: output.value,
         }]
         .into_boxed_slice();

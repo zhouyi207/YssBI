@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { TraceService } from '@/services/nodeSystem/traceService';
-import type { TraceDecimalString, TraceRecordDto } from '@/shared/types/dto/trace';
+import type { TraceDecimalString, TraceSpanDto } from '@/shared/types/dto/trace';
+
+export interface TraceSpanProjection extends TraceSpanDto {
+  durationNanos: bigint;
+}
 
 export interface TraceQueryError {
   code: string;
@@ -10,11 +14,11 @@ export interface TraceQueryError {
 }
 
 export interface GraphTraceDetailsState {
-  graphTraces: TraceRecordDto[];
+  graphTraces: TraceSpanProjection[];
   graphLoading: boolean;
   graphError: TraceQueryError | null;
   selectedRunId: TraceDecimalString | null;
-  runTrace: TraceRecordDto[];
+  runTrace: TraceSpanProjection[];
   runLoading: boolean;
   runError: TraceQueryError | null;
   selectedRunNotFound: boolean;
@@ -24,11 +28,11 @@ export interface GraphTraceDetailsState {
 
 export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState {
   const activeProjectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const [graphTraces, setGraphTraces] = useState<TraceRecordDto[]>([]);
+  const [graphTraces, setGraphTraces] = useState<TraceSpanProjection[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<TraceQueryError | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<TraceDecimalString | null>(null);
-  const [runTrace, setRunTrace] = useState<TraceRecordDto[]>([]);
+  const [runTrace, setRunTrace] = useState<TraceSpanProjection[]>([]);
   const [runLoading, setRunLoading] = useState(false);
   const [runError, setRunError] = useState<TraceQueryError | null>(null);
   const graphRequestGeneration = useRef(0);
@@ -63,7 +67,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
         if (completion === 'staleProject') setGraphLoading(false);
         return;
       }
-      setGraphTraces(traces);
+      setGraphTraces(traces.map(projectTraceSpan));
       setGraphLoading(false);
     } catch (caught) {
       const completion = classifyQueryCompletion(
@@ -116,7 +120,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
         if (completion === 'staleProject') setRunLoading(false);
         return;
       }
-      setRunTrace(traces);
+      setRunTrace(traces.map(projectTraceSpan));
       setRunLoading(false);
     } catch (caught) {
       const completion = classifyQueryCompletion(
@@ -165,6 +169,13 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
     selectedRunNotFound: runError?.code === 'trace_not_found',
     refresh,
     selectRun,
+  };
+}
+
+export function projectTraceSpan(span: TraceSpanDto): TraceSpanProjection {
+  return {
+    ...span,
+    durationNanos: BigInt(span.finishedAt) - BigInt(span.startedAt),
   };
 }
 

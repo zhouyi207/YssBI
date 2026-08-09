@@ -369,6 +369,24 @@ fn pattern_is_identity_sink(pattern: &Pat) -> bool {
     }
 }
 
+fn is_pin_definition_name_base(expr: &Expr) -> bool {
+    match expr {
+        Expr::Path(path) => path
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "pin_definition"),
+        Expr::Field(field) => {
+            matches!(&field.member, Member::Named(name) if name == "definition")
+                && expr_mentions(&field.base, &["pin"])
+        }
+        Expr::Paren(expression) => is_pin_definition_name_base(&expression.expr),
+        Expr::Group(expression) => is_pin_definition_name_base(&expression.expr),
+        Expr::Reference(expression) => is_pin_definition_name_base(&expression.expr),
+        _ => false,
+    }
+}
+
 fn expression_is_identity_sink(expr: &Expr) -> bool {
     match expr {
         Expr::Path(path) => path.path.segments.last().is_some_and(|segment| {
@@ -817,7 +835,7 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
 
     fn visit_expr_field(&mut self, node: &'ast syn::ExprField) {
         if matches!(&node.member, Member::Named(name) if name == "name")
-            && expr_mentions(&node.base, &["definition", "pin_definition"])
+            && is_pin_definition_name_base(&node.base)
         {
             self.report("display-name pin matching", "pin.definition.name");
         }
@@ -896,6 +914,265 @@ fn audit_source_tree(root: &Path, excluded_relative: Option<&str>) -> Vec<String
         }
         let source = std::fs::read_to_string(&file).unwrap();
         inspect_source(&relative, &source, &mut offenders);
+    }
+    offenders.sort();
+    offenders.dedup();
+    offenders
+}
+
+fn is_legacy_parameter_types_path(value: &str) -> bool {
+    value
+        .replace('\\', "/")
+        .split('/')
+        .any(|component| component == "parameter_types")
+}
+
+fn include_tokens_contain_parameter_types(tokens: TokenStream) -> bool {
+    let mut fragments = Vec::new();
+    collect_include_fragments(tokens, &mut fragments);
+    fragments
+        .iter()
+        .any(|fragment| fragment == "parameter_types")
+}
+
+struct Task19BoundaryVisitor<'a> {
+    relative: &'a str,
+    source: &'a str,
+    offenders: &'a mut Vec<String>,
+}
+
+impl Task19BoundaryVisitor<'_> {
+    fn report(&mut self, label: &str, token: &str) {
+        record(
+            self.offenders,
+            self.relative,
+            line_for(self.source, token),
+            label,
+            token,
+        );
+    }
+}
+
+impl<'ast> Visit<'ast> for Task19BoundaryVisitor<'_> {
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        let mut paths = Vec::new();
+        expand_use_tree(&item.tree, &mut Vec::new(), &mut paths);
+        if paths
+            .iter()
+            .any(|path| path.iter().any(|segment| segment == "parameter_types"))
+        {
+            self.report("legacy parameter_types path", "parameter_types");
+        }
+        if paths
+            .iter()
+            .any(|path| path.iter().any(|segment| segment == "LocalizationBundle"))
+        {
+            self.report("legacy localization symbol", "LocalizationBundle");
+        }
+        visit::visit_item_use(self, item);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        if path.segments.len() > 1
+            && path
+                .segments
+                .iter()
+                .any(|segment| segment.ident == "parameter_types")
+        {
+            self.report("legacy parameter_types path", "parameter_types");
+        }
+        if path
+            .segments
+            .iter()
+            .any(|segment| segment.ident == "LocalizationBundle")
+        {
+            self.report("legacy localization symbol", "LocalizationBundle");
+        }
+        visit::visit_path(self, path);
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if item.ident == "parameter_types" {
+            self.report("legacy parameter_types module", "parameter_types");
+        }
+        for attribute in &item.attrs {
+            if !attribute.path().is_ident("path") {
+                continue;
+            }
+            let Some(path) =
+                attribute
+                    .meta
+                    .require_name_value()
+                    .ok()
+                    .and_then(|value| match &value.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(path),
+                            ..
+                        }) => Some(path.value()),
+                        _ => None,
+                    })
+            else {
+                continue;
+            };
+            if is_legacy_parameter_types_path(&path) {
+                self.report("legacy parameter_types module path", &path);
+            }
+        }
+        visit::visit_item_mod(self, item);
+    }
+
+    fn visit_macro(&mut self, mac: &'ast Macro) {
+        let name = mac
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string());
+        if matches!(
+            name.as_deref(),
+            Some("include" | "include_str" | "include_bytes")
+        ) && include_tokens_contain_parameter_types(mac.tokens.clone())
+        {
+            self.report("legacy parameter_types include", "parameter_types");
+        }
+        visit::visit_macro(self, mac);
+    }
+
+    fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        if item.ident == "LocalizationBundle" {
+            self.report("legacy localization trait", "LocalizationBundle");
+        }
+        visit::visit_item_trait(self, item);
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        let implements_lookup = item.trait_.as_ref().is_some_and(|(_, path, _)| {
+            path.segments
+                .last()
+                .is_some_and(|segment| segment.ident == "LocalizationLookup")
+        });
+        if implements_lookup && !item.generics.params.is_empty() {
+            self.report("blanket localization bridge", "LocalizationLookup");
+        }
+        visit::visit_item_impl(self, item);
+    }
+
+    fn visit_field(&mut self, field: &'ast syn::Field) {
+        if field
+            .ident
+            .as_ref()
+            .is_some_and(|ident| ident == "persistence")
+        {
+            for attribute in &field.attrs {
+                if attribute.path().is_ident("serde") {
+                    let mut has_default = false;
+                    let _ = attribute.parse_nested_meta(|meta| {
+                        has_default |= meta.path.is_ident("default");
+                        Ok(())
+                    });
+                    if has_default {
+                        self.report("history persistence serde default", "persistence");
+                    }
+                }
+            }
+        }
+        visit::visit_field(self, field);
+    }
+
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if item.sig.ident == "legacy_history_transaction_defaults_to_in_memory_until_save" {
+            self.report(
+                "legacy history persistence acceptance test",
+                "legacy_history_transaction_defaults_to_in_memory_until_save",
+            );
+        }
+        visit::visit_item_fn(self, item);
+    }
+
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        if attribute.path().is_ident("doc")
+            && attribute
+                .meta
+                .require_name_value()
+                .ok()
+                .and_then(|value| match &value.value {
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(value),
+                        ..
+                    }) => Some(value.value()),
+                    _ => None,
+                })
+                .is_some_and(|value| value.contains("Compatibility boundary"))
+        {
+            self.report(
+                "localization compatibility marker",
+                "Compatibility boundary",
+            );
+        }
+        visit::visit_attribute(self, attribute);
+    }
+}
+
+fn audit_task19_boundary_source(relative: &str, source: &str, offenders: &mut Vec<String>) {
+    if relative.starts_with("node_system/parameter_types/") {
+        record(
+            offenders,
+            relative,
+            1,
+            "legacy parameter_types source directory",
+            "node_system/parameter_types/",
+        );
+    }
+    match syn::parse_file(source) {
+        Ok(file) => Task19BoundaryVisitor {
+            relative,
+            source,
+            offenders,
+        }
+        .visit_file(&file),
+        Err(error) => record(
+            offenders,
+            relative,
+            1,
+            "Rust source parse failure",
+            &error.to_string(),
+        ),
+    }
+}
+
+fn audit_task19_boundary_tree(root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    rust_sources(root, &mut files);
+    files.sort();
+    let mut offenders = Vec::new();
+    for file in files {
+        let relative = file
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if relative == AUDIT_SOURCE {
+            continue;
+        }
+        let source = std::fs::read_to_string(&file).unwrap();
+        audit_task19_boundary_source(&relative, &source, &mut offenders);
+    }
+    offenders.sort();
+    offenders.dedup();
+    offenders
+}
+
+fn audit_task19_boundary_crate(crate_root: &Path) -> Vec<String> {
+    let mut offenders = Vec::new();
+    for source_root in ["src", "tests"] {
+        let root = crate_root.join(source_root);
+        if !root.is_dir() {
+            continue;
+        }
+        offenders.extend(
+            audit_task19_boundary_tree(&root)
+                .into_iter()
+                .map(|offender| format!("{source_root}/{offender}")),
+        );
     }
     offenders.sort();
     offenders.dedup();
@@ -4553,6 +4830,160 @@ fn production_has_one_node_registry_and_no_label_identity() {
 }
 
 #[test]
+fn task19_boundary_audit_rejects_semantic_legacy_forms() {
+    let source = r#"
+#[path = "parameter_types/mod.rs"]
+mod parameter_types;
+use crate::node_system::parameter_types::dataframe::FilterPredicate;
+/// Compatibility boundary retained temporarily.
+pub trait LocalizationBundle {}
+impl<T: LocalizationBundle + ?Sized> LocalizationLookup for T {}
+struct ProjectHistoryTransaction {
+    #[serde(default)]
+    persistence: HistoryPersistencePolicy,
+}
+#[test]
+fn legacy_history_transaction_defaults_to_in_memory_until_save() {}
+"#;
+    let mut offenders = Vec::new();
+    audit_task19_boundary_source("node_system/legacy.rs", source, &mut offenders);
+
+    for label in [
+        "legacy parameter_types module",
+        "legacy parameter_types path",
+        "legacy localization trait",
+        "legacy localization symbol",
+        "blanket localization bridge",
+        "history persistence serde default",
+        "legacy history persistence acceptance test",
+        "localization compatibility marker",
+    ] {
+        assert_offender(&offenders, "node_system/legacy.rs", label);
+    }
+}
+
+#[test]
+fn task19_boundary_audit_rejects_aliased_path_module() {
+    let source = r##"
+// #[path = "node_system/parameter_types/comment.rs"]
+const DECOY: &str = r#"#[path = "node_system/parameter_types/raw.rs"]"#;
+#[path = "../node_system/parameter_types/legacy.rs"]
+mod renamed_boundary;
+"##;
+    let mut offenders = Vec::new();
+    audit_task19_boundary_source("aliased_path.rs", source, &mut offenders);
+
+    assert_offender(
+        &offenders,
+        "aliased_path.rs",
+        "legacy parameter_types module path",
+    );
+    assert_eq!(
+        offenders.len(),
+        1,
+        "decoys must remain inert: {offenders:#?}"
+    );
+}
+
+#[test]
+fn task19_boundary_audit_rejects_only_parameter_type_include_macros() {
+    for (path, source) in [
+        (
+            "include.rs",
+            r#"include!("../node_system/parameter_types/generated.rs");"#,
+        ),
+        (
+            "include_str.rs",
+            r#"include_str!(concat!("../node_system/", "parameter_types/schema.rs"));"#,
+        ),
+        (
+            "include_bytes.rs",
+            r#"include_bytes!(nested_path!("../node_system", "parameter_types/data.bin"));"#,
+        ),
+    ] {
+        let mut offenders = Vec::new();
+        audit_task19_boundary_source(path, source, &mut offenders);
+        assert_offender(&offenders, path, "legacy parameter_types include");
+    }
+
+    let decoys = r##"
+// include!("node_system/parameter_types/comment.rs");
+const RAW: &str = r#"include_str!("node_system/parameter_types/raw.rs")"#;
+fixture!("node_system/parameter_types/inert.rs");
+include!("node_system/protocol/dataframe.rs");
+"##;
+    let mut offenders = Vec::new();
+    audit_task19_boundary_source("include_decoys.rs", decoys, &mut offenders);
+    assert!(
+        offenders.is_empty(),
+        "comments, strings, unrelated macros, and current includes must remain inert:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
+fn task19_boundary_audit_rejects_aliased_and_nested_use_paths() {
+    let source = r#"
+use crate::node_system::{parameter_types::{dataframe::FilterPredicate as Predicate}};
+type LegacyAssociated<T> = <T as crate::node_system::parameter_types::Legacy>::Output;
+"#;
+    let mut offenders = Vec::new();
+    audit_task19_boundary_source("nested_use.rs", source, &mut offenders);
+
+    assert_offender(&offenders, "nested_use.rs", "legacy parameter_types path");
+}
+
+#[test]
+fn task19_boundary_audit_scans_integration_tests_but_not_generated_roots() {
+    let root = audit_fixture("task19-crate-roots");
+    write_fixture(
+        &root,
+        "src/decoys.rs",
+        r##"// use crate::node_system::parameter_types::Comment;
+const RAW: &str = r#"include!("node_system/parameter_types/raw.rs")"#;"##,
+    );
+    write_fixture(
+        &root,
+        "tests/legacy_boundary.rs",
+        "use yssbi::node_system::parameter_types::Legacy;",
+    );
+    write_fixture(
+        &root,
+        "target/generated.rs",
+        "use yssbi::node_system::parameter_types::GeneratedDecoy;",
+    );
+    write_fixture(
+        &root,
+        "gen/generated.rs",
+        "use yssbi::node_system::parameter_types::GeneratedDecoy;",
+    );
+
+    let offenders = audit_task19_boundary_crate(&root);
+    assert_offender(
+        &offenders,
+        "tests/legacy_boundary.rs",
+        "legacy parameter_types path",
+    );
+    assert_eq!(
+        offenders.len(),
+        1,
+        "only the integration-test source root must be audited: {offenders:#?}"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn production_has_no_task19_legacy_boundaries() {
+    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let offenders = audit_task19_boundary_crate(crate_root);
+    assert!(
+        offenders.is_empty(),
+        "Task 19 legacy boundary violations:\n{}",
+        offenders.join("\n")
+    );
+}
+
+#[test]
 fn audit_scans_every_rust_file_without_test_filename_exclusions() {
     let root = audit_fixture("scope");
     write_fixture(&root, "outside/legacy.rs", "pub struct GraphInstance;");
@@ -4598,6 +5029,32 @@ fn audit_rejects_grouped_uses_label_construction_and_source_bypasses() {
     assert_offender(&offenders, "identity.rs", "category/name identity");
     assert_offender(&offenders, "bypass.rs", "legacy module path attribute");
     assert_offender(&offenders, "bypass.rs", "legacy module include");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn display_name_pin_audit_distinguishes_pin_identity_from_other_definitions() {
+    let root = audit_fixture("display-name-pin-matching");
+    write_fixture(
+        &root,
+        "pin_identity.rs",
+        "fn legacy(pin: Pin) { let _ = pin.definition.name; }",
+    );
+    write_fixture(
+        &root,
+        "command_metadata.rs",
+        "fn command(definition: TauriCommandDefinition) { let _ = definition.name; }",
+    );
+
+    let offenders = audit_source_tree(&root, None);
+    assert_offender(&offenders, "pin_identity.rs", "display-name pin matching");
+    assert!(
+        offenders
+            .iter()
+            .all(|offender| !offender.starts_with("command_metadata.rs:")),
+        "non-pin definition names must not be classified as pin identity:\n{}",
+        offenders.join("\n")
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 

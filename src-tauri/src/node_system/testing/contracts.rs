@@ -1,12 +1,12 @@
 use crate::commands::command_node_system::ExecuteGraphResultDto;
-use crate::commands::command_trace::TraceRecordDto;
+use crate::commands::command_trace::TraceSpanDto;
 use crate::commands::node_system_execution_dto::{
     EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionDemandDto, RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
 };
 use crate::event::{Event, EventProject, ProjectionStatusDto, ResourceMutationResultDto};
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, ProjectSessionId,
-    ResourceVersionSet, SpanEvent, SpanKind, SpanStatus, TraceRecord,
+    CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
+    ProjectSessionId, ResourceVersionSet, RunId, SpanId, SpanKind, SpanOutcome, TraceSpan,
 };
 use crate::node_system::catalog::{
     CatalogResourceEntry, CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
@@ -229,6 +229,7 @@ fn contract_correlation(registry: &NodeRegistry) -> CorrelationContext {
         node_id: None,
         node_type_id: None,
         parent_call: None,
+        trace_parent_span_id: None,
     }
 }
 
@@ -456,14 +457,18 @@ fn fingerprint_wire_from_production_encoders(
         kind: RunEventKind::RunStarted,
     }))
     .expect("production RunEvent DTO must serialize");
-    let trace = serde_json::to_value(TraceRecordDto::from(TraceRecord {
-        sequence: 1,
-        event: SpanEvent {
-            kind: SpanKind::Run,
-            status: SpanStatus::Started,
-            correlation,
-            fields: BTreeMap::new(),
-        },
+    let trace = serde_json::to_value(TraceSpanDto::from(TraceSpan {
+        span_id: SpanId::new(1).unwrap(),
+        parent_span_id: None,
+        run_id: None,
+        operation_id: None,
+        activation_id: None,
+        attempt_id: None,
+        kind: SpanKind::Snapshot,
+        started_at: MonotonicTimestamp::new(1).unwrap(),
+        finished_at: MonotonicTimestamp::new(2).unwrap(),
+        outcome: SpanOutcome::Success,
+        correlation,
     }))
     .expect("production trace DTO must serialize");
 
@@ -492,6 +497,43 @@ fn fingerprint_wire_from_production_encoders(
             "trace",
         ),
     })
+}
+
+fn trace_span_wire_contract(registry: &NodeRegistry) -> Value {
+    let unsafe_id = 9_007_199_254_740_993_u64;
+    let run_id = RunId::new(unsafe_id + 4);
+    let correlation = contract_correlation(registry).for_run(run_id, None);
+    let run_span_id = SpanId::new(unsafe_id).unwrap();
+    let run = TraceSpan {
+        span_id: run_span_id,
+        parent_span_id: None,
+        run_id: Some(run_id),
+        operation_id: None,
+        activation_id: None,
+        attempt_id: None,
+        kind: SpanKind::Run,
+        started_at: MonotonicTimestamp::new(unsafe_id).unwrap(),
+        finished_at: MonotonicTimestamp::new(unsafe_id + 5).unwrap(),
+        outcome: SpanOutcome::Success,
+        correlation: correlation.clone(),
+    };
+    let cleanup = TraceSpan {
+        span_id: SpanId::new(unsafe_id + 1).unwrap(),
+        parent_span_id: Some(run_span_id),
+        run_id: Some(run_id),
+        operation_id: None,
+        activation_id: None,
+        attempt_id: None,
+        kind: SpanKind::Cleanup,
+        started_at: MonotonicTimestamp::new(unsafe_id + 2).unwrap(),
+        finished_at: MonotonicTimestamp::new(unsafe_id + 3).unwrap(),
+        outcome: SpanOutcome::Cleanup {
+            error_count: unsafe_id + 4,
+            panicking: true,
+        },
+        correlation,
+    };
+    json!([TraceSpanDto::from(run), TraceSpanDto::from(cleanup)])
 }
 
 fn contracts() -> BTreeMap<&'static str, Value> {
@@ -524,6 +566,7 @@ fn contracts() -> BTreeMap<&'static str, Value> {
             function_editor_projection_contract(),
         ),
         ("fingerprint-wire.json", fingerprint_wire),
+        ("trace-span-wire.json", trace_span_wire_contract(&registry)),
         ("project-events.json", project_events_contract()),
         ("execution-wire.json", execution_wire_contract(&registry)),
     ])
@@ -789,6 +832,7 @@ fn checked_in_node_system_contracts_match_rust() {
         "catalog-search-wire.json",
         "project-events.json",
         "execution-wire.json",
+        "trace-span-wire.json",
     ] {
         assert!(
             contracts.contains_key(required),

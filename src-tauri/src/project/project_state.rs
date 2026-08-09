@@ -8813,7 +8813,8 @@ mod run_parameter_tests {
     };
     use crate::node_system::plan::{
         CompiledParameterHandle, ExecutionPlan, ExecutionSemanticsVersion, GraphOutputRef,
-        OperationStableId, PlannedKernel, PlannedOperation, PlannedRetry, WorkloadClass,
+        OperationStableId, PlannedKernel, PlannedOperation, PlannedPublication, PlannedRetry,
+        WorkloadClass,
     };
     use crate::node_system::protocol::{CachePolicy, NodeTypeId, ParameterKey, PortKey, Value};
     use crate::project::GraphDocumentKind;
@@ -9143,12 +9144,18 @@ mod run_parameter_tests {
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Operation(OperationIndex::new(1)),
         ]));
+        let adf_output = GraphOutputRef {
+            graph_path: plan.provenance.graph_path.clone(),
+            port: PortAddress::declared(adf_id, PortKey::new("result").unwrap()),
+        };
         plan.results = Box::new([PlanResult {
             name: "adf".into(),
-            output: GraphOutputRef {
-                graph_path: plan.provenance.graph_path.clone(),
-                port: PortAddress::declared(adf_id, PortKey::new("result").unwrap()),
-            },
+            output: adf_output.clone(),
+            value: ValueRef::new(1),
+        }]);
+        plan.publications = Box::new([PlannedPublication::GraphResult {
+            name: "adf".into(),
+            output: adf_output,
             value: ValueRef::new(1),
         }]);
 
@@ -9319,12 +9326,18 @@ mod run_parameter_tests {
             ControlStep::Operation(OperationIndex::new(1)),
             ControlStep::Operation(OperationIndex::new(2)),
         ]));
+        let var_output = GraphOutputRef {
+            graph_path: plan.provenance.graph_path.clone(),
+            port: PortAddress::declared(var_id, PortKey::new("summary").unwrap()),
+        };
         plan.results = Box::new([PlanResult {
             name: "var".into(),
-            output: GraphOutputRef {
-                graph_path: plan.provenance.graph_path.clone(),
-                port: PortAddress::declared(var_id, PortKey::new("summary").unwrap()),
-            },
+            output: var_output.clone(),
+            value: ValueRef::new(2),
+        }]);
+        plan.publications = Box::new([PlannedPublication::GraphResult {
+            name: "var".into(),
+            output: var_output,
             value: ValueRef::new(2),
         }]);
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();

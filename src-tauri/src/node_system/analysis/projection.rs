@@ -21,17 +21,6 @@ pub trait LocalizationLookup {
     fn text(&self, key: &I18nKey, arguments: &DiagnosticArguments) -> Box<str>;
 }
 
-/// Compatibility boundary for existing catalog implementations.
-pub trait LocalizationBundle {
-    fn text(&self, key: &I18nKey, arguments: &DiagnosticArguments) -> Box<str>;
-}
-
-impl<T: LocalizationBundle + ?Sized> LocalizationLookup for T {
-    fn text(&self, key: &I18nKey, arguments: &DiagnosticArguments) -> Box<str> {
-        LocalizationBundle::text(self, key, arguments)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectionBasis {
@@ -437,7 +426,7 @@ pub struct DataframeColumnOptionDto {
 pub struct FilterColumnOptionDto {
     pub name: Box<str>,
     pub data_type: RelationalScalarTypeDto,
-    pub operators: Vec<crate::node_system::parameter_types::dataframe::FilterOperator>,
+    pub operators: Vec<crate::node_system::protocol::dataframe::FilterOperator>,
     pub literal_types: Vec<FilterLiteralTypeDto>,
 }
 
@@ -1189,7 +1178,7 @@ fn project_schema_aware_editor(
     source_schema: Option<&ResolvedSchemaFact>,
     unavailable_reason: Box<str>,
 ) -> Option<SchemaAwareParameterEditorDto> {
-    use crate::node_system::parameter_types::dataframe::{FilterPredicate, ProjectColumns};
+    use crate::node_system::protocol::dataframe::{FilterPredicate, ProjectColumns};
 
     let available = source_schema.is_some();
     let unavailable_reason = (!available).then_some(unavailable_reason);
@@ -1265,8 +1254,8 @@ fn filter_literal_types(scalar_type: RelationalScalarType) -> Vec<FilterLiteralT
 
 fn filter_operators(
     scalar_type: RelationalScalarType,
-) -> Vec<crate::node_system::parameter_types::dataframe::FilterOperator> {
-    use crate::node_system::parameter_types::dataframe::FilterOperator::*;
+) -> Vec<crate::node_system::protocol::dataframe::FilterOperator> {
+    use crate::node_system::protocol::dataframe::FilterOperator::*;
     match scalar_type {
         RelationalScalarType::Boolean => vec![Equal, NotEqual, IsNull, IsNotNull],
         RelationalScalarType::Int64

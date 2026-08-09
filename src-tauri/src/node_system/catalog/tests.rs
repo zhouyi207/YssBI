@@ -2,7 +2,7 @@ use super::localization::{Aliases, Text};
 use super::*;
 use crate::node_system::analysis::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
-    EditorGraphProjectionDto, LocalizationBundle, NodeDiagnostic, ResourceKey, ResourceVersion,
+    EditorGraphProjectionDto, LocalizationLookup, NodeDiagnostic, ResourceKey, ResourceVersion,
 };
 use crate::node_system::compiler::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompileCancellationToken, CompilerDiagnosticDefinitionError,
@@ -689,7 +689,7 @@ fn builtin_factory_hides_raw_assembly_and_registry_shortcuts() {
 fn builtin_nominal_validator_registration_propagates_duplicate_failure() {
     let mut builder = crate::node_system::registry::NodeRegistryBuilder::new();
     let project_columns = crate::node_system::protocol::TypeId::new(
-        crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+        crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
     )
     .unwrap();
     builder

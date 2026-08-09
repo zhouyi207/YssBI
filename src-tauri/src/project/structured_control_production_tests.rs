@@ -132,7 +132,8 @@ impl BranchOutcome {
 
     fn normalized_completion_sequence(&self) -> Vec<(NodeId, NodeTypeId, usize)> {
         let mut activation_ordinals = BTreeMap::new();
-        self.completed_operations
+        let mut normalized = self
+            .completed_operations
             .iter()
             .map(|operation| {
                 let next_ordinal = activation_ordinals.len();
@@ -145,7 +146,23 @@ impl BranchOutcome {
                     activation_ordinal,
                 )
             })
-            .collect()
+            .collect::<Vec<_>>();
+        let mut start = 0;
+        while start < normalized.len() {
+            if !normalized[start].1.as_str().starts_with("yssbi.constant.") {
+                start += 1;
+                continue;
+            }
+            let mut end = start + 1;
+            while end < normalized.len()
+                && normalized[end].1.as_str().starts_with("yssbi.constant.")
+            {
+                end += 1;
+            }
+            normalized[start..end].sort();
+            start = end;
+        }
+        normalized
     }
 }
 

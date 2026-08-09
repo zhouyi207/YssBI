@@ -326,7 +326,6 @@ pub struct ProjectHistoryTransaction {
     pub history_id: HistoryEntryId,
     pub caused_by: OperationId,
     pub changes: Vec<ResourcePatch>,
-    #[serde(default)]
     pub persistence: HistoryPersistencePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variable_effect_snapshots: Option<VariableEffectHistorySnapshots>,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, SpanEvent, SpanKind,
-    SpanStatus, TraceSink,
+    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, SYSTEM_TRACE_CLOCK,
+    SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
@@ -13,7 +13,7 @@ use crate::node_system::protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 struct NoFunctions;
@@ -919,10 +919,14 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
         }
     }
     #[derive(Default)]
-    struct Trace(Mutex<Vec<SpanEvent>>);
+    struct Trace(Mutex<Vec<TraceSpan>>);
     impl TraceSink for Trace {
-        fn record(&self, event: SpanEvent) {
-            self.0.lock().unwrap().push(event);
+        fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+            SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+        }
+
+        fn complete_span(&self, span: TraceSpan) {
+            self.0.lock().unwrap().push(span);
         }
     }
 
@@ -943,7 +947,17 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
         operations[index].source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(node));
         operations[index].source_node_type_id = NodeTypeId::new("yssbi.debug.print").unwrap();
     }
-    let execution_plan = plan(operations, 3, &[]);
+    let mut execution_plan = plan(operations, 3, &[]);
+    execution_plan.effect_dependencies = Box::new([
+        EffectDependency {
+            before: OperationIndex::new(3),
+            after: OperationIndex::new(5),
+        },
+        EffectDependency {
+            before: OperationIndex::new(5),
+            after: OperationIndex::new(6),
+        },
+    ]);
     let events = Events::default();
     let trace = Trace::default();
     let kernels = build_builtin_kernel_registry();
@@ -974,7 +988,9 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
         .lock()
         .unwrap()
         .iter()
-        .filter(|event| event.kind == SpanKind::Operation && event.status == SpanStatus::Succeeded)
+        .filter(|span| {
+            span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Success
+        })
         .filter_map(|event| event.correlation.node_id.and_then(label))
         .collect::<Vec<_>>();
     assert_eq!(event_order, ["First", "Second", "Third"]);
@@ -1063,10 +1079,31 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
         execution_plan.operations[print_index].inputs[0].bound_value,
         None
     );
-    assert!(execution_plan.value_dependencies.iter().any(|dependency| {
-        dependency.source == execution_plan.operations[constant_index].outputs[0].value
-            && dependency.destination == execution_plan.operations[print_index].inputs[0].value
-    }));
+    let print_input = execution_plan.operations[print_index].inputs[0].value;
+    let mut reachable =
+        BTreeSet::from([execution_plan.operations[constant_index].outputs[0].value]);
+    loop {
+        let previous_len = reachable.len();
+        for dependency in &execution_plan.value_dependencies {
+            if reachable.contains(&dependency.source) {
+                reachable.insert(dependency.destination);
+            }
+        }
+        for operation in &execution_plan.operations {
+            if matches!(operation.kernel, PlannedKernel::Adapter(_))
+                && operation
+                    .inputs
+                    .iter()
+                    .any(|input| reachable.contains(&input.value))
+            {
+                reachable.extend(operation.outputs.iter().map(|output| output.value));
+            }
+        }
+        if reachable.len() == previous_len {
+            break;
+        }
+    }
+    assert!(reachable.contains(&print_input));
 
     let capture_handle = handle("test.capture.print", KernelHandle::new);
     execution_plan.operations[print_index].kernel = PlannedKernel::Native(capture_handle.clone());

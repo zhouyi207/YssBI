@@ -63,12 +63,17 @@ enum AnchorPosition {
 struct PlacementAnchor {
     region: RegionPath,
     position: AnchorPosition,
+    operation_block: Option<usize>,
 }
 
 impl PlacementAnchor {
     fn dominates(&self, consumer: &OperationPlacement) -> bool {
         if !self.region.is_prefix_of(&consumer.region) {
             return false;
+        }
+        if self.region == consumer.region && self.operation_block == Some(consumer.operation_block)
+        {
+            return true;
         }
         match (
             &self.position,
@@ -87,6 +92,7 @@ impl PlacementAnchor {
 struct OperationPlacement {
     region: RegionPath,
     step: usize,
+    operation_block: usize,
 }
 
 #[derive(Default)]
@@ -111,6 +117,7 @@ impl ControlFlowIndex {
         let StructuredControlRegion::Sequence(steps) = region else {
             return;
         };
+        let mut operation_block = 0;
         for (step_index, step) in steps.iter().enumerate() {
             match step {
                 ControlStep::Operation(operation) => {
@@ -119,6 +126,7 @@ impl ControlFlowIndex {
                         OperationPlacement {
                             region: path.clone(),
                             step: step_index,
+                            operation_block,
                         },
                     );
                     if let Some(planned) = operations.get(operation.index()) {
@@ -128,12 +136,16 @@ impl ControlFlowIndex {
                                 PlacementAnchor {
                                     region: path.clone(),
                                     position: AnchorPosition::AfterStep(step_index),
+                                    operation_block: Some(operation_block),
                                 },
                             );
                         }
                     }
                 }
-                ControlStep::Region(child) => self.index_child(child, path, step_index, operations),
+                ControlStep::Region(child) => {
+                    self.index_child(child, path, step_index, operations);
+                    operation_block += 1;
+                }
             }
         }
     }
@@ -148,6 +160,7 @@ impl ControlFlowIndex {
         let after_region = PlacementAnchor {
             region: parent.clone(),
             position: AnchorPosition::AfterStep(parent_step),
+            operation_block: None,
         };
         match region {
             StructuredControlRegion::Sequence(_) => self.index_sequence(
@@ -185,6 +198,7 @@ impl ControlFlowIndex {
                         PlacementAnchor {
                             region: body_path.clone(),
                             position: AnchorPosition::Prelude,
+                            operation_block: None,
                         },
                     );
                     self.definitions
@@ -201,6 +215,41 @@ impl ControlFlowIndex {
     }
 }
 
+fn normalize_structured_sequences(region: &mut StructuredControlRegion) {
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            for step in steps {
+                if let ControlStep::Region(child) = step {
+                    normalize_structured_sequences(child);
+                }
+            }
+        }
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            ensure_sequence(then_region);
+            ensure_sequence(else_region);
+            normalize_structured_sequences(then_region);
+            normalize_structured_sequences(else_region);
+        }
+        StructuredControlRegion::Loop { body, .. } => {
+            ensure_sequence(body);
+            normalize_structured_sequences(body);
+        }
+        StructuredControlRegion::Call { .. } => {}
+    }
+}
+
+fn ensure_sequence(region: &mut StructuredControlRegion) {
+    if !matches!(region, StructuredControlRegion::Sequence(_)) {
+        let original = std::mem::replace(region, StructuredControlRegion::Sequence(Box::new([])));
+        *region =
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Region(Box::new(original))]));
+    }
+}
+
 fn insert_materialization_adapters(
     provenance: &crate::node_system::analysis::CompileProvenance,
     value_count: &mut u32,
@@ -209,12 +258,8 @@ fn insert_materialization_adapters(
     dependencies: &mut Vec<ValueDependency>,
     root_region: &mut StructuredControlRegion,
 ) -> Result<(), DemandPlanError> {
-    if !matches!(root_region, StructuredControlRegion::Sequence(_)) {
-        let original =
-            std::mem::replace(root_region, StructuredControlRegion::Sequence(Box::new([])));
-        *root_region =
-            StructuredControlRegion::Sequence(Box::new([ControlStep::Region(Box::new(original))]));
-    }
+    ensure_sequence(root_region);
+    normalize_structured_sequences(root_region);
     let control_flow = ControlFlowIndex::build(root_region, operations);
     let mut source_anchors = control_flow.definitions.clone();
     for source in value_sources {
@@ -224,6 +269,7 @@ fn insert_materialization_adapters(
                 PlacementAnchor {
                     region: RegionPath::default(),
                     position: AnchorPosition::Prelude,
+                    operation_block: None,
                 },
             );
         }
@@ -563,13 +609,16 @@ fn inject_placement_steps(
         .get(&PlacementAnchor {
             region: path.clone(),
             position: AnchorPosition::Prelude,
+            operation_block: None,
         })
         .into_iter()
         .flatten()
         .copied()
         .map(ControlStep::Operation)
         .collect::<Vec<_>>();
+    let mut operation_block = 0;
     for (step_index, mut step) in std::mem::take(steps).into_vec().into_iter().enumerate() {
+        let anchor_block = matches!(step, ControlStep::Operation(_)).then_some(operation_block);
         if let ControlStep::Region(child) = &mut step {
             match child.as_mut() {
                 StructuredControlRegion::Sequence(_) => inject_placement_steps(
@@ -605,8 +654,12 @@ fn inject_placement_steps(
         if let Some(operations) = operations_by_anchor.get(&PlacementAnchor {
             region: path.clone(),
             position: AnchorPosition::AfterStep(step_index),
+            operation_block: anchor_block,
         }) {
             expanded.extend(operations.iter().copied().map(ControlStep::Operation));
+        }
+        if anchor_block.is_none() {
+            operation_block += 1;
         }
     }
     *steps = expanded.into_boxed_slice();
@@ -1272,6 +1325,160 @@ mod materialization_tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn adapters_are_placed_for_branch_consumers_in_a_direct_loop_body() {
+        let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
+        let mut operations = vec![
+            operation(
+                "stable.producer",
+                1,
+                native("test.producer"),
+                None,
+                ValueRef::new(0),
+            ),
+            operation(
+                "stable.then",
+                2,
+                native("test.then"),
+                Some(ValueRef::new(1)),
+                ValueRef::new(5),
+            ),
+            operation(
+                "stable.else",
+                3,
+                native("test.else"),
+                Some(ValueRef::new(2)),
+                ValueRef::new(6),
+            ),
+        ];
+        let mut dependencies = vec![
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(1),
+            },
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(2),
+            },
+        ];
+        let mut region = StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Loop {
+                body: Box::new(StructuredControlRegion::If {
+                    condition: ValueRef::new(3),
+                    then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                        ControlStep::Operation(OperationIndex::new(1)),
+                    ]))),
+                    else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                        ControlStep::Operation(OperationIndex::new(2)),
+                    ]))),
+                    results: Box::new([]),
+                }),
+                carried: Box::new([]),
+                continue_condition: ValueRef::new(4),
+                max_iterations: 1,
+            })),
+        ]));
+        let provenance = crate::node_system::analysis::CompileProvenance {
+            project_session_id: ProjectSessionId::new("test-session"),
+            graph_path: GraphResourcePath("events/direct-loop-body".into()),
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(1),
+                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: Default::default(),
+            },
+            compile_id: CompileId::new(1),
+        };
+        let mut value_count = 7;
+
+        insert_materialization_adapters(
+            &provenance,
+            &mut value_count,
+            &mut operations,
+            &[
+                PlanValueSource::ExternalInput(
+                    ValueRef::new(3),
+                    OutputProduction::FullyMaterialized,
+                ),
+                PlanValueSource::ExternalInput(
+                    ValueRef::new(4),
+                    OutputProduction::FullyMaterialized,
+                ),
+            ],
+            &mut dependencies,
+            &mut region,
+        )
+        .expect("direct loop-body branches have indexed consumer placements");
+
+        let control_flow = ControlFlowIndex::build(&region, &operations);
+        let adapter_indices = operations
+            .iter()
+            .enumerate()
+            .filter_map(|(index, operation)| {
+                matches!(operation.kernel, PlannedKernel::Adapter(_))
+                    .then_some(OperationIndex::new(index as u32))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(adapter_indices.len(), 3);
+        assert!(
+            adapter_indices
+                .iter()
+                .all(|index| control_flow.operations.contains_key(index))
+        );
+    }
+
+    #[test]
+    fn adapter_insertion_accepts_reverse_list_order_within_an_operation_block() {
+        let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
+        let mut operations = vec![
+            operation(
+                "stable.producer",
+                1,
+                native("test.producer"),
+                None,
+                ValueRef::new(0),
+            ),
+            operation(
+                "stable.consumer",
+                2,
+                native("test.consumer"),
+                Some(ValueRef::new(1)),
+                ValueRef::new(2),
+            ),
+        ];
+        let mut dependencies = vec![ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        }];
+        let mut region = StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(0)),
+        ]));
+        let provenance = crate::node_system::analysis::CompileProvenance {
+            project_session_id: ProjectSessionId::new("test-session"),
+            graph_path: GraphResourcePath("events/reverse-operation-block".into()),
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(1),
+                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: Default::default(),
+            },
+            compile_id: CompileId::new(1),
+        };
+        let mut value_count = 3;
+
+        insert_materialization_adapters(
+            &provenance,
+            &mut value_count,
+            &mut operations,
+            &[],
+            &mut dependencies,
+            &mut region,
+        )
+        .expect("data dependencies order operations within one scheduler block");
     }
 
     #[test]

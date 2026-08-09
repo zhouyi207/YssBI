@@ -2,9 +2,9 @@
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TraceDecimalString, TraceRecordDto } from '@/shared/types/dto/trace';
+import type { TraceDecimalString, TraceSpanDto } from '@/shared/types/dto/trace';
 import { TraceService } from '@/services/nodeSystem/traceService';
-import { useGraphTraceDetails } from './useGraphTraceDetails';
+import { projectTraceSpan, useGraphTraceDetails } from './useGraphTraceDetails';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -49,14 +49,23 @@ function deferred<T>() {
 }
 
 function trace(
-  sequence: TraceDecimalString,
+  spanId: TraceDecimalString,
   runId: TraceDecimalString,
   graphPath = 'events/Main.yssbi-event',
-): TraceRecordDto {
+  startedAt: TraceDecimalString = '9007199254740993',
+  finishedAt: TraceDecimalString = '9007199254741003',
+): TraceSpanDto {
   return {
-    sequence,
+    spanId,
+    parentSpanId: null,
+    runId,
+    operationId: null,
+    activationId: null,
+    attemptId: null,
     kind: 'run',
-    status: 'succeeded',
+    startedAt,
+    finishedAt,
+    outcome: 'success',
     correlation: {
       projectSessionId: 'project-session-1',
       graphPath,
@@ -70,7 +79,6 @@ function trace(
       nodeTypeId: null,
       parentCall: null,
     },
-    fields: {},
   };
 }
 
@@ -146,7 +154,7 @@ describe('useGraphTraceDetails', () => {
 
   it('refreshes the graph list and discards an older graph completion', async () => {
     const initial = [trace('1', '11')];
-    const older = deferred<TraceRecordDto[]>();
+    const older = deferred<TraceSpanDto[]>();
     const newest = [trace('3', '13')];
     vi.mocked(TraceService.listGraphTraces)
       .mockResolvedValueOnce(initial)
@@ -160,10 +168,24 @@ describe('useGraphTraceDetails', () => {
     await act(async () => {
       await current?.refresh();
     });
-    expect(current?.graphTraces).toEqual(newest);
+    expect(current?.graphTraces).toEqual(newest.map(projectTraceSpan));
 
     await act(async () => older.resolve([trace('2', '12')]));
-    expect(current?.graphTraces).toEqual(newest);
+    expect(current?.graphTraces).toEqual(newest.map(projectTraceSpan));
+  });
+
+  it('projects nonnegative bigint durations without changing opaque IDs', async () => {
+    const span = trace('9007199254740993', '11', undefined, '90071992547409930', '90071992547410055');
+    vi.mocked(TraceService.listGraphTraces).mockResolvedValueOnce([span]);
+
+    await renderHook();
+
+    expect(current?.graphTraces[0]).toMatchObject({
+      spanId: '9007199254740993',
+      startedAt: '90071992547409930',
+      finishedAt: '90071992547410055',
+      durationNanos: 125n,
+    });
   });
 
   it('loads a selected run and clears its details when selection is cleared', async () => {
@@ -199,8 +221,8 @@ describe('useGraphTraceDetails', () => {
   });
 
   it('suppresses stale-project completions from graph and run queries', async () => {
-    const graphRequest = deferred<TraceRecordDto[]>();
-    const runRequest = deferred<TraceRecordDto[]>();
+    const graphRequest = deferred<TraceSpanDto[]>();
+    const runRequest = deferred<TraceSpanDto[]>();
     vi.mocked(TraceService.listGraphTraces)
       .mockReturnValueOnce(graphRequest.promise)
       .mockResolvedValueOnce([]);
@@ -226,8 +248,8 @@ describe('useGraphTraceDetails', () => {
   });
 
   it('releases loading without publishing stale-project graph or run rejections', async () => {
-    const graphRequest = deferred<TraceRecordDto[]>();
-    const runRequest = deferred<TraceRecordDto[]>();
+    const graphRequest = deferred<TraceSpanDto[]>();
+    const runRequest = deferred<TraceSpanDto[]>();
     vi.mocked(TraceService.listGraphTraces)
       .mockReturnValueOnce(graphRequest.promise)
       .mockResolvedValueOnce([]);
@@ -257,7 +279,7 @@ describe('useGraphTraceDetails', () => {
   });
 
   it('re-arms the graph query when project identity changes without remounting', async () => {
-    const staleRequest = deferred<TraceRecordDto[]>();
+    const staleRequest = deferred<TraceSpanDto[]>();
     const currentRecords = [trace('2', '22')];
     vi.mocked(TraceService.listGraphTraces)
       .mockReturnValueOnce(staleRequest.promise)
@@ -282,7 +304,7 @@ describe('useGraphTraceDetails', () => {
     });
 
     await act(async () => staleRequest.resolve([trace('1', '11')]));
-    expect(current?.graphTraces).toEqual(currentRecords);
+    expect(current?.graphTraces).toEqual(currentRecords.map(projectTraceSpan));
     expect(TraceService.listGraphTraces).toHaveBeenCalledTimes(2);
   });
 
@@ -299,7 +321,7 @@ describe('useGraphTraceDetails', () => {
       await current?.selectRun('31');
     });
 
-    expect(current?.graphTraces).toEqual(graphRecords);
+    expect(current?.graphTraces).toEqual(graphRecords.map(projectTraceSpan));
     expect(current).toMatchObject({
       selectedRunId: '31',
       runTrace: [],

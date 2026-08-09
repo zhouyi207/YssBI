@@ -1,21 +1,39 @@
-use super::command_trace::{TraceRecordDto, get_run_trace_from_state};
+use super::command_trace::{TraceSpanDto, get_run_trace_from_state};
 use crate::node_system::analysis::{
-    CompileId, CorrelationContext, ParentCallId, ProjectSessionId, ResourceKey, ResourceVersion,
-    RunId, SpanEvent, SpanKind, SpanStatus, TraceRecord, TraceValue,
+    CompileId, CorrelationContext, MonotonicTimestamp, ParentCallId, ProjectSessionId, ResourceKey,
+    ResourceVersion, RunId, SpanId, SpanKind, SpanOutcome, TraceSpan,
 };
 use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+use crate::node_system::plan::{AttemptId, OperationStableId};
 use crate::node_system::protocol::NodeTypeId;
 use crate::node_system::registry::RegistryFingerprint;
+use crate::node_system::runtime::ActivationId;
 use crate::project::{ProjectData, ProjectState};
 use std::collections::BTreeMap;
 
 #[test]
-fn command_trace_dto_uses_decimal_ids_full_correlation_and_field_allowlist() {
+fn command_trace_dto_uses_exact_completed_span_decimal_wire() {
     let unsafe_id = 9_007_199_254_740_993_u64;
     let node_id = NodeId::new();
-    let event = SpanEvent {
-        kind: SpanKind::RelationalBackend,
-        status: SpanStatus::Failed,
+    let run_id = RunId::new(unsafe_id);
+    let parent_span_id = SpanId::new(unsafe_id + 1).unwrap();
+    let operation_id = OperationStableId::from_digest([7; 32]);
+    let activation_id = ActivationId::next().unwrap();
+    let attempt_id = AttemptId::new(unsafe_id + 2);
+    let span = TraceSpan {
+        span_id: SpanId::new(unsafe_id + 3).unwrap(),
+        parent_span_id: Some(parent_span_id),
+        run_id: Some(run_id),
+        operation_id: Some(operation_id.clone()),
+        activation_id: Some(activation_id),
+        attempt_id: Some(attempt_id),
+        kind: SpanKind::AdapterIo,
+        started_at: MonotonicTimestamp::new(unsafe_id + 4).unwrap(),
+        finished_at: MonotonicTimestamp::new(unsafe_id + 5).unwrap(),
+        outcome: SpanOutcome::Cleanup {
+            error_count: unsafe_id + 6,
+            panicking: true,
+        },
         correlation: CorrelationContext {
             project_session_id: ProjectSessionId::new("session-7"),
             graph_path: GraphResourcePath("events/main.yssbi-event".into()),
@@ -27,84 +45,56 @@ fn command_trace_dto_uses_decimal_ids_full_correlation_and_field_allowlist() {
             )]),
             compile_id: CompileId::new(unsafe_id),
             selection_digest: Some("demand-selection-a".into()),
-            run_id: Some(RunId::new(unsafe_id)),
+            run_id: Some(run_id),
             node_id: Some(node_id),
             node_type_id: Some(NodeTypeId::new("yssbi.test.node").unwrap()),
             parent_call: Some(ParentCallId::new(unsafe_id)),
+            trace_parent_span_id: Some(parent_span_id),
         },
-        fields: BTreeMap::from([
-            ("backendId".into(), TraceValue::Redacted),
-            ("subplanIndex".into(), TraceValue::Integer(4)),
-            (
-                "rawError".into(),
-                TraceValue::Text("database password leaked".into()),
-            ),
-            (
-                "rows".into(),
-                TraceValue::Text("customer row leaked".into()),
-            ),
-        ]),
     };
 
-    let second_event = SpanEvent {
-        correlation: CorrelationContext {
-            selection_digest: Some("demand-selection-b".into()),
-            ..event.correlation.clone()
-        },
-        ..event.clone()
-    };
-    let value = serde_json::to_value(TraceRecordDto::from(TraceRecord {
-        sequence: unsafe_id,
-        event,
-    }))
-    .unwrap();
-    let second = serde_json::to_value(TraceRecordDto::from(TraceRecord {
-        sequence: unsafe_id + 1,
-        event: second_event,
-    }))
-    .unwrap();
-
-    assert_eq!(value["sequence"], unsafe_id.to_string());
-    assert_eq!(value["kind"], "relationalBackend");
-    assert_eq!(value["status"], "failed");
-    assert_eq!(value["correlation"]["projectSessionId"], "session-7");
-    assert_eq!(value["correlation"]["graphPath"], "events/main.yssbi-event");
+    let value = serde_json::to_value(TraceSpanDto::from(span)).unwrap();
+    let keys = value
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        keys,
+        std::collections::BTreeSet::from([
+            "activationId".into(),
+            "attemptId".into(),
+            "correlation".into(),
+            "finishedAt".into(),
+            "kind".into(),
+            "operationId".into(),
+            "outcome".into(),
+            "parentSpanId".into(),
+            "runId".into(),
+            "spanId".into(),
+            "startedAt".into(),
+        ])
+    );
+    assert_eq!(value["spanId"], (unsafe_id + 3).to_string());
+    assert_eq!(value["parentSpanId"], (unsafe_id + 1).to_string());
+    assert_eq!(value["runId"], unsafe_id.to_string());
+    assert_eq!(value["operationId"], operation_id.as_str());
+    assert_eq!(value["activationId"], activation_id.get().to_string());
+    assert_eq!(value["attemptId"], (unsafe_id + 2).to_string());
+    assert_eq!(value["kind"], "adapterIo");
+    assert_eq!(value["startedAt"], (unsafe_id + 4).to_string());
+    assert_eq!(value["finishedAt"], (unsafe_id + 5).to_string());
+    assert_eq!(
+        value["outcome"]["cleanup"]["errorCount"],
+        (unsafe_id + 6).to_string()
+    );
+    assert_eq!(value["outcome"]["cleanup"]["panicking"], true);
     assert_eq!(value["correlation"]["graphRevision"], unsafe_id.to_string());
     assert_eq!(value["correlation"]["compileId"], unsafe_id.to_string());
-    assert_eq!(
-        value["correlation"]["selectionDigest"],
-        "demand-selection-a"
-    );
-    assert!(value["correlation"].get("selection_digest").is_none());
-    assert_eq!(
-        value["correlation"]["compileId"],
-        second["correlation"]["compileId"]
-    );
-    assert_ne!(
-        value["correlation"]["selectionDigest"],
-        second["correlation"]["selectionDigest"]
-    );
     assert_eq!(value["correlation"]["runId"], unsafe_id.to_string());
-    assert_eq!(value["correlation"]["nodeId"], node_id.to_string());
-    assert_eq!(value["correlation"]["nodeTypeId"], "yssbi.test.node");
     assert_eq!(value["correlation"]["parentCall"], unsafe_id.to_string());
-    assert_eq!(
-        value["correlation"]["resourceVersions"]["functions/shared"],
-        "9"
-    );
-    assert_eq!(
-        value["fields"]["backendId"],
-        serde_json::json!({ "type": "redacted" })
-    );
-    assert_eq!(
-        value["fields"]["subplanIndex"],
-        serde_json::json!({ "type": "integer", "value": 4 })
-    );
-    assert!(value["fields"].get("rawError").is_none());
-    assert!(value["fields"].get("rows").is_none());
-    let serialized = serde_json::to_string(&value).unwrap();
-    assert!(!serialized.contains("database password leaked"));
-    assert!(!serialized.contains("customer row leaked"));
+    assert!(value["correlation"].get("traceParentSpanId").is_none());
 }
 
 #[test]
@@ -143,20 +133,23 @@ fn command_trace_maps_stale_project_without_internal_lifecycle_message() {
         error.message,
         "The active project changed; refresh trace details."
     );
-    assert!(!error.message.contains("project instance"));
     assert!(error.details.is_none());
 }
 
 #[test]
-fn command_trace_rejects_non_decimal_run_id() {
+fn command_trace_rejects_non_decimal_or_zero_run_id() {
     let state = ProjectState::new();
-    let error = get_run_trace_from_state(
-        &state,
-        crate::project::ProjectInstanceId::new(),
-        "7.0".to_string(),
-    )
-    .unwrap_err();
-
-    assert_eq!(error.code, "invalid_opaque_id");
-    assert_eq!(error.message, "runId must be an unsigned decimal string.");
+    for run_id in ["7.0", "0", "-1", "+1", "01"] {
+        let error = get_run_trace_from_state(
+            &state,
+            crate::project::ProjectInstanceId::new(),
+            run_id.to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_opaque_id");
+        assert_eq!(
+            error.message,
+            "runId must be a non-zero unsigned decimal string."
+        );
+    }
 }

@@ -600,6 +600,13 @@ define_compiler_diagnostics! {
         en: "Node lowering hit an internal invariant for {node_type}.",
         zh: "节点类型 {node_type} 的降低触发内部不变量。",
     },
+    LoweringExecutionIdentity {} => {
+        code: "compiler.lowering.execution_identity",
+        message_key: "diagnostics.compiler.lowering.execution_identity",
+        severity: Error,
+        en: "Lowered operation has an invalid execution identity.",
+        zh: "降低后的操作具有无效的执行身份。",
+    },
     LoweringResourceExhausted { node_type } => {
         code: "compiler.lowering.resource_exhausted",
         message_key: "diagnostics.compiler.lowering.resource_exhausted",
@@ -1180,7 +1187,7 @@ mod tests {
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 105);
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 108);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
 
         let codes = COMPILER_DIAGNOSTIC_DEFINITIONS

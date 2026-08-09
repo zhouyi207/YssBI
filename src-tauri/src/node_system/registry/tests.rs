@@ -551,7 +551,7 @@ fn built_in_nominal_types_require_registered_validators() {
     let mut builder = NodeRegistryBuilder::new();
     builder
         .register_provider(provider_with_nominal_type(
-            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
         ))
         .unwrap();
 
@@ -560,7 +560,7 @@ fn built_in_nominal_types_require_registered_validators() {
         Err(NodeRegistrationError::InvalidRegistry(
             RegistryValidationError::MissingNominalValidator(ref value)
         )) if value.as_str()
-            == crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID
+            == crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID
     ));
 }
 
@@ -587,8 +587,8 @@ fn built_in_registry_exposes_strict_dataframe_nominal_validators() {
     let registry = crate::node_system::catalog::build_builtin_node_system()
         .unwrap()
         .registry;
-    let project_type = id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID);
-    let filter_type = id(crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID);
+    let project_type = id(crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID);
+    let filter_type = id(crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID);
 
     assert_eq!(
         registry.validate_nominal_parameter(&project_type, &serde_json::json!(["a"])),

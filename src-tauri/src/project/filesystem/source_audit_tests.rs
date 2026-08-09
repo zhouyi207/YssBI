@@ -190,6 +190,8 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         "julia/worker.rs",
         "log/log_manager.rs",
         "project/project_registry.rs",
+        "node_system/runtime/materialization.rs",
+        "node_system/runtime/spill.rs",
         "sci/backends/julia/bayes/fit.rs",
         "sci/backends/julia/time_series/acf_pacf.rs",
         "window_state/mod.rs",
@@ -264,6 +266,16 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
     ));
     assert!(project_io_is_allowed(
         "database/duckdb_reader.rs",
+        &duckdb_files,
+        &non_project_files,
+    ));
+    assert!(project_io_is_allowed(
+        "node_system/runtime/materialization.rs",
+        &duckdb_files,
+        &non_project_files,
+    ));
+    assert!(project_io_is_allowed(
+        "node_system/runtime/spill.rs",
         &duckdb_files,
         &non_project_files,
     ));

@@ -1,4 +1,4 @@
-use crate::node_system::analysis::{DiagnosticArguments, LocalizationBundle};
+use crate::node_system::analysis::{DiagnosticArguments, LocalizationLookup};
 use crate::node_system::protocol::{I18nKey, NodeTypeId};
 use crate::node_system::registry::{I18nManifest, NodeRegistry};
 use serde::{Deserialize, Serialize};
@@ -627,7 +627,7 @@ impl BuiltinCatalog {
     }
 }
 
-impl LocalizationBundle for BuiltinLocalizationBundle<'_> {
+impl LocalizationLookup for BuiltinLocalizationBundle<'_> {
     fn text(&self, key: &I18nKey, arguments: &DiagnosticArguments) -> Box<str> {
         render_template(&self.catalog.text(&self.locale, key), arguments).into()
     }

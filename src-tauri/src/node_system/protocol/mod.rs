@@ -1,5 +1,6 @@
 #![deny(unused_must_use)]
 
+pub mod dataframe;
 mod identity;
 mod model;
 mod parameter;

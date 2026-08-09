@@ -43,7 +43,9 @@ enum TraceOutcomeDto {
     Cancellation,
     Timeout,
     Retry,
+    NotReached,
     Cleanup {
+        #[serde(rename = "errorCount")]
         error_count: String,
         panicking: bool,
     },
@@ -108,6 +110,7 @@ impl From<SpanOutcome> for TraceOutcomeDto {
             SpanOutcome::Cancellation => Self::Cancellation,
             SpanOutcome::Timeout => Self::Timeout,
             SpanOutcome::Retry => Self::Retry,
+            SpanOutcome::NotReached => Self::NotReached,
             SpanOutcome::Cleanup {
                 error_count,
                 panicking,
@@ -156,9 +159,12 @@ fn trace_error(error: TraceQueryError) -> AppError {
 }
 
 fn parse_run_id(run_id: &str) -> Result<RunId, AppError> {
-    run_id
-        .parse::<u64>()
-        .ok()
+    let canonical_decimal = !run_id.is_empty()
+        && run_id.bytes().all(|byte| byte.is_ascii_digit())
+        && (run_id == "0" || !run_id.starts_with('0'));
+    canonical_decimal
+        .then(|| run_id.parse::<u64>().ok())
+        .flatten()
         .and_then(|id| RunId::try_new(id).ok())
         .ok_or_else(|| {
             AppError::new(

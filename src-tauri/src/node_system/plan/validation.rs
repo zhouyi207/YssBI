@@ -1580,8 +1580,9 @@ impl fmt::Display for PlanValidationErrors {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "execution plan has {} structural error(s)",
-            self.0.len()
+            "execution plan has {} structural error(s): {:?}",
+            self.0.len(),
+            self.0
         )
     }
 }

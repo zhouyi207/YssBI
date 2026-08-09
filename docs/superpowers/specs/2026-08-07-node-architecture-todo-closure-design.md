@@ -1,7 +1,7 @@
 # Node Architecture TODO Closure Design
 
 **Date:** 2026-08-07
-**Status:** Approved
+**Status:** Implemented and verified (2026-08-09)
 **Scope:** Close every unchecked architecture item in `TODO.md:293-316` and remove the Windows linker-memory exception from the canonical verification workflow.
 
 ## 1. Goals
@@ -60,9 +60,9 @@ Independent test or audit work may run in parallel inside a batch, but analysis/
 
 ## 4. Canonical verification stabilization
 
-The four integration binaries that failed with Windows `LNK1102` all link successfully with one Cargo build job. The canonical scripts will therefore pass Cargo's cross-platform `--jobs 1` option in `rust:test` and `rust:test:sci`.
+The four integration binaries that failed with Windows `LNK1102` all link successfully with one Cargo build job. The canonical scripts pass Cargo's cross-platform `--jobs 1` option in `rust:test` and `rust:test:sci`.
 
-This is preferred over POSIX-only environment assignment and over globally limiting every development build in `.cargo/config.toml`. `rust:check` and ordinary development builds remain free to use normal parallelism.
+The Rust test suite also owns process-global test hooks, compile counters, deadlines, and filesystem bindings. `.cargo/config.toml` therefore sets `RUST_TEST_THREADS=1` for Cargo-launched test harnesses. This does not limit `rust:check` or ordinary build parallelism, preserves filtered `pnpm rust:test` arguments, and makes canonical verification deterministic on Windows without a POSIX-only script assignment.
 
 Verification proceeds from the four previously failing binaries to `pnpm verify:rust`, then full `pnpm verify`.
 
@@ -135,7 +135,7 @@ struct ExecutionDemand {
 }
 ```
 
-The scheduler creates result sources and emits `ValueReady` only for requested outputs, the selected default graph result, or an independent Pin preview demand. Intermediate operation outputs remain internal and are released when no longer required.
+The compiler finalizes requested outputs and selected default graph results as `PlannedPublication::GraphResult`, or an independent Pin preview demand as `PlannedPublication::PinPreview`. `ExecutionPlan.publications` is the sole authority for scheduler result-source publication; intermediate operation outputs remain internal and are released when no longer required.
 
 Pin preview remains an independent demand path with project/run identity checks and stale-settlement zero effects.
 
@@ -296,3 +296,5 @@ Acceptance requires:
 - stale lifecycle completion remains zero-effect;
 - no generated build artifacts are added;
 - the Git index remains empty and no repository-history operation is performed.
+
+Final acceptance evidence (2026-08-09): a fresh controller rerun of the exact sequence passed `pnpm typecheck`, 250/250 frontend files with 1568/1568 tests, `pnpm rust:fmt:check`, `pnpm rust:check`, and the serial Rust library suite at 1340/1340. Canonical `pnpm verify` exited 0 with no `LNK1102`; its Rust matrices included 1375 passing `yssbi` tests and 43 passing `yss-sci` tests with one intentionally ignored diagnostic dump. `git diff --check` exited 0 and the Git index remained empty.

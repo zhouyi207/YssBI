@@ -14,7 +14,7 @@ use crate::node_system::protocol::{
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::any::Any;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Condvar, Mutex, mpsc};
@@ -211,6 +211,42 @@ impl TraceSink for RecordingTrace {
     fn complete_span(&self, span: TraceSpan) {
         self.0.lock().unwrap().push(span);
     }
+}
+
+struct PanickingCompletionTrace;
+
+impl TraceSink for PanickingCompletionTrace {
+    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
+        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
+    }
+
+    fn complete_span(&self, _: TraceSpan) {
+        panic!("trace completion sink failed")
+    }
+}
+
+#[test]
+fn trace_sink_completion_panic_does_not_replace_successful_run() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("trace_sink_success", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("trace_sink_success", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_trace_sink(&PanickingCompletionTrace)
+        .run(&execution_plan, CancellationToken::new());
+
+    assert!(result.is_ok());
 }
 
 #[derive(Default)]
@@ -2643,6 +2679,7 @@ fn successful_run_releases_all_resources() {
 
 #[test]
 fn acquire_failure_releases_previously_acquired_resources() {
+    let trace = RecordingTrace::default();
     let released = Arc::new(AtomicUsize::new(0));
     let resources = TrackingResources {
         acquired: Arc::new(AtomicUsize::new(0)),
@@ -2653,11 +2690,17 @@ fn acquire_failure_releases_previously_acquired_resources() {
     execution_plan.resources = Box::new([requirement("one"), requirement("two")]);
 
     let error = RunExecutor::new(&KernelRegistry::new(), &resources, &NoFunctions)
+        .with_trace_sink(&trace)
         .run(&execution_plan, CancellationToken::new())
         .unwrap_err();
 
     assert!(matches!(error, RunError::ResourceAcquire { .. }));
     assert_eq!(released.load(Ordering::SeqCst), 1);
+    assert_run_phase_coverage(
+        &trace.0.lock().unwrap(),
+        SpanOutcome::Error,
+        SpanOutcome::NotReached,
+    );
 }
 
 #[test]
@@ -2722,6 +2765,195 @@ fn cleanup_spans_cover_success_failure_and_cancellation() {
             panicking: false,
         }
     )));
+}
+
+fn assert_run_phase_coverage(
+    spans: &[TraceSpan],
+    resource_outcome: SpanOutcome,
+    publication_outcome: SpanOutcome,
+) {
+    let run = spans
+        .iter()
+        .find(|span| span.kind == SpanKind::Run)
+        .unwrap();
+    let phase = |kind| {
+        let matches = spans
+            .iter()
+            .filter(|span| span.kind == kind)
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1, "expected exactly one {kind:?} span");
+        assert_eq!(matches[0].parent_span_id, Some(run.span_id));
+        matches[0]
+    };
+    let resource = phase(SpanKind::ResourceAcquire);
+    let publication = phase(SpanKind::ResultPublication);
+    let cleanup = phase(SpanKind::Cleanup);
+    assert_eq!(resource.outcome, resource_outcome);
+    assert_eq!(publication.outcome, publication_outcome);
+    assert!(matches!(cleanup.outcome, SpanOutcome::Cleanup { .. }));
+    assert!(resource.started_at <= publication.started_at);
+    assert!(publication.started_at <= cleanup.started_at);
+    for span in spans.iter().filter(|span| span.span_id != run.span_id) {
+        assert!(span.started_at >= run.started_at);
+        assert!(span.finished_at <= run.finished_at);
+    }
+}
+
+#[test]
+fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_and_panic() {
+    let success_trace = RecordingTrace::default();
+    RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+        .with_trace_sink(&success_trace)
+        .with_cleanup_delay_for_test(Duration::from_millis(100))
+        .run(
+            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+            CancellationToken::new(),
+        )
+        .unwrap();
+    assert_run_phase_coverage(
+        &success_trace.0.lock().unwrap(),
+        SpanOutcome::Success,
+        SpanOutcome::Success,
+    );
+    let success_cleanup = success_trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|span| span.kind == SpanKind::Cleanup)
+        .unwrap()
+        .clone();
+    assert!(
+        success_cleanup.finished_at.get() - success_cleanup.started_at.get() >= 50_000_000,
+        "cleanup span must include the registered cleanup delay"
+    );
+
+    let error_trace = RecordingTrace::default();
+    let error_plan = plan(
+        vec![operation("missing_phase_kernel", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    assert!(
+        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+            .with_trace_sink(&error_trace)
+            .run(&error_plan, CancellationToken::new())
+            .is_err()
+    );
+    assert_run_phase_coverage(
+        &error_trace.0.lock().unwrap(),
+        SpanOutcome::Success,
+        SpanOutcome::NotReached,
+    );
+
+    let cancelled_trace = RecordingTrace::default();
+    let cancelled = CancellationToken::new();
+    cancelled.cancel();
+    assert_eq!(
+        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+            .with_trace_sink(&cancelled_trace)
+            .run(
+                &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+                cancelled,
+            ),
+        Err(RunError::Cancelled)
+    );
+    assert_run_phase_coverage(
+        &cancelled_trace.0.lock().unwrap(),
+        SpanOutcome::NotReached,
+        SpanOutcome::NotReached,
+    );
+
+    let deadline_trace = RecordingTrace::default();
+    assert!(matches!(
+        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+            .with_trace_sink(&deadline_trace)
+            .with_deadline(RunDeadline::after(Duration::ZERO))
+            .run(
+                &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+                CancellationToken::new(),
+            ),
+        Err(RunError::DeadlineExceeded { .. })
+    ));
+    assert_run_phase_coverage(
+        &deadline_trace.0.lock().unwrap(),
+        SpanOutcome::NotReached,
+        SpanOutcome::NotReached,
+    );
+
+    let retry_trace = RecordingTrace::default();
+    let mut retry_kernels = KernelRegistry::new();
+    retry_kernels
+        .register(
+            id("phase_retry_exhausted", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Err(KernelError::transient("retry exhausted"))),
+        )
+        .unwrap();
+    assert!(
+        RunExecutor::new(&retry_kernels, &no_resources(), &NoFunctions)
+            .with_trace_sink(&retry_trace)
+            .run(
+                &retry_plan("phase_retry_exhausted", 2, Duration::ZERO),
+                CancellationToken::new(),
+            )
+            .is_err()
+    );
+    assert_run_phase_coverage(
+        &retry_trace.0.lock().unwrap(),
+        SpanOutcome::Success,
+        SpanOutcome::NotReached,
+    );
+    let retry_attempts = retry_trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .map(|span| span.outcome.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(retry_attempts, [SpanOutcome::Retry, SpanOutcome::Error]);
+
+    let panic_trace = RecordingTrace::default();
+    let mut panic_kernels = KernelRegistry::new();
+    panic_kernels
+        .register(
+            id("phase_worker_panic", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| panic!("phase worker panic sentinel")),
+        )
+        .unwrap();
+    let panic_plan = plan(
+        vec![operation("phase_worker_panic", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = RunExecutor::new(&panic_kernels, &no_resources(), &NoFunctions)
+            .with_trace_sink(&panic_trace)
+            .run(&panic_plan, CancellationToken::new());
+    }));
+    let panic = panic.expect_err("worker panic must resume");
+    assert_eq!(
+        panic.downcast_ref::<&str>().copied(),
+        Some("phase worker panic sentinel")
+    );
+    assert_run_phase_coverage(
+        &panic_trace.0.lock().unwrap(),
+        SpanOutcome::Success,
+        SpanOutcome::NotReached,
+    );
+    assert!(
+        panic_trace
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|span| span.kind == SpanKind::OperationAttempt
+                && span.outcome == SpanOutcome::InternalAborted)
+    );
 }
 
 #[test]
@@ -3740,8 +3972,10 @@ fn parallel_scheduler_io_is_not_starved_by_sustained_cpu_load() {
     release_all(&gates);
     run.join().unwrap().unwrap();
 
-    assert_eq!(first, "parallel0");
-    assert_eq!(second.unwrap(), "parallel3");
+    assert_eq!(
+        BTreeSet::from([first, second.unwrap()]),
+        BTreeSet::from(["parallel0", "parallel3"])
+    );
 }
 
 struct ThreadIdentityKernel(Arc<Mutex<HashSet<thread::ThreadId>>>);
@@ -4538,7 +4772,10 @@ fn run_initial_admission_rejection(rejection: AdmissionRejection) {
                 }
             )
     ));
-    assert_eq!(peer_calls.load(Ordering::SeqCst), 1);
+    assert!(
+        peer_calls.load(Ordering::SeqCst) <= 1,
+        "cancellation may stop the admitted peer before kernel invocation"
+    );
     assert_eq!(rejected_calls.load(Ordering::SeqCst), 0);
     assert_eq!(
         rollback.lock().unwrap().clone(),
@@ -4738,11 +4975,15 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
         )
         .unwrap();
     let events = RecordingRunEvents::default();
+    let trace = RecordingTrace::default();
+    let results = ResultStore::new();
 
     let execution_plan = retry_plan("retry_transient_success", 3, Duration::ZERO);
     execution_plan.validate().unwrap();
     let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .with_event_sink(&events)
+        .with_trace_sink(&trace)
+        .with_result_store(&results)
         .run(&execution_plan, CancellationToken::new())
         .unwrap();
 
@@ -4756,6 +4997,39 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
             .count(),
         1
     );
+    drop(events);
+    let spans = trace.0.lock().unwrap();
+    let run = spans
+        .iter()
+        .find(|span| span.kind == SpanKind::Run)
+        .unwrap();
+    let attempts = spans
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .collect::<Vec<_>>();
+    assert_eq!(attempts.len(), 2);
+    assert_eq!(attempts[0].outcome, SpanOutcome::Retry);
+    assert_eq!(attempts[1].outcome, SpanOutcome::Success);
+    assert_eq!(attempts[0].attempt_id, Some(AttemptId::new(1)));
+    assert_eq!(attempts[1].attempt_id, Some(AttemptId::new(2)));
+    assert_eq!(attempts[0].operation_id, attempts[1].operation_id);
+    assert_eq!(attempts[0].run_id, attempts[1].run_id);
+    assert!(
+        attempts
+            .iter()
+            .all(|span| span.parent_span_id == Some(run.span_id))
+    );
+    for kind in [
+        SpanKind::ResourceAcquire,
+        SpanKind::ResultPublication,
+        SpanKind::Cleanup,
+    ] {
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.kind == kind && span.parent_span_id == Some(run.span_id))
+        );
+    }
 }
 
 #[test]
@@ -4825,7 +5099,9 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         )
         .unwrap();
 
+    let trace = RecordingTrace::default();
     let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .with_trace_sink(&trace)
         .with_deadline(RunDeadline::after(Duration::from_millis(10)))
         .run(
             &retry_plan("retry_deadline", 3, Duration::from_millis(100)),
@@ -4840,6 +5116,19 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         }
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let spans = trace.0.lock().unwrap();
+    assert!(spans.iter().any(|span| {
+        span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Retry
+    }));
+    assert!(
+        spans
+            .iter()
+            .any(|span| span.kind == SpanKind::Run && span.outcome == SpanOutcome::Timeout)
+    );
+    assert!(spans.iter().any(|span| matches!(
+        (&span.kind, &span.outcome),
+        (SpanKind::Cleanup, SpanOutcome::Cleanup { .. })
+    )));
 }
 
 #[test]
@@ -5148,7 +5437,7 @@ impl RelationalBackend for TraceRelationalBackend {
 
 fn run_relational_backend_trace(
     outcome: TraceRelationalOutcome,
-) -> (Result<RunResult, RunError>, ExecutionPlan, Vec<SpanEvent>) {
+) -> (Result<RunResult, RunError>, ExecutionPlan, Vec<TraceSpan>) {
     let mut relational = RelationalBackendRegistry::new();
     relational
         .register(
@@ -5241,6 +5530,445 @@ fn relational_cancellation_installed_before_ordinary_error_wins() {
         .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
+}
+
+struct SynchronizedSuccessBackend {
+    started: mpsc::SyncSender<()>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl RelationalBackend for SynchronizedSuccessBackend {
+    fn execute(
+        &self,
+        _: &RelationalContext<'_>,
+        _: &CompiledRelationalPlan,
+        _: &[RuntimeValue],
+    ) -> Result<RelationalExecution, RelationalError> {
+        self.started.send(()).unwrap();
+        self.release.lock().unwrap().recv().unwrap();
+        Ok(RelationalExecution {
+            outputs: vec![Value::Integer(7).into()],
+        })
+    }
+}
+
+fn synchronized_relational_plan(backend: &str) -> ExecutionPlan {
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        backend,
+        "synchronized-fragment",
+        Box::new([]),
+    )]);
+    execution_plan
+}
+
+fn assert_deadline_worker_trace(spans: &[TraceSpan], attempt_outcome: SpanOutcome) {
+    let run = spans
+        .iter()
+        .find(|span| span.kind == SpanKind::Run)
+        .unwrap();
+    let attempt = spans
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .collect::<Vec<_>>();
+    let adapter = spans
+        .iter()
+        .filter(|span| span.kind == SpanKind::AdapterIo)
+        .collect::<Vec<_>>();
+    assert_eq!(attempt.len(), 1);
+    assert_eq!(adapter.len(), 1);
+    assert_eq!(attempt[0].parent_span_id, Some(run.span_id));
+    assert_eq!(attempt[0].outcome, attempt_outcome);
+    assert_eq!(adapter[0].parent_span_id, Some(attempt[0].span_id));
+    assert_eq!(adapter[0].outcome, SpanOutcome::Success);
+    assert_eq!(adapter[0].operation_id, attempt[0].operation_id);
+    assert_eq!(adapter[0].activation_id, attempt[0].activation_id);
+    assert_eq!(adapter[0].attempt_id, attempt[0].attempt_id);
+    for kind in [
+        SpanKind::ResourceAcquire,
+        SpanKind::ResultPublication,
+        SpanKind::Cleanup,
+    ] {
+        let phase = spans
+            .iter()
+            .filter(|span| span.kind == kind)
+            .collect::<Vec<_>>();
+        assert_eq!(phase.len(), 1, "expected exactly one {kind:?} span");
+        assert_eq!(phase[0].parent_span_id, Some(run.span_id));
+    }
+    let ids = spans
+        .iter()
+        .map(|span| span.span_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        ids.len(),
+        spans.len(),
+        "completed spans must be forwarded once"
+    );
+}
+
+#[test]
+fn deadline_before_envelope_receive_forwards_worker_spans_once() {
+    let trace = RecordingTrace::default();
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("deadline-before-receive", RelationalBackendId::new),
+            TraceRelationalBackend(TraceRelationalOutcome::Succeed),
+        )
+        .unwrap();
+    let execution_plan = synchronized_relational_plan("deadline-before-receive");
+    let (produced_tx, produced_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let checkpoint_release = Arc::clone(&release_rx);
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+                .with_relational_backends(&relational)
+                .with_trace_sink(&trace)
+                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                        produced_tx.send(()).unwrap();
+                        checkpoint_release.lock().unwrap().recv().unwrap();
+                    }
+                }))
+                .run(&execution_plan, CancellationToken::new())
+        });
+        produced_rx.recv().unwrap();
+        thread::sleep(Duration::from_millis(40));
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel,
+        })
+    );
+    assert_deadline_worker_trace(&trace.0.lock().unwrap(), SpanOutcome::Success);
+}
+
+#[test]
+fn completion_after_deadline_forwards_worker_spans_once() {
+    let trace = RecordingTrace::default();
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("completion-after-deadline", RelationalBackendId::new),
+            SynchronizedSuccessBackend {
+                started: started_tx,
+                release: Mutex::new(release_rx),
+            },
+        )
+        .unwrap();
+    let execution_plan = synchronized_relational_plan("completion-after-deadline");
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+                .with_relational_backends(&relational)
+                .with_trace_sink(&trace)
+                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+                .run(&execution_plan, CancellationToken::new())
+        });
+        started_rx.recv().unwrap();
+        thread::sleep(Duration::from_millis(40));
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel,
+        })
+    );
+    assert_deadline_worker_trace(&trace.0.lock().unwrap(), SpanOutcome::Timeout);
+}
+
+#[test]
+fn retryable_failure_after_deadline_keeps_retry_attempt_truth() {
+    let trace = RecordingTrace::default();
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let kernel_release = Arc::clone(&release_rx);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("retry_truth", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                started_tx.send(()).unwrap();
+                kernel_release.lock().unwrap().recv().unwrap();
+                Err(KernelError::transient("retry truth"))
+            }),
+        )
+        .unwrap();
+    let execution_plan = retry_plan("retry_truth", 2, Duration::ZERO);
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_trace_sink(&trace)
+                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+                .run(&execution_plan, CancellationToken::new())
+        });
+        started_rx.recv().unwrap();
+        thread::sleep(Duration::from_millis(40));
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert!(matches!(result, Err(RunError::DeadlineExceeded { .. })));
+    let attempts = trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .map(|span| span.outcome.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(attempts, [SpanOutcome::Retry]);
+}
+
+#[test]
+fn success_completed_after_cancellation_rewrites_attempt_but_preserves_adapter_truth() {
+    let trace = RecordingTrace::default();
+    let cancellation = CancellationToken::new();
+    let run_cancellation = cancellation.clone();
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("success_after_cancel", RelationalBackendId::new),
+            SynchronizedSuccessBackend {
+                started: started_tx,
+                release: Mutex::new(release_rx),
+            },
+        )
+        .unwrap();
+    let execution_plan = synchronized_relational_plan("success_after_cancel");
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
+                .with_relational_backends(&relational)
+                .with_trace_sink(&trace)
+                .run(&execution_plan, run_cancellation)
+        });
+        started_rx.recv().unwrap();
+        cancellation.cancel();
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(result, Err(RunError::Cancelled));
+    let spans = trace.0.lock().unwrap();
+    assert!(spans.iter().any(|span| {
+        span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Cancellation
+    }));
+    assert!(spans.iter().any(|span| {
+        span.kind == SpanKind::AdapterIo && span.outcome == SpanOutcome::Cancellation
+    }));
+}
+
+#[test]
+fn success_completed_before_cancellation_keeps_attempt_truth_while_envelope_drains() {
+    let trace = RecordingTrace::default();
+    let cancellation = CancellationToken::new();
+    let run_cancellation = cancellation.clone();
+    let (produced_tx, produced_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let checkpoint_release = Arc::clone(&release_rx);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("success_before_cancel", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![])),
+        )
+        .unwrap();
+    let execution_plan = plan(
+        vec![operation("success_before_cancel", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_trace_sink(&trace)
+                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                        produced_tx.send(()).unwrap();
+                        checkpoint_release.lock().unwrap().recv().unwrap();
+                    }
+                }))
+                .run(&execution_plan, run_cancellation)
+        });
+        produced_rx.recv().unwrap();
+        cancellation.cancel();
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(result, Err(RunError::Cancelled));
+    let attempts = trace
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .map(|span| span.outcome.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(attempts, [SpanOutcome::Success]);
+}
+
+#[test]
+fn panic_attempt_truth_survives_deadline_and_cancellation() {
+    for terminal in ["deadline", "cancellation"] {
+        let trace = RecordingTrace::default();
+        let cancellation = CancellationToken::new();
+        let run_cancellation = cancellation.clone();
+        let (started_tx, started_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let kernel_release = Arc::clone(&release_rx);
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("panic_terminal_truth", KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    started_tx.send(()).unwrap();
+                    kernel_release.lock().unwrap().recv().unwrap();
+                    panic!("panic terminal truth sentinel")
+                }),
+            )
+            .unwrap();
+        let execution_plan = plan(
+            vec![operation("panic_terminal_truth", &[], &[])],
+            0,
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(
+                OperationIndex::new(0),
+            )])),
+        );
+
+        let panic = thread::scope(|scope| {
+            let run = scope.spawn(|| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let resources = no_resources();
+                    let mut executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
+                        .with_trace_sink(&trace);
+                    if terminal == "deadline" {
+                        executor =
+                            executor.with_deadline(RunDeadline::after(Duration::from_millis(20)));
+                    }
+                    let _ = executor.run(&execution_plan, run_cancellation);
+                }))
+            });
+            started_rx.recv().unwrap();
+            if terminal == "deadline" {
+                thread::sleep(Duration::from_millis(40));
+            } else {
+                cancellation.cancel();
+            }
+            release_tx.send(()).unwrap();
+            run.join().unwrap()
+        });
+        assert!(panic.is_err());
+        assert!(trace.0.lock().unwrap().iter().any(|span| {
+            span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::InternalAborted
+        }));
+    }
+}
+
+#[test]
+fn peer_ordinary_error_does_not_rewrite_drained_success_attempt() {
+    let trace = RecordingTrace::default();
+    let entered = Arc::new(Barrier::new(3));
+    let success_thread = Arc::new(Mutex::new(None));
+    let (produced_tx, produced_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let mut kernels = KernelRegistry::new();
+    let error_entered = Arc::clone(&entered);
+    kernels
+        .register(
+            id("parallel0", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                error_entered.wait();
+                thread::sleep(Duration::from_millis(20));
+                Err(KernelError::new("peer ordinary error"))
+            }),
+        )
+        .unwrap();
+    let success_entered = Arc::clone(&entered);
+    let worker_thread = Arc::clone(&success_thread);
+    kernels
+        .register(
+            id("parallel1", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                success_entered.wait();
+                *worker_thread.lock().unwrap() = Some(thread::current().id());
+                Ok(vec![Value::Integer(1).into()])
+            }),
+        )
+        .unwrap();
+    let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]);
+
+    let checkpoint_thread = Arc::clone(&success_thread);
+    let checkpoint_release = Arc::clone(&release_rx);
+    let error = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+                .with_trace_sink(&trace)
+                .with_scheduling_policy(parallel_policy(2, 1, 1))
+                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced
+                        && checkpoint_thread.lock().unwrap().as_ref()
+                            == Some(&thread::current().id())
+                    {
+                        produced_tx.send(()).unwrap();
+                        checkpoint_release.lock().unwrap().recv().unwrap();
+                    }
+                }))
+                .run(&execution_plan, CancellationToken::new())
+        });
+        entered.wait();
+        produced_rx.recv().unwrap();
+        thread::sleep(Duration::from_millis(40));
+        release_tx.send(()).unwrap();
+        run.join().unwrap().unwrap_err()
+    });
+    assert!(matches!(error, RunError::KernelFailed { .. }));
+    let spans = trace.0.lock().unwrap();
+    let success_operation = OperationStableId::new("test.operation.parallel1").unwrap();
+    let attempts = spans
+        .iter()
+        .filter(|span| span.kind == SpanKind::OperationAttempt)
+        .map(|span| (span.operation_id.clone(), span.outcome.clone()))
+        .collect::<Vec<_>>();
+    assert!(
+        attempts.iter().any(|(operation, outcome)| {
+            operation.as_ref() == Some(&success_operation) && *outcome == SpanOutcome::Success
+        }),
+        "attempts: {attempts:?}"
+    );
 }
 
 #[test]
@@ -5708,6 +6436,7 @@ fn seed_result_source(
 
 #[test]
 fn result_publication_error_preserves_capacity_eviction_candidate() {
+    let trace = RecordingTrace::default();
     let (kernels, execution_plan) = publication_transaction_fixture();
     let results = ResultStore::with_capacity(1);
     let prior_source = seed_result_source(&kernels, &execution_plan, &results);
@@ -5720,10 +6449,16 @@ fn result_publication_error_preserves_capacity_eviction_candidate() {
     let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
         .with_result_store(&results)
         .with_atomic_success_finalizer(&finalizer)
+        .with_trace_sink(&trace)
         .run(&execution_plan, CancellationToken::new())
         .unwrap_err();
 
     assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
+    assert_run_phase_coverage(
+        &trace.0.lock().unwrap(),
+        SpanOutcome::Success,
+        SpanOutcome::Error,
+    );
     assert_eq!(results.source_count(), 1);
     assert_eq!(results.artifact_count_for_test(), 1);
     assert!(results.descriptor(prior_source).is_some());

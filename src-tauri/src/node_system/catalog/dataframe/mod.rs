@@ -16,13 +16,13 @@ use crate::node_system::compiler::{
     RelationalNodeFragment,
 };
 use crate::node_system::document::PortRef;
-use crate::node_system::parameter_types::dataframe::{
-    FilterLiteral, FilterOperator, FilterPredicate, ProjectColumns,
-};
 use crate::node_system::plan::{
     CompiledParameterHandle, RelationalBackendId, RelationalExpression, RelationalFragmentId,
     RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalProjection,
     RelationalRename,
+};
+use crate::node_system::protocol::dataframe::{
+    FilterLiteral, FilterOperator, FilterPredicate, ProjectColumns,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -172,7 +172,7 @@ fn interface(
             })?,
             vec![nominal_parameter(
                 "columns",
-                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             )?],
         )),
         FilterRows => Ok((
@@ -182,7 +182,7 @@ fn interface(
             })?,
             vec![nominal_parameter(
                 "predicate",
-                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+                crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             )?],
         )),
         Decompose => Ok((
@@ -570,11 +570,11 @@ fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
         ("tabular.dataframe", "types.dataframe.title"),
         ("tabular.series", "types.series.title"),
         (
-            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             "types.dataframe_project_columns.title",
         ),
         (
-            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             "types.dataframe_filter_predicate.title",
         ),
     ]

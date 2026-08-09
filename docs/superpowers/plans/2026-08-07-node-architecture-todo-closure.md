@@ -37,11 +37,11 @@
 - Produces: cross-platform `pnpm rust:test` and `pnpm rust:test:sci` scripts that pass Cargo `--jobs 1`.
 - Preserves: command arguments following `pnpm rust:test -- ...` and the root `target/` directory.
 
-- [ ] **Step 1: Record the existing failing-environment evidence**
+- [x] **Step 1: Record the existing failing-environment evidence**
 
 Document in the task report that the normal `pnpm verify` failed while linking the four named binaries with `LNK1102`, while all four passed 12/12 under one Cargo job. Do not manufacture another OOM as RED.
 
-- [ ] **Step 2: Add cross-platform Cargo job bounds**
+- [x] **Step 2: Add cross-platform Cargo job bounds**
 
 Change the scripts to:
 
@@ -52,11 +52,11 @@ Change the scripts to:
 
 Do not use `CARGO_BUILD_JOBS=1` in `package.json` and do not globally set `[build] jobs` in `.cargo/config.toml`.
 
-- [ ] **Step 3: Update the canonical workflow documentation**
+- [x] **Step 3: Update the canonical workflow documentation**
 
 State that Rust test linking is serialized to avoid Windows linker-memory spikes, while `rust:check` and development builds retain normal Cargo parallelism.
 
-- [ ] **Step 4: Verify the four prior failures**
+- [x] **Step 4: Verify the four prior failures**
 
 Run:
 
@@ -66,7 +66,7 @@ pnpm rust:test --test sci_api_bayes_linear_normal_golden_test --test sci_api_bay
 
 Expected: PASS, 4 binaries / 12 tests; no `LNK1102`.
 
-- [ ] **Step 5: Verify the Rust workflow**
+- [x] **Step 5: Verify the Rust workflow**
 
 Run: `pnpm verify:rust`
 
@@ -116,7 +116,7 @@ export interface FunctionEditorProjectionDto {
 - `ProjectGraphIndexEntry` produces `function_editor_projection: Option<FunctionEditorProjectionDto>` for function graphs.
 - Function mutation projection replacements carry the same resolved pin data; no frontend type inference is allowed.
 
-- [ ] **Step 1: Write Rust golden RED**
+- [x] **Step 1: Write Rust golden RED**
 
 Add a function fixture whose resolved output name/type differ from the old frontend defaults. Assert serialized project index and project-event replacement contain exact IDs, names, and structured data types.
 
@@ -128,7 +128,7 @@ pnpm rust:test --lib function_editor_projection_wire -- --test-threads=1
 
 Expected RED: `functionEditorProjection` is absent.
 
-- [ ] **Step 2: Write TypeScript strict-parser RED**
+- [x] **Step 2: Write TypeScript strict-parser RED**
 
 Add cases that reject missing `inputs`, malformed structured data types, and legacy rows containing only raw `functionSignature`. Assert a non-`Result` output name remains unchanged.
 
@@ -140,15 +140,15 @@ pnpm test src/services/project/projectService.test.ts src/services/nodeSystem/no
 
 Expected RED: new wire cannot be parsed.
 
-- [ ] **Step 3: Implement authoritative projection construction**
+- [x] **Step 3: Implement authoritative projection construction**
 
 Resolve pins in Rust from the normalized function document/registry types and attach the DTO to project-index rows and replacement projections. The constructor must be shared by load, mutation publication, and recovery sources.
 
-- [ ] **Step 4: Implement strict TypeScript parsing**
+- [x] **Step 4: Implement strict TypeScript parsing**
 
 Parse exact keys and structured data types before returning `ProjectGraphIndexRow`; reject unknown fallback types rather than returning `{ kind: 'Any' }`.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run both RED commands. Expected: PASS with all golden fixtures byte/shape aligned.
 
@@ -183,11 +183,11 @@ export function installFunctionEditorProjection(
 
 - Removes: `functionSignaturePins` and all production `dataTypeFromDisplayString` use for function pins.
 
-- [ ] **Step 1: Replace old behavior tests with authoritative-wire RED**
+- [x] **Step 1: Replace old behavior tests with authoritative-wire RED**
 
 Test load, publication, and recovery using backend-provided output name `Computed value` and a structured type that the old display parser would map incorrectly. Expect exact installation.
 
-- [ ] **Step 2: Add semantic architecture RED**
+- [x] **Step 2: Add semantic architecture RED**
 
 Extend the TypeChecker audit to reject production imports/calls of `functionSignaturePins`, signature-to-pin mapping, fixed `Result`, and fallback `Any` in function interface projection.
 
@@ -199,15 +199,15 @@ pnpm test src/services/nodeSystem/nodeIdentityArchitectureContract.test.ts src/f
 
 Expected RED: production mapping symbols are found.
 
-- [ ] **Step 3: Replace every reconstruction path**
+- [x] **Step 3: Replace every reconstruction path**
 
 Load, publication, conflict hydration, and recovery must copy `projection.inputs` and `projection.outputs` directly into `GraphMeta`. Keep raw signature only as editable authority metadata.
 
-- [ ] **Step 4: Delete the projector**
+- [x] **Step 4: Delete the projector**
 
 Remove `functionSignaturePins`, its imports, and tests asserting display-string conversion or fixed names.
 
-- [ ] **Step 5: Run focused and type verification**
+- [x] **Step 5: Run focused and type verification**
 
 Run:
 
@@ -239,23 +239,23 @@ Expected: PASS.
 - Produces: `prepareGraphResourceMove` that migrates only path-keyed UI ownership; graph nodes change only through `commitPreparedGraphProjectionReplacements`.
 - Removes: `prepareReferences`, `referenceSnapshot`, `commitReferenceSnapshot`, `cascadeSubGraphPathInLoadedGraphs`, and `cascadeGraphPathReferences`.
 
-- [ ] **Step 1: Write Rust caller-replacement RED**
+- [x] **Step 1: Write Rust caller-replacement RED**
 
 Assert a rename result contains destination and loaded caller replacements, each with source revision equal to its committed graph revision and with the caller target already remapped.
 
-- [ ] **Step 2: Write frontend authority RED**
+- [x] **Step 2: Write frontend authority RED**
 
 Provide a replacement intentionally different from what scanning old `subGraphPath` could infer. Assert commit installs the replacement exactly. If complete status names a caller without a replacement, assert protocol failure/recovery and no local node mutation.
 
-- [ ] **Step 3: Add architecture RED**
+- [x] **Step 3: Add architecture RED**
 
 Reject production use of the removed symbols and direct `useGraphDataStore.setState` node mutation from editor mutation/cascade modules.
 
-- [ ] **Step 4: Remove local reference mutation**
+- [x] **Step 4: Remove local reference mutation**
 
 Delete snapshots/scans and route all graph changes through prepared revisioned replacements. Retain only tab, focus, viewport, selection, and persisted editor-view remapping.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -293,19 +293,19 @@ Expected: PASS.
 - Removes: `createNodes`, `BatchCreateNodeRequest`, `BatchCreateNodeIpcItem`, `NodeInstanceParamsDTO`, `NodeSpawnParams`, `ParamsKind`, `GraphInstanceDTO`, `NodeInstanceDTO`, and clipboard `params`.
 - Clipboard stores stable projection identity only; it does not synthesize a replayable creation descriptor from display fields.
 
-- [ ] **Step 1: Add semantic architecture RED**
+- [x] **Step 1: Add semantic architecture RED**
 
 Audit imports, aliases, namespace access, re-exports, declarations, and production property access for every removed symbol/module.
 
-- [ ] **Step 2: Add clipboard/session RED**
+- [x] **Step 2: Add clipboard/session RED**
 
 Assert `EditorSessionNodeActions` has only current descriptor-backed creation/deletion APIs and clipboard snapshots omit legacy params/display-name identity.
 
-- [ ] **Step 3: Delete dead API and DTO paths**
+- [x] **Step 3: Delete dead API and DTO paths**
 
 Remove files, exports, hook members, session picker members, graph conversion compatibility unions, and obsolete tests. Do not add replacement aliases.
 
-- [ ] **Step 4: Run focused GREEN**
+- [x] **Step 4: Run focused GREEN**
 
 Run:
 
@@ -331,15 +331,15 @@ Expected: PASS and no removed-symbol diagnostics.
 - Production mutation remains `EditorGraphMutationDto::into_patch_with_catalog_snapshot(...) -> Result<GraphDocumentPatch, MutationConflict>` followed by authoritative atomic patch commit.
 - Raw `create_node`, `delete_node`, `bind_port`, `connect`, `disconnect`, and `set_literal` exist only under `#[cfg(test)]` with `pub(crate)` visibility.
 
-- [ ] **Step 1: Add syn-based visibility RED**
+- [x] **Step 1: Add syn-based visibility RED**
 
 Parse `transaction.rs` and assert all six methods are absent from the production impl. Scan production scopes for method calls, UFCS references, aliases, and cfg bypasses.
 
-- [ ] **Step 2: Gate raw helpers**
+- [x] **Step 2: Gate raw helpers**
 
 Move the six helpers into a strict `#[cfg(test)] impl GraphDocument` and retain production read/validation methods separately.
 
-- [ ] **Step 3: Verify descriptor authority and tests**
+- [x] **Step 3: Verify descriptor authority and tests**
 
 Run:
 
@@ -386,23 +386,23 @@ pub trait AnalysisResourceResolver {
 - `CompilationBasis.resource_versions` contains only successful reads.
 - Freshness compares graph revision, registry fingerprint, lifecycle authority, and current versions of exact keys only.
 
-- [ ] **Step 1: Add compiler RED matrix**
+- [x] **Step 1: Add compiler RED matrix**
 
 Cover no-resource graph → empty set; one used/unrelated function; one used/unrelated variable; one used/unrelated database. Duplicate reads record once.
 
-- [ ] **Step 2: Add publication freshness RED**
+- [x] **Step 2: Add publication freshness RED**
 
 Compile, mutate unrelated resource, and assert same published compile ID remains current. Mutate actual dependency and assert recompilation for function, variable, and database cases.
 
-- [ ] **Step 3: Implement coherent tracked resolver**
+- [x] **Step 3: Implement coherent tracked resolver**
 
 Value and version must come from the same project snapshot. Database schema analysis and variable nodes must use the resolver rather than independent maps.
 
-- [ ] **Step 4: Separate request identity from final basis**
+- [x] **Step 4: Separate request identity from final basis**
 
 Do not preload all resource versions into the compilation task. Publish only if lifecycle/graph/registry and each exact read remain current.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -443,23 +443,23 @@ pub fn validate_parameter_values(
 - Analysis validates primitive type/constraints, nominal codecs, resource identity/existence, typed literal decoding, call ABI availability, and implementation-specific lowerability before sealing `ValidatedSemanticGraph`.
 - `NodeLowerer` consumes validated configuration and returns only cancellation, deadline/resource exhaustion, or internal invariant errors.
 
-- [ ] **Step 1: Add Analysis RED cases**
+- [x] **Step 1: Add Analysis RED cases**
 
 Cover invalid dataframe limit range/type, rename parameter type, malformed resource ID, malformed persisted literal, missing callee, and blocking callee. Assert precise locations, no semantic/plan, no lowering-start trace, and zero lowerer calls.
 
-- [ ] **Step 2: Extract shared parameter validation**
+- [x] **Step 2: Extract shared parameter validation**
 
 Map the same `LocatedParameterIssue` into editor `MutationConflict` and compiler diagnostics; remove duplicated primitive/constraint parsing.
 
-- [ ] **Step 3: Validate all lowerability before semantic seal**
+- [x] **Step 3: Validate all lowerability before semantic seal**
 
 Decode typed literals and prepared node configuration once. Function ABI resolution uses Task 7's tracked resolver and records dependencies.
 
-- [ ] **Step 4: Narrow lowering errors**
+- [x] **Step 4: Narrow lowering errors**
 
 Replace arbitrary user-facing `LoweringError.message` handling with typed internal/runtime failures. Do not map arbitrary lowerer strings to `compiler.lowering.failed`.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -507,23 +507,23 @@ pub enum PlannedPublication {
 - Removes `ValueReady` from Rust/TS/golden wire.
 - Pin preview demand carries generation and never implies default results.
 
-- [ ] **Step 1: Add intermediate-publication RED**
+- [x] **Step 1: Add intermediate-publication RED**
 
 Run a two-operation chain requesting only the second output. Assert one source, one target event, no `ValueReady`, and no readable intermediate source.
 
-- [ ] **Step 2: Add preview identity RED**
+- [x] **Step 2: Add preview identity RED**
 
 Assert ordinary explicit output and preview produce different normalized selection digests; stale generation cannot settle another preview.
 
-- [ ] **Step 3: Make publications explicit**
+- [x] **Step 3: Make publications explicit**
 
 Finalize selected outputs into `PlannedPublication`; delete per-operation output source staging and `ValueReady` variants/parsers/fixtures.
 
-- [ ] **Step 4: Route preview through the dedicated wire**
+- [x] **Step 4: Route preview through the dedicated wire**
 
 Frontend sends preview generation in the demand. Rust returns only the requested preview publication; existing project/session/run guards remain.
 
-- [ ] **Step 5: Run focused GREEN and golden checks**
+- [x] **Step 5: Run focused GREEN and golden checks**
 
 Run:
 
@@ -579,19 +579,19 @@ pub struct PlannedOperation {
 }
 ```
 
-- [ ] **Step 1: Add compiler RED matrix**
+- [x] **Step 1: Add compiler RED matrix**
 
 Assert deterministic pure `PerRun` remains; nondeterministic/effectful `PerRun` becomes `Disabled`; plan specialization preserves values.
 
-- [ ] **Step 2: Thread metadata through compiler layers**
+- [x] **Step 2: Thread metadata through compiler layers**
 
 Add fields consistently to `PendingOperation`, `IntermediateOperation`, and `PlannedOperation`. Effective policy is computed once in compilation.
 
-- [ ] **Step 3: Remove legacy enum spelling**
+- [x] **Step 3: Remove legacy enum spelling**
 
 Update Catalog declarations, fixtures, fingerprints, and tests. Do not retain `None` alias/default decoding.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -642,23 +642,23 @@ impl RunMemoization {
 
 - Cache owner is a single run; complete successful materialized values only.
 
-- [ ] **Step 1: Add memoization RED matrix**
+- [x] **Step 1: Add memoization RED matrix**
 
 Test same key once, different inputs, different relevant revision, concurrent single-flight, producer error, cancellation, partial stream, finalization release, and new-run isolation.
 
-- [ ] **Step 2: Implement canonical fingerprints**
+- [x] **Step 2: Implement canonical fingerprints**
 
 Fingerprint typed scalar/artifact inputs deterministically. Streaming inputs are not cacheable until completely materialized by an explicit adapter.
 
-- [ ] **Step 3: Implement single-flight state**
+- [x] **Step 3: Implement single-flight state**
 
 Waiters observe producer success/error without becoming producers. Cancellation of a waiter does not corrupt the producer entry; failed producer entries are removed.
 
-- [ ] **Step 4: Integrate at operation execution**
+- [x] **Step 4: Integrate at operation execution**
 
 Use only when `PlannedOperation.cache_policy == PerRun`. Keep the existing duplicate-activation guard separate.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -703,19 +703,19 @@ pub enum PlannedKernel {
 
 - Compiler selects adapters for native/native, native/relational, relational/native, and relational/relational edges.
 
-- [ ] **Step 1: Add full contract-matrix RED**
+- [x] **Step 1: Add full contract-matrix RED**
 
 Cover every `OutputProduction × InputConsumption` combination and all producer/consumer kinds. Assert deterministic plan shape independent of insertion/UUID order.
 
-- [ ] **Step 2: Promote adapter selection**
+- [x] **Step 2: Promote adapter selection**
 
 Move the matrix from relational-only planning into a general compiler module and insert explicit adapter operations/value dependencies.
 
-- [ ] **Step 3: Validate plan authority**
+- [x] **Step 3: Validate plan authority**
 
 Reject incompatible direct edges and missing/extra adapters. Scheduler executes `PlannedAdapter`; it does not infer an adapter from runtime values.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -758,23 +758,23 @@ pub enum MaterializedArtifact {
 
 - Spill files and producer tasks are owned by `RunResourceOwner` and removed/drained on every terminal path.
 
-- [ ] **Step 1: Add bounded-resource RED**
+- [x] **Step 1: Add bounded-resource RED**
 
 Test capacity-one backpressure, memory threshold spill, stable disk order, two replay passes, and cleanup after success/error/cancel/panic/deadline/project replacement.
 
-- [ ] **Step 2: Replace `StreamValue::from_values` full buffering**
+- [x] **Step 2: Replace `StreamValue::from_values` full buffering**
 
 Use configured bounded capacity and an owned producer task rather than collecting all values and sizing the channel to the full input.
 
-- [ ] **Step 3: Implement real spill/replay**
+- [x] **Step 3: Implement real spill/replay**
 
 Serialize typed values to a run-private temporary file with bounded in-memory buffering. Replay owns independent cursors over immutable completed data.
 
-- [ ] **Step 4: Integrate RAII cleanup and memoization rule**
+- [x] **Step 4: Integrate RAII cleanup and memoization rule**
 
 Partial streams/spills never enter Task 11 cache. Cleanup errors are traced but do not overwrite the primary execution error.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -816,19 +816,19 @@ pub struct OperationCompletion {
 
 - Workers never mutate `Frame`; the scheduler commits completions on its owner thread.
 
-- [ ] **Step 1: Add concurrency/fairness RED**
+- [x] **Step 1: Add concurrency/fairness RED**
 
 Test independent CPU overlap, hard class limits, separate I/O budget, effect/exclusive serialization, no I/O starvation under CPU load, deterministic value mapping despite completion order, and cancellation drain.
 
-- [ ] **Step 2: Implement class queues and permits**
+- [x] **Step 2: Implement class queues and permits**
 
 Admit ready operations with bounded weighted round-robin. Effect dependencies and exclusive resource requirements remain hard gates.
 
-- [ ] **Step 3: Add completion ownership**
+- [x] **Step 3: Add completion ownership**
 
 Workers receive immutable operation inputs/context and return `OperationCompletion`; only the scheduler mutates frames, publishes outputs, and marks dependencies complete.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -874,19 +874,19 @@ pub enum RunError {
 
 - Cancellation wins when cancellation and deadline are simultaneously observable.
 
-- [ ] **Step 1: Add phase-specific timeout RED**
+- [x] **Step 1: Add phase-specific timeout RED**
 
 Cover queue wait, kernel, bounded send/recv, adapter I/O, publication, and cleanup. Assert no late result and all resources released.
 
-- [ ] **Step 2: Implement deadline-aware waits**
+- [x] **Step 2: Implement deadline-aware waits**
 
 Use monotonic `Instant` and condition-variable timeout waits. Do not create independent timers in each adapter.
 
-- [ ] **Step 3: Extend strict wire**
+- [x] **Step 3: Extend strict wire**
 
 Add stable deadline error code/phase to Rust and TS golden contracts and strict parser.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -930,19 +930,19 @@ pub struct PlannedRetry {
 - Side-effecting database/variable/filesystem/effect/call operations compile with no retry regardless of untrusted request input.
 - Stable operation identity persists; each attempt gets distinct `AttemptId` and `ActivationId`.
 
-- [ ] **Step 1: Add compiler safety RED**
+- [x] **Step 1: Add compiler safety RED**
 
 Assert pure idempotent protocols retain retry; nondeterministic/effectful/write protocols are forced to no retry.
 
-- [ ] **Step 2: Add runtime RED matrix**
+- [x] **Step 2: Add runtime RED matrix**
 
 Cover transient success after retry, permanent no-retry, max attempts, insufficient deadline, cancellation during backoff, distinct attempt identity, and failed/partial attempts not cached.
 
-- [ ] **Step 3: Implement typed attempt loop**
+- [x] **Step 3: Implement typed attempt loop**
 
 Backoff is bounded, cancellation/deadline aware, and never sleeps while holding project/frame/cache locks.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run:
 
@@ -994,25 +994,25 @@ export function buildCatalogSearchDocument(
 - Rust DTO uses distinct `backend_search_text` and `resource_names` arrays; old singular `pinyin`/`search_text` fields are rejected.
 - Pinyin is generated offline with `pinyin-pro@3.28.2` behind the domain function.
 
-- [ ] **Step 1: Install the pinned dependency**
+- [x] **Step 1: Install the pinned dependency**
 
 Run: `pnpm add pinyin-pro@3.28.2`
 
 Expected: `package.json` and `pnpm-lock.yaml` update only dependency metadata.
 
-- [ ] **Step 2: Write wire/search RED**
+- [x] **Step 2: Write wire/search RED**
 
 Replace tests that explicitly exclude metadata. Cover title, aliases, technical terms, stable node type ID, backend text, resource name, full pinyin, initials, mixed Chinese/Latin, polyphonic fixture, unknown characters, and locale identity stability.
 
-- [ ] **Step 3: Expand Rust Catalog metadata**
+- [x] **Step 3: Expand Rust Catalog metadata**
 
 Populate distinct arrays from static and resource entries. Do not flatten fields into a single opaque string.
 
-- [ ] **Step 4: Build one frontend search document**
+- [x] **Step 4: Build one frontend search document**
 
 Normalize every field and generate full/initial pinyin in `searchDocument.ts`; both index and direct search consume it. Results preserve original item/stable ID.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -1063,23 +1063,23 @@ pub struct TraceSpan {
 
 - `TraceSink::start_span(SpanSpec) -> SpanGuard`; normal paths call `finish`, Drop supplies only an internal-aborted fallback.
 
-- [ ] **Step 1: Add span-model RED**
+- [x] **Step 1: Add span-model RED**
 
 Assert unique IDs, exact parent pairing, nonnegative monotonic duration, run/operation/activation/attempt identity, and success/error/cancel/timeout/retry/cleanup outcomes.
 
-- [ ] **Step 2: Add strict Rust↔TS golden RED**
+- [x] **Step 2: Add strict Rust↔TS golden RED**
 
 Use decimal strings for IDs/timestamps beyond JS safe integer range. Reject missing finish/outcome/parent fields and old status-event shapes.
 
-- [ ] **Step 3: Implement span guard and clock abstraction**
+- [x] **Step 3: Implement span guard and clock abstraction**
 
 Compiler spans cover snapshot/analysis/lowering. Runtime spans cover run, operation attempt, resource acquire, adapter I/O, publication, and cleanup.
 
-- [ ] **Step 4: Update stores, queries, and frontend projection**
+- [x] **Step 4: Update stores, queries, and frontend projection**
 
 Trace records are self-contained completed spans. UI computes duration from DTO fields and does not pair status events heuristically.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -1124,23 +1124,23 @@ Expected: PASS.
 - `LocalizationLookup` is the only localization trait; `BuiltinLocalizationBundle` implements it directly.
 - `ProjectHistoryTransaction.persistence` is required on wire; missing persistence fails deserialization.
 
-- [ ] **Step 1: Add architecture/strict-wire RED**
+- [x] **Step 1: Add architecture/strict-wire RED**
 
 Audit rejects the old directory/module/import/re-export, `LocalizationBundle`, `Compatibility boundary`, blanket bridge, and persistence default. Replace `legacy_history_transaction_defaults_to_in_memory_until_save` with `history_transaction_rejects_missing_persistence`.
 
-- [ ] **Step 2: Move protocol ownership without shim**
+- [x] **Step 2: Move protocol ownership without shim**
 
 Move the file, update direct imports in analysis/catalog/compiler/registry/document tests, and delete the old module declaration/directory. Do not re-export old paths.
 
-- [ ] **Step 3: Merge localization interfaces**
+- [x] **Step 3: Merge localization interfaces**
 
 Delete `LocalizationBundle`; implement `LocalizationLookup` directly and update exports/tests.
 
-- [ ] **Step 4: Make History persistence strict**
+- [x] **Step 4: Make History persistence strict**
 
 Remove `#[serde(default)]` from `persistence`; retain optional defaults only for genuinely optional snapshot/graph-move members. Verify all three valid policies round-trip.
 
-- [ ] **Step 5: Run focused boundary GREEN**
+- [x] **Step 5: Run focused boundary GREEN**
 
 Run:
 
@@ -1153,7 +1153,7 @@ pnpm rust:check
 
 Expected: PASS and no old path/symbol remains.
 
-- [ ] **Step 6: Run complete verification**
+- [x] **Step 6: Run complete verification**
 
 Run in order:
 
@@ -1177,6 +1177,8 @@ Expected:
 - `git diff --cached --name-only` emits no output;
 - status contains only intended unstaged/untracked source, test, spec, plan, report, and TODO changes.
 
-- [ ] **Step 7: Perform final scope and quality reviews**
+- [x] **Step 7: Perform final scope and quality reviews**
 
 Review every `TODO.md:293-316` requirement against implementation and tests. Fix all Critical/Important findings with focused RED-GREEN rounds. Only after review is READY with 0 Critical / 0 Important, check every completed TODO and replace the historical `LNK1102` exception text with the fresh passing evidence while preserving historical runs as historical.
+
+**Completed 2026-08-09:** Task 19 boundary RED-GREEN, all 12 inherited Rust failures, and newly exposed full-suite ordering/isolation failures were closed without compatibility shims or weakened validation. A fresh controller rerun of the exact sequence passed with 250/250 frontend files and 1568/1568 tests, 1340/1340 serial Rust library tests, canonical `pnpm verify` exit 0, clean `git diff --check`, and an empty index. The canonical Cargo matrices additionally passed 1375 `yssbi` tests and 43 `yss-sci` tests with one intentionally ignored diagnostic dump.

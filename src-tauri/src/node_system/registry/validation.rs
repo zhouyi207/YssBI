@@ -114,10 +114,10 @@ fn required_nominal_type_id(value: &str) -> Result<TypeId, RegistryValidationErr
 fn builtin_nominal_type_ids() -> Result<BuiltinNominalTypeIds, RegistryValidationError> {
     Ok(BuiltinNominalTypeIds {
         project_columns: required_nominal_type_id(
-            crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
         )?,
         filter_predicate: required_nominal_type_id(
-            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
         )?,
     })
 }
@@ -663,12 +663,12 @@ mod nominal_schema_tests {
             (
                 project,
                 project_key,
-                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             ),
             (
                 filter,
                 filter_key,
-                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+                crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
             ),
         ] {
             let wrong = parameter(key.as_str(), TypeExpr::Unknown);

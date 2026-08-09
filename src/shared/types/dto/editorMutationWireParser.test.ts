@@ -81,6 +81,7 @@ function projection(path: string, revision: number) {
     nodes: [],
     connections: [],
     diagnostics: [],
+    outcome: { type: 'success' },
     hasBlockingDiagnostics: false,
   };
 }

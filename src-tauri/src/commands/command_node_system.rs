@@ -2589,14 +2589,19 @@ mod tests {
         assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
         assert_eq!(result.deltas[0].to_revision, ResourceRevision::new(1));
         assert!(result.deltas[0].caused_by.is_some());
-        assert!(result.projection_replacements.is_empty());
+        assert_eq!(result.projection_replacements.len(), 1);
+        assert_eq!(
+            result.projection_replacements[0].graph_path.as_str(),
+            "events/New.yssbi-event"
+        );
+        assert_eq!(
+            result.projection_replacements[0].projection.source_revision,
+            1
+        );
         assert_eq!(
             result.projection_status,
-            crate::event::ProjectionStatusDto::Incomplete {
-                invalidated_graph_paths: vec![
-                    "events/New.yssbi-event".into(),
-                    old_path.as_str().to_string(),
-                ],
+            crate::event::ProjectionStatusDto::Complete {
+                expected_graph_paths: vec!["events/New.yssbi-event".into()],
             }
         );
         assert!(result.history.can_undo);

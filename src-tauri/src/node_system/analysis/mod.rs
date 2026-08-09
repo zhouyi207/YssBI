@@ -29,17 +29,17 @@ pub use observability::{
     NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, ProjectSessionId, RedactionPolicy, RunId,
     SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec,
     SystemTraceClock, TraceClock, TraceFieldSensitivity, TraceSink, TraceSpan, TraceValue,
-    start_span_safely,
+    complete_span_safely, start_span_safely,
 };
 pub use projection::{
     CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
     DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
     EditorInputBindingDto, EditorNodeProjectionDto, EffectiveInputBindingKindDto,
-    FunctionEditorPinDto, FunctionEditorProjectionDto, GraphProjectionDelta, LocalizationBundle,
-    LocalizationLookup, NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto,
-    ParameterEditorDto, ParameterEditorKindDto, PortConnectionCapabilityDto, PortDirectionDto,
-    PortDisplayDto, PortInstanceKindDto, PortKindDto, ProjectionBasis, ProjectionError,
-    ResolvedPortDto, ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
+    FunctionEditorPinDto, FunctionEditorProjectionDto, GraphProjectionDelta, LocalizationLookup,
+    NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto, ParameterEditorDto,
+    ParameterEditorKindDto, PortConnectionCapabilityDto, PortDirectionDto, PortDisplayDto,
+    PortInstanceKindDto, PortKindDto, ProjectionBasis, ProjectionError, ResolvedPortDto,
+    ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
     build_editor_graph_projection, build_function_editor_projection,
 };
 pub use semantic::{

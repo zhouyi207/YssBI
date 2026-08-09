@@ -1,2 +1,5 @@
 [build]
 target-dir = "target"
+
+[env]
+RUST_TEST_THREADS = "1"

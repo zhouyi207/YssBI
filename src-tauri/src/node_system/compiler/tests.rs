@@ -354,7 +354,22 @@ fn compile_plan_and_trace_keep_the_exact_requested_correlation() {
     let plan = result.plan.unwrap();
 
     assert_eq!(plan.provenance, snapshot.provenance);
-    for span in trace.0.lock().unwrap().iter() {
+    let spans = trace.0.lock().unwrap();
+    let snapshot_span = spans
+        .iter()
+        .find(|span| span.kind == SpanKind::Snapshot)
+        .unwrap();
+    assert_eq!(snapshot_span.span_id, snapshot.trace_span_id);
+    assert_eq!(snapshot_span.parent_span_id, None);
+    for kind in [SpanKind::Analysis, SpanKind::Lowering] {
+        let span = spans.iter().find(|span| span.kind == kind).unwrap();
+        assert_eq!(span.parent_span_id, Some(snapshot_span.span_id));
+        assert_eq!(
+            span.outcome,
+            crate::node_system::analysis::SpanOutcome::Success
+        );
+    }
+    for span in spans.iter() {
         assert_eq!(
             span.correlation.project_session_id,
             snapshot.provenance.project_session_id
@@ -5590,7 +5605,7 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         title_key: I18nKey::new("parameters.predicate.title").unwrap(),
         description_key: None,
         value_type: TypeExpr::Concrete(type_id(
-            crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
+            crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID,
         )),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],

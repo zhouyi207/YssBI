@@ -7653,9 +7653,14 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
         .iter()
         .map(|diagnostic| diagnostic.code.as_str())
         .collect::<Vec<_>>();
+    let plan_error = products
+        .execution_basis
+        .as_ref()
+        .and_then(|basis| basis.derive_full_plan().err());
     assert!(
         products.plan.is_some(),
-        "persisted function diagnostics: {diagnostic_codes:?}"
+        "persisted function diagnostics: {diagnostic_codes:?}; outcome: {:?}; plan error: {plan_error:?}",
+        products.outcome
     );
     let event_graph = &data.graphs[&event_path].document;
     let event_products = compiler
@@ -11145,7 +11150,7 @@ fn project_execution_runs_valid_plan_through_run_executor() {
 
 #[test]
 fn production_observability_execute_graph_records_compile_and_run_for_current_session() {
-    use crate::node_system::analysis::{SpanKind, SpanStatus};
+    use crate::node_system::analysis::{SpanKind, SpanOutcome};
 
     let (state, root) = active_state_with_valid_constant_graph("production-observability");
     let (session_id, trace_sink) = {
@@ -11164,22 +11169,46 @@ fn production_observability_execute_graph_records_compile_and_run_for_current_se
         )
         .unwrap();
 
-    let records = trace_sink.records();
-    assert!(!records.is_empty());
-    assert!(records.iter().all(|record| {
-        record.event.correlation.project_session_id == session_id
-            && record.event.correlation.graph_path.0.as_ref() == graph_path().as_str()
+    let spans = trace_sink.spans();
+    assert!(!spans.is_empty());
+    assert!(spans.iter().all(|span| {
+        span.correlation.project_session_id == session_id
+            && span.correlation.graph_path.0.as_ref() == graph_path().as_str()
+            && span.finished_at >= span.started_at
     }));
-    for kind in [SpanKind::Snapshot, SpanKind::Analysis, SpanKind::Lowering] {
-        assert!(records.iter().any(|record| {
-            record.event.kind == kind && record.event.status == SpanStatus::Succeeded
-        }));
+    for kind in [
+        SpanKind::Snapshot,
+        SpanKind::Analysis,
+        SpanKind::Lowering,
+        SpanKind::Run,
+    ] {
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.kind == kind && span.outcome == SpanOutcome::Success)
+        );
     }
-    assert!(records.iter().any(|record| {
-        record.event.kind == SpanKind::Run && record.event.status == SpanStatus::Started
-    }));
-    assert!(records.iter().any(|record| {
-        record.event.kind == SpanKind::Run && record.event.status == SpanStatus::Succeeded
+    let snapshot = spans
+        .iter()
+        .find(|span| span.kind == SpanKind::Snapshot)
+        .unwrap();
+    for kind in [SpanKind::Analysis, SpanKind::Lowering] {
+        assert_eq!(
+            spans
+                .iter()
+                .find(|span| span.kind == kind)
+                .unwrap()
+                .parent_span_id,
+            Some(snapshot.span_id)
+        );
+    }
+    let ids = spans
+        .iter()
+        .map(|span| span.span_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(spans.iter().all(|span| {
+        span.parent_span_id
+            .is_none_or(|parent| ids.contains(&parent))
     }));
 
     std::fs::remove_dir_all(root).unwrap();
@@ -11199,7 +11228,7 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
             &NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
-    assert!(!old_sink.records().is_empty());
+    assert!(!old_sink.spans().is_empty());
 
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
 
@@ -11208,8 +11237,8 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
         std::sync::Arc::clone(&store.trace_sink)
     };
     assert!(!std::sync::Arc::ptr_eq(&old_sink, &new_sink));
-    assert!(new_sink.records().is_empty());
-    assert!(!old_sink.records().is_empty());
+    assert!(new_sink.spans().is_empty());
+    assert!(!old_sink.spans().is_empty());
 
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -11533,6 +11562,7 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
     reversed.provenance.compile_id = forward.provenance.compile_id;
     reversed.correlation.run_id = forward.correlation.run_id;
     reversed.correlation.compile_id = forward.correlation.compile_id;
+    reversed.correlation.trace_parent_span_id = forward.correlation.trace_parent_span_id;
     assert_eq!(forward, reversed);
 
     drop(fixture.state);

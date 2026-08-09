@@ -408,6 +408,7 @@ mod tests {
             "connections": [],
             "diagnostics": [],
             "hasBlockingDiagnostics": false,
+            "outcome": { "type": "success" },
         }))
         .unwrap();
         let result = GraphMutationResultDto {

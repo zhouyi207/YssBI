@@ -2,10 +2,14 @@ use super::{CompilationBasis, CompileId};
 use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::protocol::NodeTypeId;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::num::NonZeroU64;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
+
+#[cfg(test)]
+use std::collections::BTreeMap;
+#[cfg(test)]
+use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::node_system::plan::{AttemptId, OperationStableId};
@@ -173,6 +177,7 @@ pub enum SpanOutcome {
     Cancellation,
     Timeout,
     Retry,
+    NotReached,
     Cleanup { error_count: u64, panicking: bool },
     InternalAborted,
 }
@@ -357,6 +362,10 @@ pub fn start_span_safely<'a>(sink: &'a dyn TraceSink, spec: SpanSpec) -> SpanGua
         .unwrap_or_else(|_| NOOP_TRACE_SINK.start_span(fallback_spec))
 }
 
+pub fn complete_span_safely(sink: &dyn TraceSink, span: TraceSpan) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.complete_span(span)));
+}
+
 pub struct SpanGuard<'a> {
     sink: &'a dyn TraceSink,
     clock: &'a dyn TraceClock,
@@ -398,9 +407,7 @@ impl<'a> SpanGuard<'a> {
             outcome,
             correlation: spec.correlation,
         };
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.sink.complete_span(span);
-        }));
+        complete_span_safely(self.sink, span);
     }
 }
 
@@ -572,29 +579,51 @@ mod tests {
     }
 
     #[test]
-    fn strict_redaction_keeps_literals_and_resource_secrets_out_of_events() {
-        let event = SpanEvent::new(
-            SpanKind::Run,
-            SpanStatus::Started,
-            CorrelationContext::compile(&provenance()),
-        )
-        .with_field(
-            "literal",
-            TraceValue::Text("customer supplied text".into()),
-            TraceFieldSensitivity::UserLiteral,
-            RedactionPolicy::strict(),
-        )
-        .with_field(
-            "credential",
-            TraceValue::Text("database-password".into()),
-            TraceFieldSensitivity::ResourceSecret,
-            RedactionPolicy::strict(),
+    fn strict_redaction_replaces_sensitive_trace_values() {
+        let policy = RedactionPolicy::strict();
+        assert_eq!(
+            policy.apply(
+                TraceFieldSensitivity::UserLiteral,
+                TraceValue::Text("customer supplied text".into()),
+            ),
+            Some(TraceValue::Redacted)
         );
+        assert_eq!(
+            policy.apply(
+                TraceFieldSensitivity::ResourceSecret,
+                TraceValue::Text("database-password".into()),
+            ),
+            Some(TraceValue::Redacted)
+        );
+    }
 
-        let serialized = serde_json::to_string(&event).unwrap();
-        assert!(!serialized.contains("customer supplied text"));
-        assert!(!serialized.contains("database-password"));
-        assert_eq!(event.fields["literal"], TraceValue::Redacted);
-        assert_eq!(event.fields["credential"], TraceValue::Redacted);
+    #[test]
+    fn trace_sink_start_and_finish_panics_do_not_escape() {
+        struct PanickingSink;
+        impl TraceSink for PanickingSink {
+            fn start_span(&self, _: SpanSpec) -> SpanGuard<'_> {
+                panic!("start sink failed")
+            }
+
+            fn complete_span(&self, _: TraceSpan) {
+                panic!("finish sink failed")
+            }
+        }
+
+        let spec = SpanSpec {
+            parent_span_id: None,
+            run_id: None,
+            operation_id: None,
+            activation_id: None,
+            attempt_id: None,
+            kind: SpanKind::Snapshot,
+            correlation: CorrelationContext::compile(&provenance()),
+        };
+        let mut fallback = start_span_safely(&PanickingSink, spec.clone());
+        fallback.finish(SpanOutcome::Success);
+
+        let mut finish = SpanGuard::new(&PanickingSink, spec, &SYSTEM_TRACE_CLOCK);
+        finish.finish(SpanOutcome::Success);
+        drop(finish);
     }
 }

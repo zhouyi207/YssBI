@@ -2,8 +2,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GraphTraceDetailsState } from '@/features/application/observability/useGraphTraceDetails';
-import type { TraceRecordDto } from '@/shared/types/dto/trace';
+import type {
+  GraphTraceDetailsState,
+  TraceSpanProjection,
+} from '@/features/application/observability/useGraphTraceDetails';
 import { GraphTraceDetails } from './GraphTraceDetails';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,11 +54,19 @@ vi.mock('react-i18next', () => ({
 
 const graphPath = 'events/Main.yssbi-event';
 
-function trace(overrides: Partial<TraceRecordDto> = {}): TraceRecordDto {
+function trace(overrides: Partial<TraceSpanProjection> = {}): TraceSpanProjection {
   return {
-    sequence: '7',
-    kind: 'operation',
-    status: 'succeeded',
+    spanId: '7',
+    parentSpanId: '6',
+    runId: '41',
+    operationId: 'operation-public',
+    activationId: '8',
+    attemptId: '2',
+    kind: 'operationAttempt',
+    startedAt: '9007199254740993',
+    finishedAt: '9007199254741118',
+    durationNanos: 125n,
+    outcome: 'success',
     correlation: {
       projectSessionId: 'session-public',
       graphPath,
@@ -69,11 +79,6 @@ function trace(overrides: Partial<TraceRecordDto> = {}): TraceRecordDto {
       nodeId: 'node-public',
       nodeTypeId: 'functions/public-node',
       parentCall: '2',
-    },
-    fields: {
-      backend: { type: 'text', value: 'polars' },
-      attempt: { type: 'integer', value: 1 },
-      credential: { type: 'redacted' },
     },
     ...overrides,
   };
@@ -150,13 +155,15 @@ describe('GraphTraceDetails', () => {
     expect(host.textContent).toContain('Loading trace…');
   });
 
-  it('renders sequence, status, and the complete allowlisted correlation', () => {
+  it('renders completed span identity, outcome, duration, and correlation', () => {
     renderDetails();
     expand();
 
     expect(host.textContent).toContain('7');
-    expect(host.textContent).toContain('operation');
-    expect(host.textContent).toContain('succeeded');
+    expect(host.textContent).toContain('operationAttempt');
+    expect(host.textContent).toContain('success');
+    expect(host.textContent).toContain('operation-public');
+    expect(host.textContent).toContain('125 ns');
     expect(host.textContent).toContain('session-public');
     expect(host.textContent).toContain(graphPath);
     expect(host.textContent).toContain('registry-public');
@@ -170,7 +177,7 @@ describe('GraphTraceDetails', () => {
       selectRun: async (runId) => {
         hookState.current = readyState({
           selectedRunId: runId,
-          runTrace: [trace({ sequence: '99', status: 'failed' })],
+          runTrace: [trace({ spanId: '99', outcome: 'error' })],
         });
         renderDetails();
       },
@@ -181,23 +188,26 @@ describe('GraphTraceDetails', () => {
     clickButton('Run 41');
 
     expect(host.textContent).toContain('99');
-    expect(host.textContent).toContain('failed');
+    expect(host.textContent).toContain('error');
   });
 
-  it('renders public fields and an explicit redacted marker without leaking extra values', () => {
-    const unsafeRecord = {
-      ...trace(),
-      privateRuntimeValue: 'must-never-render',
-    } as TraceRecordDto;
-    hookState.current = readyState({ graphTraces: [unsafeRecord] });
+  it('renders cleanup metadata without heuristic start-finish pairing', () => {
+    hookState.current = readyState({
+      graphTraces: [trace({
+        kind: 'cleanup',
+        operationId: null,
+        activationId: null,
+        attemptId: null,
+        outcome: { cleanup: { errorCount: '2', panicking: true } },
+      })],
+    });
     renderDetails();
     expand();
 
-    expect(host.textContent).toContain('backend');
-    expect(host.textContent).toContain('polars');
-    expect(host.textContent).toContain('attempt');
-    expect(host.textContent).toContain('[redacted]');
-    expect(host.textContent).not.toContain('must-never-render');
+    expect(host.textContent).toContain('cleanup');
+    expect(host.textContent).toContain('Error count');
+    expect(host.textContent).toContain('2');
+    expect(host.textContent).toContain('true');
   });
 
   it.each([

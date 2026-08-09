@@ -1864,27 +1864,52 @@ fn function_signature_and_caller_graph_undo_as_one_project_transaction() {
 }
 
 #[test]
-fn legacy_history_transaction_defaults_to_in_memory_until_save() {
+fn history_transaction_rejects_missing_persistence() {
     let transaction = ProjectHistoryTransaction::graph(
         operation_id(629),
-        graph_path("events/legacy-history"),
+        graph_path("events/strict-history"),
         ResourceRevision::INITIAL,
         GraphDocumentPatch::new(Vec::new()),
     );
-    let mut legacy = serde_json::to_value(&transaction).unwrap();
-    legacy.as_object_mut().unwrap().remove("persistence");
+    let mut missing_persistence = serde_json::to_value(&transaction).unwrap();
+    missing_persistence
+        .as_object_mut()
+        .unwrap()
+        .remove("persistence");
 
-    let decoded: ProjectHistoryTransaction = serde_json::from_value(legacy).unwrap();
+    let error = serde_json::from_value::<ProjectHistoryTransaction>(missing_persistence)
+        .expect_err("history persistence is required on the wire");
 
-    assert_eq!(
-        decoded.persistence,
-        HistoryPersistencePolicy::InMemoryUntilSave
-    );
-    assert_eq!(decoded.history_id, transaction.history_id);
-    assert_eq!(decoded.caused_by, transaction.caused_by);
-    assert_eq!(decoded.changes, transaction.changes);
-    assert!(decoded.variable_effect_snapshots.is_none());
-    assert!(decoded.graph_resource_move.is_none());
+    assert!(error.to_string().contains("missing field `persistence`"));
+}
+
+#[test]
+fn history_persistence_policies_round_trip() {
+    let transactions = [
+        ProjectHistoryTransaction::graph(
+            operation_id(630),
+            graph_path("events/in-memory-history"),
+            ResourceRevision::INITIAL,
+            GraphDocumentPatch::new(Vec::new()),
+        ),
+        ProjectHistoryTransaction::durable_variable_effects(
+            operation_id(631),
+            Vec::new(),
+            VariableEffectHistorySnapshots::default(),
+        ),
+        ProjectHistoryTransaction::graph_resource_move(
+            operation_id(632),
+            graph_path("events/before-move"),
+            graph_path("events/after-move"),
+            json!({}),
+        ),
+    ];
+
+    for transaction in transactions {
+        let encoded = serde_json::to_value(&transaction).unwrap();
+        let decoded: ProjectHistoryTransaction = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, transaction);
+    }
 }
 
 #[test]

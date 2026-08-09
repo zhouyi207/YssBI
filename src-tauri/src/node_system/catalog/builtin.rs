@@ -512,24 +512,18 @@ fn register_builtin_nominal_validators(
     let parse_type_id = |value| sid(value, TypeId::new);
     let project_columns = builder
         .register_nominal_codec(
-            parse_type_id(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
-            parse_type_id(
-                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
-            )?,
-            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::node_system::parameter_types::dataframe::prepare_project_columns_json,
+            parse_type_id(crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID)?,
+            parse_type_id(crate::node_system::protocol::dataframe::PROJECT_COLUMNS_VALIDATOR_ID)?,
+            crate::node_system::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            crate::node_system::protocol::dataframe::prepare_project_columns_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     let filter_predicate = builder
         .register_nominal_codec(
-            parse_type_id(
-                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_TYPE_ID,
-            )?,
-            parse_type_id(
-                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
-            )?,
-            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
-            crate::node_system::parameter_types::dataframe::prepare_filter_predicate_json,
+            parse_type_id(crate::node_system::protocol::dataframe::FILTER_PREDICATE_TYPE_ID)?,
+            parse_type_id(crate::node_system::protocol::dataframe::FILTER_PREDICATE_VALIDATOR_ID)?,
+            crate::node_system::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            crate::node_system::protocol::dataframe::prepare_filter_predicate_json,
         )
         .map_err(BuiltinAssemblyError::Registration)?;
     Ok(super::dataframe::DataframeNominalHandles {

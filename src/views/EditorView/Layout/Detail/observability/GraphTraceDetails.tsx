@@ -4,7 +4,7 @@ import { VscRefresh } from 'react-icons/vsc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useGraphTraceDetails } from '@/features/application/observability/useGraphTraceDetails';
-import type { TraceRecordDto, TraceValueDto } from '@/shared/types/dto/trace';
+import type { TraceSpanProjection } from '@/features/application/observability/useGraphTraceDetails';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { detailEmptyHintClass } from '../shared/detailStyles';
@@ -105,7 +105,7 @@ function TraceContent({
   runSelected,
   runNotFound,
 }: {
-  records: TraceRecordDto[];
+  records: TraceSpanProjection[];
   loading: boolean;
   error: boolean;
   runSelected: boolean;
@@ -130,8 +130,8 @@ function TraceContent({
       direction="vertical"
     >
       <div className="space-y-2 p-2">
-        {records.map((record) => (
-          <TraceRecord key={record.sequence} record={record} />
+        {records.map((span) => (
+          <TraceRecord key={span.spanId} record={span} />
         ))}
       </div>
     </OverlayScrollbar>
@@ -142,7 +142,7 @@ function TraceState({ children }: { children: React.ReactNode }) {
   return <div className={detailEmptyHintClass}>{children}</div>;
 }
 
-function TraceRecord({ record }: { record: TraceRecordDto }) {
+function TraceRecord({ record }: { record: TraceSpanProjection }) {
   const { t } = useTranslation();
   const correlation = record.correlation;
 
@@ -150,10 +150,10 @@ function TraceRecord({ record }: { record: TraceRecordDto }) {
     <Card className="gap-0 rounded-md bg-card/80 py-0 shadow-xs">
       <CardHeader className="flex-row items-center justify-between gap-2 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <DetailText tone="mono">#{record.sequence}</DetailText>
+          <DetailText tone="mono">#{record.spanId}</DetailText>
           <DetailBadge>{record.kind}</DetailBadge>
         </div>
-        <DetailBadge>{record.status}</DetailBadge>
+        <DetailBadge>{outcomeLabel(record.outcome)}</DetailBadge>
       </CardHeader>
       <CardContent className="space-y-2 border-t border-border/60 px-2.5 py-2">
         <TraceGroup title={t('detail.trace.correlation')}>
@@ -165,6 +165,13 @@ function TraceRecord({ record }: { record: TraceRecordDto }) {
           <TraceValue label={t('detail.trace.runId')} value={correlation.runId} />
           <TraceValue label={t('detail.trace.nodeId')} value={correlation.nodeId} />
           <TraceValue label={t('detail.trace.nodeTypeId')} value={correlation.nodeTypeId} />
+          <TraceValue label="Parent span" value={record.parentSpanId} />
+          <TraceValue label="Operation ID" value={record.operationId} />
+          <TraceValue label="Activation ID" value={record.activationId} />
+          <TraceValue label="Attempt ID" value={record.attemptId} />
+          <TraceValue label="Started at" value={record.startedAt} />
+          <TraceValue label="Finished at" value={record.finishedAt} />
+          <TraceValue label="Duration" value={`${record.durationNanos} ns`} />
           <TraceValue label={t('detail.trace.parentCall')} value={correlation.parentCall} />
           {Object.entries(correlation.resourceVersions).map(([name, version]) => (
             <TraceValue
@@ -174,11 +181,10 @@ function TraceRecord({ record }: { record: TraceRecordDto }) {
             />
           ))}
         </TraceGroup>
-        {Object.keys(record.fields).length > 0 && (
-          <TraceGroup title={t('detail.trace.publicFields')}>
-            {Object.entries(record.fields).map(([name, value]) => (
-              <TraceField key={name} name={name} value={value} />
-            ))}
+        {typeof record.outcome === 'object' && (
+          <TraceGroup title="Cleanup">
+            <TraceValue label="Error count" value={record.outcome.cleanup.errorCount} />
+            <TraceValue label="Panicking" value={String(record.outcome.cleanup.panicking)} />
           </TraceGroup>
         )}
       </CardContent>
@@ -211,8 +217,6 @@ function TraceValue({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function TraceField({ name, value }: { name: string; value: TraceValueDto }) {
-  const { t } = useTranslation();
-  const rendered = value.type === 'redacted' ? t('detail.trace.redacted') : String(value.value);
-  return <TraceValue label={name} value={rendered} />;
+function outcomeLabel(outcome: TraceSpanProjection['outcome']): string {
+  return typeof outcome === 'string' ? outcome : 'cleanup';
 }

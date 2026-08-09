@@ -13,14 +13,15 @@ use super::{
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
     SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
-    start_span_safely,
+    complete_span_safely, start_span_safely,
 };
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
-    RelationalSubplanIndex, StructuredControlRegion, ValueRef, WorkloadClass,
+    StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
+use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -477,6 +478,77 @@ fn validate_published_call(
     Ok(())
 }
 
+struct RunTraceCoverage<'a> {
+    trace: &'a dyn TraceSink,
+    correlation: CorrelationContext,
+    resource_acquire: Cell<bool>,
+    result_publication: Cell<bool>,
+    cleanup: Cell<bool>,
+}
+
+impl<'a> RunTraceCoverage<'a> {
+    fn new(trace: &'a dyn TraceSink, correlation: CorrelationContext) -> Self {
+        Self {
+            trace,
+            correlation,
+            resource_acquire: Cell::new(false),
+            result_publication: Cell::new(false),
+            cleanup: Cell::new(false),
+        }
+    }
+
+    fn start_span(&self, kind: SpanKind) -> SpanGuard<'a> {
+        self.phase(kind).set(true);
+        start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: self.correlation.trace_parent_span_id,
+                run_id: self.correlation.run_id,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind,
+                correlation: self.correlation.clone(),
+            },
+        )
+    }
+
+    fn ensure_not_reached(&self, kind: SpanKind) {
+        let phase = self.phase(kind);
+        if phase.replace(true) {
+            return;
+        }
+        let mut span = start_span_safely(
+            self.trace,
+            SpanSpec {
+                parent_span_id: self.correlation.trace_parent_span_id,
+                run_id: self.correlation.run_id,
+                operation_id: None,
+                activation_id: None,
+                attempt_id: None,
+                kind,
+                correlation: self.correlation.clone(),
+            },
+        );
+        span.finish(SpanOutcome::NotReached);
+    }
+
+    fn ensure_all_not_reached(&self) {
+        self.ensure_not_reached(SpanKind::ResourceAcquire);
+        self.ensure_not_reached(SpanKind::ResultPublication);
+        self.ensure_not_reached(SpanKind::Cleanup);
+    }
+
+    fn phase(&self, kind: SpanKind) -> &Cell<bool> {
+        match kind {
+            SpanKind::ResourceAcquire => &self.resource_acquire,
+            SpanKind::ResultPublication => &self.result_publication,
+            SpanKind::Cleanup => &self.cleanup,
+            _ => unreachable!("coverage tracks only run phase spans"),
+        }
+    }
+}
+
 pub struct RunExecutor<'a> {
     kernels: &'a KernelRegistry,
     resources: &'a dyn ResourceProvider,
@@ -720,6 +792,7 @@ impl<'a> RunExecutor<'a> {
             },
         );
         correlation = correlation.with_trace_parent(run_span.span_id());
+        let trace_coverage = RunTraceCoverage::new(self.trace, correlation.clone());
         #[cfg(test)]
         let resource_owner = match &self.spill_root {
             Some(root) => RunResourceOwner::with_spill_root_and_deadline(
@@ -755,22 +828,28 @@ impl<'a> RunExecutor<'a> {
                     run_id,
                     correlation.clone(),
                     &resource_owner,
+                    &trace_coverage,
                 )
             }));
             match execution {
                 Ok(result) => {
-                    self.record_resource_cleanup(&resource_owner, correlation.clone(), false);
+                    trace_coverage.ensure_not_reached(SpanKind::ResourceAcquire);
+                    trace_coverage.ensure_not_reached(SpanKind::ResultPublication);
+                    self.record_resource_cleanup(&resource_owner, &trace_coverage, false);
                     if result.is_ok() {
                         check_terminal(&cancellation, self.options.deadline, RunPhase::Cleanup)?;
                     }
                     result
                 }
                 Err(payload) => {
-                    self.record_resource_cleanup(&resource_owner, correlation.clone(), true);
+                    trace_coverage.ensure_not_reached(SpanKind::ResourceAcquire);
+                    trace_coverage.ensure_not_reached(SpanKind::ResultPublication);
+                    self.record_resource_cleanup(&resource_owner, &trace_coverage, true);
                     std::panic::resume_unwind(payload)
                 }
             }
         });
+        trace_coverage.ensure_all_not_reached();
         run_span.finish(span_outcome(&result));
         let event = match &result {
             Ok(_) => RunEventKind::RunCompleted,
@@ -796,115 +875,134 @@ impl<'a> RunExecutor<'a> {
         run_id: RunId,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
+        trace_coverage: &RunTraceCoverage<'_>,
     ) -> Result<RunResult, RunError> {
         check_terminal(&cancellation, self.options.deadline, RunPhase::Kernel)?;
-        let mut result = self.run_root(
+        let execution_result = self.run_root(
             plan,
             cancellation.clone(),
             run_id,
             correlation.clone(),
             resource_owner,
+            trace_coverage,
         );
-        if result.is_ok()
-            && let Err(error) = check_terminal(
-                &cancellation,
-                self.options.deadline,
-                RunPhase::ResultPublication,
-            )
-        {
-            result = Err(error);
-        }
-        if let Ok(run_result) = result.as_ref()
-            && let Err(error) = promote_run_result(run_result, &cancellation, self.options.deadline)
-        {
-            result = Err(error);
-        }
-        let mut pending_sources = Vec::new();
-        if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
-            && let Err(error) = self.stage_result_sources(
-                results,
-                plan,
-                &correlation,
-                run_result,
-                &cancellation,
-                &mut pending_sources,
-            )
-        {
-            result = Err(error);
-            pending_sources.clear();
-        }
-        #[cfg(test)]
-        if result.is_ok() {
-            self.run_test_checkpoint(SchedulerCheckpoint::FinalResultPublication, &cancellation);
-        }
-        if result.is_ok()
-            && let Err(error) = check_terminal(
-                &cancellation,
-                self.options.deadline,
-                RunPhase::ResultPublication,
-            )
-        {
-            result = Err(error);
-            pending_sources.clear();
-        }
-        if let (Some(finalizer), Ok(run_result)) = (self.success_finalizer, result.as_mut())
-            && let Err(error) = finalizer(run_result, &cancellation, self.options.deadline)
-        {
-            pending_sources.clear();
-            result = Err(error);
-        }
-        if let (Some(preparer), Ok(run_result)) = (self.atomic_success_preparer, result.as_mut())
-            && let Err(error) = preparer(run_result, &cancellation, self.options.deadline)
-        {
-            pending_sources.clear();
-            result = Err(error);
-        }
-        if let (Some(finalizer), Some(results), Ok(run_result)) =
-            (self.atomic_success_finalizer, self.results, result.as_mut())
-        {
-            let (sources, source_events): (Vec<_>, Vec<_>) = pending_sources
-                .drain(..)
-                .map(|pending| (pending.source, pending.event))
-                .unzip();
-            let mut publication = results.begin_publication(run_id, sources);
-            publication.prepare(&cancellation, self.options.deadline)?;
-            match publication.publish_with_authority(&cancellation, self.options.deadline, |_| {
-                finalizer(run_result, &cancellation, self.options.deadline)
-            }) {
-                Ok(descriptors) => {
-                    for (event, descriptor) in source_events.into_iter().zip(descriptors) {
-                        if let Some(descriptor) = descriptor {
-                            self.record_source_event(descriptor, event);
+        let Ok(run_result) = execution_result else {
+            return execution_result;
+        };
+        let mut publication_span = trace_coverage.start_span(SpanKind::ResultPublication);
+        let result = (|| {
+            let mut result = Ok(run_result);
+            if result.is_ok()
+                && let Err(error) = check_terminal(
+                    &cancellation,
+                    self.options.deadline,
+                    RunPhase::ResultPublication,
+                )
+            {
+                result = Err(error);
+            }
+            if let Ok(run_result) = result.as_ref()
+                && let Err(error) =
+                    promote_run_result(run_result, &cancellation, self.options.deadline)
+            {
+                result = Err(error);
+            }
+            let mut pending_sources = Vec::new();
+            if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
+                && let Err(error) = self.stage_result_sources(
+                    results,
+                    plan,
+                    &correlation,
+                    run_result,
+                    &cancellation,
+                    &mut pending_sources,
+                )
+            {
+                result = Err(error);
+                pending_sources.clear();
+            }
+            #[cfg(test)]
+            if result.is_ok() {
+                self.run_test_checkpoint(
+                    SchedulerCheckpoint::FinalResultPublication,
+                    &cancellation,
+                );
+            }
+            if result.is_ok()
+                && let Err(error) = check_terminal(
+                    &cancellation,
+                    self.options.deadline,
+                    RunPhase::ResultPublication,
+                )
+            {
+                result = Err(error);
+                pending_sources.clear();
+            }
+            if let (Some(finalizer), Ok(run_result)) = (self.success_finalizer, result.as_mut())
+                && let Err(error) = finalizer(run_result, &cancellation, self.options.deadline)
+            {
+                pending_sources.clear();
+                result = Err(error);
+            }
+            if let (Some(preparer), Ok(run_result)) =
+                (self.atomic_success_preparer, result.as_mut())
+                && let Err(error) = preparer(run_result, &cancellation, self.options.deadline)
+            {
+                pending_sources.clear();
+                result = Err(error);
+            }
+            if let (Some(finalizer), Some(results), Ok(run_result)) =
+                (self.atomic_success_finalizer, self.results, result.as_mut())
+            {
+                let (sources, source_events): (Vec<_>, Vec<_>) = pending_sources
+                    .drain(..)
+                    .map(|pending| (pending.source, pending.event))
+                    .unzip();
+                let mut publication = results.begin_publication(run_id, sources);
+                publication.prepare(&cancellation, self.options.deadline)?;
+                match publication.publish_with_authority(
+                    &cancellation,
+                    self.options.deadline,
+                    |_| finalizer(run_result, &cancellation, self.options.deadline),
+                ) {
+                    Ok(descriptors) => {
+                        for (event, descriptor) in source_events.into_iter().zip(descriptors) {
+                            if let Some(descriptor) = descriptor {
+                                self.record_source_event(descriptor, event);
+                            }
                         }
                     }
+                    Err(error) => result = Err(error),
                 }
-                Err(error) => result = Err(error),
             }
-        }
-        if result.is_ok()
-            && self.atomic_success_finalizer.is_none()
-            && let Some(results) = self.results
-        {
-            let committed_publications = self.commit_result_sources(
-                results,
-                run_id,
-                pending_sources,
-                &cancellation,
-                self.success_finalizer.is_some(),
-            )?;
-            for (descriptor, event) in committed_publications {
-                self.record_source_event(descriptor, event);
+            if result.is_ok()
+                && self.atomic_success_finalizer.is_none()
+                && let Some(results) = self.results
+            {
+                let committed_publications = self.commit_result_sources(
+                    results,
+                    run_id,
+                    pending_sources,
+                    &cancellation,
+                    self.success_finalizer.is_some(),
+                )?;
+                for (descriptor, event) in committed_publications {
+                    self.record_source_event(descriptor, event);
+                }
             }
-        }
+            result
+        })();
+        publication_span.finish(span_outcome(&result));
         result
     }
 
     fn record_resource_cleanup(
         &self,
         resource_owner: &RunResourceOwner,
-        correlation: CorrelationContext,
-        _panicking: bool,
+        trace_coverage: &RunTraceCoverage<'_>,
+        panicking: bool,
     ) {
+        let mut span = trace_coverage.start_span(SpanKind::Cleanup);
         let cleanup_errors = resource_owner.cleanup();
         for error in &cleanup_errors {
             tauri_plugin_log::log::warn!(
@@ -912,21 +1010,9 @@ impl<'a> RunExecutor<'a> {
                 "{error}"
             );
         }
-        let mut span = start_span_safely(
-            self.trace,
-            SpanSpec {
-                parent_span_id: correlation.trace_parent_span_id,
-                run_id: correlation.run_id,
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::Cleanup,
-                correlation,
-            },
-        );
         span.finish(SpanOutcome::Cleanup {
             error_count: cleanup_errors.len() as u64,
-            panicking: _panicking,
+            panicking,
         });
     }
 
@@ -1073,11 +1159,12 @@ impl<'a> RunExecutor<'a> {
         run_id: RunId,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
+        trace_coverage: &RunTraceCoverage<'_>,
     ) -> Result<RunResult, RunError> {
         plan.validate()
             .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
         cancellation.check()?;
-        let resource_set = self.acquire_resources(plan, &correlation)?;
+        let resource_set = self.acquire_resources(plan, trace_coverage)?;
         let relational_backends = RunRelationalBackends::acquire(
             &plan.relational_subplans,
             self.relational_backends,
@@ -1128,20 +1215,9 @@ impl<'a> RunExecutor<'a> {
     fn acquire_resources(
         &self,
         plan: &ExecutionPlan,
-        correlation: &CorrelationContext,
+        trace_coverage: &RunTraceCoverage<'_>,
     ) -> Result<RunResourceSet, RunError> {
-        let mut span = start_span_safely(
-            self.trace,
-            SpanSpec {
-                parent_span_id: correlation.trace_parent_span_id,
-                run_id: correlation.run_id,
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::ResourceAcquire,
-                correlation: correlation.clone(),
-            },
-        );
+        let mut span = trace_coverage.start_span(SpanKind::ResourceAcquire);
         let result = self
             .resources
             .validate_plan(&plan.provenance, &plan.resources)
@@ -1295,10 +1371,13 @@ impl<'a> RunExecutor<'a> {
                     ParentCallId::new(NEXT_PARENT_CALL_ID.fetch_add(1, Ordering::Relaxed));
                 let mut correlation =
                     CorrelationContext::compile(&callee.provenance).for_run(run_id, Some(call_id));
+                let call_parent_span_id = (callee.provenance.graph_path
+                    == plan.provenance.graph_path)
+                    .then_some(run_parent_span_id);
                 let mut call_span = start_span_safely(
                     self.trace,
                     SpanSpec {
-                        parent_span_id: Some(run_parent_span_id),
+                        parent_span_id: call_parent_span_id,
                         run_id: Some(run_id),
                         operation_id: None,
                         activation_id: None,
@@ -1308,6 +1387,7 @@ impl<'a> RunExecutor<'a> {
                     },
                 );
                 correlation = correlation.with_trace_parent(call_span.span_id());
+                let call_trace_coverage = RunTraceCoverage::new(self.trace, correlation.clone());
                 let call_result = (|| {
                     callee
                         .validate()
@@ -1321,7 +1401,7 @@ impl<'a> RunExecutor<'a> {
                             ))
                         })
                         .collect::<Result<Vec<_>, RunError>>()?;
-                    let callee_resources = self.acquire_resources(&callee, &correlation)?;
+                    let callee_resources = self.acquire_resources(&callee, &call_trace_coverage)?;
                     let callee_backends = RunRelationalBackends::acquire(
                         &callee.relational_subplans,
                         self.relational_backends,
@@ -1365,18 +1445,9 @@ impl<'a> RunExecutor<'a> {
                     }
                     result
                 })();
-                let mut cleanup_span = start_span_safely(
-                    self.trace,
-                    SpanSpec {
-                        parent_span_id: correlation.trace_parent_span_id,
-                        run_id: correlation.run_id,
-                        operation_id: None,
-                        activation_id: None,
-                        attempt_id: None,
-                        kind: SpanKind::Cleanup,
-                        correlation: correlation.clone(),
-                    },
-                );
+                call_trace_coverage.ensure_not_reached(SpanKind::ResourceAcquire);
+                call_trace_coverage.ensure_not_reached(SpanKind::ResultPublication);
+                let mut cleanup_span = call_trace_coverage.start_span(SpanKind::Cleanup);
                 cleanup_span.finish(SpanOutcome::Cleanup {
                     error_count: 0,
                     panicking: false,
@@ -2281,7 +2352,7 @@ impl<'a> RunExecutor<'a> {
         parent_call: Option<ParentCallId>,
         run_id: RunId,
         worker_panic: &mut Option<Box<dyn std::any::Any + Send>>,
-        envelope: WorkerCompletion,
+        mut envelope: WorkerCompletion,
     ) {
         let completed_at = envelope.completed_at;
         let completion = envelope.completion;
@@ -2305,6 +2376,7 @@ impl<'a> RunExecutor<'a> {
             .remove(&completion.operation)
             .expect("validated running operation exists");
         admission.release(active.class);
+        let mut suppress_completion = false;
         if matches!(terminal_error, Some(RunError::DeadlineExceeded { .. })) {
             if cancellation.is_cancelled() {
                 *terminal_error = Some(RunError::Cancelled);
@@ -2321,7 +2393,7 @@ impl<'a> RunExecutor<'a> {
                 if let Some(key) = &active.memo_key {
                     memo_inflight.remove(key);
                 }
-                return;
+                suppress_completion = true;
             }
         } else if !completed_before_deadline {
             *terminal_error = Some(if cancellation.is_cancelled() {
@@ -2334,7 +2406,7 @@ impl<'a> RunExecutor<'a> {
             if let Some(key) = &active.memo_key {
                 memo_inflight.remove(key);
             }
-            return;
+            suppress_completion = true;
         } else if terminal_error.is_none()
             && !produced_ordinary_error
             && let Err(error) =
@@ -2348,11 +2420,22 @@ impl<'a> RunExecutor<'a> {
         {
             *terminal_error = Some(RunError::Cancelled);
         }
+        apply_authoritative_attempt_outcome(
+            &mut envelope.trace_spans,
+            &plan.operations[completion.operation.index()].stable_id,
+            &completion,
+            completed_at,
+            cancellation.cancelled_at(),
+            self.options.deadline,
+        );
         for span in envelope.trace_spans {
-            self.trace.complete_span(span);
+            complete_span_safely(self.trace, span);
         }
         if worker_panic.is_none() {
             *worker_panic = envelope.panic;
+        }
+        if suppress_completion {
+            return;
         }
 
         let correlation = operation_correlation(plan, run_id, parent_call, completion.operation);
@@ -2843,6 +2926,31 @@ fn promote_run_result(
         }
     }
     Ok(())
+}
+
+fn apply_authoritative_attempt_outcome(
+    spans: &mut [TraceSpan],
+    operation_id: &crate::node_system::plan::OperationStableId,
+    completion: &OperationCompletion,
+    completed_at: Instant,
+    cancelled_at: Option<Instant>,
+    deadline: Option<RunDeadline>,
+) {
+    for span in spans.iter_mut().filter(|span| {
+        span.kind == SpanKind::OperationAttempt
+            && span.operation_id.as_ref() == Some(operation_id)
+            && span.activation_id == Some(completion.activation)
+            && span.attempt_id == Some(completion.attempt)
+    }) {
+        if span.outcome != SpanOutcome::Success {
+            continue;
+        }
+        if cancelled_at.is_some_and(|cancelled_at| completed_at >= cancelled_at) {
+            span.outcome = SpanOutcome::Cancellation;
+        } else if deadline.is_some_and(|deadline| deadline.exceeded_at(completed_at)) {
+            span.outcome = SpanOutcome::Timeout;
+        }
+    }
 }
 
 fn span_outcome<T>(result: &Result<T, RunError>) -> SpanOutcome {

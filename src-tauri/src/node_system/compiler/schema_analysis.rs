@@ -422,7 +422,7 @@ impl<'a> SchemaAnalyzer<'a> {
     ) -> Option<SchemaFact> {
         let value = self.nodes.get(&node_id)?.parameters.get(predicate_key)?;
         let predicate = match serde_json::from_value::<
-            crate::node_system::parameter_types::dataframe::FilterPredicate,
+            crate::node_system::protocol::dataframe::FilterPredicate,
         >(value.clone())
         {
             Ok(predicate) => predicate,
@@ -456,7 +456,7 @@ impl<'a> SchemaAnalyzer<'a> {
             );
             return None;
         }
-        if !crate::node_system::parameter_types::dataframe::filter_comparison_is_compatible(
+        if !crate::node_system::protocol::dataframe::filter_comparison_is_compatible(
             field.scalar_type,
             predicate.operator,
             predicate.value.as_ref(),
@@ -677,9 +677,9 @@ impl<'a> SchemaAnalyzer<'a> {
 
 fn filter_operator_supported(
     scalar_type: RelationalScalarType,
-    operator: crate::node_system::parameter_types::dataframe::FilterOperator,
+    operator: crate::node_system::protocol::dataframe::FilterOperator,
 ) -> bool {
-    use crate::node_system::parameter_types::dataframe::FilterOperator;
+    use crate::node_system::protocol::dataframe::FilterOperator;
     if matches!(scalar_type, RelationalScalarType::Unknown) {
         return false;
     }

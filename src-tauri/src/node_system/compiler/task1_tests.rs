@@ -2,7 +2,7 @@ use super::*;
 use crate::node_system::analysis::{DiagnosticLocation, ResourceVersionSet};
 use crate::node_system::catalog::builtin_bundle_parts_for_test;
 use crate::node_system::document::{DocumentNode, GraphDocument, NodeId, NodePosition};
-use crate::node_system::parameter_types::dataframe::{
+use crate::node_system::protocol::dataframe::{
     FILTER_PREDICATE_TYPE_ID, PROJECT_COLUMNS_TYPE_ID, validate_filter_predicate_json,
     validate_project_columns_json,
 };
@@ -55,22 +55,18 @@ fn nominal_registry() -> NodeRegistry {
     builder
         .register_nominal_validator(
             TypeId::new(PROJECT_COLUMNS_TYPE_ID).unwrap(),
-            TypeId::new(
-                crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_VALIDATOR_ID,
-            )
-            .unwrap(),
-            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            TypeId::new(crate::node_system::protocol::dataframe::PROJECT_COLUMNS_VALIDATOR_ID)
+                .unwrap(),
+            crate::node_system::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
             validate_project_columns_json,
         )
         .unwrap();
     builder
         .register_nominal_validator(
             TypeId::new(FILTER_PREDICATE_TYPE_ID).unwrap(),
-            TypeId::new(
-                crate::node_system::parameter_types::dataframe::FILTER_PREDICATE_VALIDATOR_ID,
-            )
-            .unwrap(),
-            crate::node_system::parameter_types::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
+            TypeId::new(crate::node_system::protocol::dataframe::FILTER_PREDICATE_VALIDATOR_ID)
+                .unwrap(),
+            crate::node_system::protocol::dataframe::DATAFRAME_NOMINAL_CODEC_VERSION,
             validate_filter_predicate_json,
         )
         .unwrap();

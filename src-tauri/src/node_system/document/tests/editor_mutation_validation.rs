@@ -228,8 +228,7 @@ fn editor_parameter_validation_applies_registered_nominal_codec() {
         title_key: I18nKey::new("parameters.columns.title").unwrap(),
         description_key: None,
         value_type: TypeExpr::Concrete(
-            TypeId::new(crate::node_system::parameter_types::dataframe::PROJECT_COLUMNS_TYPE_ID)
-                .unwrap(),
+            TypeId::new(crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID).unwrap(),
         ),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],

@@ -1,24 +1,30 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { TraceDecimalString, TraceRecordDto } from '@/shared/types/dto/trace';
+import {
+  parseTraceSpanList,
+  type TraceDecimalString,
+  type TraceSpanDto,
+} from '@/shared/types/dto/trace';
 
 export class TraceService {
   static async listGraphTraces(
     projectInstanceId: string,
     graphPath: string,
-  ): Promise<TraceRecordDto[]> {
-    return invoke<TraceRecordDto[]>('list_graph_traces', {
+  ): Promise<TraceSpanDto[]> {
+    const response: unknown = await invoke('list_graph_traces', {
       projectInstanceId,
       graphPath,
     });
+    return parseTraceSpanList(response);
   }
 
   static async getRunTrace(
     projectInstanceId: string,
     runId: TraceDecimalString,
-  ): Promise<TraceRecordDto[]> {
-    return invoke<TraceRecordDto[]>('get_run_trace', {
+  ): Promise<TraceSpanDto[]> {
+    const response: unknown = await invoke('get_run_trace', {
       projectInstanceId,
       runId,
     });
+    return parseTraceSpanList(response);
   }
 }

@@ -248,6 +248,7 @@
     "diagnostics.compiler.interface.resolver_missing",
     "diagnostics.compiler.lowering.deadline_exceeded",
     "diagnostics.compiler.lowering.effect_contract",
+    "diagnostics.compiler.lowering.execution_identity",
     "diagnostics.compiler.lowering.implementation_missing",
     "diagnostics.compiler.lowering.internal_invariant",
     "diagnostics.compiler.lowering.resource_conflict",

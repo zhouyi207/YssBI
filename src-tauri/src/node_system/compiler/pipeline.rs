@@ -678,7 +678,10 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         function_abi: None,
                         outcome: CompilationOutcome::InternalFailure(InternalCompilationFailure {
                             stage: CompilationStage::Analysis,
-                            code: "compiler.semantic.invalid".into(),
+                            code: CompilerDiagnostic::SemanticInvalid {}
+                                .definition()
+                                .code
+                                .into(),
                             node_id: None,
                         }),
                     },
@@ -742,7 +745,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         None,
                         CompilationOutcome::InternalFailure(InternalCompilationFailure {
                             stage: CompilationStage::Lowering,
-                            code: "compiler.plan.invalid".into(),
+                            code: CompilerDiagnostic::PlanInvalid {}.definition().code.into(),
                             node_id: None,
                         }),
                     )
@@ -2588,7 +2591,10 @@ fn lowered_kernel_identity(kernel: &LoweredKernel) -> serde_json::Value {
 fn lowering_identity_failure(node_id: NodeId) -> LowerGraphFailure {
     LowerGraphFailure::Internal(InternalCompilationFailure {
         stage: CompilationStage::Lowering,
-        code: "compiler.lowering.execution_identity".into(),
+        code: CompilerDiagnostic::LoweringExecutionIdentity {}
+            .definition()
+            .code
+            .into(),
         node_id: Some(node_id),
     })
 }
