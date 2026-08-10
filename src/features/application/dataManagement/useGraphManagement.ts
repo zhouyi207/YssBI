@@ -10,6 +10,7 @@ import {
 } from '@/features/application/resource/resourceActions';
 import { deleteGraphWithConfirm } from '@/features/application/dataManagement/deleteGraphWithConfirm';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 
@@ -68,8 +69,9 @@ export function useGraphManagement(
       switchSidebarTab('graphs');
       useSidebarStore.getState().setSectionExpanded('graphsEvent', true);
     } catch (error) {
-      logger.graph.error(`Failed to create event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      uiStore.showToast(`创建 Event 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      const message = formatErrorMessage(error);
+      logger.graph.error(`Failed to create event: ${message}`, 'GraphManagement');
+      uiStore.showToast(`创建 Event 失败: ${message}`, 'error');
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
@@ -78,7 +80,7 @@ export function useGraphManagement(
     try {
       await deleteGraphWithConfirm(id, 'event');
     } catch (error) {
-      logger.graph.error(`Failed to delete event: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
+      logger.graph.error(`Failed to delete event: ${formatErrorMessage(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);
@@ -104,8 +106,9 @@ export function useGraphManagement(
       switchSidebarTab('graphs');
       useSidebarStore.getState().setSectionExpanded('graphsFunction', true);
     } catch (error) {
-      logger.graph.error(`Failed to create function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
-      uiStore.showToast(`创建 Function 失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      const message = formatErrorMessage(error);
+      logger.graph.error(`Failed to create function: ${message}`, 'GraphManagement');
+      uiStore.showToast(`创建 Function 失败: ${message}`, 'error');
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
@@ -114,7 +117,7 @@ export function useGraphManagement(
     try {
       await deleteGraphWithConfirm(id, 'function');
     } catch (error) {
-      logger.graph.error(`Failed to delete function: ${error instanceof Error ? error.message : String(error)}`, 'GraphManagement');
+      logger.graph.error(`Failed to delete function: ${formatErrorMessage(error)}`, 'GraphManagement');
       throw error;
     }
   }, []);

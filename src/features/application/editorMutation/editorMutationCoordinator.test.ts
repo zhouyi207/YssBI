@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { buildGraphResourceMeta, resourceKey, useResourceStore } from '@/features/core/resource';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
@@ -53,11 +54,35 @@ describe('executeEditorMutation lifecycle identity', () => {
     resetEditorMutationCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useGraphDataStore.setState({ graphEntities: {} });
+    useResourceStore.getState().clear();
+    useResourceStore.getState().upsertResource(
+      buildGraphResourceMeta('function', graphPath, 'Main', { revision: 1 }),
+    );
     useGraphDataStore.getState().replaceProjection(
       graphPath,
       makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' }).projection,
       1,
     );
+  });
+
+  it('advances sidebar resource revision after installing an authoritative graph mutation', async () => {
+    await expect(executeEditorMutation(
+      {
+        graphPath,
+        locale,
+        mutation: { type: 'deleteNode', payload: { nodeId: 'local-node' } },
+      },
+      {
+        createOperationId: () => operationId,
+        mutateGraph: vi.fn().mockResolvedValue(graphMutationResult()),
+        hydrateGraph: vi.fn(),
+        updateHistoryStatus: vi.fn(),
+      },
+    )).resolves.toMatchObject({ status: 'applied' });
+
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: graphPath, kind: 'function' })
+    ]?.revision).toBe(2);
   });
 
   it('passes one captured identity and ignores completion after project replacement', async () => {

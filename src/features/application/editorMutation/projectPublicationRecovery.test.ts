@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import type { ProjectIndexRow } from '@/services/project/projectService';
+import { resourceKey } from '@/features/core/resource';
 import { prepareProjectRecoveryCommit } from './projectPublicationRecovery';
 
 it('prepares recovery with authoritative function editor projection pins', () => {
@@ -44,6 +45,9 @@ it('prepares recovery with authoritative function editor projection pins', () =>
     pathRemaps: new Map(),
   });
 
+  expect(prepared.storeState.resources[
+    resourceKey({ id: functionPath, kind: 'function' })
+  ]).toMatchObject({ revision: 6 });
   expect(prepared.storeState.graphMeta[functionPath]).toMatchObject({
     functionRevision: 6,
     functionSignature: { parameters: [], return_type: 'Object' },

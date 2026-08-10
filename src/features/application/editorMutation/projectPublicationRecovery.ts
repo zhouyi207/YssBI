@@ -208,7 +208,7 @@ function recoveryResources(
   databases: Readonly<Record<string, { name?: unknown }>>,
 ): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = index.graphs.map((graph) =>
-    buildGraphResourceMeta(graph.type, graph.path, graph.name));
+    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }));
   resources.push(...index.worksheets.map((worksheet) => ({
     id: worksheet.id,
     kind: 'worksheet' as const,

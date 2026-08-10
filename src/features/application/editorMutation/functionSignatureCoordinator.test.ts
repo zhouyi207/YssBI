@@ -3,6 +3,7 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
+import { buildGraphResourceMeta, resourceKey, useResourceStore } from '@/features/core/resource';
 import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import type {
   FunctionSignatureDto,
@@ -52,6 +53,10 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
 
 function installState(): void {
   useGraphDataStore.setState({ graphEntities: {} });
+  useResourceStore.getState().clear();
+  useResourceStore.getState().upsertResource(
+    buildGraphResourceMeta('function', functionPath, 'Compute', { revision: 2 }),
+  );
   useGraphDataStore.getState().replaceProjection(
     functionPath,
     makeEditorProjectionFixture({
@@ -263,6 +268,9 @@ describe('executeFunctionSignatureMutation', () => {
       functionInputs: authoritativeFunctionProjection.inputs,
       functionOutputs: authoritativeFunctionProjection.outputs,
     });
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: functionPath, kind: 'function' })
+    ]?.revision).toBe(7);
     expect(useHistoryStore.getState()).toEqual({
       canUndo: true,
       canRedo: false,

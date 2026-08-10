@@ -25,6 +25,7 @@ import {
 } from '@/features/core/layout/editorGridLayout';
 import { commitEditorGridLayoutState } from '@/features/core/layout/editorGridSizing';
 import {
+  createInitialWorkbenchNodes,
   DEFAULT_EDITOR_GROUP_ID,
   EDITOR_AREA_ID,
 } from '@/features/core/layout/workbenchLayoutDefaults';
@@ -207,11 +208,12 @@ function prepareLayout(context: AuthoritativeProjectLoadPlanContext): PreparedLa
   for (const id of collectDescendants(nodes, EDITOR_AREA_ID, DEFAULT_EDITOR_GROUP_ID)) {
     delete nodes[id];
   }
+  const defaultEditor = nodes[DEFAULT_EDITOR_GROUP_ID]
+    ?? structuredClone(createInitialWorkbenchNodes()[DEFAULT_EDITOR_GROUP_ID]);
+  nodes[DEFAULT_EDITOR_GROUP_ID] = defaultEditor;
   editorArea.children = [DEFAULT_EDITOR_GROUP_ID];
   writeEditorAreaMaximizeState(nodes, null, null);
   clearEditorGroupMaximizedHidden(nodes);
-  const defaultEditor = nodes[DEFAULT_EDITOR_GROUP_ID];
-  if (!defaultEditor) throw new Error('Project layout is missing the default editor group');
   defaultEditor.parentId = EDITOR_AREA_ID;
   defaultEditor.size = 1;
   defaultEditor.pixelSize = undefined;

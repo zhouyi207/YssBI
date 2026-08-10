@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { getDocumentState, markResourceLoaded } from '@/features/core/resource';
+import {
+  buildGraphResourceMeta,
+  getDocumentState,
+  markResourceLoaded,
+  resourceKey,
+  useResourceStore,
+} from '@/features/core/resource';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
@@ -47,6 +53,7 @@ describe('graphProjectionCoordinator invalidation', () => {
     vi.clearAllMocks();
     coordinator.resetGraphProjectionCoordinator();
     useGraphDataStore.setState({ graphEntities: {} });
+    useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: 'project-instance-1' });
     startProjectLifecycle('project-instance-1');
     useDocumentStateStore.getState().clear();
@@ -57,6 +64,9 @@ describe('graphProjectionCoordinator invalidation', () => {
     const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' });
     const refreshed = makeEditorProjectionFixture({ graphPath, sourceRevision: 2, title: 'Refreshed' });
     useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
+    useResourceStore.getState().upsertResource(
+      buildGraphResourceMeta('event', graphPath, 'Main', { revision: 1 }),
+    );
     markResourceLoaded({ id: graphPath, kind: 'event' });
     vi.mocked(GraphProjectionService.hydrateGraph).mockResolvedValue(refreshed.projection);
 
@@ -72,6 +82,9 @@ describe('graphProjectionCoordinator invalidation', () => {
       sourceRevision: 2,
       nodes: { 'local-node': { title: 'Refreshed' } },
     });
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: graphPath, kind: 'event' })
+    ]?.revision).toBe(2);
     expect(getDocumentState({ id: graphPath, kind: 'event' })?.stale).toBe(false);
   });
 

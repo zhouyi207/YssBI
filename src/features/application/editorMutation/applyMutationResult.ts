@@ -2,6 +2,8 @@ import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { AtomicProjectionApplyResult } from '@/features/core/dataStore/graphDataStore';
 import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
 import type { PendingMutationRecord } from './pendingMutationRegistry';
+import { useResourceStore } from '@/features/core/resource';
+import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 
 function invalidResult(message: string): never {
   throw new Error(`invalid mutation result: ${message}`);
@@ -41,7 +43,17 @@ export function applyMutationResult(
   result: GraphMutationResultDto,
 ): AtomicProjectionApplyResult {
   validateMutationResult(pending, result);
-  return useGraphDataStore
+  const applied = useGraphDataStore
     .getState()
     .replaceProjectionsAtomically([result.projectionReplacement]);
+  if (applied.applied) {
+    const kind = inferGraphResourceKind(result.delta.graphPath);
+    if (kind) {
+      useResourceStore.getState().patchResource(
+        { id: result.delta.graphPath, kind },
+        { revision: result.delta.toRevision },
+      );
+    }
+  }
+  return applied;
 }

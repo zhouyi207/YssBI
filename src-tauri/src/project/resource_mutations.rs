@@ -490,7 +490,13 @@ impl ProjectState {
             kind,
         )
         .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
-        let resource = build_graph_shell(&path, unique_name, kind)?;
+        let mut resource = build_graph_shell(&path, unique_name, kind)?;
+        let retained_revision = self.graph_revisions.read().unwrap().get(&path).copied();
+        crate::project::project_state::normalize_function_resource_revision(
+            &path,
+            &mut resource,
+            retained_revision,
+        )?;
         let contents = crate::project::project_io::serialize_graph_resource_document(
             &resource,
             HashMap::new(),
@@ -514,12 +520,12 @@ impl ProjectState {
         let committed = prepared.commit()?;
         #[cfg(test)]
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&path));
-        self.insert_graph(path.clone(), resource)?;
+        let inserted = self.insert_graph(path.clone(), resource)?;
         let unload_context = resource_context(
             self,
             session,
             operation_id,
-            [(graph_key(&path), ResourceRevision::INITIAL)],
+            [(graph_key(&path), inserted.document.revision)],
             [],
         );
         #[cfg(test)]
@@ -1203,6 +1209,56 @@ mod tests {
         document.document.revision = graph_revision;
         document.function.as_mut().unwrap().revision = embedded_revision;
         std::fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn function_create_after_same_path_removal_continues_the_tombstone_revision() {
+        let project = TestProject::new("function-recreate-tombstone");
+        let state = project.state(ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+
+        let created = state
+            .create_graph_resource_transaction(
+                &session.instance_id,
+                "Reusable",
+                GraphDocumentKind::Function,
+                OperationId::new(),
+            )
+            .unwrap();
+        let path = super::fixture_result_path(&created).unwrap();
+        state
+            .load_graph_resource(&session.instance_id, &path, 1)
+            .unwrap();
+        let created_revision = state.graph_revisions.read().unwrap()[&path];
+        state
+            .remove_graph_resource_transaction(
+                &session.instance_id,
+                &path,
+                created_revision,
+                OperationId::new(),
+            )
+            .unwrap();
+        let tombstone_revision = state.graph_revisions.read().unwrap()[&path];
+
+        let recreated = state
+            .create_graph_resource_transaction(
+                &session.instance_id,
+                "Reusable",
+                GraphDocumentKind::Function,
+                OperationId::new(),
+            )
+            .unwrap();
+        let recreated_path = super::fixture_result_path(&recreated).unwrap();
+        let recreated_revision = state.graph_revisions.read().unwrap()[&recreated_path];
+        let persisted: GraphDocument = serde_json::from_slice(
+            &std::fs::read(project.root.join(recreated_path.as_str())).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(recreated_path, path);
+        assert_eq!(recreated_revision, tombstone_revision.next());
+        assert_eq!(persisted.revision, recreated_revision);
+        assert_eq!(persisted.function.unwrap().revision, recreated_revision);
     }
 
     #[test]

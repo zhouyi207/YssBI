@@ -704,7 +704,29 @@ fn authoritative_function_revision(
     ))
 }
 
-fn normalize_function_resource_revision(
+fn normalize_loaded_function_resource_revision(
+    path: &GraphResourcePath,
+    resource: &mut GraphResourceDocument,
+    retained: Option<crate::node_system::document::ResourceRevision>,
+) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    if resource.kind != crate::project::GraphDocumentKind::Function {
+        return Ok(resource.document.revision);
+    }
+    let incoming = resource.document.revision;
+    let revision = match retained {
+        Some(retained) if incoming < retained => {
+            authoritative_function_revision(path, incoming, Some(retained))?
+        }
+        _ => incoming,
+    };
+    resource.document.revision = revision;
+    if let Some(function) = resource.function.as_mut() {
+        function.revision = revision;
+    }
+    Ok(revision)
+}
+
+pub(super) fn normalize_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
     retained: Option<crate::node_system::document::ResourceRevision>,
@@ -4260,7 +4282,7 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
-        let revision = normalize_function_resource_revision(
+        let revision = normalize_loaded_function_resource_revision(
             &operation.owner.graph_path,
             &mut resource,
             graph_revisions.get(&operation.owner.graph_path).copied(),

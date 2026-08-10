@@ -10398,7 +10398,7 @@ fn function_load_over_retained_revision_keeps_document_ledger_and_projection_equ
     let reloaded = state
         .load_graph_projection(&instance, &path, 2, "en-US")
         .unwrap();
-    let reload_revision = GraphRevision::new(10);
+    let reload_revision = revision;
     let data = state.get_data().unwrap();
     assert_eq!(data.graphs[&path].document.revision, reload_revision);
     assert_eq!(

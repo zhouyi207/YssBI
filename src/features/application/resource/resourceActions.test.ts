@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDatabaseStore, useGraphMetaStore } from '@/features/core/dataStore';
+import { useDatabaseStore, useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { deleteResource, renameResource } from './resourceActions';
 
 vi.mock('@/features/application/editorMutation/projectPublicationCoordinator', () => ({
@@ -13,6 +15,10 @@ vi.mock('@/features/application/editorMutation/projectPublicationCoordinator', (
     submit: vi.fn(async () => ({ status: 'applied', affectedGraphPaths: new Set() })),
     capturePublicationRevision: vi.fn(() => 0),
   },
+}));
+
+vi.mock('@/features/application/editor/closeEditorTab', () => ({
+  closeEditorTab: vi.fn(async () => true),
 }));
 
 function databaseResult(afterName: string | null, operationId: string) {
@@ -44,6 +50,39 @@ function databaseResult(afterName: string | null, operationId: string) {
       projectionStatus: { status: 'complete' as const, expectedGraphPaths: [] },
       history: { canUndo: false, canRedo: false },
     },
+  };
+}
+
+function deleteResult(projectInstanceId: string) {
+  return {
+    operationId: '00000000-0000-0000-0000-000000000123',
+    projectInstanceId,
+    publicationRevision: 1,
+    moves: [],
+    deltas: [{
+      resource: { kind: 'graph' as const, key: 'events/Old.yssbi-event' },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: '00000000-0000-0000-0000-000000000123',
+      payload: {
+        kind: 'graph_resource_lifecycle' as const,
+        patch: {
+          before: {
+            path: 'events/Old.yssbi-event',
+            kind: 'event' as const,
+            name: 'Old',
+            revision: 0,
+          },
+          after: null,
+        },
+      },
+    }],
+    projectionReplacements: [],
+    projectionStatus: {
+      status: 'complete' as const,
+      expectedGraphPaths: [],
+    },
+    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -85,6 +124,7 @@ describe('renameResource project ownership', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     useResourceStore.getState().clear();
+    useGraphDataStore.setState({ graphEntities: {} });
     useResourceStore.getState().setSnapshot({
       resources: [{
         id: 'events/Old.yssbi-event',
@@ -107,7 +147,10 @@ describe('renameResource project ownership', () => {
       },
       revisions: { sales: 4 },
     });
-    useProjectIOStore.setState({ projectInstanceId: 'project-instance-current' });
+    useProjectIOStore.setState({
+      projectInstanceId: 'project-instance-current',
+      refreshResourceIndex: vi.fn(async () => true),
+    });
     startProjectLifecycle('project-instance-current');
   });
 
@@ -139,6 +182,44 @@ describe('renameResource project ownership', () => {
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenNthCalledWith(1, { result: renamed.mutation });
     expect(projectPublicationCoordinator.submit).toHaveBeenNthCalledWith(2, { result: deleted.mutation });
+  });
+
+  it('uses the loaded graph projection revision instead of stale sidebar metadata for delete', async () => {
+    const committed = deleteResult('project-instance-current');
+    vi.spyOn(GraphService, 'removeGraph').mockResolvedValue(committed);
+    useGraphDataStore.getState().replaceProjection(
+      'events/Old.yssbi-event',
+      makeEditorProjectionFixture({
+        graphPath: 'events/Old.yssbi-event',
+        sourceRevision: 3,
+      }).projection,
+      1,
+    );
+
+    await deleteResource({ id: 'events/Old.yssbi-event', kind: 'event' });
+
+    expect(GraphService.removeGraph).toHaveBeenCalledWith(
+      'project-instance-current',
+      'events/Old.yssbi-event',
+      3,
+      expect.any(String),
+    );
+  });
+
+  it('submits the authoritative delete publication without starting a competing tab unload', async () => {
+    const committed = deleteResult('project-instance-current');
+    vi.spyOn(GraphService, 'removeGraph').mockResolvedValue(committed);
+
+    await deleteResource({ id: 'events/Old.yssbi-event', kind: 'event' });
+
+    expect(closeEditorTab).not.toHaveBeenCalled();
+    expect(GraphService.removeGraph).toHaveBeenCalledWith(
+      'project-instance-current',
+      'events/Old.yssbi-event',
+      0,
+      expect.any(String),
+    );
+    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
   });
 
   it('rejects a stale rename receipt before coordinator submission', async () => {

@@ -4,6 +4,7 @@ import type {
     ResourceMutationResultDto,
 } from "@/shared/types/dto";
 
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
 
@@ -33,7 +34,7 @@ export class GraphService {
             logger.graph.info(`Event '${graphName}' created`, 'GraphService');
             return result;
         } catch (error) {
-            logger.graph.error(`Error creating event: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
+            logger.graph.error(`Error creating event: ${formatErrorMessage(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -57,7 +58,7 @@ export class GraphService {
             logger.graph.info(`Function '${graphName}' created`, 'GraphService');
             return result;
         } catch (error) {
-            logger.graph.error(`Error creating function: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
+            logger.graph.error(`Error creating function: ${formatErrorMessage(error)}`, 'GraphService');
             throw error;
         }
     }
@@ -82,7 +83,7 @@ export class GraphService {
             logger.graph.info(`Graph '${graphPath}' removed successfully`, 'GraphService');
             return result;
         } catch (error) {
-            logger.graph.error(`Error removing graph: ${error instanceof Error ? error.message : String(error)}`, 'GraphService');
+            logger.graph.error(`Error removing graph: ${formatErrorMessage(error)}`, 'GraphService');
             throw error;
         }
     }

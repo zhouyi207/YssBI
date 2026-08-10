@@ -52,6 +52,7 @@ struct GraphLifecycleRegistration {
 #[derive(Default)]
 pub(crate) struct GraphLifecycleState {
     owners: HashMap<GraphLifecycleKey, u64>,
+    client_tokens: HashMap<GraphLifecycleKey, u64>,
     registrations: HashMap<u64, GraphLifecycleRegistration>,
     next_registration_id: u64,
 }
@@ -70,7 +71,7 @@ impl GraphLifecycleRegistry {
         intent: GraphLifecycleIntent,
     ) -> Result<GraphLifecycleGuard, ProjectFilesystemError> {
         let mut state = self.lock_state();
-        self.register_locked(&mut state, session, graph_path, token, intent)
+        self.register_locked(&mut state, session, graph_path, token, intent, Some(token))
     }
 
     pub(crate) fn allocate_and_register(
@@ -97,7 +98,7 @@ impl GraphLifecycleRegistry {
             })
             .transpose()?
             .unwrap_or(1);
-        self.register_locked(&mut state, session, graph_path, token, intent)
+        self.register_locked(&mut state, session, graph_path, token, intent, None)
     }
 
     fn register_locked(
@@ -107,6 +108,7 @@ impl GraphLifecycleRegistry {
         graph_path: &GraphResourcePath,
         token: u64,
         intent: GraphLifecycleIntent,
+        client_token: Option<u64>,
     ) -> Result<GraphLifecycleGuard, ProjectFilesystemError> {
         let next_registration_id = state.next_registration_id.checked_add(1).ok_or_else(|| {
             ProjectFilesystemError::FilesystemTransactionBusy {
@@ -124,7 +126,12 @@ impl GraphLifecycleRegistry {
         let predecessor = state.owners.get(&key).copied();
         let current =
             predecessor.and_then(|registration_id| state.registrations.get(&registration_id));
-        validate_registration(current.map(|registration| &registration.owner), &owner)?;
+        validate_registration(
+            current.map(|registration| &registration.owner),
+            &owner,
+            state.client_tokens.get(&key).copied(),
+            client_token,
+        )?;
         state.next_registration_id = next_registration_id;
         state.registrations.insert(
             next_registration_id,
@@ -134,6 +141,9 @@ impl GraphLifecycleRegistry {
                 state: GraphLifecycleRegistrationState::Live,
             },
         );
+        if let Some(client_token) = client_token {
+            state.client_tokens.insert(key.clone(), client_token);
+        }
         state.owners.insert(key, next_registration_id);
         Ok(GraphLifecycleGuard {
             registry: self.clone(),
@@ -150,6 +160,9 @@ impl GraphLifecycleRegistry {
         let mut state = self.lock_state();
         state
             .owners
+            .retain(|key, _| &key.project_instance_id != project_instance_id);
+        state
+            .client_tokens
             .retain(|key, _| &key.project_instance_id != project_instance_id);
         state.registrations.retain(|_, registration| {
             &registration.owner.project_instance_id != project_instance_id
@@ -387,16 +400,15 @@ fn compact_registration_chain(state: &mut GraphLifecycleState, key: &GraphLifecy
 fn validate_registration(
     current: Option<&GraphLifecycleOwner>,
     next: &GraphLifecycleOwner,
+    latest_client_token: Option<u64>,
+    client_token: Option<u64>,
 ) -> Result<(), ProjectFilesystemError> {
-    let Some(current) = current else {
-        return Ok(());
-    };
-    if current.intent == GraphLifecycleIntent::Rename {
+    if current.is_some_and(|owner| owner.intent == GraphLifecycleIntent::Rename) {
         return Err(ProjectFilesystemError::FilesystemTransactionBusy {
             message: format!("rename is active for '{}'", next.graph_path),
         });
     }
-    if next.token <= current.token {
+    if client_token.is_some_and(|token| latest_client_token.is_some_and(|latest| token <= latest)) {
         return Err(stale_owner_error(next));
     }
     Ok(())
@@ -628,6 +640,46 @@ mod tests {
         registry.validate(&newest_owner).unwrap();
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(registry.registration_count(), 1);
+    }
+
+    #[test]
+    fn internal_function_load_does_not_advance_the_client_token_high_watermark() {
+        let registry = super::GraphLifecycleRegistry::default();
+        let session = session("internal-client-token-domains");
+        let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
+
+        let external = registry
+            .register(&session, &graph_path, 5, super::GraphLifecycleIntent::Load)
+            .unwrap();
+        let internal = registry
+            .allocate_and_register(&session, &graph_path, super::GraphLifecycleIntent::Load)
+            .unwrap();
+        assert_eq!(internal.owner().token, 6);
+
+        let next_external = registry
+            .register(
+                &session,
+                &graph_path,
+                6,
+                super::GraphLifecycleIntent::Unload,
+            )
+            .unwrap();
+        assert_eq!(
+            registry
+                .register(&session, &graph_path, 6, super::GraphLifecycleIntent::Load)
+                .unwrap_err()
+                .code(),
+            "stale_project_lifecycle"
+        );
+        assert_eq!(
+            registry.validate(external.owner()).unwrap_err().code(),
+            "stale_project_lifecycle"
+        );
+        assert_eq!(
+            registry.validate(internal.owner()).unwrap_err().code(),
+            "stale_project_lifecycle"
+        );
+        registry.validate(next_external.owner()).unwrap();
     }
 
     #[test]

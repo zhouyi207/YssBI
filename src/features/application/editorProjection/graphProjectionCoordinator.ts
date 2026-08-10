@@ -2,7 +2,7 @@ import i18n from 'i18next';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 
-import { markResourceStale } from '@/features/core/resource';
+import { markResourceStale, useResourceStore } from '@/features/core/resource';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
@@ -101,6 +101,15 @@ async function requestGraphProjection(
   const result = useGraphDataStore
     .getState()
     .replaceProjection(graphPath, projection, requestGeneration);
+  if (result.applied) {
+    const kind = inferGraphResourceKind(graphPath);
+    if (kind) {
+      useResourceStore.getState().patchResource(
+        { id: graphPath, kind },
+        { revision: projection.sourceRevision },
+      );
+    }
+  }
   if (!result.applied && result.reason === 'invalid') {
     logger.graph.error(
       `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(result.error, 'Unknown projection contract error')}`,

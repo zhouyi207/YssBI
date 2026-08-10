@@ -11,6 +11,7 @@ import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { areResourceDeltasValid } from '@/features/core/sync/utils/resourceMutationWireValidator';
 import { toProjectionEntities } from '@/features/domain/editorProjection';
 import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
+import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import {
   normalizeDatabaseRecord,
   type DatabaseDocumentDto,
@@ -533,7 +534,9 @@ function applyGraphLifecycleDeltasToAggregate(
       aggregate.graphMeta[state.path] = { path: state.path, name, type: state.kind };
       continue;
     }
-    if (!current || current.revision !== before.revision || current.kind !== before.kind) {
+    const projectionRevision = aggregate.graphEntities[before.path]?.basis.graphRevision;
+    const authoritativeRevision = projectionRevision ?? current?.revision;
+    if (!current || authoritativeRevision !== before.revision || current.kind !== before.kind) {
       throw new Error(`graph lifecycle remove source '${before.path}' is inconsistent`);
     }
     delete aggregate.resources[key];
@@ -725,6 +728,18 @@ export function prepareSynchronousPublicationCommit(
   for (const move of context.moves) delete graphEntities[move.from];
   const aggregate = createPublicationAggregate(graphEntities);
   applyMovesToAggregate(aggregate, context.moves);
+  for (const replacement of result.projectionReplacements) {
+    const kind = inferGraphResourceKind(replacement.graphPath);
+    if (!kind) continue;
+    const key = resourceKey({ id: replacement.graphPath, kind });
+    const resource = aggregate.resources[key];
+    if (resource) {
+      aggregate.resources[key] = {
+        ...resource,
+        revision: replacement.projection.basis.graphRevision,
+      };
+    }
+  }
   applyGraphLifecycleDeltasToAggregate(aggregate, result.deltas);
 
   const functionInstalls = prepareFunctionInstalls(

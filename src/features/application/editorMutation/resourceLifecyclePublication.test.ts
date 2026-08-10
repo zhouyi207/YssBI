@@ -13,6 +13,7 @@ import {
   validateResourceMutationWireResult,
 } from './resourceMutationResult';
 import { collectProjectRecoveryGraphPaths } from './projectPublicationRecovery';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000911';
 const operationId = '00000000-0000-0000-0000-000000000912';
@@ -24,6 +25,7 @@ function lifecycleResult(
   after: { revision: number; path: string; kind: 'event' | 'function' } | null,
   path = graphPath,
 ): ResourceMutationResultDto {
+  const graphRevision = (before ?? after)?.revision ?? 0;
   return {
     operationId,
     projectInstanceId,
@@ -31,8 +33,8 @@ function lifecycleResult(
     moves: [],
     deltas: [{
       resource: { kind: 'graph', key: path },
-      fromRevision: 0,
-      toRevision: 1,
+      fromRevision: graphRevision,
+      toRevision: graphRevision + 1,
       causedBy: operationId,
       payload: {
         kind: 'graph_resource_lifecycle',
@@ -143,6 +145,37 @@ describe('graph resource lifecycle publication', () => {
     expect(useResourceStore.getState().resources[key]).toBeUndefined();
     expect(useResourceStore.getState().graphOrder).toEqual([]);
     expect(useGraphMetaStore.getState().graphs[graphPath]).toBeUndefined();
+  });
+
+  it('removes a loaded graph using projection authority when sidebar metadata is stale', () => {
+    const created = lifecycleResult(1, null, present);
+    commitPreparedPublication(prepareSynchronousPublicationCommit(created, {
+      projectInstanceId,
+      epoch: 1,
+      fingerprint: fingerprintResourceMutationResult(created),
+      affectedGraphPaths: new Set([graphPath]),
+      moves: [],
+    }));
+    useGraphDataStore.getState().replaceProjection(
+      graphPath,
+      makeEditorProjectionFixture({ graphPath, sourceRevision: 2 }).projection,
+      1,
+    );
+
+    const removedState = { ...present, revision: 2 };
+    const removed = lifecycleResult(2, removedState, null);
+    const removePlan = prepareSynchronousPublicationCommit(removed, {
+      projectInstanceId,
+      epoch: 1,
+      fingerprint: fingerprintResourceMutationResult(removed),
+      affectedGraphPaths: new Set([graphPath]),
+      moves: [],
+    });
+    commitPreparedPublication(removePlan);
+
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: graphPath, kind: 'event' })
+    ]).toBeUndefined();
   });
 
   it('uses lifecycle payload paths when selecting recovery hydration', () => {

@@ -3,9 +3,10 @@ import {
   useResourceStore,
   type ResourceRef,
 } from '@/features/core/resource';
+import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
-import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
@@ -19,6 +20,9 @@ import { executeDatabaseMutation } from '@/features/application/dataManagement/d
 export type { GraphResourceKind };
 
 function graphRevision(graphPath: string): number {
+  const basis = getGraphProjectionBasis(useGraphDataStore.getState(), graphPath);
+  if (basis) return basis.graphRevision;
+
   const resource = Object.values(useResourceStore.getState().resources)
     .find((candidate) => candidate.id === graphPath
       && (candidate.kind === 'event' || candidate.kind === 'function'));
@@ -123,8 +127,6 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
   if (ref.kind === 'event' || ref.kind === 'function') {
     const context = captureProjectCommandContext();
     const expectedRevision = graphRevision(ref.id);
-    await closeEditorTab(ref.id, undefined, true);
-    context.assertCurrent();
     const result = await GraphService.removeGraph(
       context.projectInstanceId,
       ref.id,

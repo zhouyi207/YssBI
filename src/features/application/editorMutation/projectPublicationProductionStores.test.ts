@@ -437,6 +437,11 @@ describe('project publication production stores', () => {
     expect(useResourceStore.getState().graphOrder).toEqual([firstDestination, secondDestination]);
     expect(Object.values(useResourceStore.getState().resources).map((resource) => resource.id).sort())
       .toEqual([firstDestination, secondDestination].sort());
+    for (const destination of [firstDestination, secondDestination]) {
+      expect(useResourceStore.getState().resources[
+        resourceKey({ id: destination, kind: 'event' })
+      ]?.revision).toBe(destinations.get(destination)?.basis.graphRevision);
+    }
     expect(Object.keys(useGraphDataStore.getState().graphEntities).sort())
       .toEqual([firstDestination, secondDestination].sort());
     expect(Object.keys(useGraphMetaStore.getState().graphs).sort())
