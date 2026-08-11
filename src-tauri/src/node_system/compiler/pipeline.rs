@@ -1293,6 +1293,7 @@ struct ResolvedNode<'a> {
     parameters: BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
     prepared_nominal: BTreeMap<crate::node_system::protocol::ParameterKey, PreparedNominalValue>,
     ports: BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
+    port_sequence: Vec<PortAddress>,
 }
 
 struct AnalysisState<'a> {
@@ -1420,6 +1421,7 @@ impl<'a> AnalysisState<'a> {
                     parameters,
                     prepared_nominal,
                     ports,
+                    port_sequence,
                 },
             );
         }
@@ -1891,7 +1893,11 @@ impl<'a> AnalysisState<'a> {
         resolved_schemas: &BTreeMap<PortAddress, ResolvedSchemaFact>,
         resources: &mut dyn AnalysisResourceResolver,
         resolvers: &InterfaceResolverSet,
-    ) -> (BTreeMap<PortAddress, ResolvedPort<PortAddress>>, bool) {
+    ) -> (
+        BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
+        Vec<PortAddress>,
+        bool,
+    ) {
         let DynamicInterfaceResolution {
             interface,
             projected_bindings,
@@ -1922,13 +1928,18 @@ impl<'a> AnalysisState<'a> {
                 available_members,
             },
         );
+        let port_sequence = interface
+            .ports
+            .iter()
+            .map(|port| port.address.clone())
+            .collect();
         let ports = interface
             .ports
             .into_vec()
             .into_iter()
             .map(|port| (port.address.clone(), port))
             .collect();
-        (ports, deferred_for_schema)
+        (ports, port_sequence, deferred_for_schema)
     }
 
     fn complete_schema_dependent_interfaces(
@@ -1945,10 +1956,11 @@ impl<'a> AnalysisState<'a> {
             self.projection_only_ports
                 .retain(|address| address.node_id != node_id);
             self.interface_projections.remove(&node_id);
-            let (ports, deferred_for_schema) =
+            let (ports, port_sequence, _) =
                 self.resolve_ports(node_id, protocol, resolved_schemas, resources, resolvers);
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 node.ports = ports;
+                node.port_sequence = port_sequence;
             }
             if deferred_for_schema {
                 self.push(
@@ -2418,9 +2430,9 @@ impl<'a> AnalysisState<'a> {
             .map(|(&node_id, node)| ResolvedInterface {
                 node_id,
                 ports: node
-                    .ports
-                    .values()
-                    .cloned()
+                    .port_sequence
+                    .iter()
+                    .filter_map(|address| node.ports.get(address).cloned())
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             })

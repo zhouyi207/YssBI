@@ -17,7 +17,6 @@ import {
   openBayesWindow,
   openDatabaseEditorWindow,
   openLogsWindow,
-  openSecondaryEditorWindow,
 } from "@/features/application/window";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { i18n } from "@/app/i18n";
@@ -137,14 +136,6 @@ export function useMenubar() {
     resetWorkbenchLayout(panelPosition);
   }, []);
 
-  const openNewWindow = useCallback(async () => {
-    try {
-      await openSecondaryEditorWindow();
-    } catch (error) {
-      logger.app.error(`Failed to open new window: ${error instanceof Error ? error.message : String(error)}`, 'Menubar');
-    }
-  }, []);
-
   return {
     openSettings,
     isDetailVisible,
@@ -160,6 +151,5 @@ export function useMenubar() {
     toggleLogPanel: togglePanelVisibility,
     toggleSidebar: toggleSidebarVisibility,
     handleResetLayout,
-    openNewWindow,
   };
 }

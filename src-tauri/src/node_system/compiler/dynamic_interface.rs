@@ -384,6 +384,7 @@ struct MaterializationState<'a> {
     node_id: NodeId,
     document: &'a GraphDocument,
     ports: BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
+    port_sequence: Vec<PortAddress>,
     projected_bindings: BTreeMap<PortAddress, ProjectedDynamicPortBinding>,
     available_members: Vec<ValidatedProjectedMember>,
     diagnostics: Vec<DynamicInterfaceDiagnostic>,
@@ -396,6 +397,7 @@ impl<'a> MaterializationState<'a> {
             node_id,
             document,
             ports: BTreeMap::new(),
+            port_sequence: Vec::new(),
             projected_bindings: BTreeMap::new(),
             available_members: Vec::new(),
             diagnostics: Vec::new(),
@@ -403,9 +405,16 @@ impl<'a> MaterializationState<'a> {
         }
     }
 
+    fn insert_port(&mut self, address: PortAddress, port: ResolvedPort<PortAddress>) {
+        if !self.ports.contains_key(&address) {
+            self.port_sequence.push(address.clone());
+        }
+        self.ports.insert(address, port);
+    }
+
     fn add_declared(&mut self, spec: &PortSpec) {
         let address = PortAddress::declared(self.node_id, spec.key.clone());
-        self.ports.insert(
+        self.insert_port(
             address.clone(),
             resolved_port(address, spec, ResolvedPortStatus::Resolved),
         );
@@ -466,7 +475,7 @@ impl<'a> MaterializationState<'a> {
                 .clone()
                 .unwrap_or_else(|| self.unbound_projection_address(basis, spec, &member.locator));
             if bound_address.is_none() {
-                self.ports.insert(
+                self.insert_port(
                     projection_address.clone(),
                     resolved_port(
                         projection_address.clone(),
@@ -489,7 +498,7 @@ impl<'a> MaterializationState<'a> {
         spec: &PortSpec,
         members: Option<&BTreeMap<DynamicMemberLocator, InterfaceResolverMember>>,
     ) {
-        let bindings = self
+        let mut bindings = self
             .document
             .port_bindings
             .iter()
@@ -499,6 +508,13 @@ impl<'a> MaterializationState<'a> {
             })
             .map(|(address, binding)| (address.clone(), binding.clone()))
             .collect::<Vec<_>>();
+        bindings.sort_by(
+            |(left_address, left_binding), (right_address, right_binding)| {
+                dynamic_binding_order(left_binding)
+                    .cmp(dynamic_binding_order(right_binding))
+                    .then_with(|| left_address.cmp(right_address))
+            },
+        );
 
         for (address, binding) in bindings {
             if let DynamicPortBinding::UserCreated { .. } = &binding {
@@ -514,8 +530,7 @@ impl<'a> MaterializationState<'a> {
                     );
                     ResolvedPortStatus::Orphan
                 };
-                self.ports
-                    .insert(address.clone(), resolved_port(address, spec, status));
+                self.insert_port(address.clone(), resolved_port(address, spec, status));
                 continue;
             }
             if matches!(spec.instances, PortInstances::UserCreated { .. }) {
@@ -526,7 +541,7 @@ impl<'a> MaterializationState<'a> {
                     },
                     &address,
                 );
-                self.ports.insert(
+                self.insert_port(
                     address.clone(),
                     resolved_port(address, spec, ResolvedPortStatus::Orphan),
                 );
@@ -585,8 +600,7 @@ impl<'a> MaterializationState<'a> {
                 }
             };
             self.projected_bindings.insert(address.clone(), projection);
-            self.ports
-                .insert(address.clone(), resolved_port(address, spec, status));
+            self.insert_port(address.clone(), resolved_port(address, spec, status));
         }
     }
 
@@ -652,20 +666,31 @@ impl<'a> MaterializationState<'a> {
     }
 
     fn finish(self) -> DynamicInterfaceResolution {
+        let mut ports = self.ports;
+        let ordered_ports = self
+            .port_sequence
+            .into_iter()
+            .filter_map(|address| ports.remove(&address))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         DynamicInterfaceResolution {
             interface: ResolvedInterface {
                 node_id: self.node_id,
-                ports: self
-                    .ports
-                    .into_values()
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+                ports: ordered_ports,
             },
             projected_bindings: self.projected_bindings,
             available_members: self.available_members.into_boxed_slice(),
             diagnostics: self.diagnostics.into_boxed_slice(),
             deferred_for_schema: self.deferred_for_schema,
         }
+    }
+}
+
+fn dynamic_binding_order(binding: &DynamicPortBinding) -> &OrderKey {
+    match binding {
+        DynamicPortBinding::UserCreated { order }
+        | DynamicPortBinding::Resolved { order, .. }
+        | DynamicPortBinding::Orphan { order, .. } => order,
     }
 }
 
