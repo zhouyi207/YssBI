@@ -10,7 +10,7 @@ use super::dynamic_interface::{
     materialize_dynamic_interface_with_resources,
 };
 use super::relational::{RelationalConnection, RelationalFragment};
-use super::schema_analysis::{SchemaAnalyzer, SchemaResolverSet};
+use super::schema_analysis::{SchemaAnalysisIssue, SchemaAnalyzer, SchemaResolverSet};
 use super::specialization::{
     DemandPortFact, ExecutionPlanBasis, IntermediateKernel, IntermediateOperation,
 };
@@ -46,8 +46,8 @@ use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction,
     ParameterEditorSpec, ParameterIssueKind, PortDirection, PortInstances, PortKind, PortSpec,
-    Purity, RetryPolicy, TypeClassId, TypeConstructorId, TypeExpr, TypeId, Value,
-    validate_and_prepare_parameter_values,
+    Purity, ResolvedSchemaFact, RetryPolicy, SchemaExpr, TypeClassId, TypeConstructorId, TypeExpr,
+    TypeId, Value, validate_and_prepare_parameter_values,
 };
 use crate::node_system::registry::{
     NodeRegistry, PreparedNominalValue, ProtocolFingerprint, RegistryFingerprint,
@@ -1337,6 +1337,8 @@ impl<'a> AnalysisState<'a> {
         resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
     ) -> Result<(), CompileCancelled> {
+        let empty_schemas = BTreeMap::new();
+        let mut deferred_nodes = BTreeSet::new();
         for (&node_id, node) in &self.document.nodes {
             cancellation.checkpoint()?;
             if node.id != node_id {
@@ -1397,8 +1399,17 @@ impl<'a> AnalysisState<'a> {
                     DiagnosticLocation::Node(node_id),
                 );
             }
-            let ports =
-                self.resolve_ports(node_id, resolved.protocol, resources, interface_resolvers);
+            self.validate_binding_templates(node_id, resolved.protocol);
+            let (ports, deferred_for_schema) = self.resolve_ports(
+                node_id,
+                resolved.protocol,
+                &empty_schemas,
+                resources,
+                interface_resolvers,
+            );
+            if deferred_for_schema {
+                deferred_nodes.insert(node_id);
+            }
             self.nodes.insert(
                 node_id,
                 ResolvedNode {
@@ -1409,6 +1420,14 @@ impl<'a> AnalysisState<'a> {
                 },
             );
         }
+        cancellation.checkpoint()?;
+        let (_, preliminary_schemas, _) = self.resolve_schema_facts(schema_resolvers, resources);
+        self.complete_schema_dependent_interfaces(
+            &deferred_nodes,
+            &preliminary_schemas,
+            resources,
+            interface_resolvers,
+        );
         cancellation.checkpoint()?;
         self.validate_function_abi_contract(resources);
         self.validate_call_abi_contract(resources);
@@ -1866,20 +1885,22 @@ impl<'a> AnalysisState<'a> {
         &mut self,
         node_id: NodeId,
         protocol: &NodeProtocol,
+        resolved_schemas: &BTreeMap<PortAddress, ResolvedSchemaFact>,
         resources: &mut dyn AnalysisResourceResolver,
         resolvers: &InterfaceResolverSet,
-    ) -> BTreeMap<PortAddress, ResolvedPort<PortAddress>> {
-        self.validate_binding_templates(node_id, protocol);
+    ) -> (BTreeMap<PortAddress, ResolvedPort<PortAddress>>, bool) {
         let DynamicInterfaceResolution {
             interface,
             projected_bindings,
             available_members,
             diagnostics,
+            deferred_for_schema,
         } = materialize_dynamic_interface_with_resources(
             &self.basis,
             node_id,
             protocol,
             self.document,
+            resolved_schemas,
             resources,
             resolvers,
         );
@@ -1898,12 +1919,35 @@ impl<'a> AnalysisState<'a> {
                 available_members,
             },
         );
-        interface
+        let ports = interface
             .ports
             .into_vec()
             .into_iter()
             .map(|port| (port.address.clone(), port))
-            .collect()
+            .collect();
+        (ports, deferred_for_schema)
+    }
+
+    fn complete_schema_dependent_interfaces(
+        &mut self,
+        deferred_nodes: &BTreeSet<NodeId>,
+        resolved_schemas: &BTreeMap<PortAddress, ResolvedSchemaFact>,
+        resources: &mut dyn AnalysisResourceResolver,
+        resolvers: &InterfaceResolverSet,
+    ) {
+        for &node_id in deferred_nodes {
+            let Some(protocol) = self.nodes.get(&node_id).map(|node| node.registry.protocol) else {
+                continue;
+            };
+            self.projection_only_ports
+                .retain(|address| address.node_id != node_id);
+            self.interface_projections.remove(&node_id);
+            let (ports, _) =
+                self.resolve_ports(node_id, protocol, resolved_schemas, resources, resolvers);
+            if let Some(node) = self.nodes.get_mut(&node_id) {
+                node.ports = ports;
+            }
+        }
     }
 
     fn validate_binding_templates(&mut self, node_id: NodeId, protocol: &NodeProtocol) {
@@ -2234,10 +2278,14 @@ impl<'a> AnalysisState<'a> {
         }
     }
 
-    fn analyze_schemas(
-        &mut self,
+    fn resolve_schema_facts(
+        &self,
         resolvers: &SchemaResolverSet,
         resources: &mut dyn AnalysisResourceResolver,
+    ) -> (
+        BTreeMap<PortAddress, SchemaExpr>,
+        BTreeMap<PortAddress, ResolvedSchemaFact>,
+        Vec<SchemaAnalysisIssue>,
     ) {
         let mut analyzer = SchemaAnalyzer::new(resolvers);
         for (&node_id, node) in &self.nodes {
@@ -2259,7 +2307,15 @@ impl<'a> AnalysisState<'a> {
                 analyzer.add_connection(connection.output.clone(), connection.input.clone());
             }
         }
-        let (expressions, facts, issues) = analyzer.analyze_with_resources(resources);
+        analyzer.analyze_with_resources(resources)
+    }
+
+    fn analyze_schemas(
+        &mut self,
+        resolvers: &SchemaResolverSet,
+        resources: &mut dyn AnalysisResourceResolver,
+    ) {
+        let (expressions, facts, issues) = self.resolve_schema_facts(resolvers, resources);
         self.schema_facts = expressions;
         self.resolved_schema_facts = facts;
         for issue in issues {

@@ -11,7 +11,7 @@ use crate::node_system::document::{
     LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use crate::node_system::protocol::{
-    InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec,
+    InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec, ResolvedSchemaFact,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -77,10 +77,15 @@ pub struct InterfaceResolverRequest<'a> {
     pub template: &'a PortSpec,
     pub protocol: &'a NodeProtocol,
     pub document: &'a GraphDocument,
+    pub resolved_schemas: &'a BTreeMap<PortAddress, ResolvedSchemaFact>,
     pub resources: &'a mut dyn AnalysisResourceResolver,
 }
 
 pub trait InterfaceResolver: Send + Sync {
+    fn schema_dependencies(&self) -> &[PortKey] {
+        &[]
+    }
+
     fn resolve(
         &self,
         request: InterfaceResolverRequest<'_>,
@@ -209,6 +214,7 @@ pub struct DynamicInterfaceResolution {
     pub projected_bindings: BTreeMap<PortAddress, ProjectedDynamicPortBinding>,
     pub available_members: Box<[ValidatedProjectedMember]>,
     pub diagnostics: Box<[DynamicInterfaceDiagnostic]>,
+    pub deferred_for_schema: bool,
 }
 
 /// Validates resolver output against the exact graph, registry, and resource snapshot.
@@ -231,11 +237,13 @@ pub fn materialize_dynamic_interface(
         reads: ResourceVersionSet::new(),
         observations: ResourceObservationSet::new(),
     };
+    let resolved_schemas = BTreeMap::new();
     materialize_dynamic_interface_with_resources(
         basis,
         node_id,
         protocol,
         document,
+        &resolved_schemas,
         &mut resources,
         resolvers,
     )
@@ -246,6 +254,7 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
     node_id: NodeId,
     protocol: &NodeProtocol,
     document: &GraphDocument,
+    resolved_schemas: &BTreeMap<PortAddress, ResolvedSchemaFact>,
     resources: &mut dyn AnalysisResourceResolver,
     resolvers: &InterfaceResolverSet,
 ) -> DynamicInterfaceResolution {
@@ -263,12 +272,20 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
                     state.add_existing_instances(spec, None);
                     continue;
                 };
+                if implementation.schema_dependencies().iter().any(|key| {
+                    !resolved_schemas.contains_key(&PortAddress::declared(node_id, key.clone()))
+                }) {
+                    state.add_existing_instances(spec, None);
+                    state.deferred_for_schema = true;
+                    continue;
+                }
                 match implementation.resolve(InterfaceResolverRequest {
                     basis,
                     node_id,
                     template: spec,
                     protocol,
                     document,
+                    resolved_schemas,
                     resources,
                 }) {
                     Ok(members) => state.add_resolved_instances(basis, spec, members),
@@ -370,6 +387,7 @@ struct MaterializationState<'a> {
     projected_bindings: BTreeMap<PortAddress, ProjectedDynamicPortBinding>,
     available_members: Vec<ValidatedProjectedMember>,
     diagnostics: Vec<DynamicInterfaceDiagnostic>,
+    deferred_for_schema: bool,
 }
 
 impl<'a> MaterializationState<'a> {
@@ -381,6 +399,7 @@ impl<'a> MaterializationState<'a> {
             projected_bindings: BTreeMap::new(),
             available_members: Vec::new(),
             diagnostics: Vec::new(),
+            deferred_for_schema: false,
         }
     }
 
@@ -635,6 +654,7 @@ impl<'a> MaterializationState<'a> {
             projected_bindings: self.projected_bindings,
             available_members: self.available_members.into_boxed_slice(),
             diagnostics: self.diagnostics.into_boxed_slice(),
+            deferred_for_schema: self.deferred_for_schema,
         }
     }
 }
