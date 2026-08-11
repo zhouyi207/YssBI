@@ -2037,15 +2037,14 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
     let path = graph_path();
     let begin = node("yssbi.project.event.begin");
     let merge = node("yssbi.control.merge");
-    let connected_enter = PortAddress::instance(
-        merge.id,
-        PortKey::new("enter").unwrap(),
-        PortInstanceId::from_uuid(uuid::Uuid::from_u128(1)),
-    );
+    let connected_instance = PortInstanceId::from_uuid(uuid::Uuid::from_u128(2));
+    let unconnected_instance = PortInstanceId::from_uuid(uuid::Uuid::from_u128(1));
+    let connected_enter =
+        PortAddress::instance(merge.id, PortKey::new("enter").unwrap(), connected_instance);
     let unconnected_enter = PortAddress::instance(
         merge.id,
         PortKey::new("enter").unwrap(),
-        PortInstanceId::from_uuid(uuid::Uuid::from_u128(2)),
+        unconnected_instance,
     );
     let connection_id = ConnectionId::new();
     let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
@@ -2105,6 +2104,33 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
     assert!(outcome.get("nodeId").is_some());
     assert!(outcome.get("node_id").is_none());
     assert_eq!(result.delta.to_revision, GraphRevision::new(2));
+
+    let merge_projection = result
+        .projection_replacement
+        .projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id.as_ref() == merge.id.to_string())
+        .unwrap();
+    let enter_ids = merge_projection
+        .ports
+        .iter()
+        .filter_map(|port| match &port.address {
+            crate::node_system::document::PortAddressDto::Instance {
+                template_key,
+                instance_id,
+                ..
+            } if template_key.as_ref() == "enter" => Some(instance_id.to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        enter_ids,
+        vec![
+            connected_instance.to_string(),
+            unconnected_instance.to_string()
+        ]
+    );
 }
 
 #[test]
