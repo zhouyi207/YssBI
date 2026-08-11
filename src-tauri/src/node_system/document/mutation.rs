@@ -272,6 +272,8 @@ pub enum EditorGraphMutationDto {
         descriptor: NodeCreationDescriptor,
         position: NodePosition,
         user_label: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        connect_from: Option<PortAddressDto>,
     },
     DeleteNode {
         node_id: NodeId,
@@ -329,13 +331,26 @@ impl EditorGraphMutationDto {
         registry: &NodeRegistry,
         catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_compatibility(graph_path, document, registry, catalog_validation, None)
+    }
+
+    pub(crate) fn into_patch_with_compatibility(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
             Self::CreateNode {
                 descriptor,
                 position,
                 user_label,
+                connect_from,
             } => {
                 validate_position(position)?;
+                let connection_descriptor = descriptor.clone();
                 let (node_type_id, parameters, resource_bound, allow_missing_parameters) =
                     match descriptor {
                         descriptor @ NodeCreationDescriptor::Static { .. }
@@ -409,7 +424,60 @@ impl EditorGraphMutationDto {
                         validate_parameters_with_registry(registry, protocol, &parameters)?;
                     }
                 }
-                create_node_operations(protocol, node_type_id, position, parameters, user_label)
+                let mut operations = create_node_operations(
+                    protocol,
+                    node_type_id,
+                    position,
+                    parameters,
+                    user_label,
+                );
+                if let Some(connect_from) = connect_from {
+                    let source_address: PortAddress =
+                        connect_from.try_into().map_err(invalid_editor_mutation)?;
+                    let source = compatibility_source.ok_or_else(|| {
+                        invalid_editor_mutation(
+                            "an analyzed compatibility source is required for create-and-connect",
+                        )
+                    })?;
+                    if source.address != source_address {
+                        return Err(invalid_editor_mutation(
+                            "connectFrom does not match the analyzed source port",
+                        ));
+                    }
+                    let source_port = resolve_mutation_port(document, registry, &source_address)?;
+                    if source_port.spec.direction != source.direction
+                        || source_port.spec.kind != source.kind
+                        || matches!(source_port.binding, Some(DynamicPortBinding::Orphan { .. }))
+                    {
+                        return Err(invalid_editor_mutation(
+                            "connectFrom no longer resolves to the analyzed source port",
+                        ));
+                    }
+                    validate_connection_capacity(
+                        document,
+                        &source_address,
+                        source_port.spec.connections,
+                    )?;
+                    let resources = catalog_validation.ok_or_else(|| {
+                        invalid_editor_mutation("catalog compatibility snapshot is unavailable")
+                    })?;
+                    let candidate = crate::node_system::compatibility::first_compatible_port(
+                        graph_path,
+                        &connection_descriptor,
+                        registry,
+                        resources,
+                        source,
+                    )
+                    .map_err(invalid_editor_mutation)?;
+                    append_atomic_connection(
+                        document,
+                        registry,
+                        &mut operations,
+                        source,
+                        candidate,
+                    )?;
+                }
+                operations
             }
             Self::DeleteNode { node_id } => {
                 delete_editor_node_operations(document, registry, node_id)?
@@ -536,6 +604,7 @@ fn materialize_resource_descriptor(
                 scope,
                 allowed_node_type_ids,
                 parameter_binding,
+                ..
             },
         ) => {
             if !allowed_node_type_ids
@@ -696,6 +765,74 @@ fn validate_node_scope(
     } else {
         Ok(())
     }
+}
+
+fn append_atomic_connection(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    operations: &mut Vec<GraphDocumentOperation>,
+    source: &crate::node_system::compatibility::SourcePort,
+    candidate: crate::node_system::compatibility::CandidatePort,
+) -> Result<(), MutationConflict> {
+    let node_id = operations
+        .iter()
+        .find_map(|operation| match operation {
+            GraphDocumentOperation::InsertNode { node } => Some(node.id),
+            _ => None,
+        })
+        .expect("create node operations always begin with node insertion");
+    let candidate_address = if let Some(dynamic) = candidate.dynamic {
+        let address =
+            PortAddress::instance(node_id, candidate.template.clone(), PortInstanceId::new());
+        operations.push(GraphDocumentOperation::InsertPortBinding {
+            address: address.clone(),
+            binding: DynamicPortBinding::Resolved {
+                origin: dynamic.origin,
+                order: dynamic.order,
+            },
+        });
+        address
+    } else if let Some(address) = operations.iter().find_map(|operation| match operation {
+        GraphDocumentOperation::InsertPortBinding { address, .. }
+            if address.node_id == node_id
+                && matches!(
+                    &address.port,
+                    PortRef::Instance { template, .. } if *template == candidate.template
+                ) =>
+        {
+            Some(address.clone())
+        }
+        _ => None,
+    }) {
+        address
+    } else {
+        PortAddress::declared(node_id, candidate.template.clone())
+    };
+    let (output, input, input_connections) = match source.direction {
+        PortDirection::Output => (
+            source.address.clone(),
+            candidate_address,
+            candidate.connections,
+        ),
+        PortDirection::Input => {
+            let source_port = resolve_mutation_port(document, registry, &source.address)?;
+            (
+                candidate_address,
+                source.address.clone(),
+                source_port.spec.connections,
+            )
+        }
+    };
+    let order = match input_connections {
+        ConnectionsPerPort::Multiple { ordered: true, .. } => Some(OrderKey(
+            format!("{:05}", document.connections.len()).into(),
+        )),
+        ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. } => None,
+    };
+    let mut staged = document.clone();
+    staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
+    operations.extend(connect_operations(&staged, registry, output, input, order)?);
+    Ok(())
 }
 
 pub(super) fn create_node_operations(

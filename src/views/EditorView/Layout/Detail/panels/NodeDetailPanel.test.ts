@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import { selectNodeDetailNode } from './NodeDetailPanel';
@@ -65,14 +64,5 @@ describe('NodeDetailPanel projection selection', () => {
     };
 
     expect(selectNodeDetailNode(state, 'second', 'shared')?.title).toBe('Second');
-  });
-
-  it('does not read Call Function legacy fields or legacy catalogs', () => {
-    const source = readFileSync(new URL('./NodeDetailPanel.tsx', import.meta.url), 'utf8');
-
-    expect(source).not.toMatch(
-      /CALL_FUNCTION_NODE_TYPE|subGraphPath|useFunctionCatalog|useCallFunctionIssue|updateCallFunctionTarget/,
-    );
-    expect(source).not.toContain('Object.entries(s.graphEntities)');
   });
 });

@@ -86,6 +86,51 @@ function projection(path: string, revision: number) {
   };
 }
 
+function projectionWithResolvedType(resolvedType: unknown): Record<string, unknown> {
+  const value: Record<string, unknown> = projection(graphPath, 5);
+  value.nodes = [{
+    graphPath,
+    sourceRevision: 5,
+    nodeId,
+    nodeTypeId: 'core.constant',
+    position: { x: 1, y: 2 },
+    display: {
+      title: 'Constant',
+      description: null,
+      userLabel: null,
+      iconId: null,
+      styleId: null,
+    },
+    ports: [{
+      address: { kind: 'declared', nodeId, portKey: 'value' },
+      templateKey: 'value',
+      display: { label: 'Value', instanceLabel: null },
+      direction: 'output',
+      kind: 'data',
+      instanceKind: 'declared',
+      orphan: false,
+      canRemove: false,
+      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
+      input: null,
+      resolvedType,
+      resolvedSchema: null,
+      status: 'resolved',
+    }],
+    parameterEditors: [],
+    capabilities: {
+      managed: false,
+      canCopy: true,
+      canDelete: true,
+      canEditLabel: true,
+      canEditParameters: false,
+      hasDynamicPorts: false,
+      supportsInlineLiterals: false,
+    },
+    diagnostics: [],
+  }];
+  return value;
+}
+
 function functionEditorProjection(revision = 5) {
   return {
     functionRevision: revision,
@@ -107,6 +152,36 @@ function graphResult() {
 }
 
 describe('editor mutation wire parser', () => {
+  it('requires an exact structured dataType on every non-null resolved type', () => {
+    const malformedResolvedTypes = [
+      { display: 'Float64', resolved: true },
+      { display: 'Float64', resolved: true, dataType: 'Float64' },
+      { display: 'Float64', resolved: true, dataType: { kind: 'Float32' } },
+      { display: 'Array', resolved: true, dataType: { kind: 'Array' } },
+      { display: 'Float64', resolved: true, dataType: { kind: 'Float64', extra: true } },
+    ];
+
+    for (const resolvedType of malformedResolvedTypes) {
+      expect(() => parseGraphProjectionReplacementDto({
+        graphPath,
+        projection: projectionWithResolvedType(resolvedType),
+      })).toThrow('projection replacement');
+    }
+  });
+
+  it('accepts structured dataType independently from its display label', () => {
+    const replacement = {
+      graphPath,
+      projection: projectionWithResolvedType({
+        display: 'Not parsed by the frontend',
+        resolved: true,
+        dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } },
+      }),
+    };
+
+    expect(parseGraphProjectionReplacementDto(replacement)).toEqual(replacement);
+  });
+
   it('strictly branches event and function projection replacement wire shapes', () => {
     const eventReplacement = { graphPath, projection: projection(graphPath, 5) };
     const functionReplacement = {

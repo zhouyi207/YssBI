@@ -133,7 +133,8 @@ export function useEditorKeyboard({
       } else if (isControlKey && e.key.toLowerCase() === "c") {
         copy();
       } else if (isControlKey && e.key.toLowerCase() === "x") {
-        cut();
+        e.preventDefault();
+        if (!e.repeat) cut();
       } else if (isControlKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         if (EDITOR_MUTATION_CAPABILITIES.pasteNodes) {

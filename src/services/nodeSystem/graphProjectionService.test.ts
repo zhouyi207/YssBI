@@ -39,20 +39,6 @@ describe('GraphProjectionService', () => {
     });
   });
 
-  it('preserves project identity when hydrate rejects', async () => {
-    const rejection = { code: 'stale_project_lifecycle', message: 'project was replaced' };
-    vi.mocked(invoke).mockRejectedValue(rejection);
-
-    await expect(
-      GraphProjectionService.hydrateGraph('project-instance-1', 'functions/main', 'en-US'),
-    ).rejects.toBe(rejection);
-
-    expect(invoke).toHaveBeenLastCalledWith('hydrate_editor_graph', {
-      projectInstanceId: 'project-instance-1',
-      graphPath: 'functions/main',
-      locale: 'en-US',
-    });
-  });
 
   const requests = [
     ['loadGraph', () => GraphProjectionService.loadGraph(

@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react';
-import type { LogLevel, LogMessage } from '@/shared/types/ui';
+import type { LogMessage } from '@/shared/types/ui';
 import { LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
 import {
   getLogLevelBackground,
@@ -9,13 +9,6 @@ import {
   LOG_TYPE_LABELS,
 } from './logPresentation';
 
-const LEVEL_ACCENT: Record<LogLevel, string> = {
-  error: 'border-l-red-500/70',
-  warn: 'border-l-amber-500/70',
-  info: 'border-l-sky-500/60',
-  debug: 'border-l-border',
-  trace: 'border-l-border/60',
-};
 
 export function LogItemRow({
   log,
@@ -54,8 +47,6 @@ export function LogItemRow({
       onClick={handleClick}
       className={[
         'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/30 px-3 py-1.5 text-left transition-colors',
-        'border-l-2',
-        LEVEL_ACCENT[log.level] ?? 'border-l-border/50',
         isSelected
           ? 'bg-[var(--accent-color)]/8'
           : 'hover:bg-muted/30',

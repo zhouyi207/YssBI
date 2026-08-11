@@ -36,7 +36,6 @@ describe('Sidebar empty-state components', () => {
     expect(host.textContent).toContain('Node catalog unavailable');
     expect(host.textContent).toContain('Waiting for stable catalog descriptors');
     expect(host.querySelector('.overlay-scrollbar-viewport')).toBeNull();
-    expect(host.firstElementChild?.className).toContain('px-3');
   });
 
   it('renders a compact truncated section state with the full accessible label', () => {

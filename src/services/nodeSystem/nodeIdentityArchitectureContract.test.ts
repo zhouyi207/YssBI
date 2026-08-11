@@ -9,6 +9,7 @@ const functionPinSource = 'src/shared/types/domain/functionSignaturePin.ts';
 const dataTypeSource = 'src/shared/types/domain/dataType.ts';
 const functionSignatureDtoSource = 'src/shared/types/dto/editorMutation.ts';
 const graphDataStoreSource = 'src/features/core/dataStore/graphDataStore.ts';
+const nodeDetailPanelSource = 'src/views/EditorView/Layout/Detail/panels/NodeDetailPanel.tsx';
 
 const configPath = resolve('tsconfig.json');
 const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
@@ -568,6 +569,172 @@ function rawSignaturePinCallMapping(
     : null;
 }
 
+const nodeDetailLegacyHooks = new Set([
+  'useFunctionCatalog',
+  'useCallFunctionIssue',
+]);
+const nodeDetailLegacyAction = 'updateCallFunctionTarget';
+const nodeDetailLegacyApis = new Set([
+  ...nodeDetailLegacyHooks,
+  nodeDetailLegacyAction,
+]);
+
+function expressionPropertyName(
+  node: ts.Expression,
+  staticString: (node: ts.Expression) => string | null,
+): string | null {
+  const expression = unwrapExpression(node);
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  if (ts.isElementAccessExpression(expression) && expression.argumentExpression) {
+    return staticString(expression.argumentExpression);
+  }
+  return null;
+}
+
+function readsGraphEntities(
+  node: ts.Expression,
+  checker: ts.TypeChecker,
+  staticString: (node: ts.Expression) => string | null,
+  visiting: ReadonlySet<ts.Symbol> = new Set(),
+): boolean {
+  const expression = unwrapExpression(node);
+  if (expressionPropertyName(expression, staticString) === 'graphEntities') return true;
+  if (!ts.isIdentifier(expression)) return false;
+
+  const symbol = checker.getSymbolAtLocation(expression);
+  if (!symbol || visiting.has(symbol)) return expression.text === 'graphEntities';
+  const nextVisiting = new Set([...visiting, symbol]);
+  return (symbol.declarations ?? []).some((declaration) => {
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+      return readsGraphEntities(declaration.initializer, checker, staticString, nextVisiting);
+    }
+    if (ts.isBindingElement(declaration)) {
+      const name = declaration.propertyName ?? declaration.name;
+      return ts.isIdentifier(name) && name.text === 'graphEntities';
+    }
+    return false;
+  });
+}
+
+function bindingElementInitializer(node: ts.BindingElement): ts.Expression | null {
+  const pattern = node.parent;
+  if (!ts.isObjectBindingPattern(pattern) && !ts.isArrayBindingPattern(pattern)) return null;
+  const declaration = pattern.parent;
+  return ts.isVariableDeclaration(declaration) && declaration.initializer
+    ? declaration.initializer
+    : null;
+}
+
+function originatesFromImport(
+  node: ts.Expression,
+  checker: ts.TypeChecker,
+  visiting: ReadonlySet<ts.Symbol> = new Set(),
+): boolean {
+  const expression = unwrapExpression(node);
+  if (!ts.isIdentifier(expression)) return false;
+  const symbol = checker.getSymbolAtLocation(expression);
+  if (!symbol || visiting.has(symbol)) return false;
+  const nextVisiting = new Set([...visiting, symbol]);
+  return (symbol.declarations ?? []).some((declaration) => {
+    if (ts.isImportSpecifier(declaration)
+      || ts.isNamespaceImport(declaration)
+      || ts.isImportClause(declaration)) return true;
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+      return originatesFromImport(declaration.initializer, checker, nextVisiting);
+    }
+    if (ts.isBindingElement(declaration)) {
+      const initializer = bindingElementInitializer(declaration);
+      return initializer !== null && originatesFromImport(initializer, checker, nextVisiting);
+    }
+    return false;
+  });
+}
+
+function importedLegacyMemberName(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  staticString: (node: ts.Expression) => string | null,
+): string | null {
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    const member = expressionPropertyName(node, staticString);
+    const owner = unwrapExpression(node.expression);
+    return member && nodeDetailLegacyApis.has(member) && originatesFromImport(owner, checker)
+      ? member
+      : null;
+  }
+  if (ts.isBindingElement(node)) {
+    const name = node.propertyName ?? node.name;
+    const member = ts.isIdentifier(name) || ts.isStringLiteralLike(name) ? name.text : null;
+    const initializer = bindingElementInitializer(node);
+    return member && nodeDetailLegacyApis.has(member)
+      && initializer !== null && originatesFromImport(initializer, checker)
+      ? member
+      : null;
+  }
+  return null;
+}
+
+function nodeDetailProjectionBoundaryFinding(
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  staticString: (node: ts.Expression) => string | null,
+): string | null {
+  if (ts.isImportSpecifier(node)) {
+    const importedName = (node.propertyName ?? node.name).text;
+    if (nodeDetailLegacyApis.has(importedName)) {
+      return nodeDetailLegacyHooks.has(importedName)
+        ? `node detail legacy hook dependency '${importedName}'`
+        : 'node detail legacy updateCallFunctionTarget dependency';
+    }
+  }
+  if (ts.isImportClause(node) && node.name && nodeDetailLegacyApis.has(node.name.text)) {
+    return nodeDetailLegacyHooks.has(node.name.text)
+      ? `node detail legacy hook dependency '${node.name.text}'`
+      : 'node detail legacy updateCallFunctionTarget dependency';
+  }
+
+  const importedMember = importedLegacyMemberName(node, checker, staticString);
+  if (importedMember) {
+    return nodeDetailLegacyHooks.has(importedMember)
+      ? `node detail legacy hook dependency '${importedMember}'`
+      : 'node detail legacy updateCallFunctionTarget dependency';
+  }
+
+  if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
+    && expressionPropertyName(node, staticString) === 'subGraphPath') {
+    return 'node detail legacy subGraphPath read';
+  }
+  if (ts.isBindingElement(node)) {
+    const name = node.propertyName ?? node.name;
+    if (ts.isIdentifier(name) && name.text === 'subGraphPath') {
+      return 'node detail legacy subGraphPath read';
+    }
+  }
+
+
+  if ((ts.isForInStatement(node) || ts.isForOfStatement(node))
+    && readsGraphEntities(node.expression, checker, staticString)) {
+    return 'node detail cross-graph graphEntities enumeration';
+  }
+  if (ts.isCallExpression(node)) {
+    const callee = unwrapExpression(node.expression);
+    const owner = ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)
+      ? unwrapExpression(callee.expression)
+      : null;
+    const method = expressionPropertyName(node.expression, staticString);
+    const isObjectEnumeration = owner && ts.isIdentifier(owner)
+      && ((owner.text === 'Object'
+        && ['entries', 'values', 'keys', 'getOwnPropertyNames', 'getOwnPropertySymbols'].includes(method ?? ''))
+        || (owner.text === 'Reflect' && method === 'ownKeys'));
+    if (isObjectEnumeration
+      && node.arguments.some((argument) => readsGraphEntities(argument, checker, staticString))) {
+      return 'node detail cross-graph graphEntities enumeration';
+    }
+  }
+
+  return null;
+}
+
 function sourceOffendersFromSourceFile(
   path: string,
   sourceFile: ts.SourceFile,
@@ -585,7 +752,12 @@ function sourceOffendersFromSourceFile(
     || path.endsWith('/features/application/editor/cascadeGraphPathReferences.ts');
   const auditsClipboardSnapshot = path.endsWith('/features/core/editor/clipboardSnapshot.ts')
     || path.endsWith('/features/core/editor/stores/useClipboardStore.ts');
+  const auditsNodeDetailPanel = path.replace(/\\/g, '/').endsWith(nodeDetailPanelSource);
   const visit = (node: ts.Node): void => {
+    if (auditsNodeDetailPanel) {
+      const finding = nodeDetailProjectionBoundaryFinding(node, checker, staticString);
+      if (finding) report(node, finding);
+    }
     if (ts.isIdentifier(node)) {
       const legacySymbol = legacyNodeApiSymbolName(node, checker);
       if (legacySymbol) report(node, `legacy node API symbol '${legacySymbol}'`);
@@ -1134,6 +1306,105 @@ describe('frontend stable node identity architecture audit behavior', () => {
   ])('uses symbols to reject aliased direct graph store mutation fixture %#', (sources) => {
     expect(sourceOffendersFromFixture(sources as Record<string, string>))
       .toContainEqual(expect.stringContaining('direct graph node store mutation during graph move'));
+  });
+
+  it.each([
+    [
+      `declare const node: { subGraphPath?: string }; const target = node.subGraphPath;`,
+      'node detail legacy subGraphPath read',
+    ],
+    [
+      `import { useFunctionCatalog as loadCatalog } from './legacyCatalog'; loadCatalog();`,
+      "node detail legacy hook dependency 'useFunctionCatalog'",
+    ],
+    [
+      `import { useCallFunctionIssue } from './legacyDiagnostics'; useCallFunctionIssue();`,
+      "node detail legacy hook dependency 'useCallFunctionIssue'",
+    ],
+    [
+      `import * as legacyCatalog from './legacyCatalog'; legacyCatalog.useFunctionCatalog();`,
+      "node detail legacy hook dependency 'useFunctionCatalog'",
+    ],
+    [
+      `import * as legacyCatalog from './legacyCatalog';
+       const loadCatalog = legacyCatalog.useFunctionCatalog;
+       loadCatalog();`,
+      "node detail legacy hook dependency 'useFunctionCatalog'",
+    ],
+    [
+      `import * as legacyDiagnostics from './legacyDiagnostics';
+       const panel = <Panel onRefresh={legacyDiagnostics.useCallFunctionIssue} />;`,
+      "node detail legacy hook dependency 'useCallFunctionIssue'",
+    ],
+    [
+      `import * as actions from './legacyActions';
+       const updateTarget = actions.updateCallFunctionTarget;
+       updateTarget();`,
+      'node detail legacy updateCallFunctionTarget dependency',
+    ],
+    [
+      `import * as actions from './legacyActions';
+       const { updateCallFunctionTarget: updateTarget } = actions;
+       updateTarget();`,
+      'node detail legacy updateCallFunctionTarget dependency',
+    ],
+    [
+      `import * as actions from './legacyActions';
+       const panel = <Panel onSelect={actions.updateCallFunctionTarget} />;`,
+      'node detail legacy updateCallFunctionTarget dependency',
+    ],
+    [
+      `import legacyApi from './legacyApi'; legacyApi.useFunctionCatalog();`,
+      "node detail legacy hook dependency 'useFunctionCatalog'",
+    ],
+    [
+      `import legacyApi from './legacyApi';
+       const callback = legacyApi.updateCallFunctionTarget;
+       callback();`,
+      'node detail legacy updateCallFunctionTarget dependency',
+    ],
+    [
+      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+       Object.entries(state.graphEntities).find(([, bucket]) => bucket.nodes[nodeId]);`,
+      'node detail cross-graph graphEntities enumeration',
+    ],
+    [
+      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+       const entities = state.graphEntities;
+       Object.values(entities).find((bucket) => bucket.nodes[nodeId]);`,
+      'node detail cross-graph graphEntities enumeration',
+    ],
+    [
+      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+       for (const graphPath in state.graphEntities) void state.graphEntities[graphPath].nodes[nodeId];`,
+      'node detail cross-graph graphEntities enumeration',
+    ],
+  ])('rejects NodeDetailPanel projection boundary violation %#', (source, finding) => {
+    expect(sourceOffendersFromSource(nodeDetailPanelSource, source))
+      .toContainEqual(expect.stringContaining(finding));
+  });
+
+  it('allows graph-path selection and non-graph object enumeration in NodeDetailPanel', () => {
+    const source = `
+      declare const state: {
+        graphEntities: Record<string, {
+          nodes: Record<string, { capabilities: Record<string, boolean> }>
+        }>
+      };
+      const node = state.graphEntities[graphPath]?.nodes[nodeId];
+      const enabledCapabilities = Object.entries(node.capabilities)
+        .filter(([, enabled]) => enabled);
+      const localHelpers = { useFunctionCatalog: () => enabledCapabilities };
+      localHelpers.useFunctionCatalog();
+      const localActions = { updateCallFunctionTarget: () => undefined };
+      const updateTarget = localActions.updateCallFunctionTarget;
+      const { updateCallFunctionTarget } = localActions;
+      updateTarget();
+      updateCallFunctionTarget();
+      const panel = <Panel onSelect={localActions.updateCallFunctionTarget} />;
+      void panel;
+    `;
+    expect(sourceOffendersFromSource(nodeDetailPanelSource, source)).toEqual([]);
   });
 
   it('excludes only the exact tests/fixtures directory segment', () => {

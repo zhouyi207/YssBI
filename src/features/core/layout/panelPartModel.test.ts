@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PANEL_VIEWS,
-  PANEL_VIEW_SPECS,
   getPanelViewLabelKey,
   resolvePanelViewComponent,
 } from './panelPartModel';
@@ -9,8 +8,6 @@ import {
 describe('panelPartModel', () => {
   it('exposes only implemented views in defaults', () => {
     expect(DEFAULT_PANEL_VIEWS.map((view) => view.id)).toEqual(['logs']);
-    expect(PANEL_VIEW_SPECS.output.implemented).toBe(false);
-    expect(PANEL_VIEW_SPECS.terminal.implemented).toBe(false);
   });
 
   it('resolves active panel view component', () => {

@@ -181,6 +181,7 @@ mod tests {
                 },
                 position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
                 user_label: None,
+                connect_from: None,
             },
         )
     }

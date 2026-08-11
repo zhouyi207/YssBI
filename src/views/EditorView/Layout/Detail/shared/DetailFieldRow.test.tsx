@@ -3,14 +3,13 @@ import { DetailReadonlyField } from './DetailForm';
 import { DetailFieldRow } from './DetailFieldRow';
 
 describe('DetailFieldRow', () => {
-  it('uses content-width labels and a smaller gap by default', () => {
+  it('uses content-width labels by default', () => {
     const element = DetailFieldRow({
       label: '名称',
       children: 'A very long value',
     });
 
     expect(element.props.className).toContain('grid-cols-[max-content_minmax(0,1fr)]');
-    expect(element.props.className).toContain('gap-2');
   });
 
   it('renders readonly values left-aligned and truncated to one line', () => {

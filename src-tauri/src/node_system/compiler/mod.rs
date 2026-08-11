@@ -54,6 +54,7 @@ pub use schema_analysis::{
     SchemaFact, SchemaResolutionContext, SchemaResolutionError, SchemaResolver, SchemaResolverSet,
 };
 pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
+pub(crate) use type_analysis::type_exprs_assignable;
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
 #[cfg(test)]

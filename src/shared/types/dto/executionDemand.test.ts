@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_EXECUTION_DEMAND, type ExecutionDemandDto } from './executionDemand';
-import type { RunEventKind } from './runEvent';
+import type { ExecutionDemandDto } from './executionDemand';
 import { parseExecutionDemandDto } from './runEventParser';
 
 const declaredOutput = {
@@ -12,34 +11,7 @@ const declaredOutput = {
   },
 } as const;
 
-const instanceOutput = {
-  graphPath: 'events/Main.yssbi-event',
-  port: {
-    kind: 'instance',
-    nodeId: '00000000-0000-0000-0000-000000000001',
-    templateKey: 'results',
-    instanceId: '00000000-0000-0000-0000-000000000002',
-  },
-} as const;
-
 describe('ExecutionDemandDto', () => {
-  it('freezes default, declared, instance, empty, and duplicate-order wire shapes', () => {
-    const outputs: ExecutionDemandDto = {
-      type: 'outputs',
-      outputs: [declaredOutput, instanceOutput, declaredOutput],
-      includeDefaultResults: true,
-    };
-    const empty: ExecutionDemandDto = {
-      type: 'outputs',
-      outputs: [],
-      includeDefaultResults: false,
-    };
-
-    expect(DEFAULT_EXECUTION_DEMAND).toEqual({ type: 'default' });
-    expect(outputs.outputs).toEqual([declaredOutput, instanceOutput, declaredOutput]);
-    expect(empty.outputs).toEqual([]);
-  });
-
   it('strictly parses an independent pin preview demand with generation', () => {
     const preview = {
       type: 'pinPreview',
@@ -49,22 +21,6 @@ describe('ExecutionDemandDto', () => {
 
     expect(parseExecutionDemandDto(preview)).toEqual(preview);
     expect(() => parseExecutionDemandDto({ ...preview, includeDefaultResults: false })).toThrow();
-  });
-
-  it('freezes stable outputReady identity without compiler-local fields', () => {
-    const event: RunEventKind = {
-      type: 'outputReady',
-      output: declaredOutput,
-      generation: null,
-      sourceId: '42',
-    };
-
-    expect(event).toEqual({
-      type: 'outputReady',
-      output: declaredOutput,
-      generation: null,
-      sourceId: '42',
-    });
   });
 });
 

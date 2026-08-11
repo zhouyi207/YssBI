@@ -351,6 +351,31 @@ fn port_template(address: &PortAddress) -> &PortKey {
     }
 }
 
+pub(crate) fn type_exprs_assignable(
+    source: &TypeExpr,
+    target: &TypeExpr,
+    source_type_parameters: &[TypeParameterId],
+    target_type_parameters: &[TypeParameterId],
+) -> bool {
+    let source_generics = source_type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| (parameter.clone(), index))
+        .collect::<BTreeMap<_, _>>();
+    let target_generics = target_type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| (parameter.clone(), source_type_parameters.len() + index))
+        .collect::<BTreeMap<_, _>>();
+    let mut solver = Solver::new(source_type_parameters.len() + target_type_parameters.len());
+    solver
+        .assignable(
+            instantiate(source, &source_generics),
+            instantiate(target, &target_generics),
+        )
+        .is_ok()
+}
+
 fn instantiate(expr: &TypeExpr, generics: &BTreeMap<TypeParameterId, usize>) -> TypeValue {
     match expr {
         TypeExpr::Concrete(id) => TypeValue::Concrete(id.clone()),

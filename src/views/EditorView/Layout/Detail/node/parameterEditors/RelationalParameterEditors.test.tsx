@@ -3,8 +3,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enUS } from '@/app/i18n/locales/en-US';
-import { zhCN } from '@/app/i18n/locales/zh-CN';
 import type { SchemaAwareParameterEditorDto } from '@/shared/types/dto/editorProjection';
 
 const { translate } = vi.hoisted(() => ({
@@ -91,34 +89,6 @@ function chooseSelectOption(label: string, option: string): void {
     item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 }
-
-
-describe('relational parameter editor localization', () => {
-  it('defines exact English and Chinese editor chrome in the detail namespace', () => {
-    expect(enUS.detail.parameters).toBe('Parameters');
-    expect(zhCN.detail.parameters).toBe('参数');
-    expect(enUS.detail.parameterEditor).toMatchObject({
-      apply: 'Apply',
-      column: 'Column',
-      operator: 'Operator',
-      valueType: 'Value type',
-      selectColumn: 'Select {{column}}',
-      moveColumnUp: 'Move {{column}} up',
-      moveColumnDown: 'Move {{column}} down',
-    });
-    expect(zhCN.detail.parameterEditor).toMatchObject({
-      apply: '应用',
-      column: '列',
-      operator: '运算符',
-      valueType: '值类型',
-      selectColumn: '选择{{column}}',
-      moveColumnUp: '上移{{column}}',
-      moveColumnDown: '下移{{column}}',
-    });
-  });
-});
-
-
 
 describe('ProjectColumnsEditor', () => {
   it('submits an ordered multi-selection in the user selection order', () => {

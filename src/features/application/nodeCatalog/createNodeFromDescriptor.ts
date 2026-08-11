@@ -2,7 +2,7 @@ import {
   isNodeCreationDescriptor,
   type NodeCreationDescriptor,
 } from '@/features/domain/nodeCatalog/creationDescriptor';
-import type { NodePositionDto } from '@/shared/types/dto/editorProjection';
+import type { NodePositionDto, PortAddressDto } from '@/shared/types/dto/editorProjection';
 import {
   executeEditorMutation,
   type ExecuteEditorMutationOutcome,
@@ -13,6 +13,7 @@ export interface CreateNodeFromDescriptorInput {
   locale: string;
   descriptor: NodeCreationDescriptor;
   position: NodePositionDto;
+  connectFrom?: PortAddressDto | null;
 }
 
 export async function createNodeFromDescriptor(
@@ -31,6 +32,7 @@ export async function createNodeFromDescriptor(
         descriptor: input.descriptor,
         position: input.position,
         userLabel: null,
+        connectFrom: input.connectFrom ?? null,
       },
     },
   });

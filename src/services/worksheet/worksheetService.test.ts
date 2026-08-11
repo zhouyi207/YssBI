@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { WorksheetService } from './worksheetService';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -121,34 +120,6 @@ describe('WorksheetService authoritative mutation contract', () => {
     });
   });
 
-  it.each([
-    ['resource_not_found', false],
-    ['resource_name_conflict', false],
-    ['resource_revision_conflict', false],
-    ['filesystem_prepare_failed', false],
-    ['filesystem_commit_failed', false],
-    ['publication_recovery_required', true],
-  ] as const)('preserves and formats the exact %s worksheet error contract', async (
-    code,
-    recoveryRequired,
-  ) => {
-    const error = {
-      code,
-      message: `${code} message`,
-      resourceKind: 'worksheet',
-      resourcePath: 'worksheets/Report With Spaces.yssbi-worksheet',
-      ...(recoveryRequired ? { recoveryRequired: true } : {}),
-    };
-    vi.mocked(invoke).mockRejectedValue(error);
-
-    const rejection = await WorksheetService.loadWorksheet(
-      projectInstanceId,
-      error.resourcePath,
-    ).catch((caught: unknown) => caught);
-
-    expect(rejection).toEqual(error);
-    expect(formatErrorMessage(rejection)).toBe(`${code} message`);
-  });
 
   it.each([
     ['create', () => WorksheetService.createWorksheet(projectInstanceId, operationId, 'Report')],

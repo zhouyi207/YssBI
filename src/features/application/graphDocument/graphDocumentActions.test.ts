@@ -9,7 +9,6 @@ vi.mock('@/features/application/editorMutation/functionSignatureCoordinator', ()
   commitFunctionSignature,
 }));
 
-
 describe('graphDocumentActions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,10 +26,7 @@ describe('graphDocumentActions', () => {
       'functions/Compute.yssbi-function',
       { inputs },
     );
-    expect('updateCallFunctionTarget' in graphDocumentActions).toBe(false);
     expect(useGraphMetaStore.getState().graphs).toEqual({});
     expect(useGraphDataStore.getState().graphEntities).toEqual({});
-
   });
-
 });

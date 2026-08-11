@@ -13,7 +13,7 @@ use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy, I18nKey,
     InputBindingSpec, LiteralPolicy, NodeCategoryId, NodeScope, NodeTypeId, ParameterKey,
     PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec, ProviderId, Purity,
-    TypeExpr,
+    TypeExpr, TypeId,
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
@@ -330,6 +330,7 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
                 },
                 position: NodePosition { x: 1.0, y: 2.0 },
                 user_label: Some("Created".to_owned()),
+                connect_from: None,
             },
             json!({
                 "type": "createNode",
@@ -430,6 +431,7 @@ fn parameterized_static_creation_is_editable_with_empty_parameters() {
         },
         position: NodePosition { x: 1.0, y: 2.0 },
         user_label: None,
+        connect_from: None,
     }
     .into_patch(
         &graph_path("events/parameterized"),
@@ -525,6 +527,7 @@ fn forged_parameterized_static_descriptors_have_zero_effects() {
             descriptor,
             position: NodePosition { x: 1.0, y: 2.0 },
             user_label: None,
+            connect_from: None,
         }
         .into_patch(&graph_path("events/forged"), &document, &registry);
         assert!(result.is_err());
@@ -621,6 +624,7 @@ fn create_node_rejects_protocol_scope_mismatch() {
         },
         position: NodePosition { x: 1.0, y: 2.0 },
         user_label: None,
+        connect_from: None,
     };
 
     let error = mutation
@@ -643,6 +647,7 @@ fn create_node_materializes_required_user_created_ports() {
         },
         position: NodePosition { x: 1.0, y: 2.0 },
         user_label: None,
+        connect_from: None,
     }
     .into_patch(
         &graph_path("events/initial-ports"),
@@ -975,6 +980,139 @@ fn partial_member_does_not_consume_group_maximum() {
     );
 }
 
+fn compatibility_snapshot() -> crate::project::CatalogMutationValidationSnapshot {
+    crate::project::CatalogMutationValidationSnapshot {
+        project_instance_id: crate::project::ProjectInstanceId::new(),
+        authority_generation: 0,
+        resources: BTreeMap::new(),
+    }
+}
+
+#[test]
+fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let path = graph_path("events/atomic-create-connect");
+    let snapshot = compatibility_snapshot();
+
+    let output_node = node_id(1200);
+    let mut output_document = GraphDocument::default();
+    output_document
+        .create_node(DocumentNode {
+            id: output_node,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let output = declared(output_node, "value");
+    let output_source = crate::node_system::compatibility::SourcePort {
+        address: output.clone(),
+        direction: PortDirection::Output,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+    };
+    let output_patch = EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
+        },
+        position: NodePosition { x: 10.0, y: 20.0 },
+        user_label: None,
+        connect_from: Some(output.clone().into()),
+    }
+    .into_patch_with_compatibility(
+        &path,
+        &output_document,
+        &registry,
+        Some(&snapshot),
+        Some(&output_source),
+    )
+    .unwrap();
+    assert!(matches!(
+        output_patch.operations.last(),
+        Some(GraphDocumentOperation::InsertConnection { connection }) if connection.output == output
+    ));
+
+    let input_node = node_id(1201);
+    let mut input_document = GraphDocument::default();
+    input_document
+        .create_node(DocumentNode {
+            id: input_node,
+            node_type: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let input = declared(input_node, "left");
+    let input_source = crate::node_system::compatibility::SourcePort {
+        address: input.clone(),
+        direction: PortDirection::Input,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+    };
+    let input_patch = EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+        },
+        position: NodePosition { x: 10.0, y: 20.0 },
+        user_label: None,
+        connect_from: Some(input.clone().into()),
+    }
+    .into_patch_with_compatibility(
+        &path,
+        &input_document,
+        &registry,
+        Some(&snapshot),
+        Some(&input_source),
+    )
+    .unwrap();
+    assert!(matches!(
+        input_patch.operations.last(),
+        Some(GraphDocumentOperation::InsertConnection { connection }) if connection.input == input
+    ));
+}
+
+#[test]
+fn incompatible_atomic_create_is_rejected_without_document_effects() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let path = graph_path("events/incompatible-create-connect");
+    let snapshot = compatibility_snapshot();
+    let source_node = node_id(1202);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: source_node,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let before = document.clone();
+    let address = declared(source_node, "value");
+    let source = crate::node_system::compatibility::SourcePort {
+        address: address.clone(),
+        direction: PortDirection::Output,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+    };
+
+    let error = EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.logic.not").unwrap(),
+        },
+        position: NodePosition { x: 10.0, y: 20.0 },
+        user_label: None,
+        connect_from: Some(address.into()),
+    }
+    .into_patch_with_compatibility(&path, &document, &registry, Some(&snapshot), Some(&source))
+    .unwrap_err();
+
+    assert!(error.to_string().contains("no compatible"));
+    assert_graph_content_eq(&document, &before);
+}
+
 #[test]
 fn create_connect_and_add_port_allocate_identity_in_rust() {
     let registry = editor_mutation_registry();
@@ -991,6 +1129,7 @@ fn create_connect_and_add_port_allocate_identity_in_rust() {
         },
         position: NodePosition { x: 5.0, y: 8.0 },
         user_label: None,
+        connect_from: None,
     }
     .into_patch(&path, &document, &registry)
     .unwrap();

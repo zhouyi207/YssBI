@@ -72,7 +72,11 @@ function validProjection(): EditorGraphProjectionDto {
               canConnect: true,
             },
             input: null,
-            resolvedType: { display: 'Model', resolved: true },
+            resolvedType: {
+              display: 'Model',
+              resolved: true,
+              dataType: { kind: 'Struct', inner: 'Model' },
+            },
             resolvedSchema: { kind: 'derived', fields: [] },
             status: 'resolved',
           },
@@ -96,7 +100,7 @@ function validProjection(): EditorGraphProjectionDto {
               protocolDefault: 0,
               effective: 'connections',
             },
-            resolvedType: { display: 'Float64', resolved: true },
+            resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
             resolvedSchema: { kind: 'input', fields: [] },
             status: 'resolved',
           },
@@ -191,7 +195,6 @@ describe('editor projection architecture', () => {
     ['parameterEditorValidators.ts', 'editorProjection.ts', 'type-only'],
     ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
     ['editorProjectionGuards.ts', 'editorProjection.ts', 'type-only'],
-    ['editorProjectionGuards.ts', 'src/shared/types/domain/dataType.ts', 'type-only'],
     ['editorProjectionGuards.ts', 'src/shared/types/domain/graphResourcePath.ts', 'runtime'],
     ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
     ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
@@ -199,6 +202,8 @@ describe('editor projection architecture', () => {
     ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
     ['graphProjectionService.ts', 'editorProjection.ts', 'type-only'],
     ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
+    ['editorProjection.ts', 'src/shared/types/domain/dataType.ts', 'type-only'],
+    ['editorProjectionGuards.ts', 'src/shared/types/dto/dataType.ts', 'runtime'],
   ] satisfies Edge[];
   const allowedRuntimeTargets = new Map<string, ReadonlySet<string>>([
     ['dtoIndex.ts', new Set(dtoBarrelRuntimeTargets)],
@@ -207,6 +212,7 @@ describe('editor projection architecture', () => {
     ['editorProjectionGuards.ts', new Set([
       'parameterEditorValidators.ts',
       'src/shared/types/domain/graphResourcePath.ts',
+      'src/shared/types/dto/dataType.ts',
     ])],
     ['editorProjectionParser.ts', new Set([
       'editorProjectionGuards.ts',
@@ -554,6 +560,7 @@ describe('editor projection architecture', () => {
       ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
       ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
       ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
+      ['editorProjectionGuards.ts', 'src/shared/types/dto/dataType.ts', 'runtime'],
     ]);
     expect(unexpectedRuntimeEdges(edges)).toEqual([]);
     expect(hasDependencyCycle(edges)).toBe(false);

@@ -307,6 +307,7 @@ fn resource_descriptor_snapshot(
                     scope: VariableScope::Event {
                         event_path: "events/validation".into(),
                     },
+                    data_type: crate::graph::value::DataType::Int64,
                     allowed_node_type_ids: [
                         NodeTypeId::new("yssbi.project.variable.get").unwrap(),
                         NodeTypeId::new("yssbi.project.variable.set").unwrap(),
@@ -341,6 +342,7 @@ fn resource_create(
         },
         position: NodePosition { x: 1.0, y: 2.0 },
         user_label: None,
+        connect_from: None,
     }
 }
 

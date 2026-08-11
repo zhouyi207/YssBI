@@ -28,7 +28,7 @@ export interface LocalizedNodeCatalogState {
   refresh(): void;
 }
 
-export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
+export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogState {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
@@ -40,7 +40,7 @@ export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
     : null);
 
   useEffect(() => {
-    if (!projectInstanceId || request?.status === 'loading' || request?.status === 'ready'
+    if (!enabled || !projectInstanceId || request?.status === 'loading' || request?.status === 'ready'
       || request?.status === 'error') return;
 
     let identity: ReturnType<typeof captureProjectIdentity>;
@@ -71,12 +71,16 @@ export function useLocalizedNodeCatalog(): LocalizedNodeCatalogState {
           formatErrorMessage(error, 'Failed to load node catalog'),
         );
       });
-  }, [locale, projectInstanceId, request?.status]);
+  }, [enabled, locale, projectInstanceId, request?.status]);
 
   const refresh = useCallback(() => {
     if (!projectInstanceId) return;
     useNodeCatalogStore.getState().requestRefresh(projectInstanceId, locale);
   }, [locale, projectInstanceId]);
+
+  if (!enabled) {
+    return { status: 'idle', error: null, catalog: null, searchIndex: null, refresh };
+  }
 
   return {
     status: request?.status ?? 'idle',

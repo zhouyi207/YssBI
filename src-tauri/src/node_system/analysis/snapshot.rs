@@ -191,6 +191,7 @@ mod tests {
                     [crate::node_system::protocol::SchemaField {
                         name: crate::node_system::protocol::SchemaColumnRef("name".into()),
                         scalar_type: crate::node_system::protocol::RelationalScalarType::String,
+                        lineage: None,
                     }],
                 ),
             ),
@@ -201,6 +202,7 @@ mod tests {
                     [crate::node_system::protocol::SchemaField {
                         name: crate::node_system::protocol::SchemaColumnRef("amount".into()),
                         scalar_type: crate::node_system::protocol::RelationalScalarType::Float64,
+                        lineage: None,
                     }],
                 ),
             ),

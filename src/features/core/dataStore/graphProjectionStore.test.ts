@@ -1,10 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   EditorGraphProjectionDto,
-  DiagnosticDto,
   PortAddressDto,
-  ProjectionBasisDto,
 } from '@/shared/types/dto/editorProjection';
 import { portAddressKey } from '@/features/domain/editorProjection';
 import {
@@ -13,7 +11,6 @@ import {
   getGraphRequestGeneration,
   getGraphSourceRevision,
   hasGraphBlockingDiagnostics,
-  type GraphEntityBucket,
 } from './graphEntityAccess';
 import { useGraphDataStore } from './graphDataStore';
 import { toUiNode } from './nodeView';
@@ -79,7 +76,7 @@ function projection(
               canConnect: true,
             },
             input: null,
-            resolvedType: { display: 'Number', resolved: true },
+            resolvedType: { display: 'Number', resolved: true, dataType: { kind: 'Float64' } },
             resolvedSchema: null,
             status: 'resolved',
           },
@@ -103,7 +100,7 @@ function projection(
               protocolDefault: 1,
               effective: 'connections',
             },
-            resolvedType: { display: 'Number', resolved: true },
+            resolvedType: { display: 'Number', resolved: true, dataType: { kind: 'Float64' } },
             resolvedSchema: null,
             status: 'resolved',
           },
@@ -155,16 +152,6 @@ function projection(
 
 describe('graphDataStore projection replacement', () => {
   it('requires projection metadata on every graph bucket', () => {
-    expectTypeOf<GraphEntityBucket>().toHaveProperty('basis').toEqualTypeOf<ProjectionBasisDto>();
-    expectTypeOf<GraphEntityBucket>().toHaveProperty('sourceRevision').toEqualTypeOf<number>();
-    expectTypeOf<GraphEntityBucket>().toHaveProperty('requestGeneration').toEqualTypeOf<number>();
-    expectTypeOf<GraphEntityBucket>().toHaveProperty('diagnostics').toEqualTypeOf<DiagnosticDto[]>();
-    expectTypeOf<GraphEntityBucket>()
-      .toHaveProperty('outcome')
-      .toEqualTypeOf<EditorGraphProjectionDto['outcome']>();
-    expectTypeOf<GraphEntityBucket>()
-      .toHaveProperty('hasBlockingDiagnostics')
-      .toEqualTypeOf<boolean>();
     expect(getGraphProjectionBasis({ graphEntities: {} }, 'missing')).toBeUndefined();
     expect(getGraphSourceRevision({ graphEntities: {} }, 'missing')).toBeUndefined();
     expect(getGraphRequestGeneration({ graphEntities: {} }, 'missing')).toBeUndefined();

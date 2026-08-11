@@ -59,6 +59,7 @@ describe('LogItemRow', () => {
     )).toBe(false);
   });
 
+
   it('calls the callback once for an ordinary pointer click', () => {
     const { button, onClick } = renderRow();
 

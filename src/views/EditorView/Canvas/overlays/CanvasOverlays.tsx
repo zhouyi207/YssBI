@@ -3,12 +3,14 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { LayoutTab } from "@/shared/types";
 import { useEditorGroup } from "@/features/application/editor";
+import { useGraphDataStore } from '@/features/core/dataStore';
 import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
 
 import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
 import { ContextMenu } from "@/shared/ui/contextMenu";
 import { NodePalette } from "../../Layout/NodePalette";
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
@@ -51,6 +53,12 @@ export default function CanvasOverlays({
     });
 
     const tabId = activeTabId ?? "";
+    const graphRevision = useGraphDataStore((state) => activeTabId
+        ? state.graphEntities[activeTabId]?.sourceRevision ?? null
+        : null);
+    const sourcePort = pendingConnection && 'address' in pendingConnection
+        ? (pendingConnection as typeof pendingConnection & { address?: PortAddressDto }).address ?? null
+        : null;
     const onPaletteSelect = (descriptor: NodeCreationDescriptor, locale: string) => {
         if (contextMenu) void handleNodePaletteSelect(descriptor, locale, contextMenu);
     };
@@ -81,6 +89,9 @@ export default function CanvasOverlays({
                     <NodePalette
                         x={contextMenu.x}
                         y={contextMenu.y}
+                        graphPath={activeTabId}
+                        graphRevision={graphRevision}
+                        sourcePort={sourcePort}
                         onSelect={onPaletteSelect}
                     />
                 </div>,

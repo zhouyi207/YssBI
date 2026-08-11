@@ -21,7 +21,7 @@ import { cancelActiveGraphRun } from './cancelActiveGraphRun';
 import { observeGraphRunEvent, type GraphRunOutcomeState } from './observeGraphRunEvent';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
-  captureGraphSaveCommandContext,
+  captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
@@ -156,7 +156,7 @@ export function useProjectOperations() {
 
       warnCallFunctionIssuesBeforeSave(activeTabId);
 
-      context = captureGraphSaveCommandContext(activeTabId);
+      context = await captureSettledGraphSaveCommandContext(activeTabId);
       await GraphService.saveProjectGraph(
         context.projectInstanceId,
         activeTabId,

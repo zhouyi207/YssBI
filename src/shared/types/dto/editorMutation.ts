@@ -29,6 +29,7 @@ export type EditorGraphMutationDto =
         descriptor: NodeCreationDescriptorDto;
         position: NodePositionDto;
         userLabel: string | null;
+        connectFrom: PortAddressDto | null;
       };
     }
   | { type: 'deleteNode'; payload: { nodeId: string } }

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCompatibleNodeCatalog } from '@/features/application/nodeCatalog/useCompatibleNodeCatalog';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,14 +19,27 @@ export function nodePaletteItemKey(item: LocalizedCatalogItem): string {
 export function NodePalette({
   x,
   y,
+  graphPath = null,
+  graphRevision = null,
+  sourcePort = null,
   onSelect,
 }: {
   x: number;
   y: number;
+  graphPath?: string | null;
+  graphRevision?: number | null;
+  sourcePort?: PortAddressDto | null;
   onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
 }) {
   const { t } = useTranslation();
-  const { status, error, catalog, searchIndex } = useLocalizedNodeCatalog();
+  const localized = useLocalizedNodeCatalog(sourcePort === null);
+  const compatible = useCompatibleNodeCatalog({
+    enabled: sourcePort !== null,
+    graphPath,
+    graphRevision,
+    sourcePort,
+  });
+  const { status, error, catalog, searchIndex } = sourcePort ? compatible : localized;
   const [query, setQuery] = useState('');
   const items = useMemo(() => searchIndex?.search(query) ?? [], [query, searchIndex]);
 

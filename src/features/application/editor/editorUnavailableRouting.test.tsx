@@ -5,11 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import { useEditorStore } from '@/features/core/editor';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import type { Pin } from '@/shared/types/domain/pin';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
 import { useCanvasDrop } from './useCanvasDrop';
-import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 import { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -54,15 +55,34 @@ vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
 
 const graphPath = 'events/main.yssbi-event';
 const groupId = 'group-1';
+const sourceAddress = {
+  kind: 'declared' as const,
+  nodeId: '00000000-0000-0000-0000-000000000101',
+  portKey: 'output',
+};
+const newerSourceAddress = {
+  kind: 'declared' as const,
+  nodeId: '00000000-0000-0000-0000-000000000102',
+  portKey: 'new-output',
+};
 
-function pin(): Pin {
+function pin(address = sourceAddress): Pin {
   return {
     id: 'output',
     nodeId: 'source',
     name: 'Output',
     direction: 'output',
     type: 'object',
+    address,
   } as Pin;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 describe('unavailable creation routing', () => {
@@ -75,6 +95,13 @@ describe('unavailable creation routing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useEditorStore.setState({ contextMenu: null, pendingConnection: null });
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement(groupId, [{
+      id: graphPath,
+      component: 'GraphEditor',
+      type: 'event',
+    }], graphPath);
     host = document.createElement('div');
     canvas = document.createElement('div');
     canvas.getBoundingClientRect = () => ({
@@ -131,12 +158,94 @@ describe('unavailable creation routing', () => {
       locale: 'zh-CN',
       descriptor: { kind: 'static', nodeTypeId: 'math.add' },
       position: { x: 20, y: 30 },
+      connectFrom: pendingConnection ? sourceAddress : null,
     });
     expect(createNode).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
     expect(showToast).not.toHaveBeenCalled();
+    expect(setContextMenu).not.toHaveBeenCalled();
+    expect(setPendingConnection).not.toHaveBeenCalled();
+  });
+
+  it('keeps pending state until atomic create/connect is applied, then clears it', async () => {
+    const pending = deferred<{ status: 'applied'; result: never }>();
+    vi.mocked(createNodeFromDescriptor).mockReturnValueOnce(pending.promise);
+    const setContextMenu = vi.fn();
+    const setPendingConnection = vi.fn();
+    let select!: ReturnType<typeof useCanvasOverlayHandlers>['handleNodePaletteSelect'];
+    function Harness() {
+      select = useCanvasOverlayHandlers({
+        canvasElementRef: { current: canvas },
+        groupId,
+        activeTabId: graphPath,
+        pendingConnection: pin(),
+        setContextMenu,
+        setPendingConnection,
+      }).handleNodePaletteSelect;
+      return null;
+    }
+    act(() => root.render(<Harness />));
+    useEditorStore.setState({
+      contextMenu: { x: 20, y: 30, visible: true },
+      pendingConnection: pin(),
+    });
+
+    const selection = select(
+      { kind: 'static', nodeTypeId: 'math.add' },
+      'en-US',
+      { x: 20, y: 30 },
+    );
+    expect(setContextMenu).not.toHaveBeenCalled();
+    expect(setPendingConnection).not.toHaveBeenCalled();
+
+    pending.resolve({ status: 'applied', result: {} as never });
+    await act(async () => selection);
+
     expect(setContextMenu).toHaveBeenCalledWith(null);
     expect(setPendingConnection).toHaveBeenCalledWith(null);
+  });
+
+  it('does not let an older applied create clear a newer palette interaction', async () => {
+    const pending = deferred<{ status: 'applied'; result: never }>();
+    vi.mocked(createNodeFromDescriptor).mockReturnValueOnce(pending.promise);
+    const setContextMenu = vi.fn();
+    const setPendingConnection = vi.fn();
+    let select!: ReturnType<typeof useCanvasOverlayHandlers>['handleNodePaletteSelect'];
+    function Harness() {
+      select = useCanvasOverlayHandlers({
+        canvasElementRef: { current: canvas },
+        groupId,
+        activeTabId: graphPath,
+        pendingConnection: pin(),
+        setContextMenu,
+        setPendingConnection,
+      }).handleNodePaletteSelect;
+      return null;
+    }
+    act(() => root.render(<Harness />));
+    useEditorStore.setState({
+      contextMenu: { x: 20, y: 30, visible: true },
+      pendingConnection: pin(),
+    });
+
+    const selection = select(
+      { kind: 'static', nodeTypeId: 'math.add' },
+      'en-US',
+      { x: 20, y: 30 },
+    );
+    useEditorStore.setState({
+      contextMenu: { x: 40, y: 50, visible: true },
+      pendingConnection: pin(newerSourceAddress),
+    });
+    pending.resolve({ status: 'applied', result: {} as never });
+    await act(async () => selection);
+
+    expect(setContextMenu).not.toHaveBeenCalled();
+    expect(setPendingConnection).not.toHaveBeenCalled();
+    expect(useEditorStore.getState()).toMatchObject({
+      contextMenu: { x: 40, y: 50, visible: true },
+      pendingConnection: { address: newerSourceAddress },
+    });
   });
 
   it('handles descriptor creation rejection with actionable feedback', async () => {
@@ -246,18 +355,6 @@ describe('unavailable creation routing', () => {
       descriptor: resourceDescriptor,
     }));
     expect(showToast).not.toHaveBeenCalled();
-  });
-
-  it('enables Catalog descriptors and documentation while duplicate and paste stay disabled', () => {
-    expect(EDITOR_MUTATION_CAPABILITIES).toEqual({
-      createStaticNodes: true,
-      catalogDescriptors: true,
-      resourceBoundDescriptors: true,
-      contextualCompatibility: false,
-      nodeDocumentation: true,
-      duplicateNodes: false,
-      pasteNodes: false,
-    });
   });
 
   it('shift-drops a function only through its exact current opaque Catalog path', async () => {

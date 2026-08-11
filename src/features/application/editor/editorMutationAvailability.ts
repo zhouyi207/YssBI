@@ -4,7 +4,7 @@ export const EDITOR_MUTATION_CAPABILITIES = {
   createStaticNodes: true,
   catalogDescriptors: true,
   resourceBoundDescriptors: true,
-  contextualCompatibility: false,
+  contextualCompatibility: true,
   nodeDocumentation: true,
   duplicateNodes: false,
   pasteNodes: false,

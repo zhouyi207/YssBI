@@ -7,7 +7,7 @@ import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import {
-    captureGraphSaveCommandContext,
+    captureSettledGraphSaveCommandContext,
     isGraphSaveCommandRevisionCurrent,
     type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
@@ -33,7 +33,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
                 const saved = await useWorksheetStore.getState().saveDocument(tab.graphPath);
                 if (!saved) return false;
             } else if (layoutTab?.type === 'event' || layoutTab?.type === 'function') {
-                context = captureGraphSaveCommandContext(tab.graphPath);
+                context = await captureSettledGraphSaveCommandContext(tab.graphPath);
                 await GraphService.saveProjectGraph(
                     context.projectInstanceId,
                     tab.graphPath,

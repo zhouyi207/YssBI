@@ -92,6 +92,7 @@ fn create_node_mutation() -> EditorGraphMutationDto {
         },
         position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
         user_label: None,
+        connect_from: None,
     }
 }
 
@@ -527,6 +528,7 @@ fn resource_descriptor_request(
             },
             position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
             user_label: None,
+            connect_from: None,
         },
     )
 }
@@ -614,6 +616,7 @@ fn resource_descriptor_matrix_request(
             },
             position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
             user_label: None,
+            connect_from: None,
         },
     )
 }
@@ -11633,6 +11636,58 @@ fn function_resource_version_changes_with_graph_body() {
 }
 
 #[test]
+fn database_schema_resolver_attaches_canonical_field_lineage() {
+    let declaration = crate::database::DatabaseDecl {
+        id: "main".into(),
+        engine: crate::database::DatabaseEngine::InMemory {
+            name: "main".into(),
+        },
+        schema_version: 1,
+        required: true,
+        name: Some("Main".into()),
+    };
+    let mut data = ProjectData::new();
+    data.databases.insert("main".into(), declaration);
+    let resource = crate::node_system::plan::ResourceId::new("databases/main").unwrap();
+    let database_schemas = std::collections::BTreeMap::from([(
+        resource,
+        vec![crate::schema::ColumnInfoDTO {
+            name: "value".into(),
+            dtype: "String".into(),
+        }],
+    )]);
+    let resources = compile_resources_from_data(&data, database_schemas).unwrap();
+    let registry = std::sync::Arc::unwrap_or_clone(
+        crate::node_system::catalog::build_builtin_node_system()
+            .unwrap()
+            .registry,
+    );
+    let mut graph = crate::node_system::document::GraphDocument::default();
+    let mut source = node("yssbi.dataframe.source.get");
+    source.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    );
+    let output = PortAddress::declared(source.id, PortKey::new("dataframe").unwrap());
+    graph.nodes.insert(source.id, source);
+
+    let result = crate::node_system::compiler::GraphCompiler::with_schema_resolvers(
+        &registry,
+        &resources,
+        resources.schema_resolvers(),
+    )
+    .compile(&graph);
+
+    assert_eq!(
+        result.analysis.resolved_schemas[&output].fields[0].lineage,
+        Some(crate::node_system::protocol::SchemaFieldLineage {
+            source: "databases/main".into(),
+            field: "value".into(),
+        })
+    );
+}
+
+#[test]
 fn database_resource_version_changes_with_resolved_column_type() {
     let declaration = crate::database::DatabaseDecl {
         id: "main".into(),
@@ -13185,6 +13240,7 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
         descriptor: project_item.creation,
         position: NodePosition { x: 320.0, y: 180.0 },
         user_label: None,
+        connect_from: None,
     };
     let before_ids = fixture.state.get_data().unwrap().graphs[&fixture.path]
         .document

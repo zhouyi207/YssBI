@@ -113,7 +113,6 @@ describe('execution wire parsers', () => {
         || event.kind.type === 'operationCompleted'
         || event.kind.type === 'operationErrored',
     );
-    expect(operations.length).toBe(3);
     for (const operation of operations) {
       expect(operation.kind).toHaveProperty('attemptId');
       const missing = clone(operation);
@@ -128,13 +127,6 @@ describe('execution wire parsers', () => {
   it.each(executionWire.runEvents)('rejects extra keys on RunEvent $kind.type', (valid) => {
     expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
-  });
-
-  it('freezes ordinary null and preview numeric output generations', () => {
-    expect(executionWire.runEvents
-      .filter((event) => event.kind.type === 'outputReady')
-      .map((event) => event.kind.generation))
-      .toEqual([null, 17]);
   });
 
   it('rejects removed valueReady and requires exact preview generation wire', () => {

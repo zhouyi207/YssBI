@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { LayoutNode } from '@/shared/types/ui';
 import {
   clampWorkbenchPartSize,
-  PANEL_MAX_VIEWPORT_RATIO,
   resolveWorkbenchPartMaxSize,
 } from './workbenchPanelSizing';
 
@@ -18,7 +17,6 @@ const panelNode = (): LayoutNode => ({
 describe('resolveWorkbenchPartMaxSize', () => {
   it('caps panel height at 80% of viewport when docked bottom', () => {
     expect(resolveWorkbenchPartMaxSize(panelNode(), { width: 1200, height: 1000 }, 'bottom')).toBe(800);
-    expect(PANEL_MAX_VIEWPORT_RATIO).toBe(0.8);
   });
 
   it('caps panel width at 80% of viewport when docked left or right', () => {

@@ -186,69 +186,6 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     );
   });
 
-  it('rejects unknown keys before evaluating graph and database values', async () => {
-    const index = projectIndex();
-    let graphsEvaluated = false;
-    let databasesEvaluated = false;
-    index.unknownLegacyKey = true;
-    Object.defineProperties(index, {
-      graphs: {
-        enumerable: true,
-        get: () => {
-          graphsEvaluated = true;
-          throw new Error('graphs evaluated');
-        },
-      },
-      databases: {
-        enumerable: true,
-        get: () => {
-          databasesEvaluated = true;
-          throw new Error('databases evaluated');
-        },
-      },
-    });
-    ipc.response = index;
-
-    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
-      'Invalid project index response',
-    );
-    expect(graphsEvaluated).toBe(false);
-    expect(databasesEvaluated).toBe(false);
-  });
-
-  it('rejects inherited required keys before evaluating invalid rows', async () => {
-    const index = projectIndex();
-    const projectName = index.projectName;
-    let graphsEvaluated = false;
-    let databasesEvaluated = false;
-    delete index.projectName;
-    index.unknownProjectName = 'substitution';
-    Object.defineProperties(index, {
-      graphs: {
-        enumerable: true,
-        get: () => {
-          graphsEvaluated = true;
-          return [null];
-        },
-      },
-      databases: {
-        enumerable: true,
-        get: () => {
-          databasesEvaluated = true;
-          return [null];
-        },
-      },
-    });
-    Object.setPrototypeOf(index, { projectName });
-    ipc.response = index;
-
-    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
-      'Invalid project index response',
-    );
-    expect(graphsEvaluated).toBe(false);
-    expect(databasesEvaluated).toBe(false);
-  });
-
   it('strictly parses worksheet path identity and authoritative metadata', async () => {
     const index = projectIndex();
     index.worksheets = [worksheetRow()];

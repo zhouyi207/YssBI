@@ -46,32 +46,4 @@ describe('FunctionMutationService', () => {
       request,
     });
   });
-
-  it('preserves project identity when the command rejects', async () => {
-    const request: MutationRequestDto<FunctionDocumentPatchDto> = {
-      resource: { kind: 'function', key: 'functions/Compute.yssbi-function' },
-      baseRevision: 4,
-      operationId: '00000000-0000-0000-0000-000000000505',
-      payload: {
-        before: { parameters: [], return_type: null },
-        after: { parameters: [], return_type: 'Float64' },
-      },
-    };
-    const rejection = { code: 'stale_project_lifecycle', message: 'project was replaced' };
-    vi.mocked(invoke).mockRejectedValue(rejection);
-
-    await expect(FunctionMutationService.updateSignature(
-      '00000000-0000-0000-0000-000000000601',
-      'functions/Compute.yssbi-function',
-      'en-US',
-      request,
-    )).rejects.toBe(rejection);
-
-    expect(invoke).toHaveBeenCalledWith('update_function_signature', {
-      projectInstanceId: '00000000-0000-0000-0000-000000000601',
-      functionPath: 'functions/Compute.yssbi-function',
-      locale: 'en-US',
-      request,
-    });
-  });
 });

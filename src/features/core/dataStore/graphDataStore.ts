@@ -114,6 +114,7 @@ function buildProjectionBucket(
       type: port.kind === 'data' ? 'object' : 'exec',
       direction: port.direction,
       defaultValue: port.input?.protocolDefault,
+      dataType: port.kind === 'data' ? port.resolvedType?.dataType ?? undefined : undefined,
       userValue: port.input?.literalOverride,
       address: port.address,
       templateKey: port.templateKey,

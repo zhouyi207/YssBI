@@ -172,7 +172,7 @@ pub fn build_function_editor_projection(
     })
 }
 
-fn resolve_function_data_type(type_name: &str) -> Result<DataType, String> {
+pub(crate) fn resolve_function_data_type(type_name: &str) -> Result<DataType, String> {
     let data_type = type_name.parse().or_else(|_| match type_name.trim() {
         "bool" | "boolean" | "core.bool" => Ok(DataType::Boolean),
         "int" | "integer" | "int64" | "core.int64" => Ok(DataType::Int64),
@@ -336,6 +336,9 @@ pub enum EffectiveInputBindingKindDto {
 pub struct TypeSummaryDto {
     pub display: Box<str>,
     pub resolved: bool,
+    pub data_type: Option<DataType>,
+    #[serde(skip)]
+    pub(crate) internal_type_expr: Option<TypeExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1102,6 +1105,42 @@ fn project_type_summary(value: &TypeExpr) -> TypeSummaryDto {
     TypeSummaryDto {
         display: type_display(value).into(),
         resolved: type_is_resolved(value),
+        data_type: project_data_type(value),
+        internal_type_expr: Some(value.clone()),
+    }
+}
+
+pub(crate) fn project_data_type(value: &TypeExpr) -> Option<DataType> {
+    match value {
+        TypeExpr::Concrete(id) => Some(match id.as_str() {
+            "core.bool" => DataType::Boolean,
+            "core.int64" => DataType::Int64,
+            "core.float64" => DataType::Float64,
+            "core.string" => DataType::String,
+            "core.categorical" => DataType::Categorical,
+            "tabular.dataframe" => DataType::DataFrame,
+            "tabular.series" => DataType::DataSeries(Box::new(DataType::Any)),
+            "core.data_series.bool" => DataType::DataSeries(Box::new(DataType::Boolean)),
+            "core.data_series.int64" => DataType::DataSeries(Box::new(DataType::Int64)),
+            "core.data_series.float64" => DataType::DataSeries(Box::new(DataType::Float64)),
+            "core.data_series.string" => DataType::DataSeries(Box::new(DataType::String)),
+            "core.data_series.categorical" => DataType::DataSeries(Box::new(DataType::Categorical)),
+            "core.data_series.date" => DataType::DataSeries(Box::new(DataType::Date)),
+            semantic_id => DataType::Struct(semantic_id.to_owned()),
+        }),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
+            project_data_type(&arguments[0]).map(|element| DataType::DataSeries(Box::new(element)))
+        }
+        TypeExpr::Applied { .. } => None,
+        TypeExpr::Union(values) if !values.is_empty() => values
+            .iter()
+            .map(project_data_type)
+            .collect::<Option<Vec<_>>>()
+            .map(DataType::one_of),
+        TypeExpr::Union(_) | TypeExpr::Generic(_) | TypeExpr::Unknown => None,
     }
 }
 
@@ -1401,10 +1440,44 @@ mod tests {
         FunctionParameterId, GraphResourcePath, InputState, LastKnownPortMetadata, NodePosition,
         OrderKey, PortInstanceId,
     };
-    use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
+    use crate::node_system::protocol::{
+        NodeTypeId, ParameterKey, PortKey, TypeConstructorId, TypeExpr, TypeId,
+    };
     use crate::node_system::registry::RegistryFingerprint;
     use serde_json::json;
     use uuid::Uuid;
+
+    #[test]
+    fn type_summary_serializes_structured_data_type_without_display_parsing() {
+        let summary = project_type_summary(&TypeExpr::Applied {
+            constructor: TypeConstructorId::new("core.data_series").unwrap(),
+            arguments: vec![TypeExpr::Concrete(TypeId::new("core.float64").unwrap())],
+        });
+
+        assert_eq!(
+            serde_json::to_value(summary).unwrap(),
+            json!({
+                "display": "core.data_series<core.float64>",
+                "resolved": true,
+                "dataType": {
+                    "kind": "DataSeries",
+                    "inner": { "kind": "Float64" }
+                }
+            })
+        );
+        assert_eq!(
+            project_data_type(&TypeExpr::Concrete(
+                TypeId::new("statistics.model").unwrap()
+            )),
+            Some(DataType::Struct("statistics.model".into()))
+        );
+        assert_eq!(
+            project_data_type(&TypeExpr::Generic(
+                crate::node_system::protocol::TypeParameterId::new("value").unwrap()
+            )),
+            None
+        );
+    }
 
     struct EmptyResources;
 
@@ -1465,6 +1538,8 @@ mod tests {
             resolved_type: Some(TypeSummaryDto {
                 display: "core.string".into(),
                 resolved: true,
+                data_type: Some(DataType::String),
+                internal_type_expr: Some(TypeExpr::Concrete(TypeId::new("core.string").unwrap())),
             }),
             resolved_schema: None,
             status: ResolvedPortStatusDto::Resolved,
@@ -1587,30 +1662,37 @@ mod tests {
                 SchemaField {
                     name: SchemaColumnRef("active".into()),
                     scalar_type: RelationalScalarType::Boolean,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("count".into()),
                     scalar_type: RelationalScalarType::Int64,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("amount".into()),
                     scalar_type: RelationalScalarType::Float64,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("status".into()),
                     scalar_type: RelationalScalarType::String,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("day".into()),
                     scalar_type: RelationalScalarType::Date,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("created".into()),
                     scalar_type: RelationalScalarType::DateTime,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("opaque".into()),
                     scalar_type: RelationalScalarType::Unknown,
+                    lineage: None,
                 },
             ],
         );
@@ -2137,6 +2219,7 @@ mod tests {
             [crate::node_system::protocol::SchemaField {
                 name: crate::node_system::protocol::SchemaColumnRef("total".into()),
                 scalar_type: crate::node_system::protocol::RelationalScalarType::Float64,
+                lineage: None,
             }],
         );
 

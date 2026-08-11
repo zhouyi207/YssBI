@@ -93,9 +93,17 @@ impl RelationalScalarType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchemaFieldLineage {
+    pub source: Box<str>,
+    pub field: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaField {
     pub name: SchemaColumnRef,
     pub scalar_type: RelationalScalarType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<SchemaFieldLineage>,
 }
 
 impl From<SchemaColumnRef> for SchemaField {
@@ -103,6 +111,7 @@ impl From<SchemaColumnRef> for SchemaField {
         Self {
             name,
             scalar_type: RelationalScalarType::Unknown,
+            lineage: None,
         }
     }
 }
@@ -185,6 +194,32 @@ mod tests {
         assert_eq!(
             RelationalScalarType::from_database_dtype("DECIMAL(18,2)"),
             RelationalScalarType::Unknown
+        );
+    }
+
+    #[test]
+    fn schema_field_lineage_is_optional_and_round_trips() {
+        let legacy = SchemaField {
+            name: SchemaColumnRef("amount".into()),
+            scalar_type: RelationalScalarType::Float64,
+            lineage: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&legacy).unwrap(),
+            serde_json::json!({"name": "amount", "scalar_type": "Float64"})
+        );
+
+        let stable = SchemaField {
+            name: SchemaColumnRef("amount".into()),
+            scalar_type: RelationalScalarType::Float64,
+            lineage: Some(SchemaFieldLineage {
+                source: "databases/main".into(),
+                field: "amount".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::from_value::<SchemaField>(serde_json::to_value(&stable).unwrap()).unwrap(),
+            stable
         );
     }
 

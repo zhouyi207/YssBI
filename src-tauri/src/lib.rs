@@ -137,6 +137,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // ==================== Node system ====================
             get_localized_node_catalog,
+            get_compatible_node_catalog,
             create_event,
             create_function,
             remove_graph,

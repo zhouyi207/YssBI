@@ -10,6 +10,8 @@ const historyAvailability = vi.hoisted(() => ({
   pending: false,
 }));
 
+const draggableInputs = vi.hoisted(() => [] as Array<{ data: unknown; disabled?: boolean }>);
+
 const catalogState = vi.hoisted(() => ({
   status: 'ready' as const,
   error: null,
@@ -37,6 +39,13 @@ const catalogState = vi.hoisted(() => ({
     search: () => [],
   },
   refresh: vi.fn(),
+}));
+
+vi.mock('@dnd-kit/core', () => ({
+  useDraggable: (input: { data: unknown; disabled?: boolean }) => {
+    draggableInputs.push(input);
+    return { attributes: {}, listeners: {}, setNodeRef: vi.fn() };
+  },
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -74,6 +83,7 @@ describe('Sidebar tab-level empty states', () => {
   let root: Root;
 
   beforeEach(() => {
+    draggableInputs.length = 0;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -84,13 +94,24 @@ describe('Sidebar tab-level empty states', () => {
     host.remove();
   });
 
-  it('renders the backend Catalog without exposing a creation action', () => {
+  it('registers backend Catalog items as draggable node templates', () => {
     act(() => root.render(<SidebarNodesTab />));
 
     expect(host.textContent).toContain('Add');
+    expect(host.textContent).toContain('yssbi.numeric.add.int64');
     expect(host.querySelector('input[placeholder="Search nodes..."]')).not.toBeNull();
     expect(host.querySelector('button')).toBeNull();
-    expect(host.querySelector('[draggable="true"]')).toBeNull();
+    expect(draggableInputs).toContainEqual({
+      id: 'sidebar-item-node-static:yssbi.numeric.add.int64',
+      disabled: false,
+      data: {
+        type: 'node-template',
+        template: {
+          title: 'Add',
+          descriptor: { kind: 'static', nodeTypeId: 'yssbi.numeric.add.int64' },
+        },
+      },
+    });
   });
 
   it('uses the shared empty state when Commands has no active graph', () => {

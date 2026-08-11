@@ -8,6 +8,7 @@ import { useLayoutStore } from '@/features/core/layout/layoutStore';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const noop = () => {};
+const cut = vi.fn();
 const paste = vi.fn();
 const duplicateSelected = vi.fn();
 
@@ -16,7 +17,7 @@ const baseProps = {
   undo: noop,
   redo: noop,
   copy: noop,
-  cut: noop,
+  cut,
   paste,
   duplicateSelected,
   saveGraph: noop,
@@ -81,6 +82,35 @@ describe('useEditorKeyboard', () => {
 
     expect(action).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('consumes Ctrl+X before routing the graph cut', () => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'x',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(cut).toHaveBeenCalledOnce();
+  });
+
+  it('ignores repeated Ctrl+X keydown events', () => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'x',
+      ctrlKey: true,
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(cut).not.toHaveBeenCalled();
   });
 
   it('does not preventDefault on Alt so native menu access still works', () => {

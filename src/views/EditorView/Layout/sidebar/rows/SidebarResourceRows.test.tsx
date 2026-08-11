@@ -16,12 +16,17 @@ import { SidebarVariableRow } from './SidebarVariableRow';
 const mocks = vi.hoisted(() => ({
   catalogState: null as LocalizedNodeCatalogState | null,
   draggableInputs: [] as Array<{ data: unknown; disabled?: boolean }>,
+  dragPointerDown: vi.fn(),
 }));
 
 vi.mock('@dnd-kit/core', () => ({
   useDraggable: (input: { data: unknown; disabled?: boolean }) => {
     mocks.draggableInputs.push(input);
-    return { attributes: {}, listeners: {}, setNodeRef: vi.fn() };
+    return {
+      attributes: {},
+      listeners: { onPointerDown: mocks.dragPointerDown },
+      setNodeRef: vi.fn(),
+    };
   },
 }));
 vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
@@ -119,14 +124,14 @@ describe('resource sidebar rows', () => {
     host.remove();
   });
 
-  function renderVariable(resourcePath: string | null = variablePath) {
+  function renderVariable(resourcePath: string | null = variablePath, isGlobal = true) {
     act(() => root.render(
       <SidebarVariableRow
         id="variable-id"
         resourcePath={resourcePath ?? undefined}
         name="Counter"
         dataType={{ kind: 'Int64' }}
-        isGlobal
+        isGlobal={isGlobal}
         onContextMenu={vi.fn()}
       />,
     ));
@@ -144,14 +149,27 @@ describe('resource sidebar rows', () => {
     ));
   }
 
-  it('uses the exact current variable Get descriptor', () => {
-    renderVariable();
+  it.each([
+    ['global', true],
+    ['local', false],
+  ])('uses the exact current variable Get descriptor for a %s variable', (_scope, isGlobal) => {
+    renderVariable(variablePath, isGlobal);
 
     expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]).toMatchObject({
       disabled: false,
       data: { type: 'node-template', template: { title: 'Counter', descriptor: variableGet } },
     });
   });
+
+  it('forwards pointer down to the dnd-kit drag listener', () => {
+    renderVariable();
+    const row = host.firstElementChild;
+
+    act(() => row?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+
+    expect(mocks.dragPointerDown).toHaveBeenCalledOnce();
+  });
+
 
   it('uses the exact current database source descriptor', () => {
     renderDatabase();

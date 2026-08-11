@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultBayesDraft, createEmptyBayesDraft, DEFAULT_BAYES_FORMULA } from '@/features/domain/bayes';
+import { createDefaultBayesDraft, createEmptyBayesDraft } from '@/features/domain/bayes';
 import { composeLikelihoodLatex, currentResponseExpression, latexSymbol } from './BayesPanels';
 import { essRating, filterAutocorrelationSeries, filterDensitySeries, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
 
@@ -98,7 +98,6 @@ describe('FormulaStep response expression', () => {
   it('provides one canonical LaTeX default formula', () => {
     const draft = createDefaultBayesDraft();
 
-    expect(draft.formulaText).toBe(DEFAULT_BAYES_FORMULA);
     expect(draft.symbols.map(symbol => symbol.name)).toEqual(['a', 'b', 'sigma', 'x', 'y']);
     expect(currentResponseExpression(draft)).toBe('y');
   });

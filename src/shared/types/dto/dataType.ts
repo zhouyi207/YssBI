@@ -9,12 +9,39 @@ import type { DataType } from '../domain/dataType';
 import { dataTypeFromKey } from '../domain/dataType';
 
 /** 后端 DataType 格式（Rust serde: { kind: "Boolean" } 或 { kind: "Array"/"DataSeries", inner: ... }） */
-export type DataTypeBackendFormat =
-  | { kind: string }
-  | { kind: 'Array'; inner: DataTypeBackendFormat }
-  | { kind: 'DataSeries'; inner: DataTypeBackendFormat }
-  | { kind: 'Struct'; inner: string }
-  | { kind: 'OneOf'; inner: DataTypeBackendFormat[] };
+export type DataTypeBackendFormat = DataType;
+
+const DATA_TYPE_LEAVES = new Set<DataType['kind']>([
+  'Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time', 'Categorical',
+  'Object', 'Any', 'DataFrame',
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length
+    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+export function isDataTypeBackendFormat(value: unknown): value is DataTypeBackendFormat {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  if (DATA_TYPE_LEAVES.has(value.kind as DataType['kind'])) {
+    return hasExactKeys(value, ['kind']);
+  }
+  if (!hasExactKeys(value, ['kind', 'inner'])) return false;
+  if (value.kind === 'Struct') {
+    return typeof value.inner === 'string' && value.inner.trim().length > 0;
+  }
+  if (value.kind === 'Array' || value.kind === 'DataSeries') {
+    return isDataTypeBackendFormat(value.inner);
+  }
+  return value.kind === 'OneOf'
+    && Array.isArray(value.inner)
+    && value.inner.length > 0
+    && value.inner.every(isDataTypeBackendFormat);
+}
 
 /** 转为后端期望的格式 */
 export function dataTypeToBackend(dt: DataType): DataTypeBackendFormat {

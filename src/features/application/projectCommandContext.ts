@@ -1,6 +1,7 @@
 import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { waitForPendingGraphMutations } from '@/features/application/editorMutation/pendingMutationRegistry';
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -63,11 +64,26 @@ export function isGraphSaveCommandRevisionCurrent(
   return basis?.graphRevision === context.expectedRevision;
 }
 
-export function captureGraphSaveCommandContext(graphPath: string): GraphSaveCommandContext {
-  const context = captureProjectCommandContext();
+function graphSaveContextFrom(
+  context: ProjectCommandContext,
+  graphPath: string,
+): GraphSaveCommandContext {
   const basis = getGraphProjectionBasis(useGraphDataStore.getState(), graphPath);
+  context.assertCurrent();
   if (!basis) {
     throw new Error(`Graph projection '${graphPath}' is not loaded`);
   }
   return { ...context, expectedRevision: basis.graphRevision };
+}
+
+export function captureGraphSaveCommandContext(graphPath: string): GraphSaveCommandContext {
+  return graphSaveContextFrom(captureProjectCommandContext(), graphPath);
+}
+
+export async function captureSettledGraphSaveCommandContext(
+  graphPath: string,
+): Promise<GraphSaveCommandContext> {
+  const context = captureProjectCommandContext();
+  await waitForPendingGraphMutations(graphPath);
+  return graphSaveContextFrom(context, graphPath);
 }

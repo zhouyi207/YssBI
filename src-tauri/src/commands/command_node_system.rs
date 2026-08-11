@@ -9,7 +9,7 @@ use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::catalog::LocalizedCatalogDto;
 use crate::node_system::document::{
     EditorGraphMutationDto, HistoryMutation, HistoryStatusDto, MutationRequest, OperationId,
-    ResourceRevision,
+    PortAddressDto, ResourceRevision,
 };
 use crate::node_system::runtime::{ArtifactSnapshot, ResultSourceId, RunEvent, RunEventSink};
 use crate::project::project_writers::ProjectSaveResultDto;
@@ -78,6 +78,78 @@ pub fn get_localized_node_catalog(
     locale: String,
 ) -> Result<LocalizedCatalogDto, AppError> {
     get_localized_node_catalog_from_state(state.inner(), project_instance_id, &locale)
+}
+
+fn get_compatible_node_catalog_from_state(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_path: GraphResourcePath,
+    graph_revision: ResourceRevision,
+    source_port: PortAddressDto,
+    locale: &str,
+) -> Result<LocalizedCatalogDto, AppError> {
+    let snapshot = state.catalog_snapshot(&project_instance_id)?;
+    let projection =
+        state.graph_projection_for_project(&project_instance_id, &graph_path, locale)?;
+    if projection.basis.graph_revision != graph_revision.get() {
+        return Err(AppError::new(
+            "graph_revision_conflict",
+            format!(
+                "compatible catalog requested graph revision {}, current revision is {}",
+                graph_revision.get(),
+                projection.basis.graph_revision
+            ),
+        ));
+    }
+    if projection.basis.registry_fingerprint != *snapshot.registry.fingerprint() {
+        return Err(AppError::new(
+            "catalog_project_stale",
+            "registry authority changed during compatibility resolution",
+        ));
+    }
+    let mut source =
+        crate::node_system::compatibility::source_from_projection(&projection, source_port)
+            .map_err(|message| AppError::new("compatible_source_invalid", message))?;
+    let document = state
+        .get_data()?
+        .graphs
+        .get(&graph_path)
+        .map(|resource| resource.document.clone())
+        .ok_or_else(|| {
+            AppError::new("graph_not_loaded", "compatible catalog graph is not loaded")
+        })?;
+    crate::node_system::compatibility::refine_source_type(
+        &mut source,
+        &document,
+        snapshot.registry.as_ref(),
+        &snapshot.validation,
+    );
+    state.validate_catalog_snapshot_current(&snapshot)?;
+    Ok(crate::node_system::compatibility::compatible_catalog(
+        &snapshot,
+        &crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        &source,
+        locale,
+    ))
+}
+
+#[tauri::command]
+pub fn get_compatible_node_catalog(
+    state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    graph_revision: ResourceRevision,
+    source_port: PortAddressDto,
+    locale: String,
+) -> Result<LocalizedCatalogDto, AppError> {
+    get_compatible_node_catalog_from_state(
+        state.inner(),
+        project_instance_id,
+        parse_graph_path(graph_path)?,
+        graph_revision,
+        source_port,
+        &locale,
+    )
 }
 
 trait EmitOutcome {
@@ -1648,6 +1720,58 @@ mod tests {
         let error = get_localized_node_catalog_from_state(&state, stale, "en-US").unwrap_err();
 
         assert_eq!(error.code, "catalog_project_stale");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn compatible_catalog_command_filters_against_current_analyzed_source() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-compatible-catalog-command-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
+        let source_node = crate::node_system::document::NodeId::new();
+        let mut project = graph_project(&graph_path);
+        project
+            .graphs
+            .get_mut(&graph_path)
+            .unwrap()
+            .document
+            .create_node(crate::node_system::document::DocumentNode {
+                id: source_node,
+                node_type: crate::node_system::protocol::NodeTypeId::new("yssbi.constant.int64")
+                    .unwrap(),
+                position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
+                parameters: crate::node_system::document::ParameterValues::new(),
+                user_label: None,
+            })
+            .unwrap();
+        fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+
+        let catalog = get_compatible_node_catalog_from_state(
+            &state,
+            project_instance_id,
+            graph_path,
+            ResourceRevision::new(1),
+            PortAddressDto::Declared {
+                node_id: source_node.to_string().into(),
+                port_key: "value".into(),
+            },
+            "en-US",
+        )
+        .unwrap();
+        let ids = catalog
+            .items
+            .iter()
+            .map(|item| item.node_type_id.as_ref())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert!(ids.contains("yssbi.numeric.add.int64"));
+        assert!(!ids.contains("yssbi.logic.not"));
         let _ = std::fs::remove_dir_all(root);
     }
 

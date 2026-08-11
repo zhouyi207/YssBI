@@ -129,6 +129,7 @@ const projectDatabaseIdentityFields = {
 
 const activeProjectCommandIdentityFields = {
   get_localized_node_catalog: 'projectInstanceId',
+  get_compatible_node_catalog: 'projectInstanceId',
   get_project_databases_variables: 'projectInstanceId',
   get_project_path: 'projectInstanceId',
   get_project_index: 'projectInstanceId',
@@ -823,6 +824,13 @@ describe('projectFilesystemContract', () => {
       get_localized_node_catalog: 'projectInstanceId',
     });
     expect(bootstrapCommandExemptions).not.toContain('get_localized_node_catalog');
+  });
+
+  it('classifies compatible catalog reads as active-project identity-required', () => {
+    expect(activeProjectCommandIdentityFields).toMatchObject({
+      get_compatible_node_catalog: 'projectInstanceId',
+    });
+    expect(bootstrapCommandExemptions).not.toContain('get_compatible_node_catalog');
   });
 
   it.each([

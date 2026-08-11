@@ -301,6 +301,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -409,6 +410,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -443,6 +445,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -527,6 +530,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -561,6 +565,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -644,6 +649,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -678,6 +684,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -750,6 +757,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -784,6 +792,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -888,6 +897,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -938,6 +948,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -974,7 +985,8 @@
           "x": 320.0,
           "y": 180.0
         },
-        "userLabel": null
+        "userLabel": null,
+        "connectFrom": null
       },
       "type": "createNode"
     },
@@ -1190,6 +1202,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1298,6 +1311,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1332,6 +1346,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1416,6 +1431,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1450,6 +1466,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1533,6 +1550,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1567,6 +1585,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1639,6 +1658,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1673,6 +1693,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1779,6 +1800,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1813,6 +1835,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1984,6 +2007,7 @@
             },
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2092,6 +2116,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2126,6 +2151,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2210,6 +2236,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2244,6 +2271,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2327,6 +2355,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2361,6 +2390,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2433,6 +2463,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2467,6 +2498,7 @@
             "resolvedSchema": null,
             "resolvedType": {
               "display": "tabular.dataframe",
+              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2724,6 +2756,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2832,6 +2865,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2866,6 +2900,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2950,6 +2985,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2984,6 +3020,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3067,6 +3104,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3101,6 +3139,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3173,6 +3212,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3207,6 +3247,7 @@
                   "resolvedSchema": null,
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3316,6 +3357,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3366,6 +3408,7 @@
                   },
                   "resolvedType": {
                     "display": "tabular.dataframe",
+                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",

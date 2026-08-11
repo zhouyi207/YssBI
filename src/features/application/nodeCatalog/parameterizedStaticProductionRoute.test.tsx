@@ -122,6 +122,7 @@ describe('ParameterizedStatic production route', () => {
       locale: fixture.create.locale,
       descriptor: projectItem.creation,
       position: fixture.create.position,
+      connectFrom: null,
     });
 
     const createOperations = fixture.create.result.delta.payload.operations as Array<{

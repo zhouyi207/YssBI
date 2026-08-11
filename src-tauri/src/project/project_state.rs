@@ -3100,6 +3100,22 @@ impl ProjectState {
         );
     }
 
+    pub(crate) fn validate_catalog_snapshot_current(
+        &self,
+        snapshot: &crate::project::CatalogProjectSnapshot,
+    ) -> Result<(), ProjectFilesystemError> {
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != snapshot.project_instance_id.as_str()
+            || publication.authority_generation() != snapshot.authority_generation
+        {
+            return Err(ProjectFilesystemError::CatalogResourceStale {
+                message: "catalog or graph authority changed during compatibility resolution"
+                    .into(),
+            });
+        }
+        Ok(())
+    }
+
     pub fn localized_catalog_snapshot(
         &self,
         project_instance_id: &ProjectInstanceId,
@@ -4704,24 +4720,74 @@ impl ProjectState {
                 store: expected_resource,
             });
         }
-        let catalog_snapshot = match &request.payload {
-            EditorGraphMutationDto::CreateNode {
-                descriptor:
-                    crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. },
-                ..
-            } => Some(
-                self.catalog_mutation_validation_snapshot(project_instance_id)
-                    .map_err(|error| match error {
-                        ProjectFilesystemError::StaleProjectLifecycle { message } => {
-                            MutationConflict::StaleProjectLifecycle(message.into())
-                        }
-                        ProjectFilesystemError::CatalogResourceStale { message } => {
-                            MutationConflict::CatalogResourceStale(message.into())
-                        }
-                        error => MutationConflict::CatalogResourceStale(error.to_string().into()),
-                    })?,
-            ),
+        let connect_from = match &request.payload {
+            EditorGraphMutationDto::CreateNode { connect_from, .. } => connect_from.clone(),
             _ => None,
+        };
+        let map_catalog_error = |error: ProjectFilesystemError| match error {
+            ProjectFilesystemError::StaleProjectLifecycle { message } => {
+                MutationConflict::StaleProjectLifecycle(message.into())
+            }
+            ProjectFilesystemError::CatalogResourceStale { message } => {
+                MutationConflict::CatalogResourceStale(message.into())
+            }
+            error => MutationConflict::CatalogResourceStale(error.to_string().into()),
+        };
+        let compatibility_catalog = connect_from
+            .as_ref()
+            .map(|_| {
+                self.catalog_snapshot(project_instance_id)
+                    .map_err(map_catalog_error)
+            })
+            .transpose()?;
+        let catalog_snapshot = if let Some(snapshot) = compatibility_catalog.as_ref() {
+            Some(snapshot.validation.clone())
+        } else {
+            match &request.payload {
+                EditorGraphMutationDto::CreateNode {
+                    descriptor:
+                        crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. },
+                    ..
+                } => Some(
+                    self.catalog_mutation_validation_snapshot(project_instance_id)
+                        .map_err(map_catalog_error)?,
+                ),
+                _ => None,
+            }
+        };
+        let compatibility_source = if let (Some(source_port), Some(snapshot)) =
+            (connect_from, compatibility_catalog.as_ref())
+        {
+            let projection = self
+                .graph_projection_for_project(project_instance_id, graph_path, locale)
+                .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
+            if projection.basis.graph_revision != request.base_revision.get() {
+                return Err(MutationConflict::StaleRevision {
+                    base_revision: request.base_revision,
+                    current_revision: ResourceRevision::new(projection.basis.graph_revision),
+                });
+            }
+            let mut source =
+                crate::node_system::compatibility::source_from_projection(&projection, source_port)
+                    .map_err(|message| MutationConflict::InvalidEditorMutation(message.into()))?;
+            let document = self
+                .get_data()
+                .map_err(|error| MutationConflict::Projection(error.to_string().into()))?
+                .graphs
+                .get(graph_path)
+                .map(|resource| resource.document.clone())
+                .ok_or_else(|| MutationConflict::Projection("graph is not loaded".into()))?;
+            crate::node_system::compatibility::refine_source_type(
+                &mut source,
+                &document,
+                snapshot.registry.as_ref(),
+                &snapshot.validation,
+            );
+            self.validate_catalog_snapshot_current(snapshot)
+                .map_err(map_catalog_error)?;
+            Some(source)
+        } else {
+            None
         };
         if catalog_snapshot.is_some() {
             self.run_catalog_mutation_before_publication_test_hook();
@@ -4731,6 +4797,7 @@ impl ProjectState {
             graph_path,
             request,
             catalog_snapshot.as_ref(),
+            compatibility_source.as_ref(),
         )?;
         observe(&committed.delta);
         let projection_replacement = crate::event::GraphProjectionReplacementDto {
@@ -4857,6 +4924,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         request: MutationRequest<EditorGraphMutationDto>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
         let MutationRequest {
             resource,
@@ -4873,11 +4941,12 @@ impl ProjectState {
             Some(project_instance_id),
             catalog_snapshot,
             move |document, registry| {
-                payload.into_patch_with_catalog_snapshot(
+                payload.into_patch_with_compatibility(
                     &node_path,
                     document,
                     registry,
                     catalog_snapshot,
+                    compatibility_source,
                 )
             },
         )
@@ -7944,6 +8013,10 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
                         crate::node_system::protocol::RelationalScalarType::from_database_dtype(
                             &column.dtype,
                         ),
+                    lineage: Some(crate::node_system::protocol::SchemaFieldLineage {
+                        source: resource.into(),
+                        field: column.name.clone().into(),
+                    }),
                 }),
         ))
     }

@@ -24,6 +24,7 @@ export function useNodeManagement() {
         locale,
         descriptor,
         position,
+        connectFrom: null,
       });
       return outcome.status === 'applied';
     },

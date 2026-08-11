@@ -327,10 +327,10 @@ src/app/appConfig/appLinks.ts
     使编译产物失效或触发重复编译。
 - [x] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
 - [x] 修复 worksheet 需要两次 ctrl + s 才能保存的 bug
+- [x] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点；而且在这里拖动的鼠标样式不需要巴掌，只需要移动到 sidebar 中的折叠按钮的样式就好了
 
 
 
-- [ ] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点；而且在这里拖动的鼠标样式不需要巴掌，只需要移动到 sidebar 中的折叠按钮的样式就好了
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理
 - [ ] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
 - [ ] 在 sidebar 中创建 item 的时候首先会出现在最下方然后根据 name 移动位置，能不能直接根据 name 出现在某个位置，忽略出现在下方的过程，这样不美观

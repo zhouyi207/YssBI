@@ -31,6 +31,7 @@ pub use observability::{
     SystemTraceClock, TraceClock, TraceFieldSensitivity, TraceSink, TraceSpan, TraceValue,
     complete_span_safely, start_span_safely,
 };
+pub(crate) use projection::resolve_function_data_type;
 pub use projection::{
     CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
     DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,

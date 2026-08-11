@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import { DRAG_TYPES, type NodeTemplateDragData } from '@/features/core/dnd';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { SidebarDraggableItem } from '../../sidebarUi';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 
 export function SidebarNodesTab() {
@@ -38,19 +40,31 @@ export function SidebarNodesTab() {
             <p className="px-2 py-3 text-center text-sm text-muted-foreground">
               {t('canvas.nodePalette.noMatches')}
             </p>
-          ) : items.map((item) => (
-            <div
-              key={item.creation.kind === 'resourceBound'
-                ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
-                : `${item.creation.kind}:${item.nodeTypeId}`}
-              className="rounded-sm px-2 py-1.5"
-            >
-              <div className="truncate text-xs text-foreground">{item.title}</div>
-              <div className="truncate font-mono text-[10px] text-muted-foreground">
-                {item.nodeTypeId}
-              </div>
-            </div>
-          ))}
+          ) : items.map((item) => {
+            const itemKey = item.creation.kind === 'resourceBound'
+              ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
+              : `${item.creation.kind}:${item.nodeTypeId}`;
+            const dragData = {
+              type: DRAG_TYPES.NODE_TEMPLATE,
+              template: {
+                title: item.title,
+                descriptor: item.creation,
+              },
+            } satisfies NodeTemplateDragData;
+            return (
+              <SidebarDraggableItem
+                key={itemKey}
+                id={`node-${itemKey}`}
+                dragData={dragData}
+                className="rounded-sm px-2 py-1.5"
+              >
+                <div className="truncate text-xs text-foreground">{item.title}</div>
+                <div className="truncate font-mono text-[10px] text-muted-foreground">
+                  {item.nodeTypeId}
+                </div>
+              </SidebarDraggableItem>
+            );
+          })}
         </div>
       </OverlayScrollbar>
     </SidebarTabPanel>

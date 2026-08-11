@@ -5,7 +5,7 @@ import type {
   FunctionEditorProjectionDto,
   PortAddressDto,
 } from './editorProjection';
-import type { DataType } from '@/shared/types/domain/dataType';
+import { isDataTypeBackendFormat } from './dataType';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 
 const fingerprintPattern = /^[0-9a-f]{64}$/;
@@ -42,32 +42,11 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-const functionDataTypeLeaves = new Set([
-  'Boolean', 'Int64', 'Float64', 'String', 'Date', 'Datetime', 'Time', 'Categorical',
-  'Object', 'Any', 'DataFrame',
-]);
-
-function isFunctionDataType(value: unknown): value is DataType {
-  if (!isRecord(value) || typeof value.kind !== 'string') return false;
-  if (functionDataTypeLeaves.has(value.kind)) return hasExactKeys(value, ['kind']);
-  if (!hasExactKeys(value, ['kind', 'inner'])) return false;
-  if (value.kind === 'Struct') {
-    return typeof value.inner === 'string' && value.inner.trim().length > 0;
-  }
-  if (value.kind === 'Array' || value.kind === 'DataSeries') {
-    return isFunctionDataType(value.inner);
-  }
-  return value.kind === 'OneOf'
-    && Array.isArray(value.inner)
-    && value.inner.length > 0
-    && value.inner.every(isFunctionDataType);
-}
-
 function isFunctionEditorPin(value: unknown): boolean {
   return hasExactKeys(value, ['id', 'name', 'dataType'])
     && typeof value.id === 'string'
     && typeof value.name === 'string'
-    && isFunctionDataType(value.dataType);
+    && isDataTypeBackendFormat(value.dataType);
 }
 
 export function isFunctionEditorProjectionDto(
@@ -182,9 +161,10 @@ function isInputBinding(value: unknown): boolean {
 }
 
 function isTypeSummary(value: unknown): boolean {
-  return hasExactKeys(value, ['display', 'resolved'])
+  return hasExactKeys(value, ['display', 'resolved', 'dataType'])
     && typeof value.display === 'string'
-    && typeof value.resolved === 'boolean';
+    && typeof value.resolved === 'boolean'
+    && (value.dataType === null || isDataTypeBackendFormat(value.dataType));
 }
 
 function isSchemaSummary(value: unknown): boolean {

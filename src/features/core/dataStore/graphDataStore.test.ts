@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import { pinTypeLabel } from '@/shared/types/domain/pinSemantics';
+import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
@@ -9,6 +11,29 @@ import {
 describe('graphDataStore projected entity truth', () => {
   beforeEach(() => {
     useGraphDataStore.setState({ graphEntities: {} });
+  });
+
+  it('materializes exact structured data types for pin semantics and visuals', () => {
+    const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
+    fixture.projection.nodes[0].ports[1].resolvedType = {
+      display: 'Frontend must not parse this text',
+      resolved: true,
+      dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } },
+    };
+
+    useGraphDataStore.getState().replaceProjection('graph-1', fixture.projection, 1);
+
+    const bucket = useGraphDataStore.getState().graphEntities['graph-1'];
+    const output = bucket.pins[fixture.outputKey];
+    const input = bucket.pins[fixture.inputKey];
+    expect(output).toMatchObject({ type: 'object', dataType: { kind: 'Float64' } });
+    expect(input.dataType).toEqual({ kind: 'DataSeries', inner: { kind: 'Float64' } });
+    expect(pinTypeLabel(input)).toBe('DataSeries<Float64>');
+    expect(resolvePinVisualSpec(input)).toMatchObject({
+      shape: 'diamond',
+      colorKey: 'Float64',
+      container: 'dataseries',
+    });
   });
 
   it('stores projected connection topology and required metadata', () => {

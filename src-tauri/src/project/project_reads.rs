@@ -19,8 +19,8 @@ pub struct CatalogProjectSnapshot {
     pub registry: Arc<NodeRegistry>,
     pub catalog: Arc<BuiltinCatalog>,
     pub resources: Vec<CatalogResourceEntry>,
-    #[allow(dead_code)]
-    authority_generation: u64,
+    pub validation: CatalogMutationValidationSnapshot,
+    pub(crate) authority_generation: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,6 +41,7 @@ pub enum CatalogMutationResource {
     Variable {
         revision: ResourceRevision,
         scope: VariableScope,
+        data_type: crate::graph::value::DataType,
         allowed_node_type_ids: [NodeTypeId; 2],
         parameter_binding: Box<str>,
     },
@@ -309,7 +310,7 @@ fn build_catalog_snapshots(
             };
             Some((
                 format!("variables/{}", entry.id),
-                (entry.name, revision, entry.scope),
+                (entry.name, revision, entry.scope, entry.data_type),
             ))
         })
         .collect::<BTreeMap<_, _>>();
@@ -317,10 +318,15 @@ fn build_catalog_snapshots(
         let revision = loaded_variable_revisions[&variable.id].revision;
         variables.insert(
             format!("variables/{}", variable.id),
-            (variable.name.clone(), revision, variable.scope.clone()),
+            (
+                variable.name.clone(),
+                revision,
+                variable.scope.clone(),
+                variable.data_type.clone(),
+            ),
         );
     }
-    for (path, (name, revision, scope)) in variables {
+    for (path, (name, revision, scope, data_type)) in variables {
         let resource_path = CatalogResourcePath::new(path);
         let get = node_type("yssbi.project.variable.get");
         let set = node_type("yssbi.project.variable.set");
@@ -339,6 +345,7 @@ fn build_catalog_snapshots(
             CatalogMutationResource::Variable {
                 revision,
                 scope,
+                data_type,
                 allowed_node_type_ids: [get, set],
                 parameter_binding: "variable".into(),
             },
@@ -374,20 +381,22 @@ fn build_catalog_snapshots(
             .cmp(&right.resource_path)
             .then_with(|| left.node_type_id.as_str().cmp(right.node_type_id.as_str()))
     });
+    let validation = CatalogMutationValidationSnapshot {
+        project_instance_id: project_instance_id.clone(),
+        authority_generation,
+        resources: validation_resources,
+    };
     (
         CatalogProjectSnapshot {
-            project_instance_id: project_instance_id.clone(),
+            project_instance_id,
             resource_publication_revision,
             registry,
             catalog,
             resources,
+            validation: validation.clone(),
             authority_generation,
         },
-        CatalogMutationValidationSnapshot {
-            project_instance_id,
-            authority_generation,
-            resources: validation_resources,
-        },
+        validation,
     )
 }
 
@@ -1585,6 +1594,7 @@ mod tests {
                 scope,
                 allowed_node_type_ids,
                 parameter_binding,
+                ..
             } = variable
             else {
                 panic!("variable fact")

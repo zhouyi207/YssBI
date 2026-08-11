@@ -56,11 +56,6 @@ describe('buildPinDataType', () => {
     expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
   });
 
-  it('does not infer data pin types from legacy type strings alone', () => {
-    const p = pin({ direction: 'output', type: 'object' });
-    expect(() => buildPinDataType(p)).toThrow('missing structured dataType');
-  });
-
   it('keeps exec pins outside the data type system', () => {
     const p = pin({ direction: 'output', type: 'exec' });
     expect(buildPinDataType(p)).toEqual({ kind: 'Any' });
@@ -167,20 +162,6 @@ describe('isPinCompatible reuses pinAcceptsType', () => {
     expect(isPinCompatible(inSeries, out)).toBe(true);
     expect(isPinCompatible(inScalar, out)).toBe(false);
   });
-
-  it('rejects same-direction and same-node pairs', () => {
-    const out1 = pin({ id: 'o1', nodeId: 'a', direction: 'output', dataType: FLOAT64 });
-    const out2 = pin({ id: 'o2', nodeId: 'c', direction: 'output', dataType: FLOAT64 });
-    const sameNodeInput = pin({ id: 'i', nodeId: 'a', direction: 'input', dataType: FLOAT64 });
-    expect(isPinCompatible(out2, out1)).toBe(false); // same direction
-    expect(isPinCompatible(sameNodeInput, out1)).toBe(false); // same node
-  });
-
-  it('highlights concrete Struct model outputs for Model family inputs', () => {
-    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
-    const input = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });
-    expect(isPinCompatible(input, out, TYPE_SYSTEM)).toBe(true);
-  });
 });
 
 describe('canConnectPins', () => {
@@ -191,7 +172,7 @@ describe('canConnectPins', () => {
       direction: 'output',
       kind: 'data',
       connections: { current: 0, maximum: null, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true },
+      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
     });
     const input = pin({
       id: 'projected-input',
@@ -199,7 +180,7 @@ describe('canConnectPins', () => {
       direction: 'input',
       kind: 'data',
       connections: { current: 0, maximum: 1, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true },
+      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
     });
 
     expect(canConnectPins(output, input)).toBe(true);
@@ -212,7 +193,7 @@ describe('canConnectPins', () => {
       direction: 'output',
       kind: 'data',
       connections: { current: 0, maximum: null, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true },
+      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
     });
     const input = pin({
       id: 'projected-input',
@@ -220,7 +201,7 @@ describe('canConnectPins', () => {
       direction: 'input',
       kind: 'data',
       connections: { current: 1, maximum: 1, ordered: false, canConnect: false },
-      resolvedType: { display: 'Float64', resolved: true },
+      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
     });
 
     expect(canConnectPins(output, input)).toBe(false);

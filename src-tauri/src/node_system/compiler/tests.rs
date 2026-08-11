@@ -5242,10 +5242,12 @@ impl SchemaResolver for SourceSchemaResolver {
                 SchemaField {
                     name: SchemaColumnRef("a".into()),
                     scalar_type: RelationalScalarType::Int64,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("b".into()),
                     scalar_type: RelationalScalarType::String,
+                    lineage: None,
                 },
             ],
         ))
@@ -5718,6 +5720,7 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
     let expected_fields = vec![SchemaField {
         name: SchemaColumnRef("renamed".into()),
         scalar_type: RelationalScalarType::Int64,
+        lineage: None,
     }];
     assert_eq!(
         result.analysis.resolved_schemas[&output].fields,

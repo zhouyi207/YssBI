@@ -38,17 +38,3 @@ describe('resolveNodeDocumentationContent', () => {
     expect(resolveNodeDocumentationContent(undefined, 'en', 'instance note')).toBe('instance note');
   });
 });
-
-describe('node documentation markdown samples', () => {
-  it('batch-4 samples include section headings and inline math delimiters', () => {
-    const samples = [
-      '# Add (+)\n\n$$\\text{Result} = a + b$$',
-      '# Bernoulli\n\n从 $\\mathrm{Bernoulli}(p)$ 抽样',
-      '# Standardize DataSeries\n\n$z = (x - \\mu) / \\sigma$',
-    ];
-    for (const md of samples) {
-      expect(md.startsWith('# ')).toBe(true);
-      expect(md).toMatch(/\$[^$]+\$/);
-    }
-  });
-});

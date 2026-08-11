@@ -18,7 +18,7 @@ import { prepareActiveGroupBeforeLastTabClose } from '@/features/core/layout/edi
 import { activateCurrentEditorTab, activateEditorGroup } from './switchEditorTab';
 import { deactivateGraphTab } from './activateGraphTab';
 import {
-  captureGraphSaveCommandContext,
+  captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
@@ -52,7 +52,7 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
     if (shouldSave) {
       let context: GraphSaveCommandContext | undefined;
       try {
-        context = captureGraphSaveCommandContext(effectivePath);
+        context = await captureSettledGraphSaveCommandContext(effectivePath);
         await GraphService.saveProjectGraph(
           context.projectInstanceId,
           effectivePath,

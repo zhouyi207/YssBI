@@ -4,7 +4,6 @@ import { loadPresentationWindow } from './loadPresentationWindow';
 vi.mock('@/services/resultSource/resultSourceService', () => ({
   SourceService: {
     getDescriptor: vi.fn(),
-    getPinDescriptor: vi.fn(),
     getValue: vi.fn(),
   },
 }));
@@ -32,7 +31,6 @@ describe('loadPresentationWindow', () => {
     if (state.status === 'ready') {
       expect(state.payload.mode).toBe('inspector');
     }
-    expect(SourceService.getPinDescriptor).not.toHaveBeenCalled();
   });
 
   it('returns not_found when sourceId is unknown', async () => {

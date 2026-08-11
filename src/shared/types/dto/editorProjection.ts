@@ -1,4 +1,5 @@
 import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
+import type { DataType } from '@/shared/types/domain/dataType';
 
 export interface FunctionEditorProjectionDto {
   functionRevision: number;
@@ -146,6 +147,7 @@ export type EffectiveInputBindingKindDto =
 export interface TypeSummaryDto {
   display: string;
   resolved: boolean;
+  dataType: DataType | null;
 }
 
 export interface SchemaSummaryDto {

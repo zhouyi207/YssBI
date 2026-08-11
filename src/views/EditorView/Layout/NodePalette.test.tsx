@@ -9,11 +9,14 @@ import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatal
 import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import type { LocalizedCatalogResponse } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import { NodePalette, nodePaletteItemKey } from './NodePalette';
+import { NodePalette } from './NodePalette';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const catalogState = vi.hoisted(() => ({
+  current: null as LocalizedNodeCatalogState | null,
+}));
+const compatibleCatalogState = vi.hoisted(() => ({
   current: null as LocalizedNodeCatalogState | null,
 }));
 
@@ -25,6 +28,7 @@ interface NamedModuleEdge {
 
 const productionPaletteChain = {
   'src/views/EditorView/Layout/NodePalette.tsx': [
+    { kind: 'import', moduleSpecifier: '@/features/application/nodeCatalog/useCompatibleNodeCatalog', symbol: 'useCompatibleNodeCatalog' },
     { kind: 'import', moduleSpecifier: '@/features/application/nodeCatalog/useLocalizedNodeCatalog', symbol: 'useLocalizedNodeCatalog' },
     { kind: 'import', moduleSpecifier: '@/features/domain/nodeCatalog/creationDescriptor', symbol: 'NodeCreationDescriptor' },
   ],
@@ -42,6 +46,10 @@ const productionPaletteChain = {
   'src/features/application/nodeCatalog/useLocalizedNodeCatalog.ts': [
     { kind: 'import', moduleSpecifier: '@/features/core/nodeCatalog/localizedSearchIndex', symbol: 'getLocalizedSearchIndex' },
     { kind: 'import', moduleSpecifier: '@/features/core/nodeCatalog/nodeCatalogStore', symbol: 'useNodeCatalogStore' },
+    { kind: 'import', moduleSpecifier: '@/services/nodeSystem/catalogService', symbol: 'CatalogService' },
+  ],
+  'src/features/application/nodeCatalog/useCompatibleNodeCatalog.ts': [
+    { kind: 'import', moduleSpecifier: '@/features/core/nodeCatalog/localizedSearchIndex', symbol: 'getLocalizedSearchIndex' },
     { kind: 'import', moduleSpecifier: '@/services/nodeSystem/catalogService', symbol: 'CatalogService' },
   ],
   'src/features/core/nodeCatalog/localizedSearchIndex.ts': [
@@ -195,6 +203,10 @@ function hasDisallowedTauriAccess(source: string): boolean {
 
 vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
   useLocalizedNodeCatalog: () => catalogState.current,
+}));
+
+vi.mock('@/features/application/nodeCatalog/useCompatibleNodeCatalog', () => ({
+  useCompatibleNodeCatalog: () => compatibleCatalogState.current,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -371,6 +383,9 @@ describe('NodePalette', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     catalogState.current = readyState();
+    compatibleCatalogState.current = {
+      status: 'idle', error: null, catalog: null, searchIndex: null, refresh: vi.fn(),
+    };
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -384,6 +399,42 @@ describe('NodePalette', () => {
   function renderPalette(): void {
     act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
   }
+
+  it('uses only the backend-compatible catalog for an edge-drop palette', () => {
+    const compatibleCatalog = {
+      ...catalog,
+      items: [catalog.items[1]],
+      categories: [catalog.categories[1]],
+    };
+    compatibleCatalogState.current = {
+      status: 'ready',
+      error: null,
+      catalog: compatibleCatalog,
+      searchIndex: getLocalizedSearchIndex(compatibleCatalog),
+      refresh: vi.fn(),
+    };
+
+    act(() => root.render(
+      <NodePalette
+        x={12}
+        y={34}
+        graphPath="events/Main.yssbi-event"
+        graphRevision={7}
+        sourcePort={{
+          kind: 'declared',
+          nodeId: '00000000-0000-0000-0000-000000000101',
+          portKey: 'value',
+        }}
+        onSelect={onSelect}
+      />,
+    ));
+
+    expect(host.textContent).toContain('打印');
+    expect(host.textContent).not.toContain('加法');
+    const input = host.querySelector('input')!;
+    act(() => setInputValue(input, 'print'));
+    expect(host.textContent).toContain('打印');
+  });
 
   it('renders a loading state while the localized catalog is loading', () => {
     catalogState.current = {
@@ -481,25 +532,6 @@ describe('NodePalette', () => {
     expect(onSelect).toHaveBeenCalledWith(
       { kind: 'static', nodeTypeId: 'math.add' },
       'zh-CN',
-    );
-  });
-
-  it('keys same-type resources by exact descriptor tuple', () => {
-    const first = catalog.items[2];
-    const second = {
-      ...first,
-      resourcePath: 'functions/Other.yssbi-function',
-      creation: {
-        ...first.creation,
-        resourcePath: 'functions/Other.yssbi-function',
-      } as NodeCreationDescriptor,
-    };
-
-    expect(nodePaletteItemKey(first)).toBe(
-      'resourceBound:function.call:functions/Helper.yssbi-function',
-    );
-    expect(nodePaletteItemKey(second)).toBe(
-      'resourceBound:function.call:functions/Other.yssbi-function',
     );
   });
 

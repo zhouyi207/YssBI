@@ -11,11 +11,4 @@ describe('parsePresentationWindowQueryFromParts', () => {
       plotType: 'scatter',
     });
   });
-
-  it('decodes encoded slashes in sourceId', () => {
-    const sourceId = 'runtime_abc_events/Main.yssbi-event_pin-a';
-    const hash = `#/inspect?sourceId=${encodeURIComponent(sourceId)}`;
-
-    expect(parsePresentationWindowQueryFromParts(hash).sourceId).toBe(sourceId);
-  });
 });

@@ -9,6 +9,7 @@ import type {
   EditorGraphProjectionDto,
   GraphProjectionReplacementDto,
 } from './editorProjection';
+import { isDataTypeBackendFormat } from './dataType';
 import {
   isFunctionEditorProjectionDto,
   isGraphResourcePath,
@@ -204,9 +205,10 @@ function isPortConnections(value: unknown): boolean {
 
 function isResolvedType(value: unknown): boolean {
   return value === null || (isRecord(value)
-    && hasExactKeys(value, ['display', 'resolved'])
+    && hasExactKeys(value, ['display', 'resolved', 'dataType'])
     && typeof value.display === 'string'
-    && typeof value.resolved === 'boolean');
+    && typeof value.resolved === 'boolean'
+    && (value.dataType === null || isDataTypeBackendFormat(value.dataType)));
 }
 
 function isResolvedSchema(value: unknown): boolean {

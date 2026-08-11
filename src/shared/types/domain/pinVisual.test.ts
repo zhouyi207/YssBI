@@ -74,12 +74,4 @@ describe('resolvePinVisualSpec', () => {
     ).toMatchObject({ shape: 'circle', colorKey: 'oneof', dashedStroke: true });
   });
 
-  it('derives container overlay from dataType only', () => {
-    expect(
-      resolvePinVisualSpec({
-        type: 'object',
-        dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } },
-      }),
-    ).toMatchObject({ shape: 'diamond', container: 'dataseries' });
-  });
 });

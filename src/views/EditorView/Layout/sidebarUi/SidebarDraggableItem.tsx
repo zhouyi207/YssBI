@@ -40,13 +40,13 @@ export function SidebarDraggableItem({
       ref={setNodeRef}
       {...(canDrag ? listeners : {})}
       {...(canDrag ? attributes : {})}
+      {...(!canDrag && dragDisabledReason ? { onPointerDown: onDisabledDragAttempt } : {})}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
-      onPointerDown={!canDrag && dragDisabledReason ? onDisabledDragAttempt : undefined}
       aria-disabled={!canDrag && Boolean(dragDisabledReason)}
       title={!canDrag ? dragDisabledReason : undefined}
-      className={`${className ?? ""} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`${className ?? ""} ${canDrag ? "cursor-pointer" : ""}`}
       style={{
         ...style,
         opacity: !canDrag && dragDisabledReason ? 0.65 : 1,

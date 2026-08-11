@@ -3,8 +3,7 @@ use crate::node_system::analysis::DiagnosticLocation;
 use crate::node_system::document::{NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RelationalScalarType,
-    RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField,
-    SchemaResolverId,
+    RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaResolverId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -605,12 +604,13 @@ impl<'a> SchemaAnalyzer<'a> {
             .iter()
             .map(|rename| (rename.from.0.clone(), rename.to.clone()))
             .collect::<BTreeMap<_, _>>();
-        let fields = input.fields.iter().map(|field| SchemaField {
-            name: by_source
+        let fields = input.fields.iter().map(|field| {
+            let mut field = field.clone();
+            field.name = by_source
                 .get(field.name.0.as_ref())
                 .cloned()
-                .unwrap_or_else(|| field.name.clone()),
-            scalar_type: field.scalar_type,
+                .unwrap_or(field.name);
+            field
         });
         Some(SchemaFact::new(
             SchemaExpr::Rename {
@@ -759,10 +759,21 @@ mod tests {
     use super::*;
     use crate::node_system::analysis::DiagnosticLocation;
     use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::protocol::NodeTypeId;
+    use crate::node_system::protocol::{NodeTypeId, SchemaField, SchemaFieldLineage};
 
     fn parameter_key(value: &str) -> ParameterKey {
         ParameterKey::new(value).unwrap()
+    }
+
+    fn stable_field(name: &str) -> SchemaField {
+        SchemaField {
+            name: SchemaColumnRef(name.into()),
+            scalar_type: RelationalScalarType::String,
+            lineage: Some(SchemaFieldLineage {
+                source: "databases/main".into(),
+                field: name.into(),
+            }),
+        }
     }
 
     fn two_parameter_mapping() -> RenameExpr {
@@ -823,10 +834,12 @@ mod tests {
                 SchemaField {
                     name: SchemaColumnRef("renamed".into()),
                     scalar_type: RelationalScalarType::Unknown,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("b".into()),
                     scalar_type: RelationalScalarType::Unknown,
+                    lineage: None,
                 },
             ]
         );
@@ -894,6 +907,52 @@ mod tests {
     }
 
     #[test]
+    fn project_filter_and_rename_preserve_field_lineage() {
+        let fields = vec![stable_field("customer_id"), stable_field("region")];
+        let input = SchemaFact::new(
+            SchemaExpr::Input(PortKey::new("raw").unwrap()),
+            fields.clone(),
+        );
+        let resolvers = SchemaResolverSet::new();
+        let mut analyzer = SchemaAnalyzer::new(&resolvers);
+
+        let projected = analyzer
+            .project(
+                NodeId::new(),
+                input.clone(),
+                ColumnSelectionExpr::Explicit(vec![SchemaColumnRef("customer_id".into())]),
+                None,
+            )
+            .unwrap();
+        assert_eq!(projected.fields, vec![stable_field("customer_id")]);
+
+        let (filtered, issues) = filter_with(
+            input.clone(),
+            serde_json::json!({
+                "column": "region",
+                "operator": "equal",
+                "value": {"type": "string", "value": "west"}
+            }),
+        );
+        assert!(issues.is_empty());
+        assert_eq!(filtered.unwrap().fields, fields);
+
+        let renamed = analyzer
+            .rename(
+                NodeId::new(),
+                input,
+                RenameExpr::Explicit(vec![ColumnRename {
+                    from: SchemaColumnRef("customer_id".into()),
+                    to: SchemaColumnRef("account_id".into()),
+                }]),
+            )
+            .unwrap();
+        assert_eq!(renamed.fields[0].name, SchemaColumnRef("account_id".into()));
+        assert_eq!(renamed.fields[0].lineage, stable_field("customer_id").lineage);
+        assert_eq!(renamed.fields[1], stable_field("region"));
+    }
+
+    #[test]
     fn project_and_rename_preserve_resolved_scalar_types() {
         let resolvers = SchemaResolverSet::new();
         let mut analyzer = SchemaAnalyzer::new(&resolvers);
@@ -903,10 +962,12 @@ mod tests {
                 SchemaField {
                     name: SchemaColumnRef("amount".into()),
                     scalar_type: RelationalScalarType::Float64,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("status".into()),
                     scalar_type: RelationalScalarType::String,
+                    lineage: None,
                 },
             ],
         );
@@ -935,6 +996,7 @@ mod tests {
             vec![SchemaField {
                 name: SchemaColumnRef("total".into()),
                 scalar_type: RelationalScalarType::Float64,
+                lineage: None,
             }]
         );
     }
@@ -965,10 +1027,12 @@ mod tests {
                 SchemaField {
                     name: SchemaColumnRef("total".into()),
                     scalar_type: RelationalScalarType::Float64,
+                    lineage: None,
                 },
                 SchemaField {
                     name: SchemaColumnRef("active".into()),
                     scalar_type: RelationalScalarType::Boolean,
+                    lineage: None,
                 },
             ],
         )

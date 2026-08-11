@@ -56,6 +56,7 @@ describe('useNodeManagement mutation outcomes', () => {
       locale: 'zh-CN',
       descriptor,
       position: { x: 4, y: 9 },
+      connectFrom: null,
     });
   });
 
