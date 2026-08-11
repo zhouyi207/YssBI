@@ -58,7 +58,7 @@ export function LogDetailPanel({ log }: LogDetailPanelProps) {
 
   return (
     <DetailPanelShell title={t('detail.titleLog')}>
-      <DetailForm>
+      <DetailForm className="select-text">
         <DetailReadonlyField label={t('detail.fields.time')} tone="mono" className="text-foreground">
           {log.timestamp}
         </DetailReadonlyField>
@@ -78,7 +78,11 @@ export function LogDetailPanel({ log }: LogDetailPanelProps) {
           </DetailReadonlyField>
         )}
       </DetailForm>
-      <DetailCollapsibleSection title={t('detail.fields.message')} defaultOpen>
+      <DetailCollapsibleSection
+        title={t('detail.fields.message')}
+        defaultOpen
+        contentClassName="select-text"
+      >
         <DetailText
           as="pre"
           tone="mono"

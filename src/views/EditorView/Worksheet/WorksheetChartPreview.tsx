@@ -91,29 +91,31 @@ export function WorksheetChartPreview({ worksheetPath, document }: WorksheetChar
           <WorksheetEmptyState />
         </div>
       )}
-      {preview.kind === 'histogram' && (
-        <Histogram data={preview.bins} xLabel={preview.xLabel} yLabel={preview.yLabel} embedded />
+      {(preview.kind === 'histogram' || preview.kind === 'scatter' || preview.kind === 'line') && (
+        <div data-worksheet-chart-region className="h-full w-full select-none">
+          {preview.kind === 'histogram' ? (
+            <Histogram data={preview.bins} xLabel={preview.xLabel} yLabel={preview.yLabel} embedded />
+          ) : preview.kind === 'line' ? (
+            <Line
+              data={preview.pair.data}
+              xLabel={preview.pair.xLabel}
+              yLabel={preview.pair.yLabel}
+              xFormat={preview.pair.xFormat}
+              yFormat={preview.pair.yFormat}
+              embedded
+            />
+          ) : (
+            <Scatter
+              data={preview.pair.data}
+              xLabel={preview.pair.xLabel}
+              yLabel={preview.pair.yLabel}
+              xFormat={preview.pair.xFormat}
+              yFormat={preview.pair.yFormat}
+              embedded
+            />
+          )}
+        </div>
       )}
-      {(preview.kind === 'scatter' || preview.kind === 'line') &&
-        (preview.kind === 'line' ? (
-          <Line
-            data={preview.pair.data}
-            xLabel={preview.pair.xLabel}
-            yLabel={preview.pair.yLabel}
-            xFormat={preview.pair.xFormat}
-            yFormat={preview.pair.yFormat}
-            embedded
-          />
-        ) : (
-          <Scatter
-            data={preview.pair.data}
-            xLabel={preview.pair.xLabel}
-            yLabel={preview.pair.yLabel}
-            xFormat={preview.pair.xFormat}
-            yFormat={preview.pair.yFormat}
-            embedded
-          />
-        ))}
     </div>
   );
 }

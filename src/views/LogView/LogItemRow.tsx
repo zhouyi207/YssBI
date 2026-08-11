@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { LogLevel, LogMessage } from '@/shared/types/ui';
 import { LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
 import {
@@ -30,12 +31,29 @@ export function LogItemRow({
   const typeColor = getLogTypeColor(log.log_type);
   const typeBg = LOG_TYPE_BACKGROUND[log.log_type] ?? 'bg-muted/40';
 
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0) {
+      onClick();
+      return;
+    }
+
+    const row = event.currentTarget;
+    const selection = window.getSelection();
+    const hasRowSelection = Boolean(
+      selection &&
+        !selection.isCollapsed &&
+        ((selection.anchorNode && row.contains(selection.anchorNode)) ||
+          (selection.focusNode && row.contains(selection.focusNode))),
+    );
+    if (!hasRowSelection) onClick();
+  };
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       className={[
-        'group flex w-full items-center gap-2.5 border-b border-border/30 px-3 py-1.5 text-left transition-colors',
+        'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/30 px-3 py-1.5 text-left transition-colors',
         'border-l-2',
         LEVEL_ACCENT[log.level] ?? 'border-l-border/50',
         isSelected
