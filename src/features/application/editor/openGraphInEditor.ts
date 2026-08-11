@@ -1,6 +1,7 @@
 import { buildGraphLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { logger } from '@/utils/appLogger';
+import { ensureEditorViewport, editorViewportScope } from '@/features/core/viewport';
 import { openEditorTab } from './openEditorTab';
 import { switchEditorTab } from './switchEditorTab';
 
@@ -22,8 +23,9 @@ export async function openGraphInEditor(
 
   const pinned = options?.pinned !== false;
   const tab = buildGraphLayoutTab(graphPath, type, { pinned });
-  openEditorTab(tab, { targetGroupId, pinned, insertIndex: options?.insertIndex });
   const groupId = resolveEditorTargetGroupId(targetGroupId);
+  ensureEditorViewport(editorViewportScope(groupId, graphPath));
+  openEditorTab(tab, { targetGroupId, pinned, insertIndex: options?.insertIndex });
   const activated = await switchEditorTab(groupId, tab);
   if (!activated) return;
 }

@@ -10,6 +10,7 @@ import { useResourceStore, useDocumentStateStore } from '@/features/core/resourc
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
   clearWorksheetPreviewCache,
   getCachedWorksheetPreview,
@@ -71,6 +72,38 @@ it('prepares recovery with authoritative function editor projection pins', () =>
       dataType: { kind: 'Struct', inner: 'RegressionModel' },
     }],
   });
+});
+
+it('preserves a graph projection loaded while recovery was in flight', () => {
+  const graphPath = 'events/Opened-During-Recovery.yssbi-event';
+  const projectInstanceId = '00000000-0000-0000-0000-000000000703';
+  const projection = makeEditorProjectionFixture({ graphPath, sourceRevision: 3 }).projection;
+  useGraphDataStore.setState({ graphEntities: {} });
+  useGraphDataStore.getState().replaceProjection(graphPath, projection, 1);
+
+  const prepared = prepareProjectRecoveryCommit({
+    projectInstanceId,
+    epoch: 1,
+    publicationRevision: 2,
+    index: {
+      projectInstanceId,
+      projectName: 'Recovered',
+      exportTime: '',
+      publicationRevision: 2,
+      history: { canUndo: false, canRedo: false },
+      graphs: [{ path: graphPath, name: 'Opened', type: 'event', revision: 3 }],
+      variables: [],
+      worksheets: [],
+      databases: [],
+    },
+    projections: new Map(),
+    graphPathsLoadedAtStart: new Set(),
+    pathRemaps: new Map(),
+  });
+
+  expect(prepared.graphProjectionPlan.graphEntities[graphPath]).toBe(
+    useGraphDataStore.getState().graphEntities[graphPath],
+  );
 });
 
 it('recovers an opaque worksheet move with document flags tabs and detail focus', () => {

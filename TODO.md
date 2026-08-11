@@ -307,8 +307,30 @@ src/app/appConfig/appLinks.ts
 - [x] **协议契约：补齐 execution 与 project-event 的 Rust↔TS golden coverage。** 冻结全部 `ExecutionDemandDto`、`RunEventKindDto`、`ExecuteGraphResultDto`、`GraphDelta`/resource mutation event envelope，并在前端增加严格 wire parser，避免手写 TS union 与 Rust enum 漂移。
 - [x] **已完成——graph 与 worksheet 已在正确的资源架构层面统一**: 工作表中的 worksheet 的存储形式是使用目前这种形式好还是使用 event, function 形式要好，请分析：在这里我可以要求 name 禁止使用特殊符号
 - [x] 测试中我认为不应该有软件的版本号信息，因为软件版本号会更新，请分析
-- [ ] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
-- [ ] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点
+
+## 2026.08.11
+
+- [x] 优化图打开流程和 Canvas 就绪状态
+  - 在显示标签页前恢复已保存的视口，避免图在首次渲染后发生跳动。
+  - 等待图文档和投影都准备完成后再挂载 Canvas，避免先渲染空
+    Canvas、随后再完整渲染一次。
+  - 跟踪图加载状态，使加载失败时能够退出加载界面，避免标签页永久
+    空白。
+  - 在布局阶段初始化连线 Canvas，忽略临时的零尺寸，并在尺寸未变化时
+    避免重置 Canvas 缓冲区。
+  - 当 Canvas、节点或引脚尺寸无效时，不发布引脚偏移量。
+  - 先加载新图，再在后台串行卸载旧图并执行 LRU 缓存清理，避免阻塞
+    打开流程。
+  - 防止较早失败的图激活请求覆盖较新的焦点图会话。
+  - 保留 publication recovery 期间新打开的图投影。
+  - Rust 后端对已缓存图直接复用投影，不再重新插入图、推进权威代次、
+    使编译产物失效或触发重复编译。
+- [x] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
+- [x] 修复 worksheet 需要两次 ctrl + s 才能保存的 bug
+
+
+
+- [ ] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点；而且在这里拖动的鼠标样式不需要巴掌，只需要移动到 sidebar 中的折叠按钮的样式就好了
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理
 - [ ] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
 - [ ] 在 sidebar 中创建 item 的时候首先会出现在最下方然后根据 name 移动位置，能不能直接根据 name 出现在某个位置，忽略出现在下方的过程，这样不美观

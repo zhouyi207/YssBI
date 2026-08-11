@@ -6,10 +6,27 @@ import { ensureEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
 import { unloadGraphDocument } from './graphDocumentUnload';
+import { logger } from '@/utils/appLogger';
 import {
   enforceGraphDocumentCacheLimit,
   touchGraphDocument,
 } from './graphDocumentCachePolicy';
+
+let graphCleanupChain: Promise<void> = Promise.resolve();
+
+function scheduleGraphCleanup(previousGraphPath?: string): void {
+  graphCleanupChain = graphCleanupChain
+    .then(async () => {
+      if (previousGraphPath) await unloadGraphDocument(previousGraphPath);
+      await enforceGraphDocumentCacheLimit();
+    })
+    .catch((error) => {
+      logger.graph.warn(
+        `Background graph cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+        'activateGraphTab',
+      );
+    });
+}
 
 function finishGraphEditorActivation(groupId: string, graphPath: string): void {
   const kind = inferGraphResourceKind(graphPath);
@@ -28,24 +45,23 @@ export async function activateGraphTab(
   const sessionStore = useGraphSessionStore.getState();
   const previous = sessionStore.setFocusedSession(groupId, graphPath);
 
-  if (previous && previous !== graphPath) {
-    await unloadGraphDocument(previous);
-  }
-
   touchGraphDocument(graphPath);
 
   const loaded = await useProjectIOStore.getState().loadGraph(graphPath);
   if (!loaded || !useGraphDataStore.getState().hasGraph(graphPath)) {
-    if (previous) {
-      sessionStore.setFocusedSession(groupId, previous);
-    } else {
-      sessionStore.clearFocusedSession(groupId);
+    const focused = useGraphSessionStore.getState().focusedSession;
+    if (focused?.groupId === groupId && focused.graphPath === graphPath) {
+      if (previous) {
+        sessionStore.setFocusedSession(groupId, previous);
+      } else {
+        sessionStore.clearFocusedSession(groupId);
+      }
     }
     return false;
   }
 
-  await enforceGraphDocumentCacheLimit();
   finishGraphEditorActivation(groupId, graphPath);
+  scheduleGraphCleanup(previous && previous !== graphPath ? previous : undefined);
   return true;
 }
 

@@ -25,7 +25,7 @@ interface PendingInvalidation {
 }
 
 const pendingInvalidationByGraph = new Map<string, PendingInvalidation>();
-let nextLifecycleToken = 0;
+let nextLifecycleToken = Date.now() * 1_000;
 let coordinatorEpoch = 0;
 
 function nextRequestGeneration(graphPath: string): number {
@@ -156,7 +156,7 @@ export async function prepareGraphProjectionForPublication(
 ): Promise<EditorGraphProjectionDto | false> {
   const identity = { projectInstanceId, epoch: publicationEpoch };
   if (!isCurrentProjectIdentity(identity)) return false;
-  const lifecycleToken = currentOrStartGraphLifecycle(graphPath);
+  const lifecycleToken = startGraphLifecycle(graphPath);
   const requestEpoch = coordinatorEpoch;
   try {
     const projection = await GraphProjectionService.loadGraph(

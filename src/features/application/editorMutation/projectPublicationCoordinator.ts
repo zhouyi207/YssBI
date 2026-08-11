@@ -601,8 +601,13 @@ export class ProjectPublicationCoordinator {
           graphPathsLoadedAtStart,
           queuedResults,
         );
+        const requiredProjectionPaths = new Set(
+          [...graphPathsLoadedAtStart]
+            .map((path) => pathRemaps.get(path) ?? path)
+            .filter((path) => authoritativeGraphPaths.has(path)),
+        );
         for (const path of recoveryPaths) {
-          if (projections.has(path)) continue;
+          if (!requiredProjectionPaths.has(path) || projections.has(path)) continue;
           projections.set(path, await this.prepareProjection(path, projectInstanceId, epoch));
         }
         this.assertLifecycle(projectInstanceId, epoch);

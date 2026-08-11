@@ -5,6 +5,19 @@ import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore'
 import { getDocumentState, markResourceLoaded } from '@/features/core/resource';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
+import { unloadGraphDocument } from './graphDocumentUnload';
+
+vi.mock('./graphDocumentUnload', () => ({
+  unloadGraphDocument: vi.fn(async () => undefined),
+}));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe('activateGraphTab', () => {
   const graphPath = 'events/Main.yssbi-event';
@@ -14,6 +27,7 @@ describe('activateGraphTab', () => {
     useGraphDataStore.setState({ graphEntities: {} });
     useDocumentStateStore.getState().clear();
     vi.restoreAllMocks();
+    vi.mocked(unloadGraphDocument).mockResolvedValue(undefined);
   });
 
   it('calls loadGraph once and completes editor activation when graph is available', async () => {
@@ -43,7 +57,48 @@ describe('activateGraphTab', () => {
     expect(getDocumentState({ id: graphPath, kind: 'event' })?.loaded).not.toBe(true);
   });
 
-  it('rolls back session when loadGraph fails', async () => {
+  it('loads the new graph before unloading the previous session', async () => {
+    const previousPath = 'events/Previous.yssbi-event';
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
+    useGraphSessionStore.getState().setFocusedSession('editor-1', previousPath);
+    const order: string[] = [];
+    vi.mocked(unloadGraphDocument).mockImplementation(async () => {
+      order.push('unload');
+    });
+    useProjectIOStore.setState({
+      loadGraph: vi.fn(async () => {
+        order.push('load');
+        return true;
+      }),
+    });
+
+    await expect(activateGraphTab(graphPath, 'editor-1')).resolves.toBe(true);
+
+    await vi.waitFor(() => expect(unloadGraphDocument).toHaveBeenCalledWith(previousPath));
+    expect(order).toEqual(['load', 'unload']);
+  });
+
+  it('does not let an older failed activation overwrite a newer focused session', async () => {
+    const pathB = 'events/B.yssbi-event';
+    const pathC = 'events/C.yssbi-event';
+    const pendingB = deferred<boolean>();
+    const fixtureC = makeEditorProjectionFixture({ graphPath: pathC });
+    useGraphDataStore.getState().replaceProjection(pathC, fixtureC.projection, 1);
+    useGraphSessionStore.getState().setFocusedSession('editor-1', 'events/A.yssbi-event');
+    useProjectIOStore.setState({
+      loadGraph: vi.fn((path: string) => path === pathB ? pendingB.promise : Promise.resolve(true)),
+    });
+
+    const activationB = activateGraphTab(pathB, 'editor-1');
+    await expect(activateGraphTab(pathC, 'editor-1')).resolves.toBe(true);
+    pendingB.resolve(false);
+    await expect(activationB).resolves.toBe(false);
+
+    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe(pathC);
+  });
+
+  it('rolls back session without unloading the previous graph when loadGraph fails', async () => {
     const loadGraph = vi.fn(async () => false);
     useProjectIOStore.setState({ loadGraph });
 

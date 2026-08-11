@@ -10026,6 +10026,38 @@ fn fast_compile_candidate_reuse_skips_full_resource_snapshot_construction() {
 }
 
 #[test]
+fn cached_projection_load_preserves_authority_and_compile_product() {
+    let (state, root) = active_state_with_valid_constant_graph("cached-projection-load-reuse");
+    let instance = state.capture_project_session().unwrap().instance_id;
+    let before_compile = crate::node_system::compiler::compile_snapshot_invocations();
+
+    let expected = state.graph_projection(&graph_path(), "en-US").unwrap();
+    let compile_ids = state.published_compile_ids_for_test(&graph_path()).unwrap();
+    let generation = state.authority_generation_for_test();
+
+    let first = state
+        .load_graph_projection(&instance, &graph_path(), 1, "en-US")
+        .unwrap();
+    let second = state
+        .load_graph_projection(&instance, &graph_path(), 2, "en-US")
+        .unwrap();
+
+    assert_eq!(first, expected);
+    assert_eq!(second, expected);
+    assert_eq!(state.authority_generation_for_test(), generation);
+    assert_eq!(
+        state.published_compile_ids_for_test(&graph_path()),
+        Some(compile_ids),
+    );
+    assert_eq!(
+        crate::node_system::compiler::compile_snapshot_invocations() - before_compile,
+        1,
+        "cached projection loads must reuse the existing compile product",
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn projection_and_execution_reuse_one_compile_product() {
     let (state, root) = active_state_with_valid_constant_graph("projection-execution-reuse");
     let before = crate::node_system::compiler::compile_snapshot_invocations();

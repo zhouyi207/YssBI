@@ -714,6 +714,7 @@ describe('useProjectIOStore snapshot paths', () => {
     );
     expect(useGraphDataStore.getState().graphEntities[graphPath]?.nodes['local-node'].title)
       .toBe('Loaded projection');
+    expect(useProjectIOStore.getState().graphLoadStatus[graphPath]).toBe('ready');
   });
 
   it('loadGraph preserves an existing stale projection when IPC fails', async () => {
@@ -733,6 +734,7 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(previousBucket);
     expect(useDocumentStateStore.getState().documents[resourceKey({ id: graphPath, kind: 'event' })]?.stale)
       .toBe(true);
+    expect(useProjectIOStore.getState().graphLoadStatus[graphPath]).toBe('error');
   });
 
   it('loadGraph ignores its response after a newer coordinator refresh wins', async () => {

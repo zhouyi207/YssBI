@@ -59,6 +59,40 @@ describe('graphProjectionCoordinator invalidation', () => {
     useDocumentStateStore.getState().clear();
   });
 
+  it('allocates a fresh lifecycle token for each publication recovery load', async () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    const initialToken = coordinator.beginGraphLoadLifecycle(graphPath);
+    expect(initialToken).toBeGreaterThan(1_000_000_000_000);
+    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(fixture.projection);
+
+    await expect(coordinator.prepareGraphProjectionForPublication(
+      graphPath,
+      'project-instance-1',
+      1,
+    )).resolves.toEqual(fixture.projection);
+    await expect(coordinator.prepareGraphProjectionForPublication(
+      graphPath,
+      'project-instance-1',
+      1,
+    )).resolves.toEqual(fixture.projection);
+
+    expect(GraphProjectionService.loadGraph).toHaveBeenNthCalledWith(
+      1,
+      graphPath,
+      'zh-CN',
+      initialToken + 1,
+      'project-instance-1',
+    );
+    expect(GraphProjectionService.loadGraph).toHaveBeenNthCalledWith(
+      2,
+      graphPath,
+      'zh-CN',
+      initialToken + 2,
+      'project-instance-1',
+    );
+  });
+
   it('hydrates and atomically replaces an already loaded graph', async () => {
     const graphPath = 'events/Main.yssbi-event';
     const current = makeEditorProjectionFixture({ graphPath, sourceRevision: 1, title: 'Current' });

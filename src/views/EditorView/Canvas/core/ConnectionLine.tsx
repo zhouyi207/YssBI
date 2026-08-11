@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useLayoutEffect } from "react";
 import { subscribeToViewport, getViewport, type ViewportScope } from '@/features/core/viewport';
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
@@ -109,25 +109,30 @@ export const ConnectionLine = ({
         };
     }, [viewportScope?.groupId, viewportScope?.graphPath]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const canvasEl = lineCanvasRef.current;
         if (!canvasEl) return;
         const parent = canvasEl.parentElement;
         if (!parent) return;
 
-        const resizeObserverCleanup = bindSashAwareResizeObserver(parent, () => {
+        const syncCanvasSize = () => {
             const rect = parent.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
+
             const dpr = window.devicePixelRatio || 1;
-            canvasEl.width = rect.width * dpr;
-            canvasEl.height = rect.height * dpr;
+            const backingWidth = Math.round(rect.width * dpr);
+            const backingHeight = Math.round(rect.height * dpr);
+            if (canvasEl.width !== backingWidth) canvasEl.width = backingWidth;
+            if (canvasEl.height !== backingHeight) canvasEl.height = backingHeight;
             canvasEl.style.width = `${rect.width}px`;
             canvasEl.style.height = `${rect.height}px`;
             const ctx = canvasEl.getContext('2d');
             if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             renderRef.current();
-        });
+        };
 
-        return resizeObserverCleanup;
+        syncCanvasSize();
+        return bindSashAwareResizeObserver(parent, syncCanvasSize);
     }, []);
 
     return <canvas ref={lineCanvasRef} className="absolute inset-0 pointer-events-none z-50" />;

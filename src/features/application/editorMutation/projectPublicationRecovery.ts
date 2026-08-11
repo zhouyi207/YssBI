@@ -16,6 +16,7 @@ import { useDatabaseStore, useGraphMetaStore, useVariableStore } from '@/feature
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
+  useGraphDataStore,
 } from '@/features/core/dataStore/graphDataStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import {
@@ -540,16 +541,26 @@ export function prepareProjectRecoveryCommit(
     !previousPathOwnedKeys.has(key as ResourceKey) || authoritativeKeys.has(key as ResourceKey),
   )) as Record<ResourceKey, DocumentState>;
 
+  const authoritativeGraphPaths = new Set(plan.index.graphs.map((graph) => graph.path));
   const replacements = [...plan.projections].map(([graphPath, projection]) => ({
     graphPath,
     projection,
   }));
-  const preparedGraphs = prepareGraphProjectionReplacements(replacements, {});
+  const loadedAtStartTerminals = new Set(
+    [...plan.graphPathsLoadedAtStart].map((path) => plan.pathRemaps.get(path) ?? path),
+  );
+  const concurrentGraphEntities = Object.fromEntries(
+    Object.entries(useGraphDataStore.getState().graphEntities).filter(([path]) =>
+      authoritativeGraphPaths.has(path) && !loadedAtStartTerminals.has(path)),
+  );
+  const preparedGraphs = prepareGraphProjectionReplacements(
+    replacements,
+    concurrentGraphEntities,
+  );
   if (!preparedGraphs.prepared) {
     throw new Error(`recovery projection preparation failed for '${preparedGraphs.graphPath}'`);
   }
 
-  const authoritativeGraphPaths = new Set(plan.index.graphs.map((graph) => graph.path));
   const focused = useGraphSessionStore.getState().focusedSession;
   const remappedFocusedPath = focused
     ? plan.pathRemaps.get(focused.graphPath) ?? focused.graphPath

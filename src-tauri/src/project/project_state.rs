@@ -4285,7 +4285,7 @@ impl ProjectState {
         (
             ResourceLifecycleOperation,
             crate::project::ResourceLifecycleGuard,
-            Option<GraphResourceDocument>,
+            bool,
         ),
         ProjectFilesystemError,
     > {
@@ -4310,8 +4310,7 @@ impl ProjectState {
             .read()
             .unwrap()
             .graphs
-            .get(graph_path)
-            .cloned();
+            .contains_key(graph_path);
         Ok((operation, guard, cached))
     }
 
@@ -4429,6 +4428,81 @@ impl ProjectState {
         })
     }
 
+    fn complete_cached_graph_load(
+        &self,
+        operation: &ResourceLifecycleOperation,
+        guard: &mut crate::project::ResourceLifecycleGuard,
+        include_projection: bool,
+    ) -> Result<CommittedGraphLoad, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let projection_environment = if include_projection {
+            let expected = self
+                .projection_environment_expectation_for_identity(
+                    operation.session.instance_id.as_str(),
+                    &operation.session.root,
+                )
+                .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+            Some(
+                self.capture_projection_environment(&expected)
+                    .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed {
+                        message,
+                    })?,
+            )
+        } else {
+            None
+        };
+        let publication = self.mutation_publication.lock().unwrap();
+        let path = self.project_path.read().unwrap();
+        if publication.project_instance_id != operation.session.instance_id.as_str()
+            || path.is_none()
+        {
+            return Err(operation.stale_error());
+        }
+        if projection_environment
+            .as_ref()
+            .is_some_and(|environment| !environment.matches_publication(&publication))
+        {
+            return Err(ProjectFilesystemError::TransactionPrepareFailed {
+                message:
+                    "stale_project_lifecycle: projection environment changed before graph load commit"
+                        .into(),
+            });
+        }
+        let mut lifecycle = self.resource_lifecycle.boundary();
+        lifecycle.validate(&operation.owner)?;
+        self.ensure_project_operational()?;
+        let data = self.project_data.read().unwrap();
+        let current_resource = data
+            .graphs
+            .get(operation.owner.graph_path())
+            .ok_or_else(|| ProjectFilesystemError::TransactionPrepareFailed {
+                message: format!("graph '{}' not loaded", operation.owner.graph_path()),
+            })?;
+        #[cfg(test)]
+        let resource = current_resource.clone();
+        #[cfg(not(test))]
+        let _ = current_resource;
+        let graph_revisions = self.graph_revisions.read().unwrap();
+        let variable_revisions = self.variable_revisions.read().unwrap();
+        lifecycle.commit_guard(guard, ResourceLifecycleIntent::Load)?;
+        let projection_source = include_projection.then(|| {
+            self.projection_source_snapshot(
+                &data,
+                projection_environment.expect("projection environment was captured"),
+                publication.project_instance_id.clone(),
+                publication.authority_generation(),
+                graph_revisions.clone(),
+                variable_revisions.clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
+            )
+        });
+        Ok(CommittedGraphLoad {
+            #[cfg(test)]
+            resource,
+            projection_source,
+        })
+    }
+
     fn load_graph_for_lifecycle_commit(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -4452,21 +4526,15 @@ impl ProjectState {
         &self,
         operation: ResourceLifecycleOperation,
         mut guard: crate::project::ResourceLifecycleGuard,
-        cached: Option<GraphResourceDocument>,
+        cached: bool,
         include_projection: bool,
         before_commit: Option<&dyn Fn() -> Result<(), ProjectFilesystemError>>,
     ) -> Result<CommittedGraphLoad, ProjectFilesystemError> {
-        if let Some(graph) = cached {
+        if cached {
             if let Some(before_commit) = before_commit {
                 before_commit()?;
             }
-            return self.complete_graph_load(
-                &operation,
-                &mut guard,
-                graph,
-                None,
-                include_projection,
-            );
+            return self.complete_cached_graph_load(&operation, &mut guard, include_projection);
         }
 
         let filesystem_lease = self.filesystem().acquire(operation.session.root.clone())?;
@@ -6526,7 +6594,7 @@ impl ProjectState {
                 .allocate_and_register(&session, &path, ResourceLifecycleIntent::Load)
                 .map_err(|error| error.to_string())?;
             let operation = ResourceLifecycleOperation::from_guard(session.clone(), &guard);
-            let cached = self.project_data.read().unwrap().graphs.get(&path).cloned();
+            let cached = self.project_data.read().unwrap().graphs.contains_key(&path);
             let before_commit = || {
                 cancellation.check().map_err(|error| {
                     ProjectFilesystemError::StaleProjectLifecycle {

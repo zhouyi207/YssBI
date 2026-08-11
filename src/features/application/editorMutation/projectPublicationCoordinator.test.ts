@@ -742,6 +742,38 @@ describe('ProjectPublicationCoordinator', () => {
     await expect(revision3Outcome).resolves.toMatchObject({ status: 'recovered' });
   });
 
+  it('keeps consecutive unloaded graph creations index-only across recovery attempts', async () => {
+    const harness = createHarness();
+    harness.state.projections = [];
+    const firstPath = 'events/Created-1.yssbi-event';
+    const secondPath = 'events/Created-2.yssbi-event';
+    let hydrationCount = 0;
+    vi.mocked(harness.dependencies.prepareGraphProjection).mockImplementation(async (path) => {
+      hydrationCount += 1;
+      return hydrationCount === 1 ? projection(path) : false;
+    });
+
+    const first = harness.coordinator.submit({
+      result: publication(1, { invalidatedGraphPaths: [firstPath] }),
+    });
+    await waitForSnapshot(harness);
+    harness.snapshotRequests[0].resolve(index(1, [firstPath]));
+    await expect(first).resolves.toMatchObject({ status: 'recovered' });
+
+    const second = harness.coordinator.submit({
+      result: publication(2, { invalidatedGraphPaths: [secondPath] }),
+    });
+    await waitForSnapshot(harness, 2);
+    harness.snapshotRequests[1].resolve(index(2, [firstPath, secondPath]));
+
+    await expect(second).resolves.toMatchObject({ status: 'recovered' });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.state.resources).toEqual([firstPath, secondPath]);
+    expect(harness.state.projections).toEqual([]);
+    expect(harness.state.watermark).toBe(2);
+    expect(harness.dependencies.markProjectProjectionStale).not.toHaveBeenCalled();
+  });
+
   it('keeps later N+1 queued when snapshot N hydration fails and recovers it next', async () => {
     const harness = createHarness();
     const failedHydration = requestProjection(harness, beforePath);
@@ -935,21 +967,14 @@ describe('ProjectPublicationCoordinator', () => {
 
     await waitForSnapshot(harness);
     expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
-    const recoveryDestination = requestProjection(harness, afterPath);
     harness.snapshotRequests[0].resolve(index(1, [afterPath]));
-    recoveryDestination.resolve(projection(afterPath));
 
     await expect(submitted).resolves.toMatchObject({ status: 'recovered' });
-    expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledTimes(1);
-    expect(harness.dependencies.prepareGraphProjection).toHaveBeenCalledWith(
-      afterPath,
-      projectInstanceId,
-      expect.any(Number),
-    );
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
     expect(harness.dependencies.prepareMove).not.toHaveBeenCalled();
     expect(harness.dependencies.commitPublication).not.toHaveBeenCalled();
     expect(harness.state.resources).toEqual([afterPath]);
-    expect(harness.state.projections).toEqual([afterPath]);
+    expect(harness.state.projections).toEqual([]);
   });
 
   it('installs a caller replacement without hydrating fallback paths', async () => {
@@ -1250,7 +1275,6 @@ describe('ProjectPublicationCoordinator', () => {
       result: publication(2, { invalidatedGraphPaths: [functionPath] }),
     });
     await waitForSnapshot(harness);
-    const graphRequest = requestProjection(harness, functionPath);
     harness.snapshotRequests[0].resolve(index(2, [], {
       graphs: [{
         path: functionPath,
@@ -1267,12 +1291,11 @@ describe('ProjectPublicationCoordinator', () => {
       }],
       history: { canUndo: true, canRedo: true },
     }));
-    graphRequest.resolve(projection(functionPath));
 
     await expect(submitted).resolves.toMatchObject({ status: 'recovered' });
     expect(harness.state).toMatchObject({
       resources: [functionPath],
-      projections: [functionPath],
+      projections: [],
       functionRevisions: { [functionPath]: 7 },
       history: { canUndo: true, canRedo: true },
       watermark: 2,

@@ -631,9 +631,11 @@ function applyWorksheetDeltasToAggregate(
       throw new Error(`worksheet delta for '${id}' has incomplete projection state`);
     }
     const hasMatchingBefore = worksheetMatchesPatchState(existing, delta.payload.patch.before);
-    if (!hasMatchingBefore && documentState?.dirty !== true) {
+    const hasMatchingAfter = worksheetMatchesPatchState(existing, delta.payload.patch.after);
+    if (!hasMatchingBefore && !hasMatchingAfter && documentState?.dirty !== true) {
       throw new Error(`worksheet delta for '${id}' is inconsistent`);
     }
+    const matchesAuthoritativeSave = hasMatchingBefore || hasMatchingAfter;
     const after = hasMatchingBefore
       ? {
           ...existing,
@@ -653,12 +655,12 @@ function applyWorksheetDeltasToAggregate(
         : candidate);
     aggregate.documents[key] = {
       ...documentState,
-      dirty: !hasMatchingBefore,
+      dirty: !matchesAuthoritativeSave,
     };
     aggregate.resources[key] = {
       ...resource,
       revision: delta.toRevision,
-      hasDirtyDocument: !hasMatchingBefore,
+      hasDirtyDocument: !matchesAuthoritativeSave,
     };
   }
 }

@@ -71,9 +71,12 @@ import {
   resetGraphProjectionCoordinator,
 } from '@/features/application/editorProjection/graphProjectionCoordinator';
 
+export type GraphLoadStatus = 'loading' | 'ready' | 'error';
+
 interface ProjectIOStore {
   status: LoadStatus;
   error: string | null;
+  graphLoadStatus: Record<string, GraphLoadStatus>;
 
   currentPath: string | null;
   projectInstanceId: string | null;
@@ -300,6 +303,9 @@ export function commitPreparedAuthoritativeProjectLoad(
   );
   commitProjectLoadStep('graph projection coordinator', resetGraphProjectionCoordinator);
   loadGraphInFlight.clear();
+  commitProjectLoadStep('graph load status', () => useProjectIOStore.setState({
+    graphLoadStatus: {},
+  }));
   commitProjectLoadStep('function signature coordinator', resetFunctionSignatureCoordinator);
   commitProjectLoadStep('history coordinator', resetHistoryCoordinator);
 
@@ -422,6 +428,7 @@ export function invalidateGraphLoadOwnership(graphPath: string): void {
 export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   status: LoadStatus.Idle,
   error: null,
+  graphLoadStatus: {},
 
   currentPath: null,
   projectInstanceId: null,
@@ -436,6 +443,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     resetGraphProjectionCoordinator();
     loadGraphInFlight.clear();
     resetClientProjectState();
+    set({ graphLoadStatus: {} });
     set({ projectInstanceId: null });
     useGraphDataStore.setState({ graphEntities: {} });
     const normalizedVariables = normalizeVariables(project.variables);
@@ -461,12 +469,18 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
 
   loadGraph: async (graphPath) => {
     if (isGraphCachedInMemory(graphPath)) {
+      set((state) => ({
+        graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'ready' },
+      }));
       return true;
     }
 
     const existing = loadGraphInFlight.get(graphPath);
     if (existing) return existing.promise;
 
+    set((state) => ({
+      graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'loading' },
+    }));
     const lifecycleToken = beginGraphLoadLifecycle(graphPath);
     const pending = loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
@@ -474,6 +488,18 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
         logger.sys.error('Failed to load graph projection: ' + errorMessage, 'ProjectIOStore');
         set({ error: errorMessage });
         return false;
+      })
+      .then((loaded) => {
+        const current = loadGraphInFlight.get(graphPath);
+        if (current?.lifecycleToken === lifecycleToken && current.promise === pending) {
+          set((state) => ({
+            graphLoadStatus: {
+              ...state.graphLoadStatus,
+              [graphPath]: loaded ? 'ready' : 'error',
+            },
+          }));
+        }
+        return loaded;
       })
       .finally(() => {
         const current = loadGraphInFlight.get(graphPath);

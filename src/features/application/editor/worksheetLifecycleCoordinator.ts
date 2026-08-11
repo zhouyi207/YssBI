@@ -1,5 +1,5 @@
 const lifecycleTokensByProject = new Map<string, Map<string, number>>();
-let nextLifecycleToken = 0;
+let nextLifecycleToken = Date.now() * 1_000;
 
 function projectTokens(projectInstanceId: string): Map<string, number> {
   const existing = lifecycleTokensByProject.get(projectInstanceId);

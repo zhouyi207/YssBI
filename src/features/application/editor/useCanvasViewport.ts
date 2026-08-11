@@ -90,14 +90,22 @@ export function useCanvasViewport(
     const root = canvasElementRef.current;
     if (!root || !graphPath) return;
 
+    const rootRect = root.getBoundingClientRect();
+    if (rootRect.width <= 0 || rootRect.height <= 0) return;
+
     const scale = viewportScope ? getViewport(viewportScope).scale : 1;
     const nextOffsets: Record<string, { x: number; y: number }> = {};
+    let hasUnmeasurablePin = false;
 
     for (const nodeId of graphNodeIds) {
       const nodeEl = root.querySelector(`[data-node-id="${nodeId}"]`);
       if (!nodeEl) continue;
 
       const nodeRect = nodeEl.getBoundingClientRect();
+      if (nodeRect.width <= 0 || nodeRect.height <= 0) {
+        hasUnmeasurablePin = true;
+        continue;
+      }
       const pins = nodeEl.querySelectorAll<HTMLElement>('[data-pin-id]');
 
       pins.forEach((pinEl) => {
@@ -106,12 +114,18 @@ export function useCanvasViewport(
         const circleEl = pinEl.querySelector('.pin-circle');
         const targetEl = circleEl || pinEl;
         const rect = targetEl.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+          hasUnmeasurablePin = true;
+          return;
+        }
         nextOffsets[pinId] = {
           x: (rect.left + rect.width / 2 - nodeRect.left) / scale,
           y: (rect.top + rect.height / 2 - nodeRect.top) / scale,
         };
       });
     }
+
+    if (hasUnmeasurablePin) return;
 
     setPinOffsets((prev) => {
       const currentKeys = Object.keys(nextOffsets);

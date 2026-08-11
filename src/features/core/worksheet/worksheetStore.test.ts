@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { useHistoryStore } from '@/features/core/history';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { useWorksheetStore } from './worksheetStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
@@ -156,6 +157,40 @@ describe('worksheet authoritative mutation results', () => {
     expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(true);
     expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(true);
     expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(true);
+    expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
+  });
+
+  it('clears dirty when an event-first save observes the submitted after state', async () => {
+    const before = {
+      ...worksheet(3, 'histogram'),
+      encodings: { x: 'x', y: 'standard-premium' },
+    };
+    const submitted = {
+      ...before,
+      encodings: { x: 'x', y: 'signed-premium' },
+    };
+    const authoritative = { ...submitted, revision: 4 };
+    registerWorksheetResource();
+    useWorksheetStore.getState().upsertDocument(worksheetPath, submitted);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
+    const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
+    vi.spyOn(WorksheetService, 'saveWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => {
+        const result = worksheetResult(operationId, before, authoritative);
+        new ResourceMutationCommittedHandler().handle({ result });
+        await vi.waitFor(() => {
+          expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
+        });
+        expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(false);
+        return result;
+      },
+    );
+
+    await expect(useWorksheetStore.getState().saveDocument(worksheetPath)).resolves.toBe(true);
+
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toEqual(authoritative);
+    expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(false);
+    expect(submit).toHaveBeenCalledTimes(2);
     expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
   });
 

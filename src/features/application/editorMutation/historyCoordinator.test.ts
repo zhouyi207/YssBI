@@ -445,7 +445,7 @@ describe('executeHistoryMutation', () => {
     });
   });
 
-  it('installs valid partial replacements and hydrates every incomplete invalidation', async () => {
+  it('hydrates only loaded graphs from an incomplete invalidation', async () => {
     const invalidatedPath = 'events/Invalidated.yssbi-event';
     const result = completeResult();
     result.deltas = result.deltas.slice(0, 1);
@@ -467,7 +467,7 @@ describe('executeHistoryMutation', () => {
     expect(useGraphDataStore.getState().graphEntities[functionPath].sourceRevision).toBe(12);
     expect(useGraphDataStore.getState().graphEntities[eventPath].sourceRevision).toBe(3);
     expect(hydrateGraph).not.toHaveBeenCalled();
-    expect(prepareGraphProjectionForPublication).toHaveBeenCalledTimes(3);
+    expect(prepareGraphProjectionForPublication).toHaveBeenCalledTimes(2);
     expect(prepareGraphProjectionForPublication).toHaveBeenCalledWith(
       functionPath,
       projectInstanceId,
@@ -478,7 +478,7 @@ describe('executeHistoryMutation', () => {
       projectInstanceId,
       expect.any(Number),
     );
-    expect(prepareGraphProjectionForPublication).toHaveBeenCalledWith(
+    expect(prepareGraphProjectionForPublication).not.toHaveBeenCalledWith(
       invalidatedPath,
       projectInstanceId,
       expect.any(Number),

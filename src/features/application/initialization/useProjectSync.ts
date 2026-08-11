@@ -20,6 +20,14 @@ function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').Eve
   useEffect(() => {
     if (isSetupRef.current) return;
     isSetupRef.current = true;
+    let cancelled = false;
+    let acquired = false;
+
+    const release = () => {
+      SingletonManager.decrementRef(LISTENER_KEY, (instance: ProjectListener) => {
+        instance.stop();
+      });
+    };
 
     const setup = async () => {
       const listener = await SingletonManager.getInstance(
@@ -31,6 +39,13 @@ function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').Eve
           return newListener;
         },
       );
+
+      if (cancelled) {
+        release();
+        return;
+      }
+
+      acquired = true;
       listenerRef.current = listener;
 
       if (callbacks && SingletonManager.getRefCount(LISTENER_KEY) > 1) {
@@ -38,14 +53,20 @@ function useProjectSyncCore(callbacks?: import('@/features/core/sync/types').Eve
       }
     };
 
-    setup();
+    void setup().catch((error) => {
+      logger.sys.error(
+        `Failed to start project listener: ${String(error)}`,
+        'useProjectSync',
+      );
+    });
 
     return () => {
+      cancelled = true;
       isSetupRef.current = false;
       listenerRef.current = null;
-      SingletonManager.decrementRef(LISTENER_KEY, (instance: ProjectListener) => {
-        instance.stop();
-      });
+      if (acquired) {
+        release();
+      }
     };
   }, []);
 
